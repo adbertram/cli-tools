@@ -1,12 +1,25 @@
 #!/usr/bin/env python3
 import json
+import posixpath
 import re
 import shlex
+import signal
 import subprocess
 import sys
 import threading
 import time
+import zipfile
+import xml.etree.ElementTree as ElementTree
 from pathlib import Path
+
+
+class RecordingInterruptedError(RuntimeError):
+    """Raised when the recorder receives a termination signal."""
+
+
+def recording_signal_handler(signum, _frame):
+    signal_name = signal.Signals(signum).name
+    raise RecordingInterruptedError(f"Recording interrupted by {signal_name}")
 
 
 MACOS_DISPLAY_HELPER = r'''
@@ -113,6 +126,13 @@ DEFAULT_CUE_MARKER = "||"
 # Pluralsight's delivery window is -12..-6 dBFS peak. Target the midpoint so
 # normal encode jitter cannot push the muxed output across either edge.
 NARRATION_TARGET_PEAK_DBFS = -9.0
+# The narration mux must name its own bitrate. ffmpeg's AAC default lands near 70 kbps for a mono
+# input, which leaves the coding error only ~7 dB under the speech in the 4-16 kHz band. That is
+# audible as static on sibilants, and every downstream clip inherits it. Measured full-band SNR
+# against the source narration WAV: default 24.0 dB, 192k mono 48 kHz 45.6 dB. Mono 48 kHz also
+# matches the format the CourseCraft clip assembler and voiceover policy already use, so the
+# narration crosses the whole pipeline without a resample or a duplicate channel.
+NARRATION_ENCODE_ARGS = ["-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "1"]
 VOLUMEDETECT_MAX_VOLUME_PATTERN = re.compile(r"max_volume:\s*(-?\d+(?:\.\d+)?)\s*dB")
 # Hard subprocess wall-clock bound on every PowerPoint-targeting osascript. The
 # in-AppleScript ``with timeout`` only bounds Apple-event waits once the script is
@@ -140,6 +160,11 @@ DURING_CAPTURE_SLIDESHOW_CHECK_SECONDS = 2.0
 # click-build fades on these decks run 500ms; 0.7s leaves the show quiescent so the
 # index read reflects the press that just landed and never a press still in flight.
 SLIDE_CLICK_PROBE_SETTLE_SECONDS = 0.7
+# Keep the recording drive quiescent after a terminal next-click after-effect.
+# These effects use the same 500ms build timing as the probed click effects, so
+# the same measured 0.7s interval prevents the real slide advance from colliding
+# with an after-effect that is still in flight.
+TERMINAL_AFTER_EFFECT_SETTLE_SECONDS = SLIDE_CLICK_PROBE_SETTLE_SECONDS
 # Hard upper bound on click steps the probe will tolerate on a single slide before
 # declaring the walk runaway. Real authored slides are far below this; the bound only
 # exists so a slide that never advances cannot loop forever.
@@ -150,6 +175,9 @@ SLIDE_ADVANCE_CONFIRM_SECONDS = 3.0
 # Sentinel the slide-index AppleScript returns once the show is over (no slide show
 # window, or the post-final-slide black screen where the view has no current slide).
 SLIDESHOW_ENDED_MARKER = "ended"
+PRESENTATIONML_NAMESPACE = "http://schemas.openxmlformats.org/presentationml/2006/main"
+PACKAGE_RELATIONSHIPS_NAMESPACE = "http://schemas.openxmlformats.org/package/2006/relationships"
+SLIDE_LAYOUT_RELATIONSHIP_SUFFIX = "/slideLayout"
 # Hard bound on how late a scheduled slide advance may fire before the recording is
 # aborted. Every action time is absolute against the narration timeline, so lateness
 # here is exactly audio/slide desync. The capture loop wakes on a 0.1s sleep
@@ -163,6 +191,7 @@ POWERPOINT_PROCESS_NAME = "Microsoft PowerPoint"
 SLIDE_IDENTITY_FIELD = "slide"
 SLIDE_LABEL_PREFIX = "Slide"
 SLIDE_ADVANCE_REASON = "next slide"
+TERMINAL_AFTER_EFFECT_REASON = "terminal after effect"
 INTER_SLIDE_ACTIONS = [{
     "key": "space",
     "reason": SLIDE_ADVANCE_REASON,
@@ -993,10 +1022,64 @@ def click_steps_from_slide_index_walk(slide_numbers, observed_indexes):
     )
 
 
+def terminal_next_click_after_effect_in_xml(part_xml):
+    """Return whether the part's final click effect owns a next-click after-effect."""
+    root = ElementTree.fromstring(part_xml)
+    click_effect_tag = f"{{{PRESENTATIONML_NAMESPACE}}}cTn"
+    click_effects = [
+        node
+        for node in root.iter(click_effect_tag)
+        if node.get("nodeType") == "clickEffect"
+    ]
+    if not click_effects:
+        return False
+    return any(
+        node.get("masterRel") == "nextClick" and node.get("afterEffect") == "1"
+        for node in click_effects[-1].iter(click_effect_tag)
+    )
+
+
+def slide_layout_member_for_slide(deck, slide_number):
+    """Return the slide-layout OOXML member referenced by ``slide_number``."""
+    rels_member = f"ppt/slides/_rels/slide{slide_number}.xml.rels"
+    try:
+        rels_root = ElementTree.fromstring(deck.read(rels_member))
+    except KeyError as error:
+        raise FileNotFoundError(f"Slide {slide_number} relationships not found: {rels_member}") from error
+    except ElementTree.ParseError as error:
+        raise ValueError(f"Slide {slide_number} relationships are not valid XML: {rels_member}") from error
+
+    relationship_tag = f"{{{PACKAGE_RELATIONSHIPS_NAMESPACE}}}Relationship"
+    for relationship in rels_root.iter(relationship_tag):
+        relationship_type = relationship.get("Type", "")
+        target = relationship.get("Target", "")
+        if relationship_type.endswith(SLIDE_LAYOUT_RELATIONSHIP_SUFFIX) and target:
+            return posixpath.normpath(posixpath.join("ppt/slides", target))
+    raise ValueError(f"Slide {slide_number} has no slide-layout relationship")
+
+
+def terminal_next_click_after_effect_step(deck_path, slide_number):
+    """Return one when the final slide effect has a separate next-click after-effect."""
+    slide_member = f"ppt/slides/slide{slide_number}.xml"
+    try:
+        with zipfile.ZipFile(deck_path) as deck:
+            layout_member = slide_layout_member_for_slide(deck, slide_number)
+            for member in (slide_member, layout_member):
+                try:
+                    part_xml = deck.read(member)
+                except KeyError as error:
+                    raise FileNotFoundError(f"Slide animation part not found: {member}") from error
+                if terminal_next_click_after_effect_in_xml(part_xml):
+                    return 1
+    except zipfile.BadZipFile as error:
+        raise ValueError(f"PowerPoint deck is not a readable OOXML presentation: {deck_path}") from error
+    return 0
+
+
 def render_live_slideshow_slide_index():
     """AppleScript reporting the running show's slide index, or ``ended``.
 
-    Two distinct states mean "the show is over": no slide show window at all, and the
+    Two distinct states mean "the show is over": no slide show window at all, and a
     post-final-slide black screen, where the window still exists but the view has no
     current slide. Both are reported as ``ended`` rather than being read as an error, so
     a genuine AppleScript failure still propagates loudly.
@@ -1044,13 +1127,18 @@ def walk_slideshow_slide_indexes(press_budget):
 
 
 def measure_slide_click_steps(config, slide_numbers):
-    """Walk the real slide show once and return each slide's live click-step count.
+    """Return cue click counts and terminal after-effect counts from one live walk.
 
     Runs before any capture starts: opens the deck, plays the requested slide range with
     manual advance, and presses Space through the whole range while reading the live
-    slide index. The recording drive then plans exactly the presses this walk proved the
-    show consumes, so the deck can never run ahead of or behind the narration.
+    slide index. A final ``nextClick`` after-effect can consume one extra press only to
+    dim the last build, so that terminal styling step is excluded from narration cues
+    but returned separately for the recording drive.
     """
+    terminal_after_effects = {
+        slide_number: terminal_next_click_after_effect_step(config["deck_path"], slide_number)
+        for slide_number in slide_numbers
+    }
     open_deck(config)
     clear_benign_dialogs_before_slideshow()
     run_osascript(*render_run_slideshow_range(slide_numbers[0], slide_numbers[-1]))
@@ -1065,8 +1153,14 @@ def measure_slide_click_steps(config, slide_numbers):
     press_budget = len(slide_numbers) * (MAX_CLICK_STEPS_PER_SLIDE + 1)
     observed_indexes = walk_slideshow_slide_indexes(press_budget)
     click_steps = click_steps_from_slide_index_walk(slide_numbers, observed_indexes)
+    for slide_number, terminal_after_effect in terminal_after_effects.items():
+        if terminal_after_effect > click_steps[slide_number]:
+            raise RuntimeError(
+                f"Slide {slide_number} ended before its terminal after-effect could run"
+            )
+        click_steps[slide_number] = click_steps[slide_number] - terminal_after_effect
     exit_slideshow_if_running()
-    return click_steps
+    return click_steps, terminal_after_effects
 
 
 def requested_slide_numbers(items):
@@ -1131,7 +1225,7 @@ def prepared_slide_numbers(prepared_items):
     return [item["identity"]["value"] for item in prepared_items]
 
 
-def prepare(config, click_steps):
+def prepare(config, click_steps, terminal_after_effect_steps):
     work_dir = Path(config["work_dir"])
     audio_dir = work_dir / "audio"
     plan_path = work_dir / "timing-plan.json"
@@ -1139,11 +1233,16 @@ def prepare(config, click_steps):
     concat_path = work_dir / "concat.txt"
     lead_silence = audio_dir / "silence-lead.wav"
     inter_slide_silence = audio_dir / "silence-slide.wav"
+    terminal_after_effect_silence = audio_dir / "silence-terminal-after-effect.wav"
 
     audio_dir.mkdir(parents=True, exist_ok=True)
 
     generate_silence(lead_silence, config["recording_lead_seconds"])
     generate_silence(inter_slide_silence, config["slide_pause_seconds"])
+    generate_silence(
+        terminal_after_effect_silence,
+        TERMINAL_AFTER_EFFECT_SETTLE_SECONDS,
+    )
 
     timeline_seconds = config["recording_lead_seconds"]
     audio_files = [lead_silence]
@@ -1170,6 +1269,16 @@ def prepare(config, click_steps):
         timeline_seconds = timeline_seconds + duration_seconds
 
         if item_index < len(config["items"]) - 1:
+            for _ in range(terminal_after_effect_steps[item["identity"]["value"]]):
+                actions.append({
+                    "at_seconds": round(timeline_seconds, 3),
+                    "key": "space",
+                    "item": item["label"],
+                    "slide": item["identity"]["value"],
+                    "reason": TERMINAL_AFTER_EFFECT_REASON,
+                })
+                audio_files.append(terminal_after_effect_silence)
+                timeline_seconds = timeline_seconds + TERMINAL_AFTER_EFFECT_SETTLE_SECONDS
             for inter_item_action in INTER_SLIDE_ACTIONS:
                 actions.append({
                     "at_seconds": round(timeline_seconds, 3),
@@ -1186,6 +1295,7 @@ def prepare(config, click_steps):
             "identity": item["identity"],
             "cue_count": item["cue_count"],
             "measured_click_steps": click_steps[item["identity"]["value"]],
+            "terminal_after_effect_steps": terminal_after_effect_steps[item["identity"]["value"]],
             "audio": str(item["audio_path"]),
             "duration_seconds": duration_seconds,
             "cue_timing_method": "word-ratio",
@@ -1310,40 +1420,42 @@ class SlideshowPositionWatcher:
             self._pending_deadline = time.monotonic() + SLIDE_ADVANCE_CONFIRM_SECONDS
 
     def check(self):
+        # Read PowerPoint before locking recorder state. An advance expectation can
+        # change while this AppleScript call is in flight, so state must be sampled
+        # only after the observed slide is known. The short locked section below then
+        # compares one observation against the latest transition state atomically.
+        observed_slide = live_slideshow_slide_index()
         with self._lock:
             expected_slide = self._expected_slide
             pending_slide = self._pending_slide
             pending_deadline = self._pending_deadline
 
-        observed_slide = live_slideshow_slide_index()
-        if observed_slide is None:
-            raise RuntimeError(
-                f"PowerPoint slide show ended while slide {expected_slide} was still being driven"
-            )
+            if observed_slide is None:
+                raise RuntimeError(
+                    f"PowerPoint slide show ended while slide {expected_slide} was still being driven"
+                )
 
-        if pending_slide is not None:
-            if observed_slide == pending_slide:
-                with self._lock:
-                    if self._pending_slide == pending_slide:
-                        self._expected_slide = pending_slide
-                        self._pending_slide = None
-                        self._pending_deadline = None
-                return
-            if observed_slide == expected_slide and time.monotonic() < pending_deadline:
-                return
-            raise RuntimeError(
-                f"PowerPoint slide show did not advance from slide {expected_slide} to slide "
-                f"{pending_slide} within {SLIDE_ADVANCE_CONFIRM_SECONDS} seconds (observed slide "
-                f"{observed_slide}); the deck consumed a different number of click steps than "
-                "the slide-show probe measured"
-            )
+            if pending_slide is not None:
+                if observed_slide == pending_slide:
+                    self._expected_slide = pending_slide
+                    self._pending_slide = None
+                    self._pending_deadline = None
+                    return
+                if observed_slide == expected_slide and time.monotonic() < pending_deadline:
+                    return
+                raise RuntimeError(
+                    f"PowerPoint slide show did not advance from slide {expected_slide} to slide "
+                    f"{pending_slide} within {SLIDE_ADVANCE_CONFIRM_SECONDS} seconds (observed slide "
+                    f"{observed_slide}); the deck consumed a different number of click steps than "
+                    "the slide-show probe measured"
+                )
 
-        if observed_slide != expected_slide:
-            raise RuntimeError(
-                f"PowerPoint slide show is on slide {observed_slide} but the timing plan is "
-                f"driving slide {expected_slide}; the deck consumed a different number "
-                "of click steps than the slide-show probe measured"
-            )
+            if observed_slide != expected_slide:
+                raise RuntimeError(
+                    f"PowerPoint slide show is on slide {observed_slide} but the timing plan is "
+                    f"driving slide {expected_slide}; the deck consumed a different number "
+                    "of click steps than the slide-show probe measured"
+                )
 
 
 def powerpoint_is_running():
@@ -1849,7 +1961,11 @@ def stop_audio_process(audio_process):
         return
     if audio_process.poll() is None:
         audio_process.terminate()
-        audio_process.wait(timeout=10)
+        try:
+            audio_process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            audio_process.kill()
+            audio_process.wait(timeout=10)
 
 
 def stop_ffmpeg_process(ffmpeg_process):
@@ -1861,7 +1977,15 @@ def stop_ffmpeg_process(ffmpeg_process):
         raise RuntimeError("ffmpeg stdin pipe was not created")
     ffmpeg_process.stdin.write(b"q")
     ffmpeg_process.stdin.flush()
-    ffmpeg_process.wait(timeout=10)
+    try:
+        ffmpeg_process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        ffmpeg_process.terminate()
+        try:
+            ffmpeg_process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            ffmpeg_process.kill()
+            ffmpeg_process.wait(timeout=10)
 
 
 def run_cleanup(cleanup_errors, description, cleanup_function):
@@ -1984,7 +2108,13 @@ def record(config):
     audio_process = None
     primary_error = None
     cleanup_errors = []
+    previous_signal_handlers = {}
     try:
+        for termination_signal in (signal.SIGHUP, signal.SIGTERM):
+            previous_signal_handlers[termination_signal] = signal.signal(
+                termination_signal,
+                recording_signal_handler,
+            )
         if config["force_resolution"] and config["force_aspect_ratio"] is not None:
             raise ValueError("--force-resolution and --force-aspect-ratio are mutually exclusive")
         if config["force_aspect_ratio"] is not None:
@@ -2027,10 +2157,13 @@ def record(config):
         # deck and plays the requested range once, so PowerPoint state is recorded first
         # and the same cleanup path closes whatever the probe left behind on failure.
         state = create_powerpoint_state(config)
-        click_steps = measure_slide_click_steps(config, prepared_slide_numbers(config["items"]))
+        click_steps, terminal_after_effect_steps = measure_slide_click_steps(
+            config,
+            prepared_slide_numbers(config["items"]),
+        )
         assert_cue_counts_match_click_steps(config["items"], click_steps)
 
-        plan = prepare(config, click_steps)
+        plan = prepare(config, click_steps, terminal_after_effect_steps)
         work_dir = Path(config["work_dir"])
         output_path = Path(config["output_path"])
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2038,6 +2171,12 @@ def record(config):
         narration_path = Path(plan["narration_audio"])
 
         start_slideshow(config)
+        # The capture process can fail before it creates this file. Remove any prior
+        # run output first, so a failed input open cannot be muxed as fresh video.
+        if raw_video_path.exists() or raw_video_path.is_symlink():
+            raw_video_path.unlink()
+        if raw_video_path.exists() or raw_video_path.is_symlink():
+            raise RuntimeError(f"Could not clear previous raw screen recording: {raw_video_path}")
         ffmpeg_process = subprocess.Popen([
             "ffmpeg",
             "-y",
@@ -2048,6 +2187,8 @@ def record(config):
             "avfoundation",
             "-framerate",
             str(config["ffmpeg_framerate"]),
+            "-pixel_format",
+            "nv12",
             "-i",
             str(config["ffmpeg_video_input"]),
             "-pix_fmt",
@@ -2093,11 +2234,11 @@ def record(config):
                 press_space()
 
             audio_return_code = wait_for_audio(audio_process, ffmpeg_process, presence_watcher)
+            stop_ffmpeg_process(ffmpeg_process)
+            ffmpeg_return_code = ffmpeg_process.returncode
         if audio_return_code != 0:
             raise RuntimeError(f"afplay exited with code {audio_return_code}")
 
-        stop_ffmpeg_process(ffmpeg_process)
-        ffmpeg_return_code = ffmpeg_process.returncode
         if ffmpeg_return_code != 0:
             raise RuntimeError(f"ffmpeg screen recording exited with code {ffmpeg_return_code}")
 
@@ -2150,8 +2291,7 @@ def record(config):
             video_filter,
             "-af",
             f"volume={gain_db}dB",
-            "-c:a",
-            "aac",
+            *NARRATION_ENCODE_ARGS,
             "-shortest",
             str(output_path),
         ])
@@ -2167,6 +2307,8 @@ def record(config):
                 display_restore_mode["width"],
                 display_restore_mode["height"],
             ))
+        for termination_signal, previous_handler in previous_signal_handlers.items():
+            signal.signal(termination_signal, previous_handler)
 
     if primary_error is not None and cleanup_errors:
         raise RuntimeError(f"{primary_error}; cleanup failed: " + "; ".join(cleanup_errors)) from primary_error
