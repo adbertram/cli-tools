@@ -40,9 +40,26 @@ monarch <command-group> <action> [arguments] [options]
 <principle name="Transaction Review Routing">
 For requests to review, categorize, recategorize, audit, clean up, or start reviewing Monarch transactions, invoke the `monarch-transaction-reviewer` custom agent instead of performing the review inline.
 
+**The reviewer agent is project-scoped to `/Users/adam/Dropbox/GitRepos/Agents/Accountant`.** It is defined at `.claude/agents/monarch-transaction-reviewer.md` and `.codex/agents/monarch-transaction-reviewer.toml` inside that project, and its domain skill is symlinked into that project's skill roots. Start a Monarch review or audit session from the Accountant project. A session started elsewhere cannot spawn the agent, and the Skill tool returns `Unknown skill` for its domain skill.
+
 For these review workflows, do not read `usage.json`, run `monarch` commands, list transactions, load categories, or perform setup in the parent session before spawning the reviewer. The reviewer agent owns those steps.
 
 The subagent prompt must be complete and self-contained, must not use `fork_context`, and must explicitly reference `/Users/adam/Dropbox/.agents/skills/agent-expert/references/global-standards.md`.
+</principle>
+
+<principle name="Renderer Selection">
+Two deterministic renderers live in `scripts/`. Pick one per run. Never hand-write either table in prose, and never write a throwaway script in a scratchpad directory to render a shape a renderer does not support.
+
+| Renderer | Use it when | Columns |
+|----------|-------------|---------|
+| `scripts/build-output.sh` | The run proposes per-row category changes and Adam approves rows for write-back through `apply-approved-updates.sh`. | `# / Vendor / Amount / Description / Current Category / Suggested Category / Needs Input / Recommended Rule` |
+| `scripts/build-audit-output.sh` | The run is a report-only audit. It classifies each transaction into a bucket, states confidence and evidence, and writes nothing back to Monarch. | `# / Date / Account / Merchant / Amount / Current Category / Bucket / Recommended Category / Confidence / Evidence` |
+
+Choose the audit renderer when the request asks for an audit, a classification report, a business-versus-personal split, or a bucket breakdown with evidence. Choose the review renderer when the request asks to review, categorize, recategorize, or clean up transactions for approval.
+
+The two renderers are exclusive. Do not merge their columns, and do not run the audit renderer to collect approvals; it emits no rule commands and drives no write-back path.
+
+If a run needs a column that neither renderer supports, extend the matching script in this repo-owned bundle and add a test under `tests/`. Do not render that run by hand.
 </principle>
 
 <principle name="Review Rules Memory">
@@ -89,6 +106,8 @@ To pull income and expense totals for an arbitrary date range (e.g. a full calen
 - **`usage.json`** -- Complete command tree with arguments, options, defaults, and usage instructions for every command.
 - **`rules.md`** -- Persistent memory of Adam's review preferences. MANDATORY reading at the start of every transaction review. Update on user feedback.
 - **`workflows/recommend-rule.md`** -- Decision criteria for when the reviewer should propose creating a Monarch rule alongside a single-transaction category change. MANDATORY reading whenever the reviewer is about to surface a category-change recommendation.
+- **`scripts/build-output.sh`** -- Deterministic renderer for the approval-driven review table (8 columns). Consumes the decisions JSON that `apply-approved-updates.sh` also reads. `--validate-only` checks the schema without rendering.
+- **`scripts/build-audit-output.sh`** -- Deterministic renderer for a report-only audit (10 columns: `# / Date / Account / Merchant / Amount / Current Category / Bucket / Recommended Category / Confidence / Evidence`). It also emits a summary totals block per bucket and a count reconciliation block. Buckets are `business cost`, `owner draw`, and `miscategorization`, exact lowercase; any other value fails as an unclassified row. Every `recommended_category` is validated against the live Monarch category map (`monarch categories list --limit 500`), or against a saved map when `--categories PATH` is passed. Malformed, unknown, or unclassified input exits non-zero with field-level errors; there is no fallback and no silent repair. Run `scripts/build-audit-output.sh --help` for the full audit JSON schema. See the **Renderer Selection** principle for when to use this renderer instead of `build-output.sh`.
 - **`data/venmo-classification-rules.json`** -- Explicit deterministic Venmo note/counterparty to Monarch category mappings. Do not infer categories outside these rules.
 </reference_index>
 
