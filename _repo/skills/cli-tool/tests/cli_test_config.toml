@@ -39,7 +39,7 @@ orchestration_clis = []
 no_filters_clis = ["reminders", "cliclick", "powerpoint-slide-recorder", "macspeech"]
 
 # Browser automation CLIs (use BrowserAutomation backed by browser-harness)
-browser_clis = ["bricklink", "brickowl", "globiflow", "ahrefs", "brickfreedom", "raptive", "facebook_marketplace", "facebook"]
+browser_clis = ["bricklink", "brickowl", "globiflow", "ahrefs", "brickfreedom", "raptive", "facebook"]
 
 # Wrapper CLIs that don't use profiles (wrap system commands, not services)
 wrapper_clis = ["lastpass", "imessage", "openai-whisper", "cliclick", "notifier", "claude-code-sessions", "powerpoint-slide-recorder"]
