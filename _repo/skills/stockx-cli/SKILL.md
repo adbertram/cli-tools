@@ -91,6 +91,13 @@ segment of a product URL, e.g.
 search result's `urlKey` or `url` field.
 </principle>
 
+<principle name="One Product Per Market Command">
+`stockx products market` accepts one product key. It does not provide batch
+market data. A caller loop must preserve each exit status and verify exact
+requested, successful, failed, empty, and invalid JSON counts.
+Do not use the loop's final exit status as proof of complete coverage.
+</principle>
+
 <principle name="Rapid Repeat Runs Are Rate Limited">
 stockx.com rate-limits back-to-back browser sessions. If a run reports that
 StockX did not serve its app payload, wait a few seconds and retry rather than
