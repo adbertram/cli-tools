@@ -101,6 +101,6 @@ Migration reference: https://ai.google.dev/gemini-api/docs/interactions-breaking
 `gemini image generate` accepts reference images via `-i / --input-image` (repeatable) for image editing and multi-image composition. Only the Nano Banana models support this (`gemini-3-pro-image-preview`, `gemini-2.5-flash-image`); Imagen models (`imagen-4.0-*`) will error if `-i` is passed. Images are sent as inline bytes to the Gemini API.
 
 ```bash
-gemini image generate "make a slight variation" -i ./ref.png -o out.png
-gemini image generate "compose these two scenes" -i a.png -i b.png -m gemini-2.5-flash-image
+gemini-api image generate "make a slight variation" -i ./ref.png -o out.png
+gemini-api image generate "compose these two scenes" -i a.png -i b.png -m gemini-2.5-flash-image
 ```

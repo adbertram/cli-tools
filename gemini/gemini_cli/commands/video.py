@@ -33,12 +33,12 @@ def video_analyze(
     Use --json-schema for structured JSON output that guarantees valid JSON.
 
     Example:
-        gemini video analyze video.mp4 --prompt "Summarize this video"
-        gemini video analyze video.mp4 --prompt-file prompts/review.txt
-        gemini video analyze lecture.mp4 -p "What are the key topics discussed?"
-        gemini video analyze demo.mp4 -f analysis_prompt.txt --model gemini-3.1-pro-preview
-        gemini video analyze video.mp4 -p "Review this" --files outline.pdf --files notes.txt
-        gemini video analyze video.mp4 -p "Review this" --json-schema schema.json
+        gemini-api video analyze video.mp4 --prompt "Summarize this video"
+        gemini-api video analyze video.mp4 --prompt-file prompts/review.txt
+        gemini-api video analyze lecture.mp4 -p "What are the key topics discussed?"
+        gemini-api video analyze demo.mp4 -f analysis_prompt.txt --model gemini-3.1-pro-preview
+        gemini-api video analyze video.mp4 -p "Review this" --files outline.pdf --files notes.txt
+        gemini-api video analyze video.mp4 -p "Review this" --json-schema schema.json
     """
     try:
         # Validate prompt options

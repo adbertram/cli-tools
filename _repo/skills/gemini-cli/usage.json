@@ -1,7 +1,7 @@
 {
   "tool": "gemini",
   "description": "CLI interface for Gemini API",
-  "discovered_at": "2026-07-21T19:38:27Z",
+  "discovered_at": "2026-08-09T20:27:17Z",
   "total_commands": 27,
   "global_options": [
     {
@@ -282,7 +282,14 @@
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "usage_instructions": "Run `gemini cache clear --help` for exact arguments and options.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
@@ -300,7 +307,7 @@
       ],
       "commands": {
         "new": {
-          "help": "Start a new chat conversation with a prompt. Example: gemini chat new \"Explain quantum computing in simple terms\" gemini chat new \"What is in this image?\" --file photo.jpg gemini chat new \"Summarize this document\" -f report.pdf --model gemini-3.1-pro-preview",
+          "help": "Start a new chat conversation with a prompt. Example: gemini-api chat new \"Explain quantum computing in simple terms\" gemini-api chat new \"What is in this image?\" --file photo.jpg gemini-api chat new \"Summarize this document\" -f report.pdf --model gemini-3.1-pro-preview",
           "usage_instructions": "Send a prompt to Gemini and get a response. PROMPT is required (positional). Attach files with --file/-f (images, PDFs, etc.) for multimodal queries. Use --model/-m to select model (default: gemini-3-pro-preview).",
           "arguments": [
             {
@@ -837,7 +844,7 @@
       ],
       "commands": {
         "analyze": {
-          "help": "Upload and analyze a video file with Gemini. For videos < 20MB, the video is analyzed immediately using inline upload. For videos >= 20MB, the video is uploaded to Files API first. Provide a prompt either inline with --prompt or from a file with --prompt-file. Additional context files (PDFs, docs, etc.) can be included with --files. Use --json-schema for structured JSON output that guarantees valid JSON. Example: gemini video analyze video.mp4 --prompt \"Summarize this video\" gemini video analyze video.mp4 --prompt-file prompts/review.txt gemini video analyze lecture.mp4 -p \"What are the key topics discussed?\" gemini video analyze demo.mp4 -f analysis_prompt.txt --model gemini-3.1-pro-preview gemini video analyze video.mp4 -p \"Review this\" --files outline.pdf --files notes.txt gemini video analyze video.mp4 -p \"Review this\" --json-schema schema.json",
+          "help": "Upload and analyze a video file with Gemini. For videos < 20MB, the video is analyzed immediately using inline upload. For videos >= 20MB, the video is uploaded to Files API first. Provide a prompt either inline with --prompt or from a file with --prompt-file. Additional context files (PDFs, docs, etc.) can be included with --files. Use --json-schema for structured JSON output that guarantees valid JSON. Example: gemini-api video analyze video.mp4 --prompt \"Summarize this video\" gemini-api video analyze video.mp4 --prompt-file prompts/review.txt gemini-api video analyze lecture.mp4 -p \"What are the key topics discussed?\" gemini-api video analyze demo.mp4 -f analysis_prompt.txt --model gemini-3.1-pro-preview gemini-api video analyze video.mp4 -p \"Review this\" --files outline.pdf --files notes.txt gemini-api video analyze video.mp4 -p \"Review this\" --json-schema schema.json",
           "usage_instructions": "Analyze a video with Gemini. FILE_PATH is required (positional). Provide a prompt with --prompt/-p (inline) or --prompt-file/-f (from file). Videos < 20MB are sent inline; larger files use Files API. Attach extra context files with --files (repeatable). Use --model/-m to select model (default: gemini-3-pro-preview). Use --json-schema/-s for structured JSON output. Set --fps for video sampling rate (default: 1).",
           "arguments": [
             {
