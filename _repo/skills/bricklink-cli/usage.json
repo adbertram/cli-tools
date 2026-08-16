@@ -1,7 +1,7 @@
 {
   "tool": "bricklink",
   "description": "CLI interface for Bricklink API",
-  "discovered_at": "2026-07-20T15:45:40Z",
+  "discovered_at": "2026-07-29T03:39:19Z",
   "total_commands": 60,
   "global_options": [
     {
@@ -296,7 +296,14 @@
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "usage_instructions": "Run `bricklink cache clear`.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
@@ -333,7 +340,7 @@
               "name": "item_no",
               "type": "TEXT",
               "required": true,
-              "help": "Item number"
+              "help": "BrickLink catalog item number"
             }
           ],
           "options": [
@@ -392,7 +399,7 @@
               "name": "item_no",
               "type": "TEXT",
               "required": true,
-              "help": "Item number"
+              "help": "BrickLink catalog item number"
             }
           ],
           "options": [
@@ -548,7 +555,7 @@
               "name": "item_no",
               "type": "ITEM_NO",
               "required": false,
-              "help": "Item number"
+              "help": "BrickLink catalog item number"
             }
           ],
           "options": [
@@ -679,7 +686,7 @@
               "name": "item_no",
               "type": "TEXT",
               "required": true,
-              "help": "Item number"
+              "help": "BrickLink catalog item number"
             }
           ],
           "options": [
@@ -744,7 +751,7 @@
               "name": "item_no",
               "type": "TEXT",
               "required": true,
-              "help": "Item number"
+              "help": "BrickLink catalog item number"
             }
           ],
           "options": [
@@ -1680,10 +1687,10 @@
             },
             {
               "name": "--page",
-              "type": "bool",
+              "type": "INTEGER",
               "required": false,
-              "help": "g      <int>  Page number",
-              "short": "-p",
+              "help": "Page number",
+              "short": "-pg",
               "default": "1"
             },
             {

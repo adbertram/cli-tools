@@ -34,7 +34,7 @@ def _get_catalog_item(type: str, item_no: str, table: bool = False):
 @command
 def catalog_get(
     type: str = typer.Argument(..., help="Item type (PART,SET,MINIFIG,BOOK,GEAR,CATALOG,INSTRUCTION)"),
-    item_no: str = typer.Argument(..., help="Item number"),
+    item_no: str = typer.Argument(..., help="BrickLink catalog item number"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
 ):
     """
@@ -55,7 +55,7 @@ def catalog_get(
 @command
 def catalog_item(
     type: str = typer.Argument(..., help="Item type (PART,SET,MINIFIG,BOOK,GEAR,CATALOG,INSTRUCTION)"),
-    item_no: str = typer.Argument(..., help="Item number"),
+    item_no: str = typer.Argument(..., help="BrickLink catalog item number"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
 ):
     """
@@ -194,7 +194,7 @@ def catalog_minifig(
 @command
 def catalog_price(
     type: Optional[str] = typer.Argument(None, help="Item type"),
-    item_no: Optional[str] = typer.Argument(None, help="Item number"),
+    item_no: Optional[str] = typer.Argument(None, help="BrickLink catalog item number"),
     color: Optional[int] = typer.Option(None, "--color", "-c", help="Color ID"),
     condition: Optional[str] = typer.Option(None, "--condition", help="N=new, U=used"),
     sold: bool = typer.Option(False, "--sold", help="Show sold prices instead of stock"),
@@ -291,7 +291,7 @@ def catalog_price(
 @command
 def catalog_colors(
     type: str = typer.Argument(..., help="Item type"),
-    item_no: str = typer.Argument(..., help="Item number"),
+    item_no: str = typer.Argument(..., help="BrickLink catalog item number"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)"),
     limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Maximum results"),
@@ -337,7 +337,7 @@ def catalog_colors(
 @command
 def catalog_subsets(
     type: str = typer.Argument(..., help="Item type"),
-    item_no: str = typer.Argument(..., help="Item number"),
+    item_no: str = typer.Argument(..., help="BrickLink catalog item number"),
     break_minifigs: bool = typer.Option(False, "--break-minifigs", help="Break down minifigs into parts"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)"),
@@ -378,7 +378,7 @@ def catalog_subsets(
 @command
 def catalog_supersets(
     type: str = typer.Argument(..., help="Item type"),
-    item_no: str = typer.Argument(..., help="Item number"),
+    item_no: str = typer.Argument(..., help="BrickLink catalog item number"),
     color: Optional[int] = typer.Option(None, "--color", "-c", help="Color ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)"),

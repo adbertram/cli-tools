@@ -49,7 +49,8 @@ class _CodeInput:
 
 
 def _fake_runtime_init(self, config=None):
-    self.config = MagicMock()
+    assert config is not None
+    self.config = config
     self.confirmation = MagicMock()
     self.confirmation.is_pending.return_value = False
     self.clear_session = MagicMock()
@@ -96,3 +97,4 @@ def test_messages_list_uses_managed_confirmation_code_and_retries(tmp_path, monk
         "https://www.bricklink.com/myMsg.asp?pg=1&a=i",
         "https://www.bricklink.com/myMsg.asp?pg=1&a=i",
     ]
+    assert len(list(data_home.rglob("list_messages_*.json"))) == 1

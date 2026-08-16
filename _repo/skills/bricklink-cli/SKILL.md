@@ -124,6 +124,26 @@ exit "$status"
 ```
 </principle>
 
+<principle name="Safe Catalog Item Type Discovery">
+`bricklink catalog get <type> <item_no>` is a typed lookup. It does not
+discover an item's type. Never enumerate possible types with repeated
+`catalog get` calls.
+
+Read the item type from the owning source record before the catalog request.
+For a BrickBuddy lot, use the approved BrickBuddy database query path and read
+the linked item's stored `type`. Then issue one request with that exact type.
+Do not change production data during type discovery.
+
+Do not use `SET` or `INSTRUCTION` as candidate probes for an item number that
+lacks a `-<positive integer>` sequence suffix. Catalog item and price commands
+reject these incomplete numbers before an API request. They exit 1 with
+`Error: <TYPE> item numbers must include a positive sequence suffix, for example '<number>-1'.`
+
+If the owning source has no item type, stop with
+`ITEM_TYPE_UNKNOWN: <item_no>`. Do not convert invalid-request errors into
+not-found results, and do not guess a type from the item number.
+</principle>
+
 <principle name="Item Dimensions">
 BrickLink has **two separate dimension systems** for parts:
 
