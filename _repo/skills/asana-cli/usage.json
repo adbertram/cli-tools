@@ -1,8 +1,8 @@
 {
   "tool": "asana",
   "description": "CLI interface for Asana API",
-  "discovered_at": "2026-06-20T19:38:51Z",
-  "total_commands": 28,
+  "discovered_at": "2026-08-14T15:26:51Z",
+  "total_commands": 31,
   "global_options": [
     {
       "name": "--version",
@@ -27,7 +27,6 @@
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
-          "usage_instructions": "Configure Asana auth with a PAT. Use --pat/-p to provide token directly (otherwise prompts). Use --workspace/-w to set a default workspace ID. Get PAT from https://app.asana.com/0/my-apps.",
           "arguments": [],
           "options": [
             {
@@ -41,13 +40,13 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
+              "help": "Clear existing ephemeral auth state and re-authenticate",
               "short": "-F"
             }
           ]
         },
         "logout": {
-          "help": "Clear stored credentials and browser sessions.",
+          "help": "Clear stored credentials.",
           "usage_instructions": "Clear all stored Asana credentials.",
           "arguments": [],
           "options": [
@@ -122,7 +121,7 @@
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "Run `asana auth profiles list --help` for exact arguments and options.",
               "arguments": [],
               "options": [
@@ -176,6 +175,38 @@
                 }
               ]
             },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
             "select": {
               "help": "Activate a profile within its auth type.",
               "arguments": [
@@ -191,7 +222,7 @@
           }
         },
         "status": {
-          "help": "Check authentication status across profiles.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
           "usage_instructions": "Check current auth status. Use --table/-t for formatted output.",
           "arguments": [],
           "options": [
@@ -251,13 +282,19 @@
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "usage_instructions": "Run `asana cache clear --help` for exact arguments and options.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
     "custom-fields": {
       "help": "Manage Asana custom fields",
-      "usage_instructions": "Custom field management -- list and view custom fields including enum options. Always requires a --project/-p to scope the query.",
       "arguments": [],
       "options": [
         {
@@ -268,6 +305,70 @@
         }
       ],
       "commands": {
+        "add-to-project": {
+          "help": "Enable an existing custom field on a project.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--field",
+              "type": "TEXT",
+              "required": true,
+              "help": "Custom field ID"
+            },
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project ID",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "create": {
+          "help": "Create a new custom field in a workspace.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--workspace",
+              "type": "TEXT",
+              "required": true,
+              "help": "Workspace ID",
+              "short": "-w"
+            },
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Custom field name",
+              "short": "-n"
+            },
+            {
+              "name": "--type",
+              "type": "TEXT",
+              "required": true,
+              "help": "Field type (text, enum, multi_enum, number, date, people, reference)"
+            },
+            {
+              "name": "--description",
+              "type": "TEXT",
+              "required": false,
+              "help": "Custom field description",
+              "short": "-d"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "get": {
           "help": "Get custom field details including enum options.",
           "usage_instructions": "Get details for a custom field by FIELD_ID (required positional). Shows enum options and metadata. Use --table/-t for formatted output.",
@@ -347,7 +448,6 @@
     },
     "projects": {
       "help": "Manage Asana projects",
-      "usage_instructions": "Project management -- list and view Asana projects. Use --workspace/-w to specify workspace (defaults to configured default).",
       "arguments": [],
       "options": [
         {
@@ -438,7 +538,6 @@
     },
     "sections": {
       "help": "Manage Asana sections",
-      "usage_instructions": "Section management -- list and view sections within projects. Always requires --project/-p to scope the query.",
       "arguments": [],
       "options": [
         {
@@ -528,7 +627,6 @@
     },
     "tasks": {
       "help": "Manage Asana tasks",
-      "usage_instructions": "Task management -- list, search, create, update, complete, and delete tasks. List requires either --project/-p, --assignee/-a, or --workspace/-w. Use 'me' for --assignee to get your tasks.",
       "arguments": [],
       "options": [
         {
@@ -541,7 +639,6 @@
       "commands": {
         "complete": {
           "help": "Mark task as complete.",
-          "usage_instructions": "Mark a task as complete by TASK_ID (required positional). Shortcut for `tasks update <id> --completed`.",
           "arguments": [
             {
               "name": "task_id",

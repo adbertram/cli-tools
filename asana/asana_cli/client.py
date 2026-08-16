@@ -434,6 +434,24 @@ class AsanaClient:
         }
         return self._make_request("GET", f"/custom_fields/{field_id}", params=params)
 
+    def create_custom_field(self, workspace_id: str, name: str, resource_subtype: str,
+                            description: Optional[str] = None) -> Dict:
+        """Create a new custom field in a workspace."""
+        data = {
+            "workspace": workspace_id,
+            "name": name,
+            "resource_subtype": resource_subtype,
+        }
+        if description:
+            data["description"] = description
+
+        return self._make_request("POST", "/custom_fields", data=data)
+
+    def add_custom_field_to_project(self, project_id: str, field_id: str) -> Dict:
+        """Enable an existing custom field on a project."""
+        data = {"custom_field": field_id}
+        return self._make_request("POST", f"/projects/{project_id}/addCustomFieldSetting", data=data)
+
     # ==================== Users ====================
 
     def list_users(self, workspace_id: Optional[str] = None, limit: Optional[int] = None) -> List[Dict]:
