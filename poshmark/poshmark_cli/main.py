@@ -13,7 +13,7 @@ from cli_tools_shared.filters import (
 from cli_tools_shared.output import command, print_error, print_info, print_json, print_table
 
 from . import __version__
-from .client import get_client
+from .client import ListingDetailBlocked, get_client
 from .config import get_config
 
 from cli_tools_shared.auth_commands import create_auth_app
@@ -101,6 +101,36 @@ def _list(fetch, filters, table, properties, empty) -> None:
     _render(rows, table, properties, empty)
 
 
+@listings_app.command("list")
+@command
+def listings_list(
+    query: str = typer.Option("", "--query", help="Optional search query"),
+    sort: str = typer.Option(
+        "newest",
+        "--sort",
+        "-s",
+        help="Sort field: 'newest' (default), 'price', or 'relevance'. Natural direction unless --desc.",
+    ),
+    desc: bool = typer.Option(
+        False,
+        "--desc",
+        "-d",
+        help="Reverse the sort field's natural direction (price low->high becomes high->low). Not valid with 'newest' or 'relevance'.",
+    ),
+    limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of results"),
+    filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
+):
+    """List Poshmark listings, newest first by default."""
+    sort_by = _resolve_sort(sort, desc)
+    client = get_client()
+    try:
+        _list(lambda: client.search(query, limit, sort_by=sort_by), filter, table, properties, "No results found.")
+    finally:
+        client.close()
+
+
 @listings_app.command("search")
 @command
 def listings_search(
@@ -128,6 +158,39 @@ def listings_search(
         _list(lambda: client.search(query, limit, sort_by=sort_by), None, table, properties, "No results found.")
     finally:
         client.close()
+
+
+@listings_app.command("get")
+@command
+def listings_get(
+    listing_id_or_url: str = typer.Argument(..., help="Poshmark listing ID or direct URL"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
+):
+    """Get one Poshmark listing through the saved browser profile."""
+    client = get_client()
+    try:
+        row = client.get_listing(listing_id_or_url)
+    except ListingDetailBlocked as exc:
+        print_json(exc.as_dict())
+        raise typer.Exit(1)
+    finally:
+        client.close()
+
+    fields = _property_fields(properties)
+    if fields:
+        row = apply_properties_filter([row], properties)[0]
+    if not table:
+        print_json(row)
+        return
+    if fields:
+        print_table([row], fields, [field.replace("_", " ").title() for field in fields])
+        return
+    print_table(
+        [{"field": key, "value": str(value)} for key, value in row.items()],
+        ["field", "value"],
+        ["Field", "Value"],
+    )
 
 
 app.add_typer(listings_app, name="listings")

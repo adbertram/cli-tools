@@ -29,8 +29,17 @@ After installation, the `poshmark` command will be available in your terminal.
 # Search for listings
 poshmark listings search "nike shoes" --limit 10 --table
 
+# List the newest listings
+poshmark listings list --limit 10
+
 # Get raw JSON output
 poshmark listings search "nike shoes" --limit 5
+
+# Get one listing by ID through the saved CLI browser profile
+poshmark listings get 6a8097f6721f58e5c2d0f19f
+
+# A direct listing URL also works
+poshmark listings get "https://poshmark.com/listing/..."
 ```
 
 ## Commands
@@ -81,6 +90,12 @@ poshmark auth profiles delete PROFILE_NAME
 ### Listings (`poshmark listings`)
 
 ```bash
+# List newest listings without a search term
+poshmark listings list
+
+# List and filter the returned rows
+poshmark listings list --filter "price:contains:$20" --limit 10
+
 # Search for listings (JSON output, newest listed first by default)
 poshmark listings search "nike shoes"
 
@@ -101,6 +116,12 @@ poshmark listings search "nike shoes" --sort price --desc
 
 # Sort by Poshmark relevance
 poshmark listings search "nike shoes" --sort relevance
+
+# Get full detail from an ID returned by `listings list` or `listings search`
+poshmark listings get 6a8097f6721f58e5c2d0f19f
+
+# Restrict detail output fields
+poshmark listings get 6a8097f6721f58e5c2d0f19f --properties "id,available,seller_name,shipping_estimate"
 ```
 
 #### Sorting (`--sort` / `--desc`)
@@ -249,7 +270,10 @@ Commands return plain JSON records. The listing search record shape is:
 | `image` | Cover image URL |
 | `url` | Absolute Poshmark listing URL |
 
-Capture real DOM data first, then update `normalize_items()` and `normalize_item_detail()` in `parsers.py` to map page data into the documented command output. Add local models only when validation, polymorphism, or serialization removes real complexity.
+`listings get` reads the page through the active CLI browser profile. It returns
+the product fields plus `available`, `available_fulfillment`, `seller_name`,
+`shipping`, `shipping_estimate`, and `image_urls`. A login or human challenge
+returns a structured blocker on stdout and exits with a nonzero status.
 
 ## Requirements
 

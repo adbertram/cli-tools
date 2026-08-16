@@ -113,6 +113,14 @@ def _search(*args):
     return runner.invoke(main.app, ["listings", "search", "widget", *args])
 
 
+def test_list_default_discovers_listing_urls_newest_first(fake_client):
+    result = runner.invoke(main.app, ["listings", "list", "--limit", "7"])
+    assert result.exit_code == 0
+    assert fake_client.calls == [
+        {"query": "", "limit": 7, "sort_by": "added_desc"}
+    ]
+
+
 def test_search_unknown_sort_exits_nonzero(fake_client):
     """`listings search --sort bogus` exits non-zero without a network call."""
     result = _search("--sort", "bogus")

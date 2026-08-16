@@ -21,6 +21,9 @@ poshmark <command-group> <action> [arguments] [options]
 |------|---------|
 | Authenticate | `poshmark auth login` |
 | Check auth | `poshmark auth status` |
+| List newest listings | `poshmark listings list` |
+| Search listings | `poshmark listings search <query>` |
+| Get listing detail | `poshmark listings get <id-or-direct-url>` |
 </quick_start>
 
 <essential_principles>
@@ -32,6 +35,7 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
 <principle name="Command Groups">
 - **auth** -- Authentication management (login, logout, status, test) and nested `auth profiles`
 - **cache** -- Local response cache management
+- **listings** -- List, search, and get detail through the saved browser profile
 </principle>
 </essential_principles>
 

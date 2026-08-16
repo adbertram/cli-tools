@@ -1,8 +1,8 @@
 {
   "tool": "poshmark",
   "description": "CLI interface for poshmark",
-  "discovered_at": "2026-07-24T19:30:21Z",
-  "total_commands": 13,
+  "discovered_at": "2026-08-15T18:00:45Z",
+  "total_commands": 15,
   "global_options": [],
   "commands": {
     "auth": {
@@ -273,6 +273,89 @@
       "arguments": [],
       "options": [],
       "commands": {
+        "get": {
+          "help": "Get one Poshmark listing through the saved browser profile.",
+          "arguments": [
+            {
+              "name": "listing_id_or_url",
+              "type": "TEXT",
+              "required": true,
+              "help": "Poshmark listing ID or direct URL"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "list": {
+          "help": "List Poshmark listings, newest first by default.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--query",
+              "type": "TEXT",
+              "required": false,
+              "help": "Optional search query"
+            },
+            {
+              "name": "--sort",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sort field: 'newest' (default), 'price', or 'relevance'. Natural direction unless --desc",
+              "short": "-s",
+              "default": "newest"
+            },
+            {
+              "name": "--desc",
+              "type": "bool",
+              "required": false,
+              "help": "Reverse the sort field's natural direction (price low->high becomes high->low). Not valid with 'newest' or 'relevance'",
+              "short": "-d"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
         "search": {
           "help": "Search Poshmark listings.",
           "arguments": [
