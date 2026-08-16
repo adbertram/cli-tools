@@ -20,6 +20,15 @@ class GlobiflowBrowser(BrowserAutomation):
     AUTH_URL_PATTERN = r"/login|podio\.com/login|accounts\.podio\.com"
     AUTH_FAILURE_URL_PATTERN = r"^https://workflow-automation\.podio\.com/?(?:[?#].*)?$"
 
+    # Non-interactive login: LOGIN_URL redirects through podio.com/oauth/authorize
+    # to podio.com/login, a plain Email/Password/Sign-In form (verified via a
+    # read-only DOM probe on 2026-08-14 -- stable ids, no framework churn).
+    AUTH_LOGIN_USERNAME_SELECTOR = "#email"
+    AUTH_LOGIN_PASSWORD_SELECTOR = "#password"
+    AUTH_LOGIN_SUBMIT_SELECTOR = "#loginFormSignInButton"
+    AUTH_LOGIN_USERNAME_SECRET = "globiflow-username"
+    AUTH_LOGIN_PASSWORD_SECRET = "globiflow-password"
+
 
 BrowserError = BrowserAutomationError
 BrowserService = GlobiflowBrowser

@@ -18,6 +18,11 @@ dependencies = [
 [project.scripts]
 globiflow = "globiflow_cli.main:app"
 
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["globiflow_cli*"]

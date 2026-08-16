@@ -5,6 +5,8 @@ for Globiflow operations.
 """
 from typing import Dict, List, Optional, Any
 
+from cli_tools_shared.browser import BrowserHarnessError
+
 from .config import get_config
 from .browser import GlobiflowBrowser, BrowserError, AuthenticationRequired
 from .models import Flow, FlowDetail, FlowLog, Step, AnyStep, create_step, HttpMethod, RelationshipDirection, Trigger, TriggerType
@@ -49,6 +51,12 @@ FIELD_SELECTORS = {
     "filename": ["input[name*='filename']"],
     "template": ["textarea[name*='template']"],
 }
+
+# The flow's action steps live in this stable element id, not under a
+# heading: the configureflow.php page renders two "Actions" h4 headings (a
+# sidebar palette labelled "Actions" plus the real "Actions (... then do the
+# following:)" section), so matching on heading text is ambiguous.
+FLOW_ACTIONS_SELECTOR = "ul#flowactions"
 
 
 class ClientError(Exception):
@@ -264,8 +272,16 @@ class GlobiflowClient:
     def list_flows(self) -> List[Flow]:
         """List all flows across all apps.
 
-        Navigates to flows.php, expands the tree, and extracts all flows
-        from all apps.
+        Navigates to flows.php once to read the org/workspace/app tree
+        (hierarchy text only -- no clicking), then visits each app with
+        flows via a direct ``/flows.php?app={app_id}`` navigation instead
+        of clicking through the tree items in turn. Clicking each tree
+        item and reading a shared, AJAX-replaced panel is a confirmed live
+        race (see ``_disable_flow``): clicking one item while the previous
+        app's flow list is still being swapped out can make a stale,
+        about-to-be-removed checkbox transiently match the wrong app. A
+        direct per-app navigation is a full page load with no such
+        transitional DOM state.
 
         Returns:
             List of Flow models with: name, app_name, workspace_name,
@@ -285,8 +301,6 @@ class GlobiflowClient:
             expand_link.click()
             page.wait_for_timeout(2000)
 
-        flows = []
-
         # Track hierarchy as we traverse
         current_org = ""
         current_workspace = ""
@@ -294,7 +308,10 @@ class GlobiflowClient:
         # Get all tree items
         tree_items = page.locator('[role="treeitem"]').all()
 
-        # First pass: build hierarchy and identify apps with flows
+        # First (and only) pass over the tree: build hierarchy and collect
+        # (app_id, app_name, workspace_name, org_name) for every app with
+        # flows. No clicking here -- just reading text/attributes, which
+        # cannot race.
         apps_with_flows = []
         for item in tree_items:
             text = _clean(item.text_content())
@@ -313,70 +330,124 @@ class GlobiflowClient:
                     app_name = match.group(1).strip()
                     flow_count = int(match.group(2))
                     if flow_count > 0:
+                        item_id = item.get_attribute("id") or ""
+                        id_match = re.match(r"app-(\d+)_anchor", item_id)
+                        if not id_match:
+                            raise ClientError(
+                                f"Could not resolve app id for tree item {item_id!r} "
+                                f"({app_name})"
+                            )
                         apps_with_flows.append({
+                            "app_id": id_match.group(1),
                             "app_name": app_name,
                             "workspace_name": current_workspace,
                             "org_name": current_org,
-                            "tree_item_text": text,
                         })
 
-        # Second pass: click each app and extract flows
+        flows = []
+
+        # Second pass: navigate directly to each app's flow list.
         for app_info in apps_with_flows:
-            # Find and click the app tree item
-            app_item = page.get_by_role("treeitem", name=app_info["tree_item_text"])
-            if app_item.count() > 0:
-                app_item.click()
-                page.wait_for_timeout(1500)
+            self.ensure_authenticated(f"/flows.php?app={app_info['app_id']}")
+            page = self.browser.get_page()
+            page.wait_for_timeout(2000)
 
-                # Extract flows from the flow list panel
-                # Flows are in divs with cursor pointer containing an img and flow name
-                flow_container = page.locator("hr ~ div").first
-                if flow_container.count() > 0:
-                    flow_items = flow_container.locator("div[style*='cursor']").all()
-                    if not flow_items:
-                        # Alternative selector
-                        flow_items = flow_container.locator("> div").all()
+            # Extract flows from the flow list panel
+            # Flows are in divs with cursor pointer containing an img and flow name
+            flow_container = page.locator("hr ~ div").first
+            if flow_container.count() > 0:
+                flow_items = flow_container.locator("div[style*='cursor']").all()
+                if not flow_items:
+                    # Alternative selector
+                    flow_items = flow_container.locator("> div").all()
 
-                    for flow_item in flow_items:
-                        # Get flow name - it's the text content excluding img
-                        flow_name = _clean(flow_item.text_content())
+                for flow_item in flow_items:
+                    # Get flow name - it's the text content excluding img
+                    flow_name = _clean(flow_item.text_content())
 
-                        # Skip toolbar elements
-                        if flow_name.startswith("With Selected:"):
-                            continue
+                    # Skip toolbar elements
+                    if flow_name.startswith("With Selected:"):
+                        continue
 
-                        # Extract flow ID from the checkbox value attribute
-                        checkbox = flow_item.locator("input.bulkCheck").first
-                        flow_id = None
-                        if checkbox.count() > 0:
-                            flow_id = checkbox.get_attribute("value")
+                    # Extract flow ID from the checkbox value attribute
+                    checkbox = flow_item.locator("input.bulkCheck").first
+                    flow_id = None
+                    if checkbox.count() > 0:
+                        flow_id = checkbox.get_attribute("value")
 
-                        # Check enabled status from img src
-                        # Disabled flows have images ending in _off.png (e.g., transmit_off.png)
-                        # Enabled flows have images ending in .png without _off
-                        img = flow_item.locator("img").first
-                        enabled = True
-                        if img.count() > 0:
-                            src = img.get_attribute("src") or ""
-                            enabled = "_off" not in src.lower()
+                    # Check enabled status from img src
+                    # Disabled flows have images ending in _off.png (e.g., transmit_off.png)
+                    # Enabled flows have images ending in .png without _off
+                    img = flow_item.locator("img").first
+                    enabled = True
+                    if img.count() > 0:
+                        src = img.get_attribute("src") or ""
+                        enabled = "_off" not in src.lower()
 
-                        if flow_name and flow_id:
-                            flows.append(Flow(
-                                id=flow_id,
-                                name=flow_name,
-                                app_name=app_info["app_name"],
-                                workspace_name=app_info["workspace_name"],
-                                org_name=app_info["org_name"],
-                                enabled=enabled,
-                            ))
+                    if flow_name and flow_id:
+                        flows.append(Flow(
+                            id=flow_id,
+                            name=flow_name,
+                            app_name=app_info["app_name"],
+                            workspace_name=app_info["workspace_name"],
+                            org_name=app_info["org_name"],
+                            enabled=enabled,
+                        ))
 
         return flows
+
+    def _resolve_flow_app_id(self, flow_id: str) -> str:
+        """Resolve the Podio app id that owns a flow, given only its flow_id.
+
+        Navigates directly to ``/configureflow.php?id={flow_id}`` -- a
+        flow-id-keyed URL that loads only that one flow's own edit page.
+        This touches no other app's data and cannot race the AJAX-driven
+        per-app panel the way the org/workspace tree-walk can (the same
+        race documented on ``_disable_flow``, confirmed live: clicking one
+        tree item while the previous app's flow list is still being
+        replaced can make a stale, about-to-be-removed checkbox
+        transiently match ``count() > 0`` for the wrong app). The page
+        embeds the owning app id in an inline script as ``AppId = {id}``.
+
+        Raises:
+            ClientError: If the flow does not exist or its app id cannot
+                be resolved from the page.
+        """
+        self.ensure_authenticated(f"/configureflow.php?id={flow_id}")
+        page = self.browser.get_page()
+        page.wait_for_timeout(2000)
+
+        if page.locator("#flowName").count() == 0:
+            raise ClientError(f"Flow with ID {flow_id} not found")
+
+        app_id = page.evaluate(
+            "() => { const m = document.documentElement.outerHTML"
+            ".match(/AppId\\s*=\\s*(\\d+)/); return m ? m[1] : null; }"
+        )
+        if not app_id:
+            raise ClientError(f"Could not resolve app id for flow {flow_id}")
+        return str(app_id)
+
+    def _find_flow_row(self, page: "Page", flow_id: str, app_id: str) -> "Locator":
+        """Locate a flow's row div on an already-loaded ``/flows.php?app=`` page.
+
+        Raises:
+            ClientError: If the flow's row cannot be found in this app.
+        """
+        row = page.locator(
+            f'div.flowRowDiv:has(input.bulkCheck[value="{flow_id}"])'
+        ).first
+        if row.count() == 0:
+            raise ClientError(f"Flow {flow_id} not found in app {app_id} on flows.php")
+        return row
 
     def delete_flow(self, flow_id: str) -> bool:
         """Delete a flow by its ID.
 
-        Navigates to the flows page, finds the flow by ID, selects it,
-        and clicks the Delete action.
+        Resolves the flow's owning app directly via ``configureflow.php``
+        (see ``_resolve_flow_app_id``), then navigates straight to that
+        app's flow list to select and delete it -- no org/workspace
+        tree-walk, so no risk of the click-timing race that pattern has.
 
         Args:
             flow_id: The flow ID to delete
@@ -387,85 +458,72 @@ class GlobiflowClient:
         Raises:
             ClientError: If flow not found or deletion fails
         """
-        import re
+        app_id = self._resolve_flow_app_id(flow_id)
 
-        self.ensure_authenticated("/flows.php")
+        self.ensure_authenticated(f"/flows.php?app={app_id}")
         page = self.browser.get_page()
+        page.wait_for_timeout(2000)
 
-        # Wait for tree to load
-        page.wait_for_selector('[role="treeitem"]', timeout=10000)
+        self._find_flow_row(page, flow_id, app_id)
 
-        # Click "Expand All" to show full tree
-        expand_link = page.get_by_role("link", name="Expand All")
-        if expand_link.count() > 0:
-            expand_link.click()
+        # Use JavaScript to check the hidden checkbox directly
+        page.evaluate(
+            f'document.querySelector(\'input.bulkCheck[value="{flow_id}"]\').checked = true;'
+        )
+        page.wait_for_timeout(500)
+
+        delete_link = page.locator('a[onclick*="bulkDelete"]').first
+        if delete_link.count() == 0:
+            raise ClientError("Delete action not found")
+
+        # Call the JavaScript function to show delete modal
+        page.evaluate(f"bulkDelete({app_id})")
+        page.wait_for_timeout(1000)
+
+        # The modal requires typing "delete" to confirm
+        # Find the visible text input in the modal
+        modal_input = page.locator("input[type='text']").last
+        if modal_input.count() == 0 or not modal_input.is_visible():
+            raise ClientError("Delete confirmation modal not found")
+
+        modal_input.fill("delete")
+        page.wait_for_timeout(300)
+
+        # Click the OK button
+        ok_button = page.get_by_role("button", name="OK")
+        if ok_button.count() == 0:
+            raise ClientError("Delete confirmation modal not found")
+
+        ok_button.click()
+        page.wait_for_timeout(3000)
+
+        # Verify deletion by re-navigating fresh and polling, rather than
+        # a single in-place DOM check: confirmed live that Globiflow's
+        # delete is not immediately consistent -- the row can remain
+        # visible in a freshly re-navigated /flows.php?app= page for tens
+        # of seconds after the OK click, even though the delete has
+        # already been accepted server-side and completes on its own
+        # shortly after (observed once taking ~45s). A single check right
+        # after the click is not reliable; poll for the row's disappearance
+        # instead of assuming either immediate success or failure.
+        deadline_attempts = 12  # ~12 * 4s = 48s budget
+        for attempt in range(deadline_attempts):
+            self.ensure_authenticated(f"/flows.php?app={app_id}")
+            page = self.browser.get_page()
             page.wait_for_timeout(2000)
 
-        # Track hierarchy as we traverse to find apps with flows
-        tree_items = page.locator('[role="treeitem"]').all()
-        apps_with_flows = []
-        for item in tree_items:
-            text = _clean(item.text_content())
-            level = item.get_attribute("aria-level")
-            if level == "3":
-                match = re.match(r"(.+) \((\d+)\)", text)
-                if match and int(match.group(2)) > 0:
-                    apps_with_flows.append(text)
+            checkbox_after = page.locator(f'input.bulkCheck[value="{flow_id}"]').first
+            if checkbox_after.count() == 0:
+                return True
 
-        # Search through each app to find the flow
-        for app_text in apps_with_flows:
-            app_item = page.get_by_role("treeitem", name=app_text)
-            if app_item.count() > 0:
-                app_item.click()
-                page.wait_for_timeout(1500)
+            if attempt < deadline_attempts - 1:
+                page.wait_for_timeout(2000)
 
-                # Look for the checkbox with the matching flow ID
-                checkbox = page.locator(f'input.bulkCheck[value="{flow_id}"]').first
-                if checkbox.count() > 0:
-                    # Use JavaScript to check the hidden checkbox directly
-                    page.evaluate(f'''
-                        document.querySelector('input.bulkCheck[value="{flow_id}"]').checked = true;
-                    ''')
-                    page.wait_for_timeout(500)
-
-                    # Get the app_id from the Delete link's onclick attribute
-                    delete_link = page.locator('a[onclick*="bulkDelete"]').first
-                    if delete_link.count() > 0:
-                        onclick = delete_link.get_attribute("onclick") or ""
-                        # Extract app_id from bulkDelete(12345)
-                        import re as regex
-                        match = regex.search(r"bulkDelete\((\d+)\)", onclick)
-                        if match:
-                            app_id = match.group(1)
-                            # Call the JavaScript function to show delete modal
-                            page.evaluate(f"bulkDelete({app_id})")
-                            page.wait_for_timeout(1000)
-
-                            # The modal requires typing "delete" to confirm
-                            # Find the visible text input in the modal
-                            modal_input = page.locator("input[type='text']").last
-                            if modal_input.count() > 0 and modal_input.is_visible():
-                                modal_input.fill("delete")
-                                page.wait_for_timeout(300)
-
-                                # Click the OK button
-                                ok_button = page.get_by_role("button", name="OK")
-                                if ok_button.count() > 0:
-                                    ok_button.click()
-                                    page.wait_for_timeout(2000)
-
-                                    # Verify deletion - checkbox should be gone after page updates
-                                    checkbox_after = page.locator(f'input.bulkCheck[value="{flow_id}"]').first
-                                    if checkbox_after.count() == 0:
-                                        return True
-
-                                    raise ClientError(f"Failed to delete flow {flow_id}")
-
-                            raise ClientError("Delete confirmation modal not found")
-
-                    raise ClientError("Delete action not found")
-
-        raise ClientError(f"Flow with ID {flow_id} not found")
+        raise ClientError(
+            f"Flow {flow_id} still present on flows.php {deadline_attempts * 4}s after "
+            f"confirming delete -- it may still be processing server-side; re-run "
+            f"'globiflow flows get {flow_id}' shortly to check."
+        )
 
     def create_flow(
         self,
@@ -516,11 +574,13 @@ class GlobiflowClient:
             if desc_input.count() > 0:
                 desc_input.fill(description)
 
-        # Handle enabled/disabled state
-        if not enabled:
-            enabled_checkbox = page.locator("#enabled input[type='checkbox']").first
-            if enabled_checkbox.count() > 0 and enabled_checkbox.is_checked():
-                enabled_checkbox.uncheck()
+        # Note: configureflow.php has no enabled/disabled control at creation
+        # time (confirmed live: no #enabled element, and no element with
+        # "enable"/"disable"/"active"/"status" in its id/name/class anywhere
+        # on the page). Every flow is created enabled. If the caller asked
+        # for a disabled flow, it must be deactivated afterward via the
+        # flows.php bulk action -- see the enabled-state handling below,
+        # after the flow_id is known.
 
         # Add steps if provided
         if steps:
@@ -528,12 +588,7 @@ class GlobiflowClient:
                 self._add_step_to_flow(page, step_config)
 
         # Click Save
-        save_link = page.get_by_role("link", name="Save")
-        if save_link.count() == 0:
-            raise ClientError("Save button not found")
-
-        save_link.click()
-        page.wait_for_timeout(3000)  # Wait for save and redirect
+        self._save_flow(page, timeout=3000)  # Wait for save and redirect
 
         # Extract flow_id from the redirect URL
         # After save, URL becomes /flows.php?node={flow_id}
@@ -554,8 +609,137 @@ class GlobiflowClient:
         else:
             flow_id = flow_id_match.group(1)
 
+        # Flows are always created enabled (see note above). Deactivate now
+        # if the caller asked for a disabled flow.
+        if not enabled:
+            self._disable_flow(flow_id, app_id)
+
         # Return the created flow details
         return self.get_flow(flow_id)
+
+    def _disable_flow(self, flow_id: str, app_id: str) -> None:
+        """Disable a flow via the flows.php bulk "Deactivate" action.
+
+        Globiflow's flow-creation page (configureflow.php) has no
+        enabled/disabled control, so every flow is created enabled. The only
+        way to disable a flow is the "Deactivate" bulk action on flows.php:
+        select the flow's row checkbox, invoke the page's ``bulkDeactivate``
+        JS function for its app, and confirm the resulting dialog.
+
+        Navigates directly to ``/flows.php?app={app_id}`` -- the app is
+        already known to the caller (create_flow received it) -- instead of
+        walking the org/workspace tree and clicking through app entries in
+        turn. That per-app search loop (the same pattern list_flows,
+        get_flow, and delete_flow use) is prone to a confirmed live timing
+        race: clicking one tree item while the previous app's AJAX-rendered
+        flow list is still being replaced can make a stale, about-to-be-
+        removed checkbox transiently match `count() > 0` for the wrong app,
+        so the deactivate action fires against the wrong app_id and silently
+        no-ops. A direct ``?app=`` navigation is a full page load with no
+        such transitional DOM state.
+
+        Args:
+            flow_id: The flow ID to disable.
+            app_id: The Podio app ID the flow belongs to.
+
+        Raises:
+            ClientError: If the flow's row cannot be found on flows.php, the
+                deactivate confirmation dialog cannot be confirmed, or the
+                flow's status icon does not reflect the disabled state
+                afterward.
+        """
+        self.ensure_authenticated(f"/flows.php?app={app_id}")
+        page = self.browser.get_page()
+        page.wait_for_timeout(2000)
+
+        checkbox = page.locator(f'input.bulkCheck[value="{flow_id}"]').first
+        if checkbox.count() == 0:
+            raise ClientError(f"Flow {flow_id} not found in app {app_id} on flows.php")
+
+        page.evaluate(
+            f'document.querySelector(\'input.bulkCheck[value="{flow_id}"]\').checked = true;'
+        )
+        page.wait_for_timeout(500)
+
+        deactivate_link = page.locator('a[onclick*="bulkDeactivate"]').first
+        if deactivate_link.count() == 0:
+            raise ClientError(f"Deactivate action not found for flow {flow_id}")
+
+        page.evaluate(f"bulkDeactivate({app_id})")
+        page.wait_for_timeout(1000)
+
+        ok_button = page.get_by_role("button", name="OK")
+        if ok_button.count() == 0:
+            raise ClientError("Deactivate confirmation dialog not found")
+        ok_button.click()
+        page.wait_for_timeout(3000)
+
+        # Re-navigate and re-read the row's status icon to confirm the
+        # toggle actually took effect -- do not assume a click succeeded
+        # silently. Poll rather than checking once: Globiflow's bulk
+        # actions are not immediately consistent (confirmed live on the
+        # sibling bulkDelete action, which can take tens of seconds to
+        # reflect after its own confirmation click), so a single
+        # immediate re-check is not reliable here either.
+        deadline_attempts = 12  # ~12 * 4s = 48s budget
+        for attempt in range(deadline_attempts):
+            self.ensure_authenticated(f"/flows.php?app={app_id}")
+            page = self.browser.get_page()
+            page.wait_for_timeout(2000)
+
+            row = page.locator(
+                f'div.flowRowDiv:has(input.bulkCheck[value="{flow_id}"])'
+            ).first
+            if row.count() == 0:
+                raise ClientError(
+                    f"Could not re-locate flow {flow_id} on flows.php after deactivating"
+                )
+            img = row.locator("img").first
+            src = img.get_attribute("src") if img.count() > 0 else ""
+            if "_off" in (src or "").lower():
+                return
+
+            if attempt < deadline_attempts - 1:
+                page.wait_for_timeout(2000)
+
+        raise ClientError(
+            f"Flow {flow_id} was not disabled {deadline_attempts * 4}s after the "
+            f"deactivate action -- it may still be processing server-side; re-run "
+            f"'globiflow flows get {flow_id}' shortly to check."
+        )
+
+    def _wait_for_step_fields_rendered(self, page: "Page", timeout: int = 8000):
+        """Wait for the newly selected step type's config fields to render.
+
+        After clicking a step-type selector (``.sidebarblock``), Globiflow
+        replaces the step's search box (``.actionsearchinput``) with that
+        type's field form asynchronously. A fixed sleep races this render,
+        and waiting for any input/textarea/select is not specific enough:
+        the still-present search box itself is an ``<input>``, and the step
+        row also carries hidden ``stepFunction``/``sortOrder`` inputs before
+        a type is even selected. Poll for a real, visible config field --
+        any input other than the search box or a hidden field, or any
+        textarea/select -- so a later ``field.evaluate()`` on a
+        not-yet-rendered field cannot raise ``Element not found``.
+
+        Args:
+            page: Playwright page object
+            timeout: Maximum time to wait, in milliseconds
+
+        Raises:
+            ClientError: If no field renders within the timeout
+        """
+        selector = (
+            '#actions li:last-child input:not(.actionsearchinput):not([type="hidden"]), '
+            "#actions li:last-child textarea, "
+            "#actions li:last-child select"
+        )
+        try:
+            page.wait_for_selector(selector, state="attached", timeout=timeout)
+        except BrowserHarnessError as e:
+            raise ClientError(
+                f"Step type fields did not render within {timeout}ms: {e}"
+            )
 
     def _add_step_to_flow(self, page: "Page", step_config: dict):
         """Add a step to a flow being configured.
@@ -639,7 +823,7 @@ class GlobiflowClient:
             if dropdown_option.count() > 0:
                 # Use JavaScript click to bypass viewport restrictions
                 dropdown_option.evaluate("el => el.click()")
-                page.wait_for_timeout(500)
+                self._wait_for_step_fields_rendered(page)
             else:
                 raise ClientError(f"Could not find action type in dropdown: {ui_action_type}")
         else:
@@ -648,7 +832,7 @@ class GlobiflowClient:
             if action_option.count() == 0:
                 raise ClientError(f"Could not find action type: {ui_action_type}")
             action_option.evaluate("el => el.click()")
-            page.wait_for_timeout(500)
+            self._wait_for_step_fields_rendered(page)
 
         # Fill in step-specific fields based on step_config
         # Remove action_type from config since we've handled it
@@ -733,8 +917,11 @@ class GlobiflowClient:
     def get_flow(self, flow_id: str, include_steps: bool = False) -> FlowDetail:
         """Get detailed information about a specific flow.
 
-        Iterates through all flows to find one matching the given ID,
-        then extracts its details.
+        Resolves the flow's owning app directly via ``configureflow.php``
+        (see ``_resolve_flow_app_id``), then navigates straight to that
+        app's flow list to select it and extract its details -- no
+        org/workspace tree-walk, so no risk of the click-timing race that
+        pattern has.
 
         Args:
             flow_id: The flow ID to retrieve
@@ -742,68 +929,45 @@ class GlobiflowClient:
 
         Returns:
             FlowDetail model with time savings, notes, and optionally steps
+
+        Raises:
+            ClientError: If the flow is not found.
         """
         import re
 
-        self.ensure_authenticated("/flows.php")
+        app_id = self._resolve_flow_app_id(flow_id)
+
+        self.ensure_authenticated(f"/flows.php?app={app_id}")
         page = self.browser.get_page()
+        page.wait_for_timeout(2000)
 
-        # Wait for tree to load
-        page.wait_for_selector('[role="treeitem"]', timeout=10000)
+        row = self._find_flow_row(page, flow_id, app_id)
 
-        # Click "Expand All" to show full tree
-        expand_link = page.get_by_role("link", name="Expand All")
-        if expand_link.count() > 0:
-            expand_link.click()
-            page.wait_for_timeout(2000)
+        # Read enabled status from the row's img src before navigating into
+        # the flow detail view (disabled flows show an icon whose src
+        # contains "_off").
+        row_img = row.locator("img").first
+        row_enabled = True
+        if row_img.count() > 0:
+            row_src = row_img.get_attribute("src") or ""
+            row_enabled = "_off" not in row_src.lower()
 
-        # Get all tree items at level 3 (apps) with flow counts
-        tree_items = page.locator('[role="treeitem"]').all()
-        apps_with_flows = []
-        for item in tree_items:
-            text = _clean(item.text_content())
-            level = item.get_attribute("aria-level")
-            if level == "3":
-                match = re.match(r"(.+) \((\d+)\)", text)
-                if match and int(match.group(2)) > 0:
-                    apps_with_flows.append(text)
+        # Click this flow to load its detail view
+        row.click()
+        page.wait_for_timeout(1000)
 
-        # Search through each app's flows
-        for app_text in apps_with_flows:
-            app_item = page.get_by_role("treeitem", name=app_text)
-            if app_item.count() > 0:
-                app_item.click()
-                page.wait_for_timeout(1500)
+        heading = page.locator("h4").filter(has_text="Flow:").first
+        if heading.count() == 0:
+            raise ClientError(f"Flow with ID {flow_id} not found")
+        heading_text = heading.text_content() or ""
+        heading_match = re.search(r"\(ID:(\d+)\)", heading_text)
+        if not heading_match or heading_match.group(1) != flow_id:
+            raise ClientError(f"Flow with ID {flow_id} not found")
 
-                # Find flow items in the list (after the separator)
-                flow_container = page.locator("hr ~ div").first
-                if flow_container.count() > 0:
-                    flow_divs = flow_container.locator("> div").all()
-
-                    for flow_div in flow_divs:
-                        flow_name_text = _clean(flow_div.text_content())
-                        if flow_name_text.startswith("With Selected:"):
-                            continue
-
-                        # Click this flow to check its ID
-                        flow_div.click()
-                        page.wait_for_timeout(1000)
-
-                        # Check if this is the flow we're looking for
-                        heading = page.locator("h4").filter(has_text="Flow:").first
-                        if heading.count() > 0:
-                            heading_text = heading.text_content()
-                            heading_match = re.search(r"\(ID:(\d+)\)", heading_text)
-                            if heading_match and heading_match.group(1) == flow_id:
-                                # Found it! Extract details
-                                flow_detail = self._extract_flow_details(page, flow_id)
-                                # Optionally include steps
-                                if include_steps:
-                                    flow_detail.steps = self.list_flow_steps(flow_id)
-                                return flow_detail
-
-        # Flow not found
-        raise ClientError(f"Flow with ID {flow_id} not found")
+        flow_detail = self._extract_flow_details(page, flow_id, enabled=row_enabled)
+        if include_steps:
+            flow_detail.steps = self.list_flow_steps(flow_id)
+        return flow_detail
 
     def list_flow_logs(self, flow_id: str) -> List[FlowLog]:
         """Get all execution logs for a flow.
@@ -870,12 +1034,17 @@ class GlobiflowClient:
 
         return logs
 
-    def _extract_flow_details(self, page: "Page", flow_id: str) -> FlowDetail:
+    def _extract_flow_details(
+        self, page: "Page", flow_id: str, enabled: bool = True
+    ) -> FlowDetail:
         """Extract flow details from the currently selected flow.
 
         Args:
             page: Playwright page object
             flow_id: The flow ID
+            enabled: Whether the flow is enabled, as read from its flows.php
+                row status icon by the caller (this page, the flow detail
+                view, carries no independent status icon of its own)
 
         Returns:
             FlowDetail model
@@ -914,10 +1083,6 @@ class GlobiflowClient:
         # Check for logs tab
         logs_link = page.locator("a").filter(has_text="Logs").first
         has_logs = logs_link.count() > 0
-
-        # Determine enabled status from img in the flow list or heading
-        enabled = True
-        # The flow heading has an edit link and potentially a status icon
 
         return FlowDetail(
             id=extracted_id,
@@ -1460,18 +1625,15 @@ class GlobiflowClient:
         self.ensure_authenticated(f"/configureflow.php?id={flow_id}")
         page = self.browser.get_page()
 
-        # Wait for the actions step list to load. The steps live in
-        # ul#flowactions (a stable element id), not under a heading: the page
-        # renders two "Actions" h4 headings (a sidebar palette labelled
-        # "Actions" plus the real "Actions (... then do the following:)"
-        # section), so matching on heading text is ambiguous and unreliable.
-        page.wait_for_selector("ul#flowactions", timeout=10000)
+        # See FLOW_ACTIONS_SELECTOR for why we anchor on the stable element
+        # id instead of an "Actions" heading.
+        page.wait_for_selector(FLOW_ACTIONS_SELECTOR, timeout=10000)
         page.wait_for_timeout(2000)  # Allow time for all step content to render
 
         steps = []
 
         # The action steps are the direct <li> children of ul#flowactions.
-        actions_section = page.locator("ul#flowactions")
+        actions_section = page.locator(FLOW_ACTIONS_SELECTOR)
         if actions_section.count() == 0:
             return steps
 
@@ -1520,6 +1682,63 @@ class GlobiflowClient:
 
         return steps
 
+    def _require_step_item(self, page: "Page", flow_id: str, step_number: int):
+        """Wait for a flow's action steps to load and return the one at
+        step_number.
+
+        Shared by every command that operates on a single existing step
+        (get, update, move, delete): wait for FLOW_ACTIONS_SELECTOR, locate
+        the direct <li> children, and validate step_number is in range.
+
+        Args:
+            page: Playwright page object
+            flow_id: The flow ID (for error messages)
+            step_number: The step number to locate (1-based)
+
+        Returns:
+            Tuple of (step_item locator, total step count)
+
+        Raises:
+            ClientError: If the actions section is missing, or step_number
+                is out of range
+        """
+        # See FLOW_ACTIONS_SELECTOR for why we anchor on the stable element
+        # id instead of an "Actions" heading.
+        page.wait_for_selector(FLOW_ACTIONS_SELECTOR, timeout=10000)
+        page.wait_for_timeout(2000)  # Allow time for all step content to render
+
+        # The action steps are the direct <li> children of ul#flowactions.
+        actions_section = page.locator(FLOW_ACTIONS_SELECTOR)
+        if actions_section.count() == 0:
+            raise ClientError(f"Actions section not found in flow {flow_id}")
+
+        step_items = actions_section.locator("> li").all()
+        step_count = len(step_items)
+        if step_number < 1 or step_number > step_count:
+            raise ClientError(f"Step {step_number} not found in flow {flow_id} (has {step_count} steps)")
+
+        return step_items[step_number - 1], step_count
+
+    def _save_flow(self, page: "Page", timeout: int = 2500):
+        """Click the flow editor's Save link and wait for the save to settle.
+
+        Shared by every command that mutates a flow being configured
+        (create, add/update/move/delete step).
+
+        Args:
+            page: Playwright page object
+            timeout: Time to wait after clicking Save, in milliseconds
+
+        Raises:
+            ClientError: If the Save link is not found
+        """
+        save_link = page.get_by_role("link", name="Save")
+        if save_link.count() == 0:
+            raise ClientError("Save button not found")
+
+        save_link.click()
+        page.wait_for_timeout(timeout)
+
     def get_flow_step(self, flow_id: str, step_number: int) -> AnyStep:
         """Get detailed information about a specific step in a flow.
 
@@ -1533,22 +1752,7 @@ class GlobiflowClient:
         self.ensure_authenticated(f"/configureflow.php?id={flow_id}")
         page = self.browser.get_page()
 
-        # Wait for the actions step list to load (see list_flow_steps for why we
-        # anchor on the stable ul#flowactions id instead of an "Actions" heading).
-        page.wait_for_selector("ul#flowactions", timeout=10000)
-        page.wait_for_timeout(2000)  # Allow time for all step content to render
-
-        # The action steps are the direct <li> children of ul#flowactions.
-        actions_section = page.locator("ul#flowactions")
-        if actions_section.count() == 0:
-            raise ClientError(f"Actions section not found in flow {flow_id}")
-
-        # Find the specific step by index (1-based)
-        step_items = actions_section.locator("> li").all()
-        if step_number < 1 or step_number > len(step_items):
-            raise ClientError(f"Step {step_number} not found in flow {flow_id} (has {len(step_items)} steps)")
-
-        step_item = step_items[step_number - 1]
+        step_item, _ = self._require_step_item(page, flow_id, step_number)
 
         # Get the action div
         action_div = step_item.locator("> div").first
@@ -1601,21 +1805,7 @@ class GlobiflowClient:
         self.ensure_authenticated(f"/configureflow.php?id={flow_id}")
         page = self.browser.get_page()
 
-        # Wait for the actions step list to load (see list_flow_steps for why we
-        # anchor on the stable ul#flowactions id instead of an "Actions" heading).
-        page.wait_for_selector("ul#flowactions", timeout=10000)
-        page.wait_for_timeout(2000)
-
-        # The action steps are the direct <li> children of ul#flowactions.
-        actions_section = page.locator("ul#flowactions")
-        if actions_section.count() == 0:
-            raise ClientError(f"Actions section not found in flow {flow_id}")
-
-        step_items = actions_section.locator("> li").all()
-        if step_number < 1 or step_number > len(step_items):
-            raise ClientError(f"Step {step_number} not found in flow {flow_id} (has {len(step_items)} steps)")
-
-        step_item = step_items[step_number - 1]
+        step_item, _ = self._require_step_item(page, flow_id, step_number)
         action_div = step_item.locator("> div").first
         if action_div.count() == 0:
             raise ClientError(f"Step {step_number} has no content")
@@ -1679,12 +1869,7 @@ class GlobiflowClient:
             )
 
         # Save the flow
-        save_link = page.get_by_role("link", name="Save")
-        if save_link.count() > 0:
-            save_link.click()
-            page.wait_for_timeout(2000)
-        else:
-            raise ClientError("Save button not found")
+        self._save_flow(page, timeout=2000)
 
         # Return updated step details
         return self.get_flow_step(flow_id, step_number)
@@ -1721,16 +1906,103 @@ class GlobiflowClient:
         self._add_step_to_flow(page, step_config)
 
         # Save the flow
-        save_link = page.get_by_role("link", name="Save")
-        if save_link.count() == 0:
-            raise ClientError("Save button not found")
-
-        save_link.click()
-        page.wait_for_timeout(3000)  # Wait for save
+        self._save_flow(page, timeout=3000)
 
         # Return the newly added step (last step)
         new_step_number = steps_before + 1
         return self.get_flow_step(flow_id, new_step_number)
+
+    def move_flow_step(self, flow_id: str, step_number: int, to_position: int) -> AnyStep:
+        """Move a step to a new execution position within a flow.
+
+        Globiflow's flow editor exposes an up-arrow and a down-arrow icon on
+        each step row (``moveUp(step)`` / ``moveDown(step)``). Each icon
+        calls a page-level JS function that swaps the step's DOM node with
+        its neighbor and updates the hidden ``sortOrder`` inputs; it does
+        not renumber the step's identity, so the same numeric argument keeps
+        working across repeated calls while the step walks toward its target
+        position. This method locates the step currently at ``step_number``,
+        then calls ``moveUp``/``moveDown`` the exact number of times needed
+        to reach ``to_position``, and saves the flow.
+
+        Args:
+            flow_id: The flow ID
+            step_number: Current step number (1-based) of the step to move
+            to_position: Target step number (1-based) for that step
+
+        Returns:
+            The moved step's details at its new position
+
+        Raises:
+            ClientError: If either position is out of range, or the browser
+                move function reports it could not move further
+        """
+        self.ensure_authenticated(f"/configureflow.php?id={flow_id}")
+        page = self.browser.get_page()
+
+        step_item, step_count = self._require_step_item(page, flow_id, step_number)
+        if to_position < 1 or to_position > step_count:
+            raise ClientError(f"Target position {to_position} is out of range for flow {flow_id} (has {step_count} steps)")
+
+        if step_number == to_position:
+            return self.get_flow_step(flow_id, step_number)
+
+        # The step's `step` attribute is its stable browser-side identity;
+        # moveUp/moveDown keep addressing the step by this value even after
+        # it has physically moved to a different DOM position.
+        slot_id = step_item.get_attribute("step")
+        if not slot_id:
+            raise ClientError(f"Could not determine step identity for step {step_number} in flow {flow_id}")
+
+        direction = "moveDown" if to_position > step_number else "moveUp"
+        move_count = abs(to_position - step_number)
+
+        for _ in range(move_count):
+            moved = page.evaluate(f"window.{direction}({slot_id})")
+            if not moved:
+                raise ClientError(
+                    f"Browser {direction}({slot_id}) reported no further move was possible "
+                    f"while moving step {step_number} to position {to_position} in flow {flow_id}"
+                )
+
+        self._save_flow(page, timeout=2500)
+
+        return self.get_flow_step(flow_id, to_position)
+
+    def delete_flow_step(self, flow_id: str, step_number: int) -> bool:
+        """Delete a step from a flow.
+
+        Globiflow's flow editor exposes a delete ("x") icon on each step row
+        that calls the page-level ``deleteStep(step)`` JS function, which
+        removes the step's DOM node and clears its server-side prep-field
+        cache. The change is not persisted to the flow record until the
+        flow is saved.
+
+        Args:
+            flow_id: The flow ID
+            step_number: Step number (1-based) to delete
+
+        Returns:
+            True if deletion was successful
+
+        Raises:
+            ClientError: If the step is not found or the flow cannot be saved
+        """
+        self.ensure_authenticated(f"/configureflow.php?id={flow_id}")
+        page = self.browser.get_page()
+
+        step_item, _ = self._require_step_item(page, flow_id, step_number)
+
+        slot_id = step_item.get_attribute("step")
+        if not slot_id:
+            raise ClientError(f"Could not determine step identity for step {step_number} in flow {flow_id}")
+
+        page.evaluate(f"window.deleteStep({slot_id})")
+        page.wait_for_timeout(500)
+
+        self._save_flow(page, timeout=2500)
+
+        return True
 
 
 # ==================== Module-level Singleton ====================

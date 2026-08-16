@@ -1,8 +1,8 @@
 {
   "tool": "globiflow",
   "description": "CLI interface for Globiflow (browser automation)",
-  "discovered_at": "2026-06-24T14:27:29Z",
-  "total_commands": 26,
+  "discovered_at": "2026-08-15T21:09:27Z",
+  "total_commands": 28,
   "global_options": [
     {
       "name": "--version",
@@ -48,7 +48,6 @@
         },
         "logout": {
           "help": "Clear stored credentials and browser sessions.",
-          "usage_instructions": "Remove saved browser session and credentials. Use --force/-F to skip confirmation. Use --profile/-p to clear a specific profile.",
           "arguments": [],
           "options": [
             {
@@ -122,7 +121,7 @@
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "Run `globiflow auth profiles list --help` for exact arguments and options.",
               "arguments": [],
               "options": [
@@ -223,7 +222,7 @@
           }
         },
         "status": {
-          "help": "Check authentication status across profiles.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
           "usage_instructions": "Verify saved session against Globiflow. Returns exit code 0 if authenticated, 2 if not. Use --table/-t for formatted output. Use --profile/-p to check a specific profile.",
           "arguments": [],
           "options": [
@@ -283,7 +282,14 @@
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "usage_instructions": "Run `globiflow cache clear --help` for exact arguments and options.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
@@ -661,6 +667,38 @@
                 }
               ]
             },
+            "delete": {
+              "help": "Delete a step from a flow. This action cannot be undone. Use --force to skip confirmation. Remaining steps are renumbered after deletion; use 'flows steps list' to see the updated order. Example: globiflow flows steps delete 4314927 2 globiflow flows steps delete 4314927 2 --force",
+              "arguments": [
+                {
+                  "name": "flow_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Flow ID"
+                },
+                {
+                  "name": "step_number",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Step number to delete (1-based)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation prompt",
+                  "short": "-F"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
             "get": {
               "help": "Get detailed information about a specific step in a flow. Shows the action type and all configured parameter values. Example: globiflow flows steps get 4299675 1 --table globiflow flows steps get 4299675 2",
               "usage_instructions": "Retrieve a single step's action type and all configured parameters. FLOW_ID and STEP_NUMBER (1-based) are both required (positional). Use --table/-t for formatted output.",
@@ -733,6 +771,44 @@
                   "required": false,
                   "help": "Comma-separated list of fields to include",
                   "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "move": {
+              "help": "Move a step to a new execution position within a flow. Reorders the step earlier or later in the flow's execution order and saves the flow. Use 'flows steps list' first to see current step numbers. Example: globiflow flows steps move 4314927 3 --to 1 globiflow flows steps move 4314927 1 --to 4 --table",
+              "arguments": [
+                {
+                  "name": "flow_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Flow ID"
+                },
+                {
+                  "name": "step_number",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Current step number to move (1-based)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--to",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Target step number (1-based execution position)"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
                 },
                 {
                   "name": "--profile",
@@ -1090,7 +1166,6 @@
         },
         "list": {
           "help": "List all available trigger types for flows. Shows all trigger types that can be used when creating a new flow. Each trigger has a code (used with --trigger flag) and description. Supports client-side filtering and limiting (static data). Example: globiflow triggers list --table globiflow triggers list --filter \"code:eq:C\" globiflow triggers list --properties \"code,name\"",
-          "usage_instructions": "Show all trigger types with code and description. Use trigger codes with `flows create --trigger`. Supports --filter/-f, --limit/-l, --properties/-p, --table/-t.",
           "arguments": [],
           "options": [
             {
