@@ -154,8 +154,8 @@ nextdoor classifieds list --limit 25
 # Table output
 nextdoor classifieds list --limit 25 --table
 
-# Keyword-search the classifieds
-nextdoor classifieds list "lego" --limit 25
+# Keyword-search the classifieds (see "Keyword search is not a filter" below)
+nextdoor classifieds list "lego" --limit 25 --filter "type:eq:ORGANIC,title:contains:lego"
 
 # Nextdoor's own "Most Relevant" ordering
 nextdoor classifieds list --sort relevance --limit 25
@@ -179,6 +179,34 @@ nextdoor classifieds get e0a5a7da-7c11-410a-b185-930cca2a1818 --table
 
 The grid is cursor-paginated at ~20 nodes per page; `--limit` transparently
 follows the server's `endCursor` until it has enough rows.
+
+#### Keyword search is not a filter
+
+The positional `QUERY` is sent verbatim as `classifiedSearchArgs.query` to
+Nextdoor's own For Sale & Free search — verified live, because a nonsense token
+returns zero rows:
+
+```bash
+nextdoor classifieds list "zzzzznotarealthing"   # -> 0 rows
+```
+
+But Nextdoor ranks by relevance with **no relevance floor**, so it pads thin
+result sets with unrelated listings rather than returning fewer rows. `wheelchair`
+returns real wheelchairs *and* "Burgundy Sofa"; `lego` (no local inventory)
+returns only padding such as "Vintage Secretary Desk". Row counts for the same
+keyword vary between consecutive calls. The operation exposes no exact-match
+argument and no relevance threshold.
+
+Post-filter every keyword search, with all conditions in **one** `--filter`:
+
+```bash
+nextdoor classifieds list "lego" --limit 50 \
+  --filter "type:eq:ORGANIC,title:contains:lego"
+```
+
+Repeating `--filter` is OR, not AND. Comma-separated conditions inside a single
+`--filter` are AND. Zero rows after post-filtering is the honest answer: Nextdoor
+has no local listing for that term.
 
 #### Classifieds sorting
 

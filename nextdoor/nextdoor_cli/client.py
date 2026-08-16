@@ -911,9 +911,20 @@ class NextdoorClient:
         This is Nextdoor's dedicated classifieds surface — the same
         ``searchClassifiedV2`` operation the /for_sale_and_free/ grid issues —
         so every organic row carries a real direct listing URL and price.
+        ``sort_order`` must be a ``CLASSIFIED_SORT_MAP`` server value; an
+        unrecognized value fails loudly (no silent fallback).
+
         ``query`` is the grid's own keyword box (empty string browses
-        everything). ``sort_order`` must be a ``CLASSIFIED_SORT_MAP`` server
-        value; an unrecognized value fails loudly (no silent fallback).
+        everything) and is sent verbatim as ``classifiedSearchArgs.query``. It
+        is a RELEVANCE SIGNAL, NOT A FILTER. Verified live: a nonsense token
+        ("zzzzznotarealthing") returns zero edges, so the server does receive
+        and act on the keyword — but a real word returns its genuine top
+        matches followed by unrelated padding, and a word with no local
+        inventory returns padding only ("lego" -> "Vintage Secretary Desk").
+        Row counts for the same keyword also vary between consecutive calls.
+        Callers that need keyword-bearing rows must post-filter the records
+        (e.g. ``title``/``subtitle`` contains) — Nextdoor exposes no
+        exact-match or relevance-threshold argument on this operation.
 
         The grid is cursor-paginated at ~20 nodes per page, so pages are
         fetched until ``limit`` records are collected or the server reports no

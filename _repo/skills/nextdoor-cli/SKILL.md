@@ -24,7 +24,7 @@ nextdoor <command> [arguments] [options]
 | Login to Nextdoor | `nextdoor auth login` |
 | View feed | `nextdoor feed --limit 25` |
 | Browse For Sale & Free listings | `nextdoor classifieds list --limit 25` |
-| Keyword-search listings | `nextdoor classifieds list "lego" --limit 25` |
+| Keyword-search listings | `nextdoor classifieds list "lego" --limit 25 --filter "type:eq:ORGANIC,title:contains:lego"` |
 | Get one listing's full detail | `nextdoor classifieds get <listing-uuid>` |
 | Search all Nextdoor content | `nextdoor search "<query>" --limit 25` |
 | View notifications | `nextdoor notifications --table` |
@@ -53,6 +53,47 @@ The general `feed` mixes classifieds in with neighborhood news at roughly
 5-10% of items and has no classified type filter, so do not use it to harvest
 listings — use `classifieds list`.
 </listing_urls>
+
+<keyword_search_is_not_a_filter>
+**`classifieds list <query>` is a relevance signal, not a filter. Never trust
+it to restrict results to the keyword.**
+
+The query IS wired through — it is sent verbatim as
+`classifiedSearchArgs.query` on Nextdoor's own For Sale & Free search. That is
+proven, not assumed: a nonsense token returns zero rows.
+
+```bash
+nextdoor classifieds list "zzzzznotarealthing"   # -> 0 rows (query reaches the server)
+```
+
+What Nextdoor does with it is the problem. Its classifieds search ranks by
+relevance and applies **no relevance floor**, so it pads thin result sets with
+unrelated listings instead of returning fewer rows:
+
+| Query | What comes back |
+|-------|-----------------|
+| `wheelchair` (real local inventory) | "Electric Wheelchair", "Lightweight Transport Wheelchair" — plus "Burgundy Sofa", "Chicago Cubs Office Chair" |
+| `lego` / `legos` (no local inventory) | 100% padding: "Vintage Secretary Desk", "New Xbox Series S Bundle", "Everest & Jennings Transport Wheelchair" |
+
+The padding is also unstable: the same keyword returned 2, 3, and 4 rows on
+consecutive runs. Nextdoor exposes no exact-match flag and no relevance
+threshold on this operation, so there is nothing to turn off.
+
+**Post-filter every keyword search**, and put the conditions in ONE `--filter`:
+
+```bash
+nextdoor classifieds list "lego" --limit 50 \
+  --filter "type:eq:ORGANIC,title:contains:lego"
+```
+
+Repeating `--filter` is **OR**, not AND — `--filter "type:eq:ORGANIC" --filter
+"title:contains:lego"` keeps every sponsored-free row regardless of title.
+Comma-separated conditions inside a single `--filter` are AND.
+
+A keyword search that returns zero rows after post-filtering is the honest
+answer: Nextdoor has no local listing for that term. Do not read the unfiltered
+padding as inventory.
+</keyword_search_is_not_a_filter>
 
 <essential_principles>
 <principle name="Usage Reference">
