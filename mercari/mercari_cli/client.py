@@ -34,6 +34,14 @@ from .browser import MercariBrowser
 from .config import get_config
 from .parsers import normalize_item_detail, normalize_items
 
+
+class MercariChallengeError(ClientError):
+    """Mercari requires a human verification action."""
+
+
+class MercariItemNotFoundError(ClientError):
+    """Mercari returned no item for the requested item id."""
+
 # Active/inactive/complete map to userItemsQuery status values. Validated live.
 STATUS_MAP = {
     "active": ("active", "on_sale"),
@@ -219,22 +227,49 @@ class MercariClient:
         return page
 
     @staticmethod
-    def _wait_ready(page, timeout: int = 60) -> None:
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            info = page.evaluate(
-                """() => ({
-                    title: (document.title || '').toLowerCase(),
-                    bodyLen: (document.body && document.body.innerText || '').length,
-                })"""
+    def _page_info(page) -> dict:
+        return page.evaluate(
+            """() => {
+                const title = (document.title || '').toLowerCase();
+                const body = (document.body && document.body.innerText || '');
+                return {
+                    title,
+                    bodyLen: body.length,
+                    routerReady: !!(window.next && window.next.router && window.next.router.push),
+                    challenged: !!document.querySelector(
+                        '#cf-challenge-running, .cf-browser-verification, '
+                        + 'iframe[src*="challenges.cloudflare.com"], '
+                        + 'iframe[src*="recaptcha"], iframe[src*="hcaptcha"]'
+                    ) || /just a moment|security verification|verify you are human|checking your browser|ray id/i.test(title + ' ' + body),
+                };
+            }"""
+        )
+
+    @staticmethod
+    def _raise_on_challenge(info: dict) -> None:
+        if info["challenged"] or any(
+            marker in info["title"] for marker in _CHALLENGE_MARKERS
+        ):
+            raise MercariChallengeError(
+                "Mercari presented a human verification challenge. "
+                "Run 'mercari auth login' to refresh the saved browser session."
             )
-            challenged = any(m in info["title"] for m in _CHALLENGE_MARKERS)
-            if not challenged and info["bodyLen"] > 200:
+
+    @classmethod
+    def _wait_ready(cls, page, timeout: int = 60) -> None:
+        deadline = time.monotonic() + timeout
+        last_info = {}
+        while time.monotonic() < deadline:
+            info = cls._page_info(page)
+            last_info = info
+            cls._raise_on_challenge(info)
+            if info["routerReady"]:
                 return
             time.sleep(3)
         raise ClientError(
-            "Mercari page did not finish loading (possible Cloudflare challenge). "
-            "Re-run 'mercari auth login' if this persists."
+            "Mercari web app router did not become ready within "
+            f"{timeout} seconds (title={last_info.get('title', '')!r}, "
+            f"body_length={last_info.get('bodyLen', 0)})."
         )
 
     def _capture(
@@ -252,6 +287,7 @@ class MercariClient:
             raise ClientError("Mercari SPA navigation failed; router unavailable.")
         deadline = time.time() + timeout
         while time.time() < deadline:
+            self._raise_on_challenge(self._page_info(page))
             matched = self._read_matches(page, operation, accept)
             if matched:
                 return matched
@@ -310,7 +346,6 @@ class MercariClient:
 
         return normalize_items(items[:limit])
 
-    @cached
     def get_item(self, item_id: str) -> dict:
         """Get full detail for a single listing/item by id or URL.
 
@@ -321,12 +356,59 @@ class MercariClient:
         in headless/automated runs even after the seller session expires. Only
         ``list`` (the seller's OWN listings) requires the authenticated shell.
         """
+        return normalize_item_detail(self._fetch_item(item_id))
+
+    def get_items(self, item_ids: List[str]) -> List[dict]:
+        """Get many public items through one Mercari app shell."""
+        results = []
+        page = None
+        for requested_id in item_ids:
+            try:
+                normalized_id = _normalize_item_id(requested_id)
+                if page is None:
+                    page = self._app_shell(HOME_URL)
+                item = normalize_item_detail(
+                    self._fetch_item_from_page(page, normalized_id)
+                )
+            except MercariChallengeError:
+                raise
+            except ClientError as exc:
+                results.append(
+                    {
+                        "item_id": requested_id,
+                        "status": "error",
+                        "error_kind": (
+                            "not_found"
+                            if isinstance(exc, MercariItemNotFoundError)
+                            else "unreadable"
+                        ),
+                        "error": str(exc),
+                    }
+                )
+            else:
+                results.append(
+                    {
+                        "item_id": requested_id,
+                        "status": "ok",
+                        "item": item,
+                    }
+                )
+        return results
+
+    @cached
+    def _fetch_item(self, item_id: str) -> dict:
+        """Fetch raw item detail and cache only the upstream response."""
         normalized_id = _normalize_item_id(item_id)
+
+        page = self._app_shell(HOME_URL)
+        return self._fetch_item_from_page(page, normalized_id)
+
+    def _fetch_item_from_page(self, page, normalized_id: str) -> dict:
+        """Fetch one raw item through an existing Mercari app shell."""
 
         def accept(variables: dict) -> bool:
             return variables.get("id") == normalized_id
 
-        page = self._app_shell(HOME_URL)
         route = ITEM_ROUTE.format(item_id=normalized_id)
         bodies = self._capture(page, route, "productQuery", accept)
         if not bodies:
@@ -336,8 +418,10 @@ class MercariClient:
         data = bodies[0].get("data") or {}
         item = data.get("item")
         if not item:
-            raise ClientError(f"Mercari item '{normalized_id}' not found.")
-        return normalize_item_detail(item)
+            raise MercariItemNotFoundError(
+                f"Mercari item '{normalized_id}' not found."
+            )
+        return item
 
     @cached
     def search_items(

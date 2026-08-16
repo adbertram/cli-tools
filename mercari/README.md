@@ -5,7 +5,8 @@
 A browser-automation command-line interface for Mercari US that provides
 read-only access to Mercari listings. It searches other sellers' public
 listings (`listings search`), reads the authenticated seller's own listings
-(`listings list`), and returns full item detail (`listings get`). Use this CLI
+(`listings list`), and returns full item detail (`listings get` and
+`listings get-many`). Use this CLI
 when you need repeatable, JSON-first access to Mercari listings without clicking
 through the website.
 
@@ -37,6 +38,7 @@ Operations used (validated against the live authenticated session):
 | `listings search` | `searchFacetQuery` | `data.search.itemsList[]` |
 | `listings list` | `userItemsQuery` | `data.userItems.items[]` + pagination |
 | `listings get`  | `productQuery`   | `data.item` (full item detail) |
+| `listings get-many` | `productQuery` | One ordered result for each requested item |
 
 Status mapping for `list`: `active` → `on_sale`, `inactive` → `stop`,
 `complete` → `sold_out` (sold).
@@ -104,6 +106,9 @@ mercari listings list --status complete --limit 25 --table
 
 # Get full detail for one listing/item (id from search or list)
 mercari listings get m12345678901
+
+# Get multiple items through one browser session
+mercari listings get-many m12345678901 m10987654321
 ```
 
 ## Commands
@@ -155,6 +160,10 @@ mercari listings get "https://www.mercari.com/us/item/m12345678901/"
 # Get with selected fields / table
 mercari listings get m12345678901 --properties "id,name,price,status,created"
 mercari listings get m12345678901 --table
+
+# Get multiple items. Input order and coverage stay unchanged.
+mercari listings get-many m12345678901 m10987654321
+mercari listings get-many m12345678901 m10987654321 --properties "id,status"
 ```
 
 `search` returns each `searchFacetQuery` item verbatim (every upstream field
@@ -165,7 +174,15 @@ returns them (every upstream field preserved), plus convenience `id` and `url`
 fields. `get` returns the full `productQuery` item object (all fields — `itemId`,
 `name`, `price`, `description`, `status`, `itemCondition`, `itemSize`, `brand`,
 `shippingClass`, `shippingFromArea`, `numLikes`, `created`, `updated`,
-`photos[]`, `seller{}`, …) plus `id` and `url`.
+`photos[]`, `seller{}`, …) plus `id`, `url`,
+`buyer_protection_fee_cents`, and `landed_total_cents`. The landed total
+includes buyer-paid shipping. Both added cost fields use integer cents.
+
+`get-many` returns one record for each input. A successful record contains
+`item_id`, `status: "ok"`, and `item`. An item read error contains `item_id`,
+`status: "error"`, `error_kind`, and `error`. The `error_kind` is `not_found`
+only when Mercari returns no item. Other item read errors use `unreadable`.
+A human verification challenge stops the command without partial JSON.
 
 ### Authentication (`mercari auth`)
 
@@ -220,8 +237,8 @@ mercari auth profiles delete PROFILE_NAME
 | `--brand-id` |  | `listings search` | Filter by brand id (repeatable) |
 | `--limit` | `-l` | `listings list` / `search` | Maximum number of results (merged across pages) |
 | `--filter` | `-f` | `listings list` / `search` | Filter results using `field:op:value` syntax |
-| `--properties` | `-p` | list / search / get | Restrict output to selected fields |
-| `--table` | `-t` | list / search / get / auth test | Display data as a table |
+| `--properties` | `-p` | list / search / get / get-many | Restrict output to selected fields |
+| `--table` | `-t` | list / search / get / get-many / auth test | Display data as a table |
 | `--version` | `-v` | root | Show version and exit |
 | `--no-cache` |  | root | Bypass cached read responses for this execution |
 

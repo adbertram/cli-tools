@@ -47,5 +47,37 @@ def normalize_items(raw_items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def normalize_item_detail(raw: Dict[str, Any]) -> Dict[str, Any]:
-    """Normalize a productQuery item object, preserving every upstream field."""
-    return _with_conveniences(raw)
+    """Normalize item detail and expose exact buyer-cost values in cents."""
+    item = _with_conveniences(raw)
+    price = item.get("price")
+    price_summary = item.get("priceSummary")
+    if not isinstance(price, int):
+        raise ValueError("Mercari item detail has no integer price in cents")
+    if not isinstance(price_summary, dict) or not isinstance(
+        price_summary.get("totalPrice"), int
+    ):
+        raise ValueError(
+            "Mercari item detail has no integer priceSummary.totalPrice in cents"
+        )
+
+    shipping_fee = 0
+    shipping_payer = item.get("shippingPayer")
+    if isinstance(shipping_payer, dict) and shipping_payer.get("code") == "buyer":
+        shipping_class = item.get("shippingClass")
+        if not isinstance(shipping_class, dict) or not isinstance(
+            shipping_class.get("fee"), int
+        ):
+            raise ValueError(
+                "Mercari buyer-paid shipping has no integer shippingClass.fee in cents"
+            )
+        shipping_fee = shipping_class["fee"]
+
+    landed_total = price_summary["totalPrice"]
+    buyer_protection_fee = landed_total - price - shipping_fee
+    if buyer_protection_fee < 0:
+        raise ValueError(
+            "Mercari priceSummary.totalPrice is less than price plus buyer shipping"
+        )
+    item["buyer_protection_fee_cents"] = buyer_protection_fee
+    item["landed_total_cents"] = landed_total
+    return item

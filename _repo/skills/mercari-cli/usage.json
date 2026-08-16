@@ -1,8 +1,8 @@
 {
   "tool": "mercari",
   "description": "CLI interface for mercari",
-  "discovered_at": "2026-07-24T19:34:36Z",
-  "total_commands": 15,
+  "discovered_at": "2026-08-15T20:48:49Z",
+  "total_commands": 16,
   "global_options": [],
   "commands": {
     "auth": {
@@ -296,6 +296,33 @@
               "type": "TEXT",
               "required": false,
               "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "get-many": {
+          "help": "Get many listings through one public Mercari browser session.",
+          "arguments": [
+            {
+              "name": "item_ids",
+              "type": "TEXT",
+              "required": true,
+              "help": "Listing/item ids or URLs"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated item fields to include",
               "short": "-p"
             }
           ]

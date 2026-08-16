@@ -29,6 +29,7 @@ mercari <command-group> <action> [arguments] [options]
 | List sold listings (table) | `mercari listings list --status complete --table` |
 | List inactive listings | `mercari listings list --status inactive --limit 25` |
 | Get one listing/item | `mercari listings get m12345678901` |
+| Get multiple listings/items | `mercari listings get-many m12345678901 m10987654321` |
 </quick_start>
 
 <essential_principles>
@@ -41,7 +42,8 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
 - **listings** -- Read and search Mercari listings (read-only):
   - `search <keyword>` -- OTHER sellers' public listings. Options (all validated against the real search API): `--status on_sale|sold` (long-form only here), `--condition new|like_new|good|fair|poor`, `--min-price`/`--max-price` (US dollars), `--sort/-s newest|price|relevance` (default `newest`; Source-CLI Sort Standard) with `--desc/-d` to reverse (only valid with `price` — Mercari has no oldest-first, so `newest --desc`/`relevance --desc` error), `--category-id`/`--brand-id` (repeatable), plus `--limit`, `--filter`, `--properties`, `--table`. Each result has `id` + canonical `url`.
   - `list` -- the authenticated seller's OWN listings (by `--status active|inactive|complete`, with `--limit`, `--filter`, `--properties`, `--table`).
-  - `get <id>` -- full detail for any listing/item (by id or URL, with `--properties`, `--table`).
+  - `get <id>` -- full detail for any listing/item (by id or URL, with `--properties`, `--table`). It reports `buyer_protection_fee_cents` and `landed_total_cents` from Mercari's structured price fields. The landed total includes buyer-paid shipping. Both fields use integer cents.
+  - `get-many <ids...>` -- full detail for multiple items through one browser session. It preserves input order and coverage. Each result uses `status: ok` with `item`, or `status: error` with `error_kind` and `error`. A human verification challenge stops the command.
 - **auth** -- Authentication management (login, logout, status, test) and nested `auth profiles`
 - **cache** -- Local response cache management
 </principle>

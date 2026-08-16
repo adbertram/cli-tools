@@ -251,6 +251,49 @@ def listings_get(
     )
 
 
+@listings_app.command("get-many")
+@command
+def listings_get_many(
+    item_ids: List[str] = typer.Argument(
+        ..., help="Listing/item ids or URLs"
+    ),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    properties: Optional[str] = typer.Option(
+        None, "--properties", "-p", help="Comma-separated item fields to include"
+    ),
+):
+    """Get many listings through one public Mercari browser session."""
+    client = get_client()
+    try:
+        rows = client.get_items(item_ids)
+    finally:
+        client.close()
+
+    fields = _property_fields(properties)
+    if fields:
+        for row in rows:
+            if row["status"] == "ok":
+                row["item"] = apply_properties_filter([row["item"]], properties)[0]
+
+    if not table:
+        print_json(rows)
+        return
+    print_table(
+        [
+            {
+                "item_id": row["item_id"],
+                "status": row["status"],
+                "item_status": row.get("item", {}).get("status"),
+                "error_kind": row.get("error_kind"),
+                "error": row.get("error"),
+            }
+            for row in rows
+        ],
+        ["item_id", "status", "item_status", "error_kind", "error"],
+        ["Item Id", "Status", "Item Status", "Error Kind", "Error"],
+    )
+
+
 app.add_typer(listings_app, name="listings")
 app.add_typer(create_auth_app(get_config, tool_name="mercari"), name="auth")
 app.add_typer(create_cache_app(get_config), name="cache")
