@@ -125,9 +125,14 @@ node -e 'const fs=require("node:fs"); const path=require("node:path"); const lau
 </principle>
 
 <principle name="Secret Fill Verification (MANDATORY)">
-Version 0.1.18 resolves the secret, then calls `locator.fill()` on the target.
-Exit status `0` does not prove the final page state. A stale ref or a page
-script can still change the target value.
+`fill` can write the secret into a **different** input while it exits `0` and
+prints the correct locator. Playwright's `locator.fill()` runs in two phases.
+An injected page script focuses the target element and returns `needsinput`.
+The driver then calls `page.keyboard.insertText(value)` out of process. The text
+goes to the input that holds focus at that moment. A page that moves focus can
+receive the secret in another input. The printed locator comes from ref
+resolution, not from the final write. Exit status `0` is not proof. `click REF`
+before `fill` does not prevent this.
 
 After every secret `fill`, read back the per-field value **LENGTHS** and confirm two facts:
 1. The intended field's value length equals the secret's length.
