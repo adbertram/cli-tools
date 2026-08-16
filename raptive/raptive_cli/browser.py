@@ -16,6 +16,7 @@ class RaptiveBrowser(BrowserAutomation):
     AUTH_URL_PATTERN = r"/login|accounts\.google\.com"
     AUTH_SUCCESS_URL = r"/sites/"
     AUTH_STORAGE_KEY = "token"
+    AUTH_STORAGE_KEY_IS_JWT = True
     SESSION_NAME = "raptive"
 
 
