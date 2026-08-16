@@ -10,13 +10,14 @@ import typer
 from typing import Optional, List
 from googleapiclient.errors import HttpError
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_table, handle_error, print_success, print_error
+from cli_tools_shared.output import command, print_json, print_table, handle_error, print_success, print_error
 from cli_tools_shared.filters import apply_filters as _client_side_filter_reference
 from ..filter_translator import translate_drive_filters
 
 app = typer.Typer(help="Manage Google Drive files")
 
 @app.command("list")
+@command
 def drive_list(
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of files to list"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -62,6 +63,7 @@ def drive_list(
         raise typer.Exit(handle_error(e))
 
 @app.command("get")
+@command
 def drive_get(
     file_id: str = typer.Argument(..., help="File ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -90,6 +92,7 @@ def drive_get(
         raise typer.Exit(handle_error(e))
 
 @app.command("search")
+@command
 def drive_search(
     query: str = typer.Argument(..., help="Search query"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of results"),
@@ -132,6 +135,7 @@ def drive_search(
         raise typer.Exit(handle_error(e))
 
 @app.command("download")
+@command
 def drive_download(
     file_id: str = typer.Argument(..., help="File ID"),
     output: str = typer.Option(".", "--output", "-o", help="Output directory"),

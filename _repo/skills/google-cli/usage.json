@@ -411,7 +411,7 @@
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "List all profiles and show which is the default. Run `google auth profiles list --help` for exact arguments and options.",
               "arguments": [],
               "options": [
@@ -512,7 +512,7 @@
           }
         },
         "status": {
-          "help": "Check authentication status across profiles.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
           "usage_instructions": "Check if Google authentication is active and valid. Use --table/-t for formatted output.",
           "arguments": [],
           "options": [
@@ -572,7 +572,14 @@
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "usage_instructions": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed. Run `google cache clear --help` for exact arguments and options.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
@@ -2134,7 +2141,7 @@
           ]
         },
         "draft-get": {
-          "help": "Get an existing Gmail draft by draft ID.",
+          "help": "Get an existing Gmail draft by draft ID. Use the draft ID returned by `gmail draft` (for example, `r123...`). Draft metadata is fetched through Gmail's drafts API so headers such as To and Subject are preserved; `gmail get` is for message IDs and can return incomplete draft headers.",
           "arguments": [
             {
               "name": "draft_id",
@@ -2178,7 +2185,7 @@
           "options": [],
           "commands": {
             "create": {
-              "help": "Create a Gmail filter.",
+              "help": "Create a Gmail filter. Requires at least one matching criterion and at least one action. Common actions: --add-label <LABEL_ID>, --remove-label INBOX (archive), --remove-label UNREAD (mark read), --add-label TRASH (delete).",
               "arguments": [],
               "options": [
                 {
@@ -2755,7 +2762,7 @@
           ]
         },
         "send": {
-          "help": "Send an email message with optional attachments. By default, shows a preview of the message without sending. Passing --confirm sends the message, including from non-interactive automation.",
+          "help": "Send an email message with optional attachments. By default, shows a preview of the message without sending. Use --confirm to actually send the email.",
           "usage_instructions": "Run without --confirm to preview the message. After approval, rerun the same command with --confirm to send from either an interactive terminal or non-interactive automation.",
           "arguments": [],
           "options": [

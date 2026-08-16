@@ -9,7 +9,7 @@ import typer
 from typing import Optional, List
 from googleapiclient.errors import HttpError
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_table, handle_error, print_success, print_error
+from cli_tools_shared.output import command, print_json, print_table, handle_error, print_success, print_error
 from cli_tools_shared.filters import apply_filters
 from ..filter_translator import translate_cloud_project_filters
 
@@ -32,6 +32,7 @@ def _normalize_project(project: dict) -> dict:
 
 
 @projects_app.command("list")
+@command
 def projects_list(
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of projects to list"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -84,6 +85,7 @@ def projects_list(
 
 
 @projects_app.command("get")
+@command
 def projects_get(
     project_id: str = typer.Argument(..., help="Project ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -112,6 +114,7 @@ def projects_get(
 
 
 @projects_app.command("create")
+@command
 def projects_create(
     project_id: str = typer.Option(..., "--project-id", help="Unique project ID"),
     display_name: str = typer.Option(..., "--display-name", help="Human-readable project name"),
@@ -143,6 +146,7 @@ def projects_create(
 
 
 @projects_app.command("update")
+@command
 def projects_update(
     project_id: str = typer.Argument(..., help="Project ID to update"),
     display_name: Optional[str] = typer.Option(None, "--display-name", help="New display name"),
@@ -197,6 +201,7 @@ def projects_update(
 
 
 @projects_app.command("delete")
+@command
 def projects_delete(
     project_id: str = typer.Argument(..., help="Project ID to delete"),
     confirm: bool = typer.Option(False, "--confirm", "-y", help="Skip confirmation prompt"),
@@ -296,6 +301,7 @@ def _list_oauth_clients(client, project: str, limit: int):
 
 
 @credentials_app.command("list")
+@command
 def credentials_list(
     project: str = typer.Option(..., "--project", help="GCP project ID"),
     cred_type: Optional[str] = typer.Option(None, "--type", help="Credential type: service-account, api-key, oauth-client"),
@@ -342,6 +348,7 @@ def credentials_list(
 
 
 @credentials_app.command("get")
+@command
 def credentials_get(
     credential_id: str = typer.Argument(..., help="Credential identifier"),
     project: str = typer.Option(..., "--project", help="GCP project ID"),
@@ -392,6 +399,7 @@ def credentials_get(
 
 
 @credentials_app.command("create")
+@command
 def credentials_create(
     project: str = typer.Option(..., "--project", help="GCP project ID"),
     cred_type: str = typer.Option(..., "--type", help="Credential type: service-account, api-key"),
@@ -455,6 +463,7 @@ def credentials_create(
 
 
 @credentials_app.command("update")
+@command
 def credentials_update(
     credential_id: str = typer.Argument(..., help="Credential identifier (email, key name, or OAuth client name)"),
     project: str = typer.Option(..., "--project", help="GCP project ID"),
@@ -562,6 +571,7 @@ def credentials_update(
 
 
 @services_app.command("list")
+@command
 def services_list(
     project: str = typer.Option(..., "--project", help="GCP project ID or number"),
     state: Optional[str] = typer.Option("ENABLED", "--state", help="Filter by state: ENABLED, DISABLED, or ALL"),
@@ -626,6 +636,7 @@ def services_list(
 
 
 @services_app.command("enable")
+@command
 def services_enable(
     service_name: str = typer.Argument(..., help="API service name (e.g. gmail.googleapis.com)"),
     project: str = typer.Option(..., "--project", help="GCP project ID or number"),
@@ -652,6 +663,7 @@ def services_enable(
 
 
 @services_app.command("disable")
+@command
 def services_disable(
     service_name: str = typer.Argument(..., help="API service name (e.g. gmail.googleapis.com)"),
     project: str = typer.Option(..., "--project", help="GCP project ID or number"),
@@ -682,6 +694,7 @@ def services_disable(
 
 
 @services_app.command("get")
+@command
 def services_get(
     service_name: str = typer.Argument(..., help="API service name (e.g. gmail.googleapis.com)"),
     project: str = typer.Option(..., "--project", help="GCP project ID or number"),

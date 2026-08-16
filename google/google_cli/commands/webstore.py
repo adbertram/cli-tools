@@ -128,6 +128,7 @@ def _select_properties(item: dict, properties: Optional[list[str]]) -> dict:
 
 
 @app.command("package")
+@command
 def package_command(
     extension_dir: Path = typer.Argument(Path("."), exists=True, file_okay=False, help="Unpacked extension directory"),
     output_dir: Path = typer.Option(Path("dist/chrome-webstore"), "--output-dir", help="Directory for the release ZIP"),
@@ -147,6 +148,7 @@ def package_command(
 
 
 @app.command("list")
+@command
 def list_items(
     publisher_id: Optional[str] = typer.Option(None, "--publisher-id", help="Chrome Web Store publisher ID; defaults to CWS_PUBLISHER_ID"),
     item_id: Optional[str] = typer.Option(None, "--item-id", help="Chrome Web Store item or extension ID; defaults to CWS_EXTENSION_ID"),
@@ -178,6 +180,7 @@ def list_items(
 
 
 @app.command("status")
+@command
 def status(
     publisher_id: Optional[str] = typer.Option(None, "--publisher-id", help="Chrome Web Store publisher ID; defaults to CWS_PUBLISHER_ID"),
     item_id: Optional[str] = typer.Option(None, "--item-id", help="Chrome Web Store item or extension ID; defaults to CWS_EXTENSION_ID"),
@@ -209,6 +212,7 @@ def get(
 
 
 @app.command("upload")
+@command
 def upload(
     package: Path = typer.Argument(..., exists=True, dir_okay=False, help="Extension ZIP package"),
     publisher_id: Optional[str] = typer.Option(None, "--publisher-id", help="Chrome Web Store publisher ID; defaults to CWS_PUBLISHER_ID"),
@@ -229,6 +233,7 @@ def upload(
 
 
 @app.command("upload-extension")
+@command
 def upload_extension(
     extension_dir: Path = typer.Argument(Path("."), exists=True, file_okay=False, help="Unpacked extension directory"),
     publisher_id: Optional[str] = typer.Option(None, "--publisher-id", help="Chrome Web Store publisher ID; defaults to CWS_PUBLISHER_ID"),
@@ -258,6 +263,7 @@ def upload_extension(
 
 
 @app.command("publish")
+@command
 def publish(
     publisher_id: Optional[str] = typer.Option(None, "--publisher-id", help="Chrome Web Store publisher ID; defaults to CWS_PUBLISHER_ID"),
     item_id: Optional[str] = typer.Option(None, "--item-id", help="Chrome Web Store item or extension ID; defaults to CWS_EXTENSION_ID"),
@@ -290,6 +296,7 @@ def publish(
 
 
 @app.command("release")
+@command
 def release(
     extension_dir: Path = typer.Argument(Path("."), exists=True, file_okay=False, help="Unpacked extension directory"),
     publisher_id: Optional[str] = typer.Option(None, "--publisher-id", help="Chrome Web Store publisher ID; defaults to CWS_PUBLISHER_ID"),
@@ -338,6 +345,7 @@ def release(
 
 
 @listing_app.command("update")
+@command
 def update_listing(
     listing_file: Path = typer.Option(
         Path("store-assets/chrome-webstore-listing.md"),
@@ -369,6 +377,7 @@ def update_listing(
 
 
 @app.command("cancel-submission")
+@command
 def cancel_submission(
     publisher_id: Optional[str] = typer.Option(None, "--publisher-id", help="Chrome Web Store publisher ID; defaults to CWS_PUBLISHER_ID"),
     item_id: Optional[str] = typer.Option(None, "--item-id", help="Chrome Web Store item or extension ID; defaults to CWS_EXTENSION_ID"),
@@ -388,6 +397,7 @@ def cancel_submission(
 
 
 @app.command("rollout")
+@command
 def rollout(
     publisher_id: Optional[str] = typer.Option(None, "--publisher-id", help="Chrome Web Store publisher ID; defaults to CWS_PUBLISHER_ID"),
     item_id: Optional[str] = typer.Option(None, "--item-id", help="Chrome Web Store item or extension ID; defaults to CWS_EXTENSION_ID"),

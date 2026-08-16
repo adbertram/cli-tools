@@ -748,3 +748,33 @@ def test_gmail_get_include_body_outputs_decoded_body(monkeypatch):
     assert resource.get_calls == [
         {"userId": "me", "id": "msg-1", "format": "full"}
     ]
+
+
+def test_gmail_get_returns_headers_when_names_are_lowercase(monkeypatch):
+    message = {
+        "id": "sent-msg-1",
+        "threadId": "thread-1",
+        "labelIds": ["SENT"],
+        "payload": {
+            "headers": [
+                {"name": "From", "value": "adam@example.com"},
+                {"name": "to", "value": "recipient@example.com"},
+                {"name": "subject", "value": "Sent message subject"},
+                {"name": "Date", "value": "Tue, 28 Jul 2026 10:00:00 -0500"},
+            ],
+        },
+    }
+    _patch_message_client(
+        monkeypatch,
+        FakeMessagesResource(get_payloads={"sent-msg-1": message}),
+    )
+
+    result = CliRunner().invoke(
+        app,
+        ["gmail", "get", "sent-msg-1"],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    record = json.loads(result.stdout)
+    assert record["to"] == "recipient@example.com"
+    assert record["subject"] == "Sent message subject"

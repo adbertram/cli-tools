@@ -9,7 +9,7 @@ import typer
 from typing import Optional, List
 from googleapiclient.errors import HttpError
 from ..client import get_client, retry_with_exponential_backoff
-from cli_tools_shared.output import print_json, print_table, handle_error, print_success, print_error, print_info
+from cli_tools_shared.output import command, print_json, print_table, handle_error, print_success, print_error, print_info
 from cli_tools_shared.activity_log import get_activity_logger
 from cli_tools_shared.filters import apply_filters as _client_side_filter_reference
 from ..filter_translator import translate_chat_filters
@@ -44,6 +44,7 @@ app.add_typer(messages_app, name="messages")
 
 
 @spaces_app.command("list")
+@command
 def spaces_list(
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of spaces to list"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -140,6 +141,7 @@ def spaces_list(
 
 
 @spaces_app.command("get")
+@command
 def spaces_get(
     space_id: str = typer.Argument(..., help="Space ID (e.g., 'spaces/AAAA' or just 'AAAA')"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -175,6 +177,7 @@ def spaces_get(
 
 
 @messages_app.command("list")
+@command
 def messages_list(
     space: str = typer.Option(..., "--space", "-s", help="Space ID (e.g., 'spaces/AAAA' or just 'AAAA')"),
     limit: int = typer.Option(25, "--limit", "-l", help="Maximum number of messages to list"),
@@ -267,6 +270,7 @@ def messages_list(
 
 
 @messages_app.command("get")
+@command
 def messages_get(
     message_name: str = typer.Argument(..., help="Message name (e.g., 'spaces/AAAA/messages/BBBB')"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -300,6 +304,7 @@ def messages_get(
 
 
 @app.command("send")
+@command
 def chat_send(
     space: str = typer.Option(..., "--space", "-s", help="Space ID (e.g., 'spaces/AAAA' or just 'AAAA')"),
     text: str = typer.Option(..., "--text", "-t", help="Message text to send"),

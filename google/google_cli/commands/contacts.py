@@ -14,7 +14,7 @@ from cli_tools_shared.filters import (
     apply_filters,
     apply_properties_filter,
 )
-from cli_tools_shared.output import print_error, print_json, print_table, handle_error
+from cli_tools_shared.output import command, print_error, print_json, print_table, handle_error
 
 
 app = typer.Typer(help="Access Google Contacts", no_args_is_help=True)
@@ -188,6 +188,7 @@ def _list_contacts(service, limit: int, filters: Optional[List[str]]) -> list[di
 
 
 @app.command("list")
+@command
 def contacts_list(
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of contacts to list"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -224,6 +225,7 @@ def contacts_list(
 
 
 @app.command("get")
+@command
 def contacts_get(
     resource_name: str = typer.Argument(..., help="Contact resource name, for example people/c123"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),

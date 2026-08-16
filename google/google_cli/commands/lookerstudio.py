@@ -8,7 +8,7 @@ from typing import Optional
 
 import typer
 from cli_tools_shared.filters import apply_filters
-from cli_tools_shared.output import handle_error, print_json, print_table
+from cli_tools_shared.output import command, handle_error, print_json, print_table
 
 from ..client import get_client
 from ..lookerstudio_client import (
@@ -116,6 +116,7 @@ def _build_data_source_parameters(
 
 
 @reports_app.command("list")
+@command
 def reports_list(
     limit: int = typer.Option(1000, "--limit", "-l", help="Maximum number of reports to list"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -168,6 +169,7 @@ def reports_list(
 
 
 @reports_app.command("get")
+@command
 def reports_get(
     report_id: str = typer.Argument(..., help="Report ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -194,6 +196,7 @@ def reports_get(
 
 
 @reports_app.command("create-link")
+@command
 def reports_create_link(
     report_id: str = typer.Option(..., "--report-id", help="Template report ID"),
     report_name: Optional[str] = typer.Option(None, "--report-name", help="Created report name"),
@@ -256,6 +259,7 @@ def reports_create_link(
 
 
 @reports_app.command("update-link")
+@command
 def reports_update_link(
     report_id: str = typer.Argument(..., help="Report ID"),
     report_name: Optional[str] = typer.Option(None, "--report-name", help="Created report name"),
@@ -318,6 +322,7 @@ def reports_update_link(
 
 
 @reports_app.command("permissions-get")
+@command
 def permissions_get(
     report_id: str = typer.Argument(..., help="Report ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -335,6 +340,7 @@ def permissions_get(
 
 
 @reports_app.command("permissions-add-members")
+@command
 def permissions_add_members(
     report_id: str = typer.Argument(..., help="Report ID"),
     role: LookerStudioRole = typer.Option(..., "--role", help="Role to add members to"),
@@ -354,6 +360,7 @@ def permissions_add_members(
 
 
 @reports_app.command("permissions-patch")
+@command
 def permissions_patch(
     report_id: str = typer.Argument(..., help="Report ID"),
     permissions_json: str = typer.Option(
@@ -379,6 +386,7 @@ def permissions_patch(
 
 
 @reports_app.command("permissions-revoke-all")
+@command
 def permissions_revoke_all(
     report_id: str = typer.Argument(..., help="Report ID"),
     members: list[str] = typer.Option(..., "--member", help="Member to remove"),

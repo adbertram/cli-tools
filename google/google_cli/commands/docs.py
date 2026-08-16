@@ -18,7 +18,7 @@ from typing import Optional, List, Dict, Any
 from pathlib import Path
 from googleapiclient.errors import HttpError
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_table, handle_error, print_success, print_error
+from cli_tools_shared.output import command, print_json, print_table, handle_error, print_success, print_error
 from cli_tools_shared.filters import apply_filters as _client_side_filter_reference
 from ..filter_translator import translate_docs_filters
 
@@ -36,6 +36,7 @@ EXPORT_FORMATS = {
 app = typer.Typer(help="Manage Google Docs documents")
 
 @app.command("list")
+@command
 def docs_list(
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of documents to list"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -86,6 +87,7 @@ def docs_list(
         raise typer.Exit(handle_error(e))
 
 @app.command("get")
+@command
 def docs_get(
     document_id: str = typer.Argument(..., help="Document ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -147,6 +149,7 @@ def _extract_all_text(obj: Any) -> str:
 
 
 @app.command("read")
+@command
 def docs_read(
     document_id: str = typer.Argument(..., help="Document ID"),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
@@ -180,6 +183,7 @@ def docs_read(
         raise typer.Exit(handle_error(e))
 
 @app.command("create")
+@command
 def docs_create(
     title: str = typer.Option(..., "--title", "-t", help="Document title"),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
@@ -324,6 +328,7 @@ def _extract_markdown_from_doc(document: dict) -> str:
 
 
 @app.command("export")
+@command
 def docs_export(
     document_id: str = typer.Argument(..., help="Document ID"),
     format: str = typer.Option("txt", "--format", "-f", help="Export format: txt, pdf, docx, html, rtf, epub, md"),
@@ -417,6 +422,7 @@ def docs_export(
 
 
 @app.command("update")
+@command
 def docs_update(
     document_id: str = typer.Argument(..., help="Document ID"),
     content: Optional[str] = typer.Option(None, "--content", "-c", help="New content to replace document body"),
@@ -630,6 +636,7 @@ app.add_typer(tables_app, name="tables")
 
 
 @tables_app.command("update")
+@command
 def tables_update(
     document_id: str = typer.Argument(..., help="Document ID"),
     updates_data: Optional[str] = typer.Option(None, "--data", "-d", help="JSON array of updates: [{table, row, col, content}, ...]"),

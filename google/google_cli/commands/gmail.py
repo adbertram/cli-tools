@@ -262,6 +262,7 @@ def decode_body_from_payload(payload: dict) -> str:
     return ''
 
 @app.command("list")
+@command
 def gmail_list(
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of messages to list"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -354,6 +355,7 @@ def gmail_list(
         raise typer.Exit(handle_error(e))
 
 @app.command("get")
+@command
 def gmail_get(
     message_id: str = typer.Argument(..., help="Message ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -377,7 +379,7 @@ def gmail_get(
             return
 
         payload = message.get('payload', {})
-        headers = {h['name']: h['value'] for h in payload.get('headers', [])}
+        headers = {h['name'].lower(): h['value'] for h in payload.get('headers', [])}
 
         # Decode the body
         body = decode_body_from_payload(payload)
@@ -388,9 +390,9 @@ def gmail_get(
         if table:
             data = [{
                 'id': message['id'],
-                'from': headers.get('From', ''),
-                'subject': headers.get('Subject', ''),
-                'date': headers.get('Date', ''),
+                'from': headers.get('from', ''),
+                'subject': headers.get('subject', ''),
+                'date': headers.get('date', ''),
             }]
             table_cols = ['subject', 'from', 'date']
             table_headers = ['Subject', 'From', 'Date']
@@ -404,11 +406,11 @@ def gmail_get(
                 'id': message['id'],
                 'threadId': message.get('threadId', ''),
                 'labelIds': message.get('labelIds', []),
-                'from': headers.get('From', ''),
-                'to': headers.get('To', ''),
-                'cc': headers.get('Cc', ''),
-                'subject': headers.get('Subject', ''),
-                'date': headers.get('Date', ''),
+                'from': headers.get('from', ''),
+                'to': headers.get('to', ''),
+                'cc': headers.get('cc', ''),
+                'subject': headers.get('subject', ''),
+                'date': headers.get('date', ''),
                 'body': body,
             }
             # Remove empty cc field
@@ -426,6 +428,7 @@ def gmail_get(
         raise typer.Exit(handle_error(e))
 
 @app.command("read")
+@command
 def gmail_read(
     message_id: str = typer.Argument(..., help="Message ID"),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
@@ -465,6 +468,7 @@ def gmail_read(
         raise typer.Exit(handle_error(e))
 
 @app.command("search")
+@command
 def gmail_search(
     query: str = typer.Argument(..., help="Search query (Gmail search syntax)"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of results"),
@@ -540,6 +544,7 @@ def gmail_search(
 
 
 @app.command("send")
+@command
 def gmail_send(
     to: str = typer.Option(..., "--to", help="Recipient email address"),
     subject: str = typer.Option(..., "--subject", "-s", help="Email subject"),
@@ -667,6 +672,7 @@ def gmail_send(
 
 
 @app.command("archive")
+@command
 def gmail_archive(
     message_ids: List[str] = typer.Argument(..., help="Message ID(s) to archive"),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
@@ -695,6 +701,7 @@ def gmail_archive(
 
 
 @app.command("trash")
+@command
 def gmail_trash(
     message_ids: List[str] = typer.Argument(..., help="Message ID(s) to move to trash"),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
@@ -723,6 +730,7 @@ def gmail_trash(
 
 
 @app.command("download-attachment")
+@command
 def gmail_download_attachment(
     message_id: str = typer.Argument(..., help="Message ID containing the attachment"),
     filename: Optional[str] = typer.Option(None, "--filename", "-f", help="Attachment filename to download"),
@@ -829,6 +837,7 @@ def gmail_download_attachment(
 
 
 @app.command("draft")
+@command
 def gmail_draft(
     to: str = typer.Option(..., "--to", help="Recipient email address"),
     subject: str = typer.Option(..., "--subject", "-s", help="Email subject"),
@@ -1001,6 +1010,7 @@ def gmail_draft_get(
 
 
 @app.command("send-draft")
+@command
 def gmail_send_draft(
     draft_id: str = typer.Argument(..., help="Gmail draft ID (returned by `gmail draft`)"),
     confirm: bool = typer.Option(False, "--confirm", help="Actually send the draft. Without this flag, only previews the draft."),
@@ -1077,6 +1087,7 @@ def get_current_user_email(service) -> str:
 
 
 @app.command("reply")
+@command
 def gmail_reply(
     message_id: str = typer.Argument(..., help="Message ID to reply to"),
     body: str = typer.Option(..., "--body", "-b", help="Reply body (plain text)"),
@@ -1231,6 +1242,7 @@ def gmail_reply(
 
 
 @app.command("reply-all")
+@command
 def gmail_reply_all(
     message_id: str = typer.Argument(..., help="Message ID to reply to"),
     body: str = typer.Option(..., "--body", "-b", help="Reply body (plain text)"),
@@ -1420,6 +1432,7 @@ def gmail_reply_all(
 
 
 @labels_app.command("list")
+@command
 def labels_list(
     message_id: str = typer.Argument(..., help="Message ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -1474,6 +1487,7 @@ def labels_list(
 
 
 @labels_app.command("get")
+@command
 def labels_get(
     label_id: str = typer.Argument(..., help="Label ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -1507,6 +1521,7 @@ def labels_get(
 
 
 @labels_app.command("add")
+@command
 def labels_add(
     message_id: str = typer.Argument(..., help="Message ID"),
     label: List[str] = typer.Option(..., "--label", "-l", help="Label ID(s) to add"),
@@ -1534,6 +1549,7 @@ def labels_add(
 
 
 @labels_app.command("remove")
+@command
 def labels_remove(
     message_id: str = typer.Argument(..., help="Message ID"),
     label: List[str] = typer.Option(..., "--label", "-l", help="Label ID(s) to remove"),
@@ -1582,6 +1598,7 @@ def normalize_gmail_filter(raw: dict) -> dict:
 
 
 @filters_app.command("list")
+@command
 def filters_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of filters to list"),
@@ -1621,6 +1638,7 @@ def filters_list(
 
 
 @filters_app.command("get")
+@command
 def filters_get(
     filter_id: str = typer.Argument(..., help="Filter ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -1651,6 +1669,7 @@ def filters_get(
 
 
 @filters_app.command("create")
+@command
 def filters_create(
     from_: Optional[str] = typer.Option(None, "--from", help="Match sender address/pattern"),
     to: Optional[str] = typer.Option(None, "--to", help="Match recipient address/pattern"),
@@ -1720,6 +1739,7 @@ def filters_create(
 
 
 @filters_app.command("delete")
+@command
 def filters_delete(
     filter_id: str = typer.Argument(..., help="Filter ID"),
     confirm: bool = typer.Option(False, "--confirm", "-y", help="Skip confirmation prompt"),
