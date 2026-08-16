@@ -15,6 +15,9 @@ from powerpoint_slide_recorder_cli import recorder as record
 from typer.testing import CliRunner
 
 
+TEST_PRESENTATIONML_NAMESPACE = "http://schemas.openxmlformats.org/presentationml/2006/main"
+
+
 class FakeProcess:
     def __init__(self, poll_values, returncode):
         self.poll_values = list(poll_values)
@@ -1898,12 +1901,53 @@ class LiveClickStepProbeTests(unittest.TestCase):
                 mock.patch.object(record, "press_space") as press_space, \
                 mock.patch.object(record, "exit_slideshow_if_running") as exit_slideshow, \
                 mock.patch.object(record, "live_slideshow_slide_index", side_effect=indexes), \
+                mock.patch.object(record, "terminal_next_click_after_effect_step", return_value=0), \
                 mock.patch.object(record.time, "sleep"):
             counts = record.measure_slide_click_steps(config, [3, 4])
 
         self.assertEqual(counts, {3: 1, 4: 1})
         self.assertEqual(press_space.call_count, 4)
         exit_slideshow.assert_called_once()
+
+    def test_measure_slide_click_steps_excludes_one_terminal_after_effect(self):
+        config = {"deck_path": "/tmp/deck.pptx", "slideshow_start_seconds": 0}
+        indexes = [26, 26, 26, 26, 26, 26, 26, None]
+
+        with mock.patch.object(record, "open_deck"), \
+                mock.patch.object(record, "clear_benign_dialogs_before_slideshow"), \
+                mock.patch.object(record, "run_osascript"), \
+                mock.patch.object(record, "press_space"), \
+                mock.patch.object(record, "exit_slideshow_if_running"), \
+                mock.patch.object(record, "live_slideshow_slide_index", side_effect=indexes), \
+                mock.patch.object(record, "terminal_next_click_after_effect_step", return_value=1), \
+                mock.patch.object(record.time, "sleep"):
+            counts = record.measure_slide_click_steps(config, [26])
+
+        self.assertEqual(counts, {26: 5})
+
+    def test_terminal_next_click_after_effect_in_xml_checks_only_the_final_click_effect(self):
+        nonterminal_only = f'''<p:sld xmlns:p="{TEST_PRESENTATIONML_NAMESPACE}">
+          <p:cTn nodeType="clickEffect"><p:cTn masterRel="nextClick" afterEffect="1"/></p:cTn>
+          <p:cTn nodeType="clickEffect"/>
+        </p:sld>'''.encode()
+        terminal = f'''<p:sld xmlns:p="{TEST_PRESENTATIONML_NAMESPACE}">
+          <p:cTn nodeType="clickEffect"><p:cTn masterRel="nextClick" afterEffect="1"/></p:cTn>
+          <p:cTn nodeType="clickEffect"><p:cTn masterRel="nextClick" afterEffect="1"/></p:cTn>
+        </p:sld>'''.encode()
+
+        self.assertFalse(record.terminal_next_click_after_effect_in_xml(nonterminal_only))
+        self.assertTrue(record.terminal_next_click_after_effect_in_xml(terminal))
+
+    def test_slide_layout_member_resolves_the_relationship_target(self):
+        relationships = b'''<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+          <Relationship Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout"
+                        Target="../slideLayouts/custom/slideLayout53.xml"/>
+        </Relationships>'''
+        deck = SimpleNamespace(read=mock.Mock(return_value=relationships))
+
+        member = record.slide_layout_member_for_slide(deck, 26)
+
+        self.assertEqual(member, "ppt/slideLayouts/custom/slideLayout53.xml")
 
     def test_measure_slide_click_steps_rejects_a_show_that_starts_on_the_wrong_slide(self):
         config = {"deck_path": "/tmp/deck.pptx", "slideshow_start_seconds": 0}
@@ -1913,6 +1957,7 @@ class LiveClickStepProbeTests(unittest.TestCase):
                 mock.patch.object(record, "run_osascript"), \
                 mock.patch.object(record, "press_space"), \
                 mock.patch.object(record, "live_slideshow_slide_index", return_value=1), \
+                mock.patch.object(record, "terminal_next_click_after_effect_step", return_value=0), \
                 mock.patch.object(record.time, "sleep"):
             with self.assertRaisesRegex(RuntimeError, "started on slide 1, expected slide 3"):
                 record.measure_slide_click_steps(config, [3, 4])

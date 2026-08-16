@@ -47,7 +47,7 @@ Optional options:
 - `--force-resolution`; temporarily switches the main display to `--resolution` before recording and restores the previous display mode afterward
 - `--force-aspect-ratio WIDTHxHEIGHT`; temporarily switches the main display to the highest available mode with that aspect ratio before recording and restores the previous display mode afterward; mutually exclusive with `--force-resolution`
 - `--recording-lead-seconds 1.0`
-- `--slide-pause-seconds 0.75`
+- `--slide-pause-seconds 0.25`
 - `--slideshow-start-seconds 2.0`
 - `--coursecraft-repo-root PATH`; see Demo Environment Prep
 - `--table`
