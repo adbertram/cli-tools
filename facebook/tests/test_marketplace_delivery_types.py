@@ -155,6 +155,24 @@ def test_capture_ignores_a_page_with_no_listing_data():
     assert capture["parseErrors"] == 0
 
 
+def test_capture_reads_listing_state_without_delivery_types():
+    """The status command must read state from a listing node whose fulfillment
+    fields are absent, without weakening the full-detail fulfillment contract."""
+    capture = _capture_from(
+        '<script type="application/json">'
+        '{"__typename":"GroupCommerceProductItem","id":"status-only",'
+        '"is_sold":false,"is_pending":false,"is_live":true}'
+        "</script>"
+    )
+
+    assert capture["deliveryTypes"] == {}
+    assert capture["availability"]["status-only"] == {
+        "is_sold": False,
+        "is_pending": False,
+        "is_live": True,
+    }
+
+
 # --- One listing, two ids ---------------------------------------------------
 
 

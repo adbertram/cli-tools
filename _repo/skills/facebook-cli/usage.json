@@ -1,8 +1,8 @@
 {
   "tool": "facebook",
   "description": "Facebook CLI - Marketplace, Messenger, and more via browser automation",
-  "discovered_at": "2026-08-04T21:23:24Z",
-  "total_commands": 25,
+  "discovered_at": "2026-08-15T21:53:36Z",
+  "total_commands": 26,
   "global_options": [
     {
       "name": "--version",
@@ -504,6 +504,7 @@
               "examples": [
                 "facebook groups posts list 123456789",
                 "facebook groups posts list my-group-name --table --limit 10",
+                "facebook groups posts list 2318028917 --limit 25 --full-threads",
                 "facebook groups posts list 123456789 --filter \"author:contains:John\""
               ],
               "usage_instructions": "Run `facebook groups posts list --help` for exact arguments and options.",
@@ -665,6 +666,8 @@
           "examples": [
             "facebook marketplace list",
             "facebook marketplace list --query \"LEGO\"",
+            "facebook marketplace list --query \"LEGO\" --sort price",
+            "facebook marketplace list --query \"LEGO\" --sort price --desc",
             "facebook marketplace list --query \"couch\" --min-price 50 --max-price 500",
             "facebook marketplace list --location chicago --table --limit 20",
             "facebook marketplace list --query \"LEGO\" --include-detail",
@@ -756,6 +759,44 @@
               "type": "bool",
               "required": false,
               "help": "Also save the listing images to the local cache (implies --include-detail). Image URLs are returned either way"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "status": {
+          "help": "Get current availability without requiring full listing details. This command reads Facebook's structured sold, pending, and live values. It does not require delivery types, prices, descriptions, or images.",
+          "examples": [
+            "facebook marketplace status 123456789",
+            "facebook marketplace status 123456789 --table",
+            "facebook marketplace status 123456789 --properties item_id,availability"
+          ],
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Marketplace listing item ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
             },
             {
               "name": "--profile",

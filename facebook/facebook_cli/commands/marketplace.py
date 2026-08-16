@@ -5,6 +5,9 @@ COMMAND_CREDENTIALS = {
     ],
     "list": [
         "browser_session"
+    ],
+    "status": [
+        "browser_session"
     ]
 }
 
@@ -173,4 +176,26 @@ def marketplace_get(
         if download_images:
             _resolve_images(data, image_urls)
 
+        output_single(data, table=table, properties=properties)
+
+
+@app.command("status")
+@command
+def marketplace_status(
+    item_id: str = typer.Argument(..., help="Marketplace listing item ID"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
+):
+    """Get current availability without requiring full listing details.
+
+    This command reads Facebook's structured sold, pending, and live values.
+    It does not require delivery types, prices, descriptions, or images.
+
+    Examples:
+        facebook marketplace status 123456789
+        facebook marketplace status 123456789 --table
+        facebook marketplace status 123456789 --properties item_id,availability
+    """
+    with client_session() as client:
+        data = client.get_item_status(item_id)
         output_single(data, table=table, properties=properties)

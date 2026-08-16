@@ -22,6 +22,7 @@ facebook <command-group> <action> [arguments] [options]
 | Search Marketplace | `facebook marketplace list --query "LEGO" --table` |
 | Browse Today's picks | `facebook marketplace list --table` |
 | Get listing details | `facebook marketplace get ITEM_ID` |
+| Check listing availability | `facebook marketplace status ITEM_ID` |
 | List group posts | `facebook groups list GROUP_ID --table` |
 | Get a group post | `facebook groups get GROUP_ID/posts/POST_ID` |
 | List conversations | `facebook messenger list --table` |
@@ -38,7 +39,7 @@ This file contains complete command syntax, all arguments, all options, and usag
 
 <principle name="Command Groups">
 - **groups** — Read posts from Facebook Groups (list, get)
-- **marketplace** — Search and browse Facebook Marketplace (list, get with price/location filters)
+- **marketplace** — Search, browse, inspect, and check Facebook Marketplace listings (list, get, status)
 - **messenger** — Messenger conversations (list, get, send, requests)
 - **auth** — Manage authentication via headed browser (login, logout, status, test)
 - **auth** -- Authentication commands and nested `auth profiles` management
@@ -105,11 +106,33 @@ The listing's own payload node is always keyed by the LISTING id and publishes t
 </principle>
 
 <principle name="Marketplace Availability">
-`availability` reports `Sold`, `Pending`, `Available`, or `null` on BOTH `marketplace list` and `marketplace get`. It is mapped from Facebook's own `is_sold` / `is_pending` / `is_live` booleans, which ride in the same listing node as `delivery_types`. No rendered banner text is read.
+`availability` reports `Sold`, `Pending`, `Available`, or `null` on BOTH `marketplace list` and `marketplace get`. It is mapped from Facebook's own `is_sold` / `is_pending` / `is_live` booleans, which ride in the same listing node as `delivery_types`. These commands do not read rendered availability text.
 
 `null` means UNKNOWN — Facebook did not describe that listing on the surface that was read. It NEVER means "still for sale".
 
-A consumer re-checking many saved listings for sold state should use one `marketplace list` call, not one `marketplace get` per listing.
+A consumer that checks many visible search results should use one `marketplace list` call.
+
+Use `facebook marketplace status ITEM_ID` for a direct, uncached availability check.
+
+This command does not require prices, descriptions, images, or `delivery_types`.
+
+Its output has `item_id`, `status`, `availability`, `status_source`, and `url`.
+
+`Available` and `Pending` map to `status: "available"`. `Sold` maps to `status: "gone"`.
+
+Facebook can redirect a removed listing to a Marketplace page with `unavailable_product=1`.
+
+The status command also requires the exact unavailable banner before it returns `status: "gone"`.
+
+The command fails when those two signals conflict. It never infers status from absent listing data.
+</principle>
+
+<principle name="Marketplace Seller">
+Every Marketplace record carries `seller_id` and `seller_name` on BOTH `marketplace list` and `marketplace get`, read from Facebook's own `marketplace_listing_seller` payload node — not from the rendered "Seller information" heading.
+
+`seller_id` is Facebook's numeric profile id (the stable key); `seller_name` is the display name (a person can change it). Both `null` means Facebook's payload named no seller for this listing — for example, a listing posted into a Facebook Group rather than to a seller's personal profile. Unlike `delivery_types`, an absent seller is NOT fatal and does not raise: an absent seller cannot be misread as a different seller the way an absent fulfillment model could be misread as "no shipping offered".
+
+Never derive seller identity by parsing a `/marketplace/profile/<seller_id>/?product_id=<item_id>` link out of the rendered page — the CLI already reads it structurally and correctly covers the group-listing case where no such link exists at all.
 </principle>
 
 <success_criteria>
@@ -252,3 +275,28 @@ Which id a surface uses is not arbitrary. A normal search tile links by the list
 **Honest limit (unchanged and confirmed live):** `marketplace list` STILL reports `null` for those same two notification tiles, and that is correct. Their ids appear nowhere in the search page's payloads — not in any `script[type="application/json"]` blob, not in any of the 15 captured XHR bodies, and not under the canonical listing id either. Facebook serves the notification tile's listing data from the notifications feed, which the search page never loads. So the `list` surface genuinely cannot describe them, the warning names them by id, and `marketplace get` is now once again the definitive read. Do NOT try to fill those rows by guessing.
 
 **Recurrence Prevention:** Never assume the id in a Marketplace URL or tile href is the id Facebook's own payload is keyed by. When a lookup misses on a page that clearly rendered the listing, dump the node and compare its `id` against `story.post_id` and `product_item.id` BEFORE concluding Facebook changed its payload. The fail-loud guard did its job here — it refused to report an unknown fulfillment model — but its error text blamed Facebook for a keying bug in the CLI, so a "Facebook changed its payload" message is a hypothesis to test against the live page, never a conclusion.
+
+## Raw Browser Fallback Notes
+
+The `facebook` CLI extracts Marketplace data structurally, from Facebook's own embedded GraphQL/Relay payloads (see the principles above and Known Issues #3–#7) — not from rendered DOM text. That is more reliable than DOM scraping and is always the first choice; load this skill and use the CLI before ever touching a raw browser tool. The notes below were captured 2026-08-14 during a one-off LegoScout sourcing exercise that deliberately used Claude's raw browser-pane tools (`navigate`, `read_page`, `get_page_text`, `javascript_tool`, screenshots) instead of this CLI, to test a browser-pane-only workflow. Keep them for two cases only: (1) a genuine CLI-unavailable fallback, and (2) extending the CLI's own scraper. Where a note duplicates existing CLI behavior, it says so instead of repeating the derivation.
+
+### Already covered by the CLI — do not re-derive
+
+- **Gallery photo scoping.** The CLI's `img[alt^="Product photo of"]` DOM scope (Known Issue #4) is the same technique a raw browser session needs: `document.querySelectorAll('img')` alone returns dozens of unrelated images (the "Today's picks" sidebar reuses thumbnails across every page), and filtering by image size/width is not reliable — sidebar thumbnails can also be large. Use the alt-prefix filter in either context; it is the only filter that worked cleanly.
+- **Sort order.** `--sort newest` already maps to Facebook's `sortBy=creation_time_descend` URL parameter. A raw browser session has to build that URL param itself, because Facebook's on-page "Sort by" radio control (Suggested / Distance / Date listed: Newest first / Price low / Price high) does not always render in the left filter panel on a plain query search. The separate "Date listed" radio group (All / Last 24 hours / Last 7 days / Last 30 days) is a time-window filter, not a sort order — don't confuse the two or assume the sort radio is always in the DOM.
+- **Reduced-price rendering.** `$15$20` (no separator) is a current-then-struck-through-original render; the CLI already splits it correctly into `price`/`original_price` (Known Issue #3, "Marketplace Prices" principle). Never read the second, struck-through number as the current price, on either surface.
+- **Fulfillment/delivery.** `delivery_types` is read structurally and is authoritative (Known Issue #6, #7). Rendered delivery text (`"Door pickup"`, `"Public meetup"`, `"Door pickup or dropoff"`, `"Ships for $X.XX"`) is incomplete — several confirmed pickup-only listings render no tag at all — so a raw browser session that only reads visible text will systematically under- or mis-report fulfillment. A `"Ships for $X.XX"` tag pairs with a real Facebook Shop checkout flow (a "Shipping & returns" panel, an "Estimated arrival" date range, and a "Buy now" button with "Covered by Purchase Protection"), while `"Open to shipping, please provide the zip code"` in the listing body is only a soft/negotiable seller signal, not a firm quote — don't treat the two the same.
+- **Seller identity.** `seller_id`/`seller_name` are read structurally from Facebook's own `marketplace_listing_seller` payload node (see the "Marketplace Seller" principle above), including the group-posted case where no profile link exists and seller_id is genuinely unrecoverable. Don't parse the rendered `/marketplace/profile/<seller_id>/?product_id=<item_id>` link — the CLI's structural read already covers what that link would give you, and correctly returns `null` where the link doesn't exist.
+
+### New: Facebook Shop-style listings can bundle multiple priced items under one item_id
+
+A listing's body text can describe several separately-priced items in one post (e.g. 10 sealed sets, each its own `"<set> - $<price>"` line, some marked `*SOLD*`), while the page's own header price, delivery/shipping quote, and (for a Shop-style listing) "Buy now" button all describe only ONE of those items — the one keyed by the `item_id` in the URL, never "the lot". This holds whether the listing is read via the CLI or raw browser tools: `marketplace get <item_id>` returns the single sellable item that id names, not the multi-item description. When a listing body lists several priced items, do not assume the record's `price` field applies to all of them — confirm which single item the id/price actually corresponds to before pricing the listing.
+
+### Raw-browser-only technique notes (no CLI equivalent needed)
+
+These apply only when actually falling back to the Claude browser pane / computer-use tools, because the CLI does not use them at all:
+
+- **Photo carousel arrow clicks are unreliable.** Clicking a listing's "View next image" control frequently does not advance the visible image in a follow-up screenshot (looked like a stale-render/lag issue), even though the click registers. Don't enumerate a gallery by clicking through it — use the `img[alt^="Product photo of"]` JS query above instead; it returns every gallery image URL in one call, with zero clicking.
+- **Bulk item-ID/price/location harvesting.** `read_page` (not screenshots) on a search-results page, or on any listing page's own "Today's picks" sidebar, exposes each listing link's accessible name as `"<Title>, $<price>, <location>, listing <item_id>"` — title, price, location, and item_id in one shot, without visiting each listing individually.
+- **`get_page_text` covers almost all per-listing capture.** One `get_page_text` call on an item page reliably returns title, price (with struck-through original if reduced), condition, brand, the seller's full free-text description, item location, the delivery-method tag if one is rendered, and the seller's display name — plus, as a side effect, that listing's own "Today's picks" sidebar. Reserve screenshots/zoom for genuinely visual tasks: reading a set number off box art, assessing a bulk lot's visual composition, or comparing a listing photo against a BrickLink catalog image. Defaulting to screenshots for routine data capture is slower and hits more rendering/timing bugs (see the carousel and scroll notes here).
+- **Infinite-scroll pagination is flaky under `computer scroll`.** Triggering more results by scrolling the results grid sometimes produced a "Browser pane is currently hidden" timeout and could silently fail to load additional listings. Prefer navigating directly to a search URL with query params (`https://www.facebook.com/marketplace/<location-id>/search/?query=lego&sortBy=creation_time_descend`) and treating each navigation as its own result page, over chaining scrolls.

@@ -407,26 +407,37 @@ INSTALL_DELIVERY_CAPTURE_JS = r"""() => {
     const walk = (node) => {
         if (node === null || typeof node !== "object") return;
         if (Array.isArray(node)) { for (const value of node) walk(value); return; }
-        if (node.id != null && (Array.isArray(node.delivery_types) || node.location_text != null)) {
+        const hasListingState = node.__typename === "GroupCommerceProductItem"
+            && (typeof node.is_sold === "boolean" || typeof node.is_pending === "boolean"
+                || typeof node.is_live === "boolean");
+        if (node.id != null && (Array.isArray(node.delivery_types)
+            || node.location_text != null || hasListingState)) {
             record(node);
         }
         for (const key of Object.keys(node)) walk(node[key]);
     };
+    const hasCaptureData = (text) => Boolean(text) && (
+        text.indexOf("delivery_types") !== -1
+        || text.indexOf("location_text") !== -1
+        || (text.indexOf("GroupCommerceProductItem") !== -1
+            && (text.indexOf("is_sold") !== -1 || text.indexOf("is_pending") !== -1
+                || text.indexOf("is_live") !== -1))
+    );
     const harvest = (text) => {
-        if (!text || text.indexOf("delivery_types") === -1) return;
+        if (!hasCaptureData(text)) return;
         capture.payloads++;
         // Relay streams a response as several newline-separated JSON documents,
         // optionally behind Facebook's anti-JSON-hijacking prefix.
         for (const line of text.replace(/^\s*for\s*\(;;\);/, "").split("\n")) {
             const trimmed = line.trim();
-            if (!trimmed || trimmed.indexOf("delivery_types") === -1) continue;
+            if (!hasCaptureData(trimmed)) continue;
             try { walk(JSON.parse(trimmed)); } catch (e) { capture.parseErrors++; }
         }
     };
 
     for (const script of document.querySelectorAll('script[type="application/json"]')) {
         const text = script.textContent || "";
-        if (text.indexOf("delivery_types") === -1 && text.indexOf("location_text") === -1) continue;
+        if (!hasCaptureData(text)) continue;
         try { walk(JSON.parse(text)); } catch (e) { capture.parseErrors++; }
     }
 
@@ -448,6 +459,23 @@ INSTALL_DELIVERY_CAPTURE_JS = r"""() => {
 }"""
 
 READ_DELIVERY_CAPTURE_JS = """() => window.__fbDeliveryCapture || null"""
+
+# A removed listing redirects to the local Marketplace feed with Facebook's
+# explicit ``unavailable_product=1`` query marker and a matching banner. This
+# status-only signal was captured live from listing 1317865033763867 on
+# 2026-08-15. Both indicators must agree; missing listing data alone never
+# becomes an unavailable result.
+MARKETPLACE_STATUS_PAGE_JS = r"""() => {
+    const mainText = document.querySelector('[role="main"]')?.innerText || "";
+    const unavailableMessage = mainText.split("\n")
+        .some((line) => line.trim() === "This listing isn't available anymore");
+    const unavailableProduct = new URL(location.href).searchParams.get("unavailable_product") === "1";
+    return {
+        unavailableProduct,
+        unavailableMessage,
+        currentUrl: location.href,
+    };
+}"""
 
 # The maps INSTALL_DELIVERY_CAPTURE_JS writes, listed here so the Python reader
 # fails loudly if the two ever drift apart.
@@ -1165,7 +1193,11 @@ class FacebookClient:
         return capture
 
     @staticmethod
-    def _resolve_captured_listing_id(capture: Dict, item_id: str) -> Optional[str]:
+    def _resolve_captured_listing_id(
+        capture: Dict,
+        item_id: str,
+        map_name: str = "deliveryTypes",
+    ) -> Optional[str]:
         """Map a requested Marketplace id to the id Facebook described it under.
 
         Facebook gives one listing two ids -- a listing id and a story/post id --
@@ -1174,15 +1206,76 @@ class FacebookClient:
         Facebook's own alias fields, so a request by either id resolves.
 
         Returns:
-            The id the listing's ``delivery_types`` are filed under, or None
-            when this page never described the listing at all.
+            The id the requested capture map is filed under, or None when this
+            page never described that subject for the listing.
         """
-        if capture["deliveryTypes"].get(item_id):
+        captured = capture[map_name]
+        if captured.get(item_id):
             return item_id
         alias = capture["aliases"].get(item_id)
-        if alias is not None and capture["deliveryTypes"].get(alias):
+        if alias is not None and captured.get(alias):
             return alias
         return None
+
+    def _extract_listing_status(self, page, item_id: str) -> Dict:
+        """Read one listing's availability without requiring fulfillment data.
+
+        The status path uses Facebook's own ``is_sold`` / ``is_pending`` /
+        ``is_live`` values. It does not call the full-detail fulfillment reader,
+        so absent ``delivery_types`` cannot block a current availability check.
+        """
+        page_state = page.evaluate(MARKETPLACE_STATUS_PAGE_JS)
+        if not isinstance(page_state, dict):
+            raise ClientError(
+                "Facebook Marketplace status page reader returned a non-object result: "
+                f"{type(page_state).__name__}."
+            )
+        unavailable_product = page_state.get("unavailableProduct") is True
+        unavailable_message = page_state.get("unavailableMessage") is True
+        if unavailable_product != unavailable_message:
+            raise ClientError(
+                f"Facebook returned conflicting unavailable-page evidence for listing "
+                f"{item_id}: unavailable_product={unavailable_product}, "
+                f"unavailable_message={unavailable_message}. Refusing to infer status."
+            )
+        if unavailable_product:
+            return {
+                "item_id": item_id,
+                "status": "gone",
+                "availability": "Unavailable",
+                "status_source": "unavailable_product_page",
+                "url": f"/marketplace/item/{item_id}/",
+            }
+
+        self._install_delivery_capture(page)
+        capture = self._read_delivery_capture(page)
+        described_id = self._resolve_captured_listing_id(
+            capture,
+            item_id,
+            map_name="availability",
+        )
+        if described_id is None:
+            raise ClientError(
+                f"Facebook did not describe availability for listing {item_id}: "
+                "no is_sold, is_pending, or is_live values were found under that id "
+                "or under any listing id Facebook aliases to it. Refusing to infer "
+                "availability from missing data. "
+                f"(listings with availability on this page: "
+                f"{len(capture['availability'])}, aliases: {len(capture['aliases'])})"
+            )
+        availability = self._derive_availability(capture["availability"][described_id])
+        if availability is None:
+            raise ClientError(
+                f"Facebook described no usable availability state for listing {item_id}. "
+                "Refusing to infer availability from false or missing state values."
+            )
+        return {
+            "item_id": item_id,
+            "status": "gone" if availability == "Sold" else "available",
+            "availability": availability,
+            "status_source": "listing_state",
+            "url": f"/marketplace/item/{item_id}/",
+        }
 
     def _extract_listing_fulfillment(self, page, item_id: str) -> Dict:
         """Read one listing's delivery types, location, and state from its page.
@@ -1637,6 +1730,21 @@ class FacebookClient:
                 "delivery types, clear it with `facebook cache clear` and retry."
             )
         return listing
+
+    def get_item_status(self, item_id: str) -> Dict:
+        """Get current Marketplace availability without reading full details.
+
+        This live path does not use the item cache. It reads only Facebook's
+        structured listing-state booleans and keeps the full ``get`` command's
+        strict fulfillment contract unchanged.
+        """
+        url = f"{MARKETPLACE_BASE}/item/{item_id}/"
+        print_info(f"Checking listing {item_id} status...")
+
+        page = self._get_page(url)
+        self._dismiss_marketplace_login_dialog(page)
+        self._assert_marketplace_authenticated(page, url, f"Marketplace item {item_id}")
+        return self._extract_listing_status(page, item_id)
 
     @cached
     def _fetch_item(self, item_id: str) -> MarketplaceListing:
