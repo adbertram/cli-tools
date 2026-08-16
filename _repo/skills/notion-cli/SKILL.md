@@ -29,6 +29,8 @@ notion <command-group> <action> [arguments] [options]
 | Get database schema | `notion database schema DB_ID --table` |
 | Add a relation field | `notion field add DB_ID "Imports" --type relation --relation-database TARGET_ID` |
 | Create a database | `notion database create PARENT_PAGE_ID -t "Tasks" --status "Phase:Todo\|Done" --date "Due"` |
+| Trash a whole database | `notion database delete DB_ID --force` |
+| Restore a trashed database | `notion database delete DB_ID --restore --force` |
 | Add comment to page | `notion comments create "text" -p PAGE_ID` |
 | Add shell-sensitive comment text | `notion comments create --text-file comment.md --discussion-id DISCUSSION_ID` |
 | Append markdown as toggle headings | `notion pages content append PAGE_ID -f outline.md --is-toggleable` |
@@ -302,6 +304,30 @@ content as-is. (Historical note: a prior version forwarded the language verbatim
 which 400'd the request. That hazard is fixed.)
 </principle>
 
+<principle name="Markdown Round-Trips Through Notion Unchanged">
+`content set` followed by `get --include-blocks --markdown` returns the same
+markdown. Do NOT pre-transform content to work around export damage, and do NOT
+treat an exported body as lossy. Constructs Notion cannot store natively:
+
+- **Images.** `![alt](https://…)` becomes an `image` block whose `caption` holds
+  the alt text and exports as `![alt](url)`. An `![alt](src)` whose src is
+  neither an `http(s)` URL nor an uploaded file — a pipeline
+  `IMAGE_PLACEHOLDER: …` marker, for example — is stored as a paragraph holding
+  the original markdown line verbatim, so alt text and image syntax both survive.
+  Nothing is rewritten to a `[Image: src]` string any more.
+- **Code fences.** Notion stores `text` as `plain text`; the exporter maps it
+  back to `text`. Every exported fence is a single-token info-string, so
+  ` ```plain text ` can no longer reach a file.
+- **Table column alignment.** Notion tables have no per-column alignment, so
+  `| :--- | ---: |` is persisted in a `<!-- notion-table-align: … -->` marker
+  paragraph placed immediately before the `table` block. The exporter consumes
+  that paragraph and rebuilds the exact separator row; the marker never appears
+  in exported markdown. It is written only when a column declares an explicit
+  alignment, so plain `| --- |` tables add no extra block. Do NOT delete the
+  marker paragraph in the Notion UI without deleting its table — the export
+  fails loudly on an orphaned marker rather than dropping it.
+</principle>
+
 <principle name="replace-section Validates the Full Payload Before Mutating">
 `pages content replace-section` is now safe against mid-upload API rejections. It
 transforms + validates the ENTIRE new payload (block-size limits AND code-fence
@@ -387,6 +413,29 @@ notion database create PARENT_PAGE_ID -t "Tasks" \
   --status "Phase:Todo|Doing|Done" --select "Priority:High|Low" --date "Due" \
   --relation "Project:TARGET_DATA_SOURCE_ID"
 ```
+</principle>
+
+<principle name="Trashing a Whole Database">
+`notion database delete DB_ID` moves a whole database container to the trash
+(PATCH `/v1/databases/{id}` with `{"in_trash": true}`). Use `--force`/`-F` to
+skip the confirmation prompt and `--restore` to bring it back.
+
+Pick the right command for the right resource. These three are NOT
+interchangeable:
+
+| Goal | Command |
+|------|---------|
+| Trash a whole database container | `notion database delete DB_ID --force` |
+| Archive one database row | `notion database page update PAGE_ID --archive` |
+| Archive one standalone page | `notion pages delete PAGE_ID --force` |
+
+`notion pages delete DB_ID` cannot trash a database. The page-retrieve endpoint
+rejects a database ID, so it fails with "Could not find page with ID".
+
+`database delete` accepts a database container ID or a data_source ID (the IDs
+`notion database list` prints); a data_source ID resolves to its parent
+container first. After a trash, `notion --no-cache database get DB_ID` reports
+`"archived": true`.
 </principle>
 
 <principle name="Adding a Relation Field to an EXISTING Database">

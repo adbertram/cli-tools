@@ -152,6 +152,31 @@ Relation properties use the **target's data_source ID** (not a database containe
 ID), per Notion API 2025-09-03. The command prints the new database container
 `id`, its `data_sources` (id + name), the `data_source_ids`, and the `url`.
 
+### Delete Database
+
+Move a whole database container to the trash, or restore it. Notion does not
+hard-delete a database; this sends `PATCH /databases/{id}` with `in_trash`.
+`notion pages delete` cannot do this, because the page-retrieve endpoint
+rejects a database ID. To archive one row instead, use
+`notion database page delete <page-id>`.
+
+```bash
+notion database delete <database-id>
+notion database delete <database-id> --force
+notion database delete <database-id> --restore --force
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--restore` | Restore the database from the trash instead of trashing it |
+| `-F, --force` | Skip the confirmation prompt |
+
+Accepts a database container ID or a data_source ID (the IDs that
+`notion database list` prints); a data_source ID resolves to its parent
+container. The command prints the container `id`, `title`, `in_trash`,
+`archived`, and `url`.
+
 ---
 
 ## Page Commands
@@ -557,6 +582,29 @@ and uploaded sequentially.
 | `--is-toggleable` | Make every `heading_1`/`2`/`3` produced from markdown into a toggle heading (markdown input only; ignored with `--json-file`) |
 
 Note: `--text`, `--file`, and `--json-file` are mutually exclusive.
+
+### Markdown Round-Trip Fidelity
+
+Writing markdown with `content set` and reading it back with `get --markdown`
+returns the same markdown. These constructs have no direct Notion equivalent and
+are handled explicitly instead of being degraded:
+
+| Construct | Notion storage | Read back as |
+|-----------|----------------|--------------|
+| `![alt](url)` with an `http(s)` src | `image` block, `caption` = alt text | `![alt](url)` |
+| `![alt](src)` with a src that is neither a URL nor an uploaded file (for example a pipeline `IMAGE_PLACEHOLDER: ...` marker) | `paragraph` holding the original markdown line verbatim | the identical `![alt](src)` line |
+| Code fence language | Notion's enum value (`text` is stored as `plain text`) | a single-token markdown info-string (`plain text` -> `text`) |
+| Table column alignment (`&#124; :--- &#124; ---: &#124;`) | a `<!-- notion-table-align: ... -->` marker paragraph immediately before the `table` block | the original separator row |
+
+The table alignment marker is written **only** when at least one column declares
+an explicit alignment, so a table with a plain `&#124; --- &#124;` separator
+produces no extra block. The exporter consumes the marker, so it never appears in exported
+markdown. A marker left without its table (the table was deleted in the Notion
+UI) fails the export with an explicit error rather than being dropped.
+
+A Notion code language that is not a single-token markdown identifier and has no
+entry in `MARKDOWN_FENCE_LANGUAGE_ALIASES` also fails the export, because
+writing it verbatim would produce a fence a highlighter mis-reads.
 
 ### Replace Section
 

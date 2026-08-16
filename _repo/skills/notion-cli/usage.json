@@ -1,8 +1,8 @@
 {
   "tool": "notion",
   "description": "CLI interface for Notion API with database query filtering",
-  "discovered_at": "2026-07-27T16:06:16Z",
-  "total_commands": 56,
+  "discovered_at": "2026-08-05T16:20:46Z",
+  "total_commands": 57,
   "global_options": [
     {
       "name": "--version",
@@ -617,6 +617,38 @@
               "required": false,
               "help": "Relation type for --relation properties (dual_property or single_property)",
               "default": "dual_property"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Delete (trash) a whole database container, or restore it with --restore. Notion does not hard-delete a database. This moves the container to the trash through PATCH /databases/{id} with in_trash. To archive one row instead, use 'notion database page delete PAGE_ID'. Accepts a database container ID or a data_source ID (the IDs that 'notion database list' prints); a data_source ID resolves to its parent container.",
+          "arguments": [
+            {
+              "name": "database_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The database ID to delete (move to trash)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--restore",
+              "type": "bool",
+              "required": false,
+              "help": "Restore the database from the trash instead of trashing it"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation prompt",
+              "short": "-F"
             },
             {
               "name": "--profile",

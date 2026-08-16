@@ -25,10 +25,135 @@ from cli_tools_shared.output import (  # noqa: F401
 from typing import Any, Dict, List, Optional
 import re
 
-from .code_languages import normalize_code_language
+from .code_languages import markdown_fence_language, normalize_code_language
 
 
 # --- CLI-specific helpers ---
+
+# Markdown table column-alignment round-trip.
+#
+# A Notion ``table`` block stores only table_width/has_column_header/
+# has_row_header -- there is no per-column alignment field, so the ``:`` markers
+# in a markdown separator row (``| :--- | ---: |``) have nowhere to live. Rather
+# than drop the author's alignment, the importer writes it into a marker
+# paragraph placed immediately before the table, and the exporter consumes that
+# paragraph to rebuild the exact separator row. The marker is emitted ONLY when
+# at least one column declares an explicit alignment, so tables written with a
+# plain ``| --- |`` separator produce no extra block and behave exactly as
+# before.
+TABLE_ALIGNMENT_MARKER_PREFIX = "<!-- notion-table-align: "
+TABLE_ALIGNMENT_MARKER_SUFFIX = " -->"
+TABLE_ALIGNMENT_MARKER_SEPARATOR = "|"
+DEFAULT_TABLE_ALIGNMENT = "---"
+VALID_TABLE_ALIGNMENTS = (DEFAULT_TABLE_ALIGNMENT, ":---", "---:", ":---:")
+
+
+def _alignment_token(cell: str) -> str:
+    """Return the canonical separator token for one markdown separator cell."""
+    text = cell.strip()
+    left = text.startswith(":")
+    right = text.endswith(":") and len(text) > 1
+    if left and right:
+        return ":---:"
+    if left:
+        return ":---"
+    if right:
+        return "---:"
+    return DEFAULT_TABLE_ALIGNMENT
+
+
+def build_table_alignment_marker(alignments: List[str]) -> Dict:
+    """Build the paragraph block that carries a table's column alignments."""
+    payload = TABLE_ALIGNMENT_MARKER_SEPARATOR.join(alignments)
+    return {
+        "object": "block",
+        "type": "paragraph",
+        "paragraph": {
+            "rich_text": [
+                {
+                    "type": "text",
+                    "text": {
+                        "content": (
+                            f"{TABLE_ALIGNMENT_MARKER_PREFIX}{payload}"
+                            f"{TABLE_ALIGNMENT_MARKER_SUFFIX}"
+                        )
+                    },
+                }
+            ]
+        },
+    }
+
+
+def parse_table_alignment_marker(block: Dict) -> Optional[List[str]]:
+    """Return column alignments when ``block`` is an alignment marker paragraph.
+
+    Returns None for every other block, so callers can use it as a filter.
+
+    Raises:
+        ValueError: When the marker payload contains a token that is not a
+            markdown separator cell. A corrupt marker is a data error, not
+            something to silently ignore.
+    """
+    if block.get("type") != "paragraph":
+        return None
+
+    text = "".join(
+        segment.get("plain_text", "")
+        for segment in block.get("paragraph", {}).get("rich_text", [])
+    ).strip()
+
+    if not (
+        text.startswith(TABLE_ALIGNMENT_MARKER_PREFIX)
+        and text.endswith(TABLE_ALIGNMENT_MARKER_SUFFIX)
+    ):
+        return None
+
+    payload = text[
+        len(TABLE_ALIGNMENT_MARKER_PREFIX) : -len(TABLE_ALIGNMENT_MARKER_SUFFIX)
+    ]
+    alignments = payload.split(TABLE_ALIGNMENT_MARKER_SEPARATOR)
+    invalid = [token for token in alignments if token not in VALID_TABLE_ALIGNMENTS]
+    if invalid:
+        raise ValueError(
+            f"Table alignment marker carries invalid separator cells {invalid}; "
+            f"expected one of {list(VALID_TABLE_ALIGNMENTS)} in {text!r}"
+        )
+    return alignments
+
+
+def _pair_alignment_markers(blocks: List[Dict]) -> List[tuple]:
+    """Pair each block with its column alignments, dropping marker paragraphs.
+
+    Raises:
+        ValueError: When an alignment marker is not immediately followed by a
+            table block. That means the page was edited so the marker's table no
+            longer exists, and silently discarding it would hide the damage.
+    """
+    paired: List[tuple] = []
+    pending: Optional[List[str]] = None
+
+    for block in blocks:
+        alignments = parse_table_alignment_marker(block)
+        if alignments is not None:
+            if pending is not None:
+                raise ValueError(
+                    "Two consecutive table alignment markers; the first has no "
+                    "table to describe"
+                )
+            pending = alignments
+            continue
+        if pending is not None and block.get("type") != "table":
+            raise ValueError(
+                "Table alignment marker is followed by a "
+                f"{block.get('type')!r} block instead of a table"
+            )
+        paired.append((block, pending))
+        pending = None
+
+    if pending is not None:
+        raise ValueError("Table alignment marker has no table after it")
+
+    return paired
 
 def _visible_url_markdown(label: str, url: str) -> str:
     """Return a visible Markdown link for Notion URL-only blocks.
@@ -177,7 +302,12 @@ def extract_rich_text(rich_text_array: List[Dict]) -> str:
     return "".join(result)
 
 
-def block_to_markdown(block: Dict, indent_level: int = 0, list_number: int = 0) -> str:
+def block_to_markdown(
+    block: Dict,
+    indent_level: int = 0,
+    list_number: int = 0,
+    column_alignments: Optional[List[str]] = None,
+) -> str:
     """
     Convert a Notion block to markdown.
 
@@ -185,6 +315,9 @@ def block_to_markdown(block: Dict, indent_level: int = 0, list_number: int = 0) 
         block: Notion block object
         indent_level: Current indentation level for nested blocks
         list_number: Sequential number for numbered list items (1-based)
+        column_alignments: Separator-row tokens for a ``table`` block, recovered
+            from the alignment marker paragraph that precedes it. When omitted,
+            every column uses the default ``---`` separator.
 
     Returns:
         Markdown string representation of the block
@@ -248,7 +381,7 @@ def block_to_markdown(block: Dict, indent_level: int = 0, list_number: int = 0) 
     elif block_type == "code":
         code = block.get("code", {})
         text = extract_rich_text(code.get("rich_text", []))
-        language = code.get("language", "")
+        language = markdown_fence_language(code.get("language"))
         lines.append(f"{indent}```{language}")
         lines.append(text)
         lines.append(f"{indent}```")
@@ -294,7 +427,17 @@ def block_to_markdown(block: Dict, indent_level: int = 0, list_number: int = 0) 
 
                 # Add separator after header row
                 if i == 0 and has_column_header:
-                    separator = " | ".join("---" for _ in cells)
+                    if column_alignments is None:
+                        tokens = [DEFAULT_TABLE_ALIGNMENT for _ in cells]
+                    elif len(column_alignments) != len(cells):
+                        raise ValueError(
+                            "Table alignment marker declares "
+                            f"{len(column_alignments)} columns but the header "
+                            f"row has {len(cells)}"
+                        )
+                    else:
+                        tokens = column_alignments
+                    separator = " | ".join(tokens)
                     lines.append(f"{indent}| {separator} |")
 
         # Return early - we've already processed children
@@ -372,12 +515,17 @@ def block_to_markdown(block: Dict, indent_level: int = 0, list_number: int = 0) 
     children = block.get("children", [])
     if children:
         child_list_counter = 0
-        for child in children:
+        for child, child_alignments in _pair_alignment_markers(children):
             if child.get("type") == "numbered_list_item":
                 child_list_counter += 1
             else:
                 child_list_counter = 0
-            child_md = block_to_markdown(child, indent_level + 1, list_number=child_list_counter)
+            child_md = block_to_markdown(
+                child,
+                indent_level + 1,
+                list_number=child_list_counter,
+                column_alignments=child_alignments,
+            )
             if child_md:
                 lines.append(child_md)
 
@@ -397,12 +545,14 @@ def blocks_to_markdown(blocks: List[Dict]) -> str:
     """
     lines = []
     list_counter = 0
-    for block in blocks:
+    for block, alignments in _pair_alignment_markers(blocks):
         if block.get("type") == "numbered_list_item":
             list_counter += 1
         else:
             list_counter = 0
-        md = block_to_markdown(block, list_number=list_counter)
+        md = block_to_markdown(
+            block, list_number=list_counter, column_alignments=alignments
+        )
         if md:
             lines.append(md)
     return "\n\n".join(lines)
@@ -858,6 +1008,7 @@ def text_to_blocks(
         if stripped.startswith("|") and "|" in stripped[1:]:
             table_rows = []
             has_header = False
+            alignments: List[str] = []
 
             # Collect all table rows
             while i < len(lines):
@@ -868,6 +1019,10 @@ def text_to_blocks(
                 # Check if this is a separator row (| --- | --- |)
                 if re.match(r'^\|[\s\-:]+\|', row_line) and '---' in row_line:
                     has_header = True
+                    alignments = [
+                        _alignment_token(cell)
+                        for cell in row_line.strip("|").split("|")
+                    ]
                     i += 1
                     continue
 
@@ -900,6 +1055,16 @@ def text_to_blocks(
                             "cells": [text_to_rich_text(cell) for cell in row]
                         }
                     })
+
+                # Notion tables carry no per-column alignment. When the author
+                # declared one, persist it in a marker paragraph immediately
+                # before the table so the export path can rebuild the exact
+                # separator row instead of flattening every column to "---".
+                while len(alignments) < table_width:
+                    alignments.append(DEFAULT_TABLE_ALIGNMENT)
+                del alignments[table_width:]
+                if any(token != DEFAULT_TABLE_ALIGNMENT for token in alignments):
+                    blocks.append(build_table_alignment_marker(alignments))
 
                 blocks.append({
                     "object": "block",
@@ -987,15 +1152,35 @@ def text_to_blocks(
                     }
                 })
             else:
-                # Local path without upload - treat as paragraph (will show as broken)
-                # The command layer should handle uploads before calling this
+                # The src is neither an http(s) URL nor an uploaded local file
+                # (a pipeline placeholder such as ``IMAGE_PLACEHOLDER: ...``, or
+                # a relative path the command layer chose not to upload). Notion
+                # has no image block that can hold it, so store the ORIGINAL
+                # markdown line verbatim as plain text. Exporting the paragraph
+                # returns the identical ``![alt](src)`` line, so alt text and
+                # image syntax survive the round trip instead of collapsing into
+                # a lossy ``[Image: src]`` string.
                 blocks.append({
                     "object": "block",
                     "type": "paragraph",
                     "paragraph": {
-                        "rich_text": [{"type": "text", "text": {"content": f"[Image: {image_path}]"}}],
+                        "rich_text": [
+                            {"type": "text", "text": {"content": chunk}}
+                            for chunk in chunk_text_on_boundaries(
+                                stripped, boundary="whitespace"
+                            )
+                        ],
                     }
                 })
+            i += 1
+            continue
+
+        # Table alignment marker: regenerated from the separator row of the
+        # table that follows, so a literal marker in the source is dropped
+        # instead of being duplicated as a paragraph.
+        if stripped.startswith(TABLE_ALIGNMENT_MARKER_PREFIX) and stripped.endswith(
+            TABLE_ALIGNMENT_MARKER_SUFFIX
+        ):
             i += 1
             continue
 

@@ -446,6 +446,62 @@ class NotionClient:
         ds_id = self.get_data_source_id(database_id, data_source_id)
         return self._make_request("PATCH", f"/data_sources/{ds_id}", data=data)
 
+    def get_database_container_id(self, database_id: str) -> str:
+        """
+        Resolve a database ID (or data_source ID) to its database container ID.
+
+        Container-level operations (trash, restore) address
+        ``/v1/databases/{id}`` and reject a data_source ID. ``database list``
+        emits data_source IDs, so resolve the parent container here.
+
+        Args:
+            database_id: A database container ID or a data_source ID
+
+        Returns:
+            The database container ID.
+
+        Raises:
+            ClientError: If the data source's parent is not a database.
+            NotFoundError: If the input ID resolves to neither resource.
+        """
+        resolution = self._resolve_id(database_id)
+
+        if resolution["kind"] == "database":
+            return resolution["container"]["id"]
+
+        parent = resolution["data_source"]["parent"]
+        if parent["type"] != "database_id":
+            raise ClientError(
+                f"Data source {database_id} has parent type '{parent['type']}', "
+                "so it has no database container to trash or restore."
+            )
+        return parent["database_id"]
+
+    def set_database_trash(self, database_id: str, in_trash: bool = True) -> Dict:
+        """
+        Move a database container to the trash, or restore it from the trash.
+
+        This targets the database container endpoint
+        (``PATCH /v1/databases/{id}``) with an ``in_trash`` body. It is a
+        different resource from ``update_database``, which edits the schema on
+        ``/v1/data_sources/{id}``. The page endpoints cannot do this either:
+        ``GET /v1/pages/{id}`` rejects a database ID, so ``pages delete``
+        reports "Could not find page with ID".
+
+        Args:
+            database_id: Database container ID or data_source ID
+            in_trash: True to trash the database, False to restore it
+
+        Returns:
+            The updated database container object.
+        """
+        container_id = self.get_database_container_id(database_id)
+        return self._make_request(
+            "PATCH",
+            f"/databases/{container_id}",
+            data={"in_trash": in_trash},
+        )
+
     def create_database(
         self,
         parent_page_id: str,

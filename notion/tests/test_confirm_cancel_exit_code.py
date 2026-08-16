@@ -34,3 +34,13 @@ def test_database_page_delete_cancel_exits_zero(monkeypatch):
     assert result.exit_code == 0
     assert "Cancelled." in result.stdout
     assert "Error: 0" not in result.stderr
+
+
+def test_database_delete_cancel_exits_zero(monkeypatch):
+    monkeypatch.setattr(database_cmd, "get_client", lambda: UnusedClient())
+
+    result = CliRunner().invoke(database_cmd.app, ["delete", "db-1"], input="n\n")
+
+    assert result.exit_code == 0
+    assert "Cancelled." in result.stdout
+    assert "Error: 0" not in result.stderr

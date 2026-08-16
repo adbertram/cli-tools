@@ -838,6 +838,70 @@ def database_create(
     print_success(f"Database '{title}' created: {result['id']}")
 
 
+@app.command("delete")
+@command
+def database_delete(
+    database_id: str = typer.Argument(
+        ...,
+        help="The database ID to delete (move to trash)",
+    ),
+    restore: bool = typer.Option(
+        False,
+        "--restore",
+        help="Restore the database from the trash instead of trashing it",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        "-F",
+        help="Skip confirmation prompt",
+    ),
+):
+    """
+    Delete (trash) a whole database container, or restore it with --restore.
+
+    Notion does not hard-delete a database. This moves the container to the
+    trash through PATCH /databases/{id} with in_trash. To archive one row
+    instead, use 'notion database page delete PAGE_ID'.
+
+    Accepts a database container ID or a data_source ID (the IDs that
+    'notion database list' prints); a data_source ID resolves to its parent
+    container.
+
+    Examples:
+        notion database delete abc123
+        notion database delete abc123 --force
+        notion database delete abc123 --restore --force
+    """
+    client = get_client()
+
+    if not force:
+        question = (
+            f"Restore database {database_id} from trash?"
+            if restore
+            else f"Move database {database_id} to trash?"
+        )
+        if not typer.confirm(question):
+            typer.echo("Cancelled.")
+            raise typer.Exit(0)
+
+    db = client.set_database_trash(database_id, in_trash=not restore)
+
+    result = {
+        "id": db["id"],
+        "title": "".join(t.get("plain_text", "") for t in db["title"]),
+        "in_trash": db["in_trash"],
+        "archived": db["archived"],
+        "url": db["url"],
+    }
+
+    print_json(result)
+    if restore:
+        print_success(f"Database {database_id} restored from trash.")
+    else:
+        print_success(f"Database {database_id} moved to trash.")
+
+
 def format_database_for_list(db: dict) -> dict:
     """
     Format a database search result for list display.
@@ -1495,14 +1559,20 @@ def page_create(
             template_msg = "default template" if use_default else f"template {template_id}"
             print_success(f"Page created from {template_msg} (content applied asynchronously)")
 
-        elif blocks_file:
-            # Create with Notion JSON blocks
-            with open(blocks_file, 'r', encoding='utf-8') as f:
-                blocks = json.load(f)
+        elif blocks_file or content_file:
+            if blocks_file:
+                # Create with Notion JSON blocks
+                with open(blocks_file, 'r', encoding='utf-8') as f:
+                    blocks = json.load(f)
 
-            if not isinstance(blocks, list):
-                print_warning("Blocks file must contain a JSON array of block objects")
-                raise typer.Exit(1)
+                if not isinstance(blocks, list):
+                    print_warning("Blocks file must contain a JSON array of block objects")
+                    raise typer.Exit(1)
+            else:
+                # Markdown uses the same nesting-aware, chunked upload path.
+                with open(content_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                blocks = text_to_blocks(content)
 
             # Create page without children first (to handle nesting limits)
             created_page = client.create_page(
@@ -1521,22 +1591,18 @@ def page_create(
                 created_count, _ = client._upload_blocks_with_nesting(
                     page_id, blocks, progress_callback=progress_cb
                 )
-                print_success(f"Page created with {created_count} blocks: {created_page.get('url', created_page.get('id'))}")
+                if blocks_file:
+                    print_success(f"Page created with {created_count} blocks: {created_page.get('url', created_page.get('id'))}")
+                else:
+                    print_success(f"Page created successfully: {created_page.get('url', created_page.get('id'))}")
             else:
                 print_success(f"Page created successfully: {created_page.get('url', created_page.get('id'))}")
 
         else:
-            # Create without template — optional markdown content
-            children = None
-            if content_file:
-                with open(content_file, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                children = text_to_blocks(content)
-
+            # Create without template or content
             created_page = client.create_page(
                 database_id=database_id,
                 properties=properties,
-                children=children,
             )
             print_success(f"Page created successfully: {created_page.get('url', created_page.get('id'))}")
 
@@ -2224,6 +2290,9 @@ def template_get(
 
 COMMAND_CREDENTIALS = {
     "create": [
+        "custom"
+    ],
+    "delete": [
         "custom"
     ],
     "get": [
