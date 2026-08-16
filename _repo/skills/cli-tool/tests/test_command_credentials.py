@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from cli_test_utils import discover_nested_commands
+from cli_test_utils import discover_nested_commands, get_config_auth_metadata
 
 
 # Command groups that are infrastructure, not user-facing commands
@@ -198,30 +198,10 @@ def test_command_credentials_subset_of_config(
         pytest.skip(f"{cli_name} uv tool venv not found")
     venv_python = str(uv_venv / "bin" / "python")
 
-    # Get Config.CREDENTIAL_TYPES and Config.PROFILE_AUTH_TYPES
-    result = subprocess.run(
-        [
-            venv_python,
-            "-c",
-            f"import json; "
-            f"from {cli_pkg}.config import Config; "
-            f"types = getattr(Config, 'CREDENTIAL_TYPES', None); "
-            f"profile_types = getattr(Config, 'PROFILE_AUTH_TYPES', {{}}); "
-            f"payload = {{"
-            f"'credential_types': None if types is None else [t.value if hasattr(t, 'value') else str(t) for t in types], "
-            f"'profile_auth_types': list(profile_types.keys())"
-            f"}}; "
-            f"print(json.dumps(payload))",
-        ],
-        capture_output=True,
-        text=True,
-        cwd=str(cli_dir),
-    )
-
-    if result.returncode != 0:
+    config_payload = get_config_auth_metadata(cli_dir, cli_name)
+    if config_payload is None:
         pytest.skip("Config.CREDENTIAL_TYPES not available (test_config_declares_credential_types will catch this)")
 
-    config_payload = json.loads(result.stdout.strip())
     if config_payload["credential_types"] is None:
         pytest.skip("Config.CREDENTIAL_TYPES not available (test_config_declares_credential_types will catch this)")
 
@@ -323,22 +303,10 @@ def test_all_commands_have_credential_mapping(
         pytest.skip(f"{cli_name} uv tool venv not found")
     venv_python = str(uv_venv / "bin" / "python")
 
-    result = subprocess.run(
-        [
-            venv_python,
-            "-c",
-            f"import json; "
-            f"from {cli_pkg}.config import Config; "
-            f"profile_types = getattr(Config, 'PROFILE_AUTH_TYPES', {{}}); "
-            f"print(json.dumps(list(profile_types.keys())))",
-        ],
-        capture_output=True,
-        text=True,
-        cwd=str(cli_dir),
-    )
-    if result.returncode != 0:
+    config_payload = get_config_auth_metadata(cli_dir, cli_name)
+    if config_payload is None:
         pytest.skip("Config.PROFILE_AUTH_TYPES not available")
-    valid_credential_types = VALID_CREDENTIAL_TYPES | set(json.loads(result.stdout.strip()))
+    valid_credential_types = VALID_CREDENTIAL_TYPES | set(config_payload["profile_auth_types"])
 
     missing_commands = []
     invalid_values = []
