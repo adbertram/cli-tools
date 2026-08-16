@@ -67,3 +67,6 @@ n8n/_temp/
 
 # Agent worktrees (transient checkouts, never source)
 **/.claude/worktrees/
+
+# Local planning scratch (never source)
+plans/
