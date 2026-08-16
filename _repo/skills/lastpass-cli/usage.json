@@ -1,7 +1,7 @@
 {
   "tool": "lastpass",
   "description": "LastPass password manager CLI wrapper",
-  "discovered_at": "2026-07-26T22:09:36Z",
+  "discovered_at": "2026-08-03T23:40:04Z",
   "total_commands": 22,
   "global_options": [
     {
@@ -310,8 +310,8 @@
         "create": {
           "help": "Create a new vault entry.",
           "examples": [
-            "lastpass items create \"My Site\" --username me@email.com --password secret123 --url https://mysite.com",
-            "lastpass items create \"Work/VPN\" --username admin --password hunter2 --group Work"
+            "lastpass items create \"My Site\" --username me@email.com --url https://mysite.com",
+            "lastpass items create \"Work/VPN\" --username admin --group Work"
           ],
           "usage_instructions": "Use `lastpass items create` with the documented arguments and options shown below.",
           "arguments": [
@@ -624,7 +624,7 @@
         "update": {
           "help": "Update an existing vault entry.",
           "examples": [
-            "lastpass items update \"Amazon.com\" --password newpassword123",
+            "lastpass items update \"Amazon.com\" --password-stdin <<<\"$NEW_PASSWORD\"",
             "lastpass items update 1234567890 --username newuser@email.com --url https://new.example.com"
           ],
           "usage_instructions": "Use `lastpass items update` with the documented arguments and options shown below.",
@@ -650,6 +650,12 @@
               "required": false,
               "help": "New password",
               "short": "-P"
+            },
+            {
+              "name": "--password-stdin",
+              "type": "bool",
+              "required": false,
+              "help": "Read the new password from standard input"
             },
             {
               "name": "--url",

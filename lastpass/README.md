@@ -113,6 +113,9 @@ lastpass items password github.com --clip
 
 # Get just the username
 lastpass items username github.com
+
+# Update a password without placing it in process arguments
+lastpass items update github.com --password-stdin <<<"$NEW_PASSWORD"
 ```
 
 ## Output Formats

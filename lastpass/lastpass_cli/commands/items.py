@@ -2,6 +2,8 @@
 
 Manage vault entries (passwords, notes, etc.)
 """
+import sys
+
 import typer
 from typing import Optional, List
 
@@ -345,8 +347,8 @@ def vault_create(
     Create a new vault entry.
 
     Examples:
-        lastpass items create "My Site" --username me@email.com --password secret123 --url https://mysite.com
-        lastpass items create "Work/VPN" --username admin --password hunter2 --group Work
+        lastpass items create "My Site" --username me@email.com --url https://mysite.com
+        lastpass items create "Work/VPN" --username admin --group Work
     """
     client = get_client()
     result = client.create_item(
@@ -362,6 +364,7 @@ def vault_update(
     item_id: str = typer.Argument(..., help="Entry ID or unique name"),
     username: Optional[str] = typer.Option(None, "--username", "-u", help="New username"),
     password: Optional[str] = typer.Option(None, "--password", "-P", help="New password"),
+    password_stdin: bool = typer.Option(False, "--password-stdin", help="Read the new password from standard input"),
     url: Optional[str] = typer.Option(None, "--url", help="New URL"),
     notes: Optional[str] = typer.Option(None, "--notes", "-n", help="New notes"),
     name: Optional[str] = typer.Option(None, "--name", help="New name"),
@@ -370,9 +373,16 @@ def vault_update(
     Update an existing vault entry.
 
     Examples:
-        lastpass items update "Amazon.com" --password newpassword123
+        lastpass items update "Amazon.com" --password-stdin <<<"$NEW_PASSWORD"
         lastpass items update 1234567890 --username newuser@email.com --url https://new.example.com
     """
+    if password is not None and password_stdin:
+        raise ClientError("--password and --password-stdin cannot be used together")
+    if password_stdin:
+        password = sys.stdin.read().rstrip("\r\n")
+        if not password:
+            raise ClientError("Password standard input is empty")
+
     client = get_client()
     result = client.update_item(
         item_id=item_id, username=username, password=password,
