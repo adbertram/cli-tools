@@ -6,7 +6,6 @@
 set -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TEST_CONFIG_PATH="$SCRIPT_DIR/../tests/cli_test_config.toml"
 CLI_TOOLS_DIR="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 
 CLI_NAME="$1"
@@ -20,23 +19,10 @@ if [ ! -d "$TOOL_DIR" ] && [ -d "$CLI_TOOLS_DIR/_personal/$CLI_NAME" ]; then
     TOOL_DIR="$CLI_TOOLS_DIR/_personal/$CLI_NAME"
 fi
 
-# tomllib (used by the no-auth-CLI probe below) only entered the stdlib in 3.11,
-# but the ambient `python3` may be older (system Python 3.9 on macOS). Resolve a
-# 3.11+ interpreter once and use it for every embedded Python step. Fail loudly
-# rather than letting a confusing tomllib ModuleNotFoundError surface mid-run.
-PYTHON_BIN=""
-if python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then
-    PYTHON_BIN="python3"
-else
-    for candidate in python3.14 python3.13 python3.12 python3.11; do
-        if command -v "$candidate" >/dev/null 2>&1; then
-            PYTHON_BIN="$candidate"
-            break
-        fi
-    done
-fi
+# The no-auth CLI probe below uses only standard-library Python modules.
+PYTHON_BIN="$(command -v python3 || :)"
 if [ -z "$PYTHON_BIN" ]; then
-    echo '{"error": "validate-cli-tool.sh needs Python 3.11+ for tomllib, but no python3.11+ interpreter was found on PATH. Install one (e.g. brew install python@3.11) and retry."}' >&2
+    echo '{"error": "validate-cli-tool.sh needs python3 on PATH."}' >&2
     exit 1
 fi
 CANONICAL_UV_TOOL_DIR="$HOME/.local/share/uv/tools"
@@ -82,21 +68,47 @@ run_silent() {
 
 help_works=false; run_silent --help && help_works=true
 version_works=false; run_silent --version && version_works=true
-is_no_auth_cli=$("$PYTHON_BIN" - "$TEST_CONFIG_PATH" "$CLI_NAME" <<'PY'
+config_declares_no_auth() {
+    "$PYTHON_BIN" - "$1" <<'PY'
+import ast
 import sys
-import tomllib
 from pathlib import Path
 
 config_path = Path(sys.argv[1])
-cli_name = sys.argv[2]
 
-with config_path.open("rb") as fh:
-    config = tomllib.load(fh)
+try:
+    tree = ast.parse(config_path.read_text(encoding="utf-8"))
+except (OSError, SyntaxError):
+    raise SystemExit(1)
 
-no_auth_clis = config.get("exclusions", {}).get("no_auth_clis", [])
-print("true" if cli_name in no_auth_clis else "false")
+for node in tree.body:
+    if not isinstance(node, ast.ClassDef) or node.name != "Config":
+        continue
+    for statement in node.body:
+        if isinstance(statement, ast.Assign):
+            targets = statement.targets
+            value = statement.value
+        elif isinstance(statement, ast.AnnAssign):
+            targets = [statement.target]
+            value = statement.value
+        else:
+            continue
+        if not any(isinstance(target, ast.Name) and target.id == "CREDENTIAL_TYPES" for target in targets):
+            continue
+        try:
+            credential_types = ast.literal_eval(value)
+        except ValueError:
+            raise SystemExit(1)
+        raise SystemExit(0 if credential_types in ([], ()) else 1)
+
+raise SystemExit(1)
 PY
-)
+}
+
+is_no_auth_cli=false
+if config_declares_no_auth "$TOOL_DIR/$PKG_NAME/config.py"; then
+    is_no_auth_cli=true
+fi
 
 auth_group_exists=false
 if [ "$is_no_auth_cli" = "true" ]; then

@@ -411,19 +411,48 @@ def stale_example_commands(value: object, command_path: str) -> list[str]:
     return stale
 
 
+def extract_live_examples(text: str, command_path: str) -> list[str] | None:
+    """Return command examples from the live help ``Examples:`` section.
+
+    ``None`` means the help has no examples section, so manually enriched
+    usage.json examples can still be carried forward. An empty list means the
+    section exists but contains no command for this node, so old examples must
+    not survive as stale metadata.
+    """
+    expected_parts = command_path.split()
+    examples: list[str] = []
+    in_examples = False
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped == "Examples:":
+            in_examples = True
+            continue
+        if not in_examples:
+            continue
+        if stripped.startswith(("╭", "│", "╰")):
+            break
+        if not stripped or stripped.startswith("#"):
+            continue
+        try:
+            parts = shlex.split(stripped)
+        except ValueError:
+            continue
+        if parts[1 : 1 + len(expected_parts)] == expected_parts:
+            examples.append(stripped)
+
+    return examples if in_examples else None
+
+
 def filter_valid_examples(
     value: object, command_path: str, live_tokens: set[str]
 ) -> list[str]:
-    """Keep only the carried-forward examples that are still accurate.
+    """Keep only examples that match the live command and option surface.
 
-    Enrichment examples are never re-parsed from the live CLI's ``Examples:``
-    help text (no such parser exists here); they are only ever carried
-    forward from the previous usage.json and dropped once stale. A command's
-    examples array commonly accumulates independent lines added at different
-    times, so one line going stale (e.g. a single option rename such as
-    ``--tested-approved`` -> ``--ai-tested``) must not discard every other
-    still-accurate example in the same array. Filter one example at a time
-    instead of gating the whole array on the presence of any stale token.
+    A command's examples array commonly accumulates independent lines added at
+    different times. One line going stale must not discard every other valid
+    example. Filter one example at a time instead of gating the whole array on
+    the presence of any stale token.
     """
     examples = value if isinstance(value, list) else [value]
     renamed_command_examples = set(stale_example_commands(examples, command_path))
@@ -441,9 +470,11 @@ def assemble_commands(
     help_by_path: dict[str, str],
     old_meta: dict[str, dict],
     secondary_tokens_by_path: dict[str, set[str]] | None = None,
+    live_examples_by_path: dict[str, list[str] | None] | None = None,
 ) -> dict:
     root: dict = {}
     secondary_tokens_by_path = secondary_tokens_by_path or {}
+    live_examples_by_path = live_examples_by_path or {}
 
     for command_path in live_paths:
         parts = command_path.split()
@@ -460,7 +491,14 @@ def assemble_commands(
             valid_option_tokens = live_option_tokens(
                 parameters, secondary_tokens_by_path.get(current_path)
             )
-            if "examples" in meta:
+            live_examples = live_examples_by_path.get(current_path)
+            if live_examples is not None:
+                valid_examples = filter_valid_examples(
+                    live_examples, current_path, valid_option_tokens
+                )
+                if valid_examples:
+                    node["examples"] = valid_examples
+            elif "examples" in meta:
                 valid_examples = filter_valid_examples(
                     meta["examples"], current_path, valid_option_tokens
                 )
@@ -594,12 +632,17 @@ def build_usage(
             )
             for path, text in help_text_by_path.items()
         }
+        live_examples_by_path = {
+            path: extract_live_examples(text, path)
+            for path, text in help_text_by_path.items()
+        }
         new_usage["commands"] = assemble_commands(
             live_paths,
             parameters_by_path,
             help_by_path,
             existing_node_meta(old_usage),
             secondary_tokens_by_path,
+            live_examples_by_path,
         )
     else:
         root_help = help_text(cli_executable, "", timeout)

@@ -713,6 +713,74 @@ Then run the repo CLI testing tool against the live authenticated profile:
 
 The live test run must pass with zero failures before CLI creation is complete.
 
+## Step 9.8: Chaos Engineering Stress Test (MANDATORY)
+
+After the CLI is fully built, tested, and authenticated (Step 9.7 complete), spawn the `chaos-engineer` agent to find and prove failure modes, then fix every issue it finds.
+
+**Invoke the agent with this prompt** (fill in `<name>` and `<cli-tools-root>`):
+
+```
+Use the chaos-engineer agent on the newly created CLI tool at <cli-tools-root>/<name>/.
+
+Read <name>_cli/client.py, <name>_cli/main.py, <name>_cli/config.py, and any
+commands/*.py or parsers.py files. Trace every command's argument handling,
+auth flow, and API/browser/subprocess interaction end to end.
+
+MANDATORY EXECUTION COVERAGE — this is a live smoke test, not a code review:
+1. Run `<name> --help` and every `<name> <group> --help` to enumerate the full
+   command tree. Every listed command and subcommand MUST be executed live at
+   least once before this step ends.
+2. Execute every command with valid arguments first to establish a working
+   baseline (list, get, create, update, delete, auth, and any special
+   commands). Capture real stdout, stderr, and exit code for each run.
+3. Execute every `list`/`get` command again with each documented option
+   combination: `--table`, `--filter`, `--limit`, `--properties`, and any
+   command-specific flags, alone and combined.
+4. Execute every command again against the Input/State/Environment/Logic
+   Chaos taxonomy below — do not stop at one input per command; vary the
+   argument for each command until each taxonomy category has been tried
+   against it or is proven not applicable.
+5. Do not report a finding, and do not report a command as "working," unless
+   you executed it yourself in this session and captured its actual output.
+   Theorized or skipped commands are gaps, not clean results — list any
+   command you could not execute (and why) separately in the report.
+
+Generate and validate as many chaos scenarios as possible against the Input
+Chaos, State Chaos, Environment Chaos, and Logic Chaos taxonomy. Run the
+`<name>` CLI directly via shell to PROVE each failure — do not theorize.
+
+Focus areas for this CLI:
+- Malformed/boundary CLI arguments (empty strings, huge --limit values,
+  invalid --filter syntax, unicode/control characters in resource IDs,
+  missing required arguments)
+- Auth failures (expired token, revoked credentials, missing/corrupted
+  profile, concurrent `auth login` calls, wrong --profile name)
+- Upstream failures — for `api`/`browser` types: timeouts, 429/500
+  responses, malformed JSON responses, connection reset, pagination edge
+  cases
+- Underlying command failures — for `wrapper` types: missing binary,
+  non-zero exit, malformed or truncated stdout, unexpected stderr content
+- Empty/missing local state (first run, no `.env`, deleted profile,
+  corrupted cache, read-only filesystem)
+
+Report findings using the standard chaos-engineer per-finding format and
+summary table.
+```
+
+**After the agent reports findings:**
+
+1. Review every finding.
+2. Fix every CRITICAL and HIGH finding. Fix MEDIUM/LOW findings too unless
+   there is a clear reason not to — state that reason if one is skipped.
+3. Re-run `<cli-tools-root>/_repo/skills/cli-tool/scripts/test-cli-tool.sh
+   --cli-name <name>` after fixes to confirm no regressions.
+4. Re-invoke the `chaos-engineer` agent against the fixed code to confirm
+   each fixed finding no longer reproduces.
+5. Repeat steps 1-4 until `chaos-engineer` returns zero CRITICAL/HIGH
+   findings.
+
+**DO NOT proceed to Step 10 until all CRITICAL and HIGH chaos findings are fixed and verified.**
+
 ## Step 10: Update cli_tools.md
 
 Add the new CLI to `<cli-tools-root>/_repo/docs/cli_tools.md`:
@@ -775,6 +843,7 @@ CLI creation is complete when:
   - [ ] At least one live read-only service smoke command succeeded
   - [ ] `test-cli-tool.sh --cli-name <name>` passed with the saved authenticated profile
 - [ ] Wrapper CLIs explicitly skipped Step 9.7 unless the wrapper owns a separate CLI-tools auth profile
+- [ ] Step 9.8 chaos-engineer stress test completed: every command/subcommand executed live at least once (baseline + option combinations + chaos inputs), all CRITICAL/HIGH findings fixed and re-verified with zero reproductions, `test-cli-tool.sh` re-passed after fixes
 - [ ] cli_tools.md has been updated with the new CLI
 - [ ] `/create-cli-tool-skill` invoked to generate the CLI's repo-owned skill
 - [ ] Git repo initialized and committed

@@ -374,6 +374,70 @@ def test_regenerate_usage_json_keeps_valid_examples_when_only_one_is_stale(tmp_p
     ]
 
 
+def test_regenerate_usage_json_refreshes_examples_from_live_help(tmp_path):
+    """Live help examples replace stale values that use unchanged options."""
+    skill_root = __import__("pathlib").Path(__file__).resolve().parents[1]
+    fake_cli, usage_json = _write_fake_cli_fixture(tmp_path)
+    fake_cli.write_text(
+        _fake_cli_source().replace(
+            '    print("List fake items.")',
+            '    print("List fake items.")\n'
+            '    print("Examples:")\n'
+            '    print("# Filter by ID")\n'
+            '    print("fake items list --filter \\\"id:eq:69\\\"")\n'
+            '    print("fake items list --filter \\\"name:contains:Setup\\\"")',
+        ).replace(
+            '    print("│ --limit            -l      INTEGER  Max rows [default: 10] │")',
+            '    print("│ --filter           -f      TEXT     Filter rows │")\n'
+            '    print("│ --limit            -l      INTEGER  Max rows [default: 10] │")',
+        )
+    )
+    usage_json.write_text(
+        json.dumps(
+            {
+                "tool": "fake",
+                "description": "Fake CLI",
+                "commands": {
+                    "items": {
+                        "commands": {
+                            "list": {
+                                "examples": [
+                                    'fake items list --filter "fields.Name:contains:Setup"'
+                                ]
+                            }
+                        }
+                    }
+                },
+                "total_commands": 1,
+            }
+        )
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(skill_root / SCRIPT),
+            "fake",
+            "--cli-executable",
+            str(fake_cli),
+            "--usage-json",
+            str(usage_json),
+            "--discovered-at",
+            "2026-01-01T00:00:00Z",
+        ],
+        capture_output=True,
+        text=True,
+        env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path)},
+    )
+
+    assert result.returncode == 0, result.stderr
+    generated = json.loads(usage_json.read_text())
+    assert generated["commands"]["items"]["commands"]["list"]["examples"] == [
+        'fake items list --filter "id:eq:69"',
+        'fake items list --filter "name:contains:Setup"',
+    ]
+
+
 def _write_fake_cli_with_custom_negative_flag(tmp_path):
     """Fake CLI whose boolean option uses a non-mechanical secondary flag name.
 

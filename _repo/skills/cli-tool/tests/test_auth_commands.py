@@ -398,15 +398,9 @@ def test_env_has_active_profile(cli_name, cli_dir, cli_executable, help_cache, t
     no_auth CLIs (local-only tools with no auth subcommand) intentionally
     have no .env / profile system, so this test does not apply to them.
     """
-    if command_filter and command_filter != "auth":
-        pytest.skip(f"Skipping auth tests (filtering to '{command_filter}')")
-
-    no_auth_clis = test_config["exclusions"].get("no_auth_clis", [])
-    if cli_name in no_auth_clis:
-        pytest.skip(
-            f"{cli_name} is in no_auth_clis exclusion list "
-            f"(no auth subcommand, no .env profile required)"
-        )
+    skip_reason = _should_skip_auth(cli_name, help_cache, test_config, command_filter)
+    if skip_reason:
+        pytest.skip(skip_reason)
 
     from cli_tools_shared.config import get_profiles_base_dir
     import subprocess

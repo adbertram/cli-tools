@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import conftest as cli_conftest
+
 from conftest import (
     CLI_NAME_REQUIRED_MESSAGE,
     _required_credential_types_for_list_commands,
+    _required_profile_auth_types_for_list_commands,
     _selected_tests_need_cli_name,
 )
 
@@ -38,7 +41,7 @@ def test_cli_gate_message_clarifies_force_is_not_live_cli_execution() -> None:
     assert "--force only confirms batch/collect-only harness work" in CLI_NAME_REQUIRED_MESSAGE
 
 
-def test_list_command_auth_gate_ignores_no_auth_marker(tmp_path) -> None:
+def test_list_command_auth_gate_ignores_no_auth_marker(tmp_path, monkeypatch) -> None:
     cli_dir = tmp_path / "tool"
     package_dir = cli_dir / "demo_cli"
     commands_dir = package_dir / "commands"
@@ -52,6 +55,11 @@ def test_list_command_auth_gate_ignores_no_auth_marker(tmp_path) -> None:
     (commands_dir / "config.py").write_text(
         'COMMAND_CREDENTIALS = {"list": ["no_auth"]}\n'
     )
+    monkeypatch.setattr(
+        cli_conftest,
+        "get_config_auth_metadata",
+        lambda *_args: {"credential_types": ["custom"], "profile_auth_types": []},
+    )
 
     required_types = _required_credential_types_for_list_commands(
         cli_dir,
@@ -62,7 +70,7 @@ def test_list_command_auth_gate_ignores_no_auth_marker(tmp_path) -> None:
     assert required_types == ["custom"]
 
 
-def test_list_command_auth_gate_excludes_profile_auth_types(tmp_path) -> None:
+def test_list_command_auth_gate_excludes_profile_auth_types(tmp_path, monkeypatch) -> None:
     cli_dir = tmp_path / "tool"
     package_dir = cli_dir / "demo_cli"
     commands_dir = package_dir / "commands"
@@ -76,6 +84,14 @@ def test_list_command_auth_gate_excludes_profile_auth_types(tmp_path) -> None:
     (commands_dir / "opportunities.py").write_text(
         'COMMAND_CREDENTIALS = {"list": ["opportunities", "browser_session"]}\n'
     )
+    monkeypatch.setattr(
+        cli_conftest,
+        "get_config_auth_metadata",
+        lambda *_args: {
+            "credential_types": ["browser_session"],
+            "profile_auth_types": ["author_kit", "opportunities"],
+        },
+    )
 
     required_types = _required_credential_types_for_list_commands(
         cli_dir,
@@ -84,3 +100,33 @@ def test_list_command_auth_gate_excludes_profile_auth_types(tmp_path) -> None:
     )
 
     assert required_types == ["browser_session"]
+
+
+def test_list_command_auth_gate_selects_profile_auth_types(tmp_path, monkeypatch) -> None:
+    cli_dir = tmp_path / "tool"
+    package_dir = cli_dir / "demo_cli"
+    commands_dir = package_dir / "commands"
+    commands_dir.mkdir(parents=True)
+    (package_dir / "config.py").write_text(
+        "CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]\n"
+        'PROFILE_AUTH_TYPES = {"author_kit": [], "opportunities": []}\n'
+    )
+    (commands_dir / "icons.py").write_text(
+        'COMMAND_CREDENTIALS = {"list": ["author_kit", "no_auth"]}\n'
+    )
+    monkeypatch.setattr(
+        cli_conftest,
+        "get_config_auth_metadata",
+        lambda *_args: {
+            "credential_types": ["browser_session"],
+            "profile_auth_types": ["author_kit", "opportunities"],
+        },
+    )
+
+    required_types = _required_profile_auth_types_for_list_commands(
+        cli_dir,
+        "demo",
+        ["icons list"],
+    )
+
+    assert required_types == ["author_kit"]

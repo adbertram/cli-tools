@@ -7,7 +7,7 @@ import os
 import pytest
 import shutil
 import subprocess
-import tomllib
+import sys
 from pathlib import Path
 
 
@@ -17,14 +17,90 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 
 def test_validate_script_skips_auth_group_for_no_auth_clis():
     script_text = (SKILL_ROOT / "scripts/validate-cli-tool.sh").read_text()
-    with (SKILL_ROOT / "tests/cli_test_config.toml").open("rb") as fh:
-        config = tomllib.load(fh)
 
-    no_auth_clis = config["exclusions"]["no_auth_clis"]
-    assert "imessage" in no_auth_clis
-    assert 'TEST_CONFIG_PATH="$SCRIPT_DIR/../tests/cli_test_config.toml"' in script_text
+    assert "config_declares_no_auth" in script_text
+    assert 'target.id == "CREDENTIAL_TYPES"' in script_text
+    assert "TEST_CONFIG_PATH" not in script_text
+    assert "tomllib" not in script_text
+    assert "python3.11" not in script_text
+    assert 'PYTHON_BIN="$(command -v python3 || :)"' in script_text
     assert 'auth_group_exists=skipped' in script_text
     assert '[ "$is_no_auth_cli" = "true" ] || required+=(auth_group_exists)' in script_text
+
+
+def test_validate_script_accepts_config_declared_no_auth_cli(tmp_path):
+    cli_name = "no-auth"
+    script_dir = tmp_path / "_repo" / "skills" / "cli-tool" / "scripts"
+    script_dir.mkdir(parents=True)
+    script = script_dir / "validate-cli-tool.sh"
+    shutil.copy2(SKILL_ROOT / "scripts" / "validate-cli-tool.sh", script)
+    script.chmod(0o755)
+
+    tool_dir = tmp_path / cli_name
+    package_dir = tool_dir / "no_auth_cli"
+    package_dir.mkdir(parents=True)
+    (tool_dir / "pyproject.toml").write_text(
+        "[project]\nname = \"no-auth-cli\"\n",
+        encoding="utf-8",
+    )
+    (package_dir / "config.py").write_text(
+        "class Config:\n    CREDENTIAL_TYPES = []\n",
+        encoding="utf-8",
+    )
+    (package_dir / "main.py").write_text(
+        "from cli_tools_shared import create_app, run_app\n",
+        encoding="utf-8",
+    )
+
+    home_dir = tmp_path / "home"
+    fake_bin_dir = tmp_path / "bin"
+    fake_bin_dir.mkdir()
+    uv_tool_python = home_dir / ".local" / "share" / "uv" / "tools" / "no-auth-cli" / "bin" / "python"
+    uv_tool_python.parent.mkdir(parents=True)
+    uv_tool_python.symlink_to(sys.executable)
+
+    launcher_target = home_dir / "launcher-target"
+    launcher_target.parent.mkdir(parents=True, exist_ok=True)
+    launcher_target.write_text(
+        f"#!{uv_tool_python}\n"
+        "import sys\n"
+        "raise SystemExit(1 if sys.argv[1:] == ['auth', '--help'] else 0)\n",
+        encoding="utf-8",
+    )
+    launcher_target.chmod(0o755)
+    launcher = home_dir / ".local" / "bin" / cli_name
+    launcher.parent.mkdir(parents=True)
+    launcher.symlink_to(launcher_target)
+
+    fake_uv = fake_bin_dir / "uv"
+    fake_uv.write_text(
+        "#!/usr/bin/env bash\n"
+        "if [ \"$1\" = \"tool\" ] && [ \"$2\" = \"list\" ]; then\n"
+        "    printf '%s\\n' 'no-auth v0.1.0'\n"
+        "    exit 0\n"
+        "fi\n"
+        "exit 1\n",
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+
+    result = subprocess.run(
+        [str(script), cli_name],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "HOME": str(home_dir),
+            "PATH": f"{fake_bin_dir}{os.pathsep}{os.environ['PATH']}",
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["all_passed"] is True
+    assert payload["checks"]["auth_group_exists"] == "skipped"
 
 
 def test_validate_script_uses_canonical_uv_registry():
@@ -52,6 +128,15 @@ def test_test_script_runs_auth_status_schema_preflight():
     assert "run_auth_status_schema_preflight" in script_text
     assert "parse_and_validate_stdout" in script_text
     assert 'auth status schema:' in script_text
+
+
+def test_test_script_skips_auth_status_preflight_for_command_filter():
+    script_text = (SKILL_ROOT / "scripts/test-cli-tool.sh").read_text()
+
+    assert 'COMMAND="$COMMAND" \\' in script_text
+    assert 'command_filter = os.environ.get("COMMAND")' in script_text
+    assert 'if command_filter:' in script_text
+    assert 'emit("skipped", "Skipping (command filter active)")' in script_text
 
 
 def test_test_script_validates_readme_description_block():

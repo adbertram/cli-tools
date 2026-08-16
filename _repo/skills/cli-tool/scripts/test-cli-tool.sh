@@ -126,6 +126,7 @@ run_auth_status_schema_preflight() {
     PYTHONPATH="$SKILL_DIR/tests${PYTHONPATH:+:$PYTHONPATH}" \
     CLI_NAME="$CLI_NAME" \
     CLI_EXECUTABLE="$CLI_EXECUTABLE" \
+    COMMAND="$COMMAND" \
     uv run --project "$SKILL_DIR" python3 - <<'PY'
 import json
 import os
@@ -151,6 +152,11 @@ def run_command(args: list[str]) -> subprocess.CompletedProcess[str]:
 
 cli_name = os.environ["CLI_NAME"]
 cli_executable = os.environ["CLI_EXECUTABLE"]
+command_filter = os.environ.get("COMMAND")
+
+if command_filter:
+    emit("skipped", "Skipping (command filter active)")
+    raise SystemExit(0)
 
 root_help = run_command([cli_executable, "--help"])
 if root_help.returncode != 0:
