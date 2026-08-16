@@ -1,7 +1,7 @@
 {
   "tool": "claude-code-sessions",
   "description": "Query and analyze Claude Code session data from ~/.claude",
-  "discovered_at": "2026-07-22T14:38:33Z",
+  "discovered_at": "2026-07-28T16:26:59Z",
   "total_commands": 30,
   "global_options": [
     {
@@ -270,13 +270,13 @@
       ],
       "commands": {
         "get": {
-          "help": "Get a specific conversation by ID. Two ways to identify the conversation: - Positional: session:conversation_number (e.g., abc123:1), where session is a UUID or a session name. The number is split off the right, so names containing colons (e.g. \"Course: ...\") are accepted. - Flags: --session-name NAME --conversation-id N (useful when you prefer not to embed the number in a colon-containing name). --project is optional; omit it to auto-derive from the session. Example: claude-code-sessions conversations get abc123:1 claude-code-sessions conversations get \"Course: OpenAI Codex Advanced Features Module 2:1\" claude-code-sessions conversations get --session-name \"Course: OpenAI Codex Advanced Features Module 2\" -C 1 claude-code-sessions conversations get abc123:1 --project MyProject",
+          "help": "Get a specific conversation by ID, including user and assistant messages. Two ways to identify the conversation: - Positional: session:conversation_number (e.g., abc123:1), where session is a UUID or a session name. The number is split off the right, so names containing colons (e.g. \"Course: ...\") are accepted. - Flags: --session-name NAME --conversation-id N (useful when you prefer not to embed the number in a colon-containing name). --project is optional; omit it to auto-derive from the session. Example: claude-code-sessions conversations get abc123:1 claude-code-sessions conversations get \"Course: OpenAI Codex Advanced Features Module 2:1\" claude-code-sessions conversations get --session-name \"Course: OpenAI Codex Advanced Features Module 2\" -C 1 claude-code-sessions conversations get abc123:1 --project MyProject",
           "arguments": [
             {
-              "name": "[conversation_id]",
-              "type": "TEXT",
+              "name": "conversation_id",
+              "type": "CONVERSATION_ID",
               "required": false,
-              "help": "TEXT  Conversation ID (session_or_name:conv_number, e.g. abc123:1); omit when using --session-name"
+              "help": "Conversation ID (session_or_name:conv_number, e.g. abc123:1); omit when using --session-name"
             }
           ],
           "options": [
@@ -564,10 +564,10 @@
           "help": "Get full session details including messages and tool calls. Provide the session as the positional argument (UUID or name) OR via --session-name, but not both. Example: claude-code-sessions sessions get abc123-def456-789 claude-code-sessions sessions get \"Course: OpenAI Codex Advanced Features Module 2\" claude-code-sessions sessions get --session-name \"Course: OpenAI Codex Advanced Features Module 2\"",
           "arguments": [
             {
-              "name": "[session_id]",
-              "type": "TEXT",
+              "name": "session_id",
+              "type": "SESSION_ID",
               "required": false,
-              "help": "TEXT  Session ID (UUID or name); omit when using --session-name"
+              "help": "Session ID (UUID or name); omit when using --session-name"
             }
           ],
           "options": [
@@ -1086,10 +1086,10 @@
           "help": "Get timeline for a specific session. Provide the session as the positional argument (UUID or name) OR via --session-name, but not both. --project is optional; omit it to auto-derive from the session. Example: claude-code-sessions timeline get abc123 claude-code-sessions timeline get \"Course: OpenAI Codex Advanced Features Module 2\" claude-code-sessions timeline get --session-name \"Course: OpenAI Codex Advanced Features Module 2\" claude-code-sessions timeline get abc123 --project CourseCraft",
           "arguments": [
             {
-              "name": "[session_id]",
-              "type": "TEXT",
+              "name": "session_id",
+              "type": "SESSION_ID",
               "required": false,
-              "help": "TEXT  Session ID (UUID or name); omit when using --session-name"
+              "help": "Session ID (UUID or name); omit when using --session-name"
             }
           ],
           "options": [

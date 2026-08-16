@@ -21,7 +21,7 @@ from .subagent import Subagent, SubagentSummary
 from .session import Session, SessionSummary
 from .skill import SkillInvocation
 from .timeline import TimelineEntry, TimelineEventType
-from .conversation import ConversationSummary
+from .conversation import ConversationDetail, ConversationSummary
 from .search import SearchResult, SearchMatch
 
 __all__ = [
@@ -51,6 +51,7 @@ __all__ = [
     "TimelineEntry",
     "TimelineEventType",
     # Conversation
+    "ConversationDetail",
     "ConversationSummary",
     # Search
     "SearchResult",

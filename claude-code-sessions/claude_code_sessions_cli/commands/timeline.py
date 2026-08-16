@@ -107,7 +107,12 @@ def list_timeline(
         if session_id or conversation_id or errors_only:
             fetch_limit = 10000
 
-        timeline = client.list_timeline(project=project, limit=fetch_limit, since=since)
+        timeline = client.list_timeline(
+            project=project,
+            limit=fetch_limit,
+            since=since,
+            session_id=session_id,
+        )
 
         # Convert to dicts for filtering/output
         items = [e.model_dump() for e in timeline]

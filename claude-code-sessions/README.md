@@ -124,7 +124,7 @@ claude-code-sessions conversations list -p ExampleProject --since 1d --table
 # Filter by message count
 claude-code-sessions conversations list -p ExampleProject --filter "message_count:gt:10"
 
-# Get a specific conversation (--project optional, auto-derived from session)
+# Get one conversation with user and assistant messages (--project optional)
 claude-code-sessions conversations get abc123:1
 claude-code-sessions conversations get "Course: OpenAI Codex Advanced Features Module 2:1"
 claude-code-sessions conversations get --session-name "Course: OpenAI Codex Advanced Features Module 2" -C 1

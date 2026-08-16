@@ -458,6 +458,50 @@ class ClaudeCodeSessionsClient:
 
         return conversations[:limit]
 
+    def get_conversation(
+        self,
+        project: str,
+        session_id: str,
+        conversation_id: int,
+    ) -> Optional['ConversationDetail']:
+        """Get one conversation with its user and assistant message content."""
+        from .models.conversation import ConversationDetail
+        from .parsers import parse_conversation_summaries
+
+        project_dir = self._get_project_dir(project)
+        project_name = extract_project_name(project_dir.name)
+        session_file = project_dir / f"{session_id}.jsonl"
+        if not session_file.exists():
+            raise ClientError(f"Session not found: {session_id}")
+
+        summary = next(
+            (
+                item
+                for item in parse_conversation_summaries(session_file, project_name)
+                if item.conversation_id == conversation_id
+            ),
+            None,
+        )
+        if summary is None:
+            return None
+
+        session = parse_full_session(session_file, project_name)
+        if session is None:
+            raise ClientError(f"Could not parse session: {session_id}")
+
+        return ConversationDetail(
+            **summary.model_dump(),
+            messages=[
+                {
+                    "type": message.type,
+                    "timestamp": message.timestamp,
+                    "content": message.content,
+                }
+                for message in session.messages
+                if message.conversation_id == conversation_id
+            ],
+        )
+
     def _is_after_cutoff(self, timestamp: str, cutoff: datetime) -> bool:
         """Check if a timestamp is after the cutoff time."""
         try:
@@ -941,6 +985,7 @@ class ClaudeCodeSessionsClient:
         project: str,
         limit: int = 200,
         since: Optional[str] = None,
+        session_id: Optional[str] = None,
     ) -> List[TimelineEntry]:
         """
         Get a combined timeline across recent sessions.
@@ -963,7 +1008,15 @@ class ClaudeCodeSessionsClient:
 
         all_entries = []
 
-        for session_file in project_dir.glob('*.jsonl'):
+        session_files = (
+            [project_dir / f"{session_id}.jsonl"]
+            if session_id
+            else project_dir.glob('*.jsonl')
+        )
+
+        for session_file in session_files:
+            if not session_file.exists():
+                raise ClientError(f"Session not found: {session_id}")
             # Skip if file is too old
             if cutoff_time:
                 mtime = datetime.fromtimestamp(session_file.stat().st_mtime)
