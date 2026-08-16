@@ -450,6 +450,33 @@ def test_get_by_role_accepts_exact_name(monkeypatch):
     assert "aria-labelledby" in calls[0]
 
 
+def test_locator_first_count_is_one_when_element_resolves(monkeypatch):
+    """``locator(...).first.count()`` must reflect whether the underlying
+    selector actually matched, not a hardcoded constant.
+
+    Regression for a bug where ``_ServiceElement.count()`` always returned
+    1 regardless of whether ``(...)[0]`` resolved to a real element or
+    ``undefined``. That made every ``if x.first.count() > 0`` /
+    ``== 0`` existence/verification check in every browser-backed CLI
+    always take the "found" branch -- for example, a delete command's
+    "checkbox should be gone after deletion" check via
+    ``locator(...).first.count() == 0`` could never observe success.
+    """
+    service, calls = _open_service_with_eval(monkeypatch, [1])
+
+    assert service.locator("input.bulkCheck").first.count() == 1
+
+    assert "el ? 1 : 0" in calls[0]
+
+
+def test_locator_first_count_is_zero_when_nothing_matches(monkeypatch):
+    service, calls = _open_service_with_eval(monkeypatch, [0])
+
+    assert service.locator("input.bulkCheck[value=\"missing\"]").first.count() == 0
+
+    assert "el ? 1 : 0" in calls[0]
+
+
 def test_get_page_locator_aria_snapshot_uses_cdp_accessibility_tree():
     service = BrowserHarnessService("sample-browser-session")
     service._opened = True

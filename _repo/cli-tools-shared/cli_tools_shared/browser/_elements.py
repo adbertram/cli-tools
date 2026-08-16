@@ -294,7 +294,22 @@ class _ServiceElement:
         return bool(self._eval_on_el("if (!el) return false; return !el.disabled;"))
 
     def count(self) -> int:
-        return 1
+        """Return 1 if this element resolves live, 0 otherwise.
+
+        A ``_ServiceElement`` is a JS expression (e.g. ``(...)[0]`` from
+        ``Locator.first``/``.last``), not a captured handle -- it can
+        resolve to ``undefined`` when the source locator matched nothing.
+        Hardcoding ``1`` here made every ``locator(...).first.count()`` /
+        ``.last.count()`` existence check always truthy regardless of
+        whether the selector actually matched, which is the opposite of
+        Playwright's real ``Locator.count()`` contract and silently broke
+        every ``if x.first.count() > 0`` / ``== 0`` guard built on it.
+        """
+        result = self._eval_on_el("return el ? 1 : 0;")
+        try:
+            return int(result)
+        except (TypeError, ValueError):
+            return 0
 
     def text_content(self) -> Optional[str]:
         return self._eval_on_el("if (!el) return null; return el.textContent;")
