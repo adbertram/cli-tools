@@ -11,9 +11,9 @@ COMMAND_CREDENTIALS = {
 import typer
 from typing import Optional, List
 
-from ..client import get_client, ClientError
+from ..client import get_client
 from cli_tools_shared.filters import apply_filters
-from cli_tools_shared.output import print_json, print_table, handle_error, print_info, print_error
+from cli_tools_shared.output import print_json, print_table, command, print_info, print_error
 from cli_tools_shared import FilterMap
 
 app = typer.Typer(help="Manage Globiflow triggers")
@@ -81,6 +81,7 @@ def _select_properties(items: List[dict], properties: Optional[str]) -> List[dic
 
 
 @app.command("list")
+@command
 def list_triggers(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of results (client-side)"),
@@ -99,8 +100,8 @@ def list_triggers(
         globiflow triggers list --filter "code:eq:C"
         globiflow triggers list --properties "code,name"
     """
+    client = get_client()
     try:
-        client = get_client()
         triggers = client.list_triggers()
 
         # Convert to dicts for filtering
@@ -130,15 +131,12 @@ def list_triggers(
                 print_info("No triggers found.")
         else:
             print_json(trigger_dicts)
-
+    finally:
         client.close()
-    except ClientError as e:
-        raise typer.Exit(handle_error(e))
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
 
 
 @app.command("get")
+@command
 def get_trigger(
     code: str = typer.Argument(..., help="Trigger code (e.g., C, U, M)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -150,8 +148,8 @@ def get_trigger(
         globiflow triggers get C --table
         globiflow triggers get M
     """
+    client = get_client()
     try:
-        client = get_client()
         triggers = client.list_triggers()
 
         # Accept either the trigger code or the human-readable name.
@@ -174,9 +172,5 @@ def get_trigger(
             print_table(rows, ["field", "value"], ["Field", "Value"])
         else:
             print_json(trigger)
-
+    finally:
         client.close()
-    except ClientError as e:
-        raise typer.Exit(handle_error(e))
-    except Exception as e:
-        raise typer.Exit(handle_error(e))

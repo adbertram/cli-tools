@@ -14,9 +14,9 @@ COMMAND_CREDENTIALS = {
 import typer
 from typing import Optional, List
 
-from ..client import get_client, ClientError
+from ..client import get_client
 from cli_tools_shared.filters import apply_filters
-from cli_tools_shared.output import print_json, print_table, handle_error, print_info
+from cli_tools_shared.output import print_json, print_table, command, print_info
 from cli_tools_shared import FilterMap
 
 app = typer.Typer(help="Search Globiflow")
@@ -47,6 +47,7 @@ def extract_fields(items: list, fields: list) -> list:
 
 
 @app.command("query")
+@command
 def query_items(
     query: str = typer.Argument(..., help="Search query"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of results"),
@@ -62,8 +63,8 @@ def query_items(
         globiflow search query "keyword" --filter "price:lt:100"
         globiflow search query "keyword" --properties "title,price"
     """
+    client = get_client()
     try:
-        client = get_client()
         # Returns only the array of results (no metadata)
         results = client.search(query, limit=limit, filters=filter)
 
@@ -84,18 +85,15 @@ def query_items(
                 print_info("No results found.")
         else:
             print_json(results)
-
-        client.close()
     except NotImplementedError:
         print_info("Search not implemented. Update client.py with your site's search logic.")
         raise typer.Exit(1)
-    except ClientError as e:
-        raise typer.Exit(handle_error(e))
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    finally:
+        client.close()
 
 
 @app.command("item")
+@command
 def search_item(
     item_id: str = typer.Argument(..., help="Item ID or URL"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -109,8 +107,8 @@ def search_item(
         globiflow search item "https://example.com/item/abc123"
         globiflow search item abc123 --output "title,price"
     """
+    client = get_client()
     try:
-        client = get_client()
         # Returns only the item object (no metadata)
         item = client.get_item(item_id)
 
@@ -129,18 +127,15 @@ def search_item(
                 print_table(rows, ["field", "value"], ["Field", "Value"])
         else:
             print_json(item)
-
-        client.close()
     except NotImplementedError:
         print_info("Get item not implemented. Update client.py with your site's item retrieval logic.")
         raise typer.Exit(1)
-    except ClientError as e:
-        raise typer.Exit(handle_error(e))
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    finally:
+        client.close()
 
 
 @app.command("list")
+@command
 def list_items(
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of items"),
     filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)"),
@@ -155,8 +150,8 @@ def list_items(
         globiflow search list --filter "status:active"
         globiflow search list --properties "id,name,status"
     """
+    client = get_client()
     try:
-        client = get_client()
         # Returns only the array of items (no metadata)
         items = client.list_items(limit=limit, filters=filter)
 
@@ -178,12 +173,8 @@ def list_items(
                 print_info("No items found.")
         else:
             print_json(items)
-
-        client.close()
     except NotImplementedError:
         print_info("List items not implemented. Update client.py with your site's listing logic.")
         raise typer.Exit(1)
-    except ClientError as e:
-        raise typer.Exit(handle_error(e))
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    finally:
+        client.close()
