@@ -38,6 +38,14 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **auth** — Manage authentication: login, logout, check status
 </principle>
 
+<principle name="Listing Detail Is The Seller Evidence Path">
+Use `search get <id>` for listing and seller evidence. Its single detail-page
+request returns `seller_name`, `description`, `image_urls`, prices, and
+fulfillment data. Do not fetch the returned `url` with a generic URL reader.
+The site rejects Python's default URL reader with HTTP 403, while the CLI uses
+the service-compatible request headers.
+</principle>
+
 <principle name="Fulfillment: read `shipping_options`, never a price or a quote">
 `search get <id>` reports the listing's "Shipping Options" panel as **which
 options the seller offers** (`shipping_options`) separately from **what each

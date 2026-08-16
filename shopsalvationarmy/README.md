@@ -83,13 +83,15 @@ shopsalvationarmy search get <item-id> --table
 
 Returns the full listing detail as JSON, including a top-level `image_urls`
 array of absolute, directly-fetchable listing photo URLs (full-resolution
-`_largesize` images from the listing's photo gallery). The `--table` view shows
-the photo count in an `Images` row.
+`_largesize` images from the listing's photo gallery). The response also
+includes `seller_name` from the detail page. The `--table` view shows the
+seller and photo count.
 
 ```json
 {
   "id": "561473103",
   "title": "2 Kodak EasyShare C813 Digital Cameras ...",
+  "seller_name": "Canogapark_160",
   "image_urls": [
     "https://shopsalvationarmyblob.blob.core.windows.net/assets/media/69d0175f-271e-4962-9cbe-d7a88b7ea3bd_largesize.jpg",
     "https://shopsalvationarmyblob.blob.core.windows.net/assets/media/506b4064-de9d-411a-a7e2-3729265445df_largesize.jpg"

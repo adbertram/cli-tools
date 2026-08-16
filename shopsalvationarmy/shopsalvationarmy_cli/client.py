@@ -673,6 +673,18 @@ class ShopSalvationArmyClient:
             if desc_elem:
                 description = desc_elem.get_text(strip=True)
 
+            # The seller name is part of the detail page. Return it with the
+            # listing so callers do not need a second request to the seller page.
+            seller_name = None
+            seller_heading = soup.select_one(
+                ".detail__sellerInfo .detail__sectionHeading"
+            )
+            if seller_heading:
+                heading_text = seller_heading.get_text(" ", strip=True)
+                seller_prefix = "Seller - "
+                if heading_text.startswith(seller_prefix):
+                    seller_name = heading_text[len(seller_prefix):].strip() or None
+
             shipping = self._parse_shipping_panel(soup)
 
             shipping_additional_charge = None
@@ -729,6 +741,7 @@ class ShopSalvationArmyClient:
                 "bids": bids,
                 "time_left": time_left,
                 "description": description,
+                "seller_name": seller_name,
                 "shipping_options": shipping["options"],
                 "local_pickup_price": shipping["local_pickup_price"],
                 "standard_shipping_label": shipping["standard_shipping_label"],

@@ -383,12 +383,13 @@ class FakeResponse:
 
 
 class FakeGetSession:
-    def __init__(self):
+    def __init__(self, text=""):
         self.urls = []
+        self.text = text
 
     def get(self, url):
         self.urls.append(url)
-        return FakeResponse("")
+        return FakeResponse(self.text)
 
 
 class FakeSession:
@@ -465,3 +466,22 @@ def test_search_uses_site_full_text_query_parameter():
     assert "FullTextQuery=Canon+camera" in requested_url
     assert "Keywords=" not in requested_url
     assert result["url"] == requested_url
+
+
+def test_get_item_returns_seller_name_from_the_detail_response():
+    detail_html = """
+    <h1>Vintage LEGO Train Lot</h1>
+    <div class="detail__section detail__sellerInfo">
+        <div class="detail__sectionHeading">Seller - Canogapark_160</div>
+        <div class="detail__sectionBody">Canoga Park, CA US 1444</div>
+    </div>
+    """
+    client = ShopSalvationArmyClient(require_auth=False, config=object())
+    client.session = FakeGetSession(detail_html)
+
+    item = client.get_item("575431570")
+
+    assert item["seller_name"] == "Canogapark_160"
+    assert client.session.urls == [
+        "https://www.shopthesalvationarmy.com/Listing/Details/575431570"
+    ]

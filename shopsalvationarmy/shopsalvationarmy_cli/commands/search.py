@@ -184,6 +184,9 @@ def search_get(
             "field": "Title",
             "value": item.get("title", ""),
         }, {
+            "field": "Seller",
+            "value": item.get("seller_name", "") or "N/A",
+        }, {
             "field": "Price",
             "value": item.get("price", "N/A"),
         }, {
