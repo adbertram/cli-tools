@@ -1,7 +1,7 @@
 {
   "tool": "things",
   "description": "CLI interface for Things 3 task management",
-  "discovered_at": "2026-06-13T12:46:39Z",
+  "discovered_at": "2026-07-30T13:30:59Z",
   "total_commands": 24,
   "global_options": [
     {
@@ -192,7 +192,6 @@
     },
     "projects": {
       "help": "Manage projects",
-      "usage_instructions": "CRUD operations on Things projects. Use list with --area to filter by area, --status for completion state. Title is positional for create. UUID is positional for get/complete/delete/update.",
       "arguments": [],
       "options": [],
       "commands": {
@@ -419,7 +418,7 @@
           ]
         },
         "update": {
-          "help": "Update a project.",
+          "help": "Update a project. Every requested change is read back from the Things database after the write. If Things did not persist a requested field, the command exits non-zero and names each unpersisted field.",
           "examples": [
             "things projects update UUID --title \"New title\"",
             "things projects update UUID --notes \"Updated notes\"",
@@ -476,7 +475,7 @@
               "name": "--tags",
               "type": "TEXT",
               "required": false,
-              "help": "Comma-separated tag titles (replaces existing)"
+              "help": "Comma-separated tag titles (replaces existing), or empty string to remove all tags"
             }
           ]
         }
@@ -605,7 +604,6 @@
     },
     "todos": {
       "help": "Manage todos",
-      "usage_instructions": "CRUD operations on Things todos. Use list with --when to filter by inbox/today/anytime/someday/upcoming. Use --next-actions/-n to get only actionable todos. Title is positional for create. UUID is positional for get/complete/uncomplete/delete/update.",
       "arguments": [],
       "options": [],
       "commands": {
@@ -889,7 +887,7 @@
           "options": []
         },
         "update": {
-          "help": "Update a todo.",
+          "help": "Update a todo. Every requested change is read back from the Things database after the write. If Things did not persist a requested field, the command exits non-zero and names each unpersisted field.",
           "examples": [
             "things todos update UUID --title \"New title\"",
             "things todos update UUID --notes \"Updated notes\"",
@@ -927,7 +925,7 @@
               "name": "--when",
               "type": "TEXT",
               "required": false,
-              "help": "When: inbox, today, tomorrow, evening, anytime, someday, or ISO date",
+              "help": "When: inbox, today, tomorrow, evening, anytime, someday, ISO date, or empty string to clear the date",
               "short": "-w"
             },
             {
@@ -941,7 +939,7 @@
               "name": "--tags",
               "type": "TEXT",
               "required": false,
-              "help": "Comma-separated tag titles (replaces existing)"
+              "help": "Comma-separated tag titles (replaces existing), or empty string to remove all tags"
             },
             {
               "name": "--project",
@@ -953,7 +951,7 @@
               "name": "--area",
               "type": "TEXT",
               "required": false,
-              "help": "Move todo to area UUID (detaches from any project). Mutually exclusive with --project"
+              "help": "Move todo to area UUID (detaches from any project), or empty string to remove the todo from its area and project. Mutually exclusive with --project"
             }
           ]
         }

@@ -101,6 +101,51 @@ older CLI's zero exit status as proof of full storage. See
 `references/notes-length-limit.md` for evidence and Unicode counting details.
 </principle>
 
+<principle name="Someday Is Not The Same As Upcoming">
+Things stores the `when` field as `start` plus `start_date`. Read both fields
+together; `start` alone does not name a Things list.
+
+| `start` | `start_date` | Things list |
+|---------|--------------|-------------|
+| 0 | null | Inbox |
+| 1 | null | Anytime |
+| 1 | today or earlier | Today |
+| 2 | null | Someday |
+| 2 | a date | Upcoming (scheduled for that date) |
+
+A to-do scheduled for a future date keeps `start: 2`. That is correct, not a
+failed write. Do not read `start: 2` as "still in Someday" when `start_date` is
+set, and do not re-issue the same `--when <date>` command. `things todos list
+--table` prints `Upcoming` for that state; JSON output keeps the raw integer.
+
+`things todos list --when someday` returns only dateless Someday rows. Use
+`--when upcoming` for scheduled rows.
+</principle>
+
+<principle name="Empty-String Clears And Verified Writes">
+`things todos update` and `things projects update` read every requested field
+back from the Things database after the write. If Things did not persist a
+requested field, the command exits non-zero and names each unpersisted field
+plus the current `start`, `start_date`, `deadline`, and `tags`. A zero exit
+status from these two commands now proves the change landed. Treat a non-zero
+exit as an unapplied or partly applied update; re-read the record before
+retrying.
+
+Pass an empty string to clear a field:
+
+| Command | Effect |
+|---------|--------|
+| `things todos update UUID --tags ""` | Removes every tag |
+| `things todos update UUID --deadline ""` | Clears the deadline |
+| `things todos update UUID --when ""` | Clears the activation date (moves to Anytime) |
+| `things todos update UUID --area ""` | Removes the todo from its area and project |
+| `things projects update UUID --tags ""` | Removes every tag |
+| `things projects update UUID --deadline ""` | Clears the deadline |
+| `things projects update UUID --area ""` | Removes the project from its area |
+
+`--project ""` is not supported; use `--area ""` or `--when inbox`.
+</principle>
+
 <principle name="Command Groups">
 - **todos** -- Manage todos (list, get, create, complete, uncomplete, delete, update, search)
 - **projects** -- Manage projects (list, get, create, complete, delete, update, search)
@@ -292,3 +337,60 @@ The focused regression test is `things/tests/test_completion_readback.py::test_c
 **Verification:** Create a uniquely titled disposable todo with `--area`, read it back by UUID and verify both `area_uuid` and `area`, then delete it with `things todos delete <UUID> --yes`. If the configured area UUID no longer appears in `things areas list`, do not create against it or create a replacement area implicitly; report the stale mapping and use an explicitly approved current area for live CLI-path verification.
 
 **Recurrence Prevention:** Keep area resolution and property assignment as separate AppleScript statements inside one bounded `osascript` call. Do not inline `area id` on the right side of `set area of ...`, and do not move todo area placement into the creation property bag without a live readback proving Things persisted it.
+
+### 8. A repeating to-do cannot be rescheduled from outside Things
+
+**Symptom:** `things todos update <uuid> --when today` (or `--when anytime`) failed with `AppleScript error: ... Things3 got an error: Cannot move to-do (301)`, and `--when <ISO date>` failed with `Cannot schedule to-do (302)`. The to-do's `start` and `start_date` never changed. The to-do looked like an ordinary dateless Someday row (`start: 2`, `start_date: null`) with no project and no area, which made the missing container look like the cause.
+
+**Cause:** The to-do was a repeating template: `TMTask.rt1_recurrenceRule` was populated and `TMTask.rt1_repeatingTemplate` was null. Things 3 refuses `when` changes on a repeating to-do through every external channel. AppleScript returns 301 for `move` and 302 for `schedule`. The Things URL scheme documents the same restriction for `update`: "This field cannot be updated on repeating to-dos", and a live `things:///update?...&when=today` against a real repeating template produced a byte-identical `TMTask` row. The missing project/area was not the cause: a purpose-created dateless Someday to-do with no project and no area moved to Today, Anytime, and an ISO date without error.
+
+**Fix:** `client.py` `update_todo` now detects a repeating template through `_is_repeating()` before issuing any write and raises a `ClientError` that names the limitation and the manual alternative. No partial write is attempted.
+
+**Verification:**
+```bash
+things todos update <repeating-todo-uuid> --when today
+# Exit 1 with "Things 3 does not allow the `when` field of a repeating to-do..."
+things todos get <repeating-todo-uuid> --properties uuid,start,start_date
+# Unchanged
+```
+
+**Recurrence Prevention:** Do not retry `--when` on a repeating to-do, and do not try the URL scheme as an alternative. Change the repeat schedule in the Things app, or reschedule a generated instance instead of the template. Identify a template with `SELECT rt1_recurrenceRule, rt1_repeatingTemplate FROM TMTask WHERE uuid = '<uuid>'`: a template has a rule and no parent template.
+
+### 9. `things todos/projects update` printed "Updated" for writes Things ignored
+
+**Symptom:** `things todos update <uuid> --when <ISO date>` printed `Updated: <title>` and exited 0 while the requested placement did not change. `things todos update <uuid> --tags ""` printed `Updated: <title>` and exited 0 while the todo kept its tags. In a combined `--title "New" --tags ""` call the title persisted and the tag clear did not, so one command silently applied part of its requested change. `things projects update <uuid> --when today` silently moved the project to Anytime instead of rejecting an unsupported value.
+
+**Cause:** Two separate defects. First, no write path verified its own result: `update_todo` and `update_project` returned a fresh read without comparing it against what the caller asked for, so any write Things accepted and then ignored looked like success. Second, both command modules parsed tags with `[t.strip() for t in tags.split(",")] if tags else None`, so `--tags ""` evaluated to `None` and the tag write was skipped entirely.
+
+**Fix:**
+- `client.py` `_verify_persisted_updates()` compares every requested field against the post-write read and raises `UnpersistedUpdateError` (a `ClientError` subclass, exit 1) naming each unpersisted field plus the current `start`, `start_date`, `deadline`, and `tags`. Both `update_todo` and `update_project` call it as their final gate.
+- `_expected_when_state()` holds the verified `start`/`start_date` result for every `when` value.
+- `commands/todos.py` and `commands/projects.py` now treat `--tags ""` as an explicit clear (`[]`) and only a missing `--tags` as "leave tags alone".
+- `update_project` rejects any `when` other than `anytime` or `someday` instead of defaulting to Anytime.
+
+**Verification:** `things/tests/test_update_verification.py` covers Someday to today/anytime/ISO date (with and without an existing start date), unpersisted-write failures, partial-update failures, tag clears, and the option parsing. Live checks: clear tags on a WF-tagged todo, then read back `tags`.
+
+**Recurrence Prevention:** Every new `things` write path must add its requested fields to the `expectations` dict so the shared verification gate covers it. Never report success for a Things write on process exit status alone.
+
+### 10. Things 3 rejects `missing value`, so clears use the Things URL scheme (-1700)
+
+**Symptom:** `things todos update <uuid> --deadline ""` failed with `AppleScript error: ... Things3 got an error: Can't make missing value into type date. (-1700)`, and the deadline stayed set. The same error appeared for `things projects update <uuid> --area ""` (`... into type area`) and for the old `--when ""` path (`... into type date`). The raw object model failed the same way outside the CLI.
+
+**Cause:** In `/Applications/Things3.app/Contents/Resources/Things.sdef` the `due date` and `activation date` properties are typed `date` and the `area` property is typed `area`. None is optional, so Things rejects `missing value` for all three. `activation date` is additionally `access="r"`. There is no AppleScript expression that clears any of them.
+
+**Fix:** Clears go through the Things URL scheme, which documents that "including a parameter with an equals sign but without a value will clear that value". `client.py` `_run_url_scheme()` sends `things:///update` and `things:///update-project` through `open -g` (background, so a CLI write cannot steal focus). The required URL scheme token is read live from `TMSettings.uriSchemeAuthenticationToken` in the same Things database the CLI already reads, so no credential is stored anywhere. AppleScript still handles every non-clear write.
+
+**Verification:**
+```bash
+things todos update <uuid> --deadline ""   && things todos get <uuid> --properties uuid,deadline
+things todos update <uuid> --when ""       && things todos get <uuid> --properties uuid,start,start_date
+things todos update <uuid> --area ""       && things todos get <uuid> --properties uuid,area_uuid,project_uuid
+things projects update <uuid> --deadline "" && things projects get <uuid> --properties uuid,deadline
+things projects update <uuid> --area ""     && things projects get <uuid> --properties uuid,area_uuid
+```
+
+**Recurrence Prevention:** Do not retry `set <property> of ... to missing value` in Things AppleScript for `due date`, `activation date`, or `area`; -1700 is a fixed Things limitation, not a transient error. Route new clear operations through `_run_url_scheme` and add the cleared field to the update's `expectations` dict.
+
+`--when tomorrow` and `--when evening` also use the URL scheme: Things has no `Tomorrow` or `Evening` list object, so `move to list "Tomorrow"` fails with 301 and `move to list "Evening"` fails with -1728.
+
+Three production todos (`WWc1WKk5gbpigcAMVdpR7e`, `WUCbHReRa46AmJsNv7UvvS`, `CuTmbBEwc4mCbFkPHp8M2R`) carry a `4001-01-01` sentinel deadline. All three are repeating templates, and Things documents that `deadline` cannot be updated on a repeating to-do, so no supported command can clear them. `--deadline ""` on those three now exits non-zero and names the repeating limitation. Remove those deadlines in the Things app.

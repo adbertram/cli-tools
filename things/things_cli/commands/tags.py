@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 from cli_tools_shared.filters import apply_filters
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_table, handle_error
+from cli_tools_shared.output import command, print_json, print_table
 
 
 app = typer.Typer(help="Manage tags", no_args_is_help=True)
@@ -45,6 +45,7 @@ def extract_fields(items: list, fields: list) -> list:
 
 
 @app.command("list")
+@command
 def tags_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of items"),
@@ -59,37 +60,34 @@ def tags_list(
         things tags list --table
         things tags list --properties "uuid,title,shortcut"
     """
-    try:
-        client = get_client()
-        tags = client.list_tags(limit=limit)
+    client = get_client()
+    tags = client.list_tags(limit=limit)
 
-        # Apply client-side filters if provided
-        if filter:
-            tags_dicts = [model_to_dict(t) for t in tags]
-            tags = apply_filters(tags_dicts, filter)
+    # Apply client-side filters if provided
+    if filter:
+        tags_dicts = [model_to_dict(t) for t in tags]
+        tags = apply_filters(tags_dicts, filter)
 
+    if properties:
+        fields = [f.strip() for f in properties.split(",")]
+        tags = extract_fields(tags, fields)
+
+    if table:
         if properties:
             fields = [f.strip() for f in properties.split(",")]
-            tags = extract_fields(tags, fields)
-
-        if table:
-            if properties:
-                fields = [f.strip() for f in properties.split(",")]
-                print_table(tags, fields, fields)
-            else:
-                print_table(
-                    tags,
-                    ["uuid", "title", "shortcut", "parent_uuid"],
-                    ["UUID", "Title", "Shortcut", "Parent UUID"],
-                )
+            print_table(tags, fields, fields)
         else:
-            print_json(tags)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+            print_table(
+                tags,
+                ["uuid", "title", "shortcut", "parent_uuid"],
+                ["UUID", "Title", "Shortcut", "Parent UUID"],
+            )
+    else:
+        print_json(tags)
 
 
 @app.command("get")
+@command
 def tags_get(
     uuid: str = typer.Argument(..., help="The tag UUID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -102,30 +100,27 @@ def tags_get(
         things tags get UUID
         things tags get UUID --table
     """
-    try:
-        client = get_client()
-        tag = client.get_tag(uuid)
+    client = get_client()
+    tag = client.get_tag(uuid)
 
+    if properties:
+        fields = [f.strip() for f in properties.split(",")]
+        tag = extract_fields([tag], fields)[0]
+
+    if table:
         if properties:
             fields = [f.strip() for f in properties.split(",")]
-            tag = extract_fields([tag], fields)[0]
-
-        if table:
-            if properties:
-                fields = [f.strip() for f in properties.split(",")]
-                print_table([tag], fields, fields)
-            else:
-                item_dict = model_to_dict(tag)
-                rows = [{"field": k, "value": str(v)} for k, v in item_dict.items() if v is not None]
-                print_table(rows, ["field", "value"], ["Field", "Value"])
+            print_table([tag], fields, fields)
         else:
-            print_json(tag)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+            item_dict = model_to_dict(tag)
+            rows = [{"field": k, "value": str(v)} for k, v in item_dict.items() if v is not None]
+            print_table(rows, ["field", "value"], ["Field", "Value"])
+    else:
+        print_json(tag)
 
 
 @app.command("search")
+@command
 def tags_search(
     query: str = typer.Argument(..., help="Search query (matches title)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -139,30 +134,26 @@ def tags_search(
         things tags search "work"
         things tags search "urgent" --table
     """
-    try:
-        client = get_client()
-        tags = client.list_tags(limit=limit)
+    client = get_client()
+    tags = client.list_tags(limit=limit)
 
-        # Filter by title containing query (case-insensitive)
-        query_lower = query.lower()
-        tags = [t for t in tags if query_lower in t.title.lower()]
+    # Filter by title containing query (case-insensitive)
+    query_lower = query.lower()
+    tags = [t for t in tags if query_lower in t.title.lower()]
 
-        if properties:
-            fields = [f.strip() for f in properties.split(",")]
-            tags = extract_fields(tags, fields)
+    if properties:
+        fields = [f.strip() for f in properties.split(",")]
+        tags = extract_fields(tags, fields)
 
-        if table:
-            if tags:
-                if properties:
-                    columns = [f.strip() for f in properties.split(",")]
-                else:
-                    columns = ["uuid", "title", "shortcut"]
-                print_table(tags, columns, columns)
+    if table:
+        if tags:
+            if properties:
+                columns = [f.strip() for f in properties.split(",")]
             else:
-                from cli_tools_shared.output import print_info
-                print_info("No tags found matching the search query.")
+                columns = ["uuid", "title", "shortcut"]
+            print_table(tags, columns, columns)
         else:
-            print_json(tags)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+            from cli_tools_shared.output import print_info
+            print_info("No tags found matching the search query.")
+    else:
+        print_json(tags)

@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 from cli_tools_shared.filters import apply_filters
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_table, print_info, handle_error
+from cli_tools_shared.output import command, print_info, print_json, print_table
 
 
 app = typer.Typer(help="Manage projects", no_args_is_help=True)
@@ -61,6 +61,7 @@ def project_output(client, project, include_tasks: bool, fields: Optional[List[s
 
 
 @app.command("list")
+@command
 def projects_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of items"),
@@ -83,51 +84,48 @@ def projects_list(
         things projects list --exclude-tag WF
         things projects list --exclude-tag WF --exclude-tag SomeOther
     """
-    try:
-        client = get_client()
-        projects = client.list_projects(
-            area=area,
-            status=status,
-            limit=limit,
-        )
+    client = get_client()
+    projects = client.list_projects(
+        area=area,
+        status=status,
+        limit=limit,
+    )
 
-        # Drop items tagged with any of the excluded tags (case-sensitive)
-        if exclude_tag:
-            excluded = set(exclude_tag)
-            projects = [p for p in projects if not (set(model_to_dict(p).get("tags") or []) & excluded)]
+    # Drop items tagged with any of the excluded tags (case-sensitive)
+    if exclude_tag:
+        excluded = set(exclude_tag)
+        projects = [p for p in projects if not (set(model_to_dict(p).get("tags") or []) & excluded)]
 
-        # Apply client-side filters if provided
-        if filter:
-            projects_dicts = [model_to_dict(p) for p in projects]
-            projects = apply_filters(projects_dicts, filter)
+    # Apply client-side filters if provided
+    if filter:
+        projects_dicts = [model_to_dict(p) for p in projects]
+        projects = apply_filters(projects_dicts, filter)
 
-        fields = [f.strip() for f in properties.split(",")] if properties else None
-        projects = [
-            project_output(client, project, include_tasks, fields)
-            for project in projects
-        ]
+    fields = [f.strip() for f in properties.split(",")] if properties else None
+    projects = [
+        project_output(client, project, include_tasks, fields)
+        for project in projects
+    ]
 
-        if table:
-            if properties:
-                table_fields = list(fields or [])
-                if include_tasks and "tasks" not in table_fields:
-                    table_fields.append("tasks")
-                print_table(projects, table_fields, table_fields)
-            else:
-                table_fields = ["uuid", "title", "status", "start", "deadline"]
-                table_headers = ["UUID", "Title", "Status", "When", "Deadline"]
-                if include_tasks:
-                    table_fields.append("tasks")
-                    table_headers.append("Tasks")
-                print_table(projects, table_fields, table_headers)
+    if table:
+        if properties:
+            table_fields = list(fields or [])
+            if include_tasks and "tasks" not in table_fields:
+                table_fields.append("tasks")
+            print_table(projects, table_fields, table_fields)
         else:
-            print_json(projects)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+            table_fields = ["uuid", "title", "status", "start", "deadline"]
+            table_headers = ["UUID", "Title", "Status", "When", "Deadline"]
+            if include_tasks:
+                table_fields.append("tasks")
+                table_headers.append("Tasks")
+            print_table(projects, table_fields, table_headers)
+    else:
+        print_json(projects)
 
 
 @app.command("get")
+@command
 def projects_get(
     uuid: str = typer.Argument(..., help="The project UUID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -142,31 +140,28 @@ def projects_get(
         things projects get UUID --table
         things projects get UUID --properties "title,notes"
     """
-    try:
-        client = get_client()
-        project = client.get_project(uuid)
+    client = get_client()
+    project = client.get_project(uuid)
 
-        fields = [f.strip() for f in properties.split(",")] if properties else None
-        project = project_output(client, project, include_tasks, fields)
+    fields = [f.strip() for f in properties.split(",")] if properties else None
+    project = project_output(client, project, include_tasks, fields)
 
-        if table:
-            if properties:
-                table_fields = list(fields or [])
-                if include_tasks and "tasks" not in table_fields:
-                    table_fields.append("tasks")
-                print_table([project], table_fields, table_fields)
-            else:
-                item_dict = model_to_dict(project)
-                rows = [{"field": k, "value": str(v)} for k, v in item_dict.items() if v is not None]
-                print_table(rows, ["field", "value"], ["Field", "Value"])
+    if table:
+        if properties:
+            table_fields = list(fields or [])
+            if include_tasks and "tasks" not in table_fields:
+                table_fields.append("tasks")
+            print_table([project], table_fields, table_fields)
         else:
-            print_json(project)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+            item_dict = model_to_dict(project)
+            rows = [{"field": k, "value": str(v)} for k, v in item_dict.items() if v is not None]
+            print_table(rows, ["field", "value"], ["Field", "Value"])
+    else:
+        print_json(project)
 
 
 @app.command("create")
+@command
 def projects_create(
     title: str = typer.Argument(..., help="Project title"),
     notes: Optional[str] = typer.Option(None, "--notes", "-n", help="Project notes"),
@@ -181,23 +176,20 @@ def projects_create(
         things projects create "Q1 Goals" --area AREA_UUID
         things projects create "Backlog Project" --when someday
     """
-    try:
-        client = get_client()
-        project = client.create_project(
-            title=title,
-            notes=notes,
-            area=area,
-            when=when,
-        )
+    client = get_client()
+    project = client.create_project(
+        title=title,
+        notes=notes,
+        area=area,
+        when=when,
+    )
 
-        print_info(f"Created project: {project.uuid}")
-        print_json(project)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    print_info(f"Created project: {project.uuid}")
+    print_json(project)
 
 
 @app.command("complete")
+@command
 def projects_complete(
     uuid: str = typer.Argument(..., help="The project UUID"),
 ):
@@ -207,18 +199,15 @@ def projects_complete(
     Example:
         things projects complete UUID
     """
-    try:
-        client = get_client()
-        project = client.complete_project(uuid)
+    client = get_client()
+    project = client.complete_project(uuid)
 
-        print_info(f"Completed: {project.title}")
-        print_json(project)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    print_info(f"Completed: {project.title}")
+    print_json(project)
 
 
 @app.command("delete")
+@command
 def projects_delete(
     uuid: str = typer.Argument(..., help="The project UUID"),
     confirm: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
@@ -230,26 +219,21 @@ def projects_delete(
         things projects delete UUID
         things projects delete UUID --yes
     """
-    try:
-        client = get_client()
+    client = get_client()
 
-        if not confirm:
-            project = client.get_project(uuid)
-            if not typer.confirm(f"Delete project '{project.title}'?"):
-                print_info("Cancelled")
-                raise typer.Exit(0)
+    if not confirm:
+        project = client.get_project(uuid)
+        if not typer.confirm(f"Delete project '{project.title}'?"):
+            print_info("Cancelled")
+            raise typer.Exit(0)
 
-        result = client.delete_project(uuid)
-        print_info(f"Deleted: {result['title']}")
-        print_json(result)
-
-    except typer.Exit:
-        raise
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    result = client.delete_project(uuid)
+    print_info(f"Deleted: {result['title']}")
+    print_json(result)
 
 
 @app.command("update")
+@command
 def projects_update(
     uuid: str = typer.Argument(..., help="The project UUID"),
     title: Optional[str] = typer.Option(None, "--title", help="New title"),
@@ -257,10 +241,14 @@ def projects_update(
     area: Optional[str] = typer.Option(None, "--area", help="Area UUID, or empty string to remove from area"),
     when: Optional[str] = typer.Option(None, "--when", "-w", help="When: anytime, someday"),
     deadline: Optional[str] = typer.Option(None, "--deadline", "-d", help="Deadline (ISO date), or empty string to clear"),
-    tags: Optional[str] = typer.Option(None, "--tags", help="Comma-separated tag titles (replaces existing)"),
+    tags: Optional[str] = typer.Option(None, "--tags", help="Comma-separated tag titles (replaces existing), or empty string to remove all tags"),
 ):
     """
     Update a project.
+
+    Every requested change is read back from the Things database after the
+    write. If Things did not persist a requested field, the command exits
+    non-zero and names each unpersisted field.
 
     Examples:
         things projects update UUID --title "New title"
@@ -269,30 +257,34 @@ def projects_update(
         things projects update UUID --area ""  # Remove from area
         things projects update UUID --when someday
         things projects update UUID --deadline 2024-12-31
+        things projects update UUID --deadline ""  # Clear deadline
         things projects update UUID --tags "work,Q1"
+        things projects update UUID --tags ""  # Remove all tags
     """
-    try:
-        client = get_client()
-        tag_list = [t.strip() for t in tags.split(",")] if tags else None
+    client = get_client()
+    # `--tags ""` must clear every tag, so only a missing option means
+    # "leave tags alone".
+    tag_list = (
+        None if tags is None
+        else [t.strip() for t in tags.split(",") if t.strip()]
+    )
 
-        project = client.update_project(
-            uuid=uuid,
-            title=title,
-            notes=notes,
-            area=area,
-            when=when,
-            deadline=deadline,
-            tags=tag_list,
-        )
+    project = client.update_project(
+        uuid=uuid,
+        title=title,
+        notes=notes,
+        area=area,
+        when=when,
+        deadline=deadline,
+        tags=tag_list,
+    )
 
-        print_info(f"Updated: {project.title}")
-        print_json(project)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    print_info(f"Updated: {project.title}")
+    print_json(project)
 
 
 @app.command("search")
+@command
 def projects_search(
     query: str = typer.Argument(..., help="Search query (matches title)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -306,33 +298,29 @@ def projects_search(
         things projects search "home"
         things projects search "work" --table
     """
-    try:
-        client = get_client()
-        projects = client.list_projects(limit=limit)
+    client = get_client()
+    projects = client.list_projects(limit=limit)
 
-        # Filter by title OR area name containing query (case-insensitive)
-        query_lower = query.lower()
-        projects = [
-            p for p in projects
-            if query_lower in p.title.lower()
-            or (p.area is not None and query_lower in p.area.lower())
-        ]
+    # Filter by title OR area name containing query (case-insensitive)
+    query_lower = query.lower()
+    projects = [
+        p for p in projects
+        if query_lower in p.title.lower()
+        or (p.area is not None and query_lower in p.area.lower())
+    ]
 
-        if properties:
-            fields = [f.strip() for f in properties.split(",")]
-            projects = extract_fields(projects, fields)
+    if properties:
+        fields = [f.strip() for f in properties.split(",")]
+        projects = extract_fields(projects, fields)
 
-        if table:
-            if projects:
-                if properties:
-                    columns = [f.strip() for f in properties.split(",")]
-                else:
-                    columns = ["uuid", "title", "status", "start"]
-                print_table(projects, columns, columns)
+    if table:
+        if projects:
+            if properties:
+                columns = [f.strip() for f in properties.split(",")]
             else:
-                print_info("No projects found matching the search query.")
+                columns = ["uuid", "title", "status", "start"]
+            print_table(projects, columns, columns)
         else:
-            print_json(projects)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+            print_info("No projects found matching the search query.")
+    else:
+        print_json(projects)

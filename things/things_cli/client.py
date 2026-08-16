@@ -12,10 +12,11 @@ import string
 import subprocess
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from glob import glob
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlencode
 
 from .models import (
     Area,
@@ -38,6 +39,62 @@ class ClientError(Exception):
 class AppleScriptTimeoutError(ClientError):
     """Raised when osascript exceeds the bounded Things AppleScript timeout."""
     pass
+
+
+class UnpersistedUpdateError(ClientError):
+    """Raised when a requested field did not persist after a Things write.
+
+    Things 3 accepts several writes that it then ignores, so process exit status
+    alone cannot prove an update landed. Every ``update_*`` method reads the row
+    back and raises this error naming each requested field that did not persist.
+    """
+    pass
+
+
+# `move ... to list` only accepts the Things AppleScript `list` objects. Things
+# has no "Tomorrow" or "Evening" list: `move to list "Tomorrow"` fails with
+# error 301 ("Cannot move to-do") and `move to list "Evening"` fails with -1728
+# ("Can't get list"). Everything below is verified working through AppleScript.
+WHEN_LIST_MOVES = {
+    "inbox": "Inbox",
+    "today": "Today",
+    "anytime": "Anytime",
+    "someday": "Someday",
+}
+
+# `when` values Things only accepts through its URL scheme (see
+# THINGS_URL_SCHEME_CLEAR_NOTE).
+WHEN_URL_VALUES = ("tomorrow", "evening")
+
+ALL_WHEN_KEYWORDS = tuple(WHEN_LIST_MOVES) + WHEN_URL_VALUES
+
+# Things 3 has no AppleScript path for clearing a date-typed property or an
+# object-typed property:
+#   set due date of theToDo to missing value        -> -1700
+#   set activation date of theToDo to missing value -> -1700 (and the property
+#                                                     is read-only in the sdef)
+#   set area of theToDo to missing value            -> -1700
+# The Things URL scheme documents that "including a parameter with an equals
+# sign but without a value will clear that value", and that is the only
+# supported clear path. Its `update`/`update-project` commands need the URL
+# scheme authentication token, which Things stores locally in
+# `TMSettings.uriSchemeAuthenticationToken` in the same database this client
+# already reads.
+THINGS_URL_SCHEME_CLEAR_NOTE = (
+    "Things 3 cannot clear this value through AppleScript, so the CLI uses the "
+    "Things URL scheme instead."
+)
+
+# Things refuses to change the `when` field of a repeating to-do. AppleScript
+# returns 301 (move) or 302 (schedule), and the URL scheme silently ignores the
+# parameter: "This field cannot be updated on repeating to-dos."
+REPEATING_WHEN_UNSUPPORTED = (
+    "Things 3 does not allow the `when` field of a repeating to-do to be "
+    "changed from outside the app. AppleScript returns \"Cannot move to-do "
+    "(301)\" or \"Cannot schedule to-do (302)\", and the Things URL scheme "
+    "ignores the parameter. Change the repeat schedule in the Things app, or "
+    "reschedule a generated instance of the repeating to-do instead."
+)
 
 
 # Things 3 silently truncated a reproduced ASCII todo-notes AppleScript write
@@ -453,7 +510,10 @@ class ThingsClient:
                 query += " AND t.start = 1 AND (t.startDate IS NULL OR t.startDate <= ?)"
                 params.append(self._today_date_int())
             elif when == 'someday':
-                query += " AND t.start = 2"
+                # Things stores a scheduled (Upcoming) to-do as start=2 plus an
+                # activation date. Only a start=2 row with no activation date is
+                # actually in the Someday list.
+                query += " AND t.start = 2 AND t.startDate IS NULL"
             elif when == 'today':
                 query += " AND t.startDate <= ?"
                 params.append(self._today_date_int())
@@ -941,6 +1001,191 @@ class ThingsClient:
             return ""
         return s.replace('\\', '\\\\').replace('"', '\\"')
 
+    # ==================== Things URL Scheme ====================
+
+    def _url_scheme_token(self) -> str:
+        """Read the Things URL scheme authentication token from the database.
+
+        Things stores the token that its own URL scheme requires in
+        ``TMSettings.uriSchemeAuthenticationToken``. Reading it here keeps the
+        token in exactly one place (the live Things database) instead of a copy
+        that can go stale.
+
+        Raises:
+            ClientError: If the token row is missing or empty.
+        """
+        with self._connect(readonly=True) as conn:
+            row = conn.execute(
+                "SELECT uriSchemeAuthenticationToken FROM TMSettings LIMIT 1"
+            ).fetchone()
+
+        token = row['uriSchemeAuthenticationToken'] if row else None
+        if not token:
+            raise ClientError(
+                "Things 3 has no URL scheme authentication token. Enable "
+                "Things URLs in Things > Settings > General, then retry. "
+                + THINGS_URL_SCHEME_CLEAR_NOTE
+            )
+        return token
+
+    def _run_url_scheme(self, command: str, params: Dict[str, str]) -> None:
+        """Send one Things URL scheme command.
+
+        The URL scheme is fire-and-forget: Things returns no result and no error
+        for an ignored parameter, so every caller must verify the write through
+        ``_verify_persisted_updates``.
+
+        Args:
+            command: URL scheme command, for example ``update``.
+            params: Query parameters. An empty string value clears that field.
+
+        Raises:
+            ClientError: If the `open` command fails.
+        """
+        query = urlencode({"auth-token": self._url_scheme_token(), **params})
+        url = f"things:///{command}?{query}"
+        # `-g` keeps Things in the background so a CLI write cannot steal focus.
+        result = subprocess.run(
+            ['open', '-g', url],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            raise ClientError(
+                f"Things URL scheme command '{command}' failed: "
+                f"{result.stderr.strip() or result.stdout.strip()}"
+            )
+        # Things applies URL scheme commands asynchronously. Callers read the
+        # row back afterwards, so give the app a moment to commit first.
+        time.sleep(1.0)
+
+    def _is_repeating(self, uuid: str) -> bool:
+        """Return True when the row is a repeating template rather than an instance.
+
+        A repeating template owns the recurrence rule and has no parent
+        template. Generated instances point back at the template through
+        ``rt1_repeatingTemplate``.
+        """
+        with self._connect(readonly=True) as conn:
+            row = conn.execute(
+                "SELECT rt1_repeatingTemplate, rt1_recurrenceRule FROM TMTask WHERE uuid = ?",
+                (uuid,),
+            ).fetchone()
+        if not row:
+            return False
+        return row['rt1_repeatingTemplate'] is None and row['rt1_recurrenceRule'] is not None
+
+    # ==================== Write Verification ====================
+
+    def _normalize_iso_date(self, iso_date: str) -> str:
+        """Validate and normalize an ISO date to YYYY-MM-DD."""
+        try:
+            return datetime.strptime(iso_date, "%Y-%m-%d").strftime("%Y-%m-%d")
+        except ValueError:
+            raise ClientError(f"Invalid date format '{iso_date}'. Expected YYYY-MM-DD.")
+
+    def _expected_when_state(self, when: str) -> Dict[str, Any]:
+        """Return the read-back state a `when` value must produce.
+
+        Verified against Things 3 (database version 26):
+
+        =========================  =====  ==========
+        requested when             start  start_date
+        =========================  =====  ==========
+        ``""`` (clear)             1      ``None``
+        ``inbox``                  0      ``None``
+        ``anytime``                1      ``None``
+        ``someday``                2      ``None``
+        ``today``                  1      today
+        ``evening``                1      today
+        ``tomorrow``               owned  tomorrow
+        ISO date                   owned  that date
+        =========================  =====  ==========
+
+        Things owns the ``start`` bucket for a dated to-do: it stores a future
+        activation date as ``start=2`` with that date (the Upcoming list) and
+        promotes the row to ``start=1`` when the date arrives. ``start`` is
+        therefore only asserted for the dateless placements and for the two
+        keywords that pin the date to today.
+        """
+        today = datetime.now().strftime("%Y-%m-%d")
+        if when == "":
+            return {"start": StartType.ANYTIME, "start_date": None}
+        if when == "inbox":
+            return {"start": StartType.NOT_SET, "start_date": None}
+        if when == "anytime":
+            return {"start": StartType.ANYTIME, "start_date": None}
+        if when == "someday":
+            return {"start": StartType.SOMEDAY, "start_date": None}
+        if when in ("today", "evening"):
+            return {"start": StartType.ANYTIME, "start_date": today}
+        if when == "tomorrow":
+            return {"start_date": (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")}
+        return {"start_date": self._normalize_iso_date(when)}
+
+    @staticmethod
+    def _persisted_value_matches(field: str, expected: Any, actual: Any) -> bool:
+        """Compare a requested value against the value Things persisted."""
+        if field == "tags":
+            return sorted(actual or []) == sorted(expected or [])
+        if field == "notes":
+            return (actual or "") == (expected or "")
+        return actual == expected
+
+    def _verify_persisted_updates(
+        self,
+        uuid: str,
+        entity_name: str,
+        expectations: Dict[str, Any],
+        after,
+    ) -> None:
+        """Fail when any requested field did not persist.
+
+        Things accepts and then ignores several writes, so a zero exit status
+        from osascript or `open` is not evidence. This is the single gate that
+        decides whether an update succeeded.
+
+        Args:
+            uuid: Entity UUID.
+            entity_name: ``todo`` or ``project``, used in the error message.
+            expectations: Read-back attribute name -> required value.
+            after: Model read back after the write.
+
+        Raises:
+            UnpersistedUpdateError: If any expectation is unmet.
+        """
+        unpersisted: List[Tuple[str, Any, Any]] = []
+        for field, expected in expectations.items():
+            actual = getattr(after, field)
+            if not self._persisted_value_matches(field, expected, actual):
+                unpersisted.append((field, expected, actual))
+
+        if not unpersisted:
+            return
+
+        details = "; ".join(
+            f"{field}: requested {expected!r}, actual {actual!r}"
+            for field, expected, actual in unpersisted
+        )
+        actual_state = (
+            f"start={int(after.start)}, start_date={after.start_date!r}, "
+            f"deadline={after.deadline!r}, tags={list(after.tags)!r}"
+        )
+        message = (
+            f"Things 3 did not persist every requested change to {entity_name} "
+            f"{uuid}. Unpersisted fields -> {details}. Current state: "
+            f"{actual_state}."
+        )
+        if self._is_repeating(uuid) and any(
+            field in ("start", "start_date", "deadline") for field, _, _ in unpersisted
+        ):
+            message += (
+                f" This {entity_name} is a repeating item. "
+                + REPEATING_WHEN_UNSUPPORTED
+            )
+        raise UnpersistedUpdateError(message)
+
     def _wait_for_status(
         self,
         fetch_item,
@@ -1052,11 +1297,16 @@ class ThingsClient:
         # --when by applying the same post-create move/schedule operation that
         # `update_todo(..., when=...)` uses; read-back then reflects the
         # requested start value while preserving project membership.
-        if project and when in ('inbox', 'today', 'tomorrow', 'evening', 'anytime', 'someday'):
+        # `tomorrow` and `evening` are not Things lists, so the create statement
+        # above cannot express them; apply them through the same verified
+        # update path.
+        if when is not None and (
+            when in WHEN_URL_VALUES or (project and when in ALL_WHEN_KEYWORDS)
+        ):
             self.update_todo(todo_id, when=when)
 
         # If 'when' is an ISO date (not a keyword), schedule for that date
-        if when and when not in ('inbox', 'today', 'tomorrow', 'evening', 'anytime', 'someday'):
+        if when and when not in ALL_WHEN_KEYWORDS:
             as_date = self._iso_to_applescript_date(when)
             schedule_script = f'''
             tell application "Things3"
@@ -1096,9 +1346,7 @@ class ThingsClient:
                 start=start,
                 start_date=(
                     when
-                    if when and when not in (
-                        "inbox", "today", "tomorrow", "evening", "anytime", "someday"
-                    )
+                    if when and when not in ALL_WHEN_KEYWORDS
                     else None
                 ),
                 deadline=deadline,
@@ -1282,27 +1530,49 @@ class ThingsClient:
             uuid: Task UUID
             title: New title (optional)
             notes: New notes (optional)
-            when: New when value: today, tomorrow, evening, anytime, someday, or a date (optional)
+            when: New when value: inbox, today, tomorrow, evening, anytime,
+                someday, an ISO date, or an empty string to clear the date
+                (optional)
             deadline: New deadline in YYYY-MM-DD format, or empty string to clear (optional)
-            tags: New list of tag titles (replaces existing tags) (optional)
+            tags: New list of tag titles (replaces existing tags; pass an empty
+                list to remove every tag) (optional)
             project: New project UUID to move the todo to (optional). Mutually exclusive with area.
-            area: New area UUID to move the todo to (optional, detaches from any project). Mutually exclusive with project.
+            area: New area UUID to move the todo to (optional, detaches from any
+                project), or an empty string to remove the todo from its area
+                and project. Mutually exclusive with project.
 
         Returns:
             Updated Task model
 
         Raises:
             ClientError: If todo not found or AppleScript fails
+            UnpersistedUpdateError: If any requested field did not persist
             ValueError: If both project and area are supplied
         """
         _validate_notes_length(notes)
         if project is not None and area is not None:
             raise ValueError("update_todo: pass only one of `project` or `area`, not both")
+        if project == "":
+            raise ClientError(
+                "A todo cannot be detached from a project with --project \"\". "
+                "Use --area \"\" to remove the todo from its project and area, "
+                "or --when inbox to move it to the Inbox."
+            )
 
         # Verify todo exists first and keep a pre-write snapshot. If osascript
         # times out, the AppleEvent may still have committed part of the write;
         # compare against the post-timeout SQLite state before reporting.
         before_todo = self.get_todo(uuid)
+
+        # Things refuses `when` changes on a repeating to-do through every
+        # supported channel, so reject before writing anything else.
+        if when is not None and self._is_repeating(uuid):
+            raise ClientError(
+                f"Cannot change the when field of todo {uuid} "
+                f"('{before_todo.title}'). " + REPEATING_WHEN_UNSUPPORTED
+            )
+
+        expectations: Dict[str, Any] = {}
 
         # Build property updates
         updates = []
@@ -1310,32 +1580,36 @@ class ThingsClient:
         if title is not None:
             escaped_title = self._escape_applescript_string(title)
             updates.append(f'set name of theToDo to "{escaped_title}"')
+            expectations["title"] = title
 
         if notes is not None:
             escaped_notes = self._escape_applescript_string(notes)
             updates.append(f'set notes of theToDo to "{escaped_notes}"')
+            expectations["notes"] = notes
 
-        if deadline is not None:
-            if deadline == "":
-                updates.append('set due date of theToDo to missing value')
-            else:
-                as_date = self._iso_to_applescript_date(deadline)
-                updates.append(f'set due date of theToDo to date "{as_date}"')
+        if deadline is not None and deadline != "":
+            as_date = self._iso_to_applescript_date(deadline)
+            updates.append(f'set due date of theToDo to date "{as_date}"')
+            expectations["deadline"] = self._normalize_iso_date(deadline)
 
         if tags is not None:
+            # An empty list clears every tag: Things accepts `set tag names to ""`.
             tag_str = ", ".join(tags)
             escaped_tags = self._escape_applescript_string(tag_str)
             updates.append(f'set tag names of theToDo to "{escaped_tags}"')
+            expectations["tags"] = list(tags)
 
         if project is not None:
             # Reassign the todo to a different project. Things AppleScript
             # exposes this via `set project of theToDo to project id "<uuid>"`.
             updates.append(f'set project of theToDo to project id "{project}"')
+            expectations["project_uuid"] = project
 
-        if area is not None:
+        if area is not None and area != "":
             # Reassign the todo to a different area (detaches from any project).
             # Things AppleScript: `set area of theToDo to area id "<uuid>"`.
             updates.append(f'set area of theToDo to area id "{area}"')
+            expectations["area_uuid"] = area
 
         if updates:
             updates_str = "\n            ".join(updates)
@@ -1345,88 +1619,69 @@ class ThingsClient:
                 {updates_str}
             end tell
             '''
-            try:
-                self._run_applescript(script)
-            except AppleScriptTimeoutError as exc:
-                try:
-                    after_todo = self.get_todo(uuid)
-                except ClientError:
-                    after_todo = None
-                raise ClientError(
-                    self._task_update_timeout_message(uuid, before_todo, after_todo, exc)
-                ) from exc
+            self._run_task_write(uuid, before_todo, script)
 
-        # Handle 'when' by moving to appropriate list
+        # Clears have no AppleScript path; see THINGS_URL_SCHEME_CLEAR_NOTE.
+        if deadline == "":
+            self._run_url_scheme("update", {"id": uuid, "deadline": ""})
+            expectations["deadline"] = None
+
+        if area == "":
+            self._run_url_scheme("update", {"id": uuid, "list-id": ""})
+            expectations["area_uuid"] = None
+            expectations["project_uuid"] = None
+
         if when is not None:
-            if when == 'today':
-                list_name = "Today"
-            elif when == 'tomorrow':
-                list_name = "Tomorrow"
-            elif when == 'evening':
-                list_name = "Evening"
-            elif when == 'anytime':
-                list_name = "Anytime"
-            elif when == 'someday':
-                list_name = "Someday"
-            elif when == 'inbox':
-                list_name = "Inbox"
-            elif when == '':
-                # Clear activation date
-                schedule_script = f'''
-                tell application "Things3"
-                    set theToDo to (to do id "{uuid}")
-                    set activation date of theToDo to missing value
-                end tell
-                '''
-                try:
-                    self._run_applescript(schedule_script)
-                except AppleScriptTimeoutError as exc:
-                    try:
-                        after_todo = self.get_todo(uuid)
-                    except ClientError:
-                        after_todo = None
-                    raise ClientError(
-                        self._task_update_timeout_message(uuid, before_todo, after_todo, exc)
-                    ) from exc
-                return self.get_todo(uuid)
-            else:
-                # Assume it's a date - use schedule command
-                as_date = self._iso_to_applescript_date(when)
-                schedule_script = f'''
-                tell application "Things3"
-                    schedule (to do id "{uuid}") for date "{as_date}"
-                end tell
-                '''
-                try:
-                    self._run_applescript(schedule_script)
-                except AppleScriptTimeoutError as exc:
-                    try:
-                        after_todo = self.get_todo(uuid)
-                    except ClientError:
-                        after_todo = None
-                    raise ClientError(
-                        self._task_update_timeout_message(uuid, before_todo, after_todo, exc)
-                    ) from exc
-                return self.get_todo(uuid)
+            self._apply_todo_when(uuid, before_todo, when)
+            expectations.update(self._expected_when_state(when))
 
+        after_todo = self.get_todo(uuid)
+        self._verify_persisted_updates(uuid, "todo", expectations, after_todo)
+        return after_todo
+
+    def _run_task_write(self, uuid: str, before_todo: Task, script: str) -> None:
+        """Run one todo AppleScript write, reporting durable state on timeout."""
+        try:
+            self._run_applescript(script)
+        except AppleScriptTimeoutError as exc:
+            try:
+                after_todo = self.get_todo(uuid)
+            except ClientError:
+                after_todo = None
+            raise ClientError(
+                self._task_update_timeout_message(uuid, before_todo, after_todo, exc)
+            ) from exc
+
+    def _apply_todo_when(self, uuid: str, before_todo: Task, when: str) -> None:
+        """Apply one `when` value through the channel Things supports for it."""
+        if when == "":
+            # `set activation date to missing value` is rejected (-1700) and the
+            # property is read-only in the Things AppleScript dictionary.
+            self._run_url_scheme("update", {"id": uuid, "when": ""})
+            return
+
+        if when in WHEN_URL_VALUES:
+            self._run_url_scheme("update", {"id": uuid, "when": when})
+            return
+
+        list_name = WHEN_LIST_MOVES.get(when)
+        if list_name is not None:
             move_script = f'''
             tell application "Things3"
                 set theToDo to (to do id "{uuid}")
                 move theToDo to list "{list_name}"
             end tell
             '''
-            try:
-                self._run_applescript(move_script)
-            except AppleScriptTimeoutError as exc:
-                try:
-                    after_todo = self.get_todo(uuid)
-                except ClientError:
-                    after_todo = None
-                raise ClientError(
-                    self._task_update_timeout_message(uuid, before_todo, after_todo, exc)
-                ) from exc
+            self._run_task_write(uuid, before_todo, move_script)
+            return
 
-        return self.get_todo(uuid)
+        as_date = self._iso_to_applescript_date(when)
+        schedule_script = f'''
+        tell application "Things3"
+            schedule (to do id "{uuid}") for date "{as_date}"
+        end tell
+        '''
+        self._run_task_write(uuid, before_todo, schedule_script)
 
     def create_project(
         self,
@@ -1585,16 +1840,27 @@ class ThingsClient:
             area: New area UUID, or empty string to remove from area (optional)
             when: New when value: anytime, someday (optional)
             deadline: New deadline in YYYY-MM-DD format, or empty string to clear (optional)
-            tags: New list of tag titles (replaces existing tags) (optional)
+            tags: New list of tag titles (replaces existing tags; pass an empty
+                list to remove every tag) (optional)
 
         Returns:
             Updated Project model
 
         Raises:
-            ClientError: If project not found or AppleScript fails
+            ClientError: If project not found, AppleScript fails, or `when` is
+                not one of anytime/someday
+            UnpersistedUpdateError: If any requested field did not persist
         """
         # Verify project exists first
         self.get_project(uuid)
+
+        if when is not None and when not in ("anytime", "someday"):
+            raise ClientError(
+                f"Invalid project when value '{when}'. "
+                "Use 'anytime' or 'someday'."
+            )
+
+        expectations: Dict[str, Any] = {}
 
         # Build property updates
         updates = []
@@ -1602,22 +1868,23 @@ class ThingsClient:
         if title is not None:
             escaped_title = self._escape_applescript_string(title)
             updates.append(f'set name of theProject to "{escaped_title}"')
+            expectations["title"] = title
 
         if notes is not None:
             escaped_notes = self._escape_applescript_string(notes)
             updates.append(f'set notes of theProject to "{escaped_notes}"')
+            expectations["notes"] = notes
 
-        if deadline is not None:
-            if deadline == "":
-                updates.append('set due date of theProject to missing value')
-            else:
-                as_date = self._iso_to_applescript_date(deadline)
-                updates.append(f'set due date of theProject to date "{as_date}"')
+        if deadline is not None and deadline != "":
+            as_date = self._iso_to_applescript_date(deadline)
+            updates.append(f'set due date of theProject to date "{as_date}"')
+            expectations["deadline"] = self._normalize_iso_date(deadline)
 
         if tags is not None:
             tag_str = ", ".join(tags)
             escaped_tags = self._escape_applescript_string(tag_str)
             updates.append(f'set tag names of theProject to "{escaped_tags}"')
+            expectations["tags"] = list(tags)
 
         if updates:
             updates_str = "\n            ".join(updates)
@@ -1629,16 +1896,17 @@ class ThingsClient:
             '''
             self._run_applescript(script)
 
+        if deadline == "":
+            # `set due date of theProject to missing value` fails with -1700.
+            self._run_url_scheme("update-project", {"id": uuid, "deadline": ""})
+            expectations["deadline"] = None
+
         # Handle area assignment
         if area is not None:
             if area == "":
-                # Remove from area
-                area_script = f'''
-                tell application "Things3"
-                    set theProject to project id "{uuid}"
-                    set area of theProject to missing value
-                end tell
-                '''
+                # `set area of theProject to missing value` fails with -1700.
+                self._run_url_scheme("update-project", {"id": uuid, "area-id": ""})
+                expectations["area_uuid"] = None
             else:
                 area_script = f'''
                 tell application "Things3"
@@ -1646,25 +1914,23 @@ class ThingsClient:
                     set area of theProject to area id "{area}"
                 end tell
                 '''
-            self._run_applescript(area_script)
+                self._run_applescript(area_script)
+                expectations["area_uuid"] = area
 
         # Handle 'when' by moving to appropriate list
         if when is not None:
-            if when == 'anytime':
-                list_name = "Anytime"
-            elif when == 'someday':
-                list_name = "Someday"
-            else:
-                list_name = "Anytime"  # Default
-
+            list_name = "Anytime" if when == "anytime" else "Someday"
             move_script = f'''
             tell application "Things3"
                 move project id "{uuid}" to list "{list_name}"
             end tell
             '''
             self._run_applescript(move_script)
+            expectations.update(self._expected_when_state(when))
 
-        return self.get_project(uuid)
+        project = self.get_project(uuid)
+        self._verify_persisted_updates(uuid, "project", expectations, project)
+        return project
 
     def create_area(self, title: str) -> Area:
         """Create a new area using AppleScript.
