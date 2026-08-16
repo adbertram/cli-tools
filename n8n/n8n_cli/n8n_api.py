@@ -268,11 +268,18 @@ class N8nApiClient:
         if trigger_name:
             payload["triggerToStartFrom"] = {"name": trigger_name}
 
-        return self._rest_request(
+        response = self._rest_request(
             "POST",
             f"/rest/workflows/{workflow_id}/run",
             json=payload,
         )
+        if not isinstance(response, dict) or not isinstance(
+            response.get("data"), dict
+        ):
+            raise N8nApiError(
+                "Workflow execution response did not include a data object"
+            )
+        return response["data"]
 
     def trigger_webhook(self, webhook_path: str, data: Optional[Dict] = None) -> Any:
         """Trigger a webhook on the n8n server (production path).
