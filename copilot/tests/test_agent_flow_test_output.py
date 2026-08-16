@@ -26,6 +26,43 @@ def test_agent_flow_test_result_output_is_json_only(capsys):
     assert "Invoking flow" not in captured.out
 
 
+def test_wait_for_run_includes_terminal_error(monkeypatch):
+    run_data = {
+        "properties": {
+            "status": "Failed",
+            "startTime": "2026-07-29T17:26:17Z",
+            "endTime": "2026-07-29T17:26:18Z",
+            "error": {
+                "code": "UnknownDevToolsProduct",
+                "message": "The flow run failed.",
+            },
+        }
+    }
+
+    class FakeClient:
+        def get_flow_run(self, workflow_id, run_id, expand_actions):
+            assert workflow_id == "flow-123"
+            assert run_id == "run-123"
+            assert expand_actions is True
+            return run_data
+
+    monkeypatch.setattr(
+        agent_flow,
+        "_extract_response_body",
+        lambda client, result: None,
+    )
+
+    assert agent_flow._wait_for_run(FakeClient(), "flow-123", "run-123", 1) == {
+        "run_id": "run-123",
+        "status": "Failed",
+        "duration": "1.00s",
+        "error": {
+            "code": "UnknownDevToolsProduct",
+            "message": "The flow run failed.",
+        },
+    }
+
+
 def test_agent_flow_test_manual_wait_command_returns_only_json(monkeypatch):
     run_result = {
         "run_id": "run-123",
@@ -80,6 +117,59 @@ def test_agent_flow_test_manual_wait_command_returns_only_json(monkeypatch):
     assert "Getting callback URL" not in result.output
     assert "Invoking flow" not in result.output
     assert "=== Run Result ===" not in result.output
+
+
+def test_agent_flow_test_manual_wait_failed_run_exits_nonzero_with_json(monkeypatch):
+    run_result = {
+        "run_id": "run-123",
+        "status": "Failed",
+        "duration": "1.25s",
+        "error": {
+            "code": "UnknownDevToolsProduct",
+            "message": "The flow run failed.",
+        },
+    }
+
+    class FakeClient:
+        def get_flow_callback_url(self, workflow_id):
+            assert workflow_id == "flow-123"
+            return {"response": {"value": "https://example.invalid/callback"}}
+
+        def invoke_flow_manual(self, callback_url, body_data):
+            assert callback_url == "https://example.invalid/callback"
+            assert body_data == {"prompt": "hi"}
+            return {"accepted": True}
+
+        def list_flow_runs(self, workflow_id, top):
+            assert workflow_id == "flow-123"
+            assert top == 1
+            return [{"name": "run-123"}]
+
+    monkeypatch.setattr(agent_flow, "get_client", lambda: FakeClient())
+    monkeypatch.setattr(agent_flow.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        agent_flow,
+        "_wait_for_run",
+        lambda client, workflow_id, run_id, timeout: run_result,
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        agent_flow.app,
+        [
+            "test",
+            "flow-123",
+            "--trigger",
+            "manual",
+            "--body",
+            '{"prompt": "hi"}',
+            "--wait",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert json.loads(result.stdout) == run_result
+    assert result.stderr == ""
 
 
 def test_agent_flow_test_history_returns_json_even_with_table_flag(monkeypatch):

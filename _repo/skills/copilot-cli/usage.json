@@ -1,8 +1,8 @@
 {
   "tool": "copilot",
   "description": "CLI interface for Microsoft Copilot Studio agents via Dataverse API",
-  "discovered_at": "2026-07-22T18:43:50Z",
-  "total_commands": 180,
+  "discovered_at": "2026-08-05T12:51:22Z",
+  "total_commands": 181,
   "global_options": [
     {
       "name": "--version",
@@ -670,10 +670,10 @@
               "usage_instructions": "Run `copilot agent knowledge add --help` for exact arguments and options.",
               "arguments": [
                 {
-                  "name": "[agent_id]",
-                  "type": "TEXT",
+                  "name": "agent_id",
+                  "type": "AGENT_ID",
                   "required": false,
-                  "help": "TEXT  The agent's unique identifier (GUID)"
+                  "help": "The agent's unique identifier (GUID)"
                 }
               ],
               "options": [
@@ -710,10 +710,10 @@
                   "usage_instructions": "Run `copilot agent knowledge azure-ai-search add --help` for exact arguments and options.",
                   "arguments": [
                     {
-                      "name": "[agent_id]",
-                      "type": "TEXT",
+                      "name": "agent_id",
+                      "type": "AGENT_ID",
                       "required": false,
-                      "help": "TEXT  The agent's unique identifier (GUID)"
+                      "help": "The agent's unique identifier (GUID)"
                     }
                   ],
                   "options": [
@@ -833,10 +833,10 @@
               "usage_instructions": "Run `copilot agent knowledge list --help` for exact arguments and options.",
               "arguments": [
                 {
-                  "name": "[agent_id]",
-                  "type": "TEXT",
+                  "name": "agent_id",
+                  "type": "AGENT_ID",
                   "required": false,
-                  "help": "TEXT  The agent's unique identifier (GUID)"
+                  "help": "The agent's unique identifier (GUID)"
                 }
               ],
               "options": [
@@ -939,10 +939,10 @@
               "usage_instructions": "Run `copilot agent knowledge upload --help` for exact arguments and options.",
               "arguments": [
                 {
-                  "name": "[agent_id]",
-                  "type": "TEXT",
+                  "name": "agent_id",
+                  "type": "AGENT_ID",
                   "required": false,
-                  "help": "TEXT  The agent's unique identifier (GUID)"
+                  "help": "The agent's unique identifier (GUID)"
                 }
               ],
               "options": [
@@ -1143,19 +1143,7 @@
                   "name": "model",
                   "type": "TEXT",
                   "required": true,
-                  "help": "Model ID or canonical kind:hint (for example: gpt-4.1, gpt-5-chat, DefaultModels:GPT4.1, ChatPreviewModels:GPT5Chat). Use 'copilot agent model list' to see supported"
-                },
-                {
-                  "name": "models.",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": ""
-                },
-                {
-                  "name": "[required]",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": ""
+                  "help": "Model ID or canonical kind:hint (for example: gpt-4.1, gpt-5-chat, DefaultModels:GPT4.1, ChatPreviewModels:GPT5Chat). Use 'copilot agent model list' to see supported models"
                 }
               ],
               "options": [
@@ -2605,7 +2593,7 @@
           ]
         },
         "export": {
-          "help": "Export an agent flow's definition as YAML or JSON. Retrieves the flow's definition including triggers, actions, and connection references. The output can be used for documentation, backup, or as a template for creating similar flows. By default, outputs the published version of the flow. Use --draft to get the draft version (for solution-aware flows with versioning). Use --definition-only to output just the flow definition. Use --yaml for human-readable YAML format.",
+          "help": "Export an agent flow's definition as YAML or JSON. Retrieves the flow's definition including triggers, actions, and connection references. The output can be used for documentation, backup, or as a template for creating similar flows. By default, outputs the published version of the flow. Use --draft to get the unpublished draft that a \"Save draft\" in the web designer left behind. --draft fails when no unpublished draft exists, so published content is never labeled as a draft. Use --definition-only to output just the flow definition. Use --yaml for human-readable YAML format.",
           "examples": [
             "copilot agent-flow export <flow-id>",
             "copilot agent-flow export <flow-id> --yaml",
@@ -2656,7 +2644,7 @@
               "name": "--draft",
               "type": "bool",
               "required": false,
-              "help": "Export the draft version instead of published (for solution-aware flows with drafts)"
+              "help": "Export the unpublished (draft) definition. Fails when the flow has no unpublished draft instead of returning published content labeled 'draft'"
             },
             {
               "name": "--profile",
@@ -2750,6 +2738,18 @@
               "short": "-W"
             },
             {
+              "name": "--discard-draft",
+              "type": "bool",
+              "required": false,
+              "help": "Resolve an existing unpublished web-designer draft by publishing it and then overwriting it with the imported definition. The draft edits are lost"
+            },
+            {
+              "name": "--publish",
+              "type": "bool",
+              "required": false,
+              "help": "Publish the flow after the import so the imported definition goes live"
+            },
+            {
               "name": "--profile",
               "type": "TEXT",
               "required": false,
@@ -2818,6 +2818,25 @@
           "usage_instructions": "Run `copilot agent-flow permissions --help` for exact arguments and options.",
           "arguments": [],
           "options": []
+        },
+        "publish": {
+          "help": "Publish an agent flow's pending definition. Promotes the flow's unpublished (draft) definition to the published definition using the Dataverse PublishXml action. Use this to keep the edits made with \"Save draft\" in the web designer, and to clear the ActiveUnpublished state that blocks 'agent-flow import'.",
+          "arguments": [
+            {
+              "name": "workflow_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The agent flow's unique identifier (GUID)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "remove": {
           "help": "Remove (delete) an agent flow. Deletes both draft and published agent flows. For published flows, the flow is automatically deactivated before deletion. This operation removes both the draft (definition) and published (activation) versions of the flow if they exist. WARNING: This action is irreversible. The flow and all its run history will be permanently deleted.",
@@ -3203,10 +3222,10 @@
           "usage_instructions": "Run `copilot agent-flow validate --help` for exact arguments and options.",
           "arguments": [
             {
-              "name": "[file]",
-              "type": "TEXT",
+              "name": "file",
+              "type": "FILE",
               "required": false,
-              "help": "TEXT  Path to YAML or JSON file containing the flow definition"
+              "help": "Path to YAML or JSON file containing the flow definition"
             }
           ],
           "options": [
@@ -4101,7 +4120,7 @@
           "options": [],
           "commands": {
             "check-drive": {
-              "help": "Check if a user's OneDrive for Business has been provisioned. By default, uses the current az CLI login context. If --password and --tenant-id are provided, authenticates as the user via ROPC instead. - HTTP 200: OneDrive is provisioned (prints drive info, exit 0) - HTTP 404: OneDrive is NOT provisioned (prints remediation, exit 1) - Other errors: prints error details, exit 1",
+              "help": "{user_principal_name} Check if a user's OneDrive for Business has been provisioned. By default, uses the current az CLI login context. If --password and --tenant-id are provided, authenticates as the user via ROPC instead. - HTTP 200: OneDrive is provisioned (prints drive info, exit 0) - HTTP 404: OneDrive is NOT provisioned (prints remediation, exit 1) - Other errors: prints error details, exit 1",
               "examples": [
                 "copilot connections onedrive check-drive user@domain.com",
                 "copilot connections onedrive check-drive user@domain.com -p 'secret' -t <tenant-id>"

@@ -103,6 +103,17 @@ Diagnose by running both paths against the same agent minutes apart — direct f
 Fix: use delegated (user) auth — run with a profile that has no service-principal secret so the device-code sign-in flow runs — or have an admin enable app-only S2S access for the environment. This is an environment/tenant policy, not a CLI defect; the CLI now prints this cause and fix when it detects the condition.
 </gotcha>
 
+<gotcha name="Dataverse Web API commands can use service-principal auth (non-interactive); Copilot Studio conversations cannot">
+**A profile that sets `AZURE_TENANT_ID` + `AZURE_CLIENT_ID` + `AZURE_CLIENT_SECRET` (in addition to `DATAVERSE_URL`) automatically switches ALL Dataverse Web API command groups** — `connections`, `connection-references`, `agent-flow`, `solution`, `agent` CRUD (everything routed through `client.get_client()`) — **to MSAL client-credentials auth instead of `az login`.** `Config.get_auth_method()` is the single source of truth: it returns `service_principal` only when all four fields are present (`has_service_principal_auth()`), otherwise `azure_cli`. This is a deterministic per-profile choice, not a try-then-fallback — a profile is either fully opted into service-principal auth or it uses delegated `az login` auth, never both in the same call.
+
+This exists specifically to avoid the ~30-day Entra conditional-access sign-in-frequency expiry that delegated `az login` sessions hit (`AADSTS70043`) — service principals have no interactive user session and are not subject to that policy. To activate it for a profile:
+1. An Azure AD app registration with a client secret (an existing one can be reused — it does not need `Access Dynamics 365 as organization users` delegated permission for this path).
+2. **A Dataverse Application User for that app, in the target environment, bound to a security role** (Power Platform admin center → environment → Settings → Users + permissions → Application users → New app user → search by Application/Client ID → assign a role). Without this, every call fails `HTTP 403: The user is not a member of the organization.` even though MSAL successfully issues a token — Entra ID and Dataverse are separate trust boundaries here.
+3. Set the profile's `AZURE_CLIENT_ID` (Dataverse-specific field — do not confuse with `ENTRA_CLIENT_ID`, the M365 SDK's public-client field used by `agent prompt`; both can hold the same app ID but are read by different code paths) and `AZURE_CLIENT_SECRET=secret://<name>` via the CLI-tools secret manager.
+
+**This does NOT extend to `copilot agent prompt`** (Copilot Studio Direct-to-Engine conversations) — that surface has its own, usually-disabled app-only S2S gate; see the "405 'App-only S2S access is not enabled'" gotcha above. Service-principal auth here only covers the Dataverse Web API command surface, not conversational/runtime agent invocation.
+</gotcha>
+
 <gotcha name="auth status: unauthenticated profile exits 2 with JSON status data">
 `copilot auth status --profile default` can exit `2` for an unauthenticated
 profile while still returning structured JSON that includes `"authenticated":

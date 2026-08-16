@@ -272,10 +272,16 @@ class Config(BaseConfig):
         return bool(self.dataverse_url)
 
     def get_auth_method(self) -> str:
-        if self.has_cli_auth():
-            return "azure_cli"
-        elif self.has_service_principal_auth():
+        # Service principal is checked first: it requires the full
+        # tenant_id/client_id/client_secret quad, so it is only chosen when a
+        # profile has explicitly opted into non-interactive client-credential
+        # auth. `has_cli_auth()` only requires DATAVERSE_URL (always set), so
+        # checking it first would make the service-principal branch
+        # unreachable for every profile.
+        if self.has_service_principal_auth():
             return "service_principal"
+        elif self.has_cli_auth():
+            return "azure_cli"
         else:
             return "none"
 

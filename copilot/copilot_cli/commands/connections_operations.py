@@ -4,7 +4,12 @@ import json
 import typer
 from typing import Optional, List
 
-from ..client import get_client, get_access_token, ClientError
+from ..client import (
+    ClientError,
+    get_access_token,
+    get_client,
+    resolve_swagger_parameters,
+)
 from cli_tools_shared.output import print_json, print_table, handle_error
 
 
@@ -54,11 +59,15 @@ def _extract_operations_from_swagger(swagger: dict) -> list:
             if not op_id:
                 continue
 
-            # Extract parameters
+            # Extract parameters. Shared parameters are stored as local "$ref"
+            # pointers into the swagger's top-level "parameters" section, so they
+            # must be resolved before name/in/type are readable.
             params = []
-            for param in details.get("parameters", []):
+            for param in resolve_swagger_parameters(
+                swagger, op_id, details.get("parameters", [])
+            ):
                 params.append({
-                    "name": param.get("name", ""),
+                    "name": param["name"],
                     "in": param.get("in", ""),
                     "required": param.get("required", False),
                     "type": param.get("type", param.get("schema", {}).get("type", "")),

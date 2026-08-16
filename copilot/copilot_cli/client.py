@@ -81,6 +81,146 @@ class ClientError(Exception):
     pass
 
 
+# Dataverse componentversion "operation" option values, read live from
+# EntityDefinitions(LogicalName='componentversion')/Attributes(LogicalName='operation').
+AGENT_FLOW_VERSION_OPERATION_LABELS = {
+    0: "Create",
+    1: "Update",
+    2: "Publish",
+    3: "Restore",
+    4: "Solution Import",
+}
+
+# Newest-version operations that leave the component's active row unpublished.
+# "Save draft" in the web designer records an Update; "Restore" replays a past
+# version as the newest draft. Both leave a pending draft that blocks a
+# published definition update.
+AGENT_FLOW_UNPUBLISHED_VERSION_OPERATIONS = frozenset({1, 3})
+
+# Dataverse solution-layer 400 raised when a published update is attempted while
+# an unpublished active row exists. Component type 29 is the Workflow (Process)
+# table.
+_ACTIVE_UNPUBLISHED_MARKERS = (
+    "activeunpublished",
+    "unpublished active row",
+)
+
+
+def resolve_swagger_parameters(
+    swagger: dict, operation_id: str, parameters: list
+) -> list[dict]:
+    """
+    Resolve a Swagger 2.0 operation's parameter list into fully named parameters.
+
+    Connector swaggers routinely express shared parameters as a local JSON
+    pointer, e.g. ``{"$ref": "#/parameters/DynamicApprovalType"}``. Those entries
+    carry no ``name``/``in``/``type`` of their own, so any code that reads
+    ``param["name"]`` directly raises a bare ``KeyError``. Resolving the pointer
+    against the swagger's shared ``parameters`` section restores the real
+    definition (for ``DynamicApprovalType`` that is the required ``approvalType``
+    path parameter).
+
+    Args:
+        swagger: The full connector swagger document
+        operation_id: The operationId being resolved (used in error messages)
+        parameters: The operation's raw ``parameters`` list
+
+    Returns:
+        List of parameter dicts, each with a non-empty ``name``
+
+    Raises:
+        ClientError: If a ``$ref`` cannot be resolved or a parameter has no name
+    """
+    resolved: list[dict] = []
+
+    for index, param in enumerate(parameters):
+        if not isinstance(param, dict):
+            raise ClientError(
+                f"Operation '{operation_id}' parameter #{index} is "
+                f"{type(param).__name__}, not an object. The connector swagger is "
+                "malformed; report it to the connector publisher."
+            )
+
+        definition = param
+        ref = param.get("$ref")
+        if ref:
+            if not ref.startswith("#/"):
+                raise ClientError(
+                    f"Operation '{operation_id}' parameter #{index} uses the external "
+                    f"reference '{ref}', which this CLI cannot resolve. Only local "
+                    "'#/...' swagger references are supported."
+                )
+            node: Any = swagger
+            for segment in ref[2:].split("/"):
+                segment = segment.replace("~1", "/").replace("~0", "~")
+                if not isinstance(node, dict) or segment not in node:
+                    available = sorted(node.keys()) if isinstance(node, dict) else []
+                    raise ClientError(
+                        f"Operation '{operation_id}' parameter #{index} references "
+                        f"'{ref}', but segment '{segment}' is not present in the "
+                        f"connector swagger. Available keys at that level: {available}"
+                    )
+                node = node[segment]
+            if not isinstance(node, dict):
+                raise ClientError(
+                    f"Operation '{operation_id}' parameter #{index} references '{ref}', "
+                    f"which resolved to {type(node).__name__} instead of a parameter object."
+                )
+            # Sibling keys alongside "$ref" override the referenced definition.
+            definition = {**node, **{k: v for k, v in param.items() if k != "$ref"}}
+
+        name = definition.get("name")
+        if not name:
+            raise ClientError(
+                f"Operation '{operation_id}' parameter #{index} has no 'name' in the "
+                "connector swagger, so it cannot be matched to a --param value. "
+                f"Parameter definition: {json.dumps(definition)[:300]}"
+            )
+
+        resolved.append(definition)
+
+    return resolved
+
+
+def is_active_unpublished_conflict(message: str) -> bool:
+    """Return True when a Dataverse error is the ActiveUnpublished publish conflict."""
+    lowered = message.lower()
+    return any(marker in lowered for marker in _ACTIVE_UNPUBLISHED_MARKERS)
+
+
+def _agent_flow_draft_conflict_message(
+    state: dict, dataverse_error: Optional[str] = None
+) -> str:
+    """Build the actionable message for an agent flow blocked by an unpublished draft."""
+    lines = [
+        f"Agent flow '{state.get('name', '')}' ({state.get('workflowid')}) has an "
+        "unpublished draft in Dataverse, so its definition cannot be updated.",
+        "",
+        "Cause: saving a draft in the Power Automate / Copilot Studio web designer "
+        "leaves the flow's active row in the ActiveUnpublished state (Dataverse "
+        "component type 29 = Workflow). Dataverse refuses a published definition "
+        "update while that draft exists.",
+    ]
+    evidence = state.get("draft_evidence")
+    if evidence:
+        lines += ["", f"Detected because {evidence}."]
+    if dataverse_error:
+        lines += ["", f"Dataverse reported: {dataverse_error}"]
+    lines += [
+        "",
+        "Resolve it with one of:",
+        "  1. Open the flow in the web designer and select Publish to keep the draft "
+        "edits, then re-run this import.",
+        "  2. Re-run this command with --discard-draft to publish the pending draft "
+        "and immediately overwrite it with the imported definition. The draft edits "
+        "are lost.",
+        "",
+        "Inspect the draft first with: copilot agent-flow export "
+        f"{state.get('workflowid')} --draft --yaml",
+    ]
+    return "\n".join(lines)
+
+
 def _needs_mustache_template_format(text: str) -> bool:
     """
     Return True if `text` requires the Custom GPT botcomponent's TemplateLine
@@ -5895,6 +6035,138 @@ schemaName: {schema_name}
         self.patch(f"workflows({workflow_id})", data)
         return {}
 
+    def get_agent_flow_publish_state(self, workflow_id: str) -> dict:
+        """
+        Read an agent flow's published and unpublished (draft) publish state.
+
+        Dataverse stores a publishable component twice: the published row that a
+        plain ``GET workflows(id)`` returns, and the unpublished row that the
+        ``RetrieveUnpublished`` function returns. Microsoft documents that the
+        two reads return different data only when the record was updated but not
+        published — which is exactly the ``ActiveUnpublished`` condition that a
+        "Save draft" in the Power Automate / Copilot Studio web designer leaves
+        behind.
+
+        Version history for solution-aware cloud flows lives in the component
+        version rows exposed through the ``componentversionnrddatasourceset``
+        navigation property. The newest row's ``operation`` value says whether
+        the newest version was published (``Publish``) or only saved
+        (``Update`` / ``Restore``).
+
+        Args:
+            workflow_id: The agent flow's unique identifier (GUID)
+
+        Returns:
+            Dict containing:
+                - workflowid / name / description / statecode / type
+                - published_clientdata: clientdata of the published row ("" when
+                  the flow has no published row)
+                - unpublished_clientdata: clientdata of the unpublished row
+                - published_exists: True when a published row was returned
+                - has_unpublished_draft: True when an unpublished draft exists
+                - draft_evidence: human readable reason the draft was detected
+                - latest_version_operation / latest_version_operation_label /
+                  latest_version_createdon: newest component version metadata
+
+        Raises:
+            ClientError: If the flow is not found
+        """
+        select = "workflowid,name,description,clientdata,statecode,type,category"
+
+        published: Optional[dict] = None
+        published_error: Optional[str] = None
+        try:
+            published = self.get(f"workflows({workflow_id})?$select={select}")
+        except ClientError as e:
+            if "404" not in str(e):
+                raise
+            published_error = str(e)
+
+        try:
+            unpublished = self.get(
+                f"workflows({workflow_id})/Microsoft.Dynamics.CRM.RetrieveUnpublished()"
+                f"?$select={select}"
+            )
+        except ClientError as e:
+            if "404" in str(e) and published is None:
+                raise ClientError(f"Agent flow {workflow_id} not found")
+            raise
+
+        published_clientdata = (published or {}).get("clientdata") or ""
+        unpublished_clientdata = unpublished.get("clientdata") or ""
+
+        versions = self.get(
+            f"workflows({workflow_id})/componentversionnrddatasourceset"
+            "?$select=componentversionnrddatasourceid,operation,createdon,componentversionname"
+            "&$orderby=createdon desc&$top=1"
+        ).get("value", [])
+        latest_version = versions[0] if versions else {}
+        latest_operation = latest_version.get("operation")
+
+        evidence: list[str] = []
+        if published is None:
+            evidence.append(
+                "the flow has no published row in Dataverse "
+                f"(published read failed: {published_error})"
+            )
+        elif published_clientdata != unpublished_clientdata:
+            evidence.append(
+                "RetrieveUnpublished returned a different definition than the "
+                f"published row ({len(unpublished_clientdata)} vs "
+                f"{len(published_clientdata)} clientdata characters)"
+            )
+        if latest_operation in AGENT_FLOW_UNPUBLISHED_VERSION_OPERATIONS:
+            evidence.append(
+                "the newest component version is "
+                f"'{AGENT_FLOW_VERSION_OPERATION_LABELS.get(latest_operation, latest_operation)}'"
+                f" (created {latest_version.get('createdon')}), not 'Publish'"
+            )
+
+        source = published if published is not None else unpublished
+        return {
+            "workflowid": source.get("workflowid", workflow_id),
+            "name": source.get("name", ""),
+            "description": source.get("description", ""),
+            "statecode": source.get("statecode"),
+            "type": source.get("type"),
+            "published_exists": published is not None,
+            "published_clientdata": published_clientdata,
+            "unpublished_clientdata": unpublished_clientdata,
+            "has_unpublished_draft": bool(evidence),
+            "draft_evidence": "; ".join(evidence),
+            "latest_version_operation": latest_operation,
+            "latest_version_operation_label": AGENT_FLOW_VERSION_OPERATION_LABELS.get(
+                latest_operation
+            ),
+            "latest_version_createdon": latest_version.get("createdon"),
+        }
+
+    def publish_agent_flow(self, workflow_id: str) -> dict:
+        """
+        Publish an agent flow's pending definition with the PublishXml action.
+
+        ``PublishXml`` is the documented Dataverse message for publishing a
+        specific solution component. Publishing promotes the flow's unpublished
+        row to the published row, which clears the ``ActiveUnpublished`` state
+        that blocks a definition update.
+
+        Args:
+            workflow_id: The agent flow's unique identifier (GUID)
+
+        Returns:
+            Dict with the flow ID and publish status
+
+        Raises:
+            ClientError: If the publish request fails
+        """
+        parameter_xml = (
+            "<importexportxml><workflows>"
+            f"<workflow>{workflow_id}</workflow>"
+            "</workflows></importexportxml>"
+        )
+        self.post("PublishXml", {"ParameterXml": parameter_xml})
+        return {"workflowid": workflow_id, "status": "published"}
+
     def export_agent_flow(self, workflow_id: str, draft: bool = False) -> dict:
         """
         Export an agent flow's definition.
@@ -5904,9 +6176,10 @@ schemaName: {schema_name}
 
         Args:
             workflow_id: The agent flow's unique identifier (GUID)
-            draft: If True, retrieve the draft version instead of published.
-                   For solution-aware flows, draft and published versions are
-                   stored as separate workflow records.
+            draft: If True, return the unpublished (draft) definition read
+                   through ``RetrieveUnpublished``. Raises ``ClientError`` when
+                   the flow has no unpublished draft, so published content is
+                   never labeled ``draft``.
 
         Returns:
             Dict containing:
@@ -5917,69 +6190,58 @@ schemaName: {schema_name}
                 - connectionReferences: Connection references used by the flow
                 - raw_clientdata: Original clientdata string (for debugging)
                 - version: "draft" or "published" indicating which version
+                - has_unpublished_draft: True when an unpublished draft exists
 
         Raises:
-            ClientError: If the flow is not found or clientdata is missing
+            ClientError: If the flow is not found, clientdata is missing, or
+                ``draft`` was requested and no unpublished draft exists
         """
-        # Fetch workflow with clientdata field, including type and parentworkflowid
-        endpoint = (
-            f"workflows({workflow_id})"
-            "?$select=workflowid,name,description,clientdata,statecode,category,type,parentworkflowid"
-        )
-        flow = self.get(endpoint)
+        state = self.get_agent_flow_publish_state(workflow_id)
+        return self._build_agent_flow_export(state, draft=draft)
+
+    def _build_agent_flow_export(self, state: dict, draft: bool = False) -> dict:
+        """Turn a publish-state read into an export payload.
+
+        Split out so ``import_agent_flow`` can reuse a publish-state read it has
+        already made instead of querying Dataverse twice.
+        """
+        workflow_id = state["workflowid"]
 
         if draft:
-            # For draft version, we need to find the definition record (type=1)
-            # If current workflow is type=2 (Activation), find its parent
-            # If current workflow is type=1 (Definition), use it directly
-            workflow_type = flow.get("type")
+            if not state["has_unpublished_draft"]:
+                raise ClientError(
+                    f"Agent flow '{state['name']}' ({workflow_id}) has no unpublished "
+                    "draft: the Dataverse unpublished row matches the published row "
+                    "and the newest component version is published. Re-run without "
+                    "--draft to export the published definition. If the web designer "
+                    "shows this flow as 'Draft', the draft has not reached the "
+                    "Dataverse unpublished layer this CLI reads — publish it in the "
+                    "designer first."
+                )
+            clientdata_str = state["unpublished_clientdata"]
+            version = "draft"
+        else:
+            if not state["published_exists"]:
+                raise ClientError(
+                    f"Agent flow '{state['name']}' ({workflow_id}) has no published "
+                    "definition in Dataverse. Use --draft to export the unpublished "
+                    "definition, or publish the flow first."
+                )
+            clientdata_str = state["published_clientdata"]
+            version = "published"
 
-            if workflow_type == 2:
-                # This is an activation, get the parent (definition) workflow
-                parent_id = flow.get("_parentworkflowid_value") or flow.get("parentworkflowid")
-                if parent_id:
-                    endpoint = (
-                        f"workflows({parent_id})"
-                        "?$select=workflowid,name,description,clientdata,statecode,category,type"
-                    )
-                    flow = self.get(endpoint)
-                else:
-                    # Try to find definition by name with type=1
-                    flow_name = flow.get("name", "")
-                    search_endpoint = (
-                        f"workflows?$filter=name eq '{flow_name}' and type eq 1"
-                        "&$select=workflowid,name,description,clientdata,statecode,category,type"
-                        "&$top=1"
-                    )
-                    results = self.get(search_endpoint)
-                    flows = results.get("value", [])
-                    if flows:
-                        flow = flows[0]
-                    else:
-                        raise ClientError(
-                            f"Draft version not found for workflow {workflow_id}. "
-                            "The flow may not have a separate draft version."
-                        )
-
-        if not flow:
-            raise ClientError(f"Agent flow {workflow_id} not found")
-
-        actual_workflow_id = flow.get("workflowid", workflow_id)
-        clientdata_str = flow.get("clientdata", "")
         if not clientdata_str:
             raise ClientError(
-                f"Agent flow {actual_workflow_id} has no clientdata. "
+                f"Agent flow {workflow_id} has no {version} clientdata. "
                 "This may not be a modern flow or the definition is empty."
             )
 
-        # Parse the clientdata JSON
         try:
             clientdata = json.loads(clientdata_str)
         except json.JSONDecodeError as e:
             raise ClientError(f"Failed to parse flow clientdata: {e}")
 
-        # Extract the flow definition and connection references
-        # clientdata typically has structure: {"properties": {"definition": {...}, "connectionReferences": {...}}}
+        # clientdata structure: {"properties": {"definition": {...}, "connectionReferences": {...}}}
         properties = clientdata.get("properties", {})
         definition = properties.get("definition", clientdata.get("definition", {}))
         connection_refs = properties.get(
@@ -5987,20 +6249,17 @@ schemaName: {schema_name}
             clientdata.get("connectionReferences", {})
         )
 
-        # Determine version type based on workflow type field
-        workflow_type = flow.get("type")
-        version = "draft" if workflow_type == 1 else "published" if workflow_type == 2 else "unknown"
-
         return {
-            "name": flow.get("name", ""),
-            "workflowid": actual_workflow_id,
-            "description": flow.get("description", ""),
+            "name": state["name"],
+            "workflowid": workflow_id,
+            "description": state["description"],
             "definition": definition,
             "connectionReferences": connection_refs,
             "raw_clientdata": clientdata_str,
             "version": version,
-            "statecode": flow.get("statecode"),
-            "type": workflow_type,
+            "has_unpublished_draft": state["has_unpublished_draft"],
+            "statecode": state["statecode"],
+            "type": state["type"],
         }
 
     def import_agent_flow(
@@ -6008,6 +6267,8 @@ schemaName: {schema_name}
         workflow_id: str,
         definition: dict,
         connection_references: Optional[dict] = None,
+        discard_draft: bool = False,
+        publish: bool = False,
     ) -> dict:
         """
         Import/update an agent flow's definition.
@@ -6015,23 +6276,48 @@ schemaName: {schema_name}
         Updates the flow's clientdata field with a new definition. Can optionally
         update connection references as well.
 
+        A definition update is a *published* update of a publishable Dataverse
+        component. Dataverse rejects it with HTTP 400 while an unpublished
+        (``ActiveUnpublished``) row exists — the state a "Save draft" in the web
+        designer leaves behind. This method reads the publish state first and
+        refuses with an actionable message instead of leaking that raw error.
+
         Args:
             workflow_id: The agent flow's unique identifier (GUID)
             definition: The flow definition dict (triggers, actions, parameters, etc.)
             connection_references: Optional dict of connection references. If not
                 provided, existing connection references are preserved.
+            discard_draft: Opt in to resolving an existing unpublished draft by
+                publishing it and then overwriting it with ``definition``. The
+                draft's edits are lost.
+            publish: Publish the flow after the definition update so the imported
+                definition becomes the published version.
 
         Returns:
             Dict with update status
 
         Raises:
-            ClientError: If the flow is not found or update fails
+            ClientError: If the flow is not found, an unpublished draft blocks
+                the update, or the update fails
         """
-        # First, get the current flow to retrieve existing clientdata structure
-        current_flow = self.export_agent_flow(workflow_id)
+        state = self.get_agent_flow_publish_state(workflow_id)
+
+        if state["has_unpublished_draft"]:
+            if not discard_draft:
+                raise ClientError(_agent_flow_draft_conflict_message(state))
+            self.publish_agent_flow(workflow_id)
+            state = self.get_agent_flow_publish_state(workflow_id)
+            if state["has_unpublished_draft"]:
+                raise ClientError(
+                    f"Agent flow '{state['name']}' ({workflow_id}) still reports an "
+                    "unpublished draft after --discard-draft published it. "
+                    f"Evidence: {state['draft_evidence']}. Resolve the draft in the "
+                    "web designer before importing."
+                )
 
         # If no connection_references provided, preserve existing ones
         if connection_references is None:
+            current_flow = self._build_agent_flow_export(state)
             connection_references = current_flow.get("connectionReferences", {})
 
         # Build the new clientdata structure
@@ -6057,13 +6343,27 @@ schemaName: {schema_name}
             )
 
         # Update the workflow
-        self.patch(f"workflows({workflow_id})", {"clientdata": clientdata_str})
+        try:
+            self.patch(f"workflows({workflow_id})", {"clientdata": clientdata_str})
+        except ClientError as e:
+            if is_active_unpublished_conflict(str(e)):
+                raise ClientError(
+                    _agent_flow_draft_conflict_message(state, dataverse_error=str(e))
+                )
+            raise
 
-        return {
+        result = {
             "workflowid": workflow_id,
             "status": "updated",
-            "message": f"Flow definition updated successfully",
+            "message": "Flow definition updated successfully",
         }
+
+        if publish:
+            self.publish_agent_flow(workflow_id)
+            result["status"] = "updated and published"
+            result["message"] = "Flow definition updated and published successfully"
+
+        return result
 
     def create_agent_flow(
         self,
@@ -9321,8 +9621,14 @@ schemaName: {schema_name}
 
         url_path = target_path
 
-        # Classify parameters from swagger definition
-        swagger_params = {p["name"]: p for p in target_op.get("parameters", [])}
+        # Classify parameters from swagger definition. Shared parameters arrive as
+        # local "$ref" pointers and must be resolved before they can be named.
+        swagger_params = {
+            p["name"]: p
+            for p in resolve_swagger_parameters(
+                swagger, operation_id, target_op.get("parameters", [])
+            )
+        }
 
         # Replace path parameters (including {connectionId})
         path_params = {
@@ -11107,13 +11413,33 @@ def _get_access_token_from_service_principal(resource: str) -> str:
 def get_access_token(resource: str) -> str:
     """Get an access token for general CLI operations.
 
-    The public Copilot CLI contract uses Azure CLI delegated auth for its
-    normal Dataverse/Graph command surface. Service principal credentials can
-    coexist in the active profile for command groups that explicitly opt into
-    client-credential auth, but they must not silently hijack the default
-    Dataverse client path.
+    Dispatches on the active profile's ``get_auth_method()``:
+
+    - ``service_principal`` — profile has AZURE_TENANT_ID, AZURE_CLIENT_ID,
+      and AZURE_CLIENT_SECRET all set (in addition to DATAVERSE_URL). Uses
+      MSAL client-credentials auth, which is not subject to interactive
+      user sign-in-frequency conditional access policies.
+    - ``azure_cli`` — profile has only DATAVERSE_URL (plus optionally
+      AZURE_CLI_EXPECTED_USER/AZURE_TENANT_ID for identity validation). Uses
+      delegated ``az login`` auth as before.
+
+    A profile opts into service-principal auth by setting all three
+    AZURE_TENANT_ID/AZURE_CLIENT_ID/AZURE_CLIENT_SECRET fields; profiles
+    that only set DATAVERSE_URL keep today's Azure CLI behavior unchanged.
     """
-    return get_access_token_from_azure_cli(resource)
+    from cli_tools_shared.exceptions import CredentialError
+
+    config = get_config()
+    auth_method = config.get_auth_method()
+    if auth_method == "service_principal":
+        return _get_access_token_from_service_principal(resource)
+    if auth_method == "azure_cli":
+        return get_access_token_from_azure_cli(resource)
+    raise CredentialError(
+        "No usable credentials for the active copilot profile. Run "
+        "'copilot auth login' (Azure CLI) or configure AZURE_TENANT_ID/"
+        "AZURE_CLIENT_ID/AZURE_CLIENT_SECRET (service principal)."
+    )
 
 
 def get_client_for_environment(environment_id: str) -> "DataverseClient":

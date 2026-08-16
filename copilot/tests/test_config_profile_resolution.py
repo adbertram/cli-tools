@@ -142,12 +142,19 @@ def test_mcp_token_acquisition_uses_only_active_profile(tmp_path, monkeypatch):
         )
 
 
-def test_general_access_token_uses_azure_cli_even_when_service_principal_fields_exist(monkeypatch):
-    """Normal CLI commands must keep using Azure CLI delegated auth.
+def test_general_access_token_uses_service_principal_when_fully_configured(monkeypatch):
+    """Normal CLI commands must use service-principal auth once a profile has
+    fully opted in (AZURE_TENANT_ID + AZURE_CLIENT_ID + AZURE_CLIENT_SECRET
+    all set, in addition to DATAVERSE_URL).
 
-    Profiles can carry client-secret fields for specific command groups, but
-    the shared Dataverse/Graph token path must not silently switch the whole
-    CLI onto service-principal auth.
+    A profile is either an Azure-CLI (delegated, interactive) profile or a
+    service-principal (client-credentials, non-interactive) profile — never
+    a silent try-one-then-the-other fallback. ``get_auth_method()`` is the
+    single source of truth for which one a given profile is; this test
+    covers the branch where both credential sets happen to be present
+    (e.g. a profile mid-migration from Azure CLI to service principal),
+    where service principal must win because it is the non-interactive,
+    conditional-access-safe path.
     """
 
     class MixedAuthConfig:
@@ -156,6 +163,9 @@ def test_general_access_token_uses_azure_cli_even_when_service_principal_fields_
 
         def has_cli_auth(self):
             return True
+
+        def get_auth_method(self):
+            return "service_principal"
 
     seen = {}
 
@@ -176,11 +186,18 @@ def test_general_access_token_uses_azure_cli_even_when_service_principal_fields_
 
     token = copilot_client.get_access_token("https://graph.microsoft.com")
 
-    assert token == "azure-cli-token"
-    assert seen == {"azure_cli": "https://graph.microsoft.com"}
+    assert token == "service-principal-token"
+    assert seen == {"service_principal": "https://graph.microsoft.com"}
 
 
-def test_config_prefers_azure_cli_auth_method_for_mixed_profiles(tmp_path, monkeypatch):
+def test_config_prefers_service_principal_auth_method_for_mixed_profiles(tmp_path, monkeypatch):
+    """When a profile has both Azure CLI fields (DATAVERSE_URL, and
+    optionally AZURE_CLI_EXPECTED_USER/AZURE_TENANT_ID) and a full
+    service-principal credential set, service principal wins. It is the
+    more specific, fully-opted-in, non-interactive configuration and is not
+    subject to interactive user sign-in-frequency conditional access
+    policies the way delegated Azure CLI auth is.
+    """
     profiles = _setup_profiles_dir(tmp_path, monkeypatch)
 
     profile = profiles / "default" / ".env"
@@ -199,4 +216,4 @@ def test_config_prefers_azure_cli_auth_method_for_mixed_profiles(tmp_path, monke
 
     config = Config()
 
-    assert config.get_auth_method() == "azure_cli"
+    assert config.get_auth_method() == "service_principal"

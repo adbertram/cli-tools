@@ -10,6 +10,104 @@ import re
 from typing import Any, Optional
 
 
+# Lowercased Logic Apps / Power Automate operation types that are backed by a
+# connector and therefore bind to '$connections' and a connection reference.
+# Operation types are compared case-insensitively.
+CONNECTOR_OPERATION_TYPES = frozenset({
+    "openapiconnection",
+    "openapiconnectionwebhook",
+    "openapiconnectionnotification",
+    "apiconnection",
+    "apiconnectionwebhook",
+    "apiconnectionnotification",
+})
+
+
+@dataclass(frozen=True)
+class ConnectorOperation:
+    """A connector-backed trigger or action found in a flow definition."""
+
+    name: str  # Leaf operation name, e.g. "Start_and_wait_for_an_approval"
+    path: str  # Full path, e.g. "actions.Condition.else.actions.Approve"
+    node: dict  # The operation definition itself
+
+    @property
+    def kind(self) -> str:
+        """Return 'Trigger' for trigger operations and 'Action' otherwise."""
+        return "Trigger" if self.path.startswith("triggers.") else "Action"
+
+    @property
+    def inputs(self) -> dict:
+        """Return the operation inputs, or an empty mapping when absent."""
+        inputs = self.node.get("inputs")
+        return inputs if isinstance(inputs, dict) else {}
+
+    @property
+    def host(self) -> dict:
+        """Return the operation host block, or an empty mapping when absent."""
+        host = self.inputs.get("host")
+        return host if isinstance(host, dict) else {}
+
+
+def iter_connector_operations(operations: Any, path: str):
+    """
+    Yield every connector-backed operation in an actions or triggers map.
+
+    Walks nested container actions (Scope, If, Foreach, Switch, Until) so
+    connector operations inside branches are not missed.
+
+    Args:
+        operations: The actions or triggers mapping to walk
+        path: Path prefix for the mapping, e.g. "actions" or "triggers"
+
+    Yields:
+        ConnectorOperation records in definition order
+    """
+    if not isinstance(operations, dict):
+        return
+
+    for operation_name, node in operations.items():
+        if not isinstance(node, dict):
+            continue
+
+        node_path = f"{path}.{operation_name}"
+        node_type = node.get("type")
+        if isinstance(node_type, str) and node_type.lower() in CONNECTOR_OPERATION_TYPES:
+            yield ConnectorOperation(name=operation_name, path=node_path, node=node)
+
+        yield from iter_connector_operations(node.get("actions"), f"{node_path}.actions")
+
+        for branch_key in ("else", "default"):
+            branch = node.get(branch_key)
+            if isinstance(branch, dict):
+                yield from iter_connector_operations(
+                    branch.get("actions"), f"{node_path}.{branch_key}.actions"
+                )
+
+        cases = node.get("cases")
+        if isinstance(cases, dict):
+            for case_name, case_node in cases.items():
+                if isinstance(case_node, dict):
+                    yield from iter_connector_operations(
+                        case_node.get("actions"), f"{node_path}.cases.{case_name}.actions"
+                    )
+
+
+def iter_definition_connector_operations(definition: Any):
+    """Yield every connector-backed trigger and action in a flow definition."""
+    if not isinstance(definition, dict):
+        return
+
+    yield from iter_connector_operations(definition.get("triggers"), "triggers")
+    yield from iter_connector_operations(definition.get("actions"), "actions")
+
+
+def get_definition(data: dict) -> dict:
+    """Return the flow definition from a full export or a definition-only file."""
+    definition = data.get("definition", data)
+    return definition if isinstance(definition, dict) else {}
+
+
 @dataclass
 class ValidationError:
     """Represents a validation error."""
@@ -81,10 +179,20 @@ class UndefinedParameterRule(ValidationRule):
     This rule detects cases where actions use parameters that don't exist
     in the connector's operation definition. For example, using a 'fields'
     parameter when the CreateItem operation expects individual field parameters.
+
+    The rule covers connector-backed triggers and actions of every connector
+    operation type, including operations nested inside Scope, If, Foreach,
+    Switch, and Until containers.
     """
 
-    # Known operations and their valid parameter names
-    # This can be expanded as we discover more patterns
+    # Known operations and their valid path/query parameter names.
+    # This can be expanded as we discover more patterns.
+    #
+    # Request-body parameters are NOT listed here. A connector passes request
+    # body fields as 'body' or as 'body/<field>', where '<field>' is a per-app
+    # field external_id (for example 'body/fields' and 'body/file_ids' on the
+    # Podio connector). Those names cannot be enumerated, so KNOWN_OPERATIONS
+    # covers path and query parameters only.
     KNOWN_OPERATIONS = {
         # Podio connector operations
         "GetItem": ["item_id", "mark_as_viewed"],
@@ -107,31 +215,30 @@ class UndefinedParameterRule(ValidationRule):
     def description(self) -> str:
         return "Checks for parameters that don't exist in the connector operation definition"
 
+    @staticmethod
+    def is_request_body_parameter(param_name: str) -> bool:
+        """Return True for a request-body parameter such as 'body/fields'."""
+        return param_name == "body" or param_name.startswith("body/")
+
     def validate(self, data: dict, path: str = "") -> ValidationResult:
         result = ValidationResult()
 
-        # Get the definition (handle both full export and definition-only formats)
-        definition = data.get("definition", data)
-        actions = definition.get("actions", {})
+        for operation in iter_definition_connector_operations(get_definition(data)):
+            operation_path = f"{path}{operation.path}" if path else operation.path
 
-        for action_name, action_data in actions.items():
-            action_path = f"{path}actions.{action_name}" if path else f"actions.{action_name}"
-
-            # Skip non-OpenApiConnection actions
-            if action_data.get("type") != "OpenApiConnection":
+            parameters = operation.inputs.get("parameters")
+            if not isinstance(parameters, dict):
                 continue
-
-            inputs = action_data.get("inputs", {})
-            parameters = inputs.get("parameters", {})
-            operation_id = inputs.get("host", {}).get("operationId", "")
+            operation_id = operation.host.get("operationId", "")
+            label = operation.kind.lower()
 
             # Check for known invalid parameters
-            for param_name, param_value in parameters.items():
+            for param_name in parameters:
                 if param_name in self.INVALID_PARAMETERS:
                     result.add_error(ValidationError(
                         rule=self.name,
-                        message=f"Invalid parameter '{param_name}' in action '{action_name}'",
-                        path=f"{action_path}.inputs.parameters.{param_name}",
+                        message=f"Invalid parameter '{param_name}' in {label} '{operation.name}'",
+                        path=f"{operation_path}.inputs.parameters.{param_name}",
                         severity="error",
                         suggestion=self.INVALID_PARAMETERS[param_name],
                     ))
@@ -139,13 +246,16 @@ class UndefinedParameterRule(ValidationRule):
             # If we know the operation, validate against known parameters
             if operation_id in self.KNOWN_OPERATIONS:
                 valid_params = self.KNOWN_OPERATIONS[operation_id]
-                for param_name in parameters.keys():
+                for param_name in parameters:
+                    if self.is_request_body_parameter(param_name):
+                        # Request body fields are per-app and cannot be enumerated.
+                        continue
                     if param_name not in valid_params and param_name not in self.INVALID_PARAMETERS:
                         # This is a warning since we may not have complete knowledge
                         result.add_error(ValidationError(
                             rule=self.name,
-                            message=f"Unknown parameter '{param_name}' for operation '{operation_id}' in action '{action_name}'",
-                            path=f"{action_path}.inputs.parameters.{param_name}",
+                            message=f"Unknown parameter '{param_name}' for operation '{operation_id}' in {label} '{operation.name}'",
+                            path=f"{operation_path}.inputs.parameters.{param_name}",
                             severity="warning",
                             suggestion=f"Valid parameters for {operation_id}: {', '.join(valid_params)}",
                         ))
@@ -158,13 +268,17 @@ class ConnectionReferenceRule(ValidationRule):
     Validates connection reference format and consistency.
 
     Checks that:
-    1. Actions use 'connectionName' in host (maps to connectionReferences keys)
+    1. Operations use 'connectionName' in host (maps to connectionReferences keys)
     2. The connectionName matches a key in connectionReferences
     3. connectionReferences have required fields
 
     Note: The Power Platform API accepts 'connectionName' in flow definitions.
     The connectionName should match a key in the connectionReferences section,
     which typically uses the full connector API ID as the key.
+
+    The rule covers connector-backed triggers and actions of every connector
+    operation type, including operations nested inside Scope, If, Foreach,
+    Switch, and Until containers.
     """
 
     @property
@@ -178,23 +292,14 @@ class ConnectionReferenceRule(ValidationRule):
     def validate(self, data: dict, path: str = "") -> ValidationResult:
         result = ValidationResult()
 
-        # Get the definition (handle both full export and definition-only formats)
-        definition = data.get("definition", data)
         connection_refs = data.get("connectionReferences", {})
 
-        actions = definition.get("actions", {})
-
-        for action_name, action_data in actions.items():
-            action_path = f"{path}actions.{action_name}" if path else f"actions.{action_name}"
-
-            # Skip non-OpenApiConnection actions
-            if action_data.get("type") != "OpenApiConnection":
-                continue
-
-            host = action_data.get("inputs", {}).get("host", {})
+        for operation in iter_definition_connector_operations(get_definition(data)):
+            operation_path = f"{path}{operation.path}" if path else operation.path
 
             # Get the connection reference (either connectionName or connectionReferenceName)
             # Both are accepted by the API - connectionName is the standard format
+            host = operation.host
             connection_name = host.get("connectionName") or host.get("connectionReferenceName")
 
             # Check that connection reference exists in connectionReferences
@@ -202,8 +307,8 @@ class ConnectionReferenceRule(ValidationRule):
                 if connection_name not in connection_refs:
                     result.add_error(ValidationError(
                         rule=self.name,
-                        message=f"Action '{action_name}' references connection '{connection_name}' which is not defined in connectionReferences",
-                        path=f"{action_path}.inputs.host.connectionName",
+                        message=f"{operation.kind} '{operation.name}' references connection '{connection_name}' which is not defined in connectionReferences",
+                        path=f"{operation_path}.inputs.host.connectionName",
                         severity="error",
                         suggestion=f"Add '{connection_name}' to connectionReferences section or update the connectionName to match an existing reference.",
                     ))
@@ -231,6 +336,132 @@ class ConnectionReferenceRule(ValidationRule):
                 ))
 
         return result
+
+
+class ConnectionsParameterRule(ValidationRule):
+    """
+    Validates that flows using connectors declare the '$connections' parameter.
+
+    Any flow whose definition contains connector-backed operations (the
+    OpenApiConnection / ApiConnection action and trigger families) binds those
+    operations to the '$connections' definition parameter at runtime. A
+    non-empty 'connectionReferences' map signals the same requirement.
+
+    When '$connections' is absent, the Dataverse create call still succeeds, but
+    activation later fails with:
+
+        HTTP 400 InvalidPowerFlow: The provided flow definition with a recurrent
+        trigger is missing the required parameter '$connections'.
+
+    This rule raises that failure at validation time so the bad definition is
+    rejected before a flow row exists.
+    """
+
+    REQUIRED_SHAPE = (
+        "Declare it in definition.parameters:\n"
+        "        $connections:\n"
+        "          defaultValue: {}\n"
+        "          type: Object"
+    )
+
+    @property
+    def name(self) -> str:
+        return "connections-parameter"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Requires definition.parameters.$connections (type Object, defaultValue {}) "
+            "when the flow uses connector operations or connection references"
+        )
+
+    def validate(self, data: dict, path: str = "") -> ValidationResult:
+        result = ValidationResult()
+
+        if "definition" in data:
+            definition = data["definition"]
+            reference_containers = [data, definition]
+        else:
+            definition = data
+            reference_containers = [data]
+
+        if not isinstance(definition, dict):
+            return result
+
+        connector_paths = [
+            operation.path for operation in iter_definition_connector_operations(definition)
+        ]
+
+        reference_names: list[str] = []
+        for container in reference_containers:
+            if not isinstance(container, dict):
+                continue
+            references = container.get("connectionReferences")
+            if isinstance(references, dict):
+                reference_names.extend(references.keys())
+
+        if not connector_paths and not reference_names:
+            return result
+
+        parameters = definition.get("parameters")
+        has_parameter = isinstance(parameters, dict) and "$connections" in parameters
+
+        if not has_parameter:
+            result.add_error(ValidationError(
+                rule=self.name,
+                message=(
+                    "Flow definition is missing the required parameter '$connections' "
+                    f"({self._trigger_summary(connector_paths, reference_names)})"
+                ),
+                path="definition.parameters.$connections",
+                severity="error",
+                suggestion=(
+                    f"{self.REQUIRED_SHAPE}\n"
+                    "    Without it, activation fails with HTTP 400 InvalidPowerFlow: "
+                    "\"The provided flow definition with a recurrent trigger is missing "
+                    "the required parameter '$connections'.\""
+                ),
+            ))
+            return result
+
+        declared = parameters["$connections"]
+
+        if not isinstance(declared, dict):
+            result.add_error(ValidationError(
+                rule=self.name,
+                message=(
+                    f"Parameter '$connections' must be a mapping, got {type(declared).__name__}"
+                ),
+                path="definition.parameters.$connections",
+                severity="warning",
+                suggestion=self.REQUIRED_SHAPE,
+            ))
+            return result
+
+        declared_type = declared.get("type")
+        if declared_type != "Object":
+            result.add_error(ValidationError(
+                rule=self.name,
+                message=(
+                    f"Parameter '$connections' declares type '{declared_type}' "
+                    "instead of the standard 'Object'"
+                ),
+                path="definition.parameters.$connections.type",
+                severity="warning",
+                suggestion=self.REQUIRED_SHAPE,
+            ))
+
+        return result
+
+    def _trigger_summary(self, connector_paths: list[str], reference_names: list[str]) -> str:
+        """Describe why '$connections' is required for this definition."""
+        if connector_paths:
+            shown = ", ".join(connector_paths[:3])
+            if len(connector_paths) > 3:
+                shown += f", +{len(connector_paths) - 3} more"
+            return f"connector operations: {shown}"
+        shown = ", ".join(sorted(set(reference_names))[:3])
+        return f"connectionReferences declared: {shown}"
 
 
 class RequiredFieldsRule(ValidationRule):
@@ -461,6 +692,7 @@ class FlowYAMLValidator:
             # Default rules
             self.rules = [
                 RequiredFieldsRule(),
+                ConnectionsParameterRule(),
                 ConnectionReferenceRule(),
                 UndefinedParameterRule(),
                 ExpressionSyntaxRule(),
