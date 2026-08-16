@@ -78,8 +78,11 @@ def test_field_mapping_covers_publish_path():
     assert struct["post_name"] == "new-slug"
     assert struct["post_status"] == "future"
     assert struct["post_thumbnail"] == 27138
-    assert isinstance(struct["post_date"], xmlrpc.client.DateTime)
-    assert str(struct["post_date"]) == "20260901T09:00:00"
+    # date maps to post_date_gmt (unambiguous UTC), not post_date (which is
+    # relative to whatever timezone the site is configured with).
+    assert "post_date" not in struct
+    assert isinstance(struct["post_date_gmt"], xmlrpc.client.DateTime)
+    assert str(struct["post_date_gmt"]) == "20260901T09:00:00"
     assert struct["terms"] == {"post_tag": [1, 2], "category": [5403]}
     assert struct["custom_fields"] == [
         {"key": "rank_math_focus_keyword", "value": "azure"},

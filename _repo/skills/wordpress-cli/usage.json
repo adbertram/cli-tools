@@ -1,7 +1,7 @@
 {
   "tool": "wordpress",
   "description": "CLI interface for Wordpress API",
-  "discovered_at": "2026-06-24T19:18:04Z",
+  "discovered_at": "2026-08-07T20:09:40Z",
   "total_commands": 55,
   "global_options": [
     {
@@ -545,7 +545,7 @@
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "Run `wordpress auth profiles list --help` for exact arguments and options.",
               "arguments": [],
               "options": [
@@ -706,7 +706,14 @@
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "usage_instructions": "Run `wordpress cache clear --help` for exact arguments and options.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
@@ -1274,7 +1281,6 @@
           "commands": {
             "save-credential": {
               "help": "Save the WordPress.com credential bundle used to acquire Jetpack tokens.",
-              "usage_instructions": "Run `wordpress org token save-credential --client-id ... --client-secret ... --username ... --password ... --site ...` to save the WordPress.com credential bundle without requesting a token.",
               "arguments": [],
               "options": [
                 {
@@ -1384,7 +1390,7 @@
               "name": "--date",
               "type": "TEXT",
               "required": false,
-              "help": "Schedule date (ISO 8601)"
+              "help": "Schedule date in UTC, ISO 8601 (e.g., 2026-01-10T09:00:00 or with a +00:00/Z offset)"
             },
             {
               "name": "--excerpt",
@@ -1579,7 +1585,7 @@
               "name": "--date",
               "type": "TEXT",
               "required": false,
-              "help": "Schedule date (ISO 8601)"
+              "help": "Schedule date in UTC, ISO 8601 (e.g., 2026-01-10T09:00:00 or with a +00:00/Z offset)"
             },
             {
               "name": "--featured-media",
@@ -1692,7 +1698,7 @@
               "name": "--date",
               "type": "TEXT",
               "required": false,
-              "help": "Schedule date (ISO 8601, e.g., 2026-01-10T09:00:00)"
+              "help": "Schedule date in UTC, ISO 8601 (e.g., 2026-01-10T09:00:00 or with a +00:00/Z offset)"
             },
             {
               "name": "--categories",
@@ -1881,7 +1887,7 @@
               "name": "--date",
               "type": "TEXT",
               "required": false,
-              "help": "Schedule date (ISO 8601, e.g., 2026-01-10T09:00:00)"
+              "help": "Schedule date in UTC, ISO 8601 (e.g., 2026-01-10T09:00:00 or with a +00:00/Z offset)"
             },
             {
               "name": "--auto-schedule",

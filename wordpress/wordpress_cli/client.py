@@ -608,7 +608,10 @@ class WordPressClient:
         if slug is not None:
             data["slug"] = slug
         if date is not None:
-            data["date"] = date
+            # date_gmt is unambiguous UTC; date is relative to whatever
+            # timezone the site happens to be configured with. WordPress
+            # derives date from date_gmt automatically.
+            data["date_gmt"] = self._rest_date_gmt(date)
         if categories is not None:
             data["categories"] = categories
         if tags is not None:
@@ -666,10 +669,50 @@ class WordPressClient:
         return result[0] if result else None
 
     @staticmethod
-    def _xmlrpc_post_date(value: str) -> xmlrpc.client.DateTime:
-        """Convert an ISO 8601 date string to the XML-RPC DateTime WordPress expects."""
+    def _parse_utc_date(value: str) -> datetime:
+        """Parse an ISO 8601 date string that must represent UTC, returning a naive UTC datetime.
+
+        Both the REST date_gmt field and the XML-RPC post_date_gmt field are
+        unambiguous UTC, unlike date/post_date which are relative to
+        whatever timezone the WordPress site happens to be configured with.
+        Writing dates through this helper keeps both write paths correct
+        regardless of the site's configured timezone.
+
+        Accepts an explicit UTC offset (Z or +00:00) or a naive string the
+        caller guarantees is already UTC. Any other offset is a caller bug
+        and fails loudly rather than silently writing the wrong instant.
+        """
         parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-        return xmlrpc.client.DateTime(parsed.strftime("%Y%m%dT%H:%M:%S"))
+        if parsed.tzinfo is not None:
+            if parsed.utcoffset() != timedelta(0):
+                raise ClientError(
+                    f"date {value!r} must be UTC (offset +00:00); got offset {parsed.utcoffset()}"
+                )
+            parsed = parsed.replace(tzinfo=None)
+        return parsed
+
+    @classmethod
+    def _xmlrpc_post_date_gmt(cls, value: str) -> xmlrpc.client.DateTime:
+        """Convert an ISO 8601 UTC date string to the XML-RPC DateTime for post_date_gmt.
+
+        wp.editPost/wp.newPost accept both post_date (site-timezone-relative)
+        and post_date_gmt (unambiguous UTC). WordPress core derives post_date
+        from post_date_gmt using wp_timezone() when only post_date_gmt is
+        supplied, so sending post_date_gmt here is correct regardless of
+        what the site's configured timezone is.
+        """
+        return xmlrpc.client.DateTime(cls._parse_utc_date(value).strftime("%Y%m%dT%H:%M:%S"))
+
+    @classmethod
+    def _rest_date_gmt(cls, value: str) -> str:
+        """Convert an ISO 8601 UTC date string to the REST date_gmt field format.
+
+        The REST create/update payload accepts both date (site-timezone-
+        relative) and date_gmt (unambiguous UTC); WordPress derives date
+        from date_gmt automatically. Same UTC contract as
+        _xmlrpc_post_date_gmt.
+        """
+        return cls._parse_utc_date(value).strftime("%Y-%m-%dT%H:%M:%S")
 
     # Page fields the /wp/v2/pages REST route accepts but this host's wp.editPost
     # silently drops: wp_insert_post via XML-RPC only honors its whitelisted keys
@@ -701,7 +744,7 @@ class WordPressClient:
             status = fields["status"]
             struct["post_status"] = getattr(status, "value", status)
         if "date" in fields:
-            struct["post_date"] = self._xmlrpc_post_date(fields["date"])
+            struct["post_date_gmt"] = self._xmlrpc_post_date_gmt(fields["date"])
         if "featured_media" in fields:
             struct["post_thumbnail"] = int(fields["featured_media"])
         if "parent" in fields:
@@ -869,6 +912,12 @@ class WordPressClient:
     # concurrent auto-schedule calls (e.g., parallel pipeline runs)
     _RESERVATION_DIR = Path.home() / ".cache" / "wordpress-cli" / "schedule-reservations"
 
+    # Minimum lead time a returned slot must have over true UTC now. Acts as
+    # a defense-in-depth guard independent of the timezone-correctness of
+    # the code above it: if a future bug reintroduces a naive/local "now",
+    # this still refuses to hand back a slot that isn't safely in the future.
+    _MIN_SCHEDULE_LEAD = timedelta(minutes=30)
+
     def _read_schedule_reservations(self) -> List[datetime]:
         """Read pending schedule reservations, cleaning up expired ones."""
         times = []
@@ -878,10 +927,17 @@ class WordPressClient:
             try:
                 data = json.loads(f.read_text())
                 expires = datetime.fromisoformat(data["expires"])
-                if expires < datetime.now():
+                slot = datetime.fromisoformat(data["slot"])
+                if expires.tzinfo is None or slot.tzinfo is None:
+                    # Reservation was written before reservations became
+                    # UTC-aware; it is incompatible with the aware
+                    # comparisons below, so treat it as stale.
+                    f.unlink()
+                    continue
+                if expires < datetime.now(timezone.utc):
                     f.unlink()  # Expired reservation
                 else:
-                    times.append(datetime.fromisoformat(data["slot"]))
+                    times.append(slot.astimezone(timezone.utc))
             except (json.JSONDecodeError, KeyError, ValueError):
                 f.unlink()  # Corrupt reservation
         return times
@@ -891,7 +947,7 @@ class WordPressClient:
         self._RESERVATION_DIR.mkdir(parents=True, exist_ok=True)
         reservation = {
             "slot": slot,
-            "expires": (datetime.now() + timedelta(minutes=10)).isoformat(),
+            "expires": (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat(),
             "pid": os.getpid(),
         }
         path = self._RESERVATION_DIR / f"{os.getpid()}_{int(time.time())}.json"
@@ -903,6 +959,18 @@ class WordPressClient:
             for f in self._RESERVATION_DIR.glob(f"{os.getpid()}_*.json"):
                 f.unlink()
 
+    @staticmethod
+    def _ceil_to_hour(value: datetime) -> datetime:
+        """Round a datetime UP to the next hour boundary (never truncates past it).
+
+        A value already exactly on the hour is returned unchanged; any other
+        value rolls forward to the next hour. This guarantees the result is
+        never earlier than the input, which "add 1 hour then truncate" does
+        not guarantee once minutes/seconds/microseconds enter the picture.
+        """
+        truncated = value.replace(minute=0, second=0, microsecond=0)
+        return truncated if truncated == value else truncated + timedelta(hours=1)
+
     def find_next_schedule_slot(self) -> str:
         """
         Find next available publication slot respecting scheduling rules.
@@ -911,11 +979,17 @@ class WordPressClient:
         - Max 2 posts per weekday
         - 4+ hour gap between posts
         - No weekends (rolls to Monday)
-        - Posts scheduled between 9am-5pm only
+        - Posts scheduled between 9am-5pm UTC only
         - Pending reservations from concurrent processes
 
+        All arithmetic here is in UTC. The host machine's local timezone is
+        never read: WordPress interprets the written date in the site's
+        configured timezone (UTC for this site), so "now" must be true UTC
+        now, not the CLI process's local wall-clock time.
+
         Returns:
-            ISO 8601 datetime string (e.g., "2026-01-10T09:00:00")
+            ISO 8601 UTC datetime string with an explicit +00:00 offset
+            (e.g., "2026-01-10T09:00:00+00:00").
         """
         # Get scheduled posts (status=future)
         scheduled = self.list_posts(limit=100, filters={"status": "future"})
@@ -923,24 +997,27 @@ class WordPressClient:
         # Get recently published posts (last 20 for gap checking)
         published = self.list_posts(limit=20, filters={"status": "publish"})
 
-        # Parse dates from all posts
-        occupied_times = []
+        # Parse dates from all posts. date_gmt is WordPress's unambiguous UTC
+        # timestamp; date is site-timezone-relative and must not be used here
+        # (mixing it with a UTC "now" is exactly the bug this function had).
+        occupied_times: List[datetime] = []
         for post in scheduled + published:
-            # Post model has date attribute
-            date_str = getattr(post, "date", None)
-            if date_str:
-                try:
-                    dt = datetime.fromisoformat(str(date_str).replace("Z", "+00:00"))
-                    occupied_times.append(dt.replace(tzinfo=None))
-                except ValueError:
-                    continue
+            date_gmt_str = getattr(post, "date_gmt", None)
+            if not date_gmt_str:
+                raise ClientError(
+                    f"Post {getattr(post, 'id', '?')} (status={getattr(post, 'status', '?')}) "
+                    "has no date_gmt; cannot safely compute schedule occupancy"
+                )
+            dt = datetime.fromisoformat(str(date_gmt_str).replace("Z", "+00:00"))
+            occupied_times.append(dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc))
 
         # Include pending reservations from concurrent processes
         occupied_times.extend(self._read_schedule_reservations())
 
-        # Start from now, round UP to next hour to ensure future time
-        now = datetime.now()
-        candidate = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+        # Start from true UTC now, round UP to the next hour boundary so the
+        # slot is never earlier than "now" plus a full hour of lead time.
+        now = datetime.now(timezone.utc)
+        candidate = self._ceil_to_hour(now + timedelta(hours=1))
 
         # If before 9am, start at 9am
         if candidate.hour < 9:
@@ -969,8 +1046,17 @@ class WordPressClient:
                     candidate = (candidate + timedelta(days=1)).replace(hour=9, minute=0)
                 continue
 
+            # Defense-in-depth guard: refuse to hand back a slot that is not
+            # genuinely, safely in the future relative to true UTC now, no
+            # matter how "candidate" was derived above.
+            if candidate < datetime.now(timezone.utc) + self._MIN_SCHEDULE_LEAD:
+                candidate = self._ceil_to_hour(datetime.now(timezone.utc) + timedelta(hours=1))
+                if candidate.hour < 9:
+                    candidate = candidate.replace(hour=9)
+                continue
+
             # Found valid slot - reserve it before returning
-            slot = candidate.strftime("%Y-%m-%dT%H:%M:%S")
+            slot = candidate.isoformat()
             self._create_schedule_reservation(slot)
             return slot
 
@@ -1065,7 +1151,10 @@ class WordPressClient:
         if slug is not None:
             data["slug"] = slug
         if date is not None:
-            data["date"] = date
+            # date_gmt is unambiguous UTC; date is relative to whatever
+            # timezone the site happens to be configured with. WordPress
+            # derives date from date_gmt automatically.
+            data["date_gmt"] = self._rest_date_gmt(date)
         if excerpt is not None:
             data["excerpt"] = excerpt
         if parent is not None:

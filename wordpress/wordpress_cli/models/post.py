@@ -66,6 +66,11 @@ class Post(CLIModel):
     status: PostStatus = PostStatus.DRAFT
     slug: Optional[str] = None
     date: Optional[str] = Field(default=None, frozen=True)
+    # date_gmt is the WordPress REST API's unambiguous UTC timestamp for this
+    # post. date is in the site's configured timezone, which is ambiguous
+    # without also knowing that timezone. Schedule-occupancy math must use
+    # date_gmt, never date.
+    date_gmt: Optional[str] = Field(default=None, frozen=True)
     modified: Optional[str] = Field(default=None, frozen=True)
     link: Optional[str] = Field(default=None, frozen=True)
     author: Optional[int] = None
@@ -88,6 +93,7 @@ class PostDetail(CLIModel):
     status: PostStatus = PostStatus.DRAFT
     slug: Optional[str] = None
     date: Optional[str] = Field(default=None, frozen=True)
+    date_gmt: Optional[str] = Field(default=None, frozen=True)
     modified: Optional[str] = Field(default=None, frozen=True)
     link: Optional[str] = Field(default=None, frozen=True)
     author: Optional[int] = None
