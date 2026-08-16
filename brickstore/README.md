@@ -4,9 +4,9 @@
 
 Read BrickStore price guide and catalog data through its local MCP server.
 
-Use this CLI to get price guide data, catalog details, and set contents in scripts.
+Use this CLI to get price guide data, catalog details, and local set contents in scripts.
 
-The CLI does not call the BrickLink API directly; `set-contents` uses the installed `bricklink` CLI for read-only subset data.
+The CLI does not call the BrickLink API; `set-contents` reads set data from the local BrickStore catalog database.
 
 ## Requirements
 
@@ -14,7 +14,8 @@ The CLI does not call the BrickLink API directly; `set-contents` uses the instal
 - Enable the MCP server and Catalog Read permission in BrickStore Settings > AI.
 - Configure the MCP server port as `45111`, or set `BRICKSTORE_BASE_URL`.
 - The CLI starts `/Applications/BrickStore.app/Contents/MacOS/BrickStore` when no MCP server is available.
-- `set-contents` needs an installed BrickLink CLI with an authenticated OAuth profile.
+- `set-contents` and `database status` need a local version 12 database.
+- Run `brickstore database update` when the local database file does not exist.
 
 ## Installation
 
@@ -30,6 +31,7 @@ brickstore part 3001 Red
 brickstore set 30670-1
 brickstore set-batch 30670-1 75313-1
 brickstore set-contents 30670-1 75313-1
+brickstore database status
 brickstore query --item-id 3001
 brickstore part 3001 Red --table
 brickstore part 3001 Red --leave-open
@@ -88,16 +90,50 @@ brickstore set-batch 30670-1 75313-1 --leave-open
 
 ### `set-contents <set-number> [<set-number> ...]`
 
-Return direct item records for one through 25 sets.
+Return direct item records from the local database for one through 25 sets.
 
 Each input set ID must be unique.
 
-The command runs one read-only `bricklink catalog subsets SET <set-id>` command for each set.
+The database stores one row for each inventory record.
+
+The command merges the regular row and the extra row for the same item, color, alternate flag, counterpart flag, and match number.
+
+`quantity` counts all units. `extra_quantity` counts extra units only.
+
+The command does not call the BrickLink CLI or the BrickLink API.
 
 See Output for the JSON result shape.
 
 ```bash
 brickstore set-contents 30670-1 75313-1
+```
+
+### `database update [--force]`
+
+Download and install the newest local version 12 database.
+
+The command downloads `database-v12.lzma` from `BRICKSTORE_DATABASE_URL`.
+
+The command checks the SHA-512 digest, LZMA data, magic bytes, and database version before it replaces the local file.
+
+The command stores the server ETag in a `.etag` sidecar file.
+
+Use `--force` or `-f` to download the file when the local ETag is current.
+
+```bash
+brickstore database update
+brickstore database update --force
+```
+
+### `database status [--table]`
+
+Return metadata for the local database.
+
+Use `--table` or `-t` to display the metadata as a field-value table.
+
+```bash
+brickstore database status
+brickstore database status --table
 ```
 
 ### `query [filters...] [--table] [--leave-open]`
@@ -143,9 +179,22 @@ JSON is the default output format.
 
 Each `set-contents` record has `set_id` and an `items` array.
 
-Each `items` record preserves its BrickLink entry fields and adds `match_no`.
+Each `items` record has these fields:
 
-The CLI preserves these source fields:
+| Field | Meaning |
+|---|---|
+| `item.no` | BrickLink item ID. |
+| `item.name` | Catalog item name. |
+| `item.type` | Catalog item type. |
+| `item.category_id` | Catalog category ID, or `null`. |
+| `color_id` | BrickStore color ID. |
+| `quantity` | Total unit count. |
+| `extra_quantity` | Extra unit count. |
+| `is_alternate` | Whether the item is an alternate. |
+| `is_counterpart` | Whether the item is a counterpart. |
+| `match_no` | Match number from the set inventory. |
+
+Price guide output preserves these source fields:
 
 | Field | Source meaning |
 |---|---|
@@ -179,18 +228,34 @@ Each condition block has `total_quantity`, `lots`, and `prices`.
 
 Each `prices` object has `min`, `avg`, `qty_avg`, and `max`.
 
+`database update` returns an object with `path`, `url`, `updated`, and `etag`.
+
+An updated database also returns `compressed_bytes` and `bytes`.
+
+An unchanged database returns `updated: false` after the server returns HTTP 304.
+
+`database status` returns an object with `path`, `version`, `generated_at`, `etag`, `colors`, `categories`, `item_types`, `items`, `sets`, and `sets_with_inventory`.
+
 ## Configuration
 
 The BrickStore price guide commands use no reusable credentials.
-
-`set-contents` uses the existing authenticated BrickLink CLI profile.
 
 Store non-secret configuration in `~/.local/share/cli-tools/brickstore/.env`.
 
 ```bash
 BRICKSTORE_BASE_URL=http://127.0.0.1:45111
 BRICKSTORE_EXECUTABLE=/Applications/BrickStore.app/Contents/MacOS/BrickStore
+BRICKSTORE_DATABASE_PATH=~/Library/Caches/BrickStore/database-v12
+BRICKSTORE_DATABASE_URL=https://github.com/rgriebl/brickstore-database/releases/latest/download
 ```
+
+The default database path is `~/Library/Caches/BrickStore/database-v12`.
+
+The default database URL is `https://github.com/rgriebl/brickstore-database/releases/latest/download`.
+
+The updater adds `/database-v12.lzma` to the database URL.
+
+The CLI uses no reusable credentials for BrickStore or the database source.
 
 ## Errors
 
@@ -206,7 +271,17 @@ The option does not affect an existing BrickStore process.
 
 The CLI returns the source startup or readiness error when the server does not become ready.
 
-`set-contents` returns a command error when its BrickLink CLI source fails.
+`set-contents` and `database status` return a command error when the database file does not exist.
+
+Run `brickstore database update` or set `BRICKSTORE_DATABASE_PATH` to a valid version 12 file.
+
+The CLI returns a command error when the database file is unreadable, truncated, corrupt, missing a required chunk, or has an unsupported version.
+
+`set-contents` returns a command error when the requested set does not exist in the local database.
+
+`database update` returns a command error when the download fails, the server returns an unexpected status, the response has no ETag, or the database fails its SHA-512, LZMA, magic-byte, or version check.
+
+The updater replaces the local file only after all database checks pass.
 
 ## Exit Codes
 

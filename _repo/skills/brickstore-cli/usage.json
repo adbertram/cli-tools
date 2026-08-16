@@ -1,10 +1,43 @@
 {
   "tool": "brickstore",
   "description": "CLI interface for brickstore",
-  "discovered_at": "2026-08-03T00:51:26Z",
-  "total_commands": 5,
+  "discovered_at": "2026-08-03T16:15:18Z",
+  "total_commands": 7,
   "global_options": [],
   "commands": {
+    "database": {
+      "help": "Manage the local BrickStore catalog database",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "status": {
+          "help": "Return the local BrickStore catalog database's metadata.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "update": {
+          "help": "Download and install the newest local BrickStore catalog database.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Redownload even if the local copy is current",
+              "short": "-f"
+            }
+          ]
+        }
+      }
+    },
     "part": {
       "help": "Return BrickStore price guide data for one part.",
       "arguments": [

@@ -19,12 +19,12 @@ app = create_app(
 )
 
 
-def _print_price_guide(price_guide: dict, table: bool) -> None:
+def _print_fields(fields: dict, table: bool) -> None:
     if not table:
-        print_json(price_guide)
+        print_json(fields)
         return
     print_table(
-        [{"field": field, "value": value} for field, value in price_guide.items()],
+        [{"field": field, "value": value} for field, value in fields.items()],
         columns=["field", "value"],
         headers=["Field", "Value"],
     )
@@ -54,7 +54,7 @@ def part(
     leave_open: bool = _leave_open_option(),
 ) -> None:
     """Return BrickStore price guide data for one part."""
-    _print_price_guide(get_client().part(item_number, color, leave_open=leave_open), table)
+    _print_fields(get_client().part(item_number, color, leave_open=leave_open), table)
 
 
 @app.command("set")
@@ -65,7 +65,7 @@ def set_price(
     leave_open: bool = _leave_open_option(),
 ) -> None:
     """Return BrickStore price guide data for one set."""
-    _print_price_guide(get_client().set(set_number, leave_open=leave_open), table)
+    _print_fields(get_client().set(set_number, leave_open=leave_open), table)
 
 
 @app.command("query")
@@ -137,6 +137,28 @@ def set_contents(
 ) -> None:
     """Return direct item records for one or more sets."""
     print_json(get_client().set_contents(set_numbers))
+
+
+database_app = typer.Typer(help="Manage the local BrickStore catalog database")
+app.add_typer(database_app, name="database")
+
+
+@database_app.command("update")
+@command
+def database_update(
+    force: bool = typer.Option(False, "--force", "-f", help="Redownload even if the local copy is current"),
+) -> None:
+    """Download and install the newest local BrickStore catalog database."""
+    print_json(get_client().database_update(force=force))
+
+
+@database_app.command("status")
+@command
+def database_status(
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+) -> None:
+    """Return the local BrickStore catalog database's metadata."""
+    _print_fields(get_client().database_status(), table)
 
 
 def main() -> None:

@@ -12,6 +12,8 @@ from brickstore_cli.config import Config
 class TestConfig:
     base_url = "http://127.0.0.1:45111"
     executable = "/Applications/BrickStore.app/Contents/MacOS/BrickStore"
+    database_path = "/tmp/brickstore-test-database"
+    database_url = "https://example.test/brickstore-database"
 
 
 def test_config_uses_the_dedicated_endpoint_variable(monkeypatch, tmp_path):
@@ -35,6 +37,34 @@ def test_config_uses_the_brickstore_executable_variable(monkeypatch, tmp_path):
     monkeypatch.setenv("BRICKSTORE_EXECUTABLE", "/Applications/CustomBrickStore.app/Contents/MacOS/BrickStore")
 
     assert Config().executable == "/Applications/CustomBrickStore.app/Contents/MacOS/BrickStore"
+
+
+def test_config_uses_the_database_path_variable(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    monkeypatch.setenv("BRICKSTORE_DATABASE_PATH", "/custom/database-v12")
+
+    assert Config().database_path == "/custom/database-v12"
+
+
+def test_config_defaults_the_database_path_when_unset(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    monkeypatch.delenv("BRICKSTORE_DATABASE_PATH", raising=False)
+
+    assert Config().database_path == "~/Library/Caches/BrickStore/database-v12"
+
+
+def test_config_uses_the_database_url_variable(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    monkeypatch.setenv("BRICKSTORE_DATABASE_URL", "https://example.test/custom-database")
+
+    assert Config().database_url == "https://example.test/custom-database"
+
+
+def test_config_defaults_the_database_url_when_unset(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    monkeypatch.delenv("BRICKSTORE_DATABASE_URL", raising=False)
+
+    assert Config().database_url == "https://github.com/rgriebl/brickstore-database/releases/latest/download"
 
 
 class Response:
@@ -166,47 +196,29 @@ def install_owned_server(monkeypatch):
     return process, calls
 
 
-class BrickLinkResult:
-    def __init__(self, payload=None, returncode=0, stderr="", stdout=None):
-        self.stdout = stdout if stdout is not None else json.dumps(payload) if payload is not None else ""
-        self.returncode = returncode
-        self.stderr = stderr
+class FakeDatabase:
+    def __init__(self, contents_by_set=None, status_result=None):
+        self.contents_by_set = contents_by_set or {}
+        self.status_result = status_result
+        self.requested_sets = []
+
+    def set_contents(self, set_number):
+        self.requested_sets.append(set_number)
+        return self.contents_by_set[set_number]
+
+    def status(self):
+        return self.status_result
 
 
-def install_bricklink_responses(monkeypatch, responses):
-    calls = []
+def install_database(monkeypatch, database):
+    loaded_paths = []
 
-    def run(args, capture_output, check, text, timeout):
-        calls.append(
-            {
-                "args": args,
-                "capture_output": capture_output,
-                "check": check,
-                "text": text,
-                "timeout": timeout,
-            }
-        )
-        return responses.pop(0)
+    def load(path):
+        loaded_paths.append(path)
+        return database
 
-    monkeypatch.setattr("brickstore_cli.client.subprocess.run", run)
-    return calls
-
-
-def subset_entry(item_no, quantity, source_extension):
-    return {
-        "item": {
-            "category_id": 5,
-            "name": "Brick 2 x 4",
-            "no": item_no,
-            "type": "PART",
-        },
-        "color_id": 5,
-        "extra_quantity": 0,
-        "is_alternate": False,
-        "is_counterpart": False,
-        "quantity": quantity,
-        "source_extension": source_extension,
-    }
+    monkeypatch.setattr("brickstore_cli.client.CatalogDatabase.load", load)
+    return loaded_paths
 
 
 def test_part_uses_catalog_price_guide_with_exact_source_arguments(monkeypatch):
@@ -570,50 +582,17 @@ def test_set_batch_maps_tool_errors_to_source_errors(monkeypatch):
         BrickStoreClient(config=TestConfig()).set_batch(["30670-1"])
 
 
-def test_set_contents_runs_exact_bricklink_commands_and_normalizes_entries(monkeypatch):
-    first = subset_entry("3001", 2, {"source": "first"})
-    second = subset_entry("3002", 3, {"source": "second"})
-    calls = install_bricklink_responses(
-        monkeypatch,
-        [
-            BrickLinkResult(
-                [
-                    {"match_no": 0, "entries": [first]},
-                    {"match_no": 4, "entries": [second]},
-                ]
-            ),
-            BrickLinkResult([]),
-        ],
-    )
+def test_set_contents_loads_the_configured_database_once_and_aggregates_each_set(monkeypatch):
+    first_record = {"set_id": "30670-1", "items": [{"item": {"no": "3001"}, "quantity": 2}]}
+    second_record = {"set_id": "75313-1", "items": []}
+    database = FakeDatabase({"30670-1": first_record, "75313-1": second_record})
+    loaded_paths = install_database(monkeypatch, database)
 
     result = BrickStoreClient(config=TestConfig()).set_contents(["30670-1", "75313-1"])
 
-    assert result == [
-        {
-            "set_id": "30670-1",
-            "items": [
-                {**first, "match_no": 0},
-                {**second, "match_no": 4},
-            ],
-        },
-        {"set_id": "75313-1", "items": []},
-    ]
-    assert calls == [
-        {
-            "args": ["bricklink", "catalog", "subsets", "SET", "30670-1"],
-            "capture_output": True,
-            "check": False,
-            "text": True,
-            "timeout": 60,
-        },
-        {
-            "args": ["bricklink", "catalog", "subsets", "SET", "75313-1"],
-            "capture_output": True,
-            "check": False,
-            "text": True,
-            "timeout": 60,
-        },
-    ]
+    assert result == [first_record, second_record]
+    assert database.requested_sets == ["30670-1", "75313-1"]
+    assert loaded_paths == [TestConfig.database_path]
 
 
 @pytest.mark.parametrize(
@@ -629,59 +608,58 @@ def test_set_contents_reuses_the_one_to_twenty_five_unique_id_contract(set_numbe
         BrickStoreClient(config=TestConfig()).set_contents(set_numbers)
 
 
-def test_set_contents_maps_a_bricklink_child_failure_to_a_client_error(monkeypatch):
-    calls = install_bricklink_responses(
-        monkeypatch,
-        [BrickLinkResult(returncode=1, stderr="Error: BrickLink OAuth authentication is required")],
+def test_set_contents_reports_an_unknown_set_as_a_client_error(monkeypatch):
+    database = FakeDatabase({})
+
+    def load(path):
+        def missing_set(set_number):
+            raise ClientError("BrickStore database {} holds no set with the ID {}".format(path, set_number))
+
+        database.set_contents = missing_set
+        return database
+
+    monkeypatch.setattr("brickstore_cli.client.CatalogDatabase.load", load)
+
+    with pytest.raises(ClientError, match="holds no set with the ID 30670-1"):
+        BrickStoreClient(config=TestConfig()).set_contents(["30670-1"])
+
+
+def test_database_status_loads_the_configured_database_path(monkeypatch):
+    status = {"path": "/tmp/database-v12", "version": 12, "sets": 10}
+    database = FakeDatabase(status_result=status)
+    loaded_paths = install_database(monkeypatch, database)
+
+    result = BrickStoreClient(config=TestConfig()).database_status()
+
+    assert result == status
+    assert loaded_paths == [TestConfig.database_path]
+
+
+def test_database_update_forwards_the_configured_path_url_and_force_flag(monkeypatch):
+    calls = []
+
+    def fake_download(path, url, force=False):
+        calls.append((path, url, force))
+        return {"path": path, "url": url, "updated": True}
+
+    monkeypatch.setattr("brickstore_cli.client.download", fake_download)
+
+    result = BrickStoreClient(config=TestConfig()).database_update(force=True)
+
+    assert result == {"path": TestConfig.database_path, "url": TestConfig.database_url, "updated": True}
+    assert calls == [(TestConfig.database_path, TestConfig.database_url, True)]
+
+
+def test_database_update_defaults_force_to_false(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "brickstore_cli.client.download",
+        lambda path, url, force=False: calls.append((path, url, force)) or {},
     )
 
-    with pytest.raises(
-        ClientError,
-        match="BrickLink set contents command failed for 30670-1 with exit 1",
-    ):
-        BrickStoreClient(config=TestConfig()).set_contents(["30670-1"])
+    BrickStoreClient(config=TestConfig()).database_update()
 
-    assert calls[0]["args"] == ["bricklink", "catalog", "subsets", "SET", "30670-1"]
-
-
-@pytest.mark.parametrize(
-    ("response", "message"),
-    [
-        (
-            BrickLinkResult(stderr='{"valid": "stderr only"}', stdout="not JSON"),
-            "JSON_CONTRACT_MISMATCH: BrickLink set contents output must be JSON",
-        ),
-        (
-            BrickLinkResult({"match_no": 0, "entries": []}),
-            "JSON_CONTRACT_MISMATCH: BrickLink set contents output must be an array",
-        ),
-    ],
-)
-def test_set_contents_rejects_invalid_bricklink_output(monkeypatch, response, message):
-    install_bricklink_responses(monkeypatch, [response])
-
-    with pytest.raises(ClientError, match=message):
-        BrickStoreClient(config=TestConfig()).set_contents(["30670-1"])
-
-
-@pytest.mark.parametrize(
-    ("payload", "message"),
-    [
-        (
-            [{"match_no": "0", "entries": []}],
-            "JSON_CONTRACT_MISMATCH: BrickLink subset group match_no must be an integer",
-        ),
-        (
-            [{"match_no": 0, "entries": {}}],
-            "JSON_CONTRACT_MISMATCH: BrickLink subset group entries must be an array",
-        ),
-    ],
-)
-def test_set_contents_rejects_invalid_bricklink_subset_groups(monkeypatch, payload, message):
-    install_bricklink_responses(monkeypatch, [BrickLinkResult(payload)])
-
-    with pytest.raises(ClientError, match=message):
-        BrickStoreClient(config=TestConfig()).set_contents(["30670-1"])
+    assert calls == [(TestConfig.database_path, TestConfig.database_url, False)]
 
 
 def test_source_item_error_is_a_clear_client_error(monkeypatch):

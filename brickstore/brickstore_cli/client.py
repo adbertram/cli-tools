@@ -20,6 +20,7 @@ from cli_tools_shared.http_session import (
 
 from . import __version__
 from .config import get_config
+from .database import CatalogDatabase, download
 
 
 MCP_PROTOCOL_VERSION = "2025-03-26"
@@ -340,62 +341,22 @@ class BrickStoreClient:
                 )
             )
 
-    @staticmethod
-    def _set_contents_record(set_number: str, source_subsets: list) -> dict:
-        items = []
-        for source_subset in source_subsets:
-            if not isinstance(source_subset, dict):
-                raise ClientError("JSON_CONTRACT_MISMATCH: BrickLink subset group must be an object")
-            match_no = source_subset.get("match_no")
-            if type(match_no) is not int:
-                raise ClientError("JSON_CONTRACT_MISMATCH: BrickLink subset group match_no must be an integer")
-            entries = source_subset.get("entries")
-            if not isinstance(entries, list):
-                raise ClientError("JSON_CONTRACT_MISMATCH: BrickLink subset group entries must be an array")
-            for entry in entries:
-                if not isinstance(entry, dict):
-                    raise ClientError("JSON_CONTRACT_MISMATCH: BrickLink subset entry must be an object")
-                item = dict(entry)
-                item["match_no"] = match_no
-                items.append(item)
-        return {"set_id": set_number, "items": items}
-
-    @staticmethod
-    def _bricklink_subsets(set_number: str) -> list:
-        command_args = ["bricklink", "catalog", "subsets", "SET", set_number]
-        try:
-            result = subprocess.run(
-                command_args,
-                capture_output=True,
-                check=False,
-                text=True,
-                timeout=REQUEST_TIMEOUT_SECONDS,
-            )
-        except FileNotFoundError as error:
-            raise ClientError("BrickLink CLI is unavailable on PATH") from error
-        except subprocess.TimeoutExpired as error:
-            raise ClientError("BrickLink set contents command timed out for {}".format(set_number)) from error
-
-        activity.info("%s -> %s", " ".join(command_args[:-1]), result.returncode)
-        if result.returncode != 0:
-            raise ClientError(
-                "BrickLink set contents command failed for {} with exit {}".format(set_number, result.returncode)
-            )
-        try:
-            payload = json.loads(result.stdout)
-        except json.JSONDecodeError as error:
-            raise ClientError("JSON_CONTRACT_MISMATCH: BrickLink set contents output must be JSON") from error
-        if not isinstance(payload, list):
-            raise ClientError("JSON_CONTRACT_MISMATCH: BrickLink set contents output must be an array")
-        return payload
+    def _load_database(self) -> CatalogDatabase:
+        return CatalogDatabase.load(self.config.database_path)
 
     def set_contents(self, set_numbers: list[str]) -> list:
-        """Return direct item records for each requested set."""
+        """Return direct item records for each requested set from the local database."""
         validate_set_numbers(set_numbers, "set-contents")
-        return [
-            self._set_contents_record(set_number, self._bricklink_subsets(set_number))
-            for set_number in set_numbers
-        ]
+        database = self._load_database()
+        return [database.set_contents(set_number) for set_number in set_numbers]
+
+    def database_status(self) -> dict:
+        """Return the local BrickStore catalog database's metadata."""
+        return self._load_database().status()
+
+    def database_update(self, force: bool = False) -> dict:
+        """Download and install the newest local BrickStore catalog database."""
+        return download(self.config.database_path, self.config.database_url, force=force)
 
     @staticmethod
     def _require_query_fields(source: dict, required_fields, subject: str) -> None:
