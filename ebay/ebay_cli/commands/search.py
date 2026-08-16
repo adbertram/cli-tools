@@ -7,10 +7,12 @@ public API for active-listing discovery:
 Commands:
 - search: Search ACTIVE (live) or completed/sold listings by keywords.
 - get:    Fetch detail for a single active listing by item ID.
+- status: Fetch availability without requiring fulfillment details.
 """
 COMMAND_CREDENTIALS = {
     "search": ["no_auth"],
     "get": ["no_auth"],
+    "status": ["no_auth"],
 }
 
 from typing import Optional
@@ -24,6 +26,7 @@ from ..browser_client import (
     SEARCH_CONDITION_HELP,
     LISTING_FORMATS,
     LISTING_FORMAT_HELP,
+    SEARCH_MAX_RESULTS,
     DEFAULT_SORT,
     VALID_SORT_FIELDS,
 )
@@ -57,6 +60,8 @@ ITEM_TABLE_HEADERS = [
     "Shipping", "Ships", "Pickup", "Location", "Condition",
     "Availability", "Ended", "Qty", "Seller",
 ]
+STATUS_TABLE_FIELDS = ["item_id", "availability", "ended", "url"]
+STATUS_TABLE_HEADERS = ["Item ID", "Availability", "Ended", "URL"]
 
 
 @app.command("search")
@@ -79,6 +84,11 @@ def listings_search(
         None, "--condition",
         help=SEARCH_CONDITION_HELP,
     ),
+    us_only: bool = typer.Option(
+        False,
+        "--us-only",
+        help="Only show items located in the United States",
+    ),
     sort: str = typer.Option(
         DEFAULT_SORT, "--sort", "-s",
         help=(
@@ -92,7 +102,12 @@ def listings_search(
         False, "--desc", "-d",
         help="Reverse the sort field's natural direction (only valid with --sort price).",
     ),
-    limit: int = typer.Option(50, "--limit", "-l", help="Maximum number of results"),
+    limit: int = typer.Option(
+        50,
+        "--limit",
+        "-l",
+        help=f"Maximum number of results (eBay provides up to {SEARCH_MAX_RESULTS})",
+    ),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     filter_expr: Optional[list[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., status:eq:active)"),
     properties: Optional[list[str]] = typer.Option(None, "--properties", "-p", help="Select fields to display"),
@@ -104,6 +119,10 @@ def listings_search(
     to search live, purchasable listings (BIN + auction) with current price,
     current bid, time-left, shipping, and item URL.
 
+    Completed search requires an authenticated browser session. Run
+    `ebay auth login --credential-type browser_session` first. Active search
+    remains public.
+
     Results are sorted newest-first by default. With --active, 'newest' orders
     by newly listed; for completed comps it orders by most recently ended/sold.
 
@@ -114,6 +133,8 @@ def listings_search(
         ebay listings search "LEGO 75192" --active --format auction --sort ending
 
         ebay listings search "LEGO 75192" --sold --limit 5        # completed comps
+
+        ebay listings search "LEGO 75192" --sold --us-only        # US items only
 
         ebay listings search "iPhone 15" --sort price             # cheapest first
     """
@@ -150,6 +171,7 @@ def listings_search(
                     max_price=max_price,
                     category=category,
                     condition=condition,
+                    us_only=us_only,
                     limit=limit,
                     sop=sop,
                 )
@@ -161,6 +183,7 @@ def listings_search(
                     max_price=max_price,
                     category=category,
                     condition=condition,
+                    us_only=us_only,
                     limit=limit,
                     sop=sop,
                 )
@@ -261,6 +284,59 @@ def listings_get(
             else:
                 fields = ITEM_TABLE_FIELDS
                 headers = ITEM_TABLE_HEADERS
+            print_table([data], fields, headers)
+        else:
+            print_json(data)
+
+    except BrowserError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+@app.command("status")
+@command
+def listings_status(
+    item_id: str = typer.Argument(..., help="eBay item ID (from a listing URL or search result)"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    properties: Optional[list[str]] = typer.Option(None, "--properties", "-p", help="Select fields to display"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+):
+    """Fetch availability for one eBay listing without fulfillment details.
+
+    This command reads only item availability. It does not require shipping or
+    local-pickup rows. Use `listings get` when you need full item detail.
+
+    Examples:
+
+        ebay listings status 127992747834
+
+        ebay listings status 127992747834 -p item_id,ended
+    """
+    try:
+        client = get_browser_client(profile=profile)
+
+        try:
+            data = client.get_item_status(item_id)
+        finally:
+            client.close()
+
+        prop_str = ",".join(properties) if properties else None
+        if prop_str:
+            try:
+                data = validate_and_filter_properties([data], prop_str)[0]
+            except PropertyValidationError as e:
+                print_error(str(e))
+                raise typer.Exit(1)
+
+        if table:
+            if prop_str:
+                fields = [p.strip() for p in prop_str.split(",")]
+                headers = fields
+            else:
+                fields = STATUS_TABLE_FIELDS
+                headers = STATUS_TABLE_HEADERS
             print_table([data], fields, headers)
         else:
             print_json(data)

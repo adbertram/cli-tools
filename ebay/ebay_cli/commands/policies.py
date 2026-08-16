@@ -7,7 +7,7 @@ from cli_tools_shared.output import command
 COMMAND_CREDENTIALS = {
     "list": ["oauth_authorization_code"],
     "get": ["oauth_authorization_code"],
-    "create": ["oauth_authorization_code"],
+    "create": ["no_auth"],
     "update": ["oauth_authorization_code"],
     "delete": ["oauth_authorization_code"],
 }
@@ -21,6 +21,12 @@ from cli_tools_shared.filters import validate_filters, apply_filters, FilterVali
 from ..properties import validate_and_filter_properties, PropertyValidationError
 
 app = typer.Typer(help="Manage eBay fulfillment policies")
+
+US_SPECIAL_EXCLUDED_LOCATIONS = (
+    "Alaska/Hawaii",
+    "US Protectorates",
+    "APO/FPO",
+)
 
 
 @app.command("list")
@@ -216,6 +222,13 @@ def policies_create(
     description: Optional[str] = typer.Option(None, "--description", help="Policy description"),
     local_pickup: bool = typer.Option(False, "--local-pickup", help="Enable local pickup"),
     global_shipping: bool = typer.Option(False, "--global-shipping", help="Enable Global Shipping Program (UK only)"),
+    exclude_us_special_locations: bool = typer.Option(
+        False,
+        "--exclude-us-special-locations",
+        help="Exclude Alaska, Hawaii, US territories, and military addresses",
+    ),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview the request without creation"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Create the policy"),
     table: bool = typer.Option(False, "--table", "-t", help="Display result as table"),
 ):
     """
@@ -243,7 +256,15 @@ def policies_create(
             print_error("--shipping-cost is required when cost-type is FLAT_RATE (unless --free-shipping is set).")
             raise typer.Exit(1)
 
-        client = get_client()
+        if exclude_us_special_locations and marketplace != "EBAY_US":
+            print_error("--exclude-us-special-locations requires marketplace EBAY_US.")
+            raise typer.Exit(1)
+        if exclude_us_special_locations and category == "MOTORS_VEHICLES":
+            print_error("--exclude-us-special-locations does not support the MOTORS_VEHICLES category.")
+            raise typer.Exit(1)
+        if not dry_run and not yes:
+            print_error("Refusing to create an eBay fulfillment policy without --yes or --dry-run.")
+            raise typer.Exit(1)
 
         # Build shipping service entry
         shipping_service = {
@@ -251,7 +272,7 @@ def policies_create(
             "shippingCarrierCode": carrier,
             "shippingServiceCode": service,
             "freeShipping": free_shipping,
-            "buyerResponsibleForShipping": False,
+            "buyerResponsibleForShipping": not free_shipping,
             "buyerResponsibleForPickup": False,
         }
 
@@ -299,7 +320,19 @@ def policies_create(
         if description:
             policy_data["description"] = description
 
-        result = client.create_fulfillment_policy(policy_data)
+        if exclude_us_special_locations:
+            policy_data["shipToLocations"] = {
+                "regionExcluded": [
+                    {"regionName": region_name}
+                    for region_name in US_SPECIAL_EXCLUDED_LOCATIONS
+                ]
+            }
+
+        if dry_run:
+            print_json({"dry_run": True, "request": policy_data})
+            return
+
+        result = get_client().create_fulfillment_policy(policy_data)
 
         print_success(f"Fulfillment policy created: {result.get('fulfillmentPolicyId')}")
 

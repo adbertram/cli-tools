@@ -24,6 +24,8 @@ ebay <command-group> <action> [arguments] [options]
 | Get order details | `ebay seller orders get ORDER_ID` |
 | List inventory | `ebay seller inventory list --table` |
 | Create listing | `ebay seller listings create --sku SKU ...` |
+| Create store category | `ebay seller store categories create "NAME" --yes` |
+| Create fulfillment policy | `ebay seller policies create ... --yes` |
 | Publish listing | `ebay seller listings publish OFFER_ID` |
 | Upload image | `ebay seller images upload FILE_PATH` |
 | List messages | `ebay seller messages list --table` |
@@ -31,6 +33,7 @@ ebay <command-group> <action> [arguments] [options]
 | Disable Time Away | `ebay seller store time-away disable --yes` |
 | Search categories | `ebay categories list "keyword"` |
 | Search completed/sold comps | `ebay listings search "<q>" --sold --limit 5` |
+| Search US-only sold comps | `ebay listings search "<q>" --sold --us-only --limit 5` |
 | Discover ACTIVE listings | `ebay listings search "<q>" --active --format bin --sort newest` |
 | Active auctions (time-left/bids) | `ebay listings search "<q>" --active --format auction --sort ending` |
 | Active item detail | `ebay listings get <item_id>` |
@@ -41,6 +44,25 @@ ebay <command-group> <action> [arguments] [options]
 <principle name="Usage Reference">
 **MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `ebay` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
+</principle>
+
+<principle name="Marketplace Search Page Limit">
+eBay provides at most four marketplace search result pages. Therefore,
+`ebay listings search` returns up to 960 results. It prints a warning when
+`--limit` requests more results than those four pages provide.
+</principle>
+
+<principle name="One Item Per Detail Command">
+`ebay listings get` accepts one item id. It does not provide batch detail.
+A caller loop must preserve each exit status and verify exact requested,
+successful, failed, empty, and invalid JSON counts.
+Do not use the loop's final exit status as proof of complete coverage.
+</principle>
+
+<principle name="Completed Search Browser Session">
+Completed and sold searches require an authenticated browser session. Run
+`ebay auth login --credential-type browser_session` before those searches.
+Active search and active item detail remain public.
 </principle>
 
 <principle name="Item Fulfillment Fields">
@@ -72,10 +94,9 @@ Top-level (admin/agnostic):
 - **auth** — Manage eBay API authentication (OAuth)
 - **auth** -- Authentication commands and nested `auth profiles` management
 - **categories** — Search and browse marketplace categories
-- **listings** — Marketplace search & item detail (browser-scraped, no login):
-  `listings search` (COMPLETED comps by default; `--active` for live BIN/auction
-  listings with price/current bid/time-left/URL) and `listings get <item_id>`
-  (active item detail)
+- **listings** — Browser-based marketplace search and item detail. Completed
+  search requires a browser session. Use `--active` for public live BIN or
+  auction listings. `listings get <item_id>` remains public.
 
 Under `ebay seller`:
 - **orders** — View orders and fulfillment details
@@ -91,6 +112,14 @@ Under `ebay seller`:
 - **locations** — Manage merchant/inventory locations
 - **messages** — Manage seller messages and buyer inquiries
 - **store** — Manage eBay store settings, categories, and Time Away
+</principle>
+
+<principle name="Seller Mutation Guards">
+Preview store category and fulfillment policy requests with `--dry-run`.
+Use `--yes` only after you verify the request.
+Omit `destinationParentCategoryId` to create a top-level store category.
+Use `--exclude-us-special-locations` only with `EBAY_US`.
+Set template `pricing.allowOffers` to `true` to enable Best Offer.
 </principle>
 </essential_principles>
 

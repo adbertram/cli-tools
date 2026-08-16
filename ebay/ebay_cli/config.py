@@ -2,6 +2,7 @@
 import shutil
 from typing import Optional
 
+from cli_tools_shared.browser.user_agent import derive_real_chrome_user_agent
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
 from cli_tools_shared.credentials import CredentialType
 
@@ -137,6 +138,14 @@ class Config(BaseConfig):
     def headless(self) -> bool:
         """Get headless browser mode setting."""
         return (self._get("HEADLESS") or "true").lower() == "true"
+
+    @property
+    def browser_user_agent(self) -> str:
+        """Use the installed real Chrome user agent for every browser mode."""
+        override = self._get("BROWSER_USER_AGENT")
+        if override:
+            return override
+        return derive_real_chrome_user_agent()
 
     @property
     def auth_indicator_selector(self) -> Optional[str]:

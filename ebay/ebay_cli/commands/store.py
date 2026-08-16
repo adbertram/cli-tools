@@ -6,6 +6,7 @@ API Docs: https://developer.ebay.com/api-docs/sell/stores/resources/store/method
 from cli_tools_shared.output import command
 COMMAND_CREDENTIALS = {
     "list": ["oauth_authorization_code"],
+    "create": ["no_auth"],
     "categories": ["oauth_authorization_code"],
     "time-away": ["browser_session"],
 }
@@ -23,7 +24,7 @@ from cli_tools_shared.filters import validate_filters, apply_filters, FilterVali
 from ..properties import validate_and_filter_properties, PropertyValidationError
 
 app = typer.Typer(help="Manage eBay store")
-categories_app = typer.Typer(help="Manage eBay store categories")
+categories_app = typer.Typer(help="Manage eBay store categories", no_args_is_help=True)
 time_away_app = typer.Typer(help="Manage eBay Time Away settings", no_args_is_help=True)
 app.add_typer(categories_app, name="categories", help="Manage eBay store categories")
 app.add_typer(time_away_app, name="time-away", help="Manage eBay Time Away settings")
@@ -353,6 +354,37 @@ def categories_list(
             else:
                 print_json({"storeCategories": categories, "total": len(categories)})
 
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+@categories_app.command("create")
+@command
+def categories_create(
+    category_name: str = typer.Argument(..., help="Top-level store category name"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview the request without creation"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Create the category"),
+):
+    """Create a top-level store category."""
+    if not category_name.strip():
+        print_error("The category name cannot be empty.")
+        raise typer.Exit(1)
+    if len(category_name) > 35:
+        print_error("The category name cannot exceed 35 characters.")
+        raise typer.Exit(1)
+    if not dry_run and not yes:
+        print_error("Refusing to create an eBay store category without --yes or --dry-run.")
+        raise typer.Exit(1)
+
+    payload = {"categoryName": category_name}
+    if dry_run:
+        print_json({"dry_run": True, "request": payload})
+        return
+
+    try:
+        result = get_client().create_store_category(payload)
+        print_success(f"Store category creation accepted: {category_name}")
+        print_json({"categoryName": category_name, **result})
     except Exception as e:
         raise typer.Exit(handle_error(e))
 

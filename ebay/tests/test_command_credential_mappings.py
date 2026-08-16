@@ -54,6 +54,7 @@ def test_seller_listings_commands_are_oauth_only():
     for command_name in (
         "create",
         "delete",
+        "drafts",
         "get",
         "list",
         "preview",
@@ -66,10 +67,10 @@ def test_seller_listings_commands_are_oauth_only():
     assert credentials["search"] == ["no_auth"]
 
 
-def test_marketplace_listing_search_requires_no_auth():
-    """Top-level marketplace search & item-detail use a browser, but not a
-    logged-in session (eBay /sch and /itm pages are public)."""
+def test_marketplace_listing_search_keeps_mode_auth_out_of_static_mapping():
+    """The client gates completed mode. Active search, item detail, and status remain public."""
     assert _load_command_credentials("search") == {
         "search": ["no_auth"],
         "get": ["no_auth"],
+        "status": ["no_auth"],
     }

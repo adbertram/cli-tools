@@ -25,7 +25,7 @@ ebay auth login
 # List your recent orders
 ebay seller orders list
 
-# Search public sold/completed marketplace listings
+# Search sold/completed marketplace listings with a browser session
 ebay listings search "LEGO 75357" --sold --limit 5
 
 # Discover ACTIVE (live, purchasable) listings + item detail
@@ -119,16 +119,17 @@ ebay categories tree 183448 --flat
 
 ### Marketplace Search
 
-Marketplace search uses the shared stealth browser to scrape eBay's public
-search pages. It does **not** require a logged-in browser session — the pages
-under `/sch/i.html` and `/itm/<id>` are public. `listings search` searches
-COMPLETED/sold comps by default; pass `--active` to discover live, purchasable
-listings (BIN + auction). `listings get` fetches detail for a single active
-item.
+Marketplace search uses the shared stealth browser. Completed search requires
+an authenticated browser session because eBay sends cold `LH_Complete=1`
+requests to sign-in. Run `ebay auth login --credential-type browser_session`
+before a completed search. Active search and `listings get` remain public.
+`listings search` uses completed comps by default. Pass `--active` for live,
+purchasable listings.
 
 ```bash
 # Completed/sold comps (default)
 ebay listings search "LEGO 75357" --sold --limit 5
+ebay listings search "LEGO 75357" --sold --us-only --limit 5
 ebay listings search "LEGO bulk" --table
 
 # ACTIVE (live, purchasable) listings — newest first
@@ -146,9 +147,14 @@ ebay listings get 127992747834 --table
 `time_left` (and `bids` for auctions with bids). `--format` filters active
 results to `bin` (Buy It Now), `auction`, or `all` (default). `--sold` and
 `--format` apply to their respective modes only and are rejected if combined
-with the wrong mode. `listings get` returns price, currency, condition,
+with the wrong mode. `--us-only` limits active or completed results to items
+located in the United States. `listings get` returns price, currency, condition,
 availability, shipping, and (for auctions) current bid / time-left, parsed from
 the item page's schema.org `Product` JSON-LD with DOM fallbacks.
+
+eBay provides at most four search result pages. The command returns up to 960
+results. It prints a warning when `--limit` requests more results than those
+four pages provide.
 
 #### Sorting
 
@@ -325,14 +331,35 @@ ebay seller inventory delete SKU123 --force
 
 #### Listings
 
-Manage eBay listings with two creation modes:
+Manage active listings and true Seller Hub drafts.
 
-- **Without `--publish`**: Creates a pseudo-draft using a template. The listing is published
-  at $99,999 then immediately ended, making it visible in eBay Seller Hub for editing.
-- **With `--publish`**: Creates an active listing that stays live. Requires price and all
-  other API parameters.
+- Use `ebay seller listings drafts create` for a Seller Hub draft.
+- Use `ebay seller listings create --publish` for an active Inventory API listing.
+- The old `create` command rejects a request without `--publish`.
 
-**Required Fields:**
+The draft command uses the Sell Feed API `FX_LISTING` flow with `Action=Draft`.
+It does not publish or withdraw an item.
+The draft feed does not contain a payment policy field.
+
+**Known eBay platform limitation:** the Sell Feed API's `FX_LISTING` task
+processor has no registered Task Action Id for `Draft` as of 2026-08-04.
+Every upload — including a minimal, spec-correct CSV matching eBay's
+published "Draft template field definitions" — fails identically in
+production with `BAF.Error.5: Unable to find Task Action Id for task Draft`.
+eBay Developer Support has confirmed on the community forum that eBay does
+not offer a dedicated API for creating draft listings
+(<https://community.ebay.com/t5/Traditional-APIs-Selling/Can-I-generate-drafts-via-API-instead-of-live-listings/td-p/35010391>).
+This is a platform gap, not a CSV formatting defect — `drafts create` still
+attempts the documented flow (eBay's own `fx-feeds-overview` docs describe
+`FX_LISTING` as supporting draft creation, and this may work for other
+accounts/marketplaces or change over time), but the CLI now decodes the
+result CSV's `ErrorMessage` column correctly and attaches an actionable
+hint to this specific error instead of surfacing a bare error code. The
+only currently-working path for a true Seller Hub draft is the
+browser-driven Seller Hub Reports > Uploads page, or a pseudo-draft
+workflow (publish then immediately end at a placeholder price).
+
+**Required Active Listing Fields:**
 
 The CLI validates that all required eBay fields are provided (via CLI options or template):
 
@@ -348,16 +375,16 @@ The CLI validates that all required eBay fields are provided (via CLI options or
 | Description | `--description` or `--description-file` | Item description (HTML supported) |
 | Weight | `--weight` | Package weight in pounds |
 | Dimensions | `--dimensions` | Package dimensions as LxWxH in inches |
-| Price | `--price` | Required only with `--publish` |
+| Price | `--price` | Listing price |
 
 Templates can provide these fields. Use `ebay seller templates get <name>` to see what a template provides.
 
 ```bash
-# List all listings (active and pseudo-drafts)
+# List Inventory API offers and active listings
 ebay seller listings list
 ebay seller listings list --table
 
-# Filter by status (draft includes pseudo-drafts at $99,999)
+# Filter by Inventory API status
 ebay seller listings list --status active
 ebay seller listings list --status draft
 
@@ -369,15 +396,17 @@ ebay seller listings list --properties "sku,title,price,status"
 ebay seller listings get MY-SKU-123
 ebay seller listings get MY-SKU-123 --table
 
-# Create a pseudo-draft (template provides policies, category, format)
-ebay seller listings create --sku SKU123 --template lego-bulk-auction \
-  --weight 5 --dimensions 12x10x8 --photos-album "My Album"
+# Create a true Seller Hub draft
+ebay seller listings drafts create --category 47140 --sku SKU123 \
+  --title "Test Draft Shoe" --price "11.00" --quantity 1 \
+  --image-url "https://example.com/image.png" --condition-id NEW \
+  --description "<p>Draft description</p>" --format FixedPrice
 
-# Create with all required fields explicitly
+# Create an active listing with all required fields
 ebay seller listings create --sku SKU123 --template base \
   --format AUCTION --category 175673 --title "My Item" \
   --weight 2 --dimensions 10x8x6 \
-  --fulfillment-policy 246932501026
+  --fulfillment-policy 246932501026 --publish --price 29.99
 
 # Create an active listing (with --publish, price required)
 ebay seller listings create --sku SKU123 --template lego-bulk-auction \
@@ -385,19 +414,16 @@ ebay seller listings create --sku SKU123 --template lego-bulk-auction \
 
 # Create with images
 ebay seller listings create --sku SKU123 --template lego-bulk-auction \
-  --weight 5 --dimensions 12x10x8 --image-folder "/path/to/photos/"
+  --weight 5 --dimensions 12x10x8 --image-folder "/path/to/photos/" --publish
 ebay seller listings create --sku SKU123 --template lego-bulk-auction \
-  --weight 5 --dimensions 12x10x8 --photos-album "eBay Listing"
+  --weight 5 --dimensions 12x10x8 --photos-album "eBay Listing" --publish
 
 # Update a listing
 ebay seller listings update SKU123 --price 39.99
 ebay seller listings update SKU123 --quantity 5
 ebay seller listings update SKU123 --title "New Title" --price 29.99
 
-# Set final price on a pseudo-draft
-ebay seller listings publish SKU123 --price 29.99
-
-# Publish a real draft listing (legacy)
+# Publish an Inventory API draft offer
 ebay seller listings publish SKU123
 
 # Unpublish (withdraw) an active listing
@@ -413,6 +439,10 @@ ebay seller listings delete SKU123
 ebay seller listings delete SKU123 --force
 ebay seller listings delete SKU123 --keep-inventory  # Keep inventory item
 ```
+
+`ebay seller listings get` requires the SKU to select one current Inventory offer.
+Sold history stays separate from the current offer.
+The command returns an error when multiple current offers use the same SKU.
 
 **Template Support:**
 - Use `--template` to load default values from a saved template
@@ -527,6 +557,8 @@ ebay seller templates delete old-template --force
 
 **Usage:** Use templates with `ebay seller listings create --template <name>` to create listings with preset values. CLI options override template defaults.
 
+Set `pricing.allowOffers` to `true` in a template to enable Best Offer for the created offer.
+
 #### Policies
 
 Manage fulfillment, payment, and return policies.
@@ -537,7 +569,12 @@ ebay seller policies list
 ebay seller policies list --limit 5
 ebay seller policies list --properties "fulfillmentPolicyId,name"
 ebay seller policies get 12345678
-ebay seller policies create --name "Standard Shipping" --handling-days 3
+ebay seller policies create --name "UPS Ground Saver buyer paid" \
+  --handling-days 3 --carrier UPS --service US_UPSSurePost \
+  --exclude-us-special-locations --dry-run
+ebay seller policies create --name "UPS Ground Saver buyer paid" \
+  --handling-days 3 --carrier UPS --service US_UPSSurePost \
+  --exclude-us-special-locations --yes
 ebay seller policies update 12345678 --handling-days 2
 ebay seller policies delete 12345678
 ebay seller policies delete 12345678 --force
@@ -585,6 +622,12 @@ ebay seller store categories list --filter "categoryName:ilike:%lego%"
 # Get a specific store category by ID
 ebay seller store categories get 12345
 ebay seller store categories get 12345 --table
+
+# Preview a top-level store category
+ebay seller store categories create "LEGO Sets" --dry-run
+
+# Create a top-level store category
+ebay seller store categories create "LEGO Sets" --yes
 
 # Check Time Away settings
 ebay seller store time-away get

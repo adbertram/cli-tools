@@ -1,8 +1,17 @@
 """Regression tests for the completed-listings browser extractor."""
 
+import pytest
+from cli_tools_shared.browser import BrowserHarnessError
 from playwright.sync_api import sync_playwright
 
-from ebay_cli.browser_client import EXTRACT_JS, PAGE_STATE_JS, SELECTORS
+from ebay_cli.browser import BrowserError
+from ebay_cli.browser_client import (
+    EXTRACT_JS,
+    PAGE_STATE_JS,
+    SEARCH_RESULTS_TIMEOUT_MS,
+    SELECTORS,
+    EbayBrowserClient,
+)
 
 
 def _run_extract_js(html: str, active: bool = False):
@@ -346,3 +355,184 @@ def test_page_state_js_recognizes_genuine_zero_results():
 
     assert state["container_exists"] is True
     assert state["zero_results"] is True
+
+
+class _ColdProfileSearchPage:
+    """A page that requires the verified eBay homepage-first search path."""
+
+    def __init__(self):
+        self.events = []
+
+    def get_page(self, url):
+        self.events.append(("get_page", url))
+        return self
+
+    def is_authenticated(self):
+        self.events.append(("is_authenticated",))
+        return True
+
+    def wait_for_selector(self, selector, *, state, timeout):
+        self.events.append(("wait_for_selector", selector, state, timeout))
+        return object()
+
+    def evaluate(self, script, params=None):
+        if script != EXTRACT_JS:
+            raise AssertionError("The search extractor used an unexpected script")
+        return [
+            {
+                "item_id": "127992747834",
+                "title": "LEGO White Technic Panel",
+                "price": "2.95",
+                "currency": "USD",
+                "shipping_price": "6.25",
+                "status": "active",
+                "date_sold": None,
+                "time_left": None,
+                "condition": "Pre-Owned",
+                "format": "Buy It Now",
+                "bids": None,
+                "seller": "seller",
+                "url": "https://www.ebay.com/itm/127992747834",
+                "image_url": None,
+            }
+        ]
+
+    def locator(self, selector):
+        self.events.append(("locator", selector))
+        return self
+
+    def count(self):
+        return 0
+
+
+class _HydratingSearchPage(_ColdProfileSearchPage):
+    """A result container that attaches before its listing cards."""
+
+    def __init__(self):
+        super().__init__()
+        self.items_attached = False
+
+    def wait_for_selector(self, selector, *, state, timeout):
+        result = super().wait_for_selector(
+            selector,
+            state=state,
+            timeout=timeout,
+        )
+        if selector == SELECTORS["item"]:
+            self.items_attached = True
+        return result
+
+    def evaluate(self, script, params=None):
+        if script == EXTRACT_JS:
+            if not self.items_attached:
+                return []
+            return super().evaluate(script, params)
+        if script == PAGE_STATE_JS:
+            return {
+                "url": "https://www.ebay.com/sch/i.html?_nkw=lego+technic+lbs",
+                "title": "Lego Technic Lbs for sale | eBay",
+                "body_text_snippet": "318 results for lego technic lbs",
+                "container_exists": True,
+                "heading_text": "318 results for lego technic lbs",
+                "zero_results": False,
+            }
+        raise AssertionError("The search used an unexpected script")
+
+
+class _ZeroResultsSearchPage(_HydratingSearchPage):
+    """A result container with an explicit zero-results heading."""
+
+    def wait_for_selector(self, selector, *, state, timeout):
+        if selector == SELECTORS["item"]:
+            self.events.append(("wait_for_selector", selector, state, timeout))
+            raise BrowserHarnessError("selector timed out")
+        return super().wait_for_selector(selector, state=state, timeout=timeout)
+
+    def evaluate(self, script, params=None):
+        if script == EXTRACT_JS:
+            return []
+        if script == PAGE_STATE_JS:
+            return {
+                "url": "https://www.ebay.com/sch/i.html?_nkw=no-matches",
+                "title": "No matches | eBay",
+                "body_text_snippet": "0 results for no-matches",
+                "container_exists": True,
+                "heading_text": "0 results for no-matches",
+                "zero_results": True,
+            }
+        raise AssertionError("The search used an unexpected script")
+
+
+def test_should_warm_cold_profile_and_wait_for_listing_cards():
+    """Live evidence showed a cold profile's direct search returned eBay's
+    error page. A homepage request established the guest session. The search
+    then crossed a transient interstitial and rendered the listing cards."""
+    page = _ColdProfileSearchPage()
+    client = EbayBrowserClient(config=object())
+    client._browser = page
+
+    results = client.search_active("LEGO complete set no box no instructions", limit=1)
+
+    assert [result.item_id for result in results] == ["127992747834"]
+    assert page.events[0] == ("get_page", "https://www.ebay.com")
+    assert page.events[1] == (
+        "wait_for_selector",
+        SELECTORS["homepage_search_input"],
+        "attached",
+        SEARCH_RESULTS_TIMEOUT_MS,
+    )
+    assert page.events[2][0] == "get_page"
+    assert page.events[2][1].startswith("https://www.ebay.com/sch/i.html?")
+    assert page.events[3] == (
+        "wait_for_selector",
+        SELECTORS["item"],
+        "attached",
+        SEARCH_RESULTS_TIMEOUT_MS,
+    )
+
+
+def test_should_wait_for_listing_cards_when_container_attaches_first():
+    """The extractor waits for card hydration after the container attaches."""
+    page = _HydratingSearchPage()
+    client = EbayBrowserClient(config=object())
+    client._browser = page
+
+    results = client.search_completed("lego technic lbs", limit=1)
+
+    assert [result.item_id for result in results] == ["127992747834"]
+    assert page.events[4] == (
+        "wait_for_selector",
+        SELECTORS["item"],
+        "attached",
+        SEARCH_RESULTS_TIMEOUT_MS,
+    )
+
+
+def test_search_keeps_explicit_zero_results_after_item_wait_timeout():
+    """A timed out item wait returns empty only for eBay's zero heading."""
+    page = _ZeroResultsSearchPage()
+    client = EbayBrowserClient(config=object())
+    client._browser = page
+
+    results = client.search_completed("no-matches", limit=1)
+
+    assert results == []
+    assert page.events[4] == (
+        "wait_for_selector",
+        SELECTORS["item"],
+        "attached",
+        SEARCH_RESULTS_TIMEOUT_MS,
+    )
+
+
+def test_persistent_pardon_interruption_is_a_security_blocker():
+    """The live cold-profile DOM used eBay's exact interstitial title."""
+    with pytest.raises(BrowserError, match="CAPTCHA/security-verification"):
+        EbayBrowserClient._raise_for_search_blocker(
+            {
+                "url": "https://www.ebay.com/sch/i.html?_nkw=LEGO",
+                "title": "🐴 Pardon Our Interruption...",
+                "body_text_snippet": "Pardon Our Interruption",
+                "container_exists": False,
+            }
+        )

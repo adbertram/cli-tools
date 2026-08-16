@@ -9,17 +9,20 @@ the public Sell API:
   price, current bid, time-left, shipping, and item URL.
 * ``get_item`` — detail for a single active ``/itm/<id>`` page, parsed from
   the page's schema.org ``Product`` JSON-LD plus DOM supplements.
+* ``get_item_status`` — availability for one ``/itm/<id>`` page without
+  requiring shipping or local-pickup rows.
 
-eBay's ``/sch/i.html`` and ``/itm/<id>`` pages are public, so search and
-item-detail navigate directly with the persisted/warmed profile and raise a
-clear error only if eBay actually walls the page (CAPTCHA or sign-in
-redirect). They do not require a live My-eBay login.
+Active ``/sch/i.html`` searches and ``/itm/<id>`` pages are public. Completed
+searches require a live browser session because eBay sends cold
+``LH_Complete=1`` requests to sign-in. Every search also waits for usable
+homepage content before it navigates.
 """
 import json
 import re
 from typing import Any, Optional
 from urllib.parse import urlencode
 
+from cli_tools_shared.browser import BrowserHarnessError
 from cli_tools_shared.output import print_info, print_warning
 
 from .browser import BrowserError, EbayBrowser
@@ -33,6 +36,7 @@ from .models.search_result import SearchResult
 # 2026-07-23 by inspecting live search-result HTML -- see
 # tests/test_browser_search_extractor.py and sources.md for details).
 SELECTORS = {
+    "homepage_search_input": 'input[name="_nkw"]',
     "results_container": ".srp-river-main",
     "results_heading": ".srp-controls__count-heading",
     "item": "li.s-card[data-listingid]",
@@ -47,6 +51,10 @@ SELECTORS = {
     "attribute_row": ".s-card__attribute-row",
     "next_page": "a.pagination__next",
 }
+SEARCH_RESULTS_TIMEOUT_MS = 10_000
+SEARCH_PAGE_SIZE = 240
+SEARCH_MAX_PAGES = 4
+SEARCH_MAX_RESULTS = SEARCH_PAGE_SIZE * SEARCH_MAX_PAGES
 
 SEARCH_CONDITION_ALIASES = {
     "new": "1000",
@@ -500,6 +508,56 @@ def _first_offer(product: dict) -> Optional[dict]:
     return None
 
 
+_UNAVAILABLE_AVAILABILITIES = {"SoldOut", "OutOfStock", "Discontinued"}
+
+
+def _parse_item_availability(offer: Optional[dict], data: dict) -> Optional[str]:
+    """Read listing availability without inspecting fulfillment rows."""
+    if offer:
+        availability = offer.get("availability")
+        if availability:
+            return str(availability).rsplit("/", 1)[-1]
+    if data.get("ended_banner"):
+        return "SoldOut"
+    if data.get("quantity"):
+        return "InStock"
+    return None
+
+
+def parse_item_status(item_id: str, data: dict) -> dict[str, Any]:
+    """Return availability for one item without requiring fulfillment data."""
+    if data.get("captcha"):
+        raise BrowserError(
+            "eBay item page is blocked by a CAPTCHA/security-verification page. "
+            f"url={data.get('url')!r}"
+        )
+
+    product = _find_product(data.get("jsonld") or [])
+    offer = _first_offer(product) if product else None
+    if data.get("error_page"):
+        return {
+            "item_id": item_id,
+            "availability": None,
+            "ended": True,
+            "url": f"https://www.ebay.com/itm/{item_id}",
+        }
+
+    availability = _parse_item_availability(offer, data)
+    ended = bool(data.get("ended_banner")) or availability in _UNAVAILABLE_AVAILABILITIES
+    if availability is None:
+        raise BrowserError(
+            f"eBay item {item_id} page carries no availability evidence. "
+            f"url={data.get('url')!r} title={data.get('doc_title')!r}"
+        )
+
+    return {
+        "item_id": item_id,
+        "availability": availability,
+        "ended": ended,
+        "url": f"https://www.ebay.com/itm/{item_id}",
+    }
+
+
 def parse_item_detail(item_id: str, data: dict) -> ItemDetail:
     """Build an :class:`ItemDetail` from :data:`ITEM_DETAIL_JS` page data.
 
@@ -546,7 +604,7 @@ def parse_item_detail(item_id: str, data: dict) -> ItemDetail:
     # ---- price / currency ----
     currency = "USD"
     price = None
-    availability = None
+    availability = _parse_item_availability(offer, data)
     condition = data.get("condition")
     shipping_price = None
     brand = None
@@ -555,9 +613,6 @@ def parse_item_detail(item_id: str, data: dict) -> ItemDetail:
     if offer:
         price = _numeric_price(offer.get("price"))
         currency = offer.get("priceCurrency") or "USD"
-        avail = offer.get("availability")
-        if avail:
-            availability = str(avail).rsplit("/", 1)[-1]
         cond = offer.get("itemCondition")
         if cond and not condition:
             condition = _SCHEMA_CONDITION.get(str(cond).rsplit("/", 1)[-1])
@@ -579,12 +634,6 @@ def parse_item_detail(item_id: str, data: dict) -> ItemDetail:
             currency = detected
     if shipping_price is None:
         shipping_price = _parse_shipping_dom(data.get("shipping_dom"))
-    if availability is None:
-        if data.get("ended_banner"):
-            availability = "SoldOut"
-        elif data.get("quantity"):
-            availability = "InStock"
-
     if product:
         brand_obj = product.get("brand")
         if isinstance(brand_obj, dict):
@@ -619,7 +668,7 @@ def parse_item_detail(item_id: str, data: dict) -> ItemDetail:
         bin_price = price or _numeric_price(data.get("bin_price"))
 
     ended = bool(data.get("ended_banner")) or (
-        availability in {"SoldOut", "OutOfStock", "Discontinued"}
+        availability in _UNAVAILABLE_AVAILABILITIES
     )
 
     return ItemDetail(
@@ -681,10 +730,9 @@ class EbayBrowserClient:
     def ensure_authenticated(self):
         """Ensure the browser session is authenticated (My-eBay login).
 
-        Retained for callers that genuinely need a logged-in session. Public
-        search and item-detail do NOT call this: eBay's ``/sch`` and ``/itm``
-        pages are public, so they navigate directly and rely on
-        :meth:`_raise_for_search_blocker` to surface a sign-in/CAPTCHA wall.
+        Completed search calls this because eBay sends cold
+        ``LH_Complete=1`` requests to sign-in. Active search and item-detail
+        remain public.
         """
         if not self.browser.is_authenticated():
             raise BrowserError(
@@ -697,7 +745,13 @@ class EbayBrowserClient:
         page instead of real results, rather than letting that silently look
         like zero results."""
         lowered = f"{state['url']} {state['title']} {state['body_text_snippet']}".lower()
-        if "splashui/captcha" in lowered or "hcaptcha" in lowered or "recaptcha" in lowered:
+        if (
+            "splashui/captcha" in lowered
+            or "hcaptcha" in lowered
+            or "recaptcha" in lowered
+            or "pardon our interruption" in lowered
+            or "verify you are human" in lowered
+        ):
             raise BrowserError(
                 f"eBay search is blocked by a CAPTCHA/security-verification page. url={state['url']} title={state['title']!r}"
             )
@@ -720,10 +774,12 @@ class EbayBrowserClient:
         max_price: Optional[float] = None,
         category: Optional[str] = None,
         condition: Optional[str] = None,
+        us_only: bool = False,
         limit: int = 50,
         sop: str = "13",
     ) -> list[SearchResult]:
-        """Search eBay completed/sold listings (comps)."""
+        """Search completed/sold listings with a live browser session."""
+        self.ensure_authenticated()
         return self._search(
             keywords=keywords,
             active=False,
@@ -732,6 +788,7 @@ class EbayBrowserClient:
             max_price=max_price,
             category=category,
             condition=condition,
+            us_only=us_only,
             limit=limit,
             sop=sop,
         )
@@ -744,6 +801,7 @@ class EbayBrowserClient:
         max_price: Optional[float] = None,
         category: Optional[str] = None,
         condition: Optional[str] = None,
+        us_only: bool = False,
         limit: int = 50,
         sop: str = "10",
     ) -> list[SearchResult]:
@@ -756,6 +814,7 @@ class EbayBrowserClient:
             max_price=max_price,
             category=category,
             condition=condition,
+            us_only=us_only,
             limit=limit,
             sop=sop,
         )
@@ -770,20 +829,30 @@ class EbayBrowserClient:
         max_price: Optional[float] = None,
         category: Optional[str] = None,
         condition: Optional[str] = None,
+        us_only: bool = False,
         limit: int = 50,
         sop: str = "13",
     ) -> list[SearchResult]:
         """Shared search over active or completed listings.
 
-        Navigates the public search page directly (no login pre-gate) and
-        relies on :meth:`_raise_for_search_blocker` to surface a
+        Warms the public homepage, then navigates to search without a login
+        gate. Relies on :meth:`_raise_for_search_blocker` to surface a
         CAPTCHA/sign-in wall.
         """
         all_results: list[SearchResult] = []
         page_num = 1
-        max_pages = (limit // 240) + 2  # 240 items per page max
+        page = self.browser.get_page(self.BASE_URL)
+        try:
+            page.wait_for_selector(
+                SELECTORS["homepage_search_input"],
+                state="attached",
+                timeout=SEARCH_RESULTS_TIMEOUT_MS,
+            )
+        except BrowserHarnessError:
+            state = page.evaluate(PAGE_STATE_JS, SELECTORS)
+            self._raise_for_search_blocker(state)
 
-        while len(all_results) < limit and page_num <= max_pages:
+        while len(all_results) < limit and page_num <= SEARCH_MAX_PAGES:
             url = self._build_search_url(
                 keywords=keywords,
                 active=active,
@@ -793,17 +862,35 @@ class EbayBrowserClient:
                 max_price=max_price,
                 category=category,
                 condition=condition,
+                us_only=us_only,
                 page=page_num,
                 sop=sop,
             )
 
             print_info(f"Fetching page {page_num}...")
 
-            # Navigate directly to the public search page (no My-eBay pre-hop):
-            # get_page(url) opens the browser at this URL on the first call and
-            # navigates there on subsequent pages.
+            # A new eBay profile needs the homepage request to establish its
+            # guest session. Search can then show a transient "Pardon Our
+            # Interruption" page before it redirects to the results.
             page = self.browser.get_page(url)
-            page.wait_for_timeout(2000)  # Let results load
+            try:
+                page.wait_for_selector(
+                    SELECTORS["item"],
+                    state="attached",
+                    timeout=SEARCH_RESULTS_TIMEOUT_MS,
+                )
+            except BrowserHarnessError:
+                state = page.evaluate(PAGE_STATE_JS, SELECTORS)
+                self._raise_for_search_blocker(state)
+                if state["zero_results"]:
+                    break
+                raise BrowserError(
+                    "eBay search result cards did not attach before the timeout even "
+                    "though the page reports results. "
+                    f"url={state['url']} title={state['title']!r} "
+                    f"heading={state['heading_text']!r} "
+                    f"container_exists={state['container_exists']}"
+                )
 
             raw_results = page.evaluate(EXTRACT_JS, {"selectors": SELECTORS, "active": active})
 
@@ -832,6 +919,14 @@ class EbayBrowserClient:
             if next_btn.count() == 0:
                 break
 
+            if page_num == SEARCH_MAX_PAGES:
+                if len(all_results) < limit:
+                    print_warning(
+                        f"eBay search provides at most four result pages. "
+                        f"Returned {len(all_results)} of {limit} requested results."
+                    )
+                break
+
             page_num += 1
             page.wait_for_timeout(1000)  # Brief delay between pages
 
@@ -844,6 +939,21 @@ class EbayBrowserClient:
         schema.org ``Product`` JSON-LD plus DOM supplements. Raises
         :class:`BrowserError` on a CAPTCHA wall or a removed/invalid item.
         """
+        item_id, data = self._read_item_page(item_id)
+        return parse_item_detail(item_id, data)
+
+    def get_item_status(self, item_id: str) -> dict[str, Any]:
+        """Fetch item availability without parsing fulfillment details."""
+        item_id, data = self._read_item_page(item_id, original_listing=True)
+        return parse_item_status(item_id, data)
+
+    def _read_item_page(
+        self,
+        item_id: str,
+        *,
+        original_listing: bool = False,
+    ) -> tuple[str, dict]:
+        """Read the public item page once and return its normalized item ID and DOM data."""
         item_id = str(item_id).strip()
         if not item_id or not item_id.isdigit():
             raise BrowserError(f"Invalid eBay item ID: {item_id!r}")
@@ -853,11 +963,11 @@ class EbayBrowserClient:
         # server-rendered Product JSON-LD, so a fresh open is what yields the
         # structured price/condition/availability/shipping data.
         url = f"{self.BASE_URL}{self.ITEM_PATH}/{item_id}"
+        if original_listing:
+            url = f"{url}?orig_cvip=true"
         page = self.browser.get_page(url)
         page.wait_for_timeout(3000)
-
-        data = page.evaluate(ITEM_DETAIL_JS)
-        return parse_item_detail(item_id, data)
+        return item_id, page.evaluate(ITEM_DETAIL_JS)
 
     def _build_search_url(
         self,
@@ -869,6 +979,7 @@ class EbayBrowserClient:
         max_price: Optional[float] = None,
         category: Optional[str] = None,
         condition: Optional[str] = None,
+        us_only: bool = False,
         page: int = 1,
         sop: str = "13",
     ) -> str:
@@ -880,7 +991,7 @@ class EbayBrowserClient:
         """
         params = {
             "_nkw": keywords,
-            "_ipg": "240",  # Items per page (max)
+            "_ipg": str(SEARCH_PAGE_SIZE),
             "_sop": sop,  # Sort order (see resolve_sop)
         }
 
@@ -907,6 +1018,9 @@ class EbayBrowserClient:
         if condition:
             cond_id = SEARCH_CONDITION_ALIASES.get(condition.lower(), condition)
             params["LH_ItemCondition"] = cond_id
+
+        if us_only:
+            params["LH_PrefLoc"] = "1"
 
         if page > 1:
             params["_pgn"] = str(page)

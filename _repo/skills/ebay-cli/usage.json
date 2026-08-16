@@ -1,8 +1,8 @@
 {
   "tool": "ebay",
   "description": "eBay CLI — seller tools, marketplace categories, and account management",
-  "discovered_at": "2026-07-27T01:18:39Z",
-  "total_commands": 72,
+  "discovered_at": "2026-08-13T14:46:03Z",
+  "total_commands": 74,
   "global_options": [
     {
       "name": "--version",
@@ -272,6 +272,11 @@
       "commands": {
         "conditions": {
           "help": "List valid item conditions for a category. Uses the eBay Metadata API to retrieve which condition values are accepted when listing items in the specified category.",
+          "examples": [
+            "ebay categories conditions 261329",
+            "ebay categories conditions 261329 --table",
+            "ebay categories conditions 183448"
+          ],
           "arguments": [
             {
               "name": "category_id",
@@ -306,6 +311,11 @@
         },
         "get": {
           "help": "Get details for a specific category ID. Returns category details including the full path and whether it's a leaf category. Use --aspects to see required and recommended item specifics for listings.",
+          "examples": [
+            "ebay categories get 183448",
+            "ebay categories get 183448 --table",
+            "ebay categories get 261328 --aspects"
+          ],
           "arguments": [
             {
               "name": "category_id",
@@ -347,6 +357,14 @@
         },
         "list": {
           "help": "List eBay categories matching a keyword query. Returns leaf category suggestions based on your search query. Use the category ID when creating listings. This is an alias for 'ebay categories search'.",
+          "examples": [
+            "ebay categories list \"trading card storage\"",
+            "ebay categories list \"lego parts\" --table",
+            "ebay categories list \"vintage toys\" --limit 5",
+            "ebay categories list \"electronics\" --marketplace EBAY_GB",
+            "ebay categories list \"lego\" --filter \"level:gt:3\"",
+            "ebay categories list \"lego\" --properties \"categoryId,categoryName\""
+          ],
           "arguments": [
             {
               "name": "query",
@@ -403,6 +421,13 @@
         },
         "tree": {
           "help": "Browse the category tree from a parent category. Shows child categories of the specified parent. Use this to drill down into the category hierarchy to find the right leaf category for your item.",
+          "examples": [
+            "ebay categories tree                    # Show top-level categories",
+            "ebay categories tree 220                # Browse Toys & Hobbies",
+            "ebay categories tree 220 --table        # Show as table",
+            "ebay categories tree 220 --depth 2      # Show 2 levels deep",
+            "ebay categories tree 183448 --flat      # Flatten hierarchy"
+          ],
           "arguments": [
             {
               "name": "category_id",
@@ -465,6 +490,11 @@
       "commands": {
         "get": {
           "help": "Fetch detail for a single active eBay listing by item ID. Scrapes the public /itm/<id> page (schema.org Product JSON-LD + DOM) for price, currency, condition, availability, shipping, current bid, and time-left. Fulfillment comes from eBay's own label rows: `ships` is true when the shipping row quotes a rate or delivery estimate, `local_pickup` is true when the pickup row is present, and `item_location` is the shipping row's \"Located in:\" origin. A page with neither row is an error, not \"no fulfillment\".",
+          "examples": [
+            "ebay listings get 127992747834",
+            "ebay listings get 127992747834 --table",
+            "ebay listings get 127992747834 -p item_id,ships,local_pickup,item_location"
+          ],
           "arguments": [
             {
               "name": "item_id",
@@ -497,7 +527,14 @@
           ]
         },
         "search": {
-          "help": "Search eBay ACTIVE or completed/sold listings. By default searches COMPLETED listings (sold + unsold comps). Pass --active to search live, purchasable listings (BIN + auction) with current price, current bid, time-left, shipping, and item URL. Results are sorted newest-first by default. With --active, 'newest' orders by newly listed; for completed comps it orders by most recently ended/sold.",
+          "help": "Search eBay ACTIVE or completed/sold listings. By default searches COMPLETED listings (sold + unsold comps). Pass --active to search live, purchasable listings (BIN + auction) with current price, current bid, time-left, shipping, and item URL. Completed search requires an authenticated browser session. Run `ebay auth login --credential-type browser_session` first. Active search remains public. Results are sorted newest-first by default. With --active, 'newest' orders by newly listed; for completed comps it orders by most recently ended/sold.",
+          "examples": [
+            "ebay listings search \"LEGO bulk lot\" --active --format bin --limit 5",
+            "ebay listings search \"LEGO 75192\" --active --format auction --sort ending",
+            "ebay listings search \"LEGO 75192\" --sold --limit 5        # completed comps",
+            "ebay listings search \"LEGO 75192\" --sold --us-only        # US items only",
+            "ebay listings search \"iPhone 15\" --sort price             # cheapest first"
+          ],
           "arguments": [
             {
               "name": "keywords",
@@ -553,6 +590,12 @@
               "help": "Item condition (new, open_box, refurbished, used, for_parts, or eBay condition ID)"
             },
             {
+              "name": "--us-only",
+              "type": "bool",
+              "required": false,
+              "help": "Only show items located in the United States"
+            },
+            {
               "name": "--sort",
               "type": "TEXT",
               "required": false,
@@ -571,7 +614,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "Maximum number of results",
+              "help": "Maximum number of results (eBay provides up to 960)",
               "short": "-l",
               "default": "50"
             },
@@ -1103,7 +1146,11 @@
           ],
           "commands": {
             "create": {
-              "help": "Create a new listing. Without --publish: Creates a pseudo-draft using a template. The listing is published briefly at $99,999 then immediately ended, making it visible in eBay Seller Hub for editing. Only --template is required. With --publish: Creates an active listing that stays live. Requires all API parameters (price, category, etc.) either from CLI options or template.",
+              "help": "Create and publish an active Inventory API listing. Draft creation uses `ebay seller listings drafts create`.",
+              "examples": [
+                "ebay seller listings create --sku SKU123 --template vintage-camera --publish --price 149.99",
+                "ebay seller listings create --sku SKU123 --title \"Item\" --price 99 --category 175673 --publish"
+              ],
               "arguments": [],
               "options": [
                 {
@@ -1237,8 +1284,8 @@
                 {
                   "name": "--fulfillment-policy",
                   "type": "TEXT",
-                  "required": true,
-                  "help": "Fulfillment policy ID (required)"
+                  "required": false,
+                  "help": "Fulfillment policy ID"
                 },
                 {
                   "name": "--payment-policy",
@@ -1274,7 +1321,7 @@
                   "name": "--publish",
                   "type": "bool",
                   "required": false,
-                  "help": "Publish immediately after creation"
+                  "help": "Publish the item; required for this command"
                 },
                 {
                   "name": "--table",
@@ -1323,8 +1370,99 @@
                 }
               ]
             },
+            "drafts": {
+              "help": "Manage Seller Hub drafts",
+              "arguments": [],
+              "options": [],
+              "commands": {
+                "create": {
+                  "help": "Create a true Seller Hub draft through the FX_LISTING feed.",
+                  "arguments": [],
+                  "options": [
+                    {
+                      "name": "--category",
+                      "type": "TEXT",
+                      "required": true,
+                      "help": "eBay category ID",
+                      "short": "-c"
+                    },
+                    {
+                      "name": "--sku",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Custom label or SKU",
+                      "short": "-s"
+                    },
+                    {
+                      "name": "--title",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Draft title"
+                    },
+                    {
+                      "name": "--upc",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Product UPC"
+                    },
+                    {
+                      "name": "--price",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Draft price text",
+                      "short": "-p"
+                    },
+                    {
+                      "name": "--quantity",
+                      "type": "INTEGER",
+                      "required": false,
+                      "help": "Draft quantity",
+                      "short": "-q"
+                    },
+                    {
+                      "name": "--image-url",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Item photo URL"
+                    },
+                    {
+                      "name": "--condition-id",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "eBay condition ID"
+                    },
+                    {
+                      "name": "--description",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Draft description",
+                      "short": "-d"
+                    },
+                    {
+                      "name": "--description-file",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Read the description from a file or stdin with '-'"
+                    },
+                    {
+                      "name": "--format",
+                      "type": "AUCTION|FIXEDPRICE",
+                      "required": false,
+                      "help": "Draft format",
+                      "short": "-f"
+                    },
+                    {
+                      "name": "--profile",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Auth profile name"
+                    }
+                  ]
+                }
+              }
+            },
             "get": {
-              "help": "Get details for a specific listing by SKU.",
+              "help": "Get details for a specific listing by SKU. The SKU must select one current Inventory offer. Sold history stays separate. The command fails when multiple current offers use the same SKU.",
               "arguments": [
                 {
                   "name": "sku",
@@ -1431,7 +1569,7 @@
               ]
             },
             "publish": {
-              "help": "Publish a draft listing or set final price on a pseudo-draft. For real drafts: Publishes the listing to make it live on eBay. For pseudo-drafts: Use --price to set the final price (required).",
+              "help": "Publish an Inventory API draft offer.",
               "arguments": [
                 {
                   "name": "sku",
@@ -1441,13 +1579,6 @@
                 }
               ],
               "options": [
-                {
-                  "name": "--price",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Set final price (required for pseudo-drafts)",
-                  "short": "-p"
-                },
                 {
                   "name": "--table",
                   "type": "bool",
@@ -2095,6 +2226,13 @@
                   "help": "Comma-separated list of order IDs to retrieve"
                 },
                 {
+                  "name": "--include-shipping-labels",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Attach a shipping_label property (carrier/service/tracking) to each order. Issues one extra API call per order returned",
+                  "short": "-i"
+                },
+                {
                   "name": "--filter",
                   "type": "TEXT",
                   "required": false,
@@ -2221,6 +2359,11 @@
           "commands": {
             "create": {
               "help": "Create a new fulfillment policy. Fulfillment policies define how orders are handled and shipped. The handling time specifies how many business days you need to ship after payment. A shipping carrier, service code, and cost type are required by the eBay API.",
+              "examples": [
+                "ebay seller policies create --name \"UPS Ground - Buyer Pays\" --handling-days 3 --carrier UPS --service UPSGround",
+                "ebay seller policies create --name \"Free FedEx\" --handling-days 1 --carrier FedEx --service FedExSmartPost --free-shipping",
+                "ebay seller policies create --name \"USPS Flat Rate\" --handling-days 2 --carrier USPS --service USPSPriority --cost-type FLAT_RATE --shipping-cost 5.99"
+              ],
               "arguments": [],
               "options": [
                 {
@@ -2302,6 +2445,25 @@
                   "type": "bool",
                   "required": false,
                   "help": "Enable Global Shipping Program (UK only)"
+                },
+                {
+                  "name": "--exclude-us-special-locations",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Exclude Alaska, Hawaii, US territories, and military addresses"
+                },
+                {
+                  "name": "--dry-run",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Preview the request without creation"
+                },
+                {
+                  "name": "--yes",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Create the policy",
+                  "short": "-y"
                 },
                 {
                   "name": "--table",
@@ -2977,6 +3139,38 @@
               "arguments": [],
               "options": [],
               "commands": {
+                "create": {
+                  "help": "Create a top-level store category.",
+                  "arguments": [
+                    {
+                      "name": "category_name",
+                      "type": "TEXT",
+                      "required": true,
+                      "help": "Top-level store category name"
+                    }
+                  ],
+                  "options": [
+                    {
+                      "name": "--dry-run",
+                      "type": "bool",
+                      "required": false,
+                      "help": "Preview the request without creation"
+                    },
+                    {
+                      "name": "--yes",
+                      "type": "bool",
+                      "required": false,
+                      "help": "Create the category",
+                      "short": "-y"
+                    },
+                    {
+                      "name": "--profile",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Auth profile name"
+                    }
+                  ]
+                },
                 "get": {
                   "help": "Get details for a specific store category by ID. Fetches all store categories and returns the one matching the given ID, including its full path in the category hierarchy.",
                   "arguments": [
