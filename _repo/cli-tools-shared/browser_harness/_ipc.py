@@ -1,8 +1,12 @@
 """Daemon IPC plumbing. AF_UNIX socket on POSIX, TCP loopback on Windows."""
-import asyncio, json, os, re, secrets, socket, subprocess, sys, tempfile
+import asyncio, contextlib, json, os, re, secrets, socket, subprocess, sys, tempfile, threading
 from pathlib import Path
 
 IS_WINDOWS = sys.platform == "win32"
+if IS_WINDOWS:
+    import msvcrt
+else:
+    import fcntl
 # Two caller-supplied dirs:
 #   BH_RUNTIME_DIR — sock/port/pid. AF_UNIX sun_path is 104 bytes on macOS, so
 #       the runtime dir must be short. Caller is responsible for keeping it
@@ -44,10 +48,72 @@ def _tmp_stem(name):  # "bu" when BH_TMP_DIR isolates us, else "bu-<NAME>"
     return "bu" if BH_TMP_DIR else f"bu-{name}"
 
 
+def startup_lock_path(name): return _RUNTIME / f"{_runtime_stem(name)}.startup.lock"
 def log_path(name):   return _TMP / f"{_tmp_stem(name)}.log"
 def pid_path(name):   return _RUNTIME / f"{_runtime_stem(name)}.pid"
 def port_path(name):  return _RUNTIME / f"{_runtime_stem(name)}.port"  # Windows-only: holds {"port","token"} JSON
 def _sock_path(name): return _RUNTIME / f"{_runtime_stem(name)}.sock"
+
+
+_startup_locks = {}
+_startup_locks_guard = threading.Lock()
+
+
+def _startup_thread_lock(name):
+    with _startup_locks_guard:
+        if name not in _startup_locks:
+            _startup_locks[name] = threading.Lock()
+        return _startup_locks[name]
+
+
+def _lock_handle(handle):
+    if IS_WINDOWS:
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+    else:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+
+
+def _unlock_handle(handle):
+    if IS_WINDOWS:
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+@contextlib.contextmanager
+def startup_lock(name):
+    """Serialize daemon startup for ``name`` across threads and processes.
+
+    Two callers that race to spawn the same daemon both see "not alive", both
+    spawn, and the loser's daemon takes over the endpoint the winner just
+    published -- leaving the winner talking to a socket nobody serves. Startup
+    is therefore exclusive per daemon name.
+
+    Both scopes are required and neither substitutes for the other: the
+    per-name threading lock covers concurrent sessions inside one interpreter,
+    the advisory file lock covers separate CLI processes. The file lock is
+    released by the kernel when the process dies, so a crashed holder cannot
+    strand the next caller.
+    """
+    _check(name)
+    thread_lock = _startup_thread_lock(name)
+    thread_lock.acquire()
+    try:
+        path = startup_lock_path(name)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handle = open(path, "a+b")
+        try:
+            _lock_handle(handle)
+            try:
+                yield
+            finally:
+                _unlock_handle(handle)
+        finally:
+            handle.close()
+    finally:
+        thread_lock.release()
 
 
 def _read_port_file(name):

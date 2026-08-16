@@ -89,21 +89,35 @@ def _chrome_launch_command(chrome: str, args: list[str]) -> list[str]:
     return args
 
 
-def _wait_for_cdp(port: int, timeout: float = 30.0) -> None:
-    """Block until Chrome's /json/version endpoint is alive."""
+def _wait_for_cdp(port: int, timeout: float = 30.0) -> str:
+    """Block until Chrome's /json/version endpoint serves a browser WS URL.
+
+    Returns the ``webSocketDebuggerUrl`` so the caller can hand the daemon an
+    already-resolved endpoint. A 200 that has not yet published that field
+    means Chrome is still bringing the DevTools target up, so it is not
+    success -- keep polling.
+
+    The final poll runs after the deadline check rather than before it, so a
+    sleep that overshoots the deadline (a loaded host descheduling us) still
+    gets one last look at a Chrome that came up during that sleep.
+    """
     deadline = time.time() + timeout
-    while time.time() < deadline:
+    while True:
         try:
             with urllib.request.urlopen(
                 f"http://127.0.0.1:{port}/json/version", timeout=1.0
             ) as r:
                 if r.status == 200:
-                    return
-        except (urllib.error.URLError, OSError):
-            time.sleep(0.25)
-    raise BrowserHarnessError(
-        f"Chrome did not expose CDP on port {port} within {timeout}s"
-    )
+                    ws_url = json.loads(r.read()).get("webSocketDebuggerUrl")
+                    if ws_url:
+                        return ws_url
+        except (urllib.error.URLError, OSError, ValueError):
+            pass
+        if time.time() >= deadline:
+            raise BrowserHarnessError(
+                f"Chrome did not expose CDP on port {port} within {timeout}s"
+            )
+        time.sleep(0.25)
 
 
 class _BrowserHarness:
@@ -116,14 +130,21 @@ class _BrowserHarness:
     daemons.
     """
 
-    def __init__(self, session: str, runtime_dir: Path):
+    def __init__(self, session: str, runtime_dir: Path, timeout: float):
         self.session = session
         self.runtime_dir = runtime_dir
+        # browser_harness caps every CDP round-trip at its own IPC read
+        # timeout. Without threading this service's budget through, one slow
+        # Runtime.evaluate (busy page main thread, or several browsers
+        # competing for CPU) aborted work this service had granted
+        # default_timeout seconds to finish. One clock, not two racing ones.
+        self.timeout = timeout
 
     @property
     def h(self):
         os.environ["BH_RUNTIME_DIR"] = str(self.runtime_dir)
         os.environ["BH_TMP_DIR"] = str(self.runtime_dir)
+        os.environ["BH_IPC_TIMEOUT"] = str(float(self.timeout))
         from browser_harness import _ipc, helpers
         _ipc._TMP = Path(os.environ["BH_TMP_DIR"])
         _ipc._RUNTIME = Path(os.environ["BH_RUNTIME_DIR"])
@@ -146,6 +167,10 @@ class BrowserHarnessService:
         self.default_timeout = timeout
         self._chrome_proc: Optional[subprocess.Popen] = None
         self._cdp_port: Optional[int] = None
+        # Browser WS URL resolved from Chrome's /json/version by browser_open.
+        # Handed to the daemon so it never repeats HTTP discovery against a
+        # Chrome that is already serving this process.
+        self._cdp_ws: Optional[str] = None
         self._opened = False
         # Persistent Chromium user-data-dir. Set by ``browser_open`` from the
         # caller-supplied ``persistent_profile_dir``. Attribute (not method)
@@ -162,7 +187,7 @@ class BrowserHarnessService:
         # on where the socket / pid / log files live.
         os.environ["BH_RUNTIME_DIR"] = str(self._runtime_dir)
         os.environ["BH_TMP_DIR"] = str(self._runtime_dir)
-        self._bh = _BrowserHarness(session, self._runtime_dir)
+        self._bh = _BrowserHarness(session, self._runtime_dir, timeout)
 
     # --- Context Manager ---
 
@@ -202,15 +227,23 @@ class BrowserHarnessService:
     def _start_daemon(self):
         """Start (or reuse) the browser-harness daemon for this session."""
         from browser_harness.admin import ensure_daemon
+        if not self._cdp_ws:
+            raise BrowserHarnessError(
+                f"No resolved CDP WebSocket URL for session '{self.session}'."
+            )
+        # Pass the WS URL this process already resolved and proved live rather
+        # than BU_CDP_URL. A second HTTP discovery inside the daemon re-races a
+        # Chrome that is busy serving us and is the source of the
+        # "BU_CDP_URL=... unreachable" startup failures.
         env = {
             "BU_NAME": self.session,
-            "BU_CDP_URL": f"http://127.0.0.1:{self._cdp_port}",
+            "BU_CDP_RESOLVED_WS": self._cdp_ws,
             "BH_RUNTIME_DIR": str(self._runtime_dir),
             "BH_TMP_DIR": str(self._runtime_dir),
         }
         # ensure_daemon spawns a fresh daemon process with the supplied env merged
         # over os.environ, then verifies it's reachable.  Restarts stale daemons.
-        ensure_daemon(name=self.session, env=env)
+        ensure_daemon(name=self.session, env=env, wait=self.default_timeout)
         logger.debug(
             "_start_daemon: daemon up session=%s cdp_port=%s",
             self.session, self._cdp_port,
@@ -453,6 +486,7 @@ class BrowserHarnessService:
             self._terminate_session_pid(pid)
         self._opened = False
         self._cdp_port = None
+        self._cdp_ws = None
 
     # ---------------- Browser lifecycle ----------------
 
@@ -530,7 +564,9 @@ class BrowserHarnessService:
                 raise BrowserHarnessError(f"Failed to spawn Chrome: {e}")
 
             try:
-                _wait_for_cdp(self._cdp_port, timeout=self.default_timeout)
+                self._cdp_ws = _wait_for_cdp(
+                    self._cdp_port, timeout=self.default_timeout
+                )
             except BrowserHarnessError:
                 self._terminate_chrome()
                 raise

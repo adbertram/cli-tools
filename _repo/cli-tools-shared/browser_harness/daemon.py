@@ -104,6 +104,13 @@ def _ws_from_devtools_active_port(http_url: str) -> str | None:
 def get_ws_url():
     if url := os.environ.get("BU_CDP_WS"):
         return url
+    if url := os.environ.get("BU_CDP_RESOLVED_WS"):
+        # Our parent already resolved /json/version to a browser WS URL and
+        # proved Chrome was live before spawning us. Repeating that HTTP
+        # discovery here just re-races a Chrome that is busy serving the
+        # parent, which is what produced the "BU_CDP_URL=... unreachable"
+        # startup failures under load.
+        return url
     if url := os.environ.get("BU_CDP_URL"):
         # HTTP DevTools endpoint (e.g. http://127.0.0.1:9333) — resolve to ws via /json/version.
         # Use this for a dedicated automation Chrome on a non-default profile, which avoids the

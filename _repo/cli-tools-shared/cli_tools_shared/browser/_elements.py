@@ -13,7 +13,7 @@ import re
 from typing import TYPE_CHECKING, Any, List, Optional
 
 from . import BrowserHarnessError
-from ._js_fragments import _CLICK_JS, _VISIBILITY_JS, _fill_js
+from ._js_fragments import _CLICK_JS, _VISIBILITY_JS, _check_js, _fill_js
 
 if TYPE_CHECKING:
     from .driver import BrowserHarnessService
@@ -34,11 +34,18 @@ _ROLE_CSS = {
 }
 
 
-def _css_js(selector: str) -> str:
-    return f"Array.from(document.querySelectorAll({json.dumps(selector)}))"
+def _css_js(selector: str, parent_js: Optional[str] = None) -> str:
+    """Return a JS expression yielding an Array of elements matching ``selector``.
 
-
-def _scoped_css_js(parent_js: str, selector: str) -> str:
+    ``parent_js`` is ``None`` for an unscoped (document-wide) query, used by
+    top-level locators (``page.locator(...)``). When set, it is a JS
+    expression evaluating to an array of elements to search *within* --
+    used for chained/scoped locators (``locator.locator(...)``,
+    ``element.locator(...)``) so descendant combinators (``> ``, ``+``,
+    ``~``) resolve relative to each parent via ``:scope``.
+    """
+    if parent_js is None:
+        return f"Array.from(document.querySelectorAll({json.dumps(selector)}))"
     scoped_selector = selector
     if selector.lstrip().startswith((">", "+", "~")):
         scoped_selector = f":scope {selector.lstrip()}"
@@ -49,34 +56,42 @@ def _scoped_css_js(parent_js: str, selector: str) -> str:
     )
 
 
-def _text_js(text_part: str) -> str:
+def _scoped_css_js(parent_js: str, selector: str) -> str:
+    return _css_js(selector, parent_js=parent_js)
+
+
+def _text_js(text_part: str, parent_js: Optional[str] = None) -> str:
+    base = (
+        "Array.from(document.querySelectorAll('*'))"
+        if parent_js is None else
+        f"({parent_js}).flatMap(p => Array.from(p.querySelectorAll('*')))"
+    )
     if text_part.startswith("/"):
-        return (
-            f"Array.from(document.querySelectorAll('*'))"
-            f".filter(el => el.children.length === 0 && {text_part}.test(el.textContent))"
-        )
+        return f"{base}.filter(el => el.children.length === 0 && {text_part}.test(el.textContent))"
     if text_part.startswith('"') or text_part.startswith("'"):
         exact = text_part.strip('"').strip("'")
-        return (
-            f"Array.from(document.querySelectorAll('*'))"
-            f".filter(el => el.textContent.trim() === {json.dumps(exact)})"
-        )
-    return (
-        f"Array.from(document.querySelectorAll('*'))"
-        f".filter(el => el.textContent.toLowerCase().includes({json.dumps(text_part.lower())}))"
-    )
+        return f"{base}.filter(el => el.textContent.trim() === {json.dumps(exact)})"
+    return f"{base}.filter(el => el.textContent.toLowerCase().includes({json.dumps(text_part.lower())}))"
 
 
-def _has_text_js(selector: str) -> str:
+def _has_text_js(selector: str, parent_js: Optional[str] = None) -> str:
+    """Translate a Playwright-only ``css:has-text('...')`` pseudo-selector
+    into plain DOM JS (``querySelectorAll`` + a ``textContent`` filter).
+
+    Playwright's own selector engine understands ``:has-text()`` natively,
+    but this harness evaluates selectors via real browser
+    ``querySelectorAll``, which does not -- so every code path that can
+    receive a ``:has-text()`` selector (unscoped *and* scoped/chained) must
+    route through here rather than passing the raw selector to
+    ``querySelectorAll``.
+    """
     m = re.match(r'^(.*?):has-text\(\s*["\'](.+?)["\']\s*\)$', selector)
     if not m:
-        return _css_js(selector)
+        return _css_js(selector, parent_js=parent_js)
     css_part = m.group(1) or "*"
     text_part = m.group(2)
-    return (
-        f"Array.from(document.querySelectorAll({json.dumps(css_part)}))"
-        f".filter(el => el.textContent.includes({json.dumps(text_part)}))"
-    )
+    base = _css_js(css_part, parent_js=parent_js)
+    return f"{base}.filter(el => el.textContent.includes({json.dumps(text_part)}))"
 
 
 def _name_filter_js(base_js: str, name, *, exact: bool = False) -> str:
@@ -124,12 +139,21 @@ def _has_text_filter_js(base_js: str, has_text) -> str:
     return f"{base_js}.filter(el => el.textContent.includes({json.dumps(str(has_text))}))"
 
 
-def _selector_js(selector: str) -> str:
+def _selector_js(selector: str, parent_js: Optional[str] = None) -> str:
+    """Compile a CSS/``text=``/``:has-text()`` selector string into a JS
+    expression yielding an Array of matching elements.
+
+    This is the single entry point every locator constructor (top-level
+    *and* scoped/chained) must go through -- selectors are never handed
+    directly to ``_scoped_css_js``/``querySelectorAll``, since pseudo-
+    selectors like ``:has-text()`` only exist in Playwright's own locator
+    engine and would raise a ``SyntaxError`` there.
+    """
     if selector.startswith("text="):
-        return _text_js(selector[5:])
+        return _text_js(selector[5:], parent_js=parent_js)
     if ":has-text(" in selector:
-        return _has_text_js(selector)
-    return _css_js(selector)
+        return _has_text_js(selector, parent_js=parent_js)
+    return _css_js(selector, parent_js=parent_js)
 
 
 # ----------------------- Locator + Element classes -----------------------
@@ -173,6 +197,12 @@ class _ServiceLocator:
     def fill(self, text: str) -> None:
         self._eval_on_first(_fill_js(text), require=True)
 
+    def check(self) -> None:
+        self._eval_on_first(_check_js(True), require=True)
+
+    def uncheck(self) -> None:
+        self._eval_on_first(_check_js(False), require=True)
+
     def select_option(self, value: str = None, *, label: str = None) -> None:
         _select_option(self._svc, f"({self._find_js})[0]", value=value, label=label)
 
@@ -195,11 +225,26 @@ class _ServiceLocator:
     def first(self) -> _ServiceElement:
         return _ServiceElement(self._svc, js_expr=f"({self._find_js})[0]")
 
+    @property
+    def last(self) -> _ServiceElement:
+        return _ServiceElement(
+            self._svc, js_expr=f"({self._find_js})[({self._find_js}).length - 1]"
+        )
+
     def is_visible(self, *, timeout: int = None) -> bool:
         return bool(self._eval_on_first(_VISIBILITY_JS))
 
     def is_enabled(self) -> bool:
         return bool(self._eval_on_first("return !el.disabled;"))
+
+    def is_checked(self) -> bool:
+        return bool(self._eval_on_first("return !!el.checked;"))
+
+    def evaluate(self, expression: str, arg: Any = None) -> Any:
+        """Run a Playwright-style ``el => ...`` expression against the first
+        matching element (mirrors ``Locator.evaluate``)."""
+        call_arg = f", {json.dumps(arg)}" if arg is not None else ""
+        return self._eval_on_first(f"return ({expression})(el{call_arg});", require=True)
 
     def all_text_contents(self) -> List[str]:
         result = self._svc.evaluate(f"() => ({self._find_js}).map(el => el.textContent || '')")
@@ -235,7 +280,7 @@ class _ServiceLocator:
 
     def locator(self, child_selector: str) -> _ServiceLocator:
         return _ServiceLocator(
-            self._svc, _scoped_css_js(self._find_js, child_selector), _is_js=True
+            self._svc, _selector_js(child_selector, parent_js=self._find_js), _is_js=True
         )
 
     def filter(self, *, has_text=None) -> _ServiceLocator:
@@ -280,6 +325,12 @@ class _ServiceElement:
     def fill(self, text: str) -> None:
         self._eval_on_el(f"if (!el) throw new Error('Element not found'); {_fill_js(text)}")
 
+    def check(self) -> None:
+        self._eval_on_el(f"if (!el) throw new Error('Element not found'); {_check_js(True)}")
+
+    def uncheck(self) -> None:
+        self._eval_on_el(f"if (!el) throw new Error('Element not found'); {_check_js(False)}")
+
     def select_option(self, value: str = None, *, label: str = None) -> None:
         _select_option(self._svc, self._js, value=value, label=label)
 
@@ -290,8 +341,19 @@ class _ServiceElement:
     def is_visible(self, *, timeout: int = None) -> bool:
         return bool(self._eval_on_el(f"if (!el) return false; {_VISIBILITY_JS}"))
 
+    def evaluate(self, expression: str, arg: Any = None) -> Any:
+        """Run a Playwright-style ``el => ...`` expression against this
+        element (mirrors ``ElementHandle.evaluate``)."""
+        call_arg = f", {json.dumps(arg)}" if arg is not None else ""
+        return self._eval_on_el(
+            f"if (!el) throw new Error('Element not found'); return ({expression})(el{call_arg});"
+        )
+
     def is_enabled(self) -> bool:
         return bool(self._eval_on_el("if (!el) return false; return !el.disabled;"))
+
+    def is_checked(self) -> bool:
+        return bool(self._eval_on_el("if (!el) return false; return !!el.checked;"))
 
     def count(self) -> int:
         """Return 1 if this element resolves live, 0 otherwise.
@@ -329,7 +391,7 @@ class _ServiceElement:
     def locator(self, child_selector: str) -> _ServiceLocator:
         return _ServiceLocator(
             self._svc,
-            _scoped_css_js(f"[{self._js}].filter(Boolean)", child_selector),
+            _selector_js(child_selector, parent_js=f"[{self._js}].filter(Boolean)"),
             _is_js=True,
         )
 

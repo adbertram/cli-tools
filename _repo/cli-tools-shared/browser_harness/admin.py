@@ -152,6 +152,21 @@ def _needs_chrome_remote_debugging_prompt(msg):
     )
 
 
+def _is_transient_dedicated_chrome_timeout(msg):
+    """True when the daemon timed out reaching an already-verified Chrome.
+
+    The parent proved Chrome was serving /json/version moments before spawning
+    the daemon, so a BU_CDP_URL timeout here is a lost race under host load,
+    not a missing browser. It is a different failure class from
+    ``_needs_chrome_remote_debugging_prompt``: that one means a *default-profile*
+    Chrome needs the chrome://inspect Allow flow, which targets a different
+    browser instance entirely. The two classifiers must never both fire, so
+    ensure_daemon picks exactly one recovery branch.
+    """
+    lower = (msg or "").lower()
+    return "bu_cdp_url=" in lower and "unreachable after" in lower
+
+
 def _is_local_chrome_mode(env=None):
     """True when the daemon discovers a local Chrome instead of a remote CDP WS."""
     return not (env or {}).get("BU_CDP_WS") and not os.environ.get("BU_CDP_WS")
@@ -221,20 +236,42 @@ def _doctor_short_text(value, limit=None):
     return value if len(value) <= limit else value[:limit - 3] + "..."
 
 
+def _daemon_serving(name):
+    """True when a live daemon answers a real CDP call.
+
+    Stale daemons accept connects AND reply to meta:* (pure Python) even when the
+    CDP WS to Chrome is dead — probe with a real CDP call and require "result".
+    Must go through ipc.connect so this works on Windows (TCP loopback) too;
+    raw AF_UNIX here would fail on every warm call and churn the daemon.
+    """
+    if not daemon_alive(name):
+        return False
+    try:
+        s, token = ipc.connect(name or NAME, timeout=3.0)
+        resp = ipc.request(s, token, {"method": "Target.getTargets", "params": {}})
+        return "result" in resp
+    except Exception:
+        return False
+
+
 def ensure_daemon(wait=60.0, name=None, env=None):
     """Idempotent. Self-heals stale daemon, cold Chrome, and missing Allow on chrome://inspect."""
-    if daemon_alive(name):
-        # Stale daemons accept connects AND reply to meta:* (pure Python) even when the
-        # CDP WS to Chrome is dead — probe with a real CDP call and require "result".
-        # Must go through ipc.connect so this works on Windows (TCP loopback) too;
-        # raw AF_UNIX here would fail on every warm call and churn the daemon.
-        try:
-            s, token = ipc.connect(name or NAME, timeout=3.0)
-            resp = ipc.request(s, token, {"method": "Target.getTargets", "params": {}})
-            if "result" in resp: return
-        except Exception: pass
-        restart_daemon(name)
+    if _daemon_serving(name):
+        return
 
+    # Spawning is exclusive per daemon name. Without this, two processes both
+    # see "not serving", both spawn, and the second daemon takes over the
+    # endpoint the first published.
+    with ipc.startup_lock(name or NAME):
+        # A concurrent holder may have started it while we waited on the lock.
+        if _daemon_serving(name):
+            return
+        if daemon_alive(name):
+            restart_daemon(name)
+        _spawn_daemon(wait=wait, name=name, env=env)
+
+
+def _spawn_daemon(wait, name, env):
     import subprocess, sys
     local = _is_local_chrome_mode(env)
     for attempt in (0, 1):
@@ -248,7 +285,17 @@ def ensure_daemon(wait=60.0, name=None, env=None):
             if daemon_alive(name): return
             if p.poll() is not None: break
             time.sleep(0.2)
+        if p.poll() is None:
+            # The child missed its startup deadline but is still running. Leaving
+            # it alive lets it publish the endpoint later and fight the retry (or
+            # the caller's next attempt) for the same socket.
+            p.terminate()
+            p.wait(timeout=5)
         msg = _log_tail(name) or ""
+        if attempt == 0 and _is_transient_dedicated_chrome_timeout(msg):
+            # Chrome is known good; just give the daemon a clean second run.
+            restart_daemon(name)
+            continue
         if local and attempt == 0 and _needs_chrome_remote_debugging_prompt(msg):
             _open_chrome_inspect()
             print('browser-harness: at chrome://inspect/#remote-debugging, tick "Allow remote debugging for this browser instance" and click Allow on the popup that appears', file=sys.stderr)

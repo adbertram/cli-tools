@@ -39,8 +39,23 @@ SOCK = ipc.sock_addr(NAME)
 INTERNAL = ("chrome://", "chrome-untrusted://", "devtools://", "chrome-extension://", "about:")
 
 
+DEFAULT_IPC_TIMEOUT = 5.0
+
+
+def _ipc_timeout():
+    """Seconds allowed for one daemon round-trip.
+
+    The calling service owns the wall-clock budget for an operation (page
+    load, navigation) and publishes it as BH_IPC_TIMEOUT. Without reading it,
+    this module's fixed 5s socket timeout aborted work the caller had granted
+    far longer -- two clocks racing over one operation.
+    """
+    raw = os.environ.get("BH_IPC_TIMEOUT")
+    return float(raw) if raw else DEFAULT_IPC_TIMEOUT
+
+
 def _send(req):
-    c, token = ipc.connect(NAME, timeout=5.0)
+    c, token = ipc.connect(NAME, timeout=_ipc_timeout())
     try:
         r = ipc.request(c, token, req)
     finally:
