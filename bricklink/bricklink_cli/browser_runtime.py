@@ -123,7 +123,8 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
             finally:
                 raise RuntimeError(
                     "Bricklink session expired. "
-                    "Run 'bricklink auth login --force' to re-authenticate."
+                    "Run 'bricklink auth login --credential-type browser_session' "
+                    "to re-authenticate."
                 )
 
     # Bricklink server-error landing pages.

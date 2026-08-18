@@ -402,3 +402,88 @@ def test_lego_two_factor_provider_uses_fresh_subject_code_without_exposing_it(
     ]
     captured = capsys.readouterr()
     assert sentinel not in captured.out + captured.err
+
+
+class _SelectAccountPage:
+    """Mock the LEGO identity select-account interstitial.
+
+    Starts on ``identity.lego.com/select-account`` (no username/password form)
+    and, once a continue control is clicked, redirects to the authenticated
+    BrickLink page on the next ``wait_for_timeout``.
+    """
+
+    def __init__(self, *, click_returns=True):
+        self.url = (
+            "https://identity.lego.com/select-account"
+            "?clientname=BrickLink&returnUrl=%2Fconnect%2Fauthorize%2Fcallback"
+        )
+        self.click_returns = click_returns
+        self.evaluate_scripts = []
+
+    def evaluate(self, script):
+        self.evaluate_scripts.append(script)
+        return self.click_returns
+
+    def wait_for_timeout(self, _milliseconds):
+        if self.evaluate_scripts:
+            self.url = "https://www.bricklink.com/myMsg.asp"
+
+
+def test_select_account_page_is_not_authenticated():
+    from bricklink_cli.browser import BricklinkBrowser
+
+    browser = BricklinkBrowser.__new__(BricklinkBrowser)
+    page = SimpleNamespace(
+        url=(
+            "https://identity.lego.com/select-account"
+            "?clientname=BrickLink&returnUrl=%2Fconnect%2Fauthorize%2Fcallback"
+            "%3Fclient_id%3Dbricklink%26prompt%3Dselect_account"
+        )
+    )
+
+    assert browser._check_auth(page) is False
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("https://identity.lego.com/select-account?clientname=BrickLink", True),
+        ("https://identity.lego.com/en-US/select-account?clientname=BrickLink", True),
+        ("https://identity.lego.com/en-US/login", False),
+        ("https://identity.lego.com/auth/two-factor-authentication", False),
+        ("https://www.bricklink.com/myMsg.asp", False),
+        ("", False),
+    ],
+)
+def test_is_select_account_page_classification(url, expected):
+    from bricklink_cli.browser import BricklinkBrowser
+
+    assert BricklinkBrowser._is_select_account_page(url) is expected
+
+
+def test_noninteractive_login_clicks_select_account_control(monkeypatch):
+    from bricklink_cli.browser import SELECT_ACCOUNT_CLICK_JS, BricklinkBrowser
+
+    page = _SelectAccountPage()
+    browser = BricklinkBrowser.__new__(BricklinkBrowser)
+
+    def fail_credential(_field):
+        raise AssertionError("no credential may be fetched on select-account")
+
+    monkeypatch.setattr("bricklink_cli.browser.get_lastpass_credential", fail_credential)
+
+    browser._complete_noninteractive_login(page)
+
+    assert page.url == "https://www.bricklink.com/myMsg.asp"
+    assert page.evaluate_scripts == [SELECT_ACCOUNT_CLICK_JS]
+
+
+def test_noninteractive_login_raises_when_select_account_control_missing(monkeypatch):
+    from bricklink_cli.browser import BricklinkBrowser
+
+    page = _SelectAccountPage(click_returns=False)
+    browser = BricklinkBrowser.__new__(BricklinkBrowser)
+    monkeypatch.setattr("bricklink_cli.browser.get_lastpass_credential", lambda _f: None)
+
+    with pytest.raises(Exception, match="select-account"):
+        browser._complete_noninteractive_login(page)

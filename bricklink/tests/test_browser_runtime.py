@@ -107,14 +107,16 @@ def test_check_session_expired_clears_session_and_raises_actionable_error(monkey
     runtime.clear_session.assert_called_once_with()
     msg = str(ei.value)
     assert "Bricklink session expired" in msg
-    assert "bricklink auth login --force" in msg
+    assert "bricklink auth login --credential-type browser_session" in msg
 
 
 def test_check_session_expired_matches_v2_login_page(monkeypatch):
     runtime = _make_runtime(monkeypatch)
     page = _Page("https://www.bricklink.com/v2/login.page")
 
-    with pytest.raises(RuntimeError, match="bricklink auth login --force"):
+    with pytest.raises(
+        RuntimeError, match="bricklink auth login --credential-type browser_session"
+    ):
         runtime._check_session_expired(page)
 
     runtime.clear_session.assert_called_once_with()
@@ -128,6 +130,24 @@ def test_check_session_expired_no_match_does_not_clear(monkeypatch):
     result = runtime._check_session_expired(page)
     assert result is None
     runtime.clear_session.assert_not_called()
+
+
+def test_check_session_expired_raises_for_select_account(monkeypatch):
+    """LEGO select-account is a login-flow state, not a refund page."""
+    runtime = _make_runtime(monkeypatch)
+    page = _Page(
+        "https://identity.lego.com/select-account"
+        "?clientname=BrickLink&returnUrl=%2Fconnect%2Fauthorize%2Fcallback"
+        "%3Fprompt%3Dselect_account"
+    )
+
+    with pytest.raises(RuntimeError) as ei:
+        runtime._check_session_expired(page)
+
+    runtime.clear_session.assert_called_once_with()
+    msg = str(ei.value)
+    assert "Bricklink session expired" in msg
+    assert "bricklink auth login --credential-type browser_session" in msg
 
 
 @pytest.mark.parametrize(
@@ -259,8 +279,8 @@ def test_check_session_expired_raises_actionable_even_if_clear_session_fails(mon
     # either: (a) the original Bricklink message wraps the clear failure
     # (RuntimeError "Bricklink session expired..."), or (b) the clear
     # failure surfaces with the Bricklink message attached. The contract
-    # is "the user sees `bricklink auth login --force` in the final
-    # message".
+    # is "the user sees `bricklink auth login --credential-type browser_session`
+    # in the final message".
     with pytest.raises(RuntimeError) as ei:
         runtime._check_session_expired(page)
 
@@ -270,7 +290,7 @@ def test_check_session_expired_raises_actionable_even_if_clear_session_fails(mon
     # failure). The clear failure may be chained via __context__.
     final_msg = str(ei.value)
     assert "Bricklink session expired" in final_msg
-    assert "bricklink auth login --force" in final_msg
+    assert "bricklink auth login --credential-type browser_session" in final_msg
 
 
 # ============================================================================

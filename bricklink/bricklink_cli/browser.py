@@ -14,6 +14,41 @@ from .managed_auth import (
 )
 
 
+# Robust, visibility-checked click script for LEGO's select-account page.
+# LEGO identity renders one account card (the account email) plus a
+# continue / select / use-this-account control. The exact DOM is undocumented
+# and changes across LEGO's releases, so instead of a fragile CSS selector we
+# match by accessible text on any visible, enabled button / role=button / link.
+# No username or password is ever entered on this page.
+SELECT_ACCOUNT_CLICK_JS = r"""() => {
+    const verbs = /continue|select|use this account/i;
+    const isActionable = (el) => {
+        const rect = el.getBoundingClientRect();
+        if (!rect || rect.width === 0 || rect.height === 0) return false;
+        const style = window.getComputedStyle(el);
+        if (style.visibility === 'hidden' || style.display === 'none') return false;
+        if (style.opacity === '0') return false;
+        if (el.disabled || el.getAttribute('aria-disabled') === 'true') return false;
+        return true;
+    };
+    const textOf = (el) => {
+        const own = (el.innerText || el.textContent || '').trim();
+        const aria = (el.getAttribute && el.getAttribute('aria-label')) || '';
+        const title = (el.getAttribute && el.getAttribute('title')) || '';
+        return (own + ' ' + aria + ' ' + title).replace(/\s+/g, ' ');
+    };
+    const candidates = Array.from(document.querySelectorAll(
+        'button, [role="button"], a'
+    ));
+    const match = candidates.find(
+        (el) => isActionable(el) && verbs.test(textOf(el))
+    );
+    if (!match) return false;
+    match.click();
+    return true;
+}"""
+
+
 activity = get_activity_logger("bricklink")
 
 
@@ -28,8 +63,16 @@ class BricklinkBrowser(PlaywrightBrowserAutomation):
     # We anchor on the host and a ``login`` segment anywhere in the path
     # so live-auth detection works for every locale.
     AUTH_URL_PATTERN = (
-        r"identity\.lego\.com/(?:[^?]*login|auth/two-factor-authentication)"
+        r"identity\.lego\.com/(?:[^?]*login|[^?]*select-account|auth/two-factor-authentication)"
         r"|/v2/login\.page"
+    )
+    # LEGO identity's account-selection interstitial. Reached when an SSO
+    # session already exists and BrickLink requests ``prompt=select_account``
+    # (``identity.lego.com/select-account?clientname=BrickLink&...``). It is a
+    # login-flow state, NOT an authenticated BrickLink page: it must not be
+    # treated as auth success by ``_check_auth`` or its fallback.
+    SELECT_ACCOUNT_URL_PATTERN = re.compile(
+        r"identity\.lego\.com/[^?#]*select-account", re.IGNORECASE
     )
     # Shared auth probing checks this before the broad ``AUTH_SUCCESS_URL``.
     AUTH_FAILURE_URL_PATTERN = CONFIRMATION_CODE_URL_PATTERN.pattern
@@ -55,61 +98,77 @@ class BricklinkBrowser(PlaywrightBrowserAutomation):
 
     def _complete_noninteractive_login(self, page) -> None:
         """Authenticate with managed LastPass credentials and Gmail codes."""
-        first_step = (
-            ("username", page.locator(self.AUTH_LOGIN_USERNAME_SELECTOR)),
-            ("submit", page.locator(self.AUTH_LOGIN_SUBMIT_SELECTOR)),
-        )
-        for label, locator in first_step:
-            if locator.count() != 1 or not locator.first.is_visible():
-                raise BrowserAutomationError(
-                    f"BrickLink login requires one visible {label} control."
-                )
-        if not first_step[1][1].first.is_enabled():
-            raise BrowserAutomationError("BrickLink login submit control is disabled.")
-
-        username = get_lastpass_credential("username")
-        try:
-            self._fill_login_secret(page, self.AUTH_LOGIN_USERNAME_SELECTOR, username)
-            first_step[1][1].first.click()
-        finally:
-            username = None
-
-        password_control = page.locator(self.AUTH_LOGIN_PASSWORD_SELECTOR)
-        password_deadline = time.time() + 15
-        while time.time() < password_deadline:
-            if password_control.count() == 1 and password_control.first.is_visible():
-                break
-            page.wait_for_timeout(250)
-        else:
-            raise BrowserAutomationError(
-                "BrickLink login did not reveal one visible password control"
-                f"{self._login_page_error_suffix(page)}"
-            )
-        submit_control = page.locator(self.AUTH_LOGIN_SUBMIT_SELECTOR)
-        if submit_control.count() != 1 or not submit_control.first.is_visible():
-            raise BrowserAutomationError(
-                "BrickLink password step requires one visible submit control."
-            )
-        if not submit_control.first.is_enabled():
-            raise BrowserAutomationError(
-                "BrickLink password-step submit control is disabled."
-            )
-
-        password = get_lastpass_credential("password")
         requested_after = int(time.time()) - 10
-        try:
-            self._fill_login_secret(page, self.AUTH_LOGIN_PASSWORD_SELECTOR, password)
-            submit_control.first.click()
-        finally:
-            password = None
+        # LEGO identity can redirect straight to select-account
+        # (prompt=select_account) when an SSO session already exists, in which
+        # case no username/password form is rendered. Skip credential entry and
+        # go directly to the account-selection + poll loop. No credential is
+        # entered on the select-account page.
+        if not self._is_select_account_page(page):
+            first_step = (
+                ("username", page.locator(self.AUTH_LOGIN_USERNAME_SELECTOR)),
+                ("submit", page.locator(self.AUTH_LOGIN_SUBMIT_SELECTOR)),
+            )
+            for label, locator in first_step:
+                if locator.count() != 1 or not locator.first.is_visible():
+                    raise BrowserAutomationError(
+                        f"BrickLink login requires one visible {label} control."
+                    )
+            if not first_step[1][1].first.is_enabled():
+                raise BrowserAutomationError("BrickLink login submit control is disabled.")
+
+            username = get_lastpass_credential("username")
+            try:
+                self._fill_login_secret(page, self.AUTH_LOGIN_USERNAME_SELECTOR, username)
+                first_step[1][1].first.click()
+            finally:
+                username = None
+
+            password_control = page.locator(self.AUTH_LOGIN_PASSWORD_SELECTOR)
+            password_deadline = time.time() + 15
+            while time.time() < password_deadline:
+                if password_control.count() == 1 and password_control.first.is_visible():
+                    break
+                page.wait_for_timeout(250)
+            else:
+                raise BrowserAutomationError(
+                    "BrickLink login did not reveal one visible password control"
+                    f"{self._login_page_error_suffix(page)}"
+                )
+            submit_control = page.locator(self.AUTH_LOGIN_SUBMIT_SELECTOR)
+            if submit_control.count() != 1 or not submit_control.first.is_visible():
+                raise BrowserAutomationError(
+                    "BrickLink password step requires one visible submit control."
+                )
+            if not submit_control.first.is_enabled():
+                raise BrowserAutomationError(
+                    "BrickLink password-step submit control is disabled."
+                )
+
+            password = get_lastpass_credential("password")
+            try:
+                self._fill_login_secret(page, self.AUTH_LOGIN_PASSWORD_SELECTOR, password)
+                submit_control.first.click()
+            finally:
+                password = None
+        else:
+            activity.info("LEGO select-account page active; skipping credential entry")
 
         deadline = time.time() + self.AUTH_LOGIN_AUTOMATION_TIMEOUT
         confirmation_submitted = False
         lego_two_factor_submitted = False
+        select_account_submitted = False
         while time.time() < deadline:
             page.wait_for_timeout(1000)
             if self._check_auth(page):
                 return
+            if (
+                not select_account_submitted
+                and self._is_select_account_page(page)
+            ):
+                activity.info("Selecting account on LEGO select-account page")
+                self._click_select_account_control(page)
+                select_account_submitted = True
             if (
                 not lego_two_factor_submitted
                 and "identity.lego.com/auth/two-factor-authentication"
@@ -183,6 +242,28 @@ class BricklinkBrowser(PlaywrightBrowserAutomation):
             "Protected-page finalization authenticated=%s",
             self._check_auth(page),
         )
+
+    @classmethod
+    def _is_select_account_page(cls, url_or_page) -> bool:
+        """Return True when ``url_or_page`` is LEGO's select-account page."""
+        url = getattr(url_or_page, "url", url_or_page) or ""
+        return bool(cls.SELECT_ACCOUNT_URL_PATTERN.search(url))
+
+    def _click_select_account_control(self, page) -> None:
+        """Click the account-continue control on LEGO's select-account page.
+
+        The page is a login-flow state, not a BrickLink page, so no username
+        or password is entered here. The exact LEGO DOM is undocumented, so
+        ``SELECT_ACCOUNT_CLICK_JS`` uses a generic strategy that clicks the
+        first visible, enabled ``button``/``[role=button]``/``a`` whose
+        accessible text matches continue/select/use-this-account.
+        """
+        clicked = page.evaluate(SELECT_ACCOUNT_CLICK_JS)
+        if not clicked:
+            raise BrowserAutomationError(
+                "LEGO select-account page did not expose a visible "
+                "continue/select control."
+            )
 
     @staticmethod
     def _login_page_error_suffix(page) -> str:
