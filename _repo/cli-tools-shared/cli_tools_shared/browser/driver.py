@@ -231,13 +231,18 @@ class BrowserHarnessService:
             raise BrowserHarnessError(
                 f"No resolved CDP WebSocket URL for session '{self.session}'."
             )
-        # Pass the WS URL this process already resolved and proved live rather
-        # than BU_CDP_URL. A second HTTP discovery inside the daemon re-races a
-        # Chrome that is busy serving us and is the source of the
-        # "BU_CDP_URL=... unreachable" startup failures.
+        # Pass the WS URL this process already resolved and proved live via
+        # BU_CDP_WS, which every browser-harness daemon reads directly. Using
+        # BU_CDP_RESOLVED_WS here was not version-safe: it only exists in the
+        # vendored daemon, so an older browser-harness release still installed
+        # in a CLI tool venv ignores it and falls through to the
+        # DevToolsActivePort profile scan, failing with "DevToolsActivePort
+        # not found" (and emitting a bogus chrome://inspect prompt). BU_CDP_WS
+        # also avoids the second HTTP discovery that re-races a busy Chrome,
+        # which caused the earlier "BU_CDP_URL=... unreachable" failures.
         env = {
             "BU_NAME": self.session,
-            "BU_CDP_RESOLVED_WS": self._cdp_ws,
+            "BU_CDP_WS": self._cdp_ws,
             "BH_RUNTIME_DIR": str(self._runtime_dir),
             "BH_TMP_DIR": str(self._runtime_dir),
         }

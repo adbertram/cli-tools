@@ -39,6 +39,11 @@ def _clean_path() -> Dict[str, str]:
         env.pop(key, None)
     env["COLUMNS"] = "200"
     env["NO_COLOR"] = "1"
+    # FORCE_COLOR/CLICOLOR_FORCE override NO_COLOR for rich's terminal
+    # detection: rich still emits bold/dim ANSI codes and box drawing, which
+    # breaks help parsing (parse_help_commands returns zero commands).
+    for key in ("FORCE_COLOR", "CLICOLOR_FORCE"):
+        env.pop(key, None)
     return env
 
 

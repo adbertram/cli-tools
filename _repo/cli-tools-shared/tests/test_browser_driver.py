@@ -907,6 +907,7 @@ def test_service_uses_session_name_for_runtime_dir_and_bu_name(monkeypatch):
         captured_env["name"] = name
         captured_env["BU_NAME"] = env.get("BU_NAME")
         captured_env["BH_RUNTIME_DIR"] = env.get("BH_RUNTIME_DIR")
+        captured_env["BU_CDP_WS"] = env.get("BU_CDP_WS")
         captured_env["BU_CDP_RESOLVED_WS"] = env.get("BU_CDP_RESOLVED_WS")
         captured_env["BU_CDP_URL"] = env.get("BU_CDP_URL")
         captured_env["BU_CDP_CONNECT_TIMEOUT"] = env.get("BU_CDP_CONNECT_TIMEOUT")
@@ -917,7 +918,8 @@ def test_service_uses_session_name_for_runtime_dir_and_bu_name(monkeypatch):
 
     assert captured_env["name"] == "bricklink-default"
     assert captured_env["BU_NAME"] == "bricklink-default"
-    assert captured_env["BU_CDP_RESOLVED_WS"] == service._cdp_ws
+    assert captured_env["BU_CDP_WS"] == service._cdp_ws
+    assert captured_env["BU_CDP_RESOLVED_WS"] is None
     assert captured_env["BU_CDP_URL"] is None
     assert captured_env["BU_CDP_CONNECT_TIMEOUT"] is None
     assert captured_env["wait"] == service.default_timeout
