@@ -176,9 +176,9 @@ def test_replace_section_uploads_local_images_from_file(monkeypatch, tmp_path):
     monkeypatch.setattr(page, "print_success", lambda message: None)
     monkeypatch.setattr(page, "print_json", printed_json.append)
 
-    from notion_cli.commands import database
-
-    monkeypatch.setattr(database, "_process_markdown_images", lambda content, file, client: uploaded_images)
+    monkeypatch.setattr(
+        page, "process_markdown_images", lambda content, file, client: uploaded_images
+    )
 
     page.content_replace_section(
         "parent-block",
@@ -206,11 +206,9 @@ def test_replace_section_dry_run_does_not_upload_local_images(monkeypatch, tmp_p
     monkeypatch.setattr(page, "text_to_blocks", fake_text_to_blocks)
     monkeypatch.setattr(page, "print_json", lambda data: None)
 
-    from notion_cli.commands import database
-
     monkeypatch.setattr(
-        database,
-        "_process_markdown_images",
+        page,
+        "process_markdown_images",
         lambda content, file, client: processed_images.append(file),
     )
 

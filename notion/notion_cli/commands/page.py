@@ -20,6 +20,7 @@ COMMAND_CREDENTIALS = {
 
 from ..client import get_client
 from ..block_limits import enforce_block_limits, find_oversize_rich_text as _find_oversize_rich_text
+from ..markdown_images import process_markdown_images
 from cli_tools_shared import confirm_destructive_action
 from cli_tools_shared.filters import validate_filters, apply_filters, FilterValidationError
 from ..output import (
@@ -397,7 +398,12 @@ def page_create(
         if content_file:
             with open(content_file, 'r', encoding='utf-8') as f:
                 content = f.read()
-            children = text_to_blocks(content, is_toggleable=is_toggleable)
+            # Upload local images BEFORE the page is created so a missing file
+            # fails without leaving a half-populated page behind.
+            image_uploads = process_markdown_images(content, content_file, client)
+            children = text_to_blocks(
+                content, image_uploads=image_uploads, is_toggleable=is_toggleable
+            )
 
         # Create the page
         created_page = client.create_standalone_page(
@@ -1219,8 +1225,12 @@ def content_append(
             print_warning("No content specified. Use --text, --file, or --paragraph")
             raise typer.Exit(1)
 
-        # Convert to blocks
-        blocks = text_to_blocks(content, is_toggleable=is_toggleable)
+        # Upload local markdown images, then convert to blocks with the
+        # resulting file_upload IDs so ![alt](path) becomes an image block.
+        image_uploads = process_markdown_images(content, file, client)
+        blocks = text_to_blocks(
+            content, image_uploads=image_uploads, is_toggleable=is_toggleable
+        )
 
         if not blocks:
             print_warning("No valid content blocks generated from input")
@@ -1320,8 +1330,13 @@ def content_set(
                 with open(file, 'r', encoding='utf-8') as f:
                     content = f.read()
 
-            # Convert to blocks
-            blocks = text_to_blocks(content, is_toggleable=is_toggleable)
+            # Upload local markdown images FIRST. This runs before
+            # clear_page_content below, so a missing or unsupported image file
+            # fails loudly with the page's existing content still intact.
+            image_uploads = process_markdown_images(content, file, client)
+            blocks = text_to_blocks(
+                content, image_uploads=image_uploads, is_toggleable=is_toggleable
+            )
 
         if not blocks:
             print_warning("No valid content blocks generated from input")
@@ -1474,11 +1489,10 @@ def content_replace_section(
             with open(file, 'r', encoding='utf-8') as f:
                 content = f.read()
 
+        # --dry-run must stay read-only, so no upload happens on that path.
         image_uploads = {}
-        if file and not dry_run:
-            from .database import _process_markdown_images
-
-            image_uploads = _process_markdown_images(content, file, client)
+        if not dry_run:
+            image_uploads = process_markdown_images(content, file, client)
 
         new_blocks = text_to_blocks(content, image_uploads=image_uploads)
         if not new_blocks:
@@ -2382,17 +2396,28 @@ def blocks_append(
             print_warning("--synced requires exactly one content input: --text, --file, --json, or --json-file")
             raise typer.Exit(1)
 
+        # Built before block conversion: markdown input uploads its local images
+        # through this client before anything is appended. Option-validation
+        # failures above exit without ever creating a client.
+        client = get_client()
+
         if blocks is None and json_file:
             with open(json_file, 'r', encoding='utf-8') as f:
                 blocks = json.load(f)
         elif blocks is None and json_data:
             blocks = json.loads(json_data)
         elif blocks is None and text:
-            blocks = text_to_blocks(text, is_toggleable=is_toggleable)
+            image_uploads = process_markdown_images(text, None, client)
+            blocks = text_to_blocks(
+                text, image_uploads=image_uploads, is_toggleable=is_toggleable
+            )
         elif blocks is None and file:
             with open(file, 'r', encoding='utf-8') as f:
                 content = f.read()
-            blocks = text_to_blocks(content, is_toggleable=is_toggleable)
+            image_uploads = process_markdown_images(content, file, client)
+            blocks = text_to_blocks(
+                content, image_uploads=image_uploads, is_toggleable=is_toggleable
+            )
 
         if not blocks:
             print_warning("No content specified. Use --text, --file, --json, or --json-file")
@@ -2407,8 +2432,6 @@ def blocks_append(
                     "children": blocks,
                 },
             }]
-
-        client = get_client()
 
         # Define progress callback for nesting-aware upload
         def nesting_progress_cb(stage, message):

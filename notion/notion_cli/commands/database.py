@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Optional, List, Dict
 
 from ..client import get_client
+from ..markdown_images import process_markdown_images
 from cli_tools_shared.filters import validate_filters, FilterValidationError, apply_filters
 from cli_tools_shared import FilterMap
 from ..output import (
@@ -1572,7 +1573,10 @@ def page_create(
                 # Markdown uses the same nesting-aware, chunked upload path.
                 with open(content_file, 'r', encoding='utf-8') as f:
                     content = f.read()
-                blocks = text_to_blocks(content)
+                # Upload local images BEFORE the page is created so a missing
+                # file fails without leaving a half-populated page behind.
+                image_uploads = process_markdown_images(content, content_file, client)
+                blocks = text_to_blocks(content, image_uploads=image_uploads)
 
             # Create page without children first (to handle nesting limits)
             created_page = client.create_page(
@@ -1661,84 +1665,6 @@ def page_delete(
     print_success(f"Page {page_id} archived successfully.")
 
 
-# Supported image file extensions for Notion uploads
-SUPPORTED_IMAGE_EXTENSIONS = {
-    '.gif', '.heic', '.jpeg', '.jpg', '.png', '.svg', '.tif', '.tiff', '.webp', '.ico'
-}
-
-
-def _process_markdown_images(
-    content: str,
-    source_file: Optional[str],
-    client,
-) -> dict:
-    """
-    Scan markdown content for local image references and upload them to Notion.
-
-    Args:
-        content: Markdown content to scan
-        source_file: Path to the source file (for resolving relative paths).
-                    If None, relative paths cannot be resolved.
-        client: Notion client instance
-
-    Returns:
-        Dictionary mapping original image paths to Notion file_upload IDs
-    """
-    import re
-    from pathlib import Path
-
-    image_uploads = {}
-
-    # Find all image references: ![alt](path)
-    image_pattern = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
-
-    for match in image_pattern.finditer(content):
-        image_path = match.group(2)
-
-        # Skip URLs - they use external type
-        if image_path.startswith(('http://', 'https://')):
-            continue
-
-        # Skip if already processed
-        if image_path in image_uploads:
-            continue
-
-        # Resolve path relative to source file
-        if source_file:
-            source_dir = Path(source_file).parent
-            resolved_path = source_dir / image_path
-        else:
-            resolved_path = Path(image_path)
-
-        # Validate file exists
-        if not resolved_path.exists():
-            typer.echo(f"Warning: Image file not found: {resolved_path}", err=True)
-            continue
-
-        # Validate file extension
-        ext = resolved_path.suffix.lower()
-        if ext not in SUPPORTED_IMAGE_EXTENSIONS:
-            typer.echo(
-                f"Warning: Unsupported image type '{ext}' for: {resolved_path}. "
-                f"Supported: {', '.join(sorted(SUPPORTED_IMAGE_EXTENSIONS))}",
-                err=True
-            )
-            continue
-
-        # Upload the file
-        try:
-            typer.echo(f"Uploading image: {resolved_path.name}...", err=True)
-            file_upload_id = client.upload_file(str(resolved_path))
-            image_uploads[image_path] = file_upload_id
-        except typer.Exit:
-            raise
-        except Exception as e:
-            typer.echo(f"Warning: Failed to upload {resolved_path}: {e}", err=True)
-            continue
-
-    return image_uploads
-
-
 @content_app.command("append")
 @command
 def content_append(
@@ -1806,7 +1732,7 @@ def content_append(
             raise typer.Exit(1)
 
         # Process and upload any local images in the content
-        image_uploads = _process_markdown_images(content, file, client)
+        image_uploads = process_markdown_images(content, file, client)
 
         # Convert to blocks (with image upload mappings)
         blocks = text_to_blocks(content, image_uploads=image_uploads)
@@ -1915,7 +1841,7 @@ def content_set(
                     content = f.read()
 
             # Process and upload any local images in the content
-            image_uploads = _process_markdown_images(content, file, client)
+            image_uploads = process_markdown_images(content, file, client)
 
             # Convert to blocks (with image upload mappings)
             blocks = text_to_blocks(content, image_uploads=image_uploads)
