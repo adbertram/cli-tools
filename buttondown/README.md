@@ -75,6 +75,13 @@ buttondown subscribers remind SUBSCRIBER_ID_OR_EMAIL
 
 Supported subscriber filters include `email_address`, `domain`, `tag`, `type`, `source`, `creation_date`, `open_rate`, `click_rate`, `risk_score`, `utm_campaign`, `utm_medium`, and `utm_source`.
 
+**Filtering here is server-side, so the shared `like` semantics do not apply.** Each
+`field:op:value` maps to a Buttondown API query parameter and the API decides what matches; this CLI
+runs no client-side matching. Do not add SQL `%` wildcards — a `%` is sent to the API literally.
+`eq`, `like`, and `ilike` all map to the same API parameter for a given field, so they behave
+identically. An unsupported `field:op` pair fails loudly with
+`Filter '<field>:<op>' is not supported for <resource>.`
+
 ### Emails
 
 ```bash

@@ -147,8 +147,19 @@ The `--filter` option supports the following operators:
 | `gte` | Greater than or equal | `--filter "created_at:gte:2024-01-01"` |
 | `lt` | Less than | `--filter "total.value:lt:50"` |
 | `lte` | Less than or equal | `--filter "quantity:lte:5"` |
-| `like` | Pattern match | `--filter "store_name:like:ALDI*"` |
-| `in` | In list | `--filter "status:in:pending,delivered"` |
+| `like` | SQL LIKE, `%` wildcard, case-insensitive | `--filter "store_name:like:%ALDI%"` |
+| `contains` | Substring, case-insensitive | `--filter "store_name:contains:ALDI"` |
+| `in` | In list | `--filter "status:in:pending\|delivered"` |
+
+**`like` is SQL LIKE, not a substring search.** The pattern is anchored, and `%` is the only
+wildcard. `store_name:like:ALDI` matches only a store named exactly `ALDI`; it does not match
+`ALDI Express`. `*` is not a wildcard. For substring matching use `contains:ALDI` or
+`like:%ALDI%`. A bare `like:<value>` that returns `[]` is an exact-match miss, not proof the
+record is absent.
+
+**`in` separates values with `|`, not a comma.** A comma is the filter separator, so
+`status:in:pending,delivered` fails with
+`Invalid format 'delivered'. Expected field:value or field:op:value`.
 
 Multiple filters can be combined:
 ```bash
