@@ -6,6 +6,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Callable, Dict, List, Optional
+from urllib.parse import urlparse
 
 from cli_tools_shared.http_session import (
     BrowserAuthState,
@@ -60,6 +61,24 @@ GROUP_POST_THREAD_STOP_MARKERS = [
 # it is present on the search surface for BOTH a populated result set and a
 # genuinely empty one, so its presence alone never means "there are results".
 MARKETPLACE_RESULTS_CONTAINER_SELECTOR = '[aria-label="Collection of Marketplace items"]'
+
+# The path segment Facebook rewrites a Marketplace URL to when it does not
+# recognize the requested location slug. Facebook never errors on an unknown
+# slug: it drops the slug and serves the LOGGED-IN ACCOUNT'S OWN home-city
+# inventory instead. Measured live 2026-08-18:
+#
+#   /marketplace/losangeles/search/?query=lego%20bulk  ->
+#       /marketplace/category/search/?query=lego%20bulk   (Evansville rows)
+#   /marketplace/zzzzznotaplace/search/?query=lego%20bulk ->
+#       /marketplace/category/search/?query=lego%20bulk   (Evansville rows)
+#   /marketplace/losangeles/                           ->  /marketplace/
+#
+# while every valid slug kept its own segment and its own city's inventory
+# (evansville, chicago, seattle, nyc -- each rendering
+# "Location: <City>, <State>, Within 11 mi" in Facebook's own filter button).
+# So the final URL's own location segment is the authoritative answer to
+# "which city did Facebook actually search?".
+MARKETPLACE_SLUGLESS_PATH_SEGMENT = "category"
 
 # Inspect a loaded Marketplace list/search page before trusting an empty
 # extraction. The only signal that means "this search legitimately has zero
@@ -1582,7 +1601,51 @@ class FacebookClient:
             f"Facebook changed its markup. {detail}"
         )
 
-    def _paginated_fetch(self, url: str, status_msg: str, limit: int) -> List[MarketplaceListing]:
+    @staticmethod
+    def _served_location_slug(current_url: str) -> Optional[str]:
+        """Return the Marketplace location slug Facebook actually served.
+
+        ``None`` means the served URL carries no location segment at all, which
+        is what a rejected slug looks like on the browse surface
+        (``/marketplace/losangeles/`` -> ``/marketplace/``).
+        """
+        segments = [segment for segment in urlparse(current_url).path.split("/") if segment]
+        if len(segments) < 2 or segments[0] != "marketplace":
+            return None
+        return segments[1]
+
+    @staticmethod
+    def _assert_requested_location(current_url: str, location: str, requested_url: str) -> None:
+        """Fail loudly when Facebook rejected the requested location slug.
+
+        An unrecognized slug is silently downgraded by Facebook to the
+        account's own home city (see ``MARKETPLACE_SLUGLESS_PATH_SEGMENT``), so
+        the caller would otherwise receive a full, healthy-looking result set
+        under exit 0 that describes a completely different city. Another city's
+        inventory reported as the requested city's is worse than no result, so
+        this raises instead.
+
+        The literal slugless segment is rejected as a requested location too:
+        ``--location category`` would otherwise satisfy a naive equality check
+        while returning exactly the home-city inventory this guard exists to
+        catch.
+        """
+        served = FacebookClient._served_location_slug(current_url)
+        if served == location and location != MARKETPLACE_SLUGLESS_PATH_SEGMENT:
+            return
+        raise ClientError(
+            f"Facebook does not recognize the Marketplace location slug {location!r}. "
+            f"It served {current_url or '(no URL)'} instead of the requested "
+            f"{requested_url}, which returns the logged-in account's own home-city "
+            f"inventory rather than {location!r}'s. Facebook never errors on an unknown "
+            "slug, so this result would otherwise be another city's listings under a "
+            "clean exit. Use a slug Facebook publishes in its own Marketplace URL "
+            "(for example 'evansville', 'chicago', 'seattle', 'nyc')."
+        )
+
+    def _paginated_fetch(
+        self, url: str, status_msg: str, limit: int, location: str
+    ) -> List[MarketplaceListing]:
         """Navigate to a Marketplace URL and scroll to collect listings."""
         print_info(status_msg)
         page = self._get_page(url)
@@ -1593,6 +1656,11 @@ class FacebookClient:
         self._assert_marketplace_authenticated(page, url, f"Marketplace ({status_msg})")
 
         state = self._wait_for_marketplace_results(page)
+        # Checked once the page has settled into results (or Facebook's own
+        # zero-result state), because the slug rewrite happens during Facebook's
+        # client-side routing. Checked BEFORE the zero-result return so an
+        # unrecognized slug can never be reported as "this city has no matches".
+        self._assert_requested_location(state.get("url") or "", location, url)
         if state.get("no_results"):
             print_info(f"Facebook reported no listings: {state.get('empty_heading')}")
             return []
@@ -1664,6 +1732,7 @@ class FacebookClient:
         max_price: Optional[int] = None,
         limit: int = 50,
         sort_by: Optional[str] = None,
+        delivery_method: Optional[str] = None,
     ) -> List[MarketplaceListing]:
         """Search Facebook Marketplace for listings.
 
@@ -1672,6 +1741,15 @@ class FacebookClient:
                 (e.g. ``creation_time_descend`` for newest-first,
                 ``price_ascend`` / ``price_descend``). When None, Facebook
                 applies its own default ordering.
+            delivery_method: Facebook Marketplace ``deliveryMethod`` URL value
+                (``shipping`` or ``local_pick_up``). When None, no parameter is
+                sent and Facebook applies its own unfiltered default. With
+                ``shipping`` the ``location`` slug does not change the result
+                set -- Facebook serves one nationwide shipping pool from any
+                slug (measured live 2026-08-18: 60/60 identical item ids from
+                ``evansville`` and ``seattle``) -- but the slug is still
+                validated, because an unrecognized slug is a caller mistake
+                either way.
         """
         params = [f"query={query}"]
         if min_price is not None:
@@ -1680,12 +1758,15 @@ class FacebookClient:
             params.append(f"maxPrice={max_price}")
         if sort_by is not None:
             params.append(f"sortBy={sort_by}")
+        if delivery_method is not None:
+            params.append(f"deliveryMethod={delivery_method}")
 
         url = f"{MARKETPLACE_BASE}/{location}/search/?{'&'.join(params)}"
         return self._paginated_fetch(
             url=url,
             status_msg=f"Searching for '{query}' in {location}...",
             limit=limit,
+            location=location,
         )
 
     def browse(
@@ -1708,6 +1789,7 @@ class FacebookClient:
             url=url,
             status_msg=f"Browsing Marketplace in {location}...",
             limit=limit,
+            location=location,
         )
 
     def get_item(self, item_id: str) -> MarketplaceListing:

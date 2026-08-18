@@ -110,6 +110,11 @@ facebook marketplace list --query "LEGO" --sort newest   # explicit newest first
 facebook marketplace list --query "LEGO" --sort price     # price low -> high
 facebook marketplace list --query "LEGO" --sort price --desc  # price high -> low
 
+# Fulfillment filter (requires --query)
+facebook marketplace list --query "LEGO" --delivery-method shipping  # NATIONWIDE
+facebook marketplace list --query "LEGO" --delivery-method local     # local pickup
+facebook marketplace list --query "LEGO" --delivery-method all       # default
+
 # Output formatting
 facebook marketplace list --table
 facebook marketplace list --limit 20
@@ -142,6 +147,64 @@ parameter:
   (the sort menu offers only newest-first for date listed), so `--sort newest
   --desc` is rejected with a clear error instead of silently returning arbitrary
   order.
+
+#### Fulfillment: `--delivery-method` (nationwide shipping search)
+
+`marketplace list --delivery-method` maps to Facebook's own `deliveryMethod`
+search parameter. It requires `--query`.
+
+| `--delivery-method` | Facebook `deliveryMethod` | Result |
+|---------------------|---------------------------|--------|
+| `all` (default) | *(no parameter)* | Facebook's unfiltered default |
+| `shipping` | `shipping` | **Nationwide** — only listings that ship |
+| `local` | `local_pick_up` | Listings offering local pickup |
+
+- **`shipping` is the nationwide lever.** The `--location` slug does not change
+  the result set: `evansville` and `seattle` returned the same 30/30 item IDs
+  (live 2026-08-18), and sellers span the country. The slug is still validated.
+- **`local` means "offers local pickup", not "local only".** A listing can carry
+  both `local_pick_up` and shipping; 1 of 30 rows in a live `local` run also
+  carried `SHIPPING_ONSITE`.
+- **Requires `--query`.** The browse feed ("Today's picks") has no
+  delivery-method filter — live, `shipping` and `local_pick_up` returned the
+  same 18 rows there, including out-of-area listings — so the flag is rejected
+  without a query rather than sent into a filter that does not exist.
+- **Only verified tokens are sent.** Facebook does not ignore an unknown token:
+  `deliveryMethod=local` left every filter radio unchecked and the filter button
+  reading `Delivery method:` with no value.
+
+#### Location slugs are validated (no silent home-city fallback)
+
+An unrecognized `--location` slug **fails with a non-zero exit** and names the
+slug. Facebook never errors on an unknown slug — it rewrites the URL to its
+slugless surface (`/marketplace/losangeles/search/` →
+`/marketplace/category/search/`; `/marketplace/losangeles/` → `/marketplace/`)
+and serves the logged-in account's **own home-city** inventory. Before this
+check, `--location losangeles` returned 40 Evansville-area rows under exit 0.
+
+The final URL's own location segment is the signal, verified live against
+`losangeles` and `zzzzznotaplace` (both rejected) and `evansville`, `chicago`,
+`seattle`, `nyc` (all preserved, each returning its own city's listings).
+
+#### Result depth
+
+Facebook's Marketplace search pagination exhausts at **2,448 unique listings**.
+Measured live 2026-08-18 with `--limit 5000` on three different searches —
+`"lego bulk"` + shipping (92 scrolls), `"lego"` + shipping (92 scrolls), and
+`"lego"` in `chicago` with no fulfillment filter (80 scrolls) — every run
+stopped at exactly 2,448. The ceiling is Facebook's, not the CLI's; a `--limit`
+above it simply returns 2,448.
+
+#### `radius` is not supported, on purpose
+
+Facebook's `radius` URL parameter does **not** widen a search. Live 2026-08-18,
+`radius=1` and `radius=99999` returned byte-identical 100-row result sets to a
+search with no `radius` at all (100/100 identical item IDs, same four
+locations), on both the city-slug surface and the `latitude`/`longitude`
+surface. It only changes the rendered "Within N mi" label — and its unit is
+**kilometers**, not miles (`radius=500` renders "Within 311 mi";
+`radius=161` renders "Within 100 mi"). Use `--delivery-method shipping` for
+nationwide reach.
 
 #### Prices and price drops
 

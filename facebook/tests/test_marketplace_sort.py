@@ -72,9 +72,10 @@ class MarketplaceSearchUrlTests(unittest.TestCase):
         client = FacebookClient()
         captured = {}
 
-        def fake_paginated_fetch(url, status_msg, limit):
+        def fake_paginated_fetch(url, status_msg, limit, location):
             captured["url"] = url
             captured["limit"] = limit
+            captured["location"] = location
             return []
 
         client._paginated_fetch = fake_paginated_fetch

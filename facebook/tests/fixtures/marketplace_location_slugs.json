@@ -1,0 +1,70 @@
+{
+  "_measured": "Live Facebook Marketplace navigations captured 2026-08-18 from an authenticated session whose account home city is Evansville, IN. Each entry is the URL the CLI requested and the URL Facebook's own location.href reported once the page had settled, plus the text of Facebook's own 'Location:' filter button.",
+  "search": {
+    "evansville-plain": {
+      "requested_url": "https://www.facebook.com/marketplace/evansville/search/?query=lego%20bulk&sortBy=creation_time_descend",
+      "served_url": "https://www.facebook.com/marketplace/evansville/search/?query=lego%20bulk&sortBy=creation_time_descend",
+      "location_button": [
+        "Location: Evansville, Indiana, Within 11 mi"
+      ]
+    },
+    "chicago": {
+      "requested_url": "https://www.facebook.com/marketplace/chicago/search/?query=lego%20bulk&sortBy=creation_time_descend",
+      "served_url": "https://www.facebook.com/marketplace/chicago/search/?query=lego%20bulk&sortBy=creation_time_descend",
+      "location_button": [
+        "Location: Chicago, Illinois, Within 11 mi"
+      ]
+    },
+    "seattle": {
+      "requested_url": "https://www.facebook.com/marketplace/seattle/search/?query=lego%20bulk&sortBy=creation_time_descend",
+      "served_url": "https://www.facebook.com/marketplace/seattle/search/?query=lego%20bulk&sortBy=creation_time_descend",
+      "location_button": [
+        "Location: Seattle, Washington, Within 11 mi"
+      ]
+    },
+    "nyc": {
+      "requested_url": "https://www.facebook.com/marketplace/nyc/search/?query=lego%20bulk&sortBy=creation_time_descend",
+      "served_url": "https://www.facebook.com/marketplace/nyc/search/?query=lego%20bulk&sortBy=creation_time_descend",
+      "location_button": [
+        "Location: New York, New York, Within 11 mi"
+      ]
+    },
+    "losangeles-invalid": {
+      "requested_url": "https://www.facebook.com/marketplace/losangeles/search/?query=lego%20bulk&sortBy=creation_time_descend",
+      "served_url": "https://www.facebook.com/marketplace/category/search/?query=lego%20bulk&sortBy=creation_time_descend",
+      "location_button": [
+        "Location: Evansville, Indiana, Within 11 mi"
+      ]
+    },
+    "notaplace-invalid": {
+      "requested_url": "https://www.facebook.com/marketplace/zzzzznotaplace/search/?query=lego%20bulk&sortBy=creation_time_descend",
+      "served_url": "https://www.facebook.com/marketplace/category/search/?query=lego%20bulk&sortBy=creation_time_descend",
+      "location_button": [
+        "Location: Evansville, Indiana, Within 11 mi"
+      ]
+    }
+  },
+  "browse": {
+    "browse-evansville": {
+      "requested_url": "https://www.facebook.com/marketplace/evansville/",
+      "served_url": "https://www.facebook.com/marketplace/evansville/",
+      "location_button": [
+        "Location: Evansville, Indiana, Within 11 mi"
+      ]
+    },
+    "browse-chicago": {
+      "requested_url": "https://www.facebook.com/marketplace/chicago/",
+      "served_url": "https://www.facebook.com/marketplace/chicago/",
+      "location_button": [
+        "Location: Chicago, Illinois, Within 11 mi"
+      ]
+    },
+    "browse-losangeles-invalid": {
+      "requested_url": "https://www.facebook.com/marketplace/losangeles/",
+      "served_url": "https://www.facebook.com/marketplace/",
+      "location_button": [
+        "Location: Evansville, Indiana, Within 11 mi"
+      ]
+    }
+  }
+}

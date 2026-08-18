@@ -1,7 +1,7 @@
 {
   "tool": "facebook",
   "description": "Facebook CLI - Marketplace, Messenger, and more via browser automation",
-  "discovered_at": "2026-08-15T21:53:36Z",
+  "discovered_at": "2026-08-18T14:04:15Z",
   "total_commands": 26,
   "global_options": [
     {
@@ -662,7 +662,7 @@
           ]
         },
         "list": {
-          "help": "List Facebook Marketplace listings. Without --query, browses \"Today's picks\" for the location. With --query, searches by keyword. Scrolls automatically to load enough listings to satisfy --limit. Results are ordered by --sort (default 'newest' = most recently listed first), mapped to Facebook's `sortBy` URL parameter. Use --desc to reverse a field's natural direction ('price --desc' = high to low). Facebook Marketplace has no oldest-first ordering, so 'newest --desc' is rejected.",
+          "help": "List Facebook Marketplace listings. Without --query, browses \"Today's picks\" for the location. With --query, searches by keyword. Scrolls automatically to load enough listings to satisfy --limit. Results are ordered by --sort (default 'newest' = most recently listed first), mapped to Facebook's `sortBy` URL parameter. Use --desc to reverse a field's natural direction ('price --desc' = high to low). Facebook Marketplace has no oldest-first ordering, so 'newest --desc' is rejected. --delivery-method shipping searches NATIONWIDE: it returns only listings that ship, from sellers anywhere in the country, and the --location slug has no effect on that pool. An unrecognized --location slug fails instead of returning results. Facebook silently substitutes the account's own home city for a slug it does not know, so a clean-looking result set would describe the wrong city.",
           "examples": [
             "facebook marketplace list",
             "facebook marketplace list --query \"LEGO\"",
@@ -670,6 +670,8 @@
             "facebook marketplace list --query \"LEGO\" --sort price --desc",
             "facebook marketplace list --query \"couch\" --min-price 50 --max-price 500",
             "facebook marketplace list --location chicago --table --limit 20",
+            "facebook marketplace list --query \"LEGO\" --delivery-method shipping",
+            "facebook marketplace list --query \"LEGO\" --delivery-method local",
             "facebook marketplace list --query \"LEGO\" --include-detail",
             "facebook marketplace list --query \"LEGO\" --download-images",
             "facebook marketplace list --query \"LEGO\" --limit 75"
@@ -688,7 +690,7 @@
               "name": "--location",
               "type": "TEXT",
               "required": false,
-              "help": "Location slug (e.g., 'evansville', 'chicago')",
+              "help": "Location slug (e.g., 'evansville', 'chicago', 'seattle', 'nyc'). A slug Facebook does not recognize is an error, not a fallback: Facebook silently serves the account's own home-city inventory for an unknown slug, so the command fails instead. Ignored by '--delivery-method shipping', which returns the same nationwide pool from any slug",
               "short": "-L",
               "default": "evansville"
             },
@@ -718,6 +720,14 @@
               "required": false,
               "help": "Reverse the sort field's natural direction (e.g. 'price --desc' = high to low). Not supported for 'newest' (Facebook has no oldest-first order)",
               "short": "-d"
+            },
+            {
+              "name": "--delivery-method",
+              "type": "TEXT",
+              "required": false,
+              "help": "Fulfillment filter, requires --query: 'all' (default, Facebook's own unfiltered default), 'shipping' (NATIONWIDE -- only listings that ship, from sellers anywhere in the country), or 'local' (local pickup only). With 'shipping' the --location slug does not change the results; Facebook serves one nationwide shipping pool from any city slug",
+              "short": "-D",
+              "default": "all"
             },
             {
               "name": "--table",

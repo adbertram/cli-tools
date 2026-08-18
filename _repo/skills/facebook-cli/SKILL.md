@@ -20,6 +20,7 @@ facebook <command-group> <action> [arguments] [options]
 | Task | Command |
 |------|---------|
 | Search Marketplace | `facebook marketplace list --query "LEGO" --table` |
+| Search NATIONWIDE (ships) | `facebook marketplace list --query "LEGO" --delivery-method shipping` |
 | Browse Today's picks | `facebook marketplace list --table` |
 | Get listing details | `facebook marketplace get ITEM_ID` |
 | Check listing availability | `facebook marketplace status ITEM_ID` |
@@ -95,6 +96,23 @@ Every Marketplace record carries `delivery_types` on BOTH `marketplace list` and
 Never infer fulfillment from rendered text. The detail page shows only the seller's free-form meet-up prose, and a search tile shows a place name OR the string "Ships to you" — that choice is a DISTANCE decision, not a fulfillment one, so a shipping-capable listing near the viewer still renders a place name. Reading the prose or the tile text will get the answer wrong.
 
 `location` on `get` now comes from Facebook's own `location_text` (the previous "Listed in " text parse never matched, which is why `get` returned `location: null`); carrying location from the `list` row is no longer necessary. On `list`, a tile rendering "Ships to you" reports `location: null` rather than that string.
+</principle>
+
+<principle name="Marketplace Nationwide Search, Location Slugs, Radius, and Depth">
+`marketplace list --delivery-method` is the ONLY nationwide lever. It maps to Facebook's own `deliveryMethod` search parameter and REQUIRES `--query`.
+
+| `--delivery-method` | Facebook `deliveryMethod` | Result |
+|---------------------|---------------------------|--------|
+| `all` (default) | *(no parameter)* | Facebook's unfiltered default — today's behavior, unchanged |
+| `shipping` | `shipping` | **Nationwide** — only listings that ship |
+| `local` | `local_pick_up` | Listings offering local pickup |
+
+- **`shipping` ignores `--location`.** Facebook serves ONE nationwide shipping pool from any city slug: `evansville` and `seattle` returned the same 30/30 item ids (live 2026-08-18), with sellers across the country. Never run the same shipping search under several slugs expecting different inventory — it is the same rows. The slug is still validated, because an unrecognized slug is a caller mistake either way.
+- **`local` means "offers local pickup", NOT "local only".** A listing can carry both; 1 of 30 rows in a live `local` run also carried `SHIPPING_ONSITE`. Use `delivery_types` for the per-listing answer.
+- **`--delivery-method` without `--query` is rejected.** The browse feed ("Today's picks") has no delivery-method filter at all — live, `shipping` and `local_pick_up` returned the SAME 18 rows there, including Chicago IL, Tyler TX, Valdosta GA, and Woodstown NJ rows under `local_pick_up`. The parameter perturbs that feed without filtering it, so the CLI refuses instead of sending it.
+- **An unrecognized `--location` slug FAILS with a non-zero exit** and names the slug. Facebook never errors on an unknown slug: it rewrites the URL to its slugless surface (`/marketplace/losangeles/search/` → `/marketplace/category/search/`; `/marketplace/losangeles/` → `/marketplace/`) and serves the LOGGED-IN ACCOUNT'S OWN home-city inventory. See Known Issue #8. Valid slugs verified live: `evansville`, `chicago`, `seattle`, `nyc`.
+- **Depth ceiling: 2,448 unique listings per search.** Measured live 2026-08-18 with `--limit 5000` on three different searches — `"lego bulk"`+shipping (92 scrolls), `"lego"`+shipping (92 scrolls), `"lego"` in `chicago` with no fulfillment filter (80 scrolls) — every run stopped at exactly 2,448, in ~3 minutes each. That is Facebook's own pagination exhaustion, not a CLI limit. A `--limit` above 2,448 returns 2,448. To reach more inventory, vary the QUERY, not the limit.
+- **There is no `--radius`, on purpose.** Facebook's `radius` URL parameter does NOT widen a search. Live 2026-08-18, `radius=1` and `radius=99999` returned byte-identical 100-row result sets to a search with no `radius` at all (100/100 identical item ids, same four locations), on both the city-slug surface and the `latitude`/`longitude` surface. It only changes the rendered "Within N mi" label, and its unit is KILOMETERS, not miles (`radius=500` → "Within 311 mi", `radius=161` → "Within 100 mi"). The effective radius comes from the account's saved Marketplace location preference, not from the URL. Never suggest `radius` as a way to search wider or nationwide; use `--delivery-method shipping`.
 </principle>
 
 <principle name="Marketplace One Listing, Two IDs">
@@ -275,6 +293,27 @@ Which id a surface uses is not arbitrary. A normal search tile links by the list
 **Honest limit (unchanged and confirmed live):** `marketplace list` STILL reports `null` for those same two notification tiles, and that is correct. Their ids appear nowhere in the search page's payloads — not in any `script[type="application/json"]` blob, not in any of the 15 captured XHR bodies, and not under the canonical listing id either. Facebook serves the notification tile's listing data from the notifications feed, which the search page never loads. So the `list` surface genuinely cannot describe them, the warning names them by id, and `marketplace get` is now once again the definitive read. Do NOT try to fill those rows by guessing.
 
 **Recurrence Prevention:** Never assume the id in a Marketplace URL or tile href is the id Facebook's own payload is keyed by. When a lookup misses on a page that clearly rendered the listing, dump the node and compare its `id` against `story.post_id` and `product_item.id` BEFORE concluding Facebook changed its payload. The fail-loud guard did its job here — it refused to report an unknown fulfillment model — but its error text blamed Facebook for a keying bug in the CLI, so a "Facebook changed its payload" message is a hypothesis to test against the live page, never a conclusion.
+
+### 8. `marketplace list --location <unknown-slug>` returned another city's inventory under exit 0
+
+**Symptom (2026-08-18):** `facebook marketplace list --query "lego bulk" --location losangeles --sort newest --limit 40` exited 0 and returned 40 healthy-looking rows whose locations were `Evansville, IN` (31), `Newburgh, IN` (5), and `Henderson, KY` (3) — a 100% overlap with an `--location evansville` run. Nothing in the output said Los Angeles had not been searched. Valid slugs behaved correctly and are the control: `chicago` → Chicago/Elmwood Park/Oak Park, `seattle` → Seattle/Redmond/Bellevue, `nyc` → Leonia NJ/New York.
+
+**Cause:** Facebook does not error on an unknown Marketplace location slug. It silently drops the slug and serves the LOGGED-IN ACCOUNT'S OWN home city (Evansville, IN for this profile). Captured live from the page's own `location.href` after settle:
+
+```
+requested /marketplace/losangeles/search/?query=lego%20bulk&sortBy=creation_time_descend
+served    /marketplace/category/search/?query=lego%20bulk&sortBy=creation_time_descend
+requested /marketplace/zzzzznotaplace/search/?...   ->  served /marketplace/category/search/?...
+requested /marketplace/losangeles/                  ->  served /marketplace/
+```
+
+Facebook's own filter button on both rejected pages still read `Location: Evansville, Indiana, Within 11 mi`, while `chicago` / `seattle` / `nyc` each kept their slug in the served URL and rendered their own city in that button. The CLI never compared the requested slug against the served one, so the substitution was invisible: a full result set, a clean exit, and the wrong city. That is worse than an empty result, because a downstream consumer cannot detect it.
+
+**Fix (`facebook/facebook_cli/client.py`):** `_served_location_slug` reads the location segment out of the URL Facebook actually served, and `_assert_requested_location` raises `ClientError` naming the slug and both URLs unless the served segment equals the requested one. `_paginated_fetch` now takes the requested `location` and runs that assertion after `_wait_for_marketplace_results` (the slug rewrite happens during Facebook's client-side routing, so it must be read after the page settles) and BEFORE the zero-result early return, so a rejected slug can never be reported as "this city has no matches" either. The literal slugless segment `category` is rejected as a requested location too, since `--location category` would otherwise satisfy a naive equality check while returning exactly the home-city inventory this guard exists to catch. No fallback, no warning-and-continue: the command exits non-zero.
+
+**Verification:** The exact failing command now exits 1 with `Error: Facebook does not recognize the Marketplace location slug 'losangeles'. It served https://www.facebook.com/marketplace/category/search/?... instead of the requested https://www.facebook.com/marketplace/losangeles/search/?...`. All four valid controls still exit 0 and return their own city: `evansville` (11 Evansville + 1 Henderson KY), `chicago` (Chicago/Elmwood Park/Evanston/Morton Grove/Riverside IL), `seattle` (Seattle/Redmond/Bellevue WA), `nyc` (Astoria/Brooklyn/Flushing NY + Bloomfield/Leonia NJ). Regression coverage in `facebook/tests/test_marketplace_delivery_and_location.py` against verbatim live URL captures in `facebook/tests/fixtures/marketplace_location_slugs.json`, including a `_paginated_fetch` test proving the guard fires before extraction and is not masked by the zero-result path. Full suite: `337 passed`.
+
+**Recurrence Prevention:** Never trust that Facebook searched what the CLI asked for. Facebook's Marketplace surfaces answer an unrecognized identifier by substituting a default rather than failing, so any new location-, category-, or filter-bearing URL must be re-read from the served page and compared against the request. `--delivery-method shipping` is exempt from caring about the slug (Facebook serves one nationwide pool from any city), but it is NOT exempt from the check, because an unknown slug still means the caller believes something false.
 
 ## Raw Browser Fallback Notes
 
