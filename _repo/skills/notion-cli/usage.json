@@ -1,8 +1,8 @@
 {
   "tool": "notion",
   "description": "CLI interface for Notion API with database query filtering",
-  "discovered_at": "2026-08-05T16:20:46Z",
-  "total_commands": 57,
+  "discovered_at": "2026-08-18T12:07:45Z",
+  "total_commands": 59,
   "global_options": [
     {
       "name": "--version",
@@ -312,7 +312,8 @@
           "examples": [
             "notion comments create \"This is my comment\" --page-id abc123",
             "notion comments create \"Comment on this block\" --block-id def456",
-            "notion comments create \"My reply\" --discussion-id ghi789"
+            "notion comments create \"My reply\" --discussion-id ghi789",
+            "notion comments create --text-file reply.md --discussion-id ghi789"
           ],
           "usage_instructions": "Run `notion comments create --help` for exact arguments and options.",
           "arguments": [
@@ -351,6 +352,13 @@
               "required": false,
               "help": "Discussion thread ID to reply to",
               "short": "-d"
+            },
+            {
+              "name": "--mention",
+              "type": "TEXT",
+              "required": false,
+              "help": "Mention a workspace user by email or user UUID (repeatable). Creates a real Notion mention that notifies the user; a literal '@Name' in the text does not",
+              "short": "-m"
             },
             {
               "name": "--table",
@@ -496,6 +504,9 @@
       "commands": {
         "create": {
           "help": "Create a new database under a parent page. PARENT_PAGE_ID must be a page ID. Notion does not allow creating a database with a database or data_source parent. The schema is supplied via raw JSON (--properties, the Notion initial_data_source.properties object) and/or convenience flags. A title property is always present: if --properties does not define one, a title property named by --title-property (default \"Name\") is added. Relation properties use the TARGET's data_source ID (not a database container ID), per Notion API 2025-09-03.",
+          "examples": [
+            "notion database create PARENT_PAGE_ID --title \"Tasks\""
+          ],
           "arguments": [
             {
               "name": "parent_page_id",
@@ -628,6 +639,11 @@
         },
         "delete": {
           "help": "Delete (trash) a whole database container, or restore it with --restore. Notion does not hard-delete a database. This moves the container to the trash through PATCH /databases/{id} with in_trash. To archive one row instead, use 'notion database page delete PAGE_ID'. Accepts a database container ID or a data_source ID (the IDs that 'notion database list' prints); a data_source ID resolves to its parent container.",
+          "examples": [
+            "notion database delete abc123",
+            "notion database delete abc123 --force",
+            "notion database delete abc123 --restore --force"
+          ],
           "arguments": [
             {
               "name": "database_id",
@@ -843,6 +859,13 @@
                 },
                 "list-blocks": {
                   "help": "List a page's content blocks with their block IDs, types, and text. Use this to map paragraphs/headings to their block IDs so a targeted, non-destructive edit can be made with 'content update-block --block-id'. Editing a block in place preserves the block ID, so any inline comments anchored to OTHER blocks are not affected.",
+                  "examples": [
+                    "notion database page content list-blocks PAGE_ID",
+                    "notion database page content list-blocks PAGE_ID --table",
+                    "notion database page content list-blocks PAGE_ID --recursive",
+                    "notion database page content list-blocks PAGE_ID --filter \"type:eq:paragraph\"",
+                    "notion database page content list-blocks PAGE_ID --properties \"id,type,text\" --table"
+                  ],
                   "arguments": [
                     {
                       "name": "page_id",
@@ -942,6 +965,11 @@
                 },
                 "update-block": {
                   "help": "Edit a single existing block's text IN PLACE without deleting it. PATCHes the block's rich_text via the Notion API (PATCH /v1/blocks/{id}), which preserves the block and its ID. Because the block ID is unchanged, any inline/block-anchored comments on this page (including on OTHER blocks) SURVIVE the edit. This is the non-destructive alternative to 'content set', which deletes and recreates every block and so destroys all inline comments. Supported block types: paragraph, heading_1/2/3, bulleted_list_item, numbered_list_item, quote, callout, to_do, toggle. Find block IDs with 'content list-blocks PAGE_ID'.",
+                  "examples": [
+                    "notion database page content update-block --block-id BLOCK_ID --text \"Revised sentence.\"",
+                    "notion database page content update-block -b BLOCK_ID -t \"New heading text\"",
+                    "notion database page content update-block -b TODO_BLOCK_ID --checked"
+                  ],
                   "arguments": [],
                   "options": [
                     {
@@ -1711,7 +1739,8 @@
           "examples": [
             "notion field update DB_ID \"Priority\" --name \"Urgency\"",
             "notion field update DB_ID \"Score\" --number-format percent",
-            "notion field update DB_ID \"Status\" --options \"Todo,In Progress,Done\""
+            "notion field update DB_ID \"Status\" --options \"Todo,In Progress,Done\"",
+            "notion field update DB_ID \"Project\" --relation-database TARGET_DB_ID"
           ],
           "usage_instructions": "Run `notion field update --help` for exact arguments and options.",
           "arguments": [
@@ -1803,7 +1832,9 @@
                 "notion pages blocks append BLOCK_ID --file content.md",
                 "notion pages blocks append BLOCK_ID --json '[{\"paragraph\":{\"rich_text\":[{\"text\":{\"content\":\"Hello\"}}]}}]'",
                 "notion pages blocks append PAGE_ID --after BLOCK_ID --text \"Inserted after specific block\"",
-                "notion pages blocks append PAGE_ID --file chapter.md --is-toggleable"
+                "notion pages blocks append PAGE_ID --file chapter.md --is-toggleable",
+                "notion pages blocks append PAGE_ID --file synced.md --synced",
+                "notion pages blocks append PAGE_ID --synced-from ORIGINAL_SYNCED_BLOCK_ID"
               ],
               "usage_instructions": "Run `notion pages blocks append --help` for exact arguments and options.",
               "arguments": [
@@ -1959,7 +1990,8 @@
                 "notion pages blocks list --page-id PAGE_ID",
                 "notion pages blocks list --page-id PAGE_ID --table",
                 "notion pages blocks list --page-id PAGE_ID --recursive",
-                "notion pages blocks list --page-id PAGE_ID --markdown"
+                "notion pages blocks list --page-id PAGE_ID --markdown",
+                "notion pages blocks list --page-id PAGE_ID --limit 50"
               ],
               "usage_instructions": "Run `notion pages blocks list --help` for exact arguments and options.",
               "arguments": [],
@@ -2684,6 +2716,12 @@
         },
         "update": {
           "help": "Update a page's title, icon, or archive status.",
+          "examples": [
+            "notion pages update PAGE_ID --title \"New Title\"",
+            "notion pages update PAGE_ID --icon \"emoji:star\"",
+            "notion pages update PAGE_ID --archive",
+            "notion pages update PAGE_ID --restore"
+          ],
           "usage_instructions": "Run `notion pages update --help` for exact arguments and options.",
           "arguments": [
             {
@@ -2712,6 +2750,95 @@
               "type": "bool",
               "required": false,
               "help": "Archive or restore the page"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "users": {
+      "help": "List and inspect workspace users",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get a specific workspace user by ID.",
+          "examples": [
+            "notion users get fe60dca0-d16a-42d0-a41d-c3491dc972e6 --table"
+          ],
+          "arguments": [
+            {
+              "name": "user_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "User ID to retrieve"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as formatted table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List every user in the workspace. Pagination: Full cursor walk over GET /v1/users (no first-page truncation) Filtering: Client-side (Notion has no server-side user name/email filter)",
+          "examples": [
+            "notion users list --table",
+            "notion users list --filter \"type:eq:person\" --table",
+            "notion users list --filter \"person.email:eq:someone@example.com\"",
+            "notion users list --properties \"id,name,email\" --limit 10"
+          ],
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as formatted table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of users to return (default: all users)",
+              "short": "-l"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., type:eq:person, person.email:eq:user@example.com, name:contains:Mowers)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of fields to include in output (e.g., id,name,email)",
+              "short": "-p"
             },
             {
               "name": "--profile",

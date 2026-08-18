@@ -5,6 +5,7 @@ import typer
 from typing import Optional, List
 
 from ..client import DEFAULT_MAX_WORKERS, get_client
+from ..mentions import build_user_mention, resolve_mention_user_ids
 from ..output import _chunk_code_content, print_json, print_table, handle_error, command
 from cli_tools_shared.filters import apply_filters
 
@@ -15,6 +16,19 @@ def extract_comment_text(comment: dict) -> str:
     """Extract plain text from a comment's rich_text array."""
     rich_text = comment.get("rich_text", [])
     return "".join(rt.get("plain_text", "") for rt in rich_text)
+
+
+def extract_comment_mentions(comment: dict) -> List[str]:
+    """Extract the user IDs of every user mention in a comment's rich_text."""
+    mentions = []
+    for rt in comment.get("rich_text", []):
+        if rt.get("type") != "mention":
+            continue
+        mention = rt.get("mention") or {}
+        if mention.get("type") != "user":
+            continue
+        mentions.append((mention.get("user") or {}).get("id", ""))
+    return mentions
 
 
 def format_comment_for_display(comment: dict) -> dict:
@@ -38,6 +52,7 @@ def format_comment_for_display(comment: dict) -> dict:
         "id": comment.get("id", ""),
         "comment_type": comment_type,
         "text": extract_comment_text(comment),
+        "mentions": extract_comment_mentions(comment),
         "context": comment.get("context", ""),  # Added by list_comments_with_context
         "context_before": comment.get("context_before", ""),
         "context_after": comment.get("context_after", ""),
@@ -52,12 +67,29 @@ def format_comment_for_display(comment: dict) -> dict:
     }
 
 
-def build_comment_rich_text(text: str) -> List[dict]:
-    """Build a Notion rich_text payload for comment text."""
-    return [
+def build_comment_rich_text(
+    text: str,
+    mention_user_ids: Optional[List[str]] = None,
+) -> List[dict]:
+    """
+    Build a Notion rich_text payload for comment text.
+
+    Mention objects lead the array in the order given, each followed by a single
+    space, then the text body. A mention is a distinct rich_text object type; a
+    literal "@Name" string in the body is plain text and notifies nobody.
+    """
+    rich_text: List[dict] = []
+
+    for user_id in mention_user_ids or []:
+        rich_text.append(build_user_mention(user_id))
+        rich_text.append({"type": "text", "text": {"content": " "}})
+
+    rich_text.extend(
         {"type": "text", "text": {"content": chunk}}
         for chunk in _chunk_code_content(text)
-    ]
+    )
+
+    return rich_text
 
 
 @app.command("list")
@@ -268,6 +300,16 @@ def comment_create(
         "-d",
         help="Discussion thread ID to reply to",
     ),
+    mention: Optional[List[str]] = typer.Option(
+        None,
+        "--mention",
+        "-m",
+        help=(
+            "Mention a workspace user by email or user UUID (repeatable). "
+            "Creates a real Notion mention that notifies the user; a literal "
+            "'@Name' in the text does not."
+        ),
+    ),
     table: bool = typer.Option(
         False,
         "--table",
@@ -291,6 +333,14 @@ def comment_create(
 
         # Reply with shell-sensitive text from a file
         notion comments create --text-file reply.md --discussion-id ghi789
+
+        # Notify a user with a real mention (by email or user UUID)
+        notion comments create "please review" --page-id abc123 \\
+            --mention someone@example.com
+
+        # Mention several users; mentions lead the comment in the order given
+        notion comments create "handoff" --discussion-id ghi789 \\
+            -m someone@example.com -m fe60dca0-d16a-42d0-a41d-c3491dc972e6
     """
     # Validate exactly one content source is provided
     content_sources = sum([text is not None, text_file is not None])
@@ -325,9 +375,15 @@ def comment_create(
         assert text is not None
         comment_text = text
 
-    rich_text = build_comment_rich_text(comment_text)
-
     client = get_client()
+
+    # Resolve every mention BEFORE the write. An unknown, ambiguous, or bot
+    # target aborts here so no comment is posted with a mention that would not
+    # notify the intended person.
+    mention_user_ids = resolve_mention_user_ids(client, mention)
+
+    rich_text = build_comment_rich_text(comment_text, mention_user_ids)
+
     comment = client.create_comment(
         rich_text=rich_text,
         page_id=page_id,
@@ -342,7 +398,25 @@ def comment_create(
     # body as a write postcondition: a successful command must echo the exact
     # non-empty text that was submitted. This check also catches partial loss on
     # any other comment target without printing a false-success JSON object.
-    if comment_text and formatted["text"] != comment_text:
+    # A mention that came back as anything other than the resolved user IDs
+    # would notify the wrong person, or nobody. Treat it as a failed write.
+    if formatted["mentions"] != mention_user_ids:
+        comment_id = formatted["id"] or "unknown"
+        raise RuntimeError(
+            f"Notion created comment {comment_id} but its rich_text user "
+            f"mentions are {formatted['mentions']}, not the requested "
+            f"{mention_user_ids}. The mention would not notify the intended "
+            "user, so the command is failing instead of reporting success."
+        )
+
+    # Mentions occupy the front of rich_text, so the submitted body is the
+    # trailing text rather than the whole string.
+    text_preserved = (
+        formatted["text"].endswith(comment_text)
+        if mention_user_ids
+        else formatted["text"] == comment_text
+    )
+    if comment_text and not text_preserved:
         comment_id = formatted["id"] or "unknown"
         raise RuntimeError(
             "Notion created comment "

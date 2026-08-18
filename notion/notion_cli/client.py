@@ -229,6 +229,72 @@ class NotionClient:
         """
         return self._make_request("GET", "/users/me")
 
+    def list_users_all(self, limit: Optional[int] = None) -> List[Dict]:
+        """
+        List workspace users, paginating GET /v1/users completely.
+
+        Notion's users endpoint has no server-side name/email filter and caps
+        page_size at 100, so every caller needs the full cursor walk. Returning
+        only the first page would silently hide users, which is exactly the
+        failure mode mention resolution must never have.
+
+        Args:
+            limit: Optional cap on the number of users returned. ``None``
+                returns EVERY user in the workspace.
+
+        Returns:
+            List of raw Notion user objects
+
+        Raises:
+            ClientError: If the API response is missing results or reports
+                has_more without a next_cursor
+        """
+        if limit is not None and limit <= 0:
+            return []
+
+        users: List[Dict] = []
+        start_cursor: Optional[str] = None
+
+        while True:
+            page_size = 100
+            if limit is not None:
+                page_size = min(limit - len(users), 100)
+
+            params: Dict[str, Any] = {"page_size": page_size}
+            if start_cursor:
+                params["start_cursor"] = start_cursor
+
+            response = self._make_request("GET", "/users", params=params)
+            results = response.get("results")
+            if not isinstance(results, list):
+                raise ClientError("Notion users response is missing a results list")
+
+            users.extend(results)
+
+            if limit is not None and len(users) >= limit:
+                return users[:limit]
+
+            if not response.get("has_more"):
+                return users
+
+            start_cursor = response.get("next_cursor")
+            if not start_cursor:
+                raise ClientError(
+                    "Notion users response reported has_more without a next_cursor"
+                )
+
+    def get_user(self, user_id: str) -> Dict:
+        """
+        Get a single workspace user by ID.
+
+        Args:
+            user_id: The Notion user ID
+
+        Returns:
+            Raw Notion user object
+        """
+        return self._make_request("GET", f"/users/{user_id}")
+
     def _resolve_id(self, database_id: str) -> Dict[str, Any]:
         """
         Resolve a user-supplied "database ID" against API 2025-09-03.

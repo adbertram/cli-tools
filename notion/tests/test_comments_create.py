@@ -65,6 +65,7 @@ def test_comment_create_sends_chunked_rich_text_for_long_comments(monkeypatch):
         page_id="page-1",
         block_id=None,
         discussion_id=None,
+        mention=None,
         table=False,
     )
 
@@ -97,6 +98,7 @@ def test_comment_create_reads_text_file_without_shell_interpretation(monkeypatch
         page_id=None,
         block_id=None,
         discussion_id="discussion-1",
+        mention=None,
         table=False,
     )
 
@@ -122,6 +124,7 @@ def test_comment_create_fails_when_api_drops_nonempty_reply_text(monkeypatch, tm
             page_id=None,
             block_id=None,
             discussion_id="orphaned-discussion-1",
+            mention=None,
             table=False,
         )
     except Exception as exc:

@@ -46,6 +46,12 @@ except ImportError:
     pass
 
 try:
+    from .commands import users
+    register_commands(app, get_config, users, name="users", help="List and inspect workspace users")
+except ImportError:
+    pass
+
+try:
     app.add_typer(create_cache_app(get_config), name="cache")
 except ImportError:
     pass

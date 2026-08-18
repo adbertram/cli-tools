@@ -591,10 +591,21 @@ are handled explicitly instead of being degraded:
 
 | Construct | Notion storage | Read back as |
 |-----------|----------------|--------------|
-| `![alt](url)` with an `http(s)` src | `image` block, `caption` = alt text | `![alt](url)` |
-| `![alt](src)` with a src that is neither a URL nor an uploaded file (for example a pipeline `IMAGE_PLACEHOLDER: ...` marker) | `paragraph` holding the original markdown line verbatim | the identical `![alt](src)` line |
+| `![alt](url)` with an `http(s)` src | external `image` block, `caption` = alt text | `![alt](url)` |
+| `![alt](path)` with a local filesystem src (absolute, or relative to the `--file` argument) | the file is uploaded through Notion's File Upload API and stored as a Notion-hosted `image` block, `caption` = alt text | `![alt](hosted-url)` |
+| `![alt](src)` with a src that is neither a URL nor a filesystem path (for example a pipeline `IMAGE_PLACEHOLDER: ...` marker) | `paragraph` holding the original markdown line verbatim | the identical `![alt](src)` line |
 | Code fence language | Notion's enum value (`text` is stored as `plain text`) | a single-token markdown info-string (`plain text` -> `text`) |
 | Table column alignment (`&#124; :--- &#124; ---: &#124;`) | a `<!-- notion-table-align: ... -->` marker paragraph immediately before the `table` block | the original separator row |
+
+Local images are uploaded by every markdown-accepting command (`pages content
+set`, `pages content append`, `pages content replace-section`, `pages blocks
+append`, `pages create --content-file`, `database page content set`, `database
+page content append`, `database page create --content-file`). Only a line that
+is entirely `![alt](src)` counts as an image; fenced code blocks and inline
+references are left untouched. If a referenced local file does not exist, or is
+not a Notion-supported image type, the command prints every bad reference and
+exits 1 **before** any page mutation — `content set` never clears a page it
+cannot repopulate.
 
 The table alignment marker is written **only** when at least one column declares
 an explicit alignment, so a table with a plain `&#124; --- &#124;` separator
@@ -737,6 +748,14 @@ notion comments get <comment-id>
 notion comments create "This is my comment" --page-id <page-id>
 notion comments create "My reply" --discussion-id <discussion-id>
 notion comments create --text-file reply.md --discussion-id <discussion-id>
+
+#: Notify a real person with a real Notion mention
+notion comments create "please review" --page-id <page-id> --mention someone@example.com
+notion comments create "please review" --page-id <page-id> --mention <user-uuid>
+
+#: Repeatable; mentions lead the comment in the order given
+notion comments create "handoff" --discussion-id <discussion-id> \
+  -m first@example.com -m second@example.com
 ```
 
 The public API can add a page comment or reply to an existing inline discussion,
@@ -753,12 +772,78 @@ The CLI refuses to create that inaccessible state.
 | `-p, --page-id` | Page ID to add comment to |
 | `-b, --block-id` | Unsupported for creation; fails before any API request |
 | `-d, --discussion-id` | Discussion thread ID to reply to |
+| `-m, --mention` | Mention a workspace user by email or user UUID (repeatable) |
 
 Use `--text-file` for comment bodies that contain shell-sensitive text such as
 backticks, `$()`, angle-bracket placeholders, quotes, or newlines.
 
 **Note:** Exactly one target must be provided. Use `--page-id` or
 `--discussion-id`; `--block-id` always fails loud.
+
+#### Mentions Notify, Plain `@Name` Text Does Not
+
+A Notion mention is its own `rich_text` object. Typing `@Mandy Mowers` into the
+comment body stores plain text and sends **no** notification. `--mention` is the
+only way to notify someone.
+
+`--mention` accepts an email address or a user UUID and works with `--page-id`,
+`--block-id`, and `--discussion-id` alike. Resolved mentions are placed at the
+front of the comment, in the order given, each followed by a single space, then
+the body text.
+
+Resolution is fail-fast — nothing is posted when it fails, and the command never
+degrades a mention into plain text:
+
+| Condition | Result |
+|-----------|--------|
+| Email matches no user | Error naming the email; no comment created |
+| Email matches more than one user | Error listing every match; no comment created |
+| Resolved user is a `bot` | Error before the API call; only person users can be mentioned |
+| Value is neither UUID nor email | Error before any API call |
+
+Email resolution requires the integration's **read user information** capability
+(for `GET /v1/users`) and the **email** capability (to populate `person.email`).
+Without the email capability, resolve by user UUID from `notion users list`.
+
+## User Commands
+
+### List Users
+
+```bash
+notion users list --table
+notion users list --filter "type:eq:person" --table
+notion users list --filter "person.email:eq:someone@example.com"
+notion users list --properties "id,name,email" --limit 10
+```
+
+Walks every `GET /v1/users` cursor page — there is no first-page truncation.
+Notion has no server-side name or email filter, so `--filter` is applied
+client-side against the returned records.
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `-t, --table` | Display as formatted table |
+| `-l, --limit` | Maximum users to return (default: all users) |
+| `-f, --filter` | Filter: `field:op:value` (e.g., `type:eq:person`, `person.email:eq:a@b.com`) |
+| `-p, --properties` | Comma-separated fields to include (e.g., `id,name,email`) |
+
+Each record carries `id`, `name`, `type` (`person` or `bot`), a flat `email`
+convenience field, `avatar_url`, and the raw `person` / `bot` sub-object, so
+dot-notation filters such as `person.email:eq:...` resolve against the same
+shape the API returned.
+
+### Get User
+
+```bash
+notion users get <user-id>
+notion users get <user-id> --table
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `-t, --table` | Display as formatted table |
 
 ## Additional Commands
 

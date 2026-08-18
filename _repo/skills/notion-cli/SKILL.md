@@ -4,7 +4,7 @@ description: >-
   Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
   Execute Notion operations using the `notion` CLI tool.
   CLI interface for Notion API with database query filtering.
-  Triggers: notion, notion cli, notion databases, notion pages, notion comments, notion fields, list notion databases, search notion pages, query notion database, create notion page, update notion page, export notion page, notion page content, notion blocks, notion schema, notion templates
+  Triggers: notion, notion cli, notion databases, notion pages, notion comments, notion fields, notion users, notion mention, mention someone in notion, notify notion user, list notion databases, search notion pages, query notion database, create notion page, update notion page, export notion page, notion page content, notion blocks, notion schema, notion templates
 ---
 
 <objective>
@@ -32,7 +32,11 @@ notion <command-group> <action> [arguments] [options]
 | Trash a whole database | `notion database delete DB_ID --force` |
 | Restore a trashed database | `notion database delete DB_ID --restore --force` |
 | Add comment to page | `notion comments create "text" -p PAGE_ID` |
+| Notify a person in a comment | `notion comments create "text" -p PAGE_ID --mention someone@example.com` |
 | Add shell-sensitive comment text | `notion comments create --text-file comment.md --discussion-id DISCUSSION_ID` |
+| List workspace users | `notion users list --table` |
+| Find a user by email | `notion users list --filter "person.email:eq:someone@example.com"` |
+| Get one user | `notion users get USER_ID --table` |
 | Append markdown as toggle headings | `notion pages content append PAGE_ID -f outline.md --is-toggleable` |
 | List page/block children | `notion pages blocks list --page-id PAGE_ID` |
 | List blocks with IDs (database page) | `notion database page content list-blocks PAGE_ID --table` |
@@ -114,6 +118,67 @@ comma-separated `--properties` value so Bash passes it as one argument:
 Do not pass an unquoted comma list such as
 `--properties id,Name,Website,Contact Email`; Bash splits `Contact Email` and
 Typer rejects the extra `Email` argument before the CLI can parse properties.
+</principle>
+
+<principle name="A Plain @Name In Comment Text Notifies Nobody">
+Typing `@Mandy Mowers` into a comment body stores plain text. Notion sends **no**
+notification for it, and the reader gets no link to the person. A mention is a
+distinct `rich_text` object type, and `--mention` is the only way to create one.
+
+```bash
+notion comments create "please review this" --page-id PAGE_ID --mention someone@example.com
+notion comments create "please review this" --page-id PAGE_ID --mention USER_UUID
+notion comments create "handoff" --discussion-id DISCUSSION_ID -m a@x.com -m b@x.com
+```
+
+`--mention` is repeatable, accepts an email address or a user UUID, and works
+with `--page-id`, `--block-id`, and `--discussion-id` alike. Resolved mentions
+lead the comment in the order given, each followed by a single space, then the
+body text from the positional argument or `--text-file`.
+
+Resolution fails before the write and never degrades to plain text:
+
+- An email matching no user is an error naming the email; no comment is posted.
+- An email matching more than one user is an error listing every match.
+- A user of type `bot` is rejected before the API call; only `person` users can
+  be mentioned, and Notion rejects a bot ID for the whole request.
+- A value that is neither a UUID nor an email is an error before any API call.
+
+After creation the CLI validates the returned `rich_text`: if the created
+comment's user mentions are not exactly the resolved IDs, the command fails
+instead of printing success. `comments list`/`get`/`create` JSON now include a
+`mentions` array of the mentioned user IDs.
+
+Resolve by email only when the integration has both the **read user information**
+capability (for `GET /v1/users`) and the **email** capability (which populates
+`person.email`). Without the email capability, `notion users list` shows empty
+emails; pass the user UUID instead.
+</principle>
+
+<principle name="Listing Workspace Users">
+`notion users list` walks every `GET /v1/users` cursor page, so it returns the
+complete workspace roster rather than the first 100. `--limit` is an explicit
+opt-in cap, not a default.
+
+Notion has no server-side name or email filter for users, so `--filter` is
+applied client-side. Each record keeps the raw `person` / `bot` sub-object plus a
+flat `email` convenience field, so both forms work:
+
+```bash
+notion users list --table
+notion users list --filter "type:eq:person" --table
+notion users list --filter "person.email:eq:someone@example.com"
+notion users list --filter "email:eq:someone@example.com"
+notion users list --properties "id,name,email"
+notion users get USER_ID --table
+```
+
+Only `type: person` users can be mentioned. Bot users (integrations) appear in
+the listing with an empty email and are rejected by `comments create --mention`.
+
+`GET /v1/users` returns HTTP 403 when the integration lacks the **read user
+information** capability. That is a Notion integration settings change, not a CLI
+defect.
 </principle>
 
 <principle name="Comment Text With Shell Metacharacters">
@@ -269,7 +334,7 @@ RE-CREATES the heading's section siblings to nest them, which assigns NEW block
 IDs and DROPS their block-scoped comments. Notion-hosted images/files in the
 section are now PRESERVED: the re-parent path re-uploads each hosted `image`/
 `video`/`pdf`/`file` block via the File Upload API before recreating it, so the
-image survives inside the toggle intact (see Known Issue #7). Only comments (and
+image survives inside the toggle intact (see Known Issue #8). Only comments (and
 the block IDs they anchor to) are lost. Plain `--text` (and
 `--toggleable --no-nest`) never recreate blocks. Verified: editing block A in
 place leaves block B's comment intact (`comments list --page-id PAGE_ID
@@ -309,12 +374,18 @@ which 400'd the request. That hazard is fixed.)
 markdown. Do NOT pre-transform content to work around export damage, and do NOT
 treat an exported body as lossy. Constructs Notion cannot store natively:
 
-- **Images.** `![alt](https://…)` becomes an `image` block whose `caption` holds
-  the alt text and exports as `![alt](url)`. An `![alt](src)` whose src is
-  neither an `http(s)` URL nor an uploaded file — a pipeline
-  `IMAGE_PLACEHOLDER: …` marker, for example — is stored as a paragraph holding
-  the original markdown line verbatim, so alt text and image syntax both survive.
-  Nothing is rewritten to a `[Image: src]` string any more.
+- **Images.** `![alt](https://…)` becomes an `external` `image` block whose
+  `caption` holds the alt text and exports as `![alt](url)`. A src that is a
+  local filesystem path (`![alt](/abs/scene.png)` or a path relative to the
+  `--file` argument) is uploaded through Notion's File Upload API and becomes a
+  Notion-hosted `image` block; if that file is missing or is not a supported
+  image type, the command FAILS with exit 1 before mutating the page instead of
+  storing the line as text (see Known Issue #9). Only a line that is entirely
+  `![alt](src)` is an image; fenced code and inline references are left as-is.
+  An `![alt](src)` whose src is neither an `http(s)` URL nor a filesystem path —
+  a pipeline `IMAGE_PLACEHOLDER: …` marker, for example — is stored as a
+  paragraph holding the original markdown line verbatim, so alt text and image
+  syntax both survive. Nothing is rewritten to a `[Image: src]` string any more.
 - **Code fences.** Notion stores `text` as `plain text`; the exporter maps it
   back to `text`. Every exported fence is a single-token info-string, so
   ` ```plain text ` can no longer reach a file.
@@ -381,6 +452,7 @@ code is needed.
 - **field** — Manage database field schemas (list, add, rename, delete, update, options)
 - **pages** — Search, list, create, import, export, duplicate, update, delete standalone pages; manage content and blocks
 - **comments** — List, get, create comments on pages, blocks, or discussion threads
+- **users** — List and inspect workspace users; source of the user IDs `comments create --mention` resolves to
 </principle>
 
 <principle name="API 2025-09-03 Data Source Split">
@@ -519,7 +591,7 @@ There are three ways to put content inside a toggle:
    Page-level comments are unaffected. Notion-hosted images/files ARE preserved:
    the CLI re-uploads each hosted `image`/`video`/`pdf`/`file` block via the File
    Upload API before recreating it, so section images survive inside the toggle
-   (see Known Issue #7). Use `--no-nest` when you must preserve block IDs and
+   (see Known Issue #8). Use `--no-nest` when you must preserve block IDs and
    block-scoped comments.
 
 2. **Append children directly** to a heading that's already toggleable:
@@ -594,15 +666,15 @@ new inline discussion.
 ### 4. Replace-Section Local Images and Dry Runs
 **Symptom:** `notion pages content replace-section PAGE_ID --heading "## Section" --file section.md` did not upload local Markdown images, so replacement content containing `![alt](local.png)` could not persist image blocks correctly. The first repair attempt also uploaded images during `--dry-run`.
 
-**Cause:** `replace-section` parsed Markdown with `text_to_blocks(content)` directly, while `content append` and database Markdown paths process local images first and pass `image_uploads` into `text_to_blocks`. Image processing was initially added before the dry-run branch, which made dry runs perform Notion file uploads.
+**Cause:** `replace-section` parsed Markdown with `text_to_blocks(content)` directly, while the `database page content` Markdown paths processed local images first and passed `image_uploads` into `text_to_blocks`. Image processing was initially added before the dry-run branch, which made dry runs perform Notion file uploads. (This entry originally claimed `content append` also processed images. That was true only of `database page content append`; every `pages …` Markdown path still dropped local images — see Known Issue #9.)
 
-**Fix:** `replace-section` now calls the shared Markdown image processor only when `--file` is used and `--dry-run` is false, then calls `text_to_blocks(content, image_uploads=image_uploads)`.
+**Fix:** `replace-section` calls the shared Markdown image processor whenever `--dry-run` is false (for `--text` as well as `--file` since the #9 repair), then calls `text_to_blocks(content, image_uploads=image_uploads)`.
 
-**Verification:** In `/Users/adam/Dropbox/GitRepos/cli-tools/notion`, `uv run --extra dev pytest -q` passes. Tests cover local image upload wiring and prove `--dry-run` does not call image upload processing.
+**Verification:** In `/Users/adam/Dropbox/GitRepos/cli-tools/notion`, `uv run --with pytest python -m pytest tests -q` passes. Tests cover local image upload wiring and prove `--dry-run` does not call image upload processing.
 
 **Recurrence Prevention:** Any future Markdown-processing page command must match the append/set behavior for local images and must keep `--dry-run` read-only before making API upload calls.
 
-### 4. `pages blocks list` Truncated at 100 Blocks
+### 5. `pages blocks list` Truncated at 100 Blocks
 **Symptom:** `notion pages blocks list --page-id PAGE_ID` returned only the first 100 child blocks on pages with more than 100 blocks, with no warning. On page `3825d9c85b2b8074bbe3ed8aa65c9f91` it returned 100 blocks / 14 `heading_2`, while `notion pages get PAGE_ID -b -m` rendered all 16 `heading_2` sections from the same page. `--recursive` was also affected: it still capped the top-level list at 100.
 
 **Cause:** The Notion children endpoint (`GET /v1/blocks/{id}/children`) defaults to `page_size=100` and returns `has_more` + `next_cursor`. The client method `get_block_children_all` already paginates fully when called with `limit=None`, but the `blocks list` command hard-coded `--limit` to a default of `100`, passed that as the fetch limit (non-recursive), AND re-sliced the result with `formatted[:limit]` / `blocks[:limit]` in every output path — so even the recursive run (which fetched all top-level blocks) was re-truncated to 100 before output.
@@ -613,7 +685,7 @@ new inline discussion.
 
 **Recurrence Prevention:** Any command that lists Notion children must paginate the full `has_more`/`next_cursor` sequence by default and must not impose a hidden default cap on `list` output. `--limit` is an explicit opt-in cap only. Never count `len(results)` from an `--after` append as "created" — Notion returns the full repositioned tail there; the inserted count is `len(input_blocks)`.
 
-### 5. `pages duplicate` Failed on Column Layouts
+### 6. `pages duplicate` Failed on Column Layouts
 **Symptom:** `notion pages duplicate PAGE_ID --title "..."` on a page containing a `column_list` failed with exit 1: `400 - body.children[N].column_list.children[0].column.children should be defined, instead was undefined`. Progress reached "[5] Uploading N blocks..." then the API rejected the payload.
 
 **Cause:** `_upload_blocks_with_nesting` in `notion_cli/client.py` treated every direct child of a child-required block the same way — it popped each child's children to re-attach them after creation. But a `column` inside a `column_list` is itself a child-required type: Notion refuses to create a childless column, so popping the column's content sent `column: {}` and the 400 rejected the whole request. Separately, `_apply_text_replacements` only recursed block-level `children`, so `--replace` never reached content nested inside cleaned container blocks (columns, toggles, callouts) whose children live at `block[type]["children"]`.
@@ -624,7 +696,7 @@ new inline discussion.
 
 **Recurrence Prevention:** When uploading blocks, never pop the children of a block whose type is in `_CHILD_REQUIRED_TYPES` (`column_list`, `column`, `table`, `synced_block`) — the required chain must stay inline in the creation payload. Any new recursive block walker must use `_get_children`/`_pop_children` so both block-level and API-2025-09-03 type-nested children locations are handled.
 
-### 6. `pages duplicate` Omitted Child Pages and Their Content
+### 7. `pages duplicate` Omitted Child Pages and Their Content
 
 **Symptom:** `notion pages duplicate PAGE_ID` reported success after uploading the
 ordinary top-level blocks, but the destination contained no `child_page` blocks
@@ -653,7 +725,7 @@ notion` passes with 0 failures.
 page and recurse. Recursive export/duplicate reads are all-or-nothing and must
 never replace a failed subtree with `[]`.
 
-### 7. Toggle-Flip Re-Parenting Destroyed Notion-Hosted Images
+### 8. Toggle-Flip Re-Parenting Destroyed Notion-Hosted Images
 
 **Symptom:** `notion pages blocks update HEADING_ID --toggleable` (auto-nesting a
 heading's section under the new toggle) destroyed any Notion-hosted `image` block
@@ -695,6 +767,67 @@ call `_reupload_file_blocks` BEFORE `_clean_blocks_recursive`, never rely on the
 expiring `image.external` fallback, and must fail loud rather than silently
 recreate a broken external file. (Block-scoped comments on re-parented blocks
 still change IDs and drop — that is unchanged; use `--no-nest` to preserve them.)
+
+### 9. `pages` Markdown Commands Silently Dropped Local Images
+
+**Symptom:** `notion pages content set PAGE_ID --file article.md` exited 0 and
+reported `blocks_created`, but every `![alt](/absolute/path.png)` in the input
+landed as a `paragraph` block holding the literal markdown text instead of an
+`image` block. `notion pages blocks list --page-id PAGE_ID --table` showed
+`type=paragraph` rows beginning `![Scene 1:`. The same silent drop affected
+`pages content append`, `pages blocks append`, `pages create --content-file`,
+and `database page create --content-file`. A missing or misspelled image path
+produced no error at all.
+
+**Cause:** The image processor lived only in
+`notion_cli/commands/database.py` and was wired into just three call sites
+(`database page content append`, `database page content set`, and — via a lazy
+`from .database import _process_markdown_images` — `pages content
+replace-section`). Every other markdown path called
+`text_to_blocks(content, is_toggleable=...)` with no `image_uploads` argument
+(`page.py` lines 400, 1223, 1324, 2391, 2395; `database.py` line 1575). Without
+that mapping `text_to_blocks` has no file_upload ID for a local src and takes
+its verbatim-paragraph branch. The old processor also degraded on failure: a
+missing file, unsupported extension, or failed upload printed a warning and
+continued, which is exactly how the drop stayed silent.
+
+**Fix:** The processor moved to a single shared module,
+`notion_cli/markdown_images.py` (`process_markdown_images`), and every markdown
+path now calls it and passes `image_uploads` into `text_to_blocks`:
+`pages content set`, `pages content append`, `pages content replace-section`
+(non-dry-run, now for `--text` as well as `--file`), `pages blocks append`
+(`--text` and `--file`), `pages create --content-file`,
+`database page content set`, `database page content append`, and
+`database page create --content-file`. The processor is fail-loud: a referenced
+local file that does not exist, or that is not a Notion-supported image type,
+prints every bad reference and exits 1; an upload error propagates. Processing
+always runs BEFORE the mutation, so `content set` never clears a page it cannot
+repopulate, matching Known Issue-style pre-clear validation for oversize blocks.
+The scanner matches `text_to_blocks` exactly: only a line that is entirely
+`![alt](src)` counts, fenced code is skipped, `http(s)` srcs stay external, and
+a src carrying a non-http URI scheme (a pipeline `IMAGE_PLACEHOLDER: …` marker)
+is left alone so it still round-trips as a verbatim paragraph. `pages import`
+(.docx only) and `pages duplicate` (Notion blocks only) parse no markdown and
+were already correct.
+
+**Verification:** Live on scratch page `3bf5d9c85b2b8137bc4eca93616b2d81`,
+`pages content set --file` with two absolute PNG paths produced two `image`
+blocks; `pages blocks get` on one returned `image.type == "file"` with a
+`prod-files-secure.s3…` URL, while the `IMAGE_PLACEHOLDER:` line and a literal
+`[IMAGE: …]` bracket line stayed paragraphs. The same page proved
+`content append`, `blocks append`, `pages create --content-file`, and
+`replace-section` each create image blocks. A missing-path run exited 1 with
+`Local image file(s) referenced by the markdown do not exist` and left all 8
+existing blocks in place. Notion unit suite: 238 passed;
+`test-cli-tool.sh --cli-name notion`: 332 passed, 0 failed. Regression tests
+live in `notion/tests/test_markdown_image_uploads.py`.
+
+**Recurrence Prevention:** Any command that converts markdown to Notion blocks
+must call `process_markdown_images` from `notion_cli/markdown_images.py` and
+pass the result into `text_to_blocks(content, image_uploads=...)`. Never call
+`text_to_blocks` on user markdown without that mapping, never warn-and-continue
+on a missing or unuploadable local image, and always process images before the
+command's first mutating API call.
 
 <success_criteria>
 - Command executes without error
