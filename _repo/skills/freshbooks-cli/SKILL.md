@@ -26,7 +26,8 @@ freshbooks <command-group> <action> [arguments] [options]
 | Download PDF | `freshbooks invoice download INVOICE_ID` |
 | Mark paid | `freshbooks invoice mark-paid INVOICE_ID -a 500.00` |
 | List customers | `freshbooks customer list --table` |
-| Find customer | `freshbooks customer find email@example.com` |
+| Find customer by email | `freshbooks customer find email@example.com` |
+| Search customers by name | `freshbooks customer list --filter organization:contains:acme` |
 </quick_start>
 
 <essential_principles>
@@ -46,6 +47,26 @@ Per-client behavior belongs to the project that owns that customer relationship 
 - **invoice** — Full invoice lifecycle (list, get, create, send, update, mark-paid, delete, download)
 - **customer** — Manage customers/clients (list, get, find, create, update)
 - **auth** -- Authentication commands and nested `auth profiles` management
+</principle>
+
+<principle name="Filter Syntax On list Commands">
+`--filter` takes `field:op:value`. Two rules prevent a false "no such record" read:
+
+1. **`like` is SQL LIKE, not a substring search.** `organization:like:n8n` is an
+   anchored, case-insensitive exact match and does NOT match `n8n GmbH`. For a
+   substring search use `organization:contains:n8n` or `organization:like:%n8n%`.
+   Default to `contains` for name lookups.
+2. **Filter only on the documented fields.** `customer list` accepts `id`,
+   `organization`, `name`, `email`. `invoice list` accepts `id`, `number`,
+   `client`, `status`, `amount`, `outstanding`, `created`, `due_date`. Any other
+   field exits 1 with a `Field '<x>' is not filterable` error.
+
+`--limit` caps the results returned, not the records searched, so a filter always
+considers every page.
+
+**Never conclude a customer does not exist from an empty `--filter` result alone.**
+Confirm with `freshbooks customer find <email>` before creating a customer;
+duplicate records in live accounting data are hard to undo.
 </principle>
 
 <principle name="Approval Before Sending">

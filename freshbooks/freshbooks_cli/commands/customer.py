@@ -2,9 +2,10 @@
 import typer
 from typing import Optional, List
 
-from cli_tools_shared.output import print_json, print_table, handle_error, print_success
+from cli_tools_shared.output import command, print_json, print_table, print_success
 
 from ..client import get_client
+from ..filter_map import CUSTOMER_FILTER_FIELDS, CUSTOMER_FILTER_MAP
 from ..formatters import format_client_for_display
 from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 
@@ -12,12 +13,17 @@ app = typer.Typer(help="Manage FreshBooks customers/clients")
 
 
 @app.command("list")
+@command
 def customer_list(
     filter_: Optional[List[str]] = typer.Option(
         None,
         "--filter",
         "-f",
-        help="Filter results (field:op:value, e.g., organization:like:acme)",
+        help=(
+            "Filter results (field:op:value, e.g., organization:contains:acme). "
+            "Fields: id, organization, name, email. Note that 'like' is SQL LIKE, "
+            "so a substring search needs wildcards: organization:like:%acme%"
+        ),
     ),
     limit: int = typer.Option(
         100,
@@ -43,76 +49,96 @@ def customer_list(
 
     Shows all customers in your FreshBooks account.
 
+    Filterable fields: id, organization, name, email. Substring searches use
+    'contains', or 'like' with explicit SQL wildcards ('%acme%'). A bare
+    'like:acme' is an anchored, case-insensitive exact match.
+
     Examples:
         freshbooks customer list
         freshbooks customer list --table
-        freshbooks customer list --filter organization:like:acme --table
+        freshbooks customer list --filter organization:contains:acme --table
+        freshbooks customer list --filter organization:like:%acme% --table
         freshbooks customer list --filter email:eq:john@acme.com
         freshbooks customer list --limit 10
         freshbooks customer list --properties id,organization,email
     """
-    try:
-        # Validate filters first
-        if filter_:
-            try:
-                validate_filters(filter_)
-            except FilterValidationError as e:
-                typer.echo(f"Filter error: {e}", err=True)
-                raise typer.Exit(1)
+    # Validate filters first. Declaring the filterable fields turns a filter
+    # on an unknown field into a loud error instead of an empty result that
+    # reads as "no such customer".
+    if filter_:
+        try:
+            validate_filters(filter_, allowed_fields=CUSTOMER_FILTER_FIELDS)
+        except FilterValidationError as e:
+            typer.echo(f"Filter error: {e}", err=True)
+            raise typer.Exit(1)
 
-        client = get_client()
-        customers = client.get_clients(per_page=limit)
+    client = get_client()
 
-        if not customers:
-            if table:
-                print_table([], columns=["id", "organization", "name", "email"],
-                            headers=["ID", "Organization", "Contact", "Email"])
-            else:
-                print_json([])
-            return
+    # Server-side narrowing is only safe for a single --filter group. Multiple
+    # --filter flags mean OR, and AND-ing their search parameters together at
+    # the API would drop real matches.
+    search_params = None
+    if filter_ and len(filter_) == 1:
+        search_params = list(CUSTOMER_FILTER_MAP.to_api_params(filter_).items())
 
-        # Format customers
-        formatted = [format_client_for_display(c) for c in customers]
+    # When filtering, every record has to be considered before --limit is
+    # applied; --limit caps the results returned, not the rows searched.
+    customers = client.get_clients(
+        search_params=search_params,
+        max_records=None if filter_ else limit,
+    )
 
-        # Apply filters if provided (client-side filtering)
-        if filter_:
-            formatted = apply_filters(formatted, filter_)
+    if not customers:
+        if table:
+            print_table([], columns=["id", "organization", "name", "email"],
+                        headers=["ID", "Organization", "Contact", "Email"])
+        else:
+            print_json([])
+        return
 
-        if not formatted:
-            if table:
-                print_table([], columns=["id", "organization", "name", "email"],
-                            headers=["ID", "Organization", "Contact", "Email"])
-            else:
-                print_json([])
-            return
+    # Format customers
+    formatted = [format_client_for_display(c) for c in customers]
 
-        # Sort by organization name
-        formatted.sort(key=lambda x: x["organization"].lower() if x["organization"] else x["name"].lower())
+    # The shared filter module is the single authority on whether a record
+    # matches. Server-side narrowing above only reduces what was fetched.
+    if filter_:
+        formatted = apply_filters(
+            formatted, filter_, allowed_fields=CUSTOMER_FILTER_FIELDS
+        )
+        formatted = formatted[:limit]
 
-        # Apply property selection
+    if not formatted:
+        if table:
+            print_table([], columns=["id", "organization", "name", "email"],
+                        headers=["ID", "Organization", "Contact", "Email"])
+        else:
+            print_json([])
+        return
+
+    # Sort by organization name
+    formatted.sort(key=lambda x: x["organization"].lower() if x["organization"] else x["name"].lower())
+
+    # Apply property selection
+    if properties:
+        prop_list = [p.strip() for p in properties.split(",")]
+        formatted = [{k: v for k, v in c.items() if k in prop_list} for c in formatted]
+
+    if table:
         if properties:
             prop_list = [p.strip() for p in properties.split(",")]
-            formatted = [{k: v for k, v in c.items() if k in prop_list} for c in formatted]
-
-        if table:
-            if properties:
-                prop_list = [p.strip() for p in properties.split(",")]
-                print_table(formatted, columns=prop_list, headers=prop_list)
-            else:
-                print_table(
-                    formatted,
-                    columns=["id", "organization", "name", "email"],
-                    headers=["ID", "Organization", "Contact", "Email"],
-                )
+            print_table(formatted, columns=prop_list, headers=prop_list)
         else:
-            print_json(formatted)
-
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+            print_table(
+                formatted,
+                columns=["id", "organization", "name", "email"],
+                headers=["ID", "Organization", "Contact", "Email"],
+            )
+    else:
+        print_json(formatted)
 
 
 @app.command("get")
+@command
 def customer_get(
     customer_id: str = typer.Argument(
         ...,
@@ -132,30 +158,26 @@ def customer_get(
         freshbooks customer get 12345
         freshbooks customer get 12345 --table
     """
-    try:
-        client = get_client()
-        customer = client.get_client(customer_id)
+    client = get_client()
+    customer = client.get_client(customer_id)
 
-        if not customer:
-            typer.echo(f"Customer {customer_id} not found.")
-            raise typer.Exit(1)
+    if not customer:
+        typer.echo(f"Customer {customer_id} not found.")
+        raise typer.Exit(1)
 
-        if table:
-            formatted = format_client_for_display(customer)
-            print_table(
-                [formatted],
-                columns=["id", "organization", "name", "email"],
-                headers=["ID", "Organization", "Contact", "Email"],
-            )
-        else:
-            print_json(customer)
-
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+    if table:
+        formatted = format_client_for_display(customer)
+        print_table(
+            [formatted],
+            columns=["id", "organization", "name", "email"],
+            headers=["ID", "Organization", "Contact", "Email"],
+        )
+    else:
+        print_json(customer)
 
 
 @app.command("find")
+@command
 def customer_find(
     email: str = typer.Argument(
         ...,
@@ -168,22 +190,18 @@ def customer_find(
     Examples:
         freshbooks customer find client@example.com
     """
-    try:
-        client = get_client()
-        customer = client.get_client_by_email(email)
+    client = get_client()
+    customer = client.get_client_by_email(email)
 
-        if not customer:
-            typer.echo(f"No customer found with email: {email}")
-            raise typer.Exit(1)
+    if not customer:
+        typer.echo(f"No customer found with email: {email}")
+        raise typer.Exit(1)
 
-        print_json(customer)
-
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+    print_json(customer)
 
 
 @app.command("create")
+@command
 def customer_create(
     email: str = typer.Option(
         ...,
@@ -216,31 +234,27 @@ def customer_create(
     Examples:
         freshbooks customer create -e john@acme.com -f John -l Doe -o "Acme Corp"
     """
-    try:
-        client = get_client()
+    client = get_client()
 
-        # Check if customer already exists
-        existing = client.get_client_by_email(email)
-        if existing:
-            typer.echo(f"Customer with email {email} already exists (ID: {existing.get('id')})")
-            raise typer.Exit(1)
+    # Check if customer already exists
+    existing = client.get_client_by_email(email)
+    if existing:
+        typer.echo(f"Customer with email {email} already exists (ID: {existing.get('id')})")
+        raise typer.Exit(1)
 
-        customer = client.create_client(
-            email=email,
-            first_name=first_name,
-            last_name=last_name,
-            organization=organization
-        )
+    customer = client.create_client(
+        email=email,
+        first_name=first_name,
+        last_name=last_name,
+        organization=organization
+    )
 
-        print_success(f"Customer '{organization}' created (ID: {customer.get('id')})")
-        print_json(format_client_for_display(customer))
-
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+    print_success(f"Customer '{organization}' created (ID: {customer.get('id')})")
+    print_json(format_client_for_display(customer))
 
 
 @app.command("update")
+@command
 def customer_update(
     customer_id: str = typer.Argument(
         ...,
@@ -278,32 +292,27 @@ def customer_update(
         freshbooks customer update 12345 --email newemail@acme.com
         freshbooks customer update 12345 -o "New Company Name"
     """
-    try:
-        client = get_client()
+    client = get_client()
 
-        # Build update data
-        update_data = {}
-        if email:
-            update_data["email"] = email
-        if first_name:
-            update_data["fname"] = first_name
-        if last_name:
-            update_data["lname"] = last_name
-        if organization:
-            update_data["organization"] = organization
+    # Build update data
+    update_data = {}
+    if email:
+        update_data["email"] = email
+    if first_name:
+        update_data["fname"] = first_name
+    if last_name:
+        update_data["lname"] = last_name
+    if organization:
+        update_data["organization"] = organization
 
-        if not update_data:
-            typer.echo("No updates specified. Use --help to see available options.")
-            raise typer.Exit(1)
+    if not update_data:
+        typer.echo("No updates specified. Use --help to see available options.")
+        raise typer.Exit(1)
 
-        customer = client.update_client(customer_id, **update_data)
+    customer = client.update_client(customer_id, **update_data)
 
-        print_success(f"Customer {customer_id} updated.")
-        print_json(format_client_for_display(customer))
-
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+    print_success(f"Customer {customer_id} updated.")
+    print_json(format_client_for_display(customer))
 
 
 COMMAND_CREDENTIALS = {

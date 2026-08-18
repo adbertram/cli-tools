@@ -1,8 +1,8 @@
 {
   "tool": "freshbooks",
   "description": "CLI interface for FreshBooks accounting API",
-  "discovered_at": "2026-06-22T18:10:39Z",
-  "total_commands": 25,
+  "discovered_at": "2026-08-18T18:46:08Z",
+  "total_commands": 26,
   "global_options": [
     {
       "name": "--version",
@@ -122,7 +122,7 @@
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "Use `freshbooks auth profiles list` with the documented arguments and options shown below.",
               "arguments": [],
               "options": [
@@ -167,6 +167,38 @@
                 }
               ],
               "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
                 {
                   "name": "--force",
                   "type": "bool",
@@ -272,7 +304,14 @@
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "usage_instructions": "Use `freshbooks cache clear` with the documented arguments and options shown below.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
@@ -388,11 +427,12 @@
           ]
         },
         "list": {
-          "help": "List all customers/clients. Shows all customers in your FreshBooks account.",
+          "help": "List all customers/clients. Shows all customers in your FreshBooks account. Filterable fields: id, organization, name, email. Substring searches use 'contains', or 'like' with explicit SQL wildcards ('%acme%'). A bare 'like:acme' is an anchored, case-insensitive exact match.",
           "examples": [
             "freshbooks customer list",
             "freshbooks customer list --table",
-            "freshbooks customer list --filter organization:like:acme --table",
+            "freshbooks customer list --filter organization:contains:acme --table",
+            "freshbooks customer list --filter organization:like:%acme% --table",
             "freshbooks customer list --filter email:eq:john@acme.com",
             "freshbooks customer list --limit 10",
             "freshbooks customer list --properties id,organization,email"
@@ -404,7 +444,7 @@
               "name": "--filter",
               "type": "TEXT",
               "required": false,
-              "help": "Filter results (field:op:value, e.g., organization:like:acme)",
+              "help": "Filter results (field:op:value, e.g., organization:contains:acme). Fields: id, organization, name, email. Note that 'like' is SQL LIKE, so a substring search needs wildcards: organization:like:%acme%",
               "short": "-f"
             },
             {
@@ -690,13 +730,14 @@
           ]
         },
         "list": {
-          "help": "List all invoices. Shows all invoices in your FreshBooks account with optional status filtering.",
+          "help": "List all invoices. Shows all invoices in your FreshBooks account with optional status filtering. Filterable fields: id, number, client, status, amount, outstanding, created, due_date. Substring searches use 'contains', or 'like' with explicit SQL wildcards ('%acme%'). A bare 'like:acme' is an anchored, case-insensitive exact match.",
           "examples": [
             "freshbooks invoice list",
             "freshbooks invoice list --table",
             "freshbooks invoice list --status sent --table",
             "freshbooks invoice list --unpaid --table",
-            "freshbooks invoice list --filter client:like:acme",
+            "freshbooks invoice list --filter client:contains:acme",
+            "freshbooks invoice list --filter client:like:%acme%",
             "freshbooks invoice list --limit 10",
             "freshbooks invoice list --from 2024-01-01 --to 2024-12-31"
           ],
@@ -707,7 +748,7 @@
               "name": "--filter",
               "type": "TEXT",
               "required": false,
-              "help": "Filter results (field:op:value, e.g., client:like:acme)",
+              "help": "Filter results (field:op:value, e.g., client:contains:acme). Fields: id, number, client, status, amount, outstanding, created, due_date. Note that 'like' is SQL LIKE, so a substring search needs wildcards: client:like:%acme%",
               "short": "-f"
             },
             {

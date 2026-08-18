@@ -18,6 +18,9 @@ DEFAULT_JITTER = 0.1  # 10% jitter
 # HTTP status codes that trigger retry
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
+# FreshBooks caps list responses at 100 records per page.
+PAGE_SIZE = 100
+
 
 class FreshBooksClient:
     """Client for interacting with FreshBooks API with automatic token management."""
@@ -280,22 +283,72 @@ class FreshBooksClient:
 
         return last_response.json()
 
+    def _paginated_records(
+        self,
+        endpoint: str,
+        collection: str,
+        search_params: Optional[List[tuple]] = None,
+        max_records: Optional[int] = None,
+    ) -> List[Dict]:
+        """
+        Fetch every page of a paginated FreshBooks collection.
+
+        Callers that filter client-side must see the whole matching collection.
+        Requesting a single page sized to the caller's ``--limit`` and then
+        filtering that page reports an empty result whenever the match happens to
+        live on a later page, which reads as "no such record".
+
+        Args:
+            endpoint: API endpoint path
+            collection: Key holding the records inside ``response.result``
+            search_params: Extra query parameters as (key, value) tuples
+            max_records: Stop once this many records are collected. Only safe
+                when no further filtering is applied to the result.
+
+        Returns:
+            List of raw records
+        """
+        records: List[Dict] = []
+        page = 1
+
+        while True:
+            params = list(search_params or [])
+            params.append(("per_page", PAGE_SIZE))
+            params.append(("page", page))
+
+            result = self._make_request("GET", endpoint, params=params)
+            payload = result.get("response", {}).get("result", {})
+            batch = payload.get(collection, [])
+            records.extend(batch)
+
+            if max_records is not None and len(records) >= max_records:
+                return records[:max_records]
+
+            # ``pages`` is absent on responses that are not paginated; treat the
+            # current page as the last one rather than looping forever.
+            total_pages = payload.get("pages", page)
+            if not batch or page >= total_pages:
+                return records
+
+            page += 1
+
     # Invoice Methods
     def get_invoices(
         self,
         status: Optional[List[str]] = None,
-        per_page: int = 100,
         date_from: Optional[str] = None,
         date_to: Optional[str] = None,
+        max_records: Optional[int] = None,
     ) -> List[Dict]:
         """
         Get list of invoices with optional status and date filters.
 
         Args:
             status: List of invoice statuses to filter by
-            per_page: Number of results per page
             date_from: Filter invoices created on or after this date (YYYY-MM-DD)
             date_to: Filter invoices created on or before this date (YYYY-MM-DD)
+            max_records: Stop after this many records. Pass ``None`` whenever the
+                caller applies further filtering to the result.
 
         Returns:
             List of invoice records
@@ -303,7 +356,7 @@ class FreshBooksClient:
         endpoint = f"/accounting/account/{self.account_id}/invoices/invoices"
 
         # Build params as list of tuples to support multiple values with same key
-        params = [("per_page", per_page)]
+        params: List[tuple] = []
         if status:
             for s in status:
                 params.append(("search[v3_status][]", s))
@@ -312,8 +365,9 @@ class FreshBooksClient:
         if date_to:
             params.append(("search[date_max]", date_to))
 
-        result = self._make_request("GET", endpoint, params=params)
-        return result.get("response", {}).get("result", {}).get("invoices", [])
+        return self._paginated_records(
+            endpoint, "invoices", search_params=params, max_records=max_records
+        )
 
     def get_invoice(self, invoice_id: str) -> Dict:
         """
@@ -473,21 +527,29 @@ class FreshBooksClient:
         return result.get("response", {}).get("result", {}).get("payment", {})
 
     # Client/Customer Methods
-    def get_clients(self, per_page: int = 100) -> List[Dict]:
+    def get_clients(
+        self,
+        search_params: Optional[List[tuple]] = None,
+        max_records: Optional[int] = None,
+    ) -> List[Dict]:
         """
-        Get list of all clients.
+        Get list of clients, following pagination.
 
         Args:
-            per_page: Number of results per page
+            search_params: Server-side ``search[...]`` narrowing as (key, value)
+                tuples. These must only ever return a superset of the caller's
+                real matches; see ``filter_map.search_literal``.
+            max_records: Stop after this many records. Pass ``None`` whenever the
+                caller applies further filtering to the result.
 
         Returns:
             List of client records
         """
         endpoint = f"/accounting/account/{self.account_id}/users/clients"
-        params = {"per_page": per_page}
 
-        result = self._make_request("GET", endpoint, params=params)
-        return result.get("response", {}).get("result", {}).get("clients", [])
+        return self._paginated_records(
+            endpoint, "clients", search_params=search_params, max_records=max_records
+        )
 
     def get_client(self, client_id: str) -> Dict:
         """
