@@ -31,6 +31,8 @@ SERVER_READINESS_POLL_SECONDS = 1
 SERVER_STOP_TIMEOUT_SECONDS = 10
 CATALOG_QUERY_TOOL = "catalog_query"
 CATALOG_PRICE_GUIDE_TOOL = "catalog_price_guide"
+PART_ITEM_TYPE = "P"
+MINIFIG_ITEM_TYPE = "M"
 SET_ITEM_TYPE = "S"
 REQUIRED_TOOL_NAMES = {CATALOG_QUERY_TOOL, CATALOG_PRICE_GUIDE_TOOL}
 MAX_SET_BATCH_SIZE = 25
@@ -309,13 +311,21 @@ class BrickStoreClient:
             )
         return result
 
+    def _item_price_guide(self, item: dict, leave_open: bool) -> dict:
+        with self._price_guide_session(leave_open=leave_open):
+            return self._single_price_guide(self._call_tool(CATALOG_PRICE_GUIDE_TOOL, {"items": [item]}))
+
     def part(self, item_number: str, color: str | None, leave_open: bool = False) -> dict:
         """Return the price guide for one part."""
-        with self._price_guide_session(leave_open=leave_open):
-            item = {"item_id": item_number, "item_type": "P"}
-            if color is not None:
-                item["color"] = color
-            return self._single_price_guide(self._call_tool(CATALOG_PRICE_GUIDE_TOOL, {"items": [item]}))
+        item = {"item_id": item_number, "item_type": PART_ITEM_TYPE}
+        if color is not None:
+            item["color"] = color
+        return self._item_price_guide(item, leave_open)
+
+    def minifig(self, item_number: str, leave_open: bool = False) -> dict:
+        """Return the price guide for one minifigure."""
+        # A minifigure carries no color, and the source rejects a color argument for one.
+        return self._item_price_guide({"item_id": item_number, "item_type": MINIFIG_ITEM_TYPE}, leave_open)
 
     def set(self, set_number: str, leave_open: bool = False) -> dict:
         """Return the price guide for one set."""

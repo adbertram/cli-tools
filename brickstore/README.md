@@ -10,7 +10,7 @@ The CLI does not call the BrickLink API; `set-contents` reads set data from the 
 
 ## Requirements
 
-- `part`, `set`, `set-batch`, and `query` need BrickStore 2026.7.1 or later.
+- `part`, `minifig`, `set`, `set-batch`, and `query` need BrickStore 2026.7.1 or later.
 - Enable the MCP server and Catalog Read permission in BrickStore Settings > AI.
 - Configure the MCP server port as `45111`, or set `BRICKSTORE_BASE_URL`.
 - The CLI starts `/Applications/BrickStore.app/Contents/MacOS/BrickStore` when no MCP server is available.
@@ -28,6 +28,7 @@ uv tool install -e . --force --refresh
 
 ```bash
 brickstore part 3001 Red
+brickstore minifig sw0001a
 brickstore set 30670-1
 brickstore set-batch 30670-1 75313-1
 brickstore set-contents 30670-1 75313-1
@@ -53,6 +54,20 @@ Use `--leave-open` to keep a BrickStore app started by this command open.
 brickstore part 3001 Red
 brickstore part 3001 Red --table
 brickstore part 3001 Red --leave-open
+```
+
+### `minifig <item-number> [--leave-open]`
+
+Return the BrickStore price guide for one minifigure.
+
+A minifigure carries no color, so the command takes no color argument.
+
+Use `--leave-open` to keep a BrickStore app started by this command open.
+
+```bash
+brickstore minifig sw0001a
+brickstore minifig sw0001a --table
+brickstore minifig sw0001a --leave-open
 ```
 
 ### `set <set-number> [--leave-open]`
@@ -171,7 +186,7 @@ brickstore query --item-id 3001 --table
 
 JSON is the default output format.
 
-`part` and `set` support `--table` or `-t` for a field-value table.
+`part`, `minifig`, and `set` support `--table` or `-t` for a field-value table.
 
 `set-batch` always returns its JSON results envelope.
 

@@ -1,8 +1,8 @@
 {
   "tool": "brickstore",
   "description": "CLI interface for brickstore",
-  "discovered_at": "2026-08-03T16:15:18Z",
-  "total_commands": 7,
+  "discovered_at": "2026-08-18T14:56:11Z",
+  "total_commands": 8,
   "global_options": [],
   "commands": {
     "database": {
@@ -37,6 +37,32 @@
           ]
         }
       }
+    },
+    "minifig": {
+      "help": "Return BrickStore price guide data for one minifigure.",
+      "arguments": [
+        {
+          "name": "item_number",
+          "type": "TEXT",
+          "required": true,
+          "help": "BrickLink minifigure item ID"
+        }
+      ],
+      "options": [
+        {
+          "name": "--table",
+          "type": "bool",
+          "required": false,
+          "help": "Display as table",
+          "short": "-t"
+        },
+        {
+          "name": "--leave-open",
+          "type": "bool",
+          "required": false,
+          "help": "Leave a BrickStore app started by this command open"
+        }
+      ]
     },
     "part": {
       "help": "Return BrickStore price guide data for one part.",

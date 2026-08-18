@@ -255,6 +255,28 @@ def test_part_uses_catalog_price_guide_with_exact_source_arguments(monkeypatch):
     }
 
 
+def test_minifig_uses_catalog_price_guide_with_the_minifig_item_type(monkeypatch):
+    source_result = price_guide_result("sw0001a", "Battle Droid - Tan", "(Not Applicable)")
+    calls = install_responses(monkeypatch, mcp_responses({"results": [source_result]}))
+
+    result = BrickStoreClient(config=TestConfig()).minifig("sw0001a")
+
+    assert result == source_result
+    assert calls[3]["json"]["params"] == {
+        "name": "catalog_price_guide",
+        "arguments": {"items": [{"item_id": "sw0001a", "item_type": "M"}]},
+    }
+
+
+def test_minifig_sends_no_color_because_the_source_rejects_one(monkeypatch):
+    source_result = price_guide_result("sw0001a", "Battle Droid - Tan", "(Not Applicable)")
+    calls = install_responses(monkeypatch, mcp_responses({"results": [source_result]}))
+
+    BrickStoreClient(config=TestConfig()).minifig("sw0001a")
+
+    assert calls[3]["json"]["params"]["arguments"]["items"][0].keys() == {"item_id", "item_type"}
+
+
 def test_part_starts_and_stops_only_the_server_it_owns(monkeypatch):
     source_result = price_guide_result("3001", "Brick 2 x 4", "Red")
     responses = [

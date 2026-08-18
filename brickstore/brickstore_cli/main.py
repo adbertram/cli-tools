@@ -57,6 +57,17 @@ def part(
     _print_fields(get_client().part(item_number, color, leave_open=leave_open), table)
 
 
+@app.command("minifig")
+@command
+def minifig(
+    item_number: str = typer.Argument(..., help="BrickLink minifigure item ID"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    leave_open: bool = _leave_open_option(),
+) -> None:
+    """Return BrickStore price guide data for one minifigure."""
+    _print_fields(get_client().minifig(item_number, leave_open=leave_open), table)
+
+
 @app.command("set")
 @command
 def set_price(

@@ -66,6 +66,7 @@ QUERY_KWARGS = {
 class Client:
     def __init__(self):
         self.part_args = None
+        self.minifig_args = None
         self.set_args = None
         self.set_batch_args = None
         self.set_contents_args = None
@@ -73,6 +74,10 @@ class Client:
 
     def part(self, item_number, color, leave_open):
         self.part_args = (item_number, color, leave_open)
+        return PRICE_GUIDE
+
+    def minifig(self, item_number, leave_open):
+        self.minifig_args = (item_number, leave_open)
         return PRICE_GUIDE
 
     def set(self, set_number, leave_open):
@@ -102,6 +107,28 @@ def test_part_prints_unmodified_source_json(monkeypatch):
     assert result.exit_code == 0
     assert json.loads(result.stdout) == PRICE_GUIDE
     assert client.part_args == ("3001", "Red", False)
+
+
+def test_minifig_prints_unmodified_source_json(monkeypatch):
+    client = Client()
+    monkeypatch.setattr("brickstore_cli.main.get_client", lambda: client)
+
+    result = CliRunner().invoke(app, ["minifig", "sw0001a"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout) == PRICE_GUIDE
+    assert client.minifig_args == ("sw0001a", False)
+
+
+def test_minifig_takes_no_color_argument(monkeypatch):
+    # A minifig has no color; the source rejects the argument outright.
+    client = Client()
+    monkeypatch.setattr("brickstore_cli.main.get_client", lambda: client)
+
+    result = CliRunner().invoke(app, ["minifig", "sw0001a", "Red"])
+
+    assert result.exit_code == 2
+    assert client.minifig_args is None
 
 
 def test_set_table_prints_source_fields(monkeypatch):
