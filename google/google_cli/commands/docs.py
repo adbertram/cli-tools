@@ -559,10 +559,8 @@ def _find_tables_in_document(document: dict) -> List[Dict[str, Any]]:
                 cell_start = cell.get('startIndex', 0)
                 cell_end = cell.get('endIndex', 0)
 
-                # Extract cell text content - track both first paragraph and full content range
-                cell_text = []
-                first_para_start = None
-                first_para_end = None
+                # Extract cell text content and the full range it occupies. Updates
+                # replace this whole range, so no per-paragraph range is tracked.
                 all_text = []
                 all_text_start = None
                 all_text_end = None
@@ -591,19 +589,12 @@ def _find_tables_in_document(document: dict) -> List[Dict[str, Any]]:
                                 all_text_start = para_start
                             all_text_end = para_end
 
-                        # Track first paragraph for comparison
-                        if first_para_start is None and para_start is not None and para_content:
-                            first_para_start = para_start
-                            first_para_end = para_end
-                            cell_text = para_text
-
                 row_data.append({
                     'start_index': cell_start,
                     'end_index': cell_end,
                     'text_start': all_text_start,  # Use full content range for updates
                     'text_end': all_text_end,
                     'content': ''.join(all_text).strip(),
-                    'first_para_content': ''.join(cell_text).strip(),
                     'colspan': cell.get('tableCellStyle', {}).get('columnSpan', 1)
                 })
 
@@ -800,16 +791,20 @@ def tables_update(
             if text_end > text_start:
                 text_end = text_end - 1
 
-            # Get first paragraph content for comparison
-            first_para = cell.get('first_para_content', cell['content']).strip()
+            # Compare against the SAME range the update below replaces. text_start
+            # and text_end span the cell's full text, so comparing only the first
+            # paragraph skipped writes that would have removed the cell's trailing
+            # paragraphs, reporting "updates: 0" for a cell that still held stale
+            # content.
+            existing_content = cell['content'].strip()
 
             # DEBUG (uncomment to enable)
             # print(f"DEBUG: table={table_idx} row={row_idx} col={col_idx}")
-            # print(f"  first_para: {repr(first_para[:50] if first_para else '')}")
+            # print(f"  existing_content: {repr(existing_content[:50])}")
             # print(f"  new_content: {repr(new_content[:50] if new_content else '')}")
 
-            # Skip if first paragraph content is the same (avoid unnecessary updates)
-            if first_para == new_content.strip():
+            # Skip only when the cell already holds exactly what would be written.
+            if existing_content == new_content.strip():
                 continue
 
             # Skip if range is invalid
@@ -820,7 +815,7 @@ def tables_update(
                 'start': text_start,
                 'end': text_end,
                 'content': new_content,
-                'old_content': first_para,
+                'old_content': existing_content,
                 'table': table_idx,
                 'row': row_idx,
                 'col': col_idx
