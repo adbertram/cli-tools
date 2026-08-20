@@ -705,11 +705,15 @@ PASSWORD=secret://{name}-password
     try:
         copy_and_process_template(template_dir, output_dir, replacements)
 
-        # Rename the {{name}}_cli directory
-        old_cli_dir = output_dir / "{{name}}_cli"
+        # The template package directory is named {{name_underscore}}_cli, so
+        # path substitution already produced the importable package name. A
+        # hyphenated CLI name (e.g. deepseek-sessions) must NOT leak into the
+        # package directory; pyproject imports {name_underscore}_cli.
         new_cli_dir = output_dir / f"{name_underscore}_cli"
-        if old_cli_dir.exists():
-            old_cli_dir.rename(new_cli_dir)
+        if not new_cli_dir.is_dir():
+            raise FileNotFoundError(
+                f"template did not produce the package directory {new_cli_dir}"
+            )
 
         # Remove auth.py if --auth-type none
         if no_auth:

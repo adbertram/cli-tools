@@ -701,7 +701,7 @@ def test_browser_automation_requires_explicit_user_approval_after_api_discovery(
 def test_auth_guidance_documents_setup_instructions_and_non_secret_config_prompts():
     auth_standards = _read("references/auth-standards.md")
     templates = _read("references/templates.md")
-    api_template = _read("templates/api/{{name}}_cli/config.py")
+    api_template = _read("templates/api/{{name_underscore}}_cli/config.py")
 
     assert "AUTH_CONFIG_PROMPTS" in auth_standards
     assert "AUTH_SETUP_INSTRUCTIONS" in auth_standards

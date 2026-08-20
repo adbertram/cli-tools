@@ -45,7 +45,7 @@ def _has_browser_method(path: Path) -> bool:
 def test_templates_do_not_ship_model_first_scaffolding():
     forbidden_paths = []
     for template_type in TEMPLATE_TYPES:
-        pkg_dir = TEMPLATES / template_type / "{{name}}_cli"
+        pkg_dir = TEMPLATES / template_type / "{{name_underscore}}_cli"
         for relative in ("models", "commands", "filters.py", "output.py"):
             path = pkg_dir / relative
             if path.exists():
@@ -93,5 +93,5 @@ def test_rendered_template_python_is_valid():
 
 
 def test_browser_template_subclass_is_declarative():
-    browser_file = TEMPLATES / "browser" / "{{name}}_cli" / "browser.py"
+    browser_file = TEMPLATES / "browser" / "{{name_underscore}}_cli" / "browser.py"
     assert not _has_browser_method(browser_file)
