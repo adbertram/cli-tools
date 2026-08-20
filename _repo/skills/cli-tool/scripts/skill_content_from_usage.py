@@ -26,7 +26,10 @@ from pathlib import Path
 
 # Help text in usage.json is the command's full docstring line, which is often
 # several sentences. A table cell and a group bullet want the opening sentence.
-_SENTENCE_END = re.compile(r"(?<=[.!?])\s")
+# The lookahead requires an uppercase/digit start for the next sentence so a
+# mid-sentence abbreviation period (e.g. "vs.", "e.g.", "adam-server.") does
+# not get mistaken for a sentence boundary.
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9])")
 
 
 class UsageContractError(RuntimeError):
