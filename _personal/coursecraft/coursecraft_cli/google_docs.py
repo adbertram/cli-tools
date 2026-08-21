@@ -76,6 +76,24 @@ def get_document_structure(doc_id: str) -> Dict[str, Any]:
     return json.loads(result.stdout)
 
 
+def read_document_text(doc_id: str) -> str:
+    """Return the document's full text, including text inside tables.
+
+    Wraps `google docs read`, which extracts every run in the document. Use this rather
+    than the outline table parser when the whole document is wanted verbatim.
+    """
+    result = subprocess.run(
+        ["google", "docs", "read", doc_id],
+        capture_output=True,
+        text=True
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(f"Failed to read document {doc_id}: {result.stderr}")
+
+    return json.loads(result.stdout)["content"]
+
+
 def _extract_cell_text(cell: Dict) -> str:
     """Extract text content from a table cell."""
     text = ""
