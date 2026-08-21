@@ -6,12 +6,13 @@ from notion_cli.client import NotionClient
 from notion_cli.commands import page
 
 
-def heading(block_id, text, has_children=False):
+def heading(block_id, text, has_children=False, level=2):
+    block_type = f"heading_{level}"
     return {
         "id": block_id,
-        "type": "heading_2",
+        "type": block_type,
         "has_children": has_children,
-        "heading_2": {
+        block_type: {
             "rich_text": [{"plain_text": text}],
         },
     }
@@ -97,6 +98,8 @@ def test_replace_section_from_first_child_keeps_following_blocks_in_place(monkey
     page.content_replace_section(
         "parent-block",
         heading="## First",
+        occurrence=None,
+        under=None,
         text="## First\n\nnew",
         file=None,
         dry_run=False,
@@ -117,6 +120,10 @@ def test_replace_section_from_first_child_keeps_following_blocks_in_place(monkey
         {
             "page_id": "parent-block",
             "section_heading": "## First",
+            "occurrence": 1,
+            "total_matches": 1,
+            "section_start_block": 1,
+            "section_end_block": 2,
             "section_blocks_replaced": 2,
             "blocks_deleted": 2,
             "blocks_created": 2,
@@ -137,6 +144,8 @@ def test_replace_section_dry_run_reports_surgical_first_child_replace(monkeypatc
     page.content_replace_section(
         "parent-block",
         heading="## First",
+        occurrence=None,
+        under=None,
         text="## First",
         file=None,
         dry_run=True,
@@ -148,6 +157,10 @@ def test_replace_section_dry_run_reports_surgical_first_child_replace(monkeypatc
         {
             "page_id": "parent-block",
             "section_heading": "## First",
+            "occurrence": 1,
+            "total_matches": 1,
+            "section_start_block": 1,
+            "section_end_block": 2,
             "section_blocks_to_replace": 2,
             "blocks_to_delete": 2,
             "blocks_to_insert": 1,
@@ -183,6 +196,8 @@ def test_replace_section_uploads_local_images_from_file(monkeypatch, tmp_path):
     page.content_replace_section(
         "parent-block",
         heading="## First",
+        occurrence=None,
+        under=None,
         text=None,
         file=str(section_file),
         dry_run=False,
@@ -215,6 +230,8 @@ def test_replace_section_dry_run_does_not_upload_local_images(monkeypatch, tmp_p
     page.content_replace_section(
         "parent-block",
         heading="## First",
+        occurrence=None,
+        under=None,
         text=None,
         file=str(section_file),
         dry_run=True,
@@ -274,6 +291,8 @@ def test_replace_section_does_not_mutate_when_block_cannot_be_made_valid(monkeyp
         page.content_replace_section(
             "parent-block",
             heading="## First",
+            occurrence=None,
+            under=None,
             text="## First\n\nnew",
             file=None,
             dry_run=False,
@@ -307,6 +326,8 @@ def test_replace_section_normalizes_unsupported_code_language_before_any_delete(
     page.content_replace_section(
         "parent-block",
         heading="## First",
+        occurrence=None,
+        under=None,
         text="## First\n\n```kql\nStormEvents | take 10\n```",
         file=None,
         dry_run=False,
@@ -454,6 +475,8 @@ def test_replace_section_succeeds_when_a_block_is_already_archived(monkeypatch):
     page.content_replace_section(
         "parent-block",
         heading="## First",
+        occurrence=None,
+        under=None,
         text="## First\n\nnew",
         file=None,
         dry_run=False,
@@ -487,3 +510,252 @@ def test_clean_block_for_creation_strips_type_icon_from_non_tab_blocks():
             "rich_text": [{"type": "text", "text": {"content": "Body"}}],
         },
     }
+
+
+# =============================================================================
+# Repeated heading disambiguation
+#
+# The real failure: a page repeats "### Your Actions" under several "## Phase N"
+# headings. Targeting the first match silently rewrote the wrong phase.
+# =============================================================================
+
+
+class RepeatedHeadingClient(FakeClient):
+    """A page where '### Your Actions' appears under two different H2 parents."""
+
+    def __init__(self):
+        super().__init__()
+        self.top_level_blocks = [
+            heading("phase2", "Phase 2", level=2),                 # block 1
+            heading("p2-actions", "Your Actions", level=3),        # block 2
+            paragraph("p2-actions-body", "phase 2 actions"),       # block 3
+            heading("p2-podio", "What You'll See in Podio", level=3),  # block 4
+            paragraph("p2-podio-body", "phase 2 podio"),           # block 5
+            heading("phase4", "Phase 4", level=2),                 # block 6
+            heading("p4-actions", "Your Actions", level=3),        # block 7
+            paragraph("p4-actions-body", "phase 4 actions"),       # block 8
+            heading("p4-podio", "What You'll See in Podio", level=3),  # block 9
+            paragraph("p4-podio-body", "phase 4 podio"),           # block 10
+        ]
+
+
+def _install_repeated_page(monkeypatch, client, printed_json, warnings):
+    monkeypatch.setattr(page, "get_client", lambda: client)
+    monkeypatch.setattr(
+        page,
+        "text_to_blocks",
+        lambda content, image_uploads=None: [heading("replacement", "Your Actions", level=3)],
+    )
+    monkeypatch.setattr(page, "print_success", lambda message: None)
+    monkeypatch.setattr(page, "print_json", printed_json.append)
+    monkeypatch.setattr(page, "print_warning", warnings.append)
+
+
+def _replace(client_page_id="parent-block", **overrides):
+    kwargs = {
+        "heading": "### Your Actions",
+        "occurrence": None,
+        "under": None,
+        "text": "### Your Actions\n\nnew",
+        "file": None,
+        "dry_run": False,
+    }
+    kwargs.update(overrides)
+    return page.content_replace_section(client_page_id, **kwargs)
+
+
+def test_replace_section_targets_unique_heading_on_a_page_with_repeats(monkeypatch):
+    """A heading that appears once still resolves without any disambiguation."""
+    client = RepeatedHeadingClient()
+    printed_json, warnings = [], []
+    _install_repeated_page(monkeypatch, client, printed_json, warnings)
+
+    _replace(heading="## Phase 4", text="## Phase 4\n\nnew")
+
+    # Phase 4's H2 section runs to the end of the page (blocks 6-10).
+    assert sorted(client.deleted) == [
+        "p4-actions",
+        "p4-actions-body",
+        "p4-podio",
+        "p4-podio-body",
+        "phase4",
+    ]
+    assert printed_json[0]["occurrence"] == 1
+    assert printed_json[0]["total_matches"] == 1
+    assert printed_json[0]["section_start_block"] == 6
+    assert printed_json[0]["section_end_block"] == 10
+    assert client.uploads[0]["after"] == "p2-podio-body"
+
+
+def test_replace_section_fails_loudly_when_heading_matches_more_than_once(monkeypatch):
+    """THE BUG: two matches must fail, not silently rewrite the first one."""
+    client = RepeatedHeadingClient()
+    printed_json, warnings = [], []
+    _install_repeated_page(monkeypatch, client, printed_json, warnings)
+
+    with pytest.raises(page.typer.Exit) as exc:
+        _replace()
+
+    assert exc.value.exit_code == 1
+    # Nothing was touched.
+    assert client.deleted == []
+    assert client.uploads == []
+    assert printed_json == []
+
+    message = "\n".join(warnings)
+    assert "matches 2 sections" in message
+    # Every candidate is listed with its block range and enclosing heading.
+    assert "--occurrence 1: blocks 2-3 of 10, under ## Phase 2" in message
+    assert "--occurrence 2: blocks 7-8 of 10, under ## Phase 4" in message
+    assert "--occurrence N" in message
+    assert "--under" in message
+
+
+def test_replace_section_occurrence_targets_the_requested_match(monkeypatch):
+    """--occurrence 2 replaces the Phase 4 section, never the Phase 2 one."""
+    client = RepeatedHeadingClient()
+    printed_json, warnings = [], []
+    _install_repeated_page(monkeypatch, client, printed_json, warnings)
+
+    _replace(occurrence=2)
+
+    assert sorted(client.deleted) == ["p4-actions", "p4-actions-body"]
+    assert client.uploads[0]["after"] == "phase4"
+    assert printed_json[0]["occurrence"] == 2
+    assert printed_json[0]["total_matches"] == 2
+    assert printed_json[0]["section_start_block"] == 7
+    assert printed_json[0]["section_end_block"] == 8
+
+
+def test_replace_section_occurrence_one_targets_the_first_match(monkeypatch):
+    """Explicitly asking for the first match is allowed -- only guessing is not."""
+    client = RepeatedHeadingClient()
+    printed_json, warnings = [], []
+    _install_repeated_page(monkeypatch, client, printed_json, warnings)
+
+    _replace(occurrence=1)
+
+    assert sorted(client.deleted) == ["p2-actions", "p2-actions-body"]
+    assert client.uploads[0]["after"] == "phase2"
+    assert printed_json[0]["section_start_block"] == 2
+    assert printed_json[0]["section_end_block"] == 3
+
+
+@pytest.mark.parametrize("bad_occurrence", [0, 3, -1])
+def test_replace_section_rejects_out_of_range_occurrence(monkeypatch, bad_occurrence):
+    client = RepeatedHeadingClient()
+    printed_json, warnings = [], []
+    _install_repeated_page(monkeypatch, client, printed_json, warnings)
+
+    with pytest.raises(page.typer.Exit) as exc:
+        _replace(occurrence=bad_occurrence)
+
+    assert exc.value.exit_code == 1
+    assert client.deleted == []
+    assert client.uploads == []
+    message = "\n".join(warnings)
+    assert f"--occurrence {bad_occurrence} is out of range" in message
+    assert "--occurrence 2: blocks 7-8 of 10, under ## Phase 4" in message
+
+
+def test_replace_section_under_scopes_the_search_to_one_parent(monkeypatch):
+    """--under '## Phase 4' resolves the repeated heading without an index."""
+    client = RepeatedHeadingClient()
+    printed_json, warnings = [], []
+    _install_repeated_page(monkeypatch, client, printed_json, warnings)
+
+    _replace(under="## Phase 4")
+
+    assert sorted(client.deleted) == ["p4-actions", "p4-actions-body"]
+    assert printed_json[0]["occurrence"] == 1  # first (only) match within the scope
+    assert printed_json[0]["total_matches"] == 1
+    assert printed_json[0]["section_start_block"] == 7
+
+
+def test_replace_section_under_reports_no_match_inside_the_scope(monkeypatch):
+    client = RepeatedHeadingClient()
+    printed_json, warnings = [], []
+    _install_repeated_page(monkeypatch, client, printed_json, warnings)
+
+    with pytest.raises(page.typer.Exit) as exc:
+        _replace(heading="### Nowhere", under="## Phase 4")
+
+    assert exc.value.exit_code == 1
+    assert client.deleted == []
+    assert "under '## Phase 4'" in "\n".join(warnings)
+
+
+def test_replace_section_rejects_under_heading_that_is_not_higher_level(monkeypatch):
+    client = RepeatedHeadingClient()
+    printed_json, warnings = [], []
+    _install_repeated_page(monkeypatch, client, printed_json, warnings)
+
+    with pytest.raises(page.typer.Exit) as exc:
+        _replace(under="### Your Actions")
+
+    assert exc.value.exit_code == 1
+    assert client.children_calls == []  # failed before fetching the page
+    assert "--under must name a higher-level heading" in "\n".join(warnings)
+
+
+def test_replace_section_rejects_ambiguous_under_heading(monkeypatch):
+    """A repeated --under heading cannot identify a scope either."""
+
+    class TwoIdenticalParentsClient(RepeatedHeadingClient):
+        def __init__(self):
+            super().__init__()
+            self.top_level_blocks[5] = heading("phase4", "Phase 2", level=2)
+
+    client = TwoIdenticalParentsClient()
+    printed_json, warnings = [], []
+    _install_repeated_page(monkeypatch, client, printed_json, warnings)
+
+    with pytest.raises(page.typer.Exit) as exc:
+        _replace(under="## Phase 2")
+
+    assert exc.value.exit_code == 1
+    assert client.deleted == []
+    message = "\n".join(warnings)
+    assert "matches 2 sections" in message
+    assert "--under heading that appears once" in message
+
+
+def test_replace_section_dry_run_reports_the_resolved_block_range(monkeypatch):
+    client = RepeatedHeadingClient()
+    printed_json, warnings = [], []
+    _install_repeated_page(monkeypatch, client, printed_json, warnings)
+
+    _replace(occurrence=2, dry_run=True)
+
+    assert client.deleted == []
+    assert client.uploads == []
+    assert printed_json == [
+        {
+            "page_id": "parent-block",
+            "section_heading": "### Your Actions",
+            "occurrence": 2,
+            "total_matches": 2,
+            "section_start_block": 7,
+            "section_end_block": 8,
+            "section_blocks_to_replace": 2,
+            "blocks_to_delete": 2,
+            "blocks_to_insert": 1,
+            "first_child_rewrite": False,
+            "following_blocks_to_recreate": 0,
+            "after_block_id": "phase4",
+            "dry_run": True,
+        }
+    ]
+
+
+def test_replace_section_dry_run_still_fails_on_ambiguity(monkeypatch):
+    """--dry-run must not become the only way to discover the ambiguity."""
+    client = RepeatedHeadingClient()
+    printed_json, warnings = [], []
+    _install_repeated_page(monkeypatch, client, printed_json, warnings)
+
+    with pytest.raises(page.typer.Exit) as exc:
+        _replace(dry_run=True)
+
+    assert exc.value.exit_code == 1
+    assert printed_json == []

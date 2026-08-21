@@ -634,9 +634,43 @@ notion pages content replace-section <page-id> --heading "### Details" --file de
 | Option | Description |
 |--------|-------------|
 | `-h, --heading` | Exact markdown heading to replace, including `#`, `##`, or `###` |
+| `-n, --occurrence` | Which match to target when the heading repeats (1-based, page order) |
+| `-u, --under` | Scope the search to the section under this higher-level heading |
 | `-t, --text` | Markdown content for the replacement section |
 | `-f, --file` | File containing markdown content for the replacement section |
 | `--dry-run` | Show the section replacement plan without editing Notion |
+
+#### Repeated headings
+
+A page can carry the same heading text in several places — `### Your Actions`
+under four different `## Phase N` headings, for example. When the heading matches
+more than once and the call did not disambiguate, the command **exits 1 without
+touching the page** and lists every candidate with its block range and the
+enclosing higher-level heading:
+
+```
+Warning: '### Your Actions' matches 4 sections on page 2de5d9c8.... Refusing to guess which one to replace:
+  --occurrence 1: blocks 12-18 of 96, under ## Phase 1: Topic Intake
+  --occurrence 2: blocks 27-34 of 96, under ## Phase 2: AI Review
+  --occurrence 3: blocks 51-57 of 96, under ## Phase 3: Writer Assignment
+  --occurrence 4: blocks 70-79 of 96, under ## Phase 4: Draft Submission
+Re-run with --occurrence N, or --under '<parent heading>' to scope the search to one parent section.
+```
+
+Pick one of the two disambiguators:
+
+```bash
+notion pages content replace-section <page-id> --heading "### Your Actions" --occurrence 4 --file new.md
+notion pages content replace-section <page-id> --heading "### Your Actions" --under "## Phase 4: Draft Submission" --file new.md
+```
+
+`--under` must name a heading at a *higher* level than `--heading`, and must
+itself appear only once; otherwise the command exits 1. With `--under`,
+`--occurrence` counts matches inside that parent section only.
+
+The resolved target is reported in the JSON output of both the real run and
+`--dry-run` as `occurrence`, `total_matches`, `section_start_block`, and
+`section_end_block` (1-based, inclusive).
 
 ### Clear Content
 

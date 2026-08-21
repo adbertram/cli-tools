@@ -1,7 +1,7 @@
 {
   "tool": "notion",
   "description": "CLI interface for Notion API with database query filtering",
-  "discovered_at": "2026-08-18T12:07:45Z",
+  "discovered_at": "2026-08-21T22:15:55Z",
   "total_commands": 59,
   "global_options": [
     {
@@ -2228,11 +2228,13 @@
               ]
             },
             "replace-section": {
-              "help": "Replace a specific section of a page without touching the rest. Finds the section by its heading text, then replaces all blocks from that heading to (but not including) the next heading at the same or higher level. The heading argument must include the markdown prefix to identify the heading level: '# Title' for H1, '## Title' for H2, '### Title' for H3.",
+              "help": "Replace a specific section of a page without touching the rest. Finds the section by its heading text, then replaces all blocks from that heading to (but not including) the next heading at the same or higher level. The heading argument must include the markdown prefix to identify the heading level: '# Title' for H1, '## Title' for H2, '### Title' for H3. When the heading text appears more than once on the page, the command FAILS and lists every match rather than guessing. Disambiguate with --occurrence (1-based, in page order) or --under (scope the search to one parent section).",
               "examples": [
                 "notion pages content replace-section PAGE_ID --heading \"## My Section\" --file updated.md",
                 "notion pages content replace-section PAGE_ID --heading \"### Subsection\" --text \"### Subsection\\n\\nNew content here\"",
-                "notion pages content replace-section PAGE_ID --heading \"## Old Title\" --file new.md --dry-run"
+                "notion pages content replace-section PAGE_ID --heading \"## Old Title\" --file new.md --dry-run",
+                "notion pages content replace-section PAGE_ID --heading \"### Your Actions\" --occurrence 4 --file new.md",
+                "notion pages content replace-section PAGE_ID --heading \"### Your Actions\" --under \"## Phase 4\" --file new.md"
               ],
               "usage_instructions": "Run `notion pages content replace-section --help` for exact arguments and options.",
               "arguments": [
@@ -2250,6 +2252,20 @@
                   "required": true,
                   "help": "Section heading to find (e.g., '## My Section Title'). Include the markdown heading prefix (# ## ###)",
                   "short": "-h"
+                },
+                {
+                  "name": "--occurrence",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Which match to target when the heading appears more than once (1-based, in page order)",
+                  "short": "-n"
+                },
+                {
+                  "name": "--under",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Restrict the search to the section under this higher-level heading (e.g., '## Phase 4'). Include the markdown prefix",
+                  "short": "-u"
                 },
                 {
                   "name": "--text",

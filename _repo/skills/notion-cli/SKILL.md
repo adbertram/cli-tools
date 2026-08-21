@@ -243,6 +243,14 @@ Generic operators for non-date properties: `eq`, `ne`, `in`, `nin`, `like`,
 take pipe-separated values. `gt`/`gte`/`lt`/`lte` require a `number` property.
 Omitting the operator means `eq` (`--filter "Status:Done"`).
 
+A comma inside one `--filter` value joins conditions with AND logic
+(`--filter "Client:eq:Progress,Phase:eq:Done"`). To put a literal comma in a
+value, escape it as `\,` (and a literal backslash as `\\`):
+
+```bash
+notion database page list -d DB_ID --filter "Title:like:%Four Layers\, Four Failure Modes%"
+```
+
 `null` and `notnull` become Notion's `is_empty` and `is_not_empty` conditions,
 nested under the property's own type. They work for `title`, `rich_text`,
 `number`, `select`, `status`, `multi_select`, `people`, `files`, `relation`,
@@ -304,6 +312,30 @@ Only use `pages content set` when you intend to replace the ENTIRE page content.
 It also archives/removes any child pages represented by `child_page` blocks in
 that parent. Create intended child pages only after the full parent replacement,
 or avoid `pages content set` and use a non-full-replace operation.
+</principle>
+
+<principle name="replace-section Refuses to Guess Between Repeated Headings">
+Heading text is not unique on a real page. A guide with `### Your Actions` under
+four `## Phase N` headings has four candidate sections for one `--heading` value.
+
+`replace-section` resolves ALL matches, and when more than one matches without a
+disambiguator it exits 1 **before touching the page**, listing every candidate
+with its 1-based block range and enclosing higher-level heading. Disambiguate:
+
+```bash
+# By position in page order (1-based)
+notion pages content replace-section PAGE_ID --heading "### Your Actions" --occurrence 4 --file new.md
+
+# By parent section (must be a HIGHER-level heading, and must appear only once)
+notion pages content replace-section PAGE_ID --heading "### Your Actions" --under "## Phase 4" --file new.md
+```
+
+With `--under`, `--occurrence` counts matches inside that parent section only.
+Both the real run and `--dry-run` report the resolved target as `occurrence`,
+`total_matches`, `section_start_block`, and `section_end_block` in the JSON.
+
+Do NOT rely on `--dry-run` to discover ambiguity — it fails the same way. Do NOT
+assume an un-flagged call took the first match; it now fails instead.
 </principle>
 
 <principle name="Edit a Single Block In Place to Preserve Comments">
@@ -828,6 +860,17 @@ pass the result into `text_to_blocks(content, image_uploads=...)`. Never call
 `text_to_blocks` on user markdown without that mapping, never warn-and-continue
 on a missing or unuploadable local image, and always process images before the
 command's first mutating API call.
+
+### 10. `replace-section` Silently Targeted the First Duplicate Heading
+**Symptom:** `notion pages content replace-section PAGE_ID --heading "### Your Actions" --file new.md` on the Progress "Content Workflow User Guide" page (`2de5d9c8-5b2b-80a3-984a-d964d1ba46b9`) rewrote the Phase 2 section when the caller meant Phase 4. That page repeats `### Your Actions` under four phases and `### What You'll See in Podio` under two. No warning was printed and the exit code was 0; the wrong section's content was destroyed. Only a `--dry-run` inspection of the reported block range revealed the mistargeting.
+
+**Cause:** The heading search in `notion_cli/commands/page.py` (`content_replace_section`) scanned top-level blocks and `break`-ed on the FIRST block whose type and plain text matched. Nothing counted the remaining matches, so a duplicate heading was indistinguishable from a unique one.
+
+**Fix:** The search now collects EVERY match (`_find_heading_matches`) with its resolved section range and enclosing higher-level heading. More than one match without a disambiguator exits 1 before any fetch-driven mutation and prints each candidate as `--occurrence N: blocks X-Y of Z, under ## Parent`. Two disambiguators were added: `--occurrence/-n` (1-based, page order) and `--under/-u` (scope to one parent section; must be a higher heading level and must itself be unique). Out-of-range `--occurrence` exits 1 with the same candidate list. The resolved target is now reported in both the real and `--dry-run` JSON as `occurrence`, `total_matches`, `section_start_block`, `section_end_block`. No fallback path selects a match implicitly.
+
+**Verification:** In `/Users/adam/Dropbox/GitRepos/cli-tools/notion`, `uv run --with pytest python -m pytest tests -q` → 281 passed. `test-cli-tool.sh --cli-name notion` → 333 passed, 0 failed. Regression tests live in `notion/tests/test_replace_section.py` (`RepeatedHeadingClient` covers unique match, ambiguous fail, `--occurrence` targeting, out-of-range, `--under` scoping, ambiguous/lower-level `--under`, and dry-run range reporting).
+
+**Recurrence Prevention:** Any command that locates a Notion block by matching text must enumerate every match and fail loudly on ambiguity. Never `break` on the first text match and never default to it. `replace-section` is currently the only `pages content` subcommand that matches by heading text; a new one must reuse `_find_heading_matches` / `_describe_matches`.
 
 <success_criteria>
 - Command executes without error

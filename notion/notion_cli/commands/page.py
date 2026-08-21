@@ -1402,6 +1402,88 @@ def content_set(
         raise typer.Exit(1)
 
 
+_HEADING_LEVELS = {"heading_1": 1, "heading_2": 2, "heading_3": 3}
+
+
+def _parse_markdown_heading(value: str, label: str) -> tuple:
+    """
+    Parse '## Title' into (level, text, block_type).
+
+    Exits 1 when the markdown prefix is missing -- the prefix is the only thing
+    that identifies which heading level to match.
+    """
+    stripped = value.strip()
+    for prefix, level in (("### ", 3), ("## ", 2), ("# ", 1)):
+        if stripped.startswith(prefix):
+            return level, stripped[len(prefix):].strip(), f"heading_{level}"
+
+    print_warning(
+        f"{label} must start with a markdown prefix (# ## ###). "
+        f"Got: '{stripped}'"
+    )
+    raise typer.Exit(1)
+
+
+def _heading_block_text(block: dict) -> str:
+    """Plain text of a heading block, matching how the markdown heading reads."""
+    block_type = block.get("type", "")
+    rich_text = block.get(block_type, {}).get("rich_text", [])
+    return "".join(rt.get("plain_text", "") for rt in rich_text).strip()
+
+
+def _section_end_index(all_blocks: list, start_idx: int, level: int) -> int:
+    """Index one past the last block of the section starting at start_idx."""
+    for i in range(start_idx + 1, len(all_blocks)):
+        block_level = _HEADING_LEVELS.get(all_blocks[i].get("type", ""))
+        if block_level is not None and block_level <= level:
+            return i
+    return len(all_blocks)
+
+
+def _enclosing_heading(all_blocks: list, start_idx: int, level: int) -> Optional[str]:
+    """Nearest preceding heading at a higher level, rendered as markdown."""
+    for i in range(start_idx - 1, -1, -1):
+        block_level = _HEADING_LEVELS.get(all_blocks[i].get("type", ""))
+        if block_level is not None and block_level < level:
+            return f"{'#' * block_level} {_heading_block_text(all_blocks[i])}"
+    return None
+
+
+def _find_heading_matches(all_blocks: list, block_type: str, text: str, level: int) -> list:
+    """
+    Every top-level heading block whose type and text match, in page order.
+
+    Each match carries the resolved section range and the enclosing higher-level
+    heading so an ambiguous call can report exactly which sections it could mean.
+    """
+    matches = []
+    for i, block in enumerate(all_blocks):
+        if block.get("type") != block_type:
+            continue
+        if _heading_block_text(block) != text:
+            continue
+        matches.append({
+            "occurrence": len(matches) + 1,
+            "start_index": i,
+            "end_index": _section_end_index(all_blocks, i, level),
+            "under": _enclosing_heading(all_blocks, i, level),
+        })
+    return matches
+
+
+def _describe_matches(matches: list, total_blocks: int) -> str:
+    """Human-readable list of candidate sections for an ambiguity failure."""
+    lines = []
+    for match in matches:
+        under = match["under"] or "(no enclosing heading)"
+        lines.append(
+            f"  --occurrence {match['occurrence']}: blocks "
+            f"{match['start_index'] + 1}-{match['end_index']} of {total_blocks}, "
+            f"under {under}"
+        )
+    return "\n".join(lines)
+
+
 @content_app.command("replace-section")
 @command
 def content_replace_section(
@@ -1414,6 +1496,18 @@ def content_replace_section(
         "--heading",
         "-h",
         help="Section heading to find (e.g., '## My Section Title'). Include the markdown heading prefix (# ## ###).",
+    ),
+    occurrence: Optional[int] = typer.Option(
+        None,
+        "--occurrence",
+        "-n",
+        help="Which match to target when the heading appears more than once (1-based, in page order).",
+    ),
+    under: Optional[str] = typer.Option(
+        None,
+        "--under",
+        "-u",
+        help="Restrict the search to the section under this higher-level heading (e.g., '## Phase 4'). Include the markdown prefix.",
     ),
     text: Optional[str] = typer.Option(
         None,
@@ -1442,10 +1536,16 @@ def content_replace_section(
     The heading argument must include the markdown prefix to identify the heading
     level: '# Title' for H1, '## Title' for H2, '### Title' for H3.
 
+    When the heading text appears more than once on the page, the command FAILS
+    and lists every match rather than guessing. Disambiguate with --occurrence
+    (1-based, in page order) or --under (scope the search to one parent section).
+
     Examples:
         notion pages content replace-section PAGE_ID --heading "## My Section" --file updated.md
         notion pages content replace-section PAGE_ID --heading "### Subsection" --text "### Subsection\\n\\nNew content here"
         notion pages content replace-section PAGE_ID --heading "## Old Title" --file new.md --dry-run
+        notion pages content replace-section PAGE_ID --heading "### Your Actions" --occurrence 4 --file new.md
+        notion pages content replace-section PAGE_ID --heading "### Your Actions" --under "## Phase 4" --file new.md
     """
     import concurrent.futures
 
@@ -1462,24 +1562,26 @@ def content_replace_section(
 
         # Parse the heading to determine level and text
         heading_stripped = heading.strip()
-        if heading_stripped.startswith("### "):
-            target_level = 3
-            target_text = heading_stripped[4:].strip()
-            target_block_type = "heading_3"
-        elif heading_stripped.startswith("## "):
-            target_level = 2
-            target_text = heading_stripped[3:].strip()
-            target_block_type = "heading_2"
-        elif heading_stripped.startswith("# "):
-            target_level = 1
-            target_text = heading_stripped[2:].strip()
-            target_block_type = "heading_1"
-        else:
-            print_warning(
-                "Heading must start with a markdown prefix (# ## ###). "
-                f"Got: '{heading_stripped}'"
+        target_level, target_text, target_block_type = _parse_markdown_heading(
+            heading_stripped, "Heading"
+        )
+
+        # --under scopes the search to one parent section, so it must name a
+        # heading ABOVE the target level. An equal or lower level cannot contain
+        # the target section.
+        under_stripped = None
+        if under is not None:
+            under_stripped = under.strip()
+            under_level, under_text, under_block_type = _parse_markdown_heading(
+                under_stripped, "Parent heading (--under)"
             )
-            raise typer.Exit(1)
+            if under_level >= target_level:
+                print_warning(
+                    f"--under must name a higher-level heading than --heading. "
+                    f"'{under_stripped}' is H{under_level} and "
+                    f"'{heading_stripped}' is H{target_level}."
+                )
+                raise typer.Exit(1)
 
         # Load new content
         content = None
@@ -1530,40 +1632,76 @@ def content_replace_section(
             print_warning("Page has no content blocks")
             raise typer.Exit(1)
 
-        # Heading level map for block types
-        heading_levels = {
-            "heading_1": 1,
-            "heading_2": 2,
-            "heading_3": 3,
-        }
+        # Find every heading block that matches. A page can repeat the same
+        # heading text under several parents (e.g. "### Your Actions" under four
+        # phases). Silently taking the first match would rewrite the wrong
+        # section and destroy content, so ambiguity is a hard failure.
+        matches = _find_heading_matches(
+            all_blocks, target_block_type, target_text, target_level
+        )
 
-        # Find the target heading block
-        section_start_idx = None
-        for i, block in enumerate(all_blocks):
-            block_type = block.get("type", "")
-            if block_type == target_block_type:
-                # Extract text from the heading
-                rich_text = block.get(block_type, {}).get("rich_text", [])
-                block_text = "".join(rt.get("plain_text", "") for rt in rich_text).strip()
-                if block_text == target_text:
-                    section_start_idx = i
-                    break
+        if under_stripped is not None:
+            under_matches = _find_heading_matches(
+                all_blocks, under_block_type, under_text, under_level
+            )
+            if not under_matches:
+                print_warning(
+                    f"Parent heading not found: '{under_stripped}'\n"
+                    "Make sure the heading text matches exactly (case-sensitive)."
+                )
+                raise typer.Exit(1)
+            if len(under_matches) > 1:
+                print_warning(
+                    f"Parent heading '{under_stripped}' matches "
+                    f"{len(under_matches)} sections on page {page_id}, so --under "
+                    "cannot identify one scope:\n"
+                    f"{_describe_matches(under_matches, len(all_blocks))}\n"
+                    "Use a --under heading that appears once."
+                )
+                raise typer.Exit(1)
 
-        if section_start_idx is None:
+            scope = under_matches[0]
+            matches = [
+                match for match in matches
+                if scope["start_index"] < match["start_index"] < scope["end_index"]
+            ]
+            # Renumber so --occurrence counts within the scoped section.
+            for position, match in enumerate(matches, start=1):
+                match["occurrence"] = position
+
+        if not matches:
+            scope_note = f" under '{under_stripped}'" if under_stripped else ""
             print_warning(
-                f"Section heading not found: '{heading_stripped}'\n"
+                f"Section heading not found{scope_note}: '{heading_stripped}'\n"
                 "Make sure the heading text matches exactly (case-sensitive)."
             )
             raise typer.Exit(1)
 
-        # Find the end of the section (next heading at same or higher level, or end of page)
-        section_end_idx = len(all_blocks)  # Default: section goes to end of page
-        for i in range(section_start_idx + 1, len(all_blocks)):
-            block_type = all_blocks[i].get("type", "")
-            block_level = heading_levels.get(block_type)
-            if block_level is not None and block_level <= target_level:
-                section_end_idx = i
-                break
+        if occurrence is not None:
+            if occurrence < 1 or occurrence > len(matches):
+                print_warning(
+                    f"--occurrence {occurrence} is out of range: "
+                    f"'{heading_stripped}' matches {len(matches)} section(s) on "
+                    f"page {page_id}:\n"
+                    f"{_describe_matches(matches, len(all_blocks))}"
+                )
+                raise typer.Exit(1)
+            match = matches[occurrence - 1]
+        elif len(matches) > 1:
+            print_warning(
+                f"'{heading_stripped}' matches {len(matches)} sections on page "
+                f"{page_id}. Refusing to guess which one to replace:\n"
+                f"{_describe_matches(matches, len(all_blocks))}\n"
+                "Re-run with --occurrence N, or --under '<parent heading>' to "
+                "scope the search to one parent section."
+            )
+            raise typer.Exit(1)
+        else:
+            match = matches[0]
+
+        section_start_idx = match["start_index"]
+        section_end_idx = match["end_index"]
+        resolved_occurrence = match["occurrence"]
 
         # Collect block IDs to delete
         section_block_ids = [all_blocks[i]["id"] for i in range(section_start_idx, section_end_idx)]
@@ -1596,6 +1734,10 @@ def content_replace_section(
             print_json({
                 "page_id": page_id,
                 "section_heading": heading_stripped,
+                "occurrence": resolved_occurrence,
+                "total_matches": len(matches),
+                "section_start_block": section_start_idx + 1,
+                "section_end_block": section_end_idx,
                 "section_blocks_to_replace": section_block_count,
                 "blocks_to_delete": blocks_to_delete_count,
                 "blocks_to_insert": len(new_blocks),
@@ -1659,6 +1801,10 @@ def content_replace_section(
         print_json({
             "page_id": page_id,
             "section_heading": heading_stripped,
+            "occurrence": resolved_occurrence,
+            "total_matches": len(matches),
+            "section_start_block": section_start_idx + 1,
+            "section_end_block": section_end_idx,
             "section_blocks_replaced": section_block_count,
             "blocks_deleted": len(block_ids_to_delete),
             "blocks_created": created_count,
@@ -1711,9 +1857,6 @@ def content_clear(
 # =============================================================================
 # Block Commands - Manage individual blocks
 # =============================================================================
-
-
-_HEADING_LEVELS = {"heading_1": 1, "heading_2": 2, "heading_3": 3}
 
 
 def _nest_section_under_heading(client, heading_block_id: str, progress_callback=None):
