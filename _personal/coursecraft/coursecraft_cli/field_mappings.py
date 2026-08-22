@@ -1,4 +1,6 @@
-"""Field name mappings between CLI and Airtable."""
+"""Field name mappings between CLI options and Airtable fields."""
+
+from typing import Any, Dict, Mapping
 
 FIELD_MAPPINGS = {
     'Courses': {
@@ -28,9 +30,10 @@ FIELD_MAPPINGS = {
         'course_requirements': 'Course Requirements',
         'course_requirements_link': 'Course Requirements Link',
         'course_requirements_review_ai': 'Course Requirements Review (AI)',
-        'course_requirements_approved': 'Course Requirements Approved (Pluralsight)',
         'learning_objectives_override_state': 'Learning Objectives Override State',
         'learning_objectives_override_audit': 'Learning Objectives Override Audit',
+        'course_outline_review_state': 'Course Outline Review State',
+        'course_outline_submitted_revision': 'Course Outline Submitted Revision',
         'outline_draft': 'Outline Draft',
         'outline_draft_review_ai': 'Outline Draft Review (AI)',
         'outline_draft_human_verified': 'Outline Draft Human Verified',
@@ -69,8 +72,10 @@ FIELD_MAPPINGS = {
         'slide_narration_approved': 'Slide Narration Approved',
         'slide_narration_recorded': 'Slide Narration Recorded',
         'slide_narration_complete': 'Slide Narration Complete',
-        'pluralsight_feedback_review_needed': 'Pluralsight Feedback Review Needed',
-        'post_feedback_ready_to_submit': 'Post-Feedback Ready to Submit',
+        'slide_deck_review_state': 'Slide Deck Review State',
+        'slide_deck_submitted_revision': 'Slide Deck Submitted Revision',
+        'module_video_review_state': 'Module Video Review State',
+        'module_video_submitted_revisions': 'Module Video Submitted Revisions',
         'feedback_requested': 'Feedback Requested',
         'feedback_requested_at': 'Feedback Requested At',
         'version_control': 'Version Control',
@@ -208,6 +213,32 @@ FIELD_MAPPINGS = {
         'selected_text': 'Selected Text',
     },
 }
+
+
+def collect_mapped_updates(
+    table: str, option_values: Mapping[str, Any]
+) -> Dict[str, Any]:
+    """Collect provided scalar CLI options using ``FIELD_MAPPINGS``.
+
+    Linked-record values, file reads, timestamps, and domain-specific lifecycle
+    operations remain explicit command hooks. This helper is deliberately strict:
+    an unmapped option is a programming error, not a silently skipped field.
+    """
+    if table not in FIELD_MAPPINGS:
+        raise ValueError(f"Unknown table: {table}")
+
+    mapping = FIELD_MAPPINGS[table]
+    unknown = sorted(set(option_values) - set(mapping))
+    if unknown:
+        raise ValueError(
+            f"Unknown mapped option(s) for table {table}: {', '.join(unknown)}"
+        )
+
+    return {
+        mapping[option_name]: value
+        for option_name, value in option_values.items()
+        if value is not None
+    }
 
 
 def validate_field(field: str, table: str) -> str:
