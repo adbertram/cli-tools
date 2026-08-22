@@ -421,8 +421,10 @@ def parse_help_options(section_text: str) -> List[Dict]:
         # secondary form would otherwise be captured as part of the help text.
         # Strip a leading secondary long flag (with its own optional short
         # flag) before extracting the type/help so the help stays clean.
+        secondary_flag = None
         secondary_match = re.match(r"^(--[\w-]+)(?:\s+(-\w+))?\s+(.*)", rest)
         if secondary_match:
+            secondary_flag = secondary_match.group(1)
             if short_flag is None and secondary_match.group(2):
                 short_flag = secondary_match.group(2)
             rest = secondary_match.group(3).strip()
@@ -463,6 +465,10 @@ def parse_help_options(section_text: str) -> List[Dict]:
         }
         if short_flag:
             option["short"] = short_flag
+        if opt_type == "bool":
+            option["takes_value"] = False
+        if secondary_flag:
+            option["secondary"] = secondary_flag
         if default is not None:
             option["default"] = default
         if env_var:
@@ -540,7 +546,8 @@ def discover_nested_commands(
     depth: int = 0,
     max_depth: int = 3,
     skip_list: List[str] = None,
-    timeout: int = 30
+    timeout: int = 30,
+    help_text_by_path: Optional[Dict[str, str]] = None,
 ) -> List[str]:
     """Recursively discover nested command groups.
 
@@ -561,6 +568,8 @@ def discover_nested_commands(
 
     args = path.split() + ["--help"] if path else ["--help"]
     result = run_cli_command(cli_executable, args, timeout=timeout)
+    if help_text_by_path is not None:
+        help_text_by_path[path] = result.stdout
     commands = parse_help_commands(result.stdout)
 
     discovered = []
@@ -575,7 +584,15 @@ def discover_nested_commands(
         # aggregate noun (`status`, the blessed singular-aggregate group) would
         # otherwise lose every subcommand under it from the discovered map.
         if depth == 0 or cmd not in skip_list:
-            nested = discover_nested_commands(cli_executable, new_path, depth + 1, max_depth, skip_list, timeout)
+            nested = discover_nested_commands(
+                cli_executable,
+                new_path,
+                depth + 1,
+                max_depth,
+                skip_list,
+                timeout,
+                help_text_by_path,
+            )
             discovered.extend(nested)
 
     _DISCOVER_NESTED_COMMANDS_CACHE[cache_key] = tuple(discovered)

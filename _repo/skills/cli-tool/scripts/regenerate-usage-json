@@ -74,7 +74,8 @@ def load_config() -> dict:
 def resolve_usage_path(cli_name: str, usage_json: Path | None) -> Path:
     if usage_json is not None:
         return usage_json
-    return REPO_ROOT / "_repo" / "skills" / f"{cli_name}-cli" / "usage.json"
+    skill_name = cli_name if cli_name.endswith("-cli") else f"{cli_name}-cli"
+    return REPO_ROOT / "_repo" / "skills" / skill_name / "usage.json"
 
 
 def resolve_cli_executable(
@@ -333,14 +334,16 @@ def manifest_parameters(command: dict, previous: dict) -> dict[str, list[dict]]:
         if flag_name not in flags:
             raise SystemExit(f"Machine-help option {name} is absent from the flags map")
         raw_type = flags[flag_name]
-        options.append(
-            {
-                "name": name,
-                "type": MACHINE_OPTION_TYPES.get(raw_type, raw_type.upper()),
-                "required": False,
-                "help": option_help.strip(),
-            }
-        )
+        option_type = MACHINE_OPTION_TYPES.get(raw_type, raw_type.upper())
+        option = {
+            "name": name,
+            "type": option_type,
+            "required": False,
+            "help": option_help.strip(),
+        }
+        if option_type == "bool":
+            option["takes_value"] = False
+        options.append(option)
     expected_options = [f"--{name}" for name in flags]
     if [option["name"] for option in options] != expected_options:
         raise SystemExit("Machine-help flags do not match the command help text")
@@ -595,6 +598,7 @@ def build_usage(
     max_depth = config["general"]["max_nested_depth"]
     max_depth = config.get("cli_specific", {}).get(cli_name, {}).get("max_nested_depth", max_depth)
 
+    discovery_help_by_path: dict[str, str] = {}
     discovered_paths = discover_nested_commands(
         cli_executable,
         "",
@@ -602,13 +606,15 @@ def build_usage(
         max_depth=max_depth,
         skip_list=skip_list,
         timeout=timeout,
+        help_text_by_path=discovery_help_by_path,
     )
     new_usage = dict(old_usage)
     if discovered_paths:
         live_paths = sorted(discovered_paths)
         # Fetch each path's --help exactly once; both maps derive from it.
         help_text_by_path = {
-            path: help_text(cli_executable, path, timeout)
+            path: discovery_help_by_path.get(path)
+            or help_text(cli_executable, path, timeout)
             for path in live_paths
         }
         parameters_by_path = {
