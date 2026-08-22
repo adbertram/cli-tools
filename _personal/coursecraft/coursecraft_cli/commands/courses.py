@@ -19,10 +19,34 @@ from ..course_versions import (
     update_slug,
     validate_version_identity,
 )
+from ..objective_override import (
+    AUDIT_FIELD,
+    CORRECTION_REQUESTED,
+    FEEDBACK_RESYNCED,
+    OBJECTIVES_FIELD,
+    OVERRIDE_ACTIVE,
+    OVERRIDE_AUTHORIZED,
+    REVIEW_FIELD,
+    STATE_FIELD,
+    ObjectiveOverrideError,
+    append_audit,
+    content_snapshot,
+    current_requirements_version,
+    current_state,
+    now_iso,
+    predicted_requirements_version,
+    read_replacement,
+    require_current_needs_revision_review,
+    require_pluralsight,
+    require_state,
+    sha256_text,
+    version_identity,
+)
 
 app = typer.Typer(help="Manage course records")
 
 POWERPOINT_SLIDE_DECK_VERSION_FIELD = validate_field("powerpoint_slide_deck_version", "Courses")
+COURSE_REQUIREMENTS_APPROVAL_FIELD = "Course Requirements Approved (Pluralsight)"
 
 
 class RecordingDictationMethod(str, Enum):
@@ -546,6 +570,24 @@ def update_course(
             print_error(f"Course not found: {course}")
             raise typer.Exit(1)
 
+        existing_fields = existing.get("fields", {})
+        if learning_objectives is not None and existing_fields.get("Platform") == "Pluralsight":
+            state = current_state(existing_fields)
+            if state != OVERRIDE_AUTHORIZED:
+                rendered = state or "blank"
+                print_error(
+                    "Pluralsight Learning Objectives are Curriculum-owned. "
+                    f"The override state is {rendered!r}, not {OVERRIDE_AUTHORIZED!r}. "
+                    "Complete the gated override lifecycle before replacing them."
+                )
+            else:
+                print_error(
+                    "The override is authorized, but generic courses update cannot write "
+                    "Pluralsight Learning Objectives because it would omit the required audit. "
+                    "Use courses apply-objective-override with --reason."
+                )
+            raise typer.Exit(1)
+
         # Build fields dictionary with only provided values
         fields = {}
         if name is not None:
@@ -922,6 +964,156 @@ SCAFFOLD_SCRIPT = ".agents/skills/module-scaffolding/tools/module_scaffolding.sh
 SCAFFOLD_TIMEOUT_SECONDS = 1800
 
 
+def _objective_override_course(client, course: str):
+    """Resolve one Pluralsight Course record for a dedicated override command."""
+    record_id = client.resolve_course_id(course)
+    record = client.get_record("Courses", record_id)
+    if record is None:
+        raise ObjectiveOverrideError(f"Course not found: {course}")
+    fields = record.get("fields", {})
+    require_pluralsight(fields)
+    return record_id, fields
+
+
+@app.command("request-objective-correction")
+@command
+def courses_request_objective_correction(
+    course: str = typer.Argument(..., help="Course record ID or Course ID slug"),
+):
+    """Enter the Pluralsight objective-correction lifecycle after a current failed review."""
+    try:
+        client = get_client()
+        record_id, fields = _objective_override_course(client, course)
+        if current_state(fields):
+            raise ObjectiveOverrideError(
+                "request-objective-correction requires a blank override state; "
+                f"current state is {current_state(fields)!r}."
+            )
+        version = current_requirements_version(fields)
+        review = require_current_needs_revision_review(fields, version)
+        event = {
+            "type": "correction_requested",
+            "at": now_iso(),
+            "approvalBeforeRequest": bool(fields.get(COURSE_REQUIREMENTS_APPROVAL_FIELD)),
+            "requirementsVersion": version,
+            "requirementsVersionIdentity": version_identity(version),
+            "snapshot": content_snapshot(fields),
+            "review": review,
+        }
+        updates = {
+            STATE_FIELD: CORRECTION_REQUESTED,
+            AUDIT_FIELD: append_audit(fields, event),
+            # A grandfathered/old approval is not proof of a fresh Curriculum
+            # reply. Clear it in the request transition so only a subsequent
+            # human approval can unlock Feedback Resynced.
+            COURSE_REQUIREMENTS_APPROVAL_FIELD: False,
+        }
+        client.update_record("Courses", record_id, updates)
+        print_success(f"Requested Pluralsight objective correction for {record_id}")
+        print_json({
+            "mode": "request-objective-correction",
+            "course": record_id,
+            "state": CORRECTION_REQUESTED,
+            "requirements_version": version,
+        })
+    except (ClientError, ObjectiveOverrideError) as exc:
+        print_error(str(exc))
+        raise typer.Exit(1)
+
+
+@app.command("authorize-objective-override")
+@command
+def courses_authorize_objective_override(
+    course: str = typer.Argument(..., help="Course record ID or Course ID slug"),
+):
+    """Authorize an override only after the resynced requirements still fail review."""
+    try:
+        client = get_client()
+        record_id, fields = _objective_override_course(client, course)
+        require_state(fields, FEEDBACK_RESYNCED)
+        version = current_requirements_version(fields)
+        review = require_current_needs_revision_review(fields, version)
+        event = {
+            "type": "override_authorized",
+            "at": now_iso(),
+            "requirementsVersion": version,
+            "requirementsVersionIdentity": version_identity(version),
+            "snapshot": content_snapshot(fields),
+            "postFeedbackReview": review,
+        }
+        updates = {
+            STATE_FIELD: OVERRIDE_AUTHORIZED,
+            AUDIT_FIELD: append_audit(fields, event),
+        }
+        client.update_record("Courses", record_id, updates)
+        print_success(f"Authorized learning-objective override for {record_id}")
+        print_json({
+            "mode": "authorize-objective-override",
+            "course": record_id,
+            "state": OVERRIDE_AUTHORIZED,
+            "requirements_version": version,
+        })
+    except (ClientError, ObjectiveOverrideError) as exc:
+        print_error(str(exc))
+        raise typer.Exit(1)
+
+
+@app.command("apply-objective-override")
+@command
+def courses_apply_objective_override(
+    course: str = typer.Argument(..., help="Course record ID or Course ID slug"),
+    learning_objectives: Optional[str] = typer.Option(
+        None, "--learning-objectives", help="Replacement canonical Learning Objectives"
+    ),
+    learning_objectives_file: Optional[Path] = typer.Option(
+        None, "--learning-objectives-file", help="File containing replacement objectives"
+    ),
+    reason: str = typer.Option(..., "--reason", help="Why the authorized override is required"),
+):
+    """Apply an authorized override and persist its complete provenance."""
+    try:
+        if not reason.strip():
+            raise ObjectiveOverrideError("--reason cannot be blank.")
+        file_value = None
+        if learning_objectives_file is not None:
+            if not learning_objectives_file.is_file():
+                raise ObjectiveOverrideError(f"File not found: {learning_objectives_file}")
+            file_value = learning_objectives_file.read_text(encoding="utf-8")
+        replacement = read_replacement(learning_objectives, file_value)
+
+        client = get_client()
+        record_id, fields = _objective_override_course(client, course)
+        require_state(fields, OVERRIDE_AUTHORIZED)
+        version = current_requirements_version(fields)
+        old_objectives = str(fields.get(OBJECTIVES_FIELD) or "")
+        event = {
+            "type": "override_applied",
+            "at": now_iso(),
+            "requirementsVersion": version,
+            "requirementsVersionIdentity": version_identity(version),
+            "oldLearningObjectives": old_objectives,
+            "newLearningObjectives": replacement,
+            "reason": reason.strip(),
+        }
+        updates = {
+            OBJECTIVES_FIELD: replacement,
+            STATE_FIELD: OVERRIDE_ACTIVE,
+            AUDIT_FIELD: append_audit(fields, event),
+        }
+        client.update_record("Courses", record_id, updates)
+        print_success(f"Applied learning-objective override for {record_id}")
+        print_json({
+            "mode": "apply-objective-override",
+            "course": record_id,
+            "state": OVERRIDE_ACTIVE,
+            "requirements_version": version,
+            "learning_objectives_sha256": sha256_text(replacement),
+        })
+    except (ClientError, ObjectiveOverrideError, OSError) as exc:
+        print_error(str(exc))
+        raise typer.Exit(1)
+
+
 @app.command("sync-requirements")
 @command
 def courses_sync_requirements(
@@ -940,7 +1132,9 @@ def courses_sync_requirements(
     Name, Course ID, Skill Path, Path Placement, Job Role, Content Level, Content Tags,
     Target Length (Min), and Learning Objectives.
 
-    It writes NOTHING else. Short Description, Long Description, Learner Profile,
+    Outside the gated objective-override exception it writes nothing else. During that
+    exception it also appends the override audit and advances its fail-closed state.
+    Short Description, Long Description, Learner Profile,
     (Required) Learner Prerequisites and Storyline are ours and are not knowable until
     Pluralsight approves the outline draft; module-scaffolding writes them after approval.
 
@@ -965,6 +1159,22 @@ def courses_sync_requirements(
             print_error(
                 f"sync-requirements is Pluralsight-only; {course} has Platform={platform!r}. "
                 "A Udemy course has no Curriculum-supplied requirements."
+            )
+            raise typer.Exit(1)
+
+        override_state = current_state(current)
+        if override_state in {FEEDBACK_RESYNCED, OVERRIDE_AUTHORIZED}:
+            print_error(
+                "sync-requirements cannot run while the learning-objective override "
+                f"lifecycle is in state {override_state!r}. Complete the current "
+                "transition before starting another Curriculum resync."
+            )
+            raise typer.Exit(1)
+
+        if override_state == CORRECTION_REQUESTED and not current.get(COURSE_REQUIREMENTS_APPROVAL_FIELD):
+            print_error(
+                "Correction Requested can transition to Feedback Resynced only after "
+                "Course Requirements Approved (Pluralsight) is checked."
             )
             raise typer.Exit(1)
 
@@ -996,6 +1206,47 @@ def courses_sync_requirements(
 
         fields = dict(parsed)
         fields["Course Requirements"] = outline_text
+        predicted_version = None
+        if override_state in {CORRECTION_REQUESTED, OVERRIDE_ACTIVE}:
+            before_snapshot = content_snapshot(current)
+            before_version = current_requirements_version(current)
+            predicted_version = predicted_requirements_version(current, outline_text)
+
+            if override_state == OVERRIDE_ACTIVE:
+                # Once authorized and applied, Curriculum resyncs cannot silently
+                # replace the canonical override. Every other parsed field still syncs.
+                fields.pop(OBJECTIVES_FIELD, None)
+                event_type = "requirements_resynced_override_active"
+                next_state = OVERRIDE_ACTIVE
+            else:
+                event_type = "feedback_resynced"
+                next_state = FEEDBACK_RESYNCED
+
+            after_snapshot = {
+                "courseRequirements": outline_text,
+                "learningObjectives": (
+                    before_snapshot["learningObjectives"]
+                    if override_state == OVERRIDE_ACTIVE
+                    else str(parsed.get(OBJECTIVES_FIELD) or "")
+                ),
+            }
+            event = {
+                "type": event_type,
+                "at": now_iso(),
+                "approvedBeforeSync": bool(current.get(COURSE_REQUIREMENTS_APPROVAL_FIELD)),
+                "before": {
+                    "requirementsVersion": before_version,
+                    "requirementsVersionIdentity": version_identity(before_version),
+                    "snapshot": before_snapshot,
+                },
+                "after": {
+                    "requirementsVersion": predicted_version,
+                    "requirementsVersionIdentity": version_identity(predicted_version),
+                    "snapshot": after_snapshot,
+                },
+            }
+            fields[STATE_FIELD] = next_state
+            fields[AUDIT_FIELD] = append_audit(current, event)
         # The approval checkbox asserts "Curriculum returned revised requirements". Every
         # sync supersedes that claim, so it clears on every sync -- not only when the
         # document text changed. stamp_versions clears it through human_verified_pairs on a
@@ -1003,8 +1254,6 @@ def courses_sync_requirements(
         # leave the course pre-approved for a revision round that never happened. It is a
         # SEPARATE write: the client refuses a content field and its paired review field in
         # one call.
-        APPROVAL_FIELD = "Course Requirements Approved (Pluralsight)"
-
         if dry_run:
             print_json({
                 "mode": "sync-requirements",
@@ -1014,26 +1263,53 @@ def courses_sync_requirements(
                 "requirements_characters": len(outline_text),
                 "course_id_write_skipped": bool(current.get("Course ID")) and parsed_slug is not None,
                 "fields_would_write": {
-                    key: (f"<{len(value)} characters>" if key == "Course Requirements" else value)
+                    key: (
+                        f"<{len(value)} characters>"
+                        if key in {"Course Requirements", AUDIT_FIELD}
+                        else value
+                    )
                     for key, value in fields.items()
                 },
-                "approval_would_clear": bool(current.get(APPROVAL_FIELD)),
+                "approval_would_clear": bool(current.get(COURSE_REQUIREMENTS_APPROVAL_FIELD)),
+                "override_state_before": override_state or None,
+                "override_state_after": fields.get(STATE_FIELD, override_state or None),
+                "requirements_version_after": predicted_version,
             })
             raise typer.Exit(0)
+
+        if override_state == CORRECTION_REQUESTED and current.get(REVIEW_FIELD):
+            # Clear the pre-feedback verdict in its own verified write BEFORE
+            # changing Course Requirements. The centralized versioning engine
+            # rejects content + paired review in one call. Clearing first also
+            # leaves Correction Requested retryable if the later sync fails,
+            # while guaranteeing byte-identical replies still require a fresh
+            # post-feedback review.
+            client.update_record("Courses", record_id, {REVIEW_FIELD: ""})
 
         client.update_record("Courses", record_id, fields)
 
         # Separate write, per the paired-review-field rule above.
-        if current.get(APPROVAL_FIELD):
-            client.update_record("Courses", record_id, {APPROVAL_FIELD: False})
+        if current.get(COURSE_REQUIREMENTS_APPROVAL_FIELD):
+            client.update_record(
+                "Courses", record_id, {COURSE_REQUIREMENTS_APPROVAL_FIELD: False}
+            )
 
         readback = client.get_record("Courses", record_id).get("fields", {})
         mismatches = [
             key for key, value in fields.items()
-            if readback.get(key) != value
+            if not (value == "" and readback.get(key) in (None, ""))
+            and readback.get(key) != value
         ]
-        if readback.get(APPROVAL_FIELD):
-            mismatches.append(APPROVAL_FIELD)
+        if readback.get(COURSE_REQUIREMENTS_APPROVAL_FIELD):
+            mismatches.append(COURSE_REQUIREMENTS_APPROVAL_FIELD)
+        if predicted_version is not None:
+            try:
+                persisted_version = current_requirements_version(readback)
+            except ObjectiveOverrideError as exc:
+                print_error(str(exc))
+                raise typer.Exit(1)
+            if persisted_version != predicted_version:
+                mismatches.append("Version Control/course.requirements")
         if mismatches:
             print_error(
                 "sync-requirements wrote but these fields did not persist as sent: "
@@ -1050,8 +1326,10 @@ def courses_sync_requirements(
             "requirements_characters": len(outline_text),
             "fields_written": sorted(fields),
             "status": readback.get("Status"),
+            "override_state": readback.get(STATE_FIELD),
+            "requirements_version": predicted_version,
         })
-    except ClientError as exc:
+    except (ClientError, ObjectiveOverrideError) as exc:
         print_error(str(exc))
         raise typer.Exit(1)
 
@@ -1128,6 +1406,15 @@ COMMAND_CREDENTIALS = {
         "custom"
     ],
     "sync-requirements": [
+        "custom"
+    ],
+    "request-objective-correction": [
+        "custom"
+    ],
+    "authorize-objective-override": [
+        "custom"
+    ],
+    "apply-objective-override": [
         "custom"
     ],
     "delete": [

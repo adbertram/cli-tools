@@ -24,7 +24,10 @@ coursecraft <command-group> <action> [arguments] [options]
 | `coursecraft slides update <recID> --script "..."` | Update slide script |
 | `coursecraft course-outline read -l <doc-id>` | Read outline from Google Doc |
 | `coursecraft courses get <slug> --include-clips` | Get course with nested clips |
-| `coursecraft courses sync-requirements <slug>` | Sync the Pluralsight Curriculum course requirements from the linked Google Doc; no Deadline or child/workflow writes |
+| `coursecraft courses sync-requirements <slug>` | Sync linked Pluralsight requirements; no Deadline/child writes, with gated audit/state transitions during an objective-override exception |
+| `coursecraft courses request-objective-correction <slug>` | Start the gated Pluralsight objective-correction exception after a current NEEDS REVISION review |
+| `coursecraft courses authorize-objective-override <slug>` | Authorize an override only after approved feedback was resynced and a fresh current review still reads NEEDS REVISION |
+| `coursecraft courses apply-objective-override <slug> --learning-objectives-file <path> --reason <text>` | Write canonical objectives and append the authorized override provenance |
 | `coursecraft feedback list --slide <recID>` | List Feedback rows linked to a slide; do not add --filter to linked feedback reads |
 | `coursecraft feedback update <recID> --processing-status Applied --processed-at <iso>` | Stamp a Feedback row after processing |
 | `coursecraft voice-recordings preview --demo <recID>` | Read-only normalized narration/hash and cue/anchor validation before generation |
@@ -41,6 +44,20 @@ with `--course-requirements-approved` and clear it with
 </principle>
 
 <essential_principles>
+<principle name="Pluralsight Objective Overrides Are A Gated Exception">
+Never use generic `courses update --learning-objectives` for a Pluralsight course.
+Use the dedicated state machine in order: `request-objective-correction`, approve and
+`sync-requirements`, persist a fresh post-feedback course.requirements review,
+`authorize-objective-override`, then `apply-objective-override --reason ...`.
+
+The commands fail closed against `Learning Objectives Override State` and the exact
+`Reviewed-Version: course.requirements@vN sha256:<hash>` trailer. The audit field is a
+schema-versioned JSON event document whose prior events are preserved on every append.
+`request-objective-correction` also clears any pre-existing Course Requirements approval;
+only a fresh approval after that request can unlock the feedback-resync transition.
+When the state is `Override Active`, later `sync-requirements` calls preserve the canonical
+`Learning Objectives` override while syncing the remaining Curriculum fields.
+</principle>
 <principle name="Usage Reference">
 **MANDATORY: Consult the adjacent `usage.json` before executing ANY `coursecraft` command.**
 Use `/Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills/coursecraft-cli/usage.json`; it contains the generated command tree with arguments, options, examples, and usage instructions. Do not look for command syntax in the CourseCraft project `.agents` tree, the CLI source folder, the installed uv tool directory, or by importing `coursecraft_cli` with ambient `python3`.
@@ -110,7 +127,7 @@ coursecraft feedback update recXXX --processing-status Applied --processed-at "2
 - **auth** -- Authentication management via Airtable PAT delegation
 - **cache** -- Local response cache management
 - **courses** -- CRUD for course records with nested creation and --active/--include-modules/--include-clips support
-- **courses sync-requirements** -- parses the existing Course record's `Course Requirements Link` with the canonical outline parser, stores the document verbatim in `Course Requirements`, and updates only the Pluralsight-owned Course attributes. It never requires or writes Deadline and never touches modules, clips, folders, Slack fields, or approval state. Full `courses scaffold` retains its required `--deadline`.
+- **courses sync-requirements** -- parses the existing Course record's `Course Requirements Link` with the canonical outline parser, stores the document verbatim in `Course Requirements`, and updates the Pluralsight-owned Course attributes. It never requires or writes Deadline and never touches modules, clips, folders, or Slack fields. During the objective-override exception only, it also appends the audit, advances `Correction Requested` to `Feedback Resynced`, clears the pre-feedback review, and preserves `Learning Objectives` once the state is `Override Active`. Full `courses scaffold` retains its required `--deadline`.
 - **course-outline** -- Read and update course outline Google Docs, sync to database
 - **modules** -- CRUD for module records with batch clip creation and ASCII tree display via show
 - **clips** -- CRUD for clip records with batch creation and M1C1/M2C3 shorthand support
