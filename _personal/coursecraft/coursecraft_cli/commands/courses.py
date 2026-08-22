@@ -1,6 +1,6 @@
 """Courses command module."""
-from datetime import datetime, timezone
 from enum import Enum
+import json
 import os
 import typer
 from typing import Optional, List, Dict
@@ -13,30 +13,56 @@ from ..client import get_client, ClientError
 from ..coursecraft_project import run_coursecraft_script, script_flags
 from ..output import apply_properties_filter, project_record, print_success, print_error, print_info, print_json, print_table
 from ..filter_map import translate_filters
-from ..field_mappings import validate_field
+from ..field_mappings import collect_mapped_updates, validate_field
 from ..course_versions import (
+    LegacyImportBaseError,
     VersionIdentityError,
     update_slug,
+    validate_legacy_import_base,
     validate_version_identity,
+)
+from ..external_review import (
+    ExternalReviewError,
+    execute_migration_initialization,
+    execute_requirements_migration_rollback,
+    execute_requirements_migration_resolution,
+    execute_review_migration_rollback,
+    execute_transition,
 )
 from ..objective_override import (
     AUDIT_FIELD,
+    CARRY_FORWARD_PLAN_FIELD,
+    CARRY_FORWARD_PLAN_SLUG,
     CORRECTION_REQUESTED,
     FEEDBACK_RESYNCED,
     OBJECTIVES_FIELD,
+    OBJECTIVES_OVERRIDE_SLUG,
+    OUTLINE_DRAFT_SLUG,
+    OUTLINE_REVIEW_FIELD,
     OVERRIDE_ACTIVE,
     OVERRIDE_AUTHORIZED,
     REVIEW_FIELD,
     STATE_FIELD,
+    UPDATE_RECEIVED,
     ObjectiveOverrideError,
     append_audit,
+    artifact_version_entry,
+    artifact_version_identity,
     content_snapshot,
+    current_artifact_version,
+    current_json_artifact_version,
     current_requirements_version,
     current_state,
+    load_audit,
     now_iso,
     predicted_requirements_version,
     read_replacement,
+    read_json_replacement,
+    require_current_needs_revision_artifact_review,
     require_current_needs_revision_review,
+    require_current_pass_carry_forward_review,
+    require_carry_forward_v2_migration,
+    require_no_outline_revision,
     require_pluralsight,
     require_state,
     sha256_text,
@@ -46,9 +72,6 @@ from ..objective_override import (
 app = typer.Typer(help="Manage course records")
 
 POWERPOINT_SLIDE_DECK_VERSION_FIELD = validate_field("powerpoint_slide_deck_version", "Courses")
-COURSE_REQUIREMENTS_APPROVAL_FIELD = "Course Requirements Approved (Pluralsight)"
-
-
 class RecordingDictationMethod(str, Enum):
     """Allowed values for the Recording Dictation Method field."""
     AUTOMATIC = "Automatic Narration Generation"
@@ -504,9 +527,6 @@ def update_course(
     deadline: Optional[str] = typer.Option(None, "--deadline", help="Course deadline (YYYY-MM-DD)"),
     course_requirements_link: Optional[str] = typer.Option(None, "--course-requirements-link", "-l", help="Google Doc URL for the Pluralsight course requirements"),
     feedback_sheet_id: Optional[str] = typer.Option(None, "--feedback-sheet-id", help="Google Sheet ID for Pluralsight recording feedback"),
-    course_outline_submitted: Optional[bool] = typer.Option(None, "--course-outline-submitted/--no-course-outline-submitted", help="Mark whether the course outline has been submitted to Pluralsight"),
-    course_outline_approved_pluralsight: Optional[bool] = typer.Option(None, "--course-outline-approved-pluralsight/--no-course-outline-approved-pluralsight", help="Mark whether the course outline has been approved by Pluralsight"),
-    outline_submitted_at: Optional[str] = typer.Option(None, "--outline-submitted-at", help="ISO 8601 datetime the outline was submitted (auto-stamped when --course-outline-submitted is set and field is empty)"),
     short_description: Optional[str] = typer.Option(None, "--short-description", help="Brief course summary"),
     long_description: Optional[str] = typer.Option(None, "--long-description", help="Detailed description"),
     content_level: Optional[str] = typer.Option(None, "--content-level", help="Entry-level, Intermediate, Advanced"),
@@ -519,10 +539,9 @@ def update_course(
     learning_objectives: Optional[str] = typer.Option(None, "--learning-objectives", help="Course learning objectives"),
     research_report: Optional[str] = typer.Option(None, "--research-report", help="Research report content"),
     research_report_file: Optional[Path] = typer.Option(None, "--research-report-file", help="Path to file containing research report content"),
-    course_requirements: Optional[str] = typer.Option(None, "--course-requirements", help="The Pluralsight course requirements Google Doc, verbatim"),
-    course_requirements_file: Optional[Path] = typer.Option(None, "--course-requirements-file", help="Path to a file containing the course requirements"),
+    course_requirements: Optional[str] = typer.Option(None, "--course-requirements", help="Course requirements content; read-only after the Pluralsight correction lifecycle starts"),
+    course_requirements_file: Optional[Path] = typer.Option(None, "--course-requirements-file", help="File containing course requirements; read-only after the Pluralsight correction lifecycle starts"),
     course_requirements_review_ai: Optional[str] = typer.Option(None, "--course-requirements-review-ai", help="AI review verdict for course.requirements"),
-    course_requirements_approved: Optional[bool] = typer.Option(None, "--course-requirements-approved/--no-course-requirements-approved", help="Set or clear Pluralsight's sign-off on the revised course requirements; exits Waiting for Course Requirements Approval"),
     outline_draft: Optional[str] = typer.Option(None, "--outline-draft", help="Course Outline Draft Markdown content"),
     outline_draft_file: Optional[Path] = typer.Option(None, "--outline-draft-file", help="Path to file containing the Course Outline Draft Markdown"),
     outline_draft_review_ai: Optional[str] = typer.Option(None, "--outline-draft-review-ai", help="AI review verdict for course.outline_draft"),
@@ -571,6 +590,24 @@ def update_course(
             raise typer.Exit(1)
 
         existing_fields = existing.get("fields", {})
+        if (
+            (course_requirements is not None or course_requirements_file is not None)
+            and existing_fields.get("Platform") == "Pluralsight"
+        ):
+            state = current_state(existing_fields)
+            if state in {
+                CORRECTION_REQUESTED,
+                FEEDBACK_RESYNCED,
+                OVERRIDE_AUTHORIZED,
+                OVERRIDE_ACTIVE,
+            }:
+                print_error(
+                    "Course Requirements is read-only provenance after the Pluralsight "
+                    f"correction lifecycle starts (state {state!r}). Use courses "
+                    "sync-requirements to refresh it verbatim from Course Requirements Link."
+                )
+                raise typer.Exit(1)
+
         if learning_objectives is not None and existing_fields.get("Platform") == "Pluralsight":
             state = current_state(existing_fields)
             if state != OVERRIDE_AUTHORIZED:
@@ -589,47 +626,38 @@ def update_course(
             raise typer.Exit(1)
 
         # Build fields dictionary with only provided values
-        fields = {}
-        if name is not None:
-            fields["Name"] = name
-        if course_id_field is not None:
-            fields["Course ID"] = course_id_field
-        if target_length is not None:
-            fields["Target Length (Min)"] = target_length
-        if deadline is not None:
-            fields["Deadline"] = deadline
-        if course_requirements_link is not None:
-            fields["Course Requirements Link"] = course_requirements_link
-        if feedback_sheet_id is not None:
-            fields["Feedback Sheet ID"] = feedback_sheet_id
-        if course_outline_submitted is not None:
-            fields["Course Outline Submitted"] = course_outline_submitted
-        if outline_submitted_at is not None:
-            fields["Course Outline Submitted Date"] = outline_submitted_at
-        elif course_outline_submitted is True and not existing.get("fields", {}).get("Course Outline Submitted Date"):
-            fields["Course Outline Submitted Date"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
-        if course_outline_approved_pluralsight is not None:
-            fields["Course Outline Approved (Pluralsight)"] = course_outline_approved_pluralsight
-        if short_description is not None:
-            fields["Short Description"] = short_description
-        if long_description is not None:
-            fields["Long Description"] = long_description
-        if content_level is not None:
-            fields["Content Level"] = content_level
-        if content_tags is not None:
-            fields["Content Tags"] = content_tags
-        if job_role is not None:
-            fields["Job Role"] = job_role
-        if learner_profile is not None:
-            fields["Learner Profile"] = learner_profile
-        if prerequisites is not None:
-            fields["(Required) Learner Prerequisites"] = prerequisites
-        if platform_versions is not None:
-            fields["Platform/Tools"] = platform_versions
-        if storyline is not None:
-            fields["Storyline"] = storyline
-        if learning_objectives is not None:
-            fields["Learning Objectives"] = learning_objectives
+        fields = collect_mapped_updates(
+            "Courses",
+            {
+                "name": name,
+                "course_id": course_id_field,
+                "target_length": target_length,
+                "deadline": deadline,
+                "course_requirements_link": course_requirements_link,
+                "feedback_sheet_id": feedback_sheet_id,
+                "short_description": short_description,
+                "long_description": long_description,
+                "content_level": content_level,
+                "content_tags": content_tags,
+                "job_role": job_role,
+                "learner_profile": learner_profile,
+                "prerequisites": prerequisites,
+                "platform_versions": platform_versions,
+                "storyline": storyline,
+                "learning_objectives": learning_objectives,
+                "course_requirements_review_ai": course_requirements_review_ai,
+                "outline_draft_review_ai": outline_draft_review_ai,
+                "outline_draft_human_verified": outline_draft_human_verified,
+                "notes": notes,
+                "skill_path": skill_path,
+                "path_placement": path_placement,
+                "powerpoint_slide_deck_version": powerpoint_slide_deck_version,
+                "feedback_requested": feedback_requested,
+                "feedback_requested_at": feedback_requested_at,
+                "version": version,
+                "carry_forward_plan_human_verified": carry_forward_plan_human_verified,
+            },
+        )
         if research_report_file is not None:
             if not research_report_file.exists():
                 print_error(f"File not found: {research_report_file}")
@@ -644,10 +672,6 @@ def update_course(
             fields["Course Requirements"] = course_requirements_file.read_text()
         elif course_requirements is not None:
             fields["Course Requirements"] = course_requirements
-        if course_requirements_review_ai is not None:
-            fields["Course Requirements Review (AI)"] = course_requirements_review_ai
-        if course_requirements_approved is not None:
-            fields["Course Requirements Approved (Pluralsight)"] = course_requirements_approved
         if outline_draft_file is not None:
             if not outline_draft_file.exists():
                 print_error(f"File not found: {outline_draft_file}")
@@ -655,22 +679,10 @@ def update_course(
             fields["Outline Draft"] = outline_draft_file.read_text()
         elif outline_draft is not None:
             fields["Outline Draft"] = outline_draft
-        if outline_draft_review_ai is not None:
-            fields["Outline Draft Review (AI)"] = outline_draft_review_ai
-        if outline_draft_human_verified is not None:
-            fields["Outline Draft Human Verified"] = outline_draft_human_verified
-        if notes is not None:
-            fields["Notes"] = notes
-        if skill_path is not None:
-            fields["Skill Path"] = skill_path
-        if path_placement is not None:
-            fields["Path Placement"] = path_placement
         if slack_channel_name is not None:
             fields["Slack Channel Name"] = slack_channel_name
         if recording_dictation_method is not None:
             fields["Recording Dictation Method"] = recording_dictation_method.value
-        if powerpoint_slide_deck_version is not None:
-            fields[POWERPOINT_SLIDE_DECK_VERSION_FIELD] = powerpoint_slide_deck_version
         if active is not None:
             fields["Active"] = str(active).lower()
 
@@ -701,14 +713,7 @@ def update_course(
             fields["Brainstorming Outline Fact Checked"] = brainstorming_outline_fact_checked
 
         # Handle feedback gate fields
-        if feedback_requested is not None:
-            fields["Feedback Requested"] = feedback_requested
-        if feedback_requested_at is not None:
-            fields["Feedback Requested At"] = feedback_requested_at
-
         # Course-update identity and artifacts
-        if version is not None:
-            fields["Version"] = version
         if base_course is not None:
             fields["Base Course"] = [client.resolve_course_id(base_course)]
         if prior_course_inventory_file is not None:
@@ -732,8 +737,18 @@ def update_course(
             fields["Carry-Forward Plan"] = carry_forward_plan_file.read_text()
         elif carry_forward_plan is not None:
             fields["Carry-Forward Plan"] = carry_forward_plan
-        if carry_forward_plan_human_verified is not None:
-            fields["Carry-Forward Plan Human Verified"] = carry_forward_plan_human_verified
+        if "Carry-Forward Plan" in fields and existing_fields.get("Status") != "Gap Analysis":
+            ledger_raw = existing_fields.get("Version Control") or "{}"
+            try:
+                ledger = json.loads(ledger_raw)
+            except json.JSONDecodeError as exc:
+                raise ObjectiveOverrideError(f"Version Control is not valid JSON: {exc}") from None
+            if isinstance(ledger, dict) and CARRY_FORWARD_PLAN_SLUG in ledger:
+                raise ObjectiveOverrideError(
+                    "The completed Carry-Forward Plan cannot be changed through generic "
+                    "courses update. Use courses migrate-carry-forward-plan only for the "
+                    "reviewed pre-outline schema v1 to v2 structural migration."
+                )
 
         if not fields:
             print_error("No fields to update. Provide at least one field option.")
@@ -754,7 +769,7 @@ def update_course(
         # Output the record ID for scripting
         print_json(course_record_id)
 
-    except ClientError as e:
+    except (ClientError, ObjectiveOverrideError) as e:
         print_error(str(e))
         raise typer.Exit(1)
 
@@ -862,7 +877,13 @@ INTAKE_INHERITED_FIELDS = (
 )
 
 
-def _scaffold_intake(client, base: str, deadline: str, dry_run: bool) -> int:
+def _scaffold_intake(
+    client,
+    base: str,
+    deadline: Optional[str],
+    dry_run: bool,
+    legacy_import_base: bool,
+) -> int:
     """The intake touch: create the next version of a completed course.
 
     No outline is involved. Computes Version, the ``-vN`` slug, and the Base Course link,
@@ -877,13 +898,24 @@ def _scaffold_intake(client, base: str, deadline: str, dry_run: bool) -> int:
     base_fields = base_record.get("fields", {})
 
     base_status = base_fields.get("Status")
-    if base_status != "Complete":
+    if base_status != "Complete" and not legacy_import_base:
         print_error(
             f"Base course {base_fields.get('Course ID', base_record_id)!r} has Status "
             f"{base_status!r}, not 'Complete'. An update may only be taken from a completed "
-            f"course. There is no override."
+            f"course. For a proven published pre-CourseCraft import, pass "
+            f"--legacy-import-base."
         )
         return 1
+
+    legacy_import_evidence = None
+    if legacy_import_base:
+        try:
+            legacy_import_evidence = validate_legacy_import_base(
+                client, base_record, COURSES_ROOT
+            )
+        except LegacyImportBaseError as e:
+            print_error(str(e))
+            return 1
 
     base_version = base_fields.get("Version")
     if base_version is None or base_version == "":
@@ -902,10 +934,11 @@ def _scaffold_intake(client, base: str, deadline: str, dry_run: bool) -> int:
 
     fields = {
         "Course ID": slug,
-        "Deadline": deadline,
         "Version": version,
         "Base Course": [base_record_id],
     }
+    if deadline is not None:
+        fields["Deadline"] = deadline
     for name in INTAKE_INHERITED_FIELDS:
         value = base_fields.get(name)
         if value not in (None, "", []):
@@ -915,13 +948,20 @@ def _scaffold_intake(client, base: str, deadline: str, dry_run: bool) -> int:
 
     if dry_run:
         print_info("DRY RUN: planning only -- no records, fields, or folders will be created")
-        print_json({
+        result = {
             "mode": "intake",
             "dry_run": True,
-            "base_course": {"id": base_record_id, "course_id": base_slug, "version": int(base_version)},
+            "base_course": {
+                "id": base_record_id,
+                "course_id": base_slug,
+                "version": int(base_version),
+            },
             "course": {"course_id": slug, "version": version, "fields": fields},
             "course_folder_path": str(folder_path),
-        })
+        }
+        if legacy_import_evidence is not None:
+            result["legacy_import_evidence"] = legacy_import_evidence
+        print_json(result)
         return 0
 
     _refuse_duplicate_course_name(client, fields["Name"], allow_duplicate=True)
@@ -942,10 +982,14 @@ def _scaffold_intake(client, base: str, deadline: str, dry_run: bool) -> int:
 
     created = client.get_record("Courses", record_id)
     created_fields = created.get("fields", {}) if created else {}
-    print_json({
+    result = {
         "mode": "intake",
         "dry_run": False,
-        "base_course": {"id": base_record_id, "course_id": base_slug, "version": int(base_version)},
+        "base_course": {
+            "id": base_record_id,
+            "course_id": base_slug,
+            "version": int(base_version),
+        },
         "course": {
             "id": record_id,
             "course_id": created_fields.get("Course ID"),
@@ -954,7 +998,10 @@ def _scaffold_intake(client, base: str, deadline: str, dry_run: bool) -> int:
             "course_folder_root": created_fields.get("Course Folder Root"),
         },
         "course_folder_path": str(folder_path),
-    })
+    }
+    if legacy_import_evidence is not None:
+        result["legacy_import_evidence"] = legacy_import_evidence
+    print_json(result)
     return 0
 
 
@@ -964,15 +1011,32 @@ SCAFFOLD_SCRIPT = ".agents/skills/module-scaffolding/tools/module_scaffolding.sh
 SCAFFOLD_TIMEOUT_SECONDS = 1800
 
 
-def _objective_override_course(client, course: str):
-    """Resolve one Pluralsight Course record for a dedicated override command."""
+def _course_record(client, course: str):
+    """Resolve one Course record for a dedicated lifecycle command."""
     record_id = client.resolve_course_id(course)
     record = client.get_record("Courses", record_id)
     if record is None:
         raise ObjectiveOverrideError(f"Course not found: {course}")
     fields = record.get("fields", {})
+    return record_id, fields
+
+
+def _objective_override_course(client, course: str):
+    """Resolve one Pluralsight Course record for a dedicated override command."""
+    record_id, fields = _course_record(client, course)
     require_pluralsight(fields)
     return record_id, fields
+
+
+def _read_carry_forward_replacement(
+    inline: Optional[str], file_path: Optional[Path]
+) -> str:
+    file_value = None
+    if file_path is not None:
+        if not file_path.is_file():
+            raise ObjectiveOverrideError(f"File not found: {file_path}")
+        file_value = file_path.read_text(encoding="utf-8")
+    return read_json_replacement(inline, file_value)
 
 
 @app.command("request-objective-correction")
@@ -994,7 +1058,6 @@ def courses_request_objective_correction(
         event = {
             "type": "correction_requested",
             "at": now_iso(),
-            "approvalBeforeRequest": bool(fields.get(COURSE_REQUIREMENTS_APPROVAL_FIELD)),
             "requirementsVersion": version,
             "requirementsVersionIdentity": version_identity(version),
             "snapshot": content_snapshot(fields),
@@ -1003,10 +1066,6 @@ def courses_request_objective_correction(
         updates = {
             STATE_FIELD: CORRECTION_REQUESTED,
             AUDIT_FIELD: append_audit(fields, event),
-            # A grandfathered/old approval is not proof of a fresh Curriculum
-            # reply. Clear it in the request transition so only a subsequent
-            # human approval can unlock Feedback Resynced.
-            COURSE_REQUIREMENTS_APPROVAL_FIELD: False,
         }
         client.update_record("Courses", record_id, updates)
         print_success(f"Requested Pluralsight objective correction for {record_id}")
@@ -1021,26 +1080,268 @@ def courses_request_objective_correction(
         raise typer.Exit(1)
 
 
+@app.command("mark-requirements-update-received")
+@command
+def courses_mark_requirements_update_received(
+    course: str = typer.Argument(..., help="Course record ID or Course ID slug"),
+):
+    """Record the external return of corrected Pluralsight requirements."""
+    try:
+        client = get_client()
+        record_id, fields = _objective_override_course(client, course)
+        require_state(fields, CORRECTION_REQUESTED)
+        audit = load_audit(fields)
+        correction_event = audit["events"][-1]
+        version = current_requirements_version(fields)
+        if correction_event.get("requirementsVersion") != version:
+            raise ObjectiveOverrideError(
+                "The correction request audit does not match the current Course "
+                "Requirements revision."
+            )
+        event = {
+            "type": "update_received",
+            "at": now_iso(),
+            "correctionRequestedAt": correction_event.get("at"),
+            "requirementsVersion": version,
+            "requirementsVersionIdentity": version_identity(version),
+        }
+        persisted = client.update_record(
+            "Courses",
+            record_id,
+            {
+                STATE_FIELD: UPDATE_RECEIVED,
+                AUDIT_FIELD: append_audit(fields, event),
+            },
+        )
+        print_success(f"Marked Pluralsight requirements update received for {record_id}")
+        print_json({
+            "mode": "mark-requirements-update-received",
+            "course": record_id,
+            "state": persisted.get("fields", {}).get(STATE_FIELD),
+            "requirements_version": version,
+        })
+    except (ClientError, ObjectiveOverrideError) as exc:
+        print_error(str(exc))
+        raise typer.Exit(1)
+
+
+def _run_outline_transition(course: str, action: str) -> None:
+    client = get_client()
+    record_id = client.resolve_course_id(course)
+    result = execute_transition(
+        client, "course_outline", action, "operator", record_id
+    )
+    print_success(f"Applied course outline action {action!r} to {record_id}")
+    print_json(result)
+
+
+@app.command("submit-outline-for-review")
+@command
+def courses_submit_outline_for_review(
+    course: str = typer.Argument(..., help="Course record ID or Course ID slug"),
+):
+    """Submit or resubmit the current ready Course Outline revision."""
+    try:
+        _run_outline_transition(course, "submit")
+    except (ClientError, ExternalReviewError, ObjectiveOverrideError) as exc:
+        print_error(str(exc))
+        raise typer.Exit(1)
+
+
+@app.command("mark-outline-changes-requested")
+@command
+def courses_mark_outline_changes_requested(
+    course: str = typer.Argument(..., help="Course record ID or Course ID slug"),
+):
+    """Record external Course Outline changes requested."""
+    try:
+        _run_outline_transition(course, "request_changes")
+    except (ClientError, ExternalReviewError, ObjectiveOverrideError) as exc:
+        print_error(str(exc))
+        raise typer.Exit(1)
+
+
+@app.command("mark-outline-approved")
+@command
+def courses_mark_outline_approved(
+    course: str = typer.Argument(..., help="Course record ID or Course ID slug"),
+):
+    """Record external approval of the exact submitted Course Outline revision."""
+    try:
+        _run_outline_transition(course, "approve")
+    except (ClientError, ExternalReviewError, ObjectiveOverrideError) as exc:
+        print_error(str(exc))
+        raise typer.Exit(1)
+
+
+@app.command("migrate-outline-review", hidden=True)
+@command
+def courses_migrate_outline_review(
+    course: str = typer.Argument(..., help="Course record ID or Course ID slug"),
+    resolution_file: Optional[Path] = typer.Option(
+        None,
+        "--resolution-file",
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        resolve_path=True,
+        help="Planner-sealed resolution artifact; permitted only for an exact conflict baseline",
+    ),
+):
+    """Initialize Course Outline lifecycle from fixed legacy fields."""
+    try:
+        client = get_client()
+        record_id = client.resolve_course_id(course)
+        print_json(
+            execute_migration_initialization(
+                client, "course_outline", record_id, resolution_file
+            )
+        )
+    except (ClientError, ExternalReviewError, ObjectiveOverrideError) as exc:
+        print_error(str(exc))
+        raise typer.Exit(1)
+
+
+@app.command("migrate-requirements-return", hidden=True)
+@command
+def courses_migrate_requirements_return(
+    course: str = typer.Argument(..., help="Course record ID or Course ID slug"),
+    resolution_file: Path = typer.Option(
+        ...,
+        "--resolution-file",
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        resolve_path=True,
+        help="Planner-sealed course-requirements conflict resolution artifact",
+    ),
+):
+    """Apply one planner-sealed Course Requirements migration resolution."""
+    try:
+        client = get_client()
+        record_id = client.resolve_course_id(course)
+        print_json(
+            execute_requirements_migration_resolution(
+                client, record_id, resolution_file
+            )
+        )
+    except (ClientError, ExternalReviewError, ObjectiveOverrideError) as exc:
+        print_error(str(exc))
+        raise typer.Exit(1)
+
+
+@app.command("rollback-requirements-return", hidden=True)
+@command
+def courses_rollback_requirements_return(
+    course: str = typer.Argument(..., help="Course record ID or Course ID slug"),
+    rollback_plan: Path = typer.Option(
+        ...,
+        "--rollback-plan",
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        resolve_path=True,
+        help="Planner-sealed lifecycle rollback plan",
+    ),
+):
+    """Restore Course Requirements migration fields from a sealed baseline."""
+    try:
+        client = get_client()
+        record_id = client.resolve_course_id(course)
+        print_json(
+            execute_requirements_migration_rollback(
+                client, record_id, rollback_plan
+            )
+        )
+    except (ClientError, ExternalReviewError, ObjectiveOverrideError) as exc:
+        print_error(str(exc))
+        raise typer.Exit(1)
+
+
+@app.command("rollback-outline-review", hidden=True)
+@command
+def courses_rollback_outline_review(
+    course: str = typer.Argument(..., help="Course record ID or Course ID slug"),
+    rollback_plan: Path = typer.Option(
+        ...,
+        "--rollback-plan",
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        resolve_path=True,
+        help="Planner-sealed lifecycle rollback plan",
+    ),
+):
+    """Restore Course Outline migration fields from a sealed baseline."""
+    try:
+        client = get_client()
+        record_id = client.resolve_course_id(course)
+        print_json(
+            execute_review_migration_rollback(
+                client, "course_outline", record_id, rollback_plan
+            )
+        )
+    except (ClientError, ExternalReviewError, ObjectiveOverrideError) as exc:
+        print_error(str(exc))
+        raise typer.Exit(1)
+
+
 @app.command("authorize-objective-override")
 @command
 def courses_authorize_objective_override(
     course: str = typer.Argument(..., help="Course record ID or Course ID slug"),
 ):
-    """Authorize an override only after the resynced requirements still fail review."""
+    """Authorize an initial or downstream-reviewed objective override."""
     try:
         client = get_client()
         record_id, fields = _objective_override_course(client, course)
-        require_state(fields, FEEDBACK_RESYNCED)
+        state = current_state(fields)
         version = current_requirements_version(fields)
-        review = require_current_needs_revision_review(fields, version)
-        event = {
-            "type": "override_authorized",
-            "at": now_iso(),
-            "requirementsVersion": version,
-            "requirementsVersionIdentity": version_identity(version),
-            "snapshot": content_snapshot(fields),
-            "postFeedbackReview": review,
-        }
+        if state == FEEDBACK_RESYNCED:
+            review = require_current_needs_revision_review(fields, version)
+            event = {
+                "type": "override_authorized",
+                "at": now_iso(),
+                "requirementsVersion": version,
+                "requirementsVersionIdentity": version_identity(version),
+                "snapshot": content_snapshot(fields),
+                "postFeedbackReview": review,
+            }
+        elif state == OVERRIDE_ACTIVE:
+            review_version = current_artifact_version(fields, OUTLINE_DRAFT_SLUG)
+            review = require_current_needs_revision_artifact_review(
+                fields, OUTLINE_REVIEW_FIELD, OUTLINE_DRAFT_SLUG, review_version
+            )
+            source_version = current_artifact_version(fields, OBJECTIVES_OVERRIDE_SLUG)
+            event = {
+                "type": "override_reauthorized",
+                "at": now_iso(),
+                "requirementsVersion": version,
+                "requirementsVersionIdentity": version_identity(version),
+                "reviewArtifactVersion": review_version,
+                "reviewArtifactVersionIdentity": artifact_version_identity(
+                    OUTLINE_DRAFT_SLUG, review_version
+                ),
+                "downstreamReview": review,
+                "sourceArtifactVersion": source_version,
+                "sourceArtifactVersionIdentity": artifact_version_identity(
+                    OBJECTIVES_OVERRIDE_SLUG, source_version
+                ),
+                "sourceLearningObjectivesSha256": sha256_text(
+                    str(fields.get(OBJECTIVES_FIELD) or "")
+                ),
+            }
+        else:
+            rendered = state or "blank"
+            raise ObjectiveOverrideError(
+                "Learning-objective override authorization requires either the initial "
+                f"{FEEDBACK_RESYNCED!r} state or an active override with a current "
+                f"downstream NEEDS REVISION review; current state is {rendered!r}."
+            )
         updates = {
             STATE_FIELD: OVERRIDE_AUTHORIZED,
             AUDIT_FIELD: append_audit(fields, event),
@@ -1054,6 +1355,101 @@ def courses_authorize_objective_override(
             "requirements_version": version,
         })
     except (ClientError, ObjectiveOverrideError) as exc:
+        print_error(str(exc))
+        raise typer.Exit(1)
+
+
+@app.command("migrate-carry-forward-plan")
+@command
+def courses_migrate_carry_forward_plan(
+    course: str = typer.Argument(..., help="Course record ID or Course ID slug"),
+    carry_forward_plan: Optional[str] = typer.Option(
+        None, "--carry-forward-plan", help="Replacement schemaVersion 2 Carry-Forward Plan JSON"
+    ),
+    carry_forward_plan_file: Optional[Path] = typer.Option(
+        None, "--carry-forward-plan-file", help="File containing the schemaVersion 2 Carry-Forward Plan"
+    ),
+    reason: str = typer.Option(..., "--reason", help="Why the reviewed migration is required"),
+):
+    """Migrate a Carry-Forward Plan to structural-only schema v2 without learner titles."""
+    try:
+        if not reason.strip():
+            raise ObjectiveOverrideError("--reason cannot be blank.")
+        replacement = _read_carry_forward_replacement(
+            carry_forward_plan, carry_forward_plan_file
+        )
+        client = get_client()
+        record_id, fields = _course_record(client, course)
+        current_plan = fields.get(CARRY_FORWARD_PLAN_FIELD)
+        if not isinstance(current_plan, str):
+            raise ObjectiveOverrideError(f"{CARRY_FORWARD_PLAN_FIELD} is blank.")
+        current_document = json.loads(current_plan)
+        if not isinstance(current_document, dict):
+            raise ObjectiveOverrideError("Carry-Forward Plan must be a JSON object.")
+        source_has_structure = bool(current_document.get("target_structure"))
+        if not source_has_structure:
+            require_no_outline_revision(fields)
+        source_version = artifact_version_entry(fields, CARRY_FORWARD_PLAN_SLUG)
+        source_live_version = {
+            "v": source_version["v"],
+            "sha256": sha256_text(current_plan),
+        }
+        source_review = None
+        if not source_has_structure:
+            source_review = require_current_pass_carry_forward_review(
+                fields, record_id, source_version
+            )
+        require_carry_forward_v2_migration(current_plan, replacement)
+        target_version = {
+            "v": source_version["v"] + 1,
+            "sha256": sha256_text(replacement),
+        }
+        event = {
+            "type": "carry_forward_plan_migrated",
+            "at": now_iso(),
+            "oldLedgerArtifactVersion": source_version,
+            "oldLedgerArtifactVersionIdentity": artifact_version_identity(
+                CARRY_FORWARD_PLAN_SLUG, source_version
+            ),
+            "sourceLiveArtifactVersion": source_live_version,
+            "sourceLiveArtifactVersionIdentity": artifact_version_identity(
+                CARRY_FORWARD_PLAN_SLUG, source_live_version
+            ),
+            "sourceHadTargetStructure": source_has_structure,
+            "newArtifactVersion": target_version,
+            "newArtifactVersionIdentity": artifact_version_identity(
+                CARRY_FORWARD_PLAN_SLUG, target_version
+            ),
+            "reason": reason.strip(),
+        }
+        if source_review is not None:
+            event["sourceReview"] = source_review
+        persisted = client.update_record("Courses", record_id, {
+            CARRY_FORWARD_PLAN_FIELD: replacement,
+            AUDIT_FIELD: append_audit(fields, event),
+        })
+        actual_fields = persisted.get("fields", {})
+        if actual_fields.get(CARRY_FORWARD_PLAN_FIELD) != replacement:
+            raise ObjectiveOverrideError(
+                "Persisted Carry-Forward Plan differs from the reviewed migration candidate."
+            )
+        actual_version = current_json_artifact_version(
+            actual_fields, CARRY_FORWARD_PLAN_SLUG, CARRY_FORWARD_PLAN_FIELD
+        )
+        if actual_version != target_version:
+            raise ObjectiveOverrideError(
+                f"Carry-Forward Plan version verification failed: expected {target_version}, "
+                f"got {actual_version}."
+            )
+        print_success(f"Migrated Carry-Forward Plan for {record_id}")
+        print_json({
+            "mode": "migrate-carry-forward-plan",
+            "course": record_id,
+            "source_ledger_artifact_version": source_version,
+            "source_live_artifact_version": source_live_version,
+            "carry_forward_plan_version": actual_version,
+        })
+    except (ClientError, ObjectiveOverrideError, OSError, json.JSONDecodeError) as exc:
         print_error(str(exc))
         raise typer.Exit(1)
 
@@ -1086,6 +1482,25 @@ def courses_apply_objective_override(
         require_state(fields, OVERRIDE_AUTHORIZED)
         version = current_requirements_version(fields)
         old_objectives = str(fields.get(OBJECTIVES_FIELD) or "")
+        events = load_audit(fields)["events"]
+        authorization = events[-1]
+        if authorization.get("type") == "override_reauthorized":
+            review_version = current_artifact_version(fields, OUTLINE_DRAFT_SLUG)
+            review = require_current_needs_revision_artifact_review(
+                fields, OUTLINE_REVIEW_FIELD, OUTLINE_DRAFT_SLUG, review_version
+            )
+            if (
+                authorization.get("reviewArtifactVersion") != review_version
+                or authorization.get("downstreamReview") != review
+            ):
+                raise ObjectiveOverrideError(
+                    "The downstream review changed after objective-override authorization; "
+                    "authorize again."
+                )
+            if authorization.get("sourceLearningObjectivesSha256") != sha256_text(old_objectives):
+                raise ObjectiveOverrideError(
+                    "Learning Objectives changed after downstream authorization; authorize again."
+                )
         event = {
             "type": "override_applied",
             "at": now_iso(),
@@ -1171,10 +1586,10 @@ def courses_sync_requirements(
             )
             raise typer.Exit(1)
 
-        if override_state == CORRECTION_REQUESTED and not current.get(COURSE_REQUIREMENTS_APPROVAL_FIELD):
+        if override_state == CORRECTION_REQUESTED:
             print_error(
-                "Correction Requested can transition to Feedback Resynced only after "
-                "Course Requirements Approved (Pluralsight) is checked."
+                "Correction Requested can transition only after the external return is "
+                "recorded with mark-requirements-update-received."
             )
             raise typer.Exit(1)
 
@@ -1207,7 +1622,7 @@ def courses_sync_requirements(
         fields = dict(parsed)
         fields["Course Requirements"] = outline_text
         predicted_version = None
-        if override_state in {CORRECTION_REQUESTED, OVERRIDE_ACTIVE}:
+        if override_state in {UPDATE_RECEIVED, OVERRIDE_ACTIVE}:
             before_snapshot = content_snapshot(current)
             before_version = current_requirements_version(current)
             predicted_version = predicted_requirements_version(current, outline_text)
@@ -1233,7 +1648,6 @@ def courses_sync_requirements(
             event = {
                 "type": event_type,
                 "at": now_iso(),
-                "approvedBeforeSync": bool(current.get(COURSE_REQUIREMENTS_APPROVAL_FIELD)),
                 "before": {
                     "requirementsVersion": before_version,
                     "requirementsVersionIdentity": version_identity(before_version),
@@ -1247,13 +1661,7 @@ def courses_sync_requirements(
             }
             fields[STATE_FIELD] = next_state
             fields[AUDIT_FIELD] = append_audit(current, event)
-        # The approval checkbox asserts "Curriculum returned revised requirements". Every
-        # sync supersedes that claim, so it clears on every sync -- not only when the
-        # document text changed. stamp_versions clears it through human_verified_pairs on a
-        # version bump, but an unchanged document produces no bump, which would otherwise
-        # leave the course pre-approved for a revision round that never happened. It is a
-        # SEPARATE write: the client refuses a content field and its paired review field in
-        # one call.
+            fields[REVIEW_FIELD] = ""
         if dry_run:
             print_json({
                 "mode": "sync-requirements",
@@ -1270,29 +1678,13 @@ def courses_sync_requirements(
                     )
                     for key, value in fields.items()
                 },
-                "approval_would_clear": bool(current.get(COURSE_REQUIREMENTS_APPROVAL_FIELD)),
                 "override_state_before": override_state or None,
                 "override_state_after": fields.get(STATE_FIELD, override_state or None),
                 "requirements_version_after": predicted_version,
             })
             raise typer.Exit(0)
 
-        if override_state == CORRECTION_REQUESTED and current.get(REVIEW_FIELD):
-            # Clear the pre-feedback verdict in its own verified write BEFORE
-            # changing Course Requirements. The centralized versioning engine
-            # rejects content + paired review in one call. Clearing first also
-            # leaves Correction Requested retryable if the later sync fails,
-            # while guaranteeing byte-identical replies still require a fresh
-            # post-feedback review.
-            client.update_record("Courses", record_id, {REVIEW_FIELD: ""})
-
         client.update_record("Courses", record_id, fields)
-
-        # Separate write, per the paired-review-field rule above.
-        if current.get(COURSE_REQUIREMENTS_APPROVAL_FIELD):
-            client.update_record(
-                "Courses", record_id, {COURSE_REQUIREMENTS_APPROVAL_FIELD: False}
-            )
 
         readback = client.get_record("Courses", record_id).get("fields", {})
         mismatches = [
@@ -1300,8 +1692,6 @@ def courses_sync_requirements(
             if not (value == "" and readback.get(key) in (None, ""))
             and readback.get(key) != value
         ]
-        if readback.get(COURSE_REQUIREMENTS_APPROVAL_FIELD):
-            mismatches.append(COURSE_REQUIREMENTS_APPROVAL_FIELD)
         if predicted_version is not None:
             try:
                 persisted_version = current_requirements_version(readback)
@@ -1350,8 +1740,18 @@ def courses_scaffold(
         None, "--base",
         help="Intake touch: record ID or slug of the completed course this update follows",
     ),
-    deadline: str = typer.Option(
-        ..., "--deadline", help="Required CourseCraft course deadline (YYYY-MM-DD)"
+    legacy_import_base: bool = typer.Option(
+        False,
+        "--legacy-import-base",
+        help=(
+            "Allow a non-Complete base only after proving it is a shipped "
+            "pre-CourseCraft Pluralsight import"
+        ),
+    ),
+    deadline: Optional[str] = typer.Option(
+        None,
+        "--deadline",
+        help="Optional CourseCraft course deadline to write (YYYY-MM-DD)",
     ),
     dry_run: bool = typer.Option(
         False, "--dry-run",
@@ -1366,7 +1766,8 @@ def courses_scaffold(
 
     With --base this is instead the course-update INTAKE touch: no outline is read,
     and it creates only the new Course record (Version, -vN slug, Base Course link,
-    inherited basics) plus its course folder. The base course must be Complete.
+    inherited basics) plus its course folder. The base course must be Complete unless
+    --legacy-import-base proves a shipped pre-CourseCraft Pluralsight predecessor.
     """
     if base is not None:
         if course_slug or google_docs_link or file_path:
@@ -1376,10 +1777,18 @@ def courses_scaffold(
             )
             raise typer.Exit(1)
         try:
-            raise typer.Exit(_scaffold_intake(get_client(), base, deadline, dry_run))
+            raise typer.Exit(
+                _scaffold_intake(
+                    get_client(), base, deadline, dry_run, legacy_import_base
+                )
+            )
         except ClientError as e:
             print_error(str(e))
             raise typer.Exit(1)
+
+    if legacy_import_base:
+        print_error("--legacy-import-base requires --base.")
+        raise typer.Exit(1)
 
     args = script_flags([
         ("--deadline", deadline),
@@ -1408,10 +1817,21 @@ COMMAND_CREDENTIALS = {
     "sync-requirements": [
         "custom"
     ],
+    "mark-requirements-update-received": ["custom"],
+    "submit-outline-for-review": ["custom"],
+    "mark-outline-changes-requested": ["custom"],
+    "mark-outline-approved": ["custom"],
+    "migrate-outline-review": ["custom"],
+    "migrate-requirements-return": ["custom"],
+    "rollback-outline-review": ["custom"],
+    "rollback-requirements-return": ["custom"],
     "request-objective-correction": [
         "custom"
     ],
     "authorize-objective-override": [
+        "custom"
+    ],
+    "migrate-carry-forward-plan": [
         "custom"
     ],
     "apply-objective-override": [

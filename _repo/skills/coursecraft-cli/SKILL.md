@@ -26,8 +26,14 @@ coursecraft <command-group> <action> [arguments] [options]
 | `coursecraft courses get <slug> --include-clips` | Get course with nested clips |
 | `coursecraft courses sync-requirements <slug>` | Sync linked Pluralsight requirements; no Deadline/child writes, with gated audit/state transitions during an objective-override exception |
 | `coursecraft courses request-objective-correction <slug>` | Start the gated Pluralsight objective-correction exception after a current NEEDS REVISION review |
-| `coursecraft courses authorize-objective-override <slug>` | Authorize an override only after approved feedback was resynced and a fresh current review still reads NEEDS REVISION |
+| `coursecraft courses mark-requirements-update-received <slug>` | Move an audited correction request to Update Received after Pluralsight returns it |
+| `coursecraft courses submit-outline-for-review <slug>` | Submit or resubmit the exact current Course Outline revision |
+| `coursecraft modules submit-slide-deck-for-review <module>` | Submit or resubmit the exact current Slide Deck revision |
+| `coursecraft modules submit-videos-for-review <module>` | Submit or resubmit the exact current Module Video manifest |
+| `coursecraft courses authorize-objective-override <slug>` | Authorize the initial override after requirements resync, or reauthorize an active override from a current downstream NEEDS REVISION outline review |
 | `coursecraft courses apply-objective-override <slug> --learning-objectives-file <path> --reason <text>` | Write canonical objectives and append the authorized override provenance |
+| `coursecraft courses migrate-carry-forward-plan <slug> --carry-forward-plan-file <path> --reason <text>` | Atomically migrate a Carry-Forward Plan from named schema v1 to structural-only schema v2 |
+| `coursecraft versions reconcile --course <course> --artifact-slug <slug> --expected-version <v> --expected-old-ledger-sha <sha> --expected-live-content-sha <sha> --check` | Read-only safety check for one exact stale Course airtable-content ledger SHA recovery |
 | `coursecraft feedback list --slide <recID>` | List Feedback rows linked to a slide; do not add --filter to linked feedback reads |
 | `coursecraft feedback update <recID> --processing-status Applied --processed-at <iso>` | Stamp a Feedback row after processing |
 | `coursecraft voice-recordings preview --demo <recID>` | Read-only normalized narration/hash and cue/anchor validation before generation |
@@ -38,25 +44,103 @@ coursecraft <command-group> <action> [arguments] [options]
 For any `usage.json` option with `"type": "bool"` and `"takes_value": false`,
 pass the flag by itself; never append `true` or `false`. When the option also
 has a `secondary` field, use the primary `name` to set the value and the
-`secondary` flag to clear it. For example, set Course Requirements approval
-with `--course-requirements-approved` and clear it with
-`--no-course-requirements-approved`.
+`secondary` flag to clear it. For example, set Course Outline Draft verification
+with `--outline-draft-human-verified` and clear it with
+`--no-outline-draft-human-verified`.
+</principle>
+
+<principle name="Version Ledger Reconciliation Is Exact And Fail-Closed">
+Use `coursecraft versions reconcile` only to repair one stale SHA in an existing
+Course-owned `airtable_content` Version Control entry. Always run the exact
+command with `--check` first. The command requires the course, artifact slug,
+version, current stale ledger SHA, and current persisted-content SHA; any drift
+fails before a write. It preserves the target entry's `v` and `at`, every other
+ledger entry, and the Course content/lifecycle/review fields, then verifies an
+uncached readback. For `update.carry_forward_plan`, it also requires the latest
+`carry_forward_plan_migrated` audit event to bind the expected corrected
+version/hash. A migration that added previously missing structure also requires no Outline Draft
+revision. Omit `--check` only for the already-verified repair.
 </principle>
 
 <essential_principles>
 <principle name="Pluralsight Objective Overrides Are A Gated Exception">
 Never use generic `courses update --learning-objectives` for a Pluralsight course.
-Use the dedicated state machine in order: `request-objective-correction`, approve and
-`sync-requirements`, persist a fresh post-feedback course.requirements review,
+Use the dedicated state machine in order: `request-objective-correction`,
+`mark-requirements-update-received`, `sync-requirements`, persist a fresh
+post-feedback course.requirements review,
 `authorize-objective-override`, then `apply-objective-override --reason ...`.
 
 The commands fail closed against `Learning Objectives Override State` and the exact
 `Reviewed-Version: course.requirements@vN sha256:<hash>` trailer. The audit field is a
-schema-versioned JSON event document whose prior events are preserved on every append.
-`request-objective-correction` also clears any pre-existing Course Requirements approval;
-only a fresh approval after that request can unlock the feedback-resync transition.
+schema-versioned JSON event document whose prior operational events are preserved on every
+append. `mark-requirements-update-received` requires the exact `Correction Requested`
+state plus its matching correction-request audit event, moves to `Update Received`, and
+only then can `sync-requirements` resync and move to `Feedback Resynced`.
 When the state is `Override Active`, later `sync-requirements` calls preserve the canonical
 `Learning Objectives` override while syncing the remaining Curriculum fields.
+
+If a later outline review finds an error in the active objectives, rerun
+`authorize-objective-override` while the state is `Override Active`, then use
+`apply-objective-override`. The authorization is bound to the current
+`course.outline_draft` review/version and the current objective content; apply fails if
+either changes. Generic `courses update` rejects both active-lifecycle objective edits and
+post-gap-analysis Carry-Forward Plan edits.
+</principle>
+<principle name="Carry-Forward Plan Migration Is Structural And Pre-Outline">
+Carry-Forward Plan owns inheritance decisions and structural mapping. Course Outline Draft owns
+learner-facing module and clip titles. The only post-review Carry-Forward Plan mutation is the
+explicit pre-outline schema migration; there is no downstream title-amendment lifecycle.
+
+First validate the schemaVersion 2 candidate with explicit record context:
+`coursecraft artifacts validate update.carry_forward_plan <candidate> --course <course>`.
+Then pass that same candidate to `courses migrate-carry-forward-plan`. It preserves
+`module_order` and `clip_order`, strips learner-facing names/titles, requires a non-empty
+`base_record` with no `addition_id` for inherited rows, and requires `base_record: null` plus a
+non-empty `addition_id` for added rows. Each addition's schemaVersion 2 `planning_purpose` must
+be a reviewed, non-editorial planning purpose grounded in the existing reason/gap evidence; it
+must not reuse the learner-facing title. It is the only semantic replacement migration permits.
+Within `verdicts`, migration removes only `target.name` and `target.title`; it preserves target
+`module_order`, `clip_order`, and every other non-title target value exactly.
+A schemaVersion 2 source is accepted only to complete an earlier incomplete migration when its
+live `verdicts.*.target` still contains `name` or `title`; a clean schemaVersion 2 plan is rejected.
+A source that already has non-empty `target_structure` may migrate after Outline Draft exists and
+without a new plan review because no structural decision changes; the candidate structure must be
+its exact non-title projection. A legacy source without `target_structure` requires the canonical
+`carry-forward-plan-review.md` to be PASS and bound to the exact source, and may migrate only when
+no Outline Draft content, review, or Version Control entry exists; the validated candidate supplies
+the missing structural decisions. Every other plan value remains unchanged. The atomic write binds
+both the ledger identity and exact live source bytes (so a stale source ledger SHA is never trusted),
+appends the new identity/reason provenance (plus review provenance for a missing-structure repair),
+and never changes the objective-override state.
+</principle>
+<principle name="External Reviews Use Dedicated Lifecycle Commands">
+Do not mutate legacy Pluralsight submission/approval checkboxes through generic update
+commands. Course Outline uses `submit-outline-for-review`,
+`mark-outline-changes-requested`, and `mark-outline-approved`. Slide Deck uses
+`submit-slide-deck-for-review`, `mark-slide-deck-changes-requested`, and
+`mark-slide-deck-approved`. Module Video uses `submit-videos-for-review` and
+`mark-videos-approved`; the feedback-ingest workflow owns the internal
+`mark-video-changes-requested` action.
+
+The hidden `accept-approved-slide-deck` action belongs only to the approved-deck release
+workflow. That workflow supplies explicit approval evidence and atomically registers the
+canonical returned deck, replaces submitted revision evidence, enters `Approved`, and
+invalidates AI/human deck-review gates. Do not call it as an operator approval shortcut.
+
+The hidden lifecycle migration commands are planner-only. Ordinary unambiguous legacy
+backfills omit `--resolution-file`. A conflict may run only with the exact immutable
+resolution file sealed and emitted by the lifecycle migration planner; the CLI revalidates
+its hash, record/process identity, live baseline fingerprint, desired evidence, authoritative
+evidence, and conflict semantics. `courses migrate-requirements-return` is resolution-only
+and always requires `--resolution-file`.
+
+The hidden rollback commands are also migration-planner-only: `courses
+rollback-requirements-return`, `courses rollback-outline-review`, `modules
+rollback-slide-deck-review`, and `modules rollback-video-review`. Each accepts only the
+target record plus `--rollback-plan <sealed-path>`. The CLI derives its exact two-field
+restore authority and fixed command prefix from `course-pipeline.json`, accepts only the
+sealed forward result or an already-restored baseline, and rejects arbitrary fields, states,
+commands, and targets. Never use these as operator lifecycle APIs.
 </principle>
 <principle name="Usage Reference">
 **MANDATORY: Consult the adjacent `usage.json` before executing ANY `coursecraft` command.**
@@ -127,7 +211,7 @@ coursecraft feedback update recXXX --processing-status Applied --processed-at "2
 - **auth** -- Authentication management via Airtable PAT delegation
 - **cache** -- Local response cache management
 - **courses** -- CRUD for course records with nested creation and --active/--include-modules/--include-clips support
-- **courses sync-requirements** -- parses the existing Course record's `Course Requirements Link` with the canonical outline parser, stores the document verbatim in `Course Requirements`, and updates the Pluralsight-owned Course attributes. It never requires or writes Deadline and never touches modules, clips, folders, or Slack fields. During the objective-override exception only, it also appends the audit, advances `Correction Requested` to `Feedback Resynced`, clears the pre-feedback review, and preserves `Learning Objectives` once the state is `Override Active`. Full `courses scaffold` retains its required `--deadline`.
+- **courses sync-requirements** -- parses the existing Course record's `Course Requirements Link` with the canonical outline parser, stores the document verbatim in `Course Requirements`, and updates the Pluralsight-owned Course attributes. It never requires or writes Deadline and never touches modules, clips, folders, or Slack fields. During the objective-override exception only, it appends the audit, advances `Update Received` to `Feedback Resynced`, clears the pre-feedback review, and preserves `Learning Objectives` once the state is `Override Active`. Use `courses mark-requirements-update-received` after `courses request-objective-correction`; generic `courses update` cannot drive this lifecycle. `courses scaffold` accepts optional `--deadline`; omitting it in either intake (`--base`) or ordinary scaffold mode leaves Deadline unchanged.
 - **course-outline** -- Read and update course outline Google Docs, sync to database
 - **modules** -- CRUD for module records with batch clip creation and ASCII tree display via show
 - **clips** -- CRUD for clip records with batch creation and M1C1/M2C3 shorthand support
@@ -136,6 +220,20 @@ coursecraft feedback update recXXX --processing-status Applied --processed-at "2
 - **slide-templates** -- Manage PowerPoint slide template definitions with --platform filtering
 - **feedback** -- CRUD for CourseCraft Feedback rows with per-level link filters (`--demo`, `--slide`, `--clip`, `--module`, `--course`), `Processing Status`/`Patterns Learned`/`Processed At` writes, write verification, and fail-closed `--remediation-claim` verification for `Applied` stamps. This is the first-class path for Feedback-table I/O; do not use raw `airtable` for the Feedback table.
 - **voice-recordings** -- Generate slide and demo narration audio with ElevenLabs and store recording metadata
+</principle>
+
+<principle name="Legacy Import Update Intake">
+`coursecraft courses scaffold --base <course>` still requires the base course's
+computed Status to be `Complete`. The only exception is the explicit
+`--legacy-import-base` flag for a published pre-CourseCraft Pluralsight predecessor.
+That flag fails closed unless the base is Version 1, its Notes begin with the canonical
+legacy-import marker and contain its canonical Pluralsight course-overview source,
+it has Module and Clip records, every Clip ID has a unique `M#C#` prefix, and every
+corresponding `<courses-root>/<base-slug>/clips/m#c#.mp4` file is regular and non-empty. Use
+`--dry-run` first to read the `legacy_import_evidence` object without
+creating a Course record or folder. Do not use `courses create` for this workflow;
+the scaffold intake remains the single writer of Version, the `-vN` slug, and the
+Base Course link. Ordinary duplicate-name protection remains unchanged.
 </principle>
 
 <principle name="Order And Narrative Field Names By Table">

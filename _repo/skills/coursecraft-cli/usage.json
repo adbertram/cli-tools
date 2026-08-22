@@ -1,8 +1,8 @@
 {
   "tool": "coursecraft",
   "description": "Manage CourseCraft course content in Airtable",
-  "discovered_at": "2026-08-22T14:49:05Z",
-  "total_commands": 65,
+  "discovered_at": "2026-08-22T23:05:16Z",
+  "total_commands": 77,
   "global_options": [
     {
       "name": "--version",
@@ -73,6 +73,12 @@
             }
           ],
           "options": [
+            {
+              "name": "--course",
+              "type": "TEXT",
+              "required": false,
+              "help": "Explicit Course record ID or slug for validating a file candidate"
+            },
             {
               "name": "--profile",
               "type": "TEXT",
@@ -739,14 +745,6 @@
               "secondary": "--no-recording-review-human"
             },
             {
-              "name": "--submitted-to-pluralsight",
-              "type": "bool",
-              "required": false,
-              "help": "Set or clear the clip submitted-to-Pluralsight flag",
-              "takes_value": false,
-              "secondary": "--no-submitted-to-pluralsight"
-            },
-            {
               "name": "--feedback-requested",
               "type": "bool",
               "required": false,
@@ -829,10 +827,11 @@
           ]
         },
         "update": {
-          "help": "Update course outline Google Doc table cells. The --type parameter specifies where to update: - google_doc: Update the Google Doc's table cells with provided field values For google_doc type: - Provide field values via CLI params (--name, --short-description, etc.) - Or provide --course-outline-file with markdown to parse for field values - Only explicitly provided fields are updated (partial update) For module updates: - Use --module to specify which module to update (1, 2, 3, etc.) - Provide content via --module-name, --module-objectives, --module-layout - Or use --module-content or --module-content-file for full content - Optionally add --module-duration for the duration column",
+          "help": "Update course outline Google Doc table cells. The --type parameter specifies where to update: - google_doc: Update the Google Doc's table cells with provided field values For google_doc type: - Provide field values via CLI params (--name, --short-description, etc.) - Or provide --course-outline-file with markdown to parse for field values - Only explicitly provided fields are updated (partial update) For module updates: - Use --module to specify which module to update (1, 2, 3, etc.) - Provide content via --module-name, --module-objectives, --module-layout - Or use --module-content or --module-content-file for full content - Optionally add --module-duration for the duration column - Use --clear-module to clear an unused module slot",
           "examples": [
             "coursecraft course-outline update my-course --type google_doc --name \"New Name\"",
             "coursecraft course-outline update my-course --type google_doc -f outline.md",
+            "coursecraft course-outline update my-course --type google_doc --module 4 --clear-module",
             "coursecraft course-outline update my-course --type google_doc -f outline.md --validate-only"
           ],
           "arguments": [
@@ -945,6 +944,13 @@
               "short": "-m"
             },
             {
+              "name": "--clear-module",
+              "type": "bool",
+              "required": false,
+              "help": "Clear the selected module slot's number, content, and duration",
+              "takes_value": false
+            },
+            {
               "name": "--module-name",
               "type": "TEXT",
               "required": false,
@@ -1047,7 +1053,7 @@
           ]
         },
         "authorize-objective-override": {
-          "help": "Authorize an override only after the resynced requirements still fail review.",
+          "help": "Authorize an initial or downstream-reviewed objective override.",
           "arguments": [
             {
               "name": "course",
@@ -1399,6 +1405,100 @@
             }
           ]
         },
+        "mark-outline-approved": {
+          "help": "Record external approval of the exact submitted Course Outline revision.",
+          "arguments": [
+            {
+              "name": "course",
+              "type": "TEXT",
+              "required": true,
+              "help": "Course record ID or Course ID slug"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "mark-outline-changes-requested": {
+          "help": "Record external Course Outline changes requested.",
+          "arguments": [
+            {
+              "name": "course",
+              "type": "TEXT",
+              "required": true,
+              "help": "Course record ID or Course ID slug"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "mark-requirements-update-received": {
+          "help": "[OPTIONS] {course} Record the external return of corrected Pluralsight requirements.",
+          "arguments": [
+            {
+              "name": "course",
+              "type": "TEXT",
+              "required": true,
+              "help": "Course record ID or Course ID slug"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "migrate-carry-forward-plan": {
+          "help": "Migrate a Carry-Forward Plan to structural-only schema v2 without learner titles.",
+          "arguments": [
+            {
+              "name": "course",
+              "type": "TEXT",
+              "required": true,
+              "help": "Course record ID or Course ID slug"
+            }
+          ],
+          "options": [
+            {
+              "name": "--carry-forward-plan",
+              "type": "TEXT",
+              "required": false,
+              "help": "Replacement schemaVersion 2 Carry-Forward Plan JSON"
+            },
+            {
+              "name": "--carry-forward-plan-file",
+              "type": "PATH",
+              "required": false,
+              "help": "File containing the schemaVersion 2 Carry-Forward Plan"
+            },
+            {
+              "name": "--reason",
+              "type": "TEXT",
+              "required": true,
+              "help": "Why the reviewed migration is required"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "request-objective-correction": {
           "help": "Enter the Pluralsight objective-correction lifecycle after a current failed review.",
           "arguments": [
@@ -1419,7 +1519,7 @@
           ]
         },
         "scaffold": {
-          "help": "Scaffold a course from its approved outline (records plus course folder). Dispatches the CourseCraft scaffolder, which parses the approved outline and creates or verifies the Course, Module, and Clip records plus the course folder. Its JSON report goes to stdout and its exit code passes through. With --base this is instead the course-update INTAKE touch: no outline is read, and it creates only the new Course record (Version, -vN slug, Base Course link, inherited basics) plus its course folder. The base course must be Complete.",
+          "help": "Scaffold a course from its approved outline (records plus course folder). Dispatches the CourseCraft scaffolder, which parses the approved outline and creates or verifies the Course, Module, and Clip records plus the course folder. Its JSON report goes to stdout and its exit code passes through. With --base this is instead the course-update INTAKE touch: no outline is read, and it creates only the new Course record (Version, -vN slug, Base Course link, inherited basics) plus its course folder. The base course must be Complete unless --legacy-import-base proves a shipped pre-CourseCraft Pluralsight predecessor.",
           "arguments": [],
           "options": [
             {
@@ -1449,10 +1549,17 @@
               "help": "Intake touch: record ID or slug of the completed course this update follows"
             },
             {
+              "name": "--legacy-import-base",
+              "type": "bool",
+              "required": false,
+              "help": "Allow a non-Complete base only after proving it is a shipped pre-CourseCraft Pluralsight import",
+              "takes_value": false
+            },
+            {
               "name": "--deadline",
               "type": "TEXT",
-              "required": true,
-              "help": "Required CourseCraft course deadline (YYYY-MM-DD)"
+              "required": false,
+              "help": "Optional CourseCraft course deadline to write (YYYY-MM-DD)"
             },
             {
               "name": "--dry-run",
@@ -1461,6 +1568,25 @@
               "help": "Parse and plan only: report what WOULD be created, creating nothing",
               "takes_value": false
             },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "submit-outline-for-review": {
+          "help": "Submit or resubmit the current ready Course Outline revision.",
+          "arguments": [
+            {
+              "name": "course",
+              "type": "TEXT",
+              "required": true,
+              "help": "Course record ID or Course ID slug"
+            }
+          ],
+          "options": [
             {
               "name": "--profile",
               "type": "TEXT",
@@ -1553,28 +1679,6 @@
               "help": "Google Sheet ID for Pluralsight recording feedback"
             },
             {
-              "name": "--course-outline-submitted",
-              "type": "bool",
-              "required": false,
-              "help": "Mark whether the course outline has been submitted to Pluralsight",
-              "takes_value": false,
-              "secondary": "--no-course-outline-submitted"
-            },
-            {
-              "name": "--course-outline-approved-pluralsight",
-              "type": "bool",
-              "required": false,
-              "help": "Mark whether the course outline has been approved by Pluralsight",
-              "takes_value": false,
-              "secondary": "--no-course-outline-approved-pluralsight"
-            },
-            {
-              "name": "--outline-submitted-at",
-              "type": "TEXT",
-              "required": false,
-              "help": "ISO 8601 datetime the outline was submitted (auto-stamped when --course-outline-submitted is set and field is empty)"
-            },
-            {
               "name": "--short-description",
               "type": "TEXT",
               "required": false,
@@ -1650,27 +1754,19 @@
               "name": "--course-requirements",
               "type": "TEXT",
               "required": false,
-              "help": "The Pluralsight course requirements Google Doc, verbatim"
+              "help": "Course requirements content; read-only after the Pluralsight correction lifecycle starts"
             },
             {
               "name": "--course-requirements-file",
               "type": "PATH",
               "required": false,
-              "help": "Path to a file containing the course requirements"
+              "help": "File containing course requirements; read-only after the Pluralsight correction lifecycle starts"
             },
             {
               "name": "--course-requirements-review-ai",
               "type": "TEXT",
               "required": false,
               "help": "AI review verdict for course.requirements"
-            },
-            {
-              "name": "--course-requirements-approved",
-              "type": "bool",
-              "required": false,
-              "help": "Set or clear Pluralsight's sign-off on the revised course requirements; exits Waiting for Course Requirements Approval",
-              "takes_value": false,
-              "secondary": "--no-course-requirements-approved"
             },
             {
               "name": "--outline-draft",
@@ -1726,7 +1822,7 @@
               "name": "--recording-dictation-method",
               "type": "bool",
               "required": false,
-              "help": "<Automatic Narration Generation|Manual Instructor      Recording dictation method (Automatic Narration Generation>                                            Generation, Manual Instructor Generation)",
+              "help": "<Automatic Narration Generation|Manual Instructor       Recording dictation method (Automatic Narration Generation>                                             Generation, Manual Instructor Generation)",
               "takes_value": false
             },
             {
@@ -3119,6 +3215,63 @@
             }
           ]
         },
+        "mark-slide-deck-approved": {
+          "help": "Record external approval of the exact submitted Slide Deck revision.",
+          "arguments": [
+            {
+              "name": "module",
+              "type": "TEXT",
+              "required": true,
+              "help": "Module record ID, ID pattern, or name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "mark-slide-deck-changes-requested": {
+          "help": "[OPTIONS] {module} Record external Slide Deck changes requested.",
+          "arguments": [
+            {
+              "name": "module",
+              "type": "TEXT",
+              "required": true,
+              "help": "Module record ID, ID pattern, or name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "mark-videos-approved": {
+          "help": "Record external approval of the exact submitted Module Video manifest.",
+          "arguments": [
+            {
+              "name": "module",
+              "type": "TEXT",
+              "required": true,
+              "help": "Module record ID, ID pattern, or name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "show": {
           "help": "Display module hierarchy as an ASCII tree diagram. Shows the module with all its clips, demos, and slides along with their statuses.",
           "examples": [
@@ -3143,6 +3296,44 @@
               "help": "Course to scope the search (record ID or slug)",
               "short": "-c"
             },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "submit-slide-deck-for-review": {
+          "help": "Submit or resubmit the current ready Slide Deck revision.",
+          "arguments": [
+            {
+              "name": "module",
+              "type": "TEXT",
+              "required": true,
+              "help": "Module record ID, ID pattern, or name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "submit-videos-for-review": {
+          "help": "Submit or resubmit the current ready Module Video manifest.",
+          "arguments": [
+            {
+              "name": "module",
+              "type": "TEXT",
+              "required": true,
+              "help": "Module record ID, ID pattern, or name"
+            }
+          ],
+          "options": [
             {
               "name": "--profile",
               "type": "TEXT",
@@ -3269,60 +3460,12 @@
               "help": "AI review of the slide build"
             },
             {
-              "name": "--slides-submitted",
-              "type": "bool",
-              "required": false,
-              "help": "Set or clear the slide deck submitted-for-review flag (Pluralsight only)",
-              "takes_value": false,
-              "secondary": "--no-slides-submitted"
-            },
-            {
-              "name": "--pluralsight-slides-approved",
-              "type": "bool",
-              "required": false,
-              "help": "Set or clear the Pluralsight slides-approved flag, the gate trigger that releases 'Waiting for Slide Approval' to recording (Pluralsight only)",
-              "takes_value": false,
-              "secondary": "--no-pluralsight-slides-approved"
-            },
-            {
               "name": "--powerpoint-deck-human-verified",
               "type": "bool",
               "required": false,
               "help": "Set or clear the PowerPoint deck human-verified gate flag",
               "takes_value": false,
               "secondary": "--no-powerpoint-deck-human-verified"
-            },
-            {
-              "name": "--module-submitted-to-pluralsight",
-              "type": "bool",
-              "required": false,
-              "help": "Set or clear the module video submitted-for-review flag (Pluralsight only)",
-              "takes_value": false,
-              "secondary": "--no-module-submitted-to-pluralsight"
-            },
-            {
-              "name": "--pluralsight-module-video-approved",
-              "type": "bool",
-              "required": false,
-              "help": "Set or clear the Pluralsight module video approved flag",
-              "takes_value": false,
-              "secondary": "--no-pluralsight-module-video-approved"
-            },
-            {
-              "name": "--pluralsight-feedback-review-needed",
-              "type": "bool",
-              "required": false,
-              "help": "Set or clear the Pluralsight recording-feedback review-needed flag",
-              "takes_value": false,
-              "secondary": "--no-pluralsight-feedback-review-needed"
-            },
-            {
-              "name": "--post-feedback-ready-to-submit",
-              "type": "bool",
-              "required": false,
-              "help": "Set or clear the post-feedback-ready-to-submit flag (Pluralsight only)",
-              "takes_value": false,
-              "secondary": "--no-post-feedback-ready-to-submit"
             },
             {
               "name": "--slide-narration-approved",
@@ -4228,6 +4371,74 @@
         }
       ],
       "commands": {
+        "reconcile": {
+          "help": "Reconcile one stale Course airtable-content ledger SHA without bumping it.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--course",
+              "type": "TEXT",
+              "required": true,
+              "help": "Course record ID or Course ID slug"
+            },
+            {
+              "name": "--artifact-slug",
+              "type": "TEXT",
+              "required": true,
+              "help": "Course-owned airtable_content artifact slug"
+            },
+            {
+              "name": "--expected-version",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Exact positive ledger version that must remain unchanged"
+            },
+            {
+              "name": "--expected-old-ledger-sha",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact stale SHA currently stored in Version Control"
+            },
+            {
+              "name": "--expected-live-content-sha",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact SHA of the current persisted artifact content"
+            },
+            {
+              "name": "--check",
+              "type": "bool",
+              "required": false,
+              "help": "Verify the exact reconciliation is safe without writing",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "register-module-deck": {
+          "help": "Register the canonical raw deck and atomically invalidate stale review evidence.",
+          "arguments": [
+            {
+              "name": "module",
+              "type": "TEXT",
+              "required": true,
+              "help": "Module record ID, ID pattern, or name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "sync": {
           "help": "Idempotently seed missing content entries and register file artifacts. Walks Course -> Modules -> Clips -> Demos/Slides. For each record, seeds a Version Control entry for any coverage-map airtable_content slug that has non-empty content but no entry yet (never overwrites an existing entry -- the write-time engine owns updates from here on), and registers new or changed files for the file-kind slugs this command resolves a path for (demo.environment_prep_script, demo.dictation_audio, demo.automated_walkthrough/demo.manual_walkthrough, module.powerpoint_deck).",
           "examples": [

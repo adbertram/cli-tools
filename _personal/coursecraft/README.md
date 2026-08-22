@@ -88,12 +88,20 @@ coursecraft courses delete --course my-course-id --cascade
 coursecraft courses delete --course my-course-id --cascade --force
 
 # Scaffold a course from its approved outline (records plus course folder)
+coursecraft courses scaffold --course-slug my-course
+coursecraft courses scaffold --google-docs-link "https://docs.google.com/..."
+coursecraft courses scaffold --file-path ./approved-outline.pdf
+
+# Optionally write a CourseCraft Deadline during scaffolding
 coursecraft courses scaffold --course-slug my-course --deadline 2026-09-30
-coursecraft courses scaffold --google-docs-link "https://docs.google.com/..." --deadline 2026-09-30
-coursecraft courses scaffold --file-path ./approved-outline.pdf --deadline 2026-09-30
 
 # Plan the scaffold without creating anything (reads stay live)
-coursecraft courses scaffold --course-slug my-course --deadline 2026-09-30 --dry-run
+coursecraft courses scaffold --course-slug my-course --dry-run
+
+# Start an update from a published pre-CourseCraft Pluralsight import whose
+# computed Status is not Complete. The explicit flag verifies the import marker,
+# Version 1 identity, Module/Clip records, and every corresponding clip MP4.
+coursecraft courses scaffold --base recLEGACY --legacy-import-base --dry-run
 
 # Sync the Pluralsight Curriculum course requirements from the Course's linked Google Doc.
 # This does not require or write Deadline and does not scaffold child records.
@@ -102,32 +110,45 @@ coursecraft courses sync-requirements my-course --dry-run
 
 # Exception lifecycle when Pluralsight still returns inaccurate objectives
 coursecraft courses request-objective-correction my-course
-# After Pluralsight responds, approve the returned requirements and resync them.
+# After Pluralsight responds, mark the returned requirements and resync them.
+coursecraft courses mark-requirements-update-received my-course
 coursecraft courses sync-requirements my-course
 # Run and persist a fresh post-feedback course.requirements review, then authorize.
 coursecraft courses authorize-objective-override my-course
 coursecraft courses apply-objective-override my-course \
   --learning-objectives-file ./objectives.md \
   --reason "Pluralsight retained the current-product inaccuracies after feedback."
+
+# Migrate a reviewed schema v1 Carry-Forward Plan to structural-only schema v2
+# before any course.outline_draft revision exists. The candidate carries stable
+# base_record/addition_id identities and no learner-facing module or clip titles,
+# including under verdicts.*.target.
+coursecraft artifacts validate update.carry_forward_plan ./carry-forward-plan-v2.json \
+  --course my-course
+coursecraft courses migrate-carry-forward-plan my-course \
+  --carry-forward-plan-file ./carry-forward-plan-v2.json \
+  --reason "Migrate the reviewed plan to the structural-only schema."
+# The same command narrowly completes an earlier schema v2 migration only when
+# live verdicts.*.target objects still contain forbidden name/title keys.
 ```
 
 The override workflow is fail-closed and Pluralsight-only. It requires these
 Courses-table fields:
 
 - `Learning Objectives Override State`: single select with exactly `Correction Requested`,
-  `Feedback Resynced`, `Override Authorized`, and `Override Active` (blank means the
-  exception lifecycle has never started).
+  `Update Received`, `Feedback Resynced`, `Override Authorized`, and `Override Active`
+  (blank means the exception lifecycle has never started).
 - `Learning Objectives Override Audit`: multiline text containing the schema-versioned,
   append-only logical JSON event document written only by these dedicated commands.
 
 `request-objective-correction` requires a current `NEEDS REVISION` review whose exact
 `Reviewed-Version: course.requirements@vN sha256:<hash>` trailer matches `Version Control`.
-The request atomically clears any existing `Course Requirements Approved (Pluralsight)`
-checkbox so a grandfathered approval cannot masquerade as a fresh Curriculum reply.
-The correction resync requires `Course Requirements Approved (Pluralsight)` to be checked,
-captures before/after requirements and objective snapshots, transitions to `Feedback Resynced`,
-and clears the old review even if the returned requirements are byte-identical. A new current
-post-feedback review is therefore mandatory before authorization. Applying the override writes
+After Pluralsight returns a correction, `mark-requirements-update-received` requires the exact
+`Correction Requested` state and its matching audit event, then transitions to `Update Received`.
+The next `sync-requirements` captures before/after requirements and objective snapshots,
+transitions to `Feedback Resynced`, and clears the old review even if the returned requirements
+are byte-identical. A new current post-feedback review is therefore mandatory before
+authorization. Applying the override writes
 the canonical `Learning Objectives`, reason, old/new values, current requirements identity, and
 timestamp to the audit, then enters `Override Active`. Later requirement syncs preserve those
 canonical objectives while continuing to refresh the other Pluralsight-owned fields.
@@ -149,6 +170,8 @@ wrong-shape candidate; stdout is empty).
 coursecraft artifacts validate demo.script recXXXXXXXXXXXXXXX
 coursecraft artifacts validate slide.content.script recXXXXXXXXXXXXXXX
 coursecraft artifacts validate module-review recXXXXXXXXXXXXXXX
+coursecraft artifacts validate update.carry_forward_plan ./candidate.json \
+  --course recXXXXXXXXXXXXXXX
 
 # Run an artifact's environmental preflight checks
 coursecraft artifacts preflight demo.script recXXXXXXXXXXXXXXX
@@ -236,7 +259,14 @@ Learning Objectives
 
 Module Layout
 Description text here..." --module-duration "9"
+
+# Clear an unused module slot (number, content, and duration)
+coursecraft course-outline update my-course --type google_doc --module 4 --clear-module
 ```
+
+`--clear-module` is exclusive: provide `--module`, and do not combine it with
+course fields, outline files, module content, or module duration options. A later
+normal module update restores and reuses the cleared slot.
 
 **Update Types:**
 - `--type google_doc`: Updates individual table cells in the Google Doc. Only explicitly provided fields are updated (partial update). Data comes from CLI params or `--course-outline-file`.
