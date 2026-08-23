@@ -524,6 +524,8 @@ def update_course(
     outline_draft_file: Optional[Path] = typer.Option(None, "--outline-draft-file", help="Path to file containing the Course Outline Draft Markdown"),
     outline_draft_review_ai: Optional[str] = typer.Option(None, "--outline-draft-review-ai", help="AI review verdict for course.outline_draft"),
     outline_draft_human_verified: Optional[bool] = typer.Option(None, "--outline-draft-human-verified/--no-outline-draft-human-verified", help="Set or clear Adam's approval of the Course Outline Draft"),
+    course_outline: Optional[str] = typer.Option(None, "--course-outline", help="Built Course Outline content"),
+    course_outline_file: Optional[Path] = typer.Option(None, "--course-outline-file", help="Path to file containing the built Course Outline"),
     notes: Optional[str] = typer.Option(None, "--notes", help="Internal notes"),
     skill_path: Optional[str] = typer.Option(None, "--skill-path", help="Skill path name"),
     path_placement: Optional[str] = typer.Option(None, "--path-placement", help="Position in skill path (1, 2, 3, etc.)"),
@@ -552,6 +554,7 @@ def update_course(
         coursecraft courses update recXXX --active
         coursecraft courses update my-course --target-length 60
         coursecraft courses update my-course --brainstorming-outline-file outline.md
+        coursecraft courses update my-course --course-outline-file course-outline.md
     """
     try:
         client = get_client()
@@ -655,6 +658,17 @@ def update_course(
             fields["Outline Draft"] = outline_draft_file.read_text()
         elif outline_draft is not None:
             fields["Outline Draft"] = outline_draft
+        course_outline_value = course_outline
+        if course_outline_file is not None:
+            if not course_outline_file.exists():
+                print_error(f"File not found: {course_outline_file}")
+                raise typer.Exit(1)
+            course_outline_value = course_outline_file.read_text()
+        if course_outline_value is not None:
+            if not course_outline_value.strip():
+                print_error("Course Outline content must not be blank.")
+                raise typer.Exit(1)
+            fields["Course Outline"] = course_outline_value
         if slack_channel_name is not None:
             fields["Slack Channel Name"] = slack_channel_name
         if active is not None:

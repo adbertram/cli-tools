@@ -635,6 +635,88 @@ def _same_record_lifecycle_invalidation(
     return consequences
 
 
+def _same_record_dependents(table: str, changed_slugs: List[str]) -> List[str]:
+    """Return same-record Airtable artifacts invalidated by changed dependencies."""
+    catalog = _pipeline_router().get("artifact_dependencies")
+    if not isinstance(catalog, dict):
+        raise VersioningError(
+            "course-pipeline.json has no artifact_dependencies object."
+        )
+    changed = set(changed_slugs)
+    dependents: List[str] = []
+    while True:
+        added = False
+        for slug in sorted(catalog):
+            declaration = catalog[slug]
+            if not isinstance(declaration, dict):
+                raise VersioningError(
+                    f"course-pipeline.json artifact dependency {slug!r} must be an object."
+                )
+            dependencies = declaration.get("depends_on", [])
+            if not isinstance(dependencies, list) or not all(
+                isinstance(dependency, str) for dependency in dependencies
+            ):
+                raise VersioningError(
+                    f"course-pipeline.json artifact dependency {slug!r} depends_on "
+                    "must be a list of slugs."
+                )
+            if slug in changed or not changed.intersection(dependencies):
+                continue
+            dependent = coverage_map().get(slug)
+            if not isinstance(dependent, dict):
+                raise VersioningError(
+                    f"course-pipeline.json dependency target {slug!r} is absent from coverage-map.json."
+                )
+            if dependent.get("kind") != "airtable_content":
+                continue
+            dependent_table = _RESOURCE_TABLE.get(dependent.get("table"))
+            if dependent_table != table:
+                continue
+            changed.add(slug)
+            dependents.append(slug)
+            added = True
+        if not added:
+            return dependents
+
+
+def _readiness_gate_invalidations(
+    table: str, changed_slugs: List[str]
+) -> Dict[str, Any]:
+    """Clear same-record lifecycle gates bound to changed artifact slugs."""
+    lifecycle = _pipeline_router().get("artifact_lifecycle")
+    if not isinstance(lifecycle, dict):
+        raise VersioningError("course-pipeline.json has no artifact_lifecycle object.")
+    instances = lifecycle.get("instances")
+    if not isinstance(instances, dict):
+        raise VersioningError(
+            "course-pipeline.json artifact_lifecycle has no instances object."
+        )
+    changed = set(changed_slugs)
+    invalidations: Dict[str, Any] = {}
+    for instance_name, instance in instances.items():
+        if not isinstance(instance, dict) or instance.get("table") != table:
+            continue
+        gates = instance.get("readiness_gates", [])
+        if not isinstance(gates, list):
+            raise VersioningError(
+                f"Lifecycle instance {instance_name!r} readiness_gates must be a list."
+            )
+        for gate in gates:
+            if not isinstance(gate, dict):
+                raise VersioningError(
+                    f"Lifecycle instance {instance_name!r} readiness gate must be an object."
+                )
+            field = gate.get("field")
+            if gate.get("slug") not in changed or field is None:
+                continue
+            if not isinstance(field, str):
+                raise VersioningError(
+                    f"Lifecycle instance {instance_name!r} readiness gate field must be a string."
+                )
+            invalidations[field] = False if field.endswith("Human Verified") else ""
+    return invalidations
+
+
 def plan_record_update(
     table: str,
     record_id: str,
@@ -688,6 +770,33 @@ def plan_record_update(
     if not changed_slugs:
         return dict(proposed_fields)
 
+    planned = dict(proposed_fields)
+    dependent_slugs = _same_record_dependents(table, changed_slugs)
+    for slug in dependent_slugs:
+        content_fields = coverage_map()[slug].get("content_fields") or []
+        if not content_fields or not all(
+            isinstance(field, str) for field in content_fields
+        ):
+            raise VersioningError(
+                f"coverage-map.json artifact {slug!r} has invalid content_fields."
+            )
+        for field in content_fields:
+            if field in proposed_fields and proposed_fields[field] not in (None, ""):
+                raise VersioningError(
+                    f"{table}: cannot change dependency content and dependent artifact "
+                    f"{slug!r} field {field!r} in the same write."
+                )
+            metadata = field_metadata.get(field)
+            if not isinstance(metadata, dict):
+                raise VersioningError(
+                    f"Missing canonicalization metadata for {table}.{field}."
+                )
+            planned[field] = ""
+            predicted_fields[field] = _canonicalize_storage_value(
+                field, "", metadata
+            )
+    changed_slugs.extend(dependent_slugs)
+
     version_field = validate_field(VERSION_CONTROL_CLI_FIELD, table)
     existing_vc = _decode_version_control(
         current_fields.get(version_field) or "{}",
@@ -697,7 +806,6 @@ def plan_record_update(
         "before owner write",
     )
     merged_vc = dict(existing_vc)
-    planned = dict(proposed_fields)
     stamped_at = now_iso()
     for slug in changed_slugs:
         current_entry = existing_vc.get(slug)
@@ -709,6 +817,8 @@ def plan_record_update(
         }
         for review_field in _paired_review_targets(slug):
             planned[review_field] = ""
+
+    planned.update(_readiness_gate_invalidations(table, changed_slugs))
 
     planned.update(
         _same_record_lifecycle_invalidation(table, changed_slugs, current_fields)

@@ -34,6 +34,7 @@ FIELD_MAPPINGS = {
         'learning_objectives_override_audit': 'Learning Objectives Override Audit',
         'course_outline_review_state': 'Course Outline Review State',
         'course_outline_submitted_revision': 'Course Outline Submitted Revision',
+        'course_outline': 'Course Outline',
         'outline_draft': 'Outline Draft',
         'outline_draft_review_ai': 'Outline Draft Review (AI)',
         'outline_draft_human_verified': 'Outline Draft Human Verified',

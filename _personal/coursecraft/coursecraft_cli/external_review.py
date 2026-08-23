@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Mapping
 
+from .artifact_versions import coverage_map
 from .coursecraft_project import coursecraft_project_root
 from .objective_override import current_artifact_version
 
@@ -66,7 +67,9 @@ def _protocol_contract(instance: Mapping[str, Any]) -> Dict[str, Any]:
     return value
 
 
-def _require_canonical_evidence(instance: str, raw: Any) -> None:
+def _require_canonical_evidence(
+    instance: str, raw: Any, *, allow_legacy: bool = False
+) -> Mapping[str, Any]:
     """Require one exact canonical submitted-revision evidence document."""
     if not isinstance(raw, str) or not raw.strip():
         raise ExternalReviewError(f"{instance} submitted revision evidence is blank.")
@@ -76,45 +79,57 @@ def _require_canonical_evidence(instance: str, raw: Any) -> None:
         raise ExternalReviewError(
             f"{instance} submitted revision evidence is malformed JSON: {error}."
         ) from None
-    subject = _instance_contract(instance).get("review_subject", {})
-    if subject.get("evidence_kind") == "version_entry":
-        valid = (
-            isinstance(value, dict)
-            and set(value) == {"slug", "v", "sha256"}
-            and value.get("slug") == subject.get("slug")
-            and isinstance(value.get("v"), int)
-            and not isinstance(value.get("v"), bool)
-            and value["v"] > 0
-            and isinstance(value.get("sha256"), str)
-            and _SHA256_RE.fullmatch(value["sha256"]) is not None
-        )
-    elif subject.get("evidence_kind") == "sorted_linked_record_manifest":
-        valid = isinstance(value, list) and bool(value)
-        clip_ids: List[str] = []
+    contract = _instance_contract(instance)
+    subjects = [contract.get("review_subject", {})]
+    if allow_legacy:
+        legacy = contract.get("legacy_submitted_subjects", [])
+        if not isinstance(legacy, list) or not all(
+            isinstance(subject, dict) for subject in legacy
+        ):
+            raise ExternalReviewError(
+                f"Lifecycle instance {instance!r} legacy_submitted_subjects must be a list of objects."
+            )
+        subjects.extend(legacy)
+    for subject in subjects:
+        if subject.get("evidence_kind") == "version_entry":
+            valid = (
+                isinstance(value, dict)
+                and set(value) == {"slug", "v", "sha256"}
+                and value.get("slug") == subject.get("slug")
+                and isinstance(value.get("v"), int)
+                and not isinstance(value.get("v"), bool)
+                and value["v"] > 0
+                and isinstance(value.get("sha256"), str)
+                and _SHA256_RE.fullmatch(value["sha256"]) is not None
+            )
+        elif subject.get("evidence_kind") == "sorted_linked_record_manifest":
+            valid = isinstance(value, list) and bool(value)
+            clip_ids: List[str] = []
+            if valid:
+                for item in value:
+                    if not (
+                        isinstance(item, dict)
+                        and set(item) == {"clip_id", "v", "sha256"}
+                        and isinstance(item.get("clip_id"), str)
+                        and isinstance(item.get("v"), int)
+                        and not isinstance(item.get("v"), bool)
+                        and item["v"] > 0
+                        and isinstance(item.get("sha256"), str)
+                        and _SHA256_RE.fullmatch(item["sha256"]) is not None
+                    ):
+                        valid = False
+                        break
+                    clip_ids.append(item["clip_id"])
+                valid = valid and clip_ids == sorted(set(clip_ids))
+        else:
+            raise ExternalReviewError(
+                f"Lifecycle instance {instance!r} has an unknown submitted evidence kind."
+            )
         if valid:
-            for item in value:
-                if not (
-                    isinstance(item, dict)
-                    and set(item) == {"clip_id", "v", "sha256"}
-                    and isinstance(item.get("clip_id"), str)
-                    and isinstance(item.get("v"), int)
-                    and not isinstance(item.get("v"), bool)
-                    and item["v"] > 0
-                    and isinstance(item.get("sha256"), str)
-                    and _SHA256_RE.fullmatch(item["sha256"]) is not None
-                ):
-                    valid = False
-                    break
-                clip_ids.append(item["clip_id"])
-            valid = valid and clip_ids == sorted(set(clip_ids))
-    else:
-        raise ExternalReviewError(
-            f"Lifecycle instance {instance!r} has an unknown submitted evidence kind."
-        )
-    if not valid:
-        raise ExternalReviewError(
-            f"{instance} submitted revision evidence is not canonical."
-        )
+            return subject
+    raise ExternalReviewError(
+        f"{instance} submitted revision evidence is not canonical."
+    )
 
 
 def _stable_json(value: Any) -> str:
@@ -198,7 +213,6 @@ def _require_readiness(
     record: Mapping[str, Any],
 ) -> None:
     fields = record["fields"]
-    evidence = record["current_revision"]
     linked = record.get("linked_records") or []
     for gate in instance.get("readiness_gates", []):
         kind = gate.get("kind")
@@ -207,12 +221,20 @@ def _require_readiness(
         if kind in {"version_entry_current", "linked_version_entries_current"}:
             continue  # Evidence construction already proved the exact current ledger entries.
         if kind == "ai_review_current_pass":
-            _require_current_pass(fields.get(gate["field"]), gate["slug"], evidence, gate["field"])
+            evidence = version_evidence(
+                gate["slug"], current_artifact_version(fields, gate["slug"])
+            )
+            _require_current_pass(
+                fields.get(gate["field"]), gate["slug"], evidence, gate["field"]
+            )
         elif kind == "field_truthy":
             if not _truthy(fields.get(gate["field"])):
                 raise ExternalReviewError(f"Readiness field {gate['field']!r} is not true.")
         elif kind == "field_present":
-            if fields.get(gate["field"]) in (None, "", []):
+            value = fields.get(gate["field"])
+            if value in (None, "", []) or (
+                isinstance(value, str) and not value.strip()
+            ):
                 raise ExternalReviewError(f"Readiness field {gate['field']!r} is blank.")
         elif kind == "positive_count":
             if _number(fields.get(gate["field"]), gate["field"]) <= 0:
@@ -242,6 +264,32 @@ def _require_readiness(
             raise ExternalReviewError(
                 f"Lifecycle instance {instance_name!r} uses unknown readiness gate {kind!r}."
             )
+
+
+def _lifecycle_action_statuses(action_id: Any) -> List[str]:
+    """Return canonical work-phase statuses assigned to one lifecycle action."""
+    if not isinstance(action_id, str):
+        return []
+    phases = _pipeline_document().get("work_phases")
+    if not isinstance(phases, list):
+        raise ExternalReviewError("Lifecycle contract work_phases must be a list.")
+    statuses: List[str] = []
+    for phase in phases:
+        if not isinstance(phase, dict):
+            raise ExternalReviewError("Lifecycle contract work_phases entries must be objects.")
+        if phase.get("lifecycle_action") != action_id:
+            continue
+        phase_statuses = phase.get("statuses")
+        if not isinstance(phase_statuses, list) or not all(
+            isinstance(status, str) for status in phase_statuses
+        ):
+            raise ExternalReviewError(
+                f"Lifecycle work phase for {action_id!r} must define string statuses."
+            )
+        for status in phase_statuses:
+            if status not in statuses:
+                statuses.append(status)
+    return statuses
 
 
 def plan_transition(
@@ -274,6 +322,13 @@ def plan_transition(
             f"{action_contract.get('actor')!r}, not {actor!r}."
         )
 
+    allowed_statuses = _lifecycle_action_statuses(action_contract.get("id"))
+    if allowed_statuses and fields.get("Status") not in allowed_statuses:
+        raise ExternalReviewError(
+            f"{instance}.{action} requires Status in {allowed_statuses!r}; "
+            f"current Status is {fields.get('Status')!r}."
+        )
+
     state_field = instance_contract.get("state_field")
     revision_field = instance_contract.get("submitted_revision_field")
     current_state = fields.get(state_field)
@@ -292,7 +347,11 @@ def plan_transition(
     )
     persisted_evidence = fields.get(revision_field)
     if current_state in evidence_required_states:
-        _require_canonical_evidence(instance, persisted_evidence)
+        _require_canonical_evidence(
+            instance,
+            persisted_evidence,
+            allow_legacy=current_state in {"Submitted", "Changes Requested"},
+        )
     elif persisted_evidence not in (None, ""):
         raise ExternalReviewError(
             f"{instance} state {current_state!r} forbids submitted revision evidence."
@@ -355,7 +414,12 @@ def plan_transition(
         raise ExternalReviewError(
             f"Transition {instance}.{action} has unknown evidence rule {evidence_action!r}."
         )
-    for invalidated_field in edge.get("invalidates") or []:
+    invalidated_fields = list(edge.get("invalidates") or [])
+    if action == "request_changes":
+        invalidated_fields.extend(
+            instance_contract.get("request_changes_invalidates") or []
+        )
+    for invalidated_field in invalidated_fields:
         planned[invalidated_field] = (
             False if invalidated_field.endswith("Human Verified") else ""
         )
@@ -396,11 +460,27 @@ def transition_record(client: Any, instance_name: str, record_id: str) -> Dict[s
     if table == "Modules":
         fields["Platform"] = _module_course_platform(client, fields)
     subject = instance["review_subject"]
+    if fields.get(instance["state_field"]) == "Submitted":
+        subject = _require_canonical_evidence(
+            instance_name,
+            fields.get(instance["submitted_revision_field"]),
+            allow_legacy=True,
+        )
     if subject["evidence_kind"] == "version_entry":
-        if subject["slug"] == "course.outline_draft":
+        artifact = coverage_map().get(subject["slug"])
+        if not isinstance(artifact, dict):
+            raise ExternalReviewError(
+                f"Unknown coverage-map review subject {subject['slug']!r}."
+            )
+        if artifact.get("kind") == "airtable_content":
             version = current_artifact_version(fields, subject["slug"])
-        else:
+        elif artifact.get("kind") == "file":
             version = _registered_file_version(fields, subject["slug"])
+        else:
+            raise ExternalReviewError(
+                f"Review subject {subject['slug']!r} has unsupported artifact kind "
+                f"{artifact.get('kind')!r}."
+            )
         evidence = version_evidence(subject["slug"], version)
         linked: List[Mapping[str, Any]] = []
     elif subject["evidence_kind"] == "sorted_linked_record_manifest":
