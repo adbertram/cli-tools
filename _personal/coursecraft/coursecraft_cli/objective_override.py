@@ -6,7 +6,7 @@ import json
 import re
 from typing import Any, Dict
 
-from .artifact_versions import canonical_hash, now_iso
+from .artifact_versions import canonical_hash, now_iso  # noqa: F401 - re-exported for commands
 
 
 STATE_FIELD = "Learning Objectives Override State"

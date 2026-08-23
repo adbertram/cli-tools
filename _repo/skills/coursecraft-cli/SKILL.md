@@ -173,7 +173,7 @@ coursecraft feedback update recXXX --processing-status Applied --processed-at "2
 - **slides** -- CRUD for slide records with hierarchical filtering and build-instructions/script fields
 - **slide-templates** -- Manage PowerPoint slide template definitions with --platform filtering
 - **feedback** -- CRUD for CourseCraft Feedback rows with per-level link filters (`--demo`, `--slide`, `--clip`, `--module`, `--course`), `Processing Status`/`Patterns Learned`/`Processed At` writes, write verification, and fail-closed `--remediation-claim` verification for `Applied` stamps. This is the first-class path for Feedback-table I/O; do not use raw `airtable` for the Feedback table.
-- **voice-recordings** -- Generate slide and demo narration audio with ElevenLabs and store recording metadata
+- **voice-recordings** -- Generate demo narration audio with ElevenLabs and store recording metadata (demos only; slides carry an instructor WAV take)
 </principle>
 
 <principle name="Legacy Import Update Intake">

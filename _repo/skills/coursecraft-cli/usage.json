@@ -1,7 +1,7 @@
 {
   "tool": "coursecraft",
   "description": "Manage CourseCraft course content in Airtable",
-  "discovered_at": "2026-08-23T02:18:20Z",
+  "discovered_at": "2026-08-23T13:53:16Z",
   "total_commands": 76,
   "global_options": [
     {
@@ -1979,7 +1979,7 @@
               "name": "--recording-dictation-method",
               "type": "bool",
               "required": false,
-              "help": "<Manual Instructor Generation|Automatic Narration Generation>  How this demo's narration is produced: 'Manual Instructor Generation' (Adam reads the Demo Script) or 'Automatic Narration Generation' (ElevenLabs generates it). Set per demo; the course-level field is not inherited",
+              "help": "<Manual Instructor Generation|Automatic Narration Generation>  How this demo's narration is produced: 'Manual Instructor Generation' (Adam reads the Demo Script) or 'Automatic Narration Generation' (ElevenLabs generates it). Set per demo -- it is the only level that carries this field",
               "takes_value": false,
               "default": "Manual Instructor Generation"
             },
@@ -2280,7 +2280,7 @@
               "name": "--recording-dictation-method",
               "type": "bool",
               "required": false,
-              "help": "<Manual Instructor Generation|Automatic Narration            How this demo's narration is produced: 'Manual Instructor Generation>                                                  Generation' (Adam reads the Demo Script) or 'Automatic Narration Generation' (ElevenLabs generates it). Set per demo; the course-level field is not inherited",
+              "help": "<Manual Instructor Generation|Automatic Narration            How this demo's narration is produced: 'Manual Instructor Generation>                                                  Generation' (Adam reads the Demo Script) or 'Automatic Narration Generation' (ElevenLabs generates it). Set per demo -- it is the only level that carries this field",
               "takes_value": false
             },
             {

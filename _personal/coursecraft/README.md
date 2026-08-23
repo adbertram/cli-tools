@@ -65,7 +65,7 @@ coursecraft courses get my-course-slug --include-clips
 
 # Update a course
 coursecraft courses update my-course-slug --name "New Name"
-coursecraft courses update recXXX --status "Complete" --active
+coursecraft courses update recXXX --active --content-level "Intermediate"
 coursecraft courses update my-course --target-length 60
 coursecraft courses update my-course --research-report-file report.md
 
@@ -308,7 +308,7 @@ coursecraft modules show recXXXXXXXXXXXXXXX
 coursecraft modules create --name "Getting Started" --course my-course-id --order 1
 
 # Update a module
-coursecraft modules update recXXX --name "New Name" --status "Complete"
+coursecraft modules update recXXX --name "New Name" --module-plan-complete
 
 # Delete module only
 coursecraft modules delete recXXX
@@ -362,7 +362,7 @@ coursecraft clips create --module recXXX \
   --json '[{"name":"Clip 1","order":1},{"name":"Clip 2","order":2}]'
 
 # Update a clip
-coursecraft clips update recXXX --name "Updated Name" --status "Complete"
+coursecraft clips update recXXX --name "Updated Name" --content-done
 coursecraft clips update recXXX --module recYYY --order 1
 coursecraft clips update recXXX --content-done
 
@@ -431,7 +431,7 @@ coursecraft demos create --clip recXXX --clip-order 1 --name "Setup Demo" --reco
 coursecraft demos update recXXX --recording-dictation-method "Automatic Narration Generation"
 
 # Update a demo
-coursecraft demos update recXXX --name "New Name" --idea "Updated idea"
+coursecraft demos update recXXX --name "New Name" --learner-takeaway "Updated takeaway"
 coursecraft demos update recXXX --script "Updated narration script"
 
 # Re-parent a demo to a different clip
@@ -445,9 +445,10 @@ coursecraft demos update recXXX --execution-method "Automated Walkthrough"
 # <action>/<expect> cue sequence changes: the CLI compares the new text's
 # executable-cue hash against executableCuesSha256 in the demo folder's
 # walkthrough.json, so rewording an <explain>/<observe>/<wait> author cue or the
-# "## Goal" prose keeps AI Tested. With no readable walkthrough.json, any Action
-# Summary change clears it. Each auto-clear prints a notice naming the reason.
-coursecraft demos update recXXX --ai-tested
+# "## Goal" prose keeps the walkthrough test result. With no readable
+# walkthrough.json, any Action Summary change clears it. Each auto-clear
+# prints a notice naming the reason.
+coursecraft demos update recXXX --walkthrough-test-complete
 
 # Delete a demo
 coursecraft demos delete recXXX
@@ -459,7 +460,7 @@ coursecraft demos delete recXXX --force
 Use the CourseCraft-owned schema path instead of calling Airtable directly:
 
 ```bash
-coursecraft fields rename Demos "Tested and Approved" "AI Tested"
+coursecraft fields rename Demos "Tested and Approved" "Walkthrough Test Complete"
 ```
 
 The command resolves the existing field ID, rejects a duplicate destination
@@ -809,12 +810,14 @@ coursecraft courses create \
   ]'
 ```
 
-### Batch Update Module Status
+### Batch Update Modules
+
+`Status` is a read-only Airtable formula — set the fields it reads instead.
 
 ```bash
 # Get all module IDs for a course, then update each
 for id in $(coursecraft modules list --course my-course | jq -r '.[].id'); do
-  coursecraft modules update "$id" --status "In Progress"
+  coursecraft modules update "$id" --demo-density 2
 done
 ```
 
@@ -843,6 +846,5 @@ coursecraft slide-templates update recXXX --requirements "Exactly three points; 
 ## Cache
 
 ```bash
-coursecraft cache status
 coursecraft cache clear
 ```

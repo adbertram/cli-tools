@@ -314,8 +314,8 @@ def _paired_review_targets(slug: str) -> List[str]:
     Both sources can name a field that lives on a DIFFERENT table than
     ``slug``'s own content -- e.g. ``module-slide-build-review``'s
     ``Slide Build Review (AI)`` lives on Modules but is individually targeted
-    at each ``slide.*`` slug (Slides). ``stamp_versions``'s follow-up write
-    always targets the SAME record it just wrote, so a cross-table field is
+    at each ``slide.*`` slug (Slides). ``plan_record_update``'s merged PATCH
+    always targets the SAME record it is planning for, so a cross-table field is
     never a valid write there. This is documented, intentional V1 scope (see
     the versioning framework plan's named follow-up 1: cross-record composite
     review staleness is out of V1 scope on purpose) -- a cross-table field is
@@ -363,12 +363,12 @@ def check_write_conflict(
     """Pre-write guard: reject a content+its-own-review write before it lands.
 
     Called from ``client.py``'s ``create_record``/``update_record`` BEFORE
-    the Airtable write is issued. ``stamp_versions``'s own post-write check
-    (below) catches the same conflict too late -- the corrupt content+review
+    the Airtable write is issued. A post-write check would catch
+    the same conflict too late -- the corrupt content+review
     pairing has already reached Airtable by the time that check runs, and by
     then no Version Control entry gets created for the touched slug, so
     ``preflight_lib.ai_review_status()`` reads the record as clean/unsynced
-    rather than stale (Finding 2). Unlike ``stamp_versions``, this makes no
+    rather than stale (Finding 2). This makes no
     attempt to detect whether the content would actually CHANGE first --
     sending a content field and its own paired review field in one call is
     never legitimate regardless of whether the content differs from what is
@@ -411,7 +411,7 @@ def check_write_conflict(
     ``fetch_persisted_fields`` is supplied (``update_record`` passes a
     callback that re-reads the record; ``create_record`` passes none, since
     there is no persisted record yet to read), it resolves the record's real
-    slide-type slug the same way ``stamp_versions`` does, and the reject only
+    slide-type slug the same way ``plan_record_update`` does, and the reject only
     fires if that real slug matches the candidate under test. Without a
     resolver (``create_record``), the check stays conservative and rejects,
     same as it always has.

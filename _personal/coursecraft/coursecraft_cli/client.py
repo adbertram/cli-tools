@@ -918,7 +918,6 @@ class CourseCraftClient:
         for module in sorted(all_modules, key=lambda m: m.get("fields", {}).get("Order", 999)):
             fields = module.get("fields", {})
             mid = fields.get("ID", "")
-            name = fields.get("Name", "")
             if mid:
                 suggestions.append(f"  - {mid}")
 

@@ -491,9 +491,8 @@ def _validate_approved_module_deck(path: Optional[Path]) -> Path:
             missing = sorted(required - names)
             if missing:
                 raise ExternalReviewError(
-                    f"Canonical approved module deck is missing PPTX members: "
-                    + ", ".join(missing)
-                    + "."
+                    "Canonical approved module deck is missing PPTX members: "
+                    f"{', '.join(missing)}."
                 )
             corrupt = archive.testzip()
             if corrupt is not None:
