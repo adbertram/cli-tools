@@ -19,6 +19,7 @@ legoscout <command-group> <action> [arguments] [options]
 
 | Task | Command |
 |------|---------|
+| FULL pre-run gate: verify every deal-run dependency before any worker starts | `legoscout pricing preflight [--source <NS>]...` |
 | Assemble one ledger-ready record | `legoscout deals build <CANDIDATE> <APPRAISAL>` |
 | Resolve every active listing to available/unavailable/blocked | `legoscout deals expire` |
 | Get one deal record | `legoscout deals get <LISTING_KEY>` |

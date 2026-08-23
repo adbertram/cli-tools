@@ -1,0 +1,245 @@
+{
+  "tool": "pluralsight",
+  "description": "CLI interface for pluralsight",
+  "discovered_at": "2026-08-23T18:58:25Z",
+  "total_commands": 6,
+  "global_options": [],
+  "commands": {
+    "cache": {
+      "help": "Manage response cache",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
+        }
+      }
+    },
+    "get": {
+      "help": "Get a single catalog entry by product id.",
+      "arguments": [
+        {
+          "name": "item_id",
+          "type": "TEXT",
+          "required": true,
+          "help": "Product id (e.g. docker-developers-docker-foundations)"
+        }
+      ],
+      "options": [
+        {
+          "name": "--table",
+          "type": "bool",
+          "required": false,
+          "help": "Display as table",
+          "short": "-t",
+          "takes_value": false
+        },
+        {
+          "name": "--properties",
+          "type": "TEXT",
+          "required": false,
+          "help": "Comma-separated fields to include",
+          "short": "-p"
+        }
+      ]
+    },
+    "list": {
+      "help": "List newest catalog entries across the public Pluralsight library.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--limit",
+          "type": "INTEGER",
+          "required": false,
+          "help": "Maximum number of items (server-side page size)",
+          "short": "-l",
+          "default": "20"
+        },
+        {
+          "name": "--page",
+          "type": "bool",
+          "required": false,
+          "help": "<int range> [x>=1]  Result page number",
+          "short": "-P",
+          "takes_value": false,
+          "default": "1"
+        },
+        {
+          "name": "--category",
+          "type": "TEXT",
+          "required": false,
+          "help": "Content type (repeatable): course, path, labs, certificate, all",
+          "short": "-c"
+        },
+        {
+          "name": "--filter",
+          "type": "TEXT",
+          "required": false,
+          "help": "Filter results (field:op:value)",
+          "short": "-f"
+        },
+        {
+          "name": "--table",
+          "type": "bool",
+          "required": false,
+          "help": "Display as table",
+          "short": "-t",
+          "takes_value": false
+        },
+        {
+          "name": "--properties",
+          "type": "TEXT",
+          "required": false,
+          "help": "Comma-separated fields to include",
+          "short": "-p"
+        },
+        {
+          "name": "--full",
+          "type": "bool",
+          "required": false,
+          "help": "Include total count and facets wrapper",
+          "takes_value": false
+        }
+      ]
+    },
+    "modules": {
+      "help": "Get module titles, lengths, and clip structure for one course.",
+      "arguments": [
+        {
+          "name": "course_id",
+          "type": "TEXT",
+          "required": true,
+          "help": "Course product id (e.g. docker-developers-docker-foundations)"
+        }
+      ],
+      "options": [
+        {
+          "name": "--clips",
+          "type": "bool",
+          "required": false,
+          "help": "Include individual clip listings",
+          "takes_value": false,
+          "secondary": "--no-clips",
+          "default": "clips"
+        },
+        {
+          "name": "--filter",
+          "type": "TEXT",
+          "required": false,
+          "help": "Filter modules (field:op:value)",
+          "short": "-f"
+        },
+        {
+          "name": "--table",
+          "type": "bool",
+          "required": false,
+          "help": "Display as table",
+          "short": "-t",
+          "takes_value": false
+        },
+        {
+          "name": "--properties",
+          "type": "TEXT",
+          "required": false,
+          "help": "Comma-separated fields to include",
+          "short": "-p"
+        }
+      ]
+    },
+    "search": {
+      "help": "Keyword search over the public Pluralsight catalog.",
+      "arguments": [
+        {
+          "name": "query",
+          "type": "TEXT",
+          "required": true,
+          "help": "Search keywords (e.g. 'agentic ai')"
+        }
+      ],
+      "options": [
+        {
+          "name": "--limit",
+          "type": "INTEGER",
+          "required": false,
+          "help": "Maximum number of results (server-side page size)",
+          "short": "-l",
+          "default": "20"
+        },
+        {
+          "name": "--page",
+          "type": "bool",
+          "required": false,
+          "help": "<int range> [x>=1]  Result page number",
+          "short": "-P",
+          "takes_value": false,
+          "default": "1"
+        },
+        {
+          "name": "--category",
+          "type": "TEXT",
+          "required": false,
+          "help": "Content type (repeatable): course, path, labs, certificate, all",
+          "short": "-c"
+        },
+        {
+          "name": "--sort",
+          "type": "TEXT",
+          "required": false,
+          "help": "Sort order: relevance or newest",
+          "default": "relevance"
+        },
+        {
+          "name": "--filter",
+          "type": "TEXT",
+          "required": false,
+          "help": "Filter results (field:op:value)",
+          "short": "-f"
+        },
+        {
+          "name": "--table",
+          "type": "bool",
+          "required": false,
+          "help": "Display as table",
+          "short": "-t",
+          "takes_value": false
+        },
+        {
+          "name": "--properties",
+          "type": "TEXT",
+          "required": false,
+          "help": "Comma-separated fields to include",
+          "short": "-p"
+        },
+        {
+          "name": "--full",
+          "type": "bool",
+          "required": false,
+          "help": "Include total count and facets wrapper",
+          "takes_value": false
+        }
+      ]
+    },
+    "suggestions": {
+      "help": "Return query suggestions from the catalog search engine.",
+      "arguments": [
+        {
+          "name": "query",
+          "type": "TEXT",
+          "required": true,
+          "help": "Partial search phrase"
+        }
+      ],
+      "options": []
+    }
+  },
+  "usage_instructions": "Use the `pluralsight` CLI. Run `pluralsight --help` to discover command groups and `--help` on any subcommand for its options."
+}

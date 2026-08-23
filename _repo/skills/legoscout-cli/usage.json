@@ -1,8 +1,8 @@
 {
   "tool": "legoscout",
   "description": "CLI interface for legoscout",
-  "discovered_at": "2026-08-20T20:54:08Z",
-  "total_commands": 59,
+  "discovered_at": "2026-08-23T17:52:16Z",
+  "total_commands": 60,
   "global_options": [],
   "commands": {
     "deals": {
@@ -49,13 +49,15 @@
               "name": "--apply",
               "type": "bool",
               "required": false,
-              "help": "Write confirmed_unavailable/blocked rows and stamp confirmed_still_active rows, batched in one upsert_deals() call"
+              "help": "Write confirmed_unavailable/blocked rows and stamp confirmed_still_active rows, batched in one upsert_deals() call",
+              "takes_value": false
             },
             {
               "name": "--timeout-seconds",
               "type": "bool",
               "required": false,
               "help": "<float range> [x>=0.001]  Hard limit for the complete sweep",
+              "takes_value": false,
               "default": "2700"
             },
             {
@@ -63,6 +65,7 @@
               "type": "bool",
               "required": false,
               "help": "<float range> [x>=0.001]  Hard limit for one live listing check",
+              "takes_value": false,
               "default": "180"
             }
           ]
@@ -83,7 +86,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -104,6 +108,7 @@
               "required": false,
               "help": "<int range> [x>=0]  Maximum number of deals",
               "short": "-l",
+              "takes_value": false,
               "default": "100"
             },
             {
@@ -118,7 +123,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -169,13 +175,15 @@
               "name": "--apply",
               "type": "bool",
               "required": false,
-              "help": "Write the answers back"
+              "help": "Write the answers back",
+              "takes_value": false
             },
             {
               "name": "--dry-run",
               "type": "bool",
               "required": false,
-              "help": "Report and write nothing"
+              "help": "Report and write nothing",
+              "takes_value": false
             },
             {
               "name": "--source",
@@ -187,7 +195,8 @@
               "name": "--include-inactive",
               "type": "bool",
               "required": false,
-              "help": "Do not skip dead listings"
+              "help": "Do not skip dead listings",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -205,7 +214,8 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Re-answer rows the done-predicate would skip"
+              "help": "Re-answer rows the done-predicate would skip",
+              "takes_value": false
             },
             {
               "name": "--ledger",
@@ -217,13 +227,15 @@
               "name": "--set",
               "type": "bool",
               "required": false,
-              "help": "KEY=VALUE  Write an agent-read answer for one row, through the same resolve-and-write path the readers use"
+              "help": "KEY=VALUE  Write an agent-read answer for one row, through the same resolve-and-write path the readers use",
+              "takes_value": false
             },
             {
               "name": "--list",
               "type": "bool",
               "required": false,
-              "help": "The sweeps and what they read"
+              "help": "The sweeps and what they read",
+              "takes_value": false
             }
           ]
         },
@@ -259,7 +271,8 @@
               "name": "--json",
               "type": "bool",
               "required": false,
-              "help": "the raw JSON Schema properties, for a machine caller"
+              "help": "the raw JSON Schema properties, for a machine caller",
+              "takes_value": false
             }
           ]
         },
@@ -295,13 +308,15 @@
               "name": "--strict",
               "type": "bool",
               "required": false,
-              "help": "Exit 1 if any ERROR"
+              "help": "Exit 1 if any ERROR",
+              "takes_value": false
             },
             {
               "name": "--include-inactive",
               "type": "bool",
               "required": false,
-              "help": "Check dead listings too"
+              "help": "Check dead listings too",
+              "takes_value": false
             }
           ]
         }
@@ -355,7 +370,8 @@
               "name": "--active-only",
               "type": "bool",
               "required": false,
-              "help": "Drop rejected rows as well as unavailable and blocked"
+              "help": "Drop rejected rows as well as unavailable and blocked",
+              "takes_value": false
             },
             {
               "name": "--db",
@@ -387,7 +403,8 @@
               "name": "--no-open",
               "type": "bool",
               "required": false,
-              "help": "Do not open a browser"
+              "help": "Do not open a browser",
+              "takes_value": false
             },
             {
               "name": "--db",
@@ -430,37 +447,46 @@
               "name": "--register",
               "type": "bool",
               "required": false,
-              "help": "Persist the discovered house record"
+              "help": "Persist the discovered house record",
+              "takes_value": false
             }
           ]
         },
         "comps": {
-          "help": "BrickLink + eBay sold comps for a LEGO set (or several, on one listing), or eBay-only for a bulk lot. The single command the comps-only appraiser calls. Pass --set-no once per detected set number; a single-set listing still passes it once. BrickLink and eBay are independent lookups -- one failing never blocks the other; read `bricklink.lookup_status` and `ebay.available` separately per set.",
+          "help": "BrickLink + eBay sold comps for a LEGO set (or several, on one listing), eBay-only for a bulk lot, or eBay-only $/fig for a minifigure lot. The single command the comps-only appraiser calls. Pass --set-no once per detected set number; a single-set listing still passes it once. BrickLink and eBay are independent lookups -- one failing never blocks the other; read `bricklink.lookup_status` and `ebay.available` separately per set.",
           "arguments": [],
           "options": [
             {
               "name": "--set-no",
               "type": "TEXT",
               "required": false,
-              "help": "A LEGO set number. Repeatable -- pass it once per detected set on a multi-set listing. Required unless --bulk"
+              "help": "A LEGO set number. Repeatable -- pass it once per detected set on a multi-set listing. Required unless --bulk or --minifigure"
             },
             {
               "name": "--bulk",
               "type": "bool",
               "required": false,
-              "help": "Bulk-lot mode: eBay $/lb comps only, no BrickLink"
+              "help": "Bulk-lot mode: eBay $/lb comps only, no BrickLink",
+              "takes_value": false
+            },
+            {
+              "name": "--minifigure",
+              "type": "bool",
+              "required": false,
+              "help": "Minifigure-lot mode: eBay $/fig comps only, no BrickLink",
+              "takes_value": false
             },
             {
               "name": "--condition",
               "type": "TEXT",
               "required": false,
-              "help": "N or U. Required unless --bulk"
+              "help": "N or U. Required unless --bulk or --minifigure"
             },
             {
               "name": "--description",
               "type": "TEXT",
               "required": false,
-              "help": "Extra search keywords: set name/theme, or bulk lot description"
+              "help": "Extra search keywords: set name/theme, bulk lot description, or minifigure theme/name"
             },
             {
               "name": "--dollars-per-lb",
@@ -478,14 +504,14 @@
           ]
         },
         "comps-batch": {
-          "help": "Price a whole appraiser batch in ONE call: BrickLink + eBay sold comps for every candidate, concurrently. Each result is exactly what `pricing comps` would print for that candidate, plus `listing_key`. One candidate's failure becomes that candidate's `blocked` result -- it never fails the batch. The root `timings` object reports wall seconds vs the serial equivalent.",
+          "help": "Price a whole appraiser batch in ONE call: BrickLink + eBay sold comps for every candidate, concurrently. Each result is exactly what `legoscout pricing comps` would print for that candidate, plus `listing_key`. One candidate's failure becomes that candidate's `blocked` result -- it never fails the batch. The root `timings` object reports wall seconds vs the serial equivalent, so batch sizing stays a measurement.",
           "arguments": [],
           "options": [
             {
               "name": "--input",
               "type": "FILE",
               "required": true,
-              "help": "JSON array file of the classifier's comps hand-offs: listing_key, listing_category, and set_numbers/condition/description (set) or description/dollars_per_lb (bulk)"
+              "help": "JSON array file of the classifier's comps hand-offs: listing_key, listing_category, and set_numbers/condition/description (set), description/dollars_per_lb (bulk), description/figure_count/figure_count_source (minifigure), or exclusion_reason (excluded)"
             },
             {
               "name": "--output",
@@ -497,26 +523,26 @@
               "name": "--workers",
               "type": "INTEGER",
               "required": false,
-              "default": "4",
-              "help": "Concurrent candidates. Keep narrow: eBay is a browser-session scrape"
+              "help": "Concurrent candidates. Keep narrow: eBay is a browser-session scrape",
+              "default": "4"
             },
             {
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "default": "50",
-              "help": "Max eBay results per search"
+              "help": "Max eBay results per search",
+              "default": "50"
             }
           ]
         },
         "ebay-comps": {
-          "help": "eBay sold comps for one LEGO set, or one bulk lot with --bulk. Never fails on an eBay auth lapse -- returns `{\"available\": false, \"reason\": \"ebay_auth_required\", ...}` instead. Run `ebay auth login --credential-type browser_session` to authenticate completed/sold search.",
+          "help": "eBay sold comps for one LEGO set, one bulk lot with --bulk, or one minifigure lot with --minifigure. Never fails on an eBay auth lapse -- returns `{\"available\": false, \"reason\": \"ebay_auth_required\", ...}` instead. Run `ebay auth login --credential-type browser_session` to authenticate completed/sold search.",
           "arguments": [
             {
               "name": "set_no",
               "type": "SET_NO",
               "required": false,
-              "help": "A LEGO set number. Required unless --bulk"
+              "help": "A LEGO set number. Required unless --bulk or --minifigure"
             }
           ],
           "options": [
@@ -524,19 +550,27 @@
               "name": "--bulk",
               "type": "bool",
               "required": false,
-              "help": "Bulk-lot mode: match by weight, not a set number"
+              "help": "Bulk-lot mode: match by weight, not a set number",
+              "takes_value": false
+            },
+            {
+              "name": "--minifigure",
+              "type": "bool",
+              "required": false,
+              "help": "Minifigure-lot mode: match by figure count, not a set number",
+              "takes_value": false
             },
             {
               "name": "--condition",
               "type": "TEXT",
               "required": false,
-              "help": "N or U. Required unless --bulk"
+              "help": "N or U. Required unless --bulk or --minifigure"
             },
             {
               "name": "--description",
               "type": "TEXT",
               "required": false,
-              "help": "Extra search keywords: set name/theme, or bulk lot description"
+              "help": "Extra search keywords: set name/theme, bulk lot description, or minifigure theme/name"
             },
             {
               "name": "--dollars-per-lb",
@@ -621,7 +655,8 @@
               "name": "--shipping-unknown",
               "type": "bool",
               "required": false,
-              "help": "No freight is known, so the landed total is a FLOOR"
+              "help": "No freight is known, so the landed total is a FLOOR",
+              "takes_value": false
             },
             {
               "name": "--handling",
@@ -662,14 +697,20 @@
           "options": []
         },
         "preflight": {
-          "help": "Mandatory pre-run gate for both comps-pricing credentials. Verifies BrickLink and eBay auth status BEFORE any source worker starts. `pricing comps` degrades a per-candidate eBay auth lapse to `{\"available\": false, \"reason\": \"ebay_auth_required\", ...}` rather than raising -- correct within a run, but it means a session-wide eBay auth lapse is invisible until an appraiser batch is already many candidates deep. Run this first: a dead credential blocks the run at the door instead of surfacing 20 candidates later.",
+          "help": "Mandatory FULL pre-run gate for a deal run. Verifies EVERY dependency a run touches before any source worker starts: BrickLink and eBay live auth, every planned CLI-first source's binary (plus live auth where the registry requires it), the runtime headless browser, adam-server SSH + the deployed display app's pm2 process, source-registry structure and researched fee configs, ledger working copy writability, all four custom-agent definitions on both harnesses plus hard-rules parity, the nine project skills, the global agent standards file, and the run workspace directories. A session-wide eBay auth lapse looks identical to a per-candidate miss inside any one comps call -- this gate catches it at the door instead of 20 candidates deep. Exits non-zero on any blocker; warnings (unresearched fee configs, dead Gmail outreach) are reported without failing the run. Pass --source once per namespace for a selected-source run; omit it for an all-active run.",
           "arguments": [],
           "options": [
             {
               "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Check this profile on BOTH tools instead of each tool's own active profile"
+              "help": "Check this profile on the authed tools instead of each tool's own active profile"
+            },
+            {
+              "name": "--source",
+              "type": "NS",
+              "required": false,
+              "help": "Scope the source-CLI and fee-config checks to this active namespace instead of every active source. Repeatable. Match a planned selected-source run; omit for an all-active run"
             }
           ]
         },
@@ -778,7 +819,8 @@
               "name": "--refresh",
               "type": "bool",
               "required": false,
-              "help": "Call BrickLink directly, ignoring and not writing the call cache"
+              "help": "Call BrickLink directly, ignoring and not writing the call cache",
+              "takes_value": false
             }
           ]
         },
@@ -826,7 +868,8 @@
               "name": "--refresh",
               "type": "bool",
               "required": false,
-              "help": "Re-quote the carrier, ignoring the rate cache"
+              "help": "Re-quote the carrier, ignoring the rate cache",
+              "takes_value": false
             }
           ]
         }
@@ -870,7 +913,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--properties",
@@ -905,7 +949,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--properties",
@@ -946,7 +991,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -978,7 +1024,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--properties",
@@ -1013,7 +1060,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--properties",
@@ -1050,7 +1098,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -1082,7 +1131,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--properties",
@@ -1117,7 +1167,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--properties",
@@ -1143,7 +1194,8 @@
                   "name": "--confirm",
                   "type": "bool",
                   "required": false,
-                  "help": "Adam approved THIS exact body; send it"
+                  "help": "Adam approved THIS exact body; send it",
+                  "takes_value": false
                 },
                 {
                   "name": "--db",
@@ -1188,7 +1240,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--properties",
@@ -1223,7 +1276,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--properties",
@@ -1263,19 +1317,22 @@
               "name": "--apply",
               "type": "bool",
               "required": false,
-              "help": "Write the new scores"
+              "help": "Write the new scores",
+              "takes_value": false
             },
             {
               "name": "--dry-run",
               "type": "bool",
               "required": false,
-              "help": "Report and write nothing"
+              "help": "Report and write nothing",
+              "takes_value": false
             },
             {
               "name": "--include-rejected",
               "type": "bool",
               "required": false,
-              "help": "Rescore rejected rows too"
+              "help": "Rescore rejected rows too",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -1306,13 +1363,15 @@
               "name": "--apply",
               "type": "bool",
               "required": false,
-              "help": "Write the rows"
+              "help": "Write the rows",
+              "takes_value": false
             },
             {
               "name": "--dry-run",
               "type": "bool",
               "required": false,
-              "help": "Report and write nothing"
+              "help": "Report and write nothing",
+              "takes_value": false
             },
             {
               "name": "--db",
@@ -1343,7 +1402,8 @@
               "name": "--off",
               "type": "bool",
               "required": false,
-              "help": "Clear the flag instead of setting it"
+              "help": "Clear the flag instead of setting it",
+              "takes_value": false
             }
           ]
         },
@@ -1369,7 +1429,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -1404,7 +1465,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -1443,7 +1505,8 @@
               "name": "--dry-run",
               "type": "bool",
               "required": false,
-              "help": "Run every validation rule and write nothing"
+              "help": "Run every validation rule and write nothing",
+              "takes_value": false
             }
           ]
         },
@@ -1462,14 +1525,16 @@
               "name": "--notes",
               "type": "bool",
               "required": false,
-              "help": "Include learning notes"
+              "help": "Include learning notes",
+              "takes_value": false
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -1504,7 +1569,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -1561,7 +1627,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--properties",
@@ -1603,7 +1670,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--properties",
@@ -1641,14 +1709,16 @@
               "name": "--apply",
               "type": "bool",
               "required": false,
-              "help": "Write the computed watermarks back to the ledger"
+              "help": "Write the computed watermarks back to the ledger",
+              "takes_value": false
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -1682,7 +1752,8 @@
           "name": "--fetch-details",
           "type": "bool",
           "required": false,
-          "help": "Run `ebay listings get` per kept candidate and write the run artifact (live eBay calls)"
+          "help": "Run `ebay listings get` per kept candidate and write the run artifact (live eBay calls)",
+          "takes_value": false
         },
         {
           "name": "--jobs",
