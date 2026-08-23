@@ -1,4 +1,5 @@
 """CourseCraft client using airtable CLI for API access."""
+import hashlib
 import json
 import os
 import shutil
@@ -300,6 +301,189 @@ class CourseCraftClient:
                 f"Field rename in {table} did not persist: expected '{new_name}', "
                 f"read back {verified.get('name')!r}.",
                 mismatched_fields=frozenset({new_name}),
+            )
+        return verified
+
+    def get_formula_field(self, table: str, field_name: str) -> Dict:
+        """Read one formula field's live schema definition."""
+        fields = self._run_airtable_command(
+            ["fields", "list", table, "--base", self.base_id]
+        )
+        if not isinstance(fields, list):
+            raise ClientError(
+                f"Unexpected field-list response for table {table}: {fields}"
+            )
+
+        matches = [
+            field
+            for field in fields
+            if isinstance(field, dict) and field.get("name") == field_name
+        ]
+        if len(matches) != 1:
+            raise ClientError(
+                f"Expected exactly one field named '{field_name}' in {table}; "
+                f"found {len(matches)}."
+            )
+
+        field = matches[0]
+        if field.get("type") != "formula":
+            raise ClientError(
+                f"Field '{field_name}' in {table} must be a formula field; "
+                f"found type {field.get('type')!r}."
+            )
+        field_id = field.get("id")
+        if not isinstance(field_id, str) or not field_id.startswith("fld"):
+            raise ClientError(
+                f"Field metadata for '{field_name}' did not include a valid field ID."
+            )
+
+        verified = self._run_airtable_command(
+            ["fields", "get", table, field_id, "--base", self.base_id]
+        )
+        if not isinstance(verified, dict):
+            raise ClientError(
+                f"Formula field {table}.{field_name} returned invalid schema read-back."
+            )
+        options = verified.get("options")
+        formula = options.get("formula") if isinstance(options, dict) else None
+        if verified.get("type") != "formula" or not isinstance(formula, str):
+            raise ClientError(
+                f"Formula field {table}.{field_name} returned invalid formula metadata."
+            )
+        return verified
+
+    @staticmethod
+    def _canonicalize_formula_field_references(
+        formula: str,
+        fields: List[Dict],
+        table: str,
+        target_field_name: str,
+    ) -> str:
+        """Rewrite live formula field names to the schema's stable field IDs."""
+        field_ids_by_name = {
+            field["name"]: field["id"]
+            for field in fields
+            if isinstance(field, dict)
+            and isinstance(field.get("name"), str)
+            and isinstance(field.get("id"), str)
+            and field["id"].startswith("fld")
+        }
+        canonical: List[str] = []
+        in_string = False
+        index = 0
+        while index < len(formula):
+            character = formula[index]
+            if in_string and character == "\\" and index + 1 < len(formula):
+                canonical.append(formula[index:index + 2])
+                index += 2
+                continue
+            if character == '"':
+                in_string = not in_string
+                canonical.append(character)
+                index += 1
+                continue
+            if not in_string and character == "{":
+                close_index = formula.find("}", index + 1)
+                if close_index == -1:
+                    raise ClientError(
+                        f"Formula update in {table}.{target_field_name} contains "
+                        "an unterminated field reference."
+                    )
+                referenced_name = formula[index + 1:close_index]
+                referenced_id = field_ids_by_name.get(referenced_name)
+                if referenced_id is None:
+                    raise ClientError(
+                        f"Formula update in {table}.{target_field_name} references "
+                        f"'{{{referenced_name}}}', which did not resolve from live schema."
+                    )
+                canonical.append(f"{{{referenced_id}}}")
+                index = close_index + 1
+                continue
+            canonical.append(character)
+            index += 1
+        if in_string:
+            raise ClientError(
+                f"Formula update in {table}.{target_field_name} contains an "
+                "unterminated string literal."
+            )
+        return "".join(canonical)
+
+    def update_formula_field(self, table: str, field_name: str, formula: str) -> Dict:
+        """Update one formula field from live schema and verify its exact formula."""
+        fields = self._run_airtable_command(
+            ["fields", "list", table, "--base", self.base_id]
+        )
+        if not isinstance(fields, list):
+            raise ClientError(
+                f"Unexpected field-list response for table {table}: {fields}"
+            )
+
+        matches = [
+            field
+            for field in fields
+            if isinstance(field, dict) and field.get("name") == field_name
+        ]
+        if len(matches) != 1:
+            raise ClientError(
+                f"Expected exactly one field named '{field_name}' in {table}; "
+                f"found {len(matches)}."
+            )
+
+        field = matches[0]
+        if field.get("type") != "formula":
+            raise ClientError(
+                f"Field '{field_name}' in {table} must be a formula field; "
+                f"found type {field.get('type')!r}."
+            )
+        field_id = field.get("id")
+        if not isinstance(field_id, str) or not field_id.startswith("fld"):
+            raise ClientError(
+                f"Field metadata for '{field_name}' did not include a valid field ID."
+            )
+        expected_formula = self._canonicalize_formula_field_references(
+            formula,
+            fields,
+            table,
+            field_name,
+        )
+
+        self._run_airtable_command(
+            [
+                "fields",
+                "update",
+                table,
+                field_id,
+                "--base",
+                self.base_id,
+                "--options",
+                json.dumps({"formula": formula}),
+            ]
+        )
+        verified = self._run_airtable_command(
+            ["fields", "get", table, field_id, "--base", self.base_id]
+        )
+        if not isinstance(verified, dict):
+            raise WriteVerificationError(
+                f"Formula update in {table}.{field_name} returned invalid schema read-back.",
+                mismatched_fields=frozenset({field_name}),
+            )
+        options = verified.get("options")
+        verified_formula = options.get("formula") if isinstance(options, dict) else None
+        if verified.get("type") != "formula" or not isinstance(verified_formula, str):
+            raise WriteVerificationError(
+                f"Formula update in {table}.{field_name} returned invalid formula read-back.",
+                mismatched_fields=frozenset({field_name}),
+            )
+        expected_bytes = expected_formula.encode("utf-8")
+        actual_bytes = verified_formula.encode("utf-8")
+        if actual_bytes != expected_bytes:
+            raise WriteVerificationError(
+                f"Formula update in {table}.{field_name} did not persist byte-for-byte: "
+                f"expected sha256={hashlib.sha256(expected_bytes).hexdigest()} "
+                f"bytes={len(expected_bytes)}, actual "
+                f"sha256={hashlib.sha256(actual_bytes).hexdigest()} "
+                f"bytes={len(actual_bytes)}.",
+                mismatched_fields=frozenset({field_name}),
             )
         return verified
 

@@ -1,8 +1,8 @@
 {
   "tool": "coursecraft",
   "description": "Manage CourseCraft course content in Airtable",
-  "discovered_at": "2026-08-23T14:14:52Z",
-  "total_commands": 76,
+  "discovered_at": "2026-08-23T15:53:16Z",
+  "total_commands": 78,
   "global_options": [
     {
       "name": "--version",
@@ -2873,6 +2873,31 @@
         }
       ],
       "commands": {
+        "get-formula": {
+          "help": "Read one formula field's current schema definition.",
+          "arguments": [
+            {
+              "name": "table",
+              "type": "TEXT",
+              "required": true,
+              "help": "CourseCraft Airtable table name"
+            },
+            {
+              "name": "field_name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Formula field name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "rename": {
           "help": "Rename one CourseCraft Airtable field and verify the schema read-back.",
           "arguments": [
@@ -2896,6 +2921,37 @@
             }
           ],
           "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "update-formula": {
+          "help": "Update one formula field and verify byte-equivalent schema read-back.",
+          "arguments": [
+            {
+              "name": "table",
+              "type": "TEXT",
+              "required": true,
+              "help": "CourseCraft Airtable table name"
+            },
+            {
+              "name": "field_name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Formula field name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--formula-file",
+              "type": "FILE",
+              "required": true,
+              "help": "UTF-8 file containing the complete formula"
+            },
             {
               "name": "--profile",
               "type": "TEXT",
