@@ -62,3 +62,78 @@ def test_content_file_over_100_blocks_uses_chunked_upload(monkeypatch, tmp_path)
     assert len(uploaded) == 1
     assert uploaded[0][0] == "page-1"
     assert len(uploaded[0][1]) == 198
+
+
+def test_page_create_two_select_flags_set_both_properties(monkeypatch):
+    client = NotionClient.__new__(NotionClient)
+    captured = {}
+
+    client.get_database = lambda database_id: {
+        "properties": {"Name": {"type": "title"}}
+    }
+
+    def fake_create_page(database_id=None, properties=None, **kwargs):
+        captured.update(properties or {})
+        return {"id": "page-1", "url": "https://notion.so/page-1"}
+
+    client.create_page = fake_create_page
+    monkeypatch.setattr(database_cmd, "get_client", lambda: client)
+
+    result = CliRunner().invoke(
+        database_cmd.page_app,
+        [
+            "create",
+            "database-1",
+            "--title",
+            "Test page",
+            "--select",
+            "Client:Progress",
+            "--select",
+            "Contact:Mandy Mowers",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured == {
+        "Name": {"title": [{"type": "text", "text": {"content": "Test page"}}]},
+        "Client": {"select": {"name": "Progress"}},
+        "Contact": {"select": {"name": "Mandy Mowers"}},
+    }
+
+
+def test_page_create_two_status_flags_set_both_properties(monkeypatch):
+    client = NotionClient.__new__(NotionClient)
+    captured = {}
+
+    client.get_database = lambda database_id: {
+        "properties": {"Name": {"type": "title"}}
+    }
+
+    def fake_create_page(database_id=None, properties=None, **kwargs):
+        captured.update(properties or {})
+        return {"id": "page-1", "url": "https://notion.so/page-1"}
+
+    client.create_page = fake_create_page
+    monkeypatch.setattr(database_cmd, "get_client", lambda: client)
+
+    result = CliRunner().invoke(
+        database_cmd.page_app,
+        [
+            "create",
+            "database-1",
+            "--title",
+            "Test page",
+            "--status",
+            "Phase:Pending",
+            "--status",
+            "Priority:High",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured == {
+        "Name": {"title": [{"type": "text", "text": {"content": "Test page"}}]},
+        "Phase": {"status": {"name": "Pending"}},
+        "Priority": {"status": {"name": "High"}},
+    }
+

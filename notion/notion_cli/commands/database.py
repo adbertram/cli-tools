@@ -230,16 +230,22 @@ def build_emptiness_filter(field: str, op: str, prop_type: str) -> dict:
 def parse_notion_filter_conditions(filter_string: str) -> List[tuple]:
     """Parse a filter string into (field, op, value) triples.
 
-    ``cli_tools_shared.filters.parse_filter_string`` only recognizes the generic
-    operator set, so a Notion-native operator such as ``on_or_after`` would be
-    collapsed into an ``eq`` condition whose value still contains the operator
-    token. Recognize the Notion-native operators here, and delegate every other
-    part to the shared parser so generic operator behavior stays in one place.
+    The shared parser only recognizes the generic operator set, so a
+    Notion-native operator such as ``on_or_after`` would be collapsed into an
+    ``eq`` condition whose value still contains the operator token. Recognize
+    the Notion-native operators here, and delegate every other part to the
+    shared per-part parser so generic operator behavior stays in one place.
+
+    Comma splitting uses ``split_filter_parts`` so ``\\,`` escapes a literal
+    comma in a value (``\\\\`` a literal backslash). The split parts contain
+    unescaped literal commas, so they must NEVER be re-passed through a
+    comma-splitting parser; each part goes to ``parse_filter_part``, which
+    parses exactly one condition.
     """
-    from cli_tools_shared.filters import parse_filter_string
+    from cli_tools_shared.filters import parse_filter_part, split_filter_parts
 
     conditions: List[tuple] = []
-    for part in filter_string.split(','):
+    for part in split_filter_parts(filter_string):
         part = part.strip()
         if not part:
             continue
@@ -248,7 +254,7 @@ def parse_notion_filter_conditions(filter_string: str) -> List[tuple]:
         if len(tokens) >= 2 and tokens[1] in DATE_OPERATORS:
             conditions.append((tokens[0], tokens[1], ":".join(tokens[2:])))
         else:
-            conditions.extend(parse_filter_string(part))
+            conditions.append(parse_filter_part(part))
     return conditions
 
 
