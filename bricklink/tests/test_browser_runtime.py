@@ -856,3 +856,107 @@ def test_reveal_refund_reason_dropdown_noop_when_no_edit_button_found(monkeypatc
 
     assert page.click_calls == 0
     assert page.dropdown_present is False
+
+
+# ============================================================================
+# mark_as_read — post-condition verification (kill the silent no-op)
+#
+# The old implementation "marked read by viewing" and treated the always-present
+# Subject:/From: labels on the detail page as proof of success, so it exited 0
+# without ever changing BrickLink's read state. BrickLink's inbox "unread" flag
+# is the "Not Yet Replied" icon, which only clears once the seller replies.
+# The new implementation re-queries the live inbox and raises (non-zero exit)
+# when the message is still unread after a bounded retry.
+# ============================================================================
+
+
+class _MarkReadDetailPage:
+    """Fake message detail page for mark_as_read tests."""
+
+    def __init__(self, url, html=""):
+        self.url = url
+        self._html = html
+
+    def evaluate(self, script, arg=None):
+        return self._html
+
+    def wait_for_timeout(self, _ms):
+        return None
+
+
+class _MarkReadInboxPage:
+    """Fake inbox page for _message_unread_state tests."""
+
+    def __init__(self, url, rows):
+        self.url = url
+        self._rows = rows
+
+    def wait_for_selector(self, _selector, timeout=None):
+        return object()
+
+    def evaluate(self, script, arg=None):
+        return self._rows
+
+
+def _detail_runtime(monkeypatch, html):
+    runtime = _make_runtime(monkeypatch)
+    runtime._get_page_for = MagicMock(return_value=_MarkReadDetailPage(
+        "https://www.bricklink.com/myMsg.asp?msgID=123&a=i", html,
+    ))
+    return runtime
+
+
+def test_mark_as_read_succeeds_when_message_already_read(monkeypatch):
+    """An already-read (Already Replied) message returns success on the first
+    verification pass without looping."""
+    runtime = _detail_runtime(monkeypatch, "Subject: hi From: alice")
+    runtime._message_unread_state = MagicMock(return_value=False)
+
+    result = runtime.mark_as_read("123")
+
+    assert result["success"] is True
+    assert result["message_id"] == "123"
+    assert result["action"] == "mark_as_read"
+    runtime._message_unread_state.assert_called_once_with("123")
+
+
+def test_mark_as_read_raises_when_message_still_unread(monkeypatch):
+    """A still-unread message must fail non-zero after a bounded retry —
+    never silently report success."""
+    runtime = _detail_runtime(monkeypatch, "Subject: hi From: alice")
+    runtime._message_unread_state = MagicMock(return_value=True)
+
+    with pytest.raises(RuntimeError) as ei:
+        runtime.mark_as_read("123")
+
+    msg = str(ei.value)
+    assert "still unread after 3 attempts" in msg
+    assert "bricklink messages reply 123" in msg
+    # Bounded retry: exactly the three configured attempts, no infinite loop.
+    assert runtime._message_unread_state.call_count == 3
+
+
+def test_mark_as_read_raises_when_detail_page_missing(monkeypatch):
+    """A detail page that does not render the Subject/From labels is not proof
+    of read — raise instead of reporting success."""
+    runtime = _detail_runtime(monkeypatch, "<html><body>oops</body></html>")
+
+    with pytest.raises(RuntimeError, match="did not render on BrickLink"):
+        runtime.mark_as_read("123")
+
+
+def test_message_unread_state_returns_unread_flag(monkeypatch):
+    """_message_unread_state reads the fresh inbox: True unread, False read,
+    None when the message is not present."""
+    runtime = _make_runtime(monkeypatch)
+    runtime._get_page_for = MagicMock(return_value=_MarkReadInboxPage(
+        "https://www.bricklink.com/myMsg.asp?pg=1&a=i",
+        [
+            {"message_id": "111", "is_unread": True},
+            {"message_id": "123", "is_unread": False},
+        ],
+    ))
+
+    assert runtime._message_unread_state("111") is True
+    assert runtime._message_unread_state("123") is False
+    assert runtime._message_unread_state("999") is None
