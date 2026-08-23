@@ -209,6 +209,45 @@ cloudflare analytics top-paths example.com --properties "path,page_views"
   adaptively sampled and retention varies by Cloudflare plan.
 - The API token must include the `Analytics: Read` zone permission.
 
+### Workers
+
+Account-level Workers script management. The `ACCOUNT` argument accepts an
+account name or a 32-character account ID; omit it when the token can see
+exactly one account.
+
+```bash
+# List scripts in the account
+cloudflare workers list
+
+# List scripts for an explicit account, as a table
+cloudflare workers list ACCOUNT_NAME --table
+cloudflare workers list --filter "id:contains:cron" --properties "id"
+
+# Download a script's source content
+cloudflare workers get my-worker > worker.js
+cloudflare workers get my-worker ACCOUNT_NAME --output worker.js
+
+# Upload (create or replace) a script from a file or stdin
+cloudflare workers upload my-worker --file ./worker.js
+cloudflare workers upload my-worker --file - < worker.js
+cloudflare workers upload my-worker --file ./worker.js --compatibility-date 2026-01-15
+cloudflare workers upload my-worker --file ./worker.js --format service-worker
+cloudflare workers upload my-worker --file ./worker.js \
+  --bindings '[{"type":"plain_text","name":"TITLE","text":"hi"}]'
+
+# Delete a script (confirmation prompt; --force skips it)
+cloudflare workers delete my-worker --force
+```
+
+**Notes:**
+- Listing/downloading requires the `Account > Workers Scripts > Read`
+  permission on the API token; uploading/deleting requires
+  `Account > Workers Scripts > Edit`.
+- `--format modules` (default) uploads an ES module with entry file
+  `--main-module` (`worker.js` by default); `--format service-worker` uploads
+  a single-file service-worker script.
+- `--bindings` must be a JSON array of Cloudflare binding objects.
+
 ## Output Formats
 
 All commands support two output formats:

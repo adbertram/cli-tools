@@ -20,6 +20,10 @@ from .dns_record import (
     DNSRecordType,
     create_dns_record,
 )
+from .worker_route import (
+    WorkerRoute,
+    create_worker_route,
+)
 
 __all__ = [
     # Base
@@ -37,4 +41,7 @@ __all__ = [
     "DNSRecord",
     "DNSRecordType",
     "create_dns_record",
+    # Worker route models
+    "WorkerRoute",
+    "create_worker_route",
 ]

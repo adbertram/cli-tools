@@ -3,8 +3,8 @@ name: cloudflare-cli
 description: >-
   Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
   Execute cloudflare operations using the `cloudflare` CLI tool.
-  CLI interface for Cloudflare API — manage zones, DNS records, cache, IP access rules, and zone traffic analytics.
-  Triggers: cloudflare, cloudflare cli, cloudflare dns, cloudflare zones, cloudflare cache, cloudflare access rules, manage dns records, purge cloudflare cache, cloudflare ip rules, block ip cloudflare, cloudflare analytics, zone traffic, page views, top paths
+  CLI interface for Cloudflare API — manage zones, DNS records, cache, IP access rules, zone traffic analytics, and Workers scripts.
+  Triggers: cloudflare, cloudflare cli, cloudflare dns, cloudflare zones, cloudflare cache, cloudflare access rules, manage dns records, purge cloudflare cache, cloudflare ip rules, block ip cloudflare, cloudflare analytics, zone traffic, page views, top paths, cloudflare workers, worker scripts, upload worker
 ---
 
 <objective>
@@ -29,6 +29,10 @@ cloudflare <command-group> <action> [arguments] [options]
 | Set Under Attack mode | `cloudflare zones update ZONE_ID --security-level under_attack` |
 | Traffic totals for a date range | `cloudflare analytics summary example.com --start 2026-06-01 --end 2026-06-30` |
 | Top pages by HTML page views | `cloudflare analytics top-paths example.com --limit 5 --table` |
+| List Workers scripts | `cloudflare workers list` |
+| Download a Worker script | `cloudflare workers get my-worker > worker.js` |
+| Upload a Worker script | `cloudflare workers upload my-worker --file ./worker.js` |
+| Delete a Worker script | `cloudflare workers delete my-worker --force` |
 </quick_start>
 
 <essential_principles>
@@ -45,6 +49,7 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **access-rules** — Manage IP access rules (whitelist, block, challenge IPs/ranges/ASNs/countries)
 - **dns** — Manage DNS with sub-groups: `dns zones` (list/get zones) and `dns records` (full CRUD on DNS records)
 - **analytics** — Zone traffic analytics via the GraphQL Analytics API: `analytics summary` (totals for a date range) and `analytics top-paths` (top pages by HTML page views). Zone argument accepts a zone name or zone ID. Requires the `Analytics: Read` zone permission on the API token.
+- **workers** — Account-level Workers script management: `workers list`, `workers get SCRIPT_NAME` (raw source to stdout or `--output FILE`), `workers upload SCRIPT_NAME --file ./worker.js [--format modules|service-worker] [--compatibility-date YYYY-MM-DD] [--bindings '<json-array>']`, and `workers delete SCRIPT_NAME --force`. All four take an optional ACCOUNT argument (name or ID); omit it when the token sees exactly one account. Requires `Account > Workers Scripts > Read` (list/get) or `Account > Workers Scripts > Edit` (upload/delete) on the API token.
 </principle>
 
 <principle name="Optional Capability Probes">
@@ -110,11 +115,13 @@ area the CLI must write, then store it in the secret manager:
 | `zones update` (security level) | Zone > Zone Settings > Edit |
 | `zones list/get` | Zone > Zone > Read |
 | `analytics summary/top-paths` | Zone > Analytics > Read |
+| `workers list/get` | Account > Workers Scripts > Read |
+| `workers upload/delete` | Account > Workers Scripts > Edit |
 
 Set Zone Resources to include every zone the CLI manages, then rotate:
 
 ```bash
-<cli-tools-root>/_repo/_secret-manager/secrets.sh set cloudflare-legacy-api-key
+<cli-tools-root>/_repo/_secret-manager/secrets.sh set cloudflare-api-key
 ```
 
 Verify the new scope with a real write against a low-risk zone
@@ -133,7 +140,7 @@ error path itself regressed.
 
 <issue name="API key is sourced from a CLI-tools secret (auth login cannot re-prompt it)">
 The `cloudflare` credential type is `api_key`, and the active profile stores it as a
-`secret://cloudflare-legacy-api-key` placeholder resolved from the CLI-tools secret
+`secret://cloudflare-api-key` placeholder resolved from the CLI-tools secret
 manager. Because the API key lives in the secret manager, `cloudflare auth login`
 and `cloudflare auth login --force` cannot prompt for it interactively — they now
 print an actionable notice naming the secret and the exact command to set/rotate it,
@@ -143,7 +150,7 @@ To change or rotate the API key, update the secret directly (never edit the prof
 `.env` or paste the key into a prompt):
 
 ```bash
-<cli-tools-root>/_repo/_secret-manager/secrets.sh set cloudflare-legacy-api-key
+<cli-tools-root>/_repo/_secret-manager/secrets.sh set cloudflare-api-key
 ```
 
 If `auth login` reports `Missing secret 'cloudflare-legacy-api-key'`, the referenced

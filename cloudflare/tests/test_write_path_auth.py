@@ -67,9 +67,15 @@ class _RecordingTransport:
         self._responses = list(responses)
         self.calls = []
 
-    def __call__(self, method, url, headers, json=None, params=None):
+    def __call__(self, method, url, headers, json=None, params=None, files=None):
         self.calls.append(
-            {"method": method, "url": url, "headers": dict(headers), "json": json}
+            {
+                "method": method,
+                "url": url,
+                "headers": dict(headers),
+                "json": json,
+                "files": files,
+            }
         )
         return self._responses.pop(0)
 

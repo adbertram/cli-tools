@@ -1,8 +1,8 @@
 {
   "tool": "cloudflare",
   "description": "CLI interface for Cloudflare API",
-  "discovered_at": "2026-07-27T14:00:42Z",
-  "total_commands": 28,
+  "discovered_at": "2026-08-22T22:23:45Z",
+  "total_commands": 32,
   "global_options": [
     {
       "name": "--version",
@@ -82,7 +82,8 @@
               "name": "--table",
               "type": "bool",
               "required": false,
-              "help": "Display result as table"
+              "help": "Display result as table",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -119,7 +120,8 @@
               "type": "bool",
               "required": false,
               "help": "Skip confirmation prompt",
-              "short": "-f"
+              "short": "-f",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -156,7 +158,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as key-value table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -190,7 +193,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -302,6 +306,11 @@
       "commands": {
         "summary": {
           "help": "Show zone traffic totals for a date range. Totals come from the httpRequests1dGroups daily rollup dataset: page views, unique visitors, requests, and bytes. unique_visitors is the sum of per-day uniques, not deduplicated across days.",
+          "examples": [
+            "cloudflare analytics summary example.com",
+            "cloudflare analytics summary example.com --start 2026-06-01 --end 2026-06-30",
+            "cloudflare analytics summary example.com --table"
+          ],
           "arguments": [
             {
               "name": "zone",
@@ -330,7 +339,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as key-value table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -342,6 +352,12 @@
         },
         "top-paths": {
           "help": "Show top request paths by HTML page views for a date range. Uses the httpRequestsAdaptiveGroups dataset filtered to edge responses with content type \"html\" (page views). Data is adaptively sampled by Cloudflare, and pct_of_total is each path's share of all HTML page views in the range. Dataset retention varies by plan, so old ranges may return no data.",
+          "examples": [
+            "cloudflare analytics top-paths example.com",
+            "cloudflare analytics top-paths example.com --start 2026-06-01 --end 2026-06-30",
+            "cloudflare analytics top-paths example.com --limit 5 --table",
+            "cloudflare analytics top-paths example.com --filter \"path:contains:blog\""
+          ],
           "arguments": [
             {
               "name": "zone",
@@ -370,7 +386,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -426,7 +443,8 @@
               "type": "bool",
               "required": false,
               "help": "Clear existing ephemeral auth state and re-authenticate",
-              "short": "-F"
+              "short": "-F",
+              "takes_value": false
             }
           ]
         },
@@ -480,7 +498,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -501,7 +520,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
@@ -515,7 +535,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -572,7 +593,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -586,14 +608,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--verbose",
               "type": "bool",
               "required": false,
               "help": "Show detailed checks",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -653,14 +677,16 @@
               "type": "bool",
               "required": false,
               "help": "Skip confirmation prompt",
-              "short": "-F"
+              "short": "-F",
+              "takes_value": false
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Display result as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -743,7 +769,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Proxy through Cloudflare (A/AAAA/CNAME only)",
-                  "short": "-p"
+                  "short": "-p",
+                  "takes_value": false
                 },
                 {
                   "name": "--priority",
@@ -762,7 +789,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display result as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -799,7 +827,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation prompt",
-                  "short": "-f"
+                  "short": "-f",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -836,7 +865,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as key-value table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -870,7 +900,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -918,7 +949,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Filter by proxied status",
-                  "short": "-p"
+                  "short": "-p",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -983,7 +1015,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "New proxied status",
-                  "short": "-p"
+                  "short": "-p",
+                  "takes_value": false
                 },
                 {
                   "name": "--priority",
@@ -1034,7 +1067,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as key-value table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -1061,7 +1095,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -1111,6 +1146,212 @@
         }
       }
     },
+    "workers": {
+      "help": "Manage Workers scripts",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "delete": {
+          "help": "Delete a Worker script.",
+          "examples": [
+            "cloudflare workers delete my-worker",
+            "cloudflare workers delete my-worker my-account --force"
+          ],
+          "arguments": [
+            {
+              "name": "script_name",
+              "type": "TEXT",
+              "required": true,
+              "help": "The worker script name"
+            },
+            {
+              "name": "account",
+              "type": "ACCOUNT",
+              "required": false,
+              "help": "Account name or ID (defaults to the single visible account)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation prompt",
+              "short": "-f",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Download a Worker script's source content.",
+          "examples": [
+            "cloudflare workers get my-worker > worker.js",
+            "cloudflare workers get my-worker my-account --output worker.js"
+          ],
+          "arguments": [
+            {
+              "name": "script_name",
+              "type": "TEXT",
+              "required": true,
+              "help": "The worker script name"
+            },
+            {
+              "name": "account",
+              "type": "ACCOUNT",
+              "required": false,
+              "help": "Account name or ID (defaults to the single visible account)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--output",
+              "type": "TEXT",
+              "required": false,
+              "help": "Write the script content to this file instead of stdout",
+              "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List Workers scripts for an account.",
+          "examples": [
+            "cloudflare workers list",
+            "cloudflare workers list ACCOUNT_NAME --table",
+            "cloudflare workers list --limit 10",
+            "cloudflare workers list --filter \"id:contains:cron\"",
+            "cloudflare workers list --properties \"id,modified_on\""
+          ],
+          "arguments": [
+            {
+              "name": "account",
+              "type": "ACCOUNT",
+              "required": false,
+              "help": "Account name or ID (defaults to the single visible account)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of scripts to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., id:contains:my-worker)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "upload": {
+          "help": "Upload (create or replace) a Worker script.",
+          "examples": [
+            "cloudflare workers upload my-worker --file ./worker.js",
+            "cloudflare workers upload my-worker --file - < worker.js",
+            "cloudflare workers upload my-worker --file ./worker.js --compatibility-date 2026-01-15",
+            "cloudflare workers upload my-worker --file ./worker.js --format service-worker"
+          ],
+          "arguments": [
+            {
+              "name": "script_name",
+              "type": "TEXT",
+              "required": true,
+              "help": "The worker script name"
+            },
+            {
+              "name": "account",
+              "type": "ACCOUNT",
+              "required": false,
+              "help": "Account name or ID (defaults to the single visible account)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--file",
+              "type": "FILENAME",
+              "required": true,
+              "help": "Path to the script source ('-' for stdin)"
+            },
+            {
+              "name": "--format",
+              "type": "MODULES|SERVICE-WORKER",
+              "required": false,
+              "help": "Script format",
+              "default": "modules"
+            },
+            {
+              "name": "--main-module",
+              "type": "TEXT",
+              "required": false,
+              "help": "Entry module filename (modules format)",
+              "default": "worker.js"
+            },
+            {
+              "name": "--compatibility-date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Compatibility date (YYYY-MM-DD)"
+            },
+            {
+              "name": "--bindings",
+              "type": "TEXT",
+              "required": false,
+              "help": "JSON array of bindings (e.g. '[{\"type\":\"plain_text\",\"name\":\"TITLE\",\"text\":\"hi\"}]')"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
     "zones": {
       "help": "Manage Cloudflare zones",
       "usage_instructions": "Use `cloudflare zones` for manage cloudflare zones. Available subcommands here are `list`, `get`, `update`.",
@@ -1146,7 +1387,8 @@
               "type": "bool",
               "required": false,
               "help": "Display summary as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -1180,7 +1422,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
