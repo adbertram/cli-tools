@@ -7,12 +7,14 @@ Supports two auth methods based on the active profile's AUTH_METHOD:
 The az_cli method requires Azure CLI to be logged in.
 The msal_device_code method uses Microsoft's well-known Graph Command Line Tools app.
 """
+import base64
+import binascii
 import json
 import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import msal
 import requests
@@ -28,6 +30,11 @@ SCOPES = [
     "Files.ReadWrite.All",  # Full access to user's files
     "User.Read",            # Basic profile
 ]
+
+# Graph permission families that actually grant drive/driveItem access.
+# A token without one of these reads drive collections as an EMPTY 200 response
+# instead of a 403, so it must be rejected before any command runs.
+DRIVE_PERMISSION_PREFIXES = ("Files.", "Sites.")
 
 
 def _get_az_cmd() -> str:
@@ -122,8 +129,82 @@ def _get_az_cli_token() -> str:
     return token
 
 
+def _decode_token_claims(token: str) -> dict:
+    """Decode the claims payload of a Microsoft Graph JWT access token.
+
+    Raises:
+        RuntimeError: If the token is not a decodable JWT
+    """
+    parts = token.split(".")
+    if len(parts) != 3:
+        raise RuntimeError(
+            "Microsoft Graph access token is not a JWT "
+            f"({len(parts)} dot-separated segments); cannot verify its permissions."
+        )
+
+    payload = parts[1]
+    payload += "=" * (-len(payload) % 4)
+    try:
+        claims = json.loads(base64.urlsafe_b64decode(payload))
+    except (binascii.Error, ValueError, UnicodeDecodeError) as exc:
+        raise RuntimeError(f"Microsoft Graph access token claims are unreadable: {exc}")
+
+    if not isinstance(claims, dict):
+        raise RuntimeError(
+            f"Microsoft Graph access token claims are not an object: {type(claims).__name__}"
+        )
+    return claims
+
+
+def _token_graph_permissions(token: str) -> List[str]:
+    """List the Graph permissions carried by a token.
+
+    Delegated tokens carry them in the space-delimited ``scp`` claim;
+    app-only tokens carry them in the ``roles`` array.
+    """
+    claims = _decode_token_claims(token)
+
+    delegated = claims.get("scp", "")
+    if not isinstance(delegated, str):
+        raise RuntimeError(f"Token 'scp' claim is not a string: {delegated!r}")
+
+    application = claims.get("roles", [])
+    if not isinstance(application, list):
+        raise RuntimeError(f"Token 'roles' claim is not a list: {application!r}")
+
+    return delegated.split() + [str(role) for role in application]
+
+
+def _assert_drive_permissions(token: str) -> None:
+    """Fail loudly when a token cannot read drives.
+
+    Microsoft Graph answers ``/me/drives`` and ``/drives`` with an empty ``200``
+    collection when the caller holds no Files/Sites permission, which is
+    indistinguishable from "this account owns no drives". Reject the token here
+    so no command can report an empty result for a permission problem.
+
+    Raises:
+        RuntimeError: If the token carries no Files.* or Sites.* permission
+    """
+    permissions = _token_graph_permissions(token)
+    if any(p.startswith(DRIVE_PERMISSION_PREFIXES) for p in permissions):
+        return
+
+    raise RuntimeError(
+        "Microsoft Graph token has no Files.* or Sites.* permission, so drive "
+        "queries return empty results instead of an error.\n"
+        f"Token permissions: {' '.join(permissions) or '(none)'}\n"
+        "Re-authenticate with drive permissions:\n"
+        "  az login --scope https://graph.microsoft.com/Files.ReadWrite.All\n"
+        "Or switch this profile to AUTH_METHOD=msal_device_code, which requests "
+        "Files.ReadWrite.All directly."
+    )
+
+
 def _verify_drive_access(token: str) -> None:
     """Verify the token can access the OneDrive API surface this CLI uses."""
+    _assert_drive_permissions(token)
+
     response = requests.get(
         "https://graph.microsoft.com/v1.0/me/drives",
         params={"$top": 1},
@@ -260,14 +341,17 @@ def get_access_token() -> str:
     method = config.auth_method
 
     if method == "az_cli":
-        return _get_az_cli_token()
+        token = _get_az_cli_token()
     elif method == "msal_device_code":
-        return _get_msal_token(config)
+        token = _get_msal_token(config)
     else:
         raise RuntimeError(
             f"Unknown or missing AUTH_METHOD: {method!r}. "
             "Set AUTH_METHOD to 'az_cli' or 'msal_device_code' in your profile."
         )
+
+    _assert_drive_permissions(token)
+    return token
 
 
 def login_handler(config, force: bool) -> None:

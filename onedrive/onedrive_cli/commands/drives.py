@@ -53,21 +53,29 @@ def drives_list(
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of drives to return"),
     filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
+    user: Optional[str] = typer.Option(None, "--user", "-u", help="List drives owned by this user ID or userPrincipalName"),
+    site: Optional[str] = typer.Option(None, "--site", "-s", help="List document libraries of this SharePoint site ID or 'hostname:/sites/name'"),
+    group: Optional[str] = typer.Option(None, "--group", "-g", help="List drives owned by this Microsoft 365 group ID"),
 ):
     """
-    List all drives accessible to the authenticated user.
+    List drives in one scope.
 
-    Shows personal OneDrive and any shared drives the user can access.
+    Defaults to the signed-in user's own drives. Accounts with no provisioned
+    OneDrive own none — use --site, --user, or --group to reach a SharePoint
+    document library or another principal's drives.
 
     Examples:
         onedrive drives list
         onedrive drives list --table
         onedrive drives list --properties "id,name,driveType"
         onedrive drives list --limit 10
+        onedrive drives list --site 'contoso.sharepoint.com:/sites/Marketing'
+        onedrive drives list --user someone@contoso.com
+        onedrive drives list --group GROUP_ID
     """
     try:
         client = get_client()
-        drives = client.list_drives(limit=limit)
+        drives = client.list_drives(limit=limit, user=user, site=site, group=group)
 
         if filter:
             drives = apply_filters([model_to_dict(drive) for drive in drives], filter)

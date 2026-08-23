@@ -275,41 +275,84 @@ class OneDriveClient:
 
     # ==================== Drive Methods ====================
 
-    def list_drives(self, limit: int = 100) -> List[Drive]:
+    @staticmethod
+    def _drives_endpoint(
+        user: Optional[str] = None,
+        site: Optional[str] = None,
+        group: Optional[str] = None,
+    ) -> str:
         """
-        List all drives accessible to the user.
+        Build the drive-collection endpoint for exactly one requested scope.
 
-        Returns the user's personal OneDrive plus any shared drives.
+        Args:
+            user: User ID or userPrincipalName owning the drives
+            site: SharePoint site ID, or "hostname:/sites/name" addressing
+            group: Microsoft 365 group ID owning the drives
+
+        Returns:
+            Graph endpoint path for the drive collection
+
+        Raises:
+            ClientError: If more than one scope is requested
+        """
+        requested = {"--user": user, "--site": site, "--group": group}
+        supplied = sorted(flag for flag, value in requested.items() if value)
+        if len(supplied) > 1:
+            raise ClientError(
+                f"Choose one drive scope: {', '.join(supplied)} are mutually exclusive."
+            )
+
+        if user:
+            return f"/users/{user}/drives"
+
+        if group:
+            return f"/groups/{group}/drives"
+
+        if site:
+            # "hostname:/sites/name" addressing needs its path segment closed
+            # with a colon before the /drives suffix.
+            if ":" in site:
+                return f"/sites/{site.rstrip(':')}:/drives"
+            return f"/sites/{site}/drives"
+
+        return "/me/drives"
+
+    def list_drives(
+        self,
+        limit: int = 100,
+        user: Optional[str] = None,
+        site: Optional[str] = None,
+        group: Optional[str] = None,
+    ) -> List[Drive]:
+        """
+        List the drives in one scope.
+
+        Defaults to the signed-in user's own drives (``/me/drives``). Accounts
+        with no provisioned OneDrive have none; use ``site``, ``user``, or
+        ``group`` to reach a SharePoint document library or another principal's
+        drives.
 
         Args:
             limit: Maximum number of drives to return (passed to API via $top)
+            user: User ID or userPrincipalName owning the drives
+            site: SharePoint site ID, or "hostname:/sites/name" addressing
+            group: Microsoft 365 group ID owning the drives
 
         Returns:
             List of Drive models
+
+        Raises:
+            ClientError: If the request fails or the response has no collection
         """
-        drives = []
-        seen_ids = set()
+        endpoint = self._drives_endpoint(user=user, site=site, group=group)
+        response = self._make_request("GET", endpoint, params={"$top": limit})
 
-        # First, get the user's personal OneDrive via /me/drive (singular)
-        try:
-            personal_drive = self._make_request("GET", "/me/drive")
-            if personal_drive and personal_drive.get("id"):
-                drives.append(create_drive(personal_drive))
-                seen_ids.add(personal_drive["id"])
-        except Exception:
-            pass  # User may not have a personal drive provisioned
+        if "value" not in response:
+            raise ClientError(
+                f"Graph response for {endpoint} contains no 'value' collection: {response}"
+            )
 
-        # Then get any shared drives via /me/drives (plural), avoiding duplicates
-        if len(drives) < limit:
-            params = {"$top": limit - len(drives)}
-            response = self._make_request("GET", "/me/drives", params=params)
-            raw_drives = response.get("value", [])
-            for d in raw_drives:
-                if d.get("id") not in seen_ids:
-                    drives.append(create_drive(d))
-                    seen_ids.add(d["id"])
-
-        return drives[:limit]
+        return [create_drive(d) for d in response["value"]][:limit]
 
     def get_drive(self, drive_id: str) -> Drive:
         """
