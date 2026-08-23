@@ -9,12 +9,13 @@ from cli_tools_shared.command_registry import register_commands
 app = create_app(name="cryptocom", help="Crypto.com Exchange API CLI", version=__version__)
 
 # Register command modules
-from .commands import account, book, candlesticks, instruments, ticker, trades
+from .commands import account, book, candlesticks, instruments, orders, ticker, trades
 
 register_commands(app, get_config, account, name="account", help="Inspect authenticated account data")
 register_commands(app, get_config, book, name="book", help="Inspect order books")
 register_commands(app, get_config, candlesticks, name="candlesticks", help="Inspect candlesticks")
 register_commands(app, get_config, instruments, name="instruments", help="Inspect Exchange instruments")
+register_commands(app, get_config, orders, name="orders", help="Place and manage trading orders")
 register_commands(app, get_config, ticker, name="ticker", help="Inspect ticker data")
 register_commands(app, get_config, trades, name="trades", help="Inspect public trades")
 

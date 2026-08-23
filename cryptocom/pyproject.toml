@@ -18,6 +18,11 @@ dependencies = [
 [project.scripts]
 cryptocom = "cryptocom_cli.main:app"
 
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["cryptocom_cli*"]

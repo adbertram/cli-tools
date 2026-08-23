@@ -1,8 +1,10 @@
 # Crypto.com Exchange CLI
 
-Command-line access to the Crypto.com Exchange REST API for public market data and authenticated account data.
+## DESCRIPTION
 
-Official API docs: https://exchange-docs.crypto.com/exchange/v1/rest-ws/index.html
+The `cryptocom` CLI provides command-line access to Crypto.com Exchange API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 
@@ -125,6 +127,28 @@ cryptocom account open-orders --filter "side:eq:BUY"
 cryptocom account open-orders --properties "order_id,instrument_name,side,quantity,limit_price,status"
 ```
 
+### Orders
+
+Authenticated trading order commands (signed private endpoints):
+
+```bash
+cryptocom orders create --symbol SOL_USD --side buy --price 96.50 --quantity 0.1
+cryptocom orders create --symbol BTC_USD --side buy --price 96.50 --quantity 0.1 --type LIMIT --tif IOC
+cryptocom orders create --symbol BTC_USD --side sell --quantity 0.01 --type MARKET
+cryptocom orders details ORDER_ID
+cryptocom orders cancel ORDER_ID
+cryptocom orders list
+cryptocom orders list --instrument-name BTC_USD
+cryptocom orders list --table
+cryptocom orders list --filter "side:eq:BUY"
+cryptocom orders list --properties "order_id,instrument_name,side,quantity,limit_price,status"
+```
+
+`--tif` accepts `GTC`, `IOC`, `FOK` aliases plus the full names
+`GOOD_TILL_CANCEL`, `IMMEDIATE_OR_CANCEL`, `FILL_OR_KILL`. `--price` is required
+for LIMIT orders and rejected for MARKET orders. stdout carries only the API
+result (for example `{"order_id": ...}`); messages go to stderr.
+
 ### Cache
 
 ```bash
@@ -165,7 +189,14 @@ cryptocom trades list BTCUSD-PERP --limit 5 --properties "p,q,s,t"
 | `--timeframe` | | `candlesticks list` | Candlestick timeframe |
 | `--start-ts` | | `trades list`, `candlesticks list` | Inclusive start timestamp |
 | `--end-ts` | | `trades list`, `candlesticks list` | Exclusive end timestamp |
-| `--instrument-name` | `-i` | `account open-orders` | Restrict open orders to one instrument |
+| `--instrument-name` | `-i` | `account open-orders`, `orders list` | Restrict open orders to one instrument |
+| `--symbol` | `-s` | `orders create` | Instrument name (e.g., BTC_USD) |
+| `--side` | | `orders create` | Order side: buy or sell |
+| `--price` | | `orders create` | Limit price (required for LIMIT) |
+| `--quantity` | `-q` | `orders create` | Order quantity in base currency |
+| `--type` | | `orders create` | Order type: MARKET or LIMIT |
+| `--tif` | | `orders create` | Time in force: GTC, IOC, FOK |
+| `--client-oid` | | `orders create` | Optional client order ID |
 | `--version` | `-v` | Root command | Show version and exit |
 
 ## Configuration
