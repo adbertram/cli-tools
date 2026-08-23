@@ -112,6 +112,14 @@ globiflow flows create --app-id 30560419 --trigger C --name "With Steps" --steps
 globiflow flows delete FLOW_ID
 globiflow flows delete FLOW_ID --force
 
+# Export a flow's XML definition to a file
+globiflow flows export FLOW_ID
+globiflow flows export FLOW_ID --output /tmp/my-flow.xml
+
+# Import a flow XML into an app
+globiflow flows import --app-id 30529466 --file flow-4321944.xml
+globiflow flows import --app-id 30529466 --file flow-4321944.xml --table
+
 # Manage flow steps
 globiflow flows steps list FLOW_ID
 globiflow flows steps get FLOW_ID STEP_NUMBER

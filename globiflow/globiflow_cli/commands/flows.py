@@ -17,6 +17,12 @@ COMMAND_CREDENTIALS = {
     ],
     "steps": [
         "browser_session"
+    ],
+    "export": [
+        "browser_session"
+    ],
+    "import": [
+        "browser_session"
     ]
 }
 
@@ -347,6 +353,81 @@ def delete_flow(
         # Perform deletion
         client.delete_flow(flow_id)
         print_info(f"Flow {flow_id} deleted successfully.")
+    finally:
+        client.close()
+
+
+@app.command("export")
+@command
+def export_flow_command(
+    flow_id: str = typer.Argument(..., help="Flow ID to export"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file path (default: flow-<id>.xml)"),
+):
+    """
+    Export a single flow's XML definition to a file.
+
+    Fetches the flow's XML from Globiflow (the same ZIP-backed endpoint its
+    bulk "Export" action uses) and writes it to --output. The resulting XML can
+    be re-imported with 'flows import'.
+
+    Example:
+        globiflow flows export 4321944
+        globiflow flows export 4321944 --output /tmp/my-flow.xml
+    """
+    client = get_client()
+    try:
+        xml = client.export_flow(flow_id)
+
+        out_path = output or f"flow-{flow_id}.xml"
+        with open(out_path, "w", encoding="utf-8") as fh:
+            fh.write(xml)
+
+        print_json({"flow_id": flow_id, "output": out_path, "bytes": len(xml)})
+        print_info(f"Exported flow {flow_id} to {out_path}")
+    finally:
+        client.close()
+
+
+@app.command("import")
+@command
+def import_flow_command(
+    app_id: str = typer.Option(..., "--app-id", "-a", help="Podio app ID to import the flow into"),
+    file: str = typer.Option(..., "--file", "-f", help="Flow XML file to import"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+):
+    """
+    Import a flow XML definition into an app.
+
+    Reads the XML from --file and posts it to Globiflow's import endpoint
+    (copy_from=file), creating a new flow in --app-id. Prints the new flow's
+    details.
+
+    Example:
+        globiflow flows import --app-id 30529466 --file flow-4321944.xml
+        globiflow flows import --app-id 30529466 --file flow-4321944.xml --table
+    """
+    file_path = Path(file)
+    if not file_path.exists():
+        print_error(f"Flow file not found: {file}")
+        raise typer.Exit(1)
+
+    xml = file_path.read_text(encoding="utf-8")
+
+    client = get_client()
+    try:
+        new_id = client.import_flow(app_id, xml)
+        flow = client.get_flow(new_id)
+
+        if table:
+            rows = [
+                {"field": "ID", "value": flow.id},
+                {"field": "Name", "value": flow.name},
+                {"field": "Enabled", "value": "Yes" if flow.enabled else "No"},
+            ]
+            print_table(rows, ["field", "value"], ["Field", "Value"])
+            print_info(f"Flow imported successfully with ID: {flow.id}")
+        else:
+            print_json(flow)
     finally:
         client.close()
 
