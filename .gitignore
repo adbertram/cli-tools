@@ -70,3 +70,93 @@ n8n/_temp/
 
 # Local planning scratch (never source)
 plans/
+
+# ==========================================================================
+# Migrated from the 68 per-tool .gitignore files, removed 2026-08-20.
+# The compliance suite requires exactly one source-visible .gitignore, at
+# the repo root, so these now apply to EVERY package in the repo.
+# ==========================================================================
+
+# --- Credentials, auth state, and per-tool profile/session storage ---
+.browser-data/
+# .env*  -- NOT universal: root already has .env + .env.* + !.env.example; this re-ignored 98 tracked .env.example files
+.env.*.local
+.env.local
+.m365-token-cache.json
+# .mcp.json  -- NOT universal: hides shopgoodwill/.mcp.json and slack/.mcp.json, both committed config
+.profiles/
+.storage/
+.token-cache.json
+.usage.json
+credentials.json
+profiles/
+token.json
+
+# --- Python bytecode and compiled artifacts ---
+*$py.class
+**/__pycache__/
+*.pyc
+*.so
+*.swo
+*.tar.gz
+*.whl
+*/__pycache__/
+
+# --- Editor and OS files ---
+.idea/
+.vscode/
+Thumbs.db
+
+# --- Build, packaging, virtualenv, and coverage output ---
+*.egg
+*.egg-info
+.eggs/
+.installed.cfg
+.nox/
+.Python
+.tox
+.tox/
+.venv
+.virtualenv
+build
+coverage/
+develop-eggs/
+dist
+downloads/
+eggs/
+env
+env.bak/
+ENV/
+htmlcov/
+# lib/  -- NOT universal: hides _repo/_scripts/lib/log.sh, the shared script logger
+lib64/
+parts/
+pip-delete-this-directory.txt
+pip-log.txt
+sdist/
+var/
+vendor/
+wheels/
+
+# --- Node tooling output ---
+npm-debug.log*
+package-lock.json
+yarn-debug.log*
+yarn-error.log*
+
+# --- Other per-tool scratch and output ---
+*.temp
+.playwright-mcp/
+.temp/
+.tmp/
+_temp/
+dbxcli
+docs/plans/
+idea
+# test.py  -- NOT universal: hides n8n/n8n_cli/commands/test.py, a real command module
+untitled
+
+
+# Never let any later rule hide the shape-only example env files.
+!.env.example
+!**/.env.example
