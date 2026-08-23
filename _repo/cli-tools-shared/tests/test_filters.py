@@ -1,5 +1,8 @@
 from cli_tools_shared.filters import (
     apply_filters,
+    parse_filter_part,
+    parse_filter_string,
+    split_filter_parts,
     validate_filters,
     FilterValidationError,
 )
@@ -219,3 +222,96 @@ def test_extra_operators_do_not_whitelist_everything_else():
 def test_empty_extra_operators_behaves_like_none():
     with pytest.raises(FilterValidationError):
         validate_filters(["status:bogusop:active"], extra_operators=())
+
+
+# ---- comma escaping: \, is a literal comma, \\ a literal backslash ----
+
+def test_split_filter_parts_unescapes_escaped_comma():
+    assert split_filter_parts(r"Title:like:%Four Layers\, Four Failure Modes%") == [
+        "Title:like:%Four Layers, Four Failure Modes%"
+    ]
+
+
+def test_split_filter_parts_unescaped_comma_still_splits():
+    assert split_filter_parts("status:eq:active,price:gte:100") == [
+        "status:eq:active",
+        "price:gte:100",
+    ]
+
+
+def test_split_filter_parts_escaped_backslash_is_literal_and_does_not_escape_comma():
+    # '\\,' is a literal backslash followed by an AND-splitting comma.
+    assert split_filter_parts(r"a:eq:x\\,b:eq:y") == [
+        "a:eq:x\\",
+        "b:eq:y",
+    ]
+
+
+def test_split_filter_parts_lone_backslash_before_other_chars_stays_literal():
+    # Existing values like 'Path:eq:C:\temp' keep working unchanged.
+    assert split_filter_parts(r"Path:eq:C:\temp") == [r"Path:eq:C:\temp"]
+
+
+def test_split_filter_parts_trailing_backslash_stays_literal():
+    assert split_filter_parts("a:eq:x\\") == ["a:eq:x\\"]
+
+
+def test_validate_filters_accepts_escaped_comma_in_value():
+    validate_filters([r"Title:like:%Four Layers\, Four Failure Modes%"])
+
+
+def test_parse_filter_string_yields_single_condition_for_escaped_comma():
+    assert parse_filter_string(r"Title:like:%Four Layers\, Four Failure Modes%") == [
+        ("Title", "like", "%Four Layers, Four Failure Modes%")
+    ]
+
+
+def test_parse_filter_part_never_splits_on_comma():
+    # Parts produced by split_filter_parts contain literal commas; the per-part
+    # parser must treat them as value characters, not AND separators.
+    assert parse_filter_part("Title:like:%Four Layers, Four Failure Modes%") == (
+        "Title",
+        "like",
+        "%Four Layers, Four Failure Modes%",
+    )
+
+
+def test_parse_filter_string_unescaped_comma_still_yields_and_conditions():
+    assert parse_filter_string("status:eq:active,price:gte:100") == [
+        ("status", "eq", "active"),
+        ("price", "gte", "100"),
+    ]
+
+
+def test_apply_filters_matches_value_containing_escaped_comma():
+    items = [
+        {"Title": "Four Layers, Four Failure Modes"},
+        {"Title": "Something Else"},
+    ]
+
+    filtered = apply_filters(items, [r"Title:like:%Four Layers\, Four Failure Modes%"])
+
+    assert filtered == [{"Title": "Four Layers, Four Failure Modes"}]
+
+
+def test_apply_filters_matches_value_containing_escaped_backslash():
+    items = [
+        {"path": "C:\\temp"},  # literal value: C:\temp
+        {"path": "D:\\data"},
+    ]
+
+    # r"path:eq:C:\\temp" carries an escaped backslash that unescapes to
+    # the literal value C:\temp.
+    filtered = apply_filters(items, [r"path:eq:C:\\temp"])
+
+    assert filtered == [{"path": "C:\\temp"}]
+
+
+def test_apply_filters_lone_backslash_value_still_matches_unchanged():
+    # Backward compatibility: a backslash before a non-comma, non-backslash
+    # character is kept literally, so the pre-escape spelling still works.
+    items = [{"path": "C:\\temp"}]
+
+    filtered = apply_filters(items, [r"path:eq:C:\temp"])
+
+    assert filtered == [{"path": "C:\\temp"}]
