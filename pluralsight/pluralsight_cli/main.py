@@ -185,6 +185,50 @@ def suggestions(
         raise typer.Exit(1)
 
 
+@app.command("modules")
+@command
+def course_modules(
+    course_id: str = typer.Argument(..., help="Course product id (e.g. docker-developers-docker-foundations)"),
+    clips: bool = typer.Option(True, "--clips/--no-clips", help="Include individual clip listings"),
+    filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter modules (field:op:value)"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
+):
+    """Get module titles, lengths, and clip structure for one course."""
+    try:
+        parsed = get_client().get_course_modules(course_id)
+    except Exception as exc:
+        print_error(str(exc))
+        raise typer.Exit(1)
+    _validate(filter)
+    modules = parsed.get("modules") or []
+    if not clips:
+        for module in modules:
+            module.pop("clips", None)
+    if filter:
+        modules = apply_filters(modules, filter)
+    payload = {"course": course_id, "title": parsed.get("title"), "moduleCount": len(modules), "modules": modules}
+    fields = _property_fields(properties)
+    if fields:
+        modules_out = apply_properties_filter(modules, properties) if modules else []
+        if not table:
+            payload["modules"] = modules_out
+            print_json(payload)
+            return
+        rows = modules_out
+        columns = fields
+    else:
+        rows = modules
+        columns = ["title", "duration"]
+    if table:
+        if not rows:
+            print_info("No modules found.")
+            return
+        print_table(rows, columns, [c.replace("_", " ").title() for c in columns])
+    else:
+        print_json(payload)
+
+
 app.add_typer(create_cache_app(get_config), name="cache")
 
 

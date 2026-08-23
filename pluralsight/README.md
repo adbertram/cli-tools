@@ -21,6 +21,7 @@ pluralsight
 ├── search <query>    Keyword search (courses/paths/labs/certificates)
 ├── list              Newest catalog entries across the library
 ├── get <prodId>      One catalog entry by product id
+├── modules <prodId>  Module titles/lengths + clip structure for one course
 ├── suggestions <q>   Query suggestions for a partial phrase
 └── cache             Manage response cache (shared cli-tools cache commands)
 ```
@@ -108,6 +109,23 @@ pluralsight suggestions "agentic"
 ```
 
 Returns the engine's suggestion strings for a partial phrase as a JSON array.
+
+### modules
+
+```
+pluralsight modules docker-developers-docker-foundations
+pluralsight modules docker-developers-docker-foundations --no-clips --table
+pluralsight modules generative-ai-foundations-agentic-ai -p title,duration
+```
+
+Returns `{course, title, moduleCount, modules[]}` where each module carries its
+`title`, `duration`, and `clips[]` (each clip's title + duration), parsed from
+the course page's public table of contents. Options:
+
+- `--clips/--no-clips`: omit per-clip listings with `--no-clips`
+- `--filter/-f`, `--table/-t`, `--properties/-p`: standard output controls
+
+Works on course product ids only; path/skill entries have no module TOC.
 
 ## Configuration
 

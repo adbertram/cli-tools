@@ -6,6 +6,7 @@ key Pluralsight publishes inside its own web pages (base64 of
 """
 
 import random
+import re
 import time
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -18,6 +19,7 @@ from .config import get_config
 
 SITE_AUTHORIZATION = "SiteKey MTAwMDA4NDc6MTAwMDEyNzg6U2VhcmNoS2V5"
 REFERER = "https://www.pluralsight.com/"
+COURSE_PAGE_URL = "https://www.pluralsight.com/courses/"
 
 DEFAULT_MAX_RETRIES = 3
 DEFAULT_BASE_DELAY = 1.0
@@ -390,6 +392,86 @@ class PluralsightClient:
             if value:
                 result.append(value)
         return result
+
+    def _fetch_course_page(self, course_id: str) -> str:
+        """Fetch one public course page's HTML (module TOC is server-rendered)."""
+        url = COURSE_PAGE_URL + course_id.strip().rstrip("/")
+        last_exception: Optional[Exception] = None
+        last_response: Optional[requests.Response] = None
+        headers = {k: v for k, v in self.headers.items() if k != "Content-Type"}
+
+        attempt = 0
+        for attempt in range(self.max_retries + 1):
+            try:
+                response = requests.get(url, headers=headers)
+                last_response = response
+                if self._is_retryable(response, None) and attempt < self.max_retries:
+                    time.sleep(self._calculate_retry_delay(attempt, self._get_retry_after(response)))
+                    continue
+                break
+            except requests.exceptions.RequestException as exc:
+                last_exception = exc
+                if self._is_retryable(None, exc) and attempt < self.max_retries:
+                    time.sleep(self._calculate_retry_delay(attempt))
+                    continue
+                break
+
+        if last_exception is not None and last_response is None:
+            raise ClientError(f"Request failed after {attempt + 1} attempts: {last_exception}")
+        if last_response is None:
+            raise ClientError("Request failed: no response received")
+        if last_response.status_code == 404:
+            raise ClientError(f"Course not found: {course_id}")
+        if not last_response.ok:
+            raise ClientError(f"HTTP {last_response.status_code} fetching course page {url}")
+        return last_response.text
+
+    @staticmethod
+    def parse_course_modules(html: str) -> dict:
+        """Parse the server-rendered table of contents from a course page.
+
+        Returns {"title": ..., "modules": [{"title", "duration", "clips":
+        [{"title", "duration"}]}]}. Durations stay as the site renders them
+        (e.g. "29m", "4m 52s").
+        """
+        title_match = re.search(r"<h1[^>]*>([^<]+)</h1>", html)
+
+        modules: List[dict] = []
+        pattern = re.compile(
+            r'accordion_btn_text">(?P<module_title>[^<]+)</span>.*?'
+            r'toc-small-text">(?P<module_duration>[^<]+)</div>.*?'
+            r'<ul>(?P<clips>.*?)</ul>',
+            re.S,
+        )
+        clip_pattern = re.compile(
+            r'clip-title">(?P<title>[^<]+)</span>\s*'
+            r'<span class="clip-duration">\s*\|\s*(?P<duration>[^<]+)</span>'
+        )
+
+        def _clean(value: str) -> str:
+            value = value.replace("&#39;", "'").replace("&amp;", "&")
+            value = value.replace("&quot;", '"').replace("&lt;", "<").replace("&gt;", ">")
+            return re.sub(r"\s+", " ", value).strip()
+
+        for match in pattern.finditer(html):
+            clips = [
+                {"title": _clean(c["title"]), "duration": c["duration"].strip()}
+                for c in clip_pattern.finditer(match.group("clips"))
+            ]
+            modules.append({
+                "title": _clean(match.group("module_title")),
+                "duration": match.group("module_duration").strip(),
+                "clips": clips,
+            })
+        return {
+            "title": _clean(title_match.group(1)) if title_match else None,
+            "modules": modules,
+        }
+
+    @cached
+    def get_course_modules(self, course_id: str) -> dict:
+        """Return module/clip structure for one course by product id."""
+        return self.parse_course_modules(self._fetch_course_page(course_id))
 
 
 _client: Optional[PluralsightClient] = None

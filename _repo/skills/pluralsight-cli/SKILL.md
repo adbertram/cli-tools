@@ -36,6 +36,7 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
 - **cache** -- Manage response cache (subcommands: clear)
 - **get** -- Get a single catalog entry by product id
 - **list** -- List newest catalog entries across the public Pluralsight library
+- **modules** -- Get module titles/lengths and clip structure for one course
 - **search** -- Keyword search over the public Pluralsight catalog
 - **suggestions** -- Return query suggestions from the catalog search engine
 </principle>
@@ -54,6 +55,10 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
   publish date and return `null`. Ratings can be absent on brand-new items.
 - `get <prodId>` uses a server-side `prodId:<id>` query; the prodId is the
   course URL slug (e.g. `docker-developers-docker-foundations`).
+- `modules <prodId>` works on COURSE ids only. There is no JSON endpoint for
+  course contents without login; the CLI parses the course page's public
+  server-rendered table of contents (module title/duration + clip list).
+  Paths/skills have no module TOC — use `get <path-prodId>` for member courses.
 - If a command errors right after install with a legacy-profile message under
   `~/.local/share/cli-tools/pluralsight/`, remove any leftover `.profiles/`
   directory there; canonical auth profiles live in `authentication_profiles/`.

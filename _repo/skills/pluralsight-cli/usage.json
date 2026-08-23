@@ -1,8 +1,8 @@
 {
   "tool": "pluralsight",
   "description": "CLI interface for pluralsight",
-  "discovered_at": "2026-08-23T18:43:30Z",
-  "total_commands": 5,
+  "discovered_at": "2026-08-23T18:58:25Z",
+  "total_commands": 6,
   "global_options": [],
   "commands": {
     "cache": {
@@ -108,6 +108,50 @@
           "required": false,
           "help": "Include total count and facets wrapper",
           "takes_value": false
+        }
+      ]
+    },
+    "modules": {
+      "help": "Get module titles, lengths, and clip structure for one course.",
+      "arguments": [
+        {
+          "name": "course_id",
+          "type": "TEXT",
+          "required": true,
+          "help": "Course product id (e.g. docker-developers-docker-foundations)"
+        }
+      ],
+      "options": [
+        {
+          "name": "--clips",
+          "type": "bool",
+          "required": false,
+          "help": "Include individual clip listings",
+          "takes_value": false,
+          "secondary": "--no-clips",
+          "default": "clips"
+        },
+        {
+          "name": "--filter",
+          "type": "TEXT",
+          "required": false,
+          "help": "Filter modules (field:op:value)",
+          "short": "-f"
+        },
+        {
+          "name": "--table",
+          "type": "bool",
+          "required": false,
+          "help": "Display as table",
+          "short": "-t",
+          "takes_value": false
+        },
+        {
+          "name": "--properties",
+          "type": "TEXT",
+          "required": false,
+          "help": "Comma-separated fields to include",
+          "short": "-p"
         }
       ]
     },
