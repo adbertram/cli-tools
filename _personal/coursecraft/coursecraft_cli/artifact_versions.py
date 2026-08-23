@@ -277,11 +277,11 @@ def canonical_hash(slug: str, persisted: Any) -> str:
 def _artifact_owning_reference_index() -> Dict[str, str]:
     """artifact_reference -> slug, for every non-review work-phase artifact.
 
-    Used to resolve a review artifact's implicit target when course-pipeline.json
-    omits an explicit ``review_target`` (true for the single-artifact review
-    groups: course-outline-review, course-scaffolding-review, module-review,
-    powerpoint-deck-review). Those entries share their ``artifact_reference``
-    with exactly one content-producing artifact whose ``skill`` IS the slug.
+    Used to resolve a review artifact's implicit target when its
+    course-pipeline.json work-phase entry carries ``review_ai`` but omits an
+    explicit ``review_target`` (today: module-review, powerpoint-deck-review). Such an entry shares its
+    ``artifact_reference`` with exactly one content-producing artifact whose
+    ``skill`` IS the slug.
     """
     index: Dict[str, str] = {}
     for phase in _pipeline_router().get("work_phases", []):

@@ -13,8 +13,6 @@ from ..filter_map import translate_filters
 from ..field_mappings import collect_mapped_updates
 from ..external_review import (
     ExternalReviewError,
-    execute_migration_initialization,
-    execute_review_migration_rollback,
     execute_transition,
     verified_video_feedback_receipts,
 )
@@ -826,122 +824,6 @@ def modules_mark_video_changes_requested(
         raise typer.Exit(1)
 
 
-def _run_module_migration(
-    module: str, instance: str, resolution_file: Optional[Path]
-) -> None:
-    client = get_client()
-    record_id = client.resolve_module_id(module)
-    print_json(
-        execute_migration_initialization(
-            client, instance, record_id, resolution_file
-        )
-    )
-
-
-@app.command("migrate-slide-deck-review", hidden=True)
-@command
-def modules_migrate_slide_deck_review(
-    module: str = typer.Argument(..., help="Module record ID, ID pattern, or name"),
-    resolution_file: Optional[Path] = typer.Option(
-        None,
-        "--resolution-file",
-        exists=True,
-        file_okay=True,
-        dir_okay=False,
-        readable=True,
-        resolve_path=True,
-        help="Planner-sealed resolution artifact; permitted only for an exact conflict baseline",
-    ),
-):
-    """Initialize Slide Deck lifecycle from fixed legacy fields."""
-    try:
-        _run_module_migration(module, "slide_deck", resolution_file)
-    except (ClientError, ExternalReviewError, ObjectiveOverrideError) as exc:
-        print_error(str(exc))
-        raise typer.Exit(1)
-
-
-@app.command("migrate-video-review", hidden=True)
-@command
-def modules_migrate_video_review(
-    module: str = typer.Argument(..., help="Module record ID, ID pattern, or name"),
-    resolution_file: Optional[Path] = typer.Option(
-        None,
-        "--resolution-file",
-        exists=True,
-        file_okay=True,
-        dir_okay=False,
-        readable=True,
-        resolve_path=True,
-        help="Planner-sealed resolution artifact; permitted only for an exact conflict baseline",
-    ),
-):
-    """Initialize Module Video lifecycle from fixed legacy fields."""
-    try:
-        _run_module_migration(module, "module_video", resolution_file)
-    except (ClientError, ExternalReviewError, ObjectiveOverrideError) as exc:
-        print_error(str(exc))
-        raise typer.Exit(1)
-
-
-def _run_module_rollback(
-    module: str, instance: str, rollback_plan: Path
-) -> None:
-    client = get_client()
-    record_id = client.resolve_module_id(module)
-    print_json(
-        execute_review_migration_rollback(
-            client, instance, record_id, rollback_plan
-        )
-    )
-
-
-@app.command("rollback-slide-deck-review", hidden=True)
-@command
-def modules_rollback_slide_deck_review(
-    module: str = typer.Argument(..., help="Module record ID, ID pattern, or name"),
-    rollback_plan: Path = typer.Option(
-        ...,
-        "--rollback-plan",
-        exists=True,
-        file_okay=True,
-        dir_okay=False,
-        readable=True,
-        resolve_path=True,
-        help="Planner-sealed lifecycle rollback plan",
-    ),
-):
-    """Restore Slide Deck migration fields from a sealed baseline."""
-    try:
-        _run_module_rollback(module, "slide_deck", rollback_plan)
-    except (ClientError, ExternalReviewError, ObjectiveOverrideError) as exc:
-        print_error(str(exc))
-        raise typer.Exit(1)
-
-
-@app.command("rollback-video-review", hidden=True)
-@command
-def modules_rollback_video_review(
-    module: str = typer.Argument(..., help="Module record ID, ID pattern, or name"),
-    rollback_plan: Path = typer.Option(
-        ...,
-        "--rollback-plan",
-        exists=True,
-        file_okay=True,
-        dir_okay=False,
-        readable=True,
-        resolve_path=True,
-        help="Planner-sealed lifecycle rollback plan",
-    ),
-):
-    """Restore Module Video migration fields from a sealed baseline."""
-    try:
-        _run_module_rollback(module, "module_video", rollback_plan)
-    except (ClientError, ExternalReviewError, ObjectiveOverrideError) as exc:
-        print_error(str(exc))
-        raise typer.Exit(1)
-
-
 COMMAND_CREDENTIALS = {
     "create": [
         "custom"
@@ -960,10 +842,6 @@ COMMAND_CREDENTIALS = {
     "mark-slide-deck-changes-requested": ["custom"],
     "mark-video-changes-requested": ["custom"],
     "mark-videos-approved": ["custom"],
-    "migrate-slide-deck-review": ["custom"],
-    "migrate-video-review": ["custom"],
-    "rollback-slide-deck-review": ["custom"],
-    "rollback-video-review": ["custom"],
     "show": [
         "custom"
     ],

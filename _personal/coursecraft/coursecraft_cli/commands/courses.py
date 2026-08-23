@@ -21,17 +21,9 @@ from ..course_versions import (
     validate_legacy_import_base,
     validate_version_identity,
 )
-from ..external_review import (
-    ExternalReviewError,
-    execute_migration_initialization,
-    execute_requirements_migration_rollback,
-    execute_requirements_migration_resolution,
-    execute_review_migration_rollback,
-    execute_transition,
-)
+from ..external_review import ExternalReviewError, execute_transition
 from ..objective_override import (
     AUDIT_FIELD,
-    CARRY_FORWARD_PLAN_FIELD,
     CARRY_FORWARD_PLAN_SLUG,
     CORRECTION_REQUESTED,
     FEEDBACK_RESYNCED,
@@ -46,23 +38,17 @@ from ..objective_override import (
     UPDATE_RECEIVED,
     ObjectiveOverrideError,
     append_audit,
-    artifact_version_entry,
     artifact_version_identity,
     content_snapshot,
     current_artifact_version,
-    current_json_artifact_version,
     current_requirements_version,
     current_state,
     load_audit,
     now_iso,
     predicted_requirements_version,
     read_replacement,
-    read_json_replacement,
     require_current_needs_revision_artifact_review,
     require_current_needs_revision_review,
-    require_current_pass_carry_forward_review,
-    require_carry_forward_v2_migration,
-    require_no_outline_revision,
     require_pluralsight,
     require_state,
     sha256_text,
@@ -746,8 +732,7 @@ def update_course(
             if isinstance(ledger, dict) and CARRY_FORWARD_PLAN_SLUG in ledger:
                 raise ObjectiveOverrideError(
                     "The completed Carry-Forward Plan cannot be changed through generic "
-                    "courses update. Use courses migrate-carry-forward-plan only for the "
-                    "reviewed pre-outline schema v1 to v2 structural migration."
+                    "courses update; update-planner rebuilds it."
                 )
 
         if not fields:
@@ -1028,17 +1013,6 @@ def _objective_override_course(client, course: str):
     return record_id, fields
 
 
-def _read_carry_forward_replacement(
-    inline: Optional[str], file_path: Optional[Path]
-) -> str:
-    file_value = None
-    if file_path is not None:
-        if not file_path.is_file():
-            raise ObjectiveOverrideError(f"File not found: {file_path}")
-        file_value = file_path.read_text(encoding="utf-8")
-    return read_json_replacement(inline, file_value)
-
-
 @app.command("request-objective-correction")
 @command
 def courses_request_objective_correction(
@@ -1174,122 +1148,6 @@ def courses_mark_outline_approved(
         raise typer.Exit(1)
 
 
-@app.command("migrate-outline-review", hidden=True)
-@command
-def courses_migrate_outline_review(
-    course: str = typer.Argument(..., help="Course record ID or Course ID slug"),
-    resolution_file: Optional[Path] = typer.Option(
-        None,
-        "--resolution-file",
-        exists=True,
-        file_okay=True,
-        dir_okay=False,
-        readable=True,
-        resolve_path=True,
-        help="Planner-sealed resolution artifact; permitted only for an exact conflict baseline",
-    ),
-):
-    """Initialize Course Outline lifecycle from fixed legacy fields."""
-    try:
-        client = get_client()
-        record_id = client.resolve_course_id(course)
-        print_json(
-            execute_migration_initialization(
-                client, "course_outline", record_id, resolution_file
-            )
-        )
-    except (ClientError, ExternalReviewError, ObjectiveOverrideError) as exc:
-        print_error(str(exc))
-        raise typer.Exit(1)
-
-
-@app.command("migrate-requirements-return", hidden=True)
-@command
-def courses_migrate_requirements_return(
-    course: str = typer.Argument(..., help="Course record ID or Course ID slug"),
-    resolution_file: Path = typer.Option(
-        ...,
-        "--resolution-file",
-        exists=True,
-        file_okay=True,
-        dir_okay=False,
-        readable=True,
-        resolve_path=True,
-        help="Planner-sealed course-requirements conflict resolution artifact",
-    ),
-):
-    """Apply one planner-sealed Course Requirements migration resolution."""
-    try:
-        client = get_client()
-        record_id = client.resolve_course_id(course)
-        print_json(
-            execute_requirements_migration_resolution(
-                client, record_id, resolution_file
-            )
-        )
-    except (ClientError, ExternalReviewError, ObjectiveOverrideError) as exc:
-        print_error(str(exc))
-        raise typer.Exit(1)
-
-
-@app.command("rollback-requirements-return", hidden=True)
-@command
-def courses_rollback_requirements_return(
-    course: str = typer.Argument(..., help="Course record ID or Course ID slug"),
-    rollback_plan: Path = typer.Option(
-        ...,
-        "--rollback-plan",
-        exists=True,
-        file_okay=True,
-        dir_okay=False,
-        readable=True,
-        resolve_path=True,
-        help="Planner-sealed lifecycle rollback plan",
-    ),
-):
-    """Restore Course Requirements migration fields from a sealed baseline."""
-    try:
-        client = get_client()
-        record_id = client.resolve_course_id(course)
-        print_json(
-            execute_requirements_migration_rollback(
-                client, record_id, rollback_plan
-            )
-        )
-    except (ClientError, ExternalReviewError, ObjectiveOverrideError) as exc:
-        print_error(str(exc))
-        raise typer.Exit(1)
-
-
-@app.command("rollback-outline-review", hidden=True)
-@command
-def courses_rollback_outline_review(
-    course: str = typer.Argument(..., help="Course record ID or Course ID slug"),
-    rollback_plan: Path = typer.Option(
-        ...,
-        "--rollback-plan",
-        exists=True,
-        file_okay=True,
-        dir_okay=False,
-        readable=True,
-        resolve_path=True,
-        help="Planner-sealed lifecycle rollback plan",
-    ),
-):
-    """Restore Course Outline migration fields from a sealed baseline."""
-    try:
-        client = get_client()
-        record_id = client.resolve_course_id(course)
-        print_json(
-            execute_review_migration_rollback(
-                client, "course_outline", record_id, rollback_plan
-            )
-        )
-    except (ClientError, ExternalReviewError, ObjectiveOverrideError) as exc:
-        print_error(str(exc))
-        raise typer.Exit(1)
-
-
 @app.command("authorize-objective-override")
 @command
 def courses_authorize_objective_override(
@@ -1355,101 +1213,6 @@ def courses_authorize_objective_override(
             "requirements_version": version,
         })
     except (ClientError, ObjectiveOverrideError) as exc:
-        print_error(str(exc))
-        raise typer.Exit(1)
-
-
-@app.command("migrate-carry-forward-plan")
-@command
-def courses_migrate_carry_forward_plan(
-    course: str = typer.Argument(..., help="Course record ID or Course ID slug"),
-    carry_forward_plan: Optional[str] = typer.Option(
-        None, "--carry-forward-plan", help="Replacement schemaVersion 2 Carry-Forward Plan JSON"
-    ),
-    carry_forward_plan_file: Optional[Path] = typer.Option(
-        None, "--carry-forward-plan-file", help="File containing the schemaVersion 2 Carry-Forward Plan"
-    ),
-    reason: str = typer.Option(..., "--reason", help="Why the reviewed migration is required"),
-):
-    """Migrate a Carry-Forward Plan to structural-only schema v2 without learner titles."""
-    try:
-        if not reason.strip():
-            raise ObjectiveOverrideError("--reason cannot be blank.")
-        replacement = _read_carry_forward_replacement(
-            carry_forward_plan, carry_forward_plan_file
-        )
-        client = get_client()
-        record_id, fields = _course_record(client, course)
-        current_plan = fields.get(CARRY_FORWARD_PLAN_FIELD)
-        if not isinstance(current_plan, str):
-            raise ObjectiveOverrideError(f"{CARRY_FORWARD_PLAN_FIELD} is blank.")
-        current_document = json.loads(current_plan)
-        if not isinstance(current_document, dict):
-            raise ObjectiveOverrideError("Carry-Forward Plan must be a JSON object.")
-        source_has_structure = bool(current_document.get("target_structure"))
-        if not source_has_structure:
-            require_no_outline_revision(fields)
-        source_version = artifact_version_entry(fields, CARRY_FORWARD_PLAN_SLUG)
-        source_live_version = {
-            "v": source_version["v"],
-            "sha256": sha256_text(current_plan),
-        }
-        source_review = None
-        if not source_has_structure:
-            source_review = require_current_pass_carry_forward_review(
-                fields, record_id, source_version
-            )
-        require_carry_forward_v2_migration(current_plan, replacement)
-        target_version = {
-            "v": source_version["v"] + 1,
-            "sha256": sha256_text(replacement),
-        }
-        event = {
-            "type": "carry_forward_plan_migrated",
-            "at": now_iso(),
-            "oldLedgerArtifactVersion": source_version,
-            "oldLedgerArtifactVersionIdentity": artifact_version_identity(
-                CARRY_FORWARD_PLAN_SLUG, source_version
-            ),
-            "sourceLiveArtifactVersion": source_live_version,
-            "sourceLiveArtifactVersionIdentity": artifact_version_identity(
-                CARRY_FORWARD_PLAN_SLUG, source_live_version
-            ),
-            "sourceHadTargetStructure": source_has_structure,
-            "newArtifactVersion": target_version,
-            "newArtifactVersionIdentity": artifact_version_identity(
-                CARRY_FORWARD_PLAN_SLUG, target_version
-            ),
-            "reason": reason.strip(),
-        }
-        if source_review is not None:
-            event["sourceReview"] = source_review
-        persisted = client.update_record("Courses", record_id, {
-            CARRY_FORWARD_PLAN_FIELD: replacement,
-            AUDIT_FIELD: append_audit(fields, event),
-        })
-        actual_fields = persisted.get("fields", {})
-        if actual_fields.get(CARRY_FORWARD_PLAN_FIELD) != replacement:
-            raise ObjectiveOverrideError(
-                "Persisted Carry-Forward Plan differs from the reviewed migration candidate."
-            )
-        actual_version = current_json_artifact_version(
-            actual_fields, CARRY_FORWARD_PLAN_SLUG, CARRY_FORWARD_PLAN_FIELD
-        )
-        if actual_version != target_version:
-            raise ObjectiveOverrideError(
-                f"Carry-Forward Plan version verification failed: expected {target_version}, "
-                f"got {actual_version}."
-            )
-        print_success(f"Migrated Carry-Forward Plan for {record_id}")
-        print_json({
-            "mode": "migrate-carry-forward-plan",
-            "course": record_id,
-            "source_ledger_artifact_version": source_version,
-            "source_live_artifact_version": source_live_version,
-            "carry_forward_plan_version": actual_version,
-        })
-    except (ClientError, ObjectiveOverrideError, OSError, json.JSONDecodeError) as exc:
         print_error(str(exc))
         raise typer.Exit(1)
 
@@ -1821,17 +1584,10 @@ COMMAND_CREDENTIALS = {
     "submit-outline-for-review": ["custom"],
     "mark-outline-changes-requested": ["custom"],
     "mark-outline-approved": ["custom"],
-    "migrate-outline-review": ["custom"],
-    "migrate-requirements-return": ["custom"],
-    "rollback-outline-review": ["custom"],
-    "rollback-requirements-return": ["custom"],
     "request-objective-correction": [
         "custom"
     ],
     "authorize-objective-override": [
-        "custom"
-    ],
-    "migrate-carry-forward-plan": [
         "custom"
     ],
     "apply-objective-override": [

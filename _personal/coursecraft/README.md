@@ -118,18 +118,6 @@ coursecraft courses authorize-objective-override my-course
 coursecraft courses apply-objective-override my-course \
   --learning-objectives-file ./objectives.md \
   --reason "Pluralsight retained the current-product inaccuracies after feedback."
-
-# Migrate a reviewed schema v1 Carry-Forward Plan to structural-only schema v2
-# before any course.outline_draft revision exists. The candidate carries stable
-# base_record/addition_id identities and no learner-facing module or clip titles,
-# including under verdicts.*.target.
-coursecraft artifacts validate update.carry_forward_plan ./carry-forward-plan-v2.json \
-  --course my-course
-coursecraft courses migrate-carry-forward-plan my-course \
-  --carry-forward-plan-file ./carry-forward-plan-v2.json \
-  --reason "Migrate the reviewed plan to the structural-only schema."
-# The same command narrowly completes an earlier schema v2 migration only when
-# live verdicts.*.target objects still contain forbidden name/title keys.
 ```
 
 The override workflow is fail-closed and Pluralsight-only. It requires these
@@ -624,7 +612,7 @@ coursecraft voice-recordings generate --demo recXXXXXXXXXXXXXXX \
 
 `voice-recordings preview` reads the demo Script and its walkthrough manifest, uses CourseCraft's canonical Demo Script parser, and returns JSON containing `normalizedNarration`, `normalizedNarrationSha256`, `cueValidation`, and `anchorValidation`. It exits nonzero when cue/anchor validation fails. Automated Walkthrough generation runs the same validation before any ElevenLabs or Airtable operation.
 
-Voice recording generation uses the ElevenLabs CLI only when separate generated narration is required before video capture. Slide generation retains the legacy explicit voice/path behavior. Demo generation supports only `mp3_44100_128`, derives `.mp3`, live-verifies voice/model/dictionary identity, and generates to a unique `.staging` candidate rather than the current authoritative path. Before promotion it requires a full single-audio-stream decode, positive duration, canonical source hash, no action-cue leakage, whole-script Whisper recall, a peak at or below `-1.0 dBFS`, and exact voice/model/format/dictionary/tuning identity. It promotes without overwrite, then makes one CourseCraft narration update and uncached readback for metadata and `Dictation Recorded=true`; a demo's take path is derived from `Folder Root` and `Recording Dictation Method`, never stored, and it never writes `Recorded`.
+Voice recording generation uses the ElevenLabs CLI only when separate generated narration is required before video capture. Slide generation uses the explicit voice/path behavior. Demo generation supports only `mp3_44100_128`, derives `.mp3`, live-verifies voice/model/dictionary identity, and generates to a unique `.staging` candidate rather than the current authoritative path. Before promotion it requires a full single-audio-stream decode, positive duration, canonical source hash, no action-cue leakage, whole-script Whisper recall, a peak at or below `-1.0 dBFS`, and exact voice/model/format/dictionary/tuning identity. It promotes without overwrite, then makes one CourseCraft narration update and uncached readback for metadata and `Dictation Recorded=true`; a demo's take path is derived from `Folder Root` and `Recording Dictation Method`, never stored, and it never writes `Recorded`.
 
 The adjacent `<authoritative-audio>.narration.json` is the durable transaction/adapter contract. It binds normalized source and output SHA-256 values, voice/model/format/dictionary/tuning, validation evidence, request/history IDs, and deterministic derived-WAV input policy (`pcm_s16le`, 48 kHz, mono). Timeout checkpoints contain exactly every narration-owned CourseCraft field plus `Recorded`; any key-set or value mismatch blocks before local adoption, history lookup/download, or paid authorization. Exact history-ID recovery derives character count from a positive official `character_count`, a valid positive `character_count_change_to - character_count_change_from`, or nonempty official `text` length, in that order. If none is available it blocks with `HISTORY_RECOVERY_CHARACTER_COUNT_UNAVAILABLE`. Because official history does not guarantee the original request ID, recovered metadata stores `request_id=""` (the CourseCraft/Airtable empty value) plus explicit status/provenance in the sidecar; final CourseCraft update/readback still compares all owned fields exactly. Recovered download SHA-256 must bind the candidate before narration validation. An identical validated local/CourseCraft identity is reused without paid generation. A promoted take can be registered after a write failure without regeneration. Timeout/unknown state leaves a pending reconciliation record and blocks blind retry, preserving the prior take and fields. If video and audio will be recorded together, skip this command and leave `Dictation Recorded` unset.
 

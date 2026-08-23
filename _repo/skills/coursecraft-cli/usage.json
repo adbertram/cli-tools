@@ -1,8 +1,8 @@
 {
   "tool": "coursecraft",
   "description": "Manage CourseCraft course content in Airtable",
-  "discovered_at": "2026-08-22T23:05:16Z",
-  "total_commands": 77,
+  "discovered_at": "2026-08-23T00:40:52Z",
+  "total_commands": 76,
   "global_options": [
     {
       "name": "--version",
@@ -1454,43 +1454,6 @@
             }
           ],
           "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ]
-        },
-        "migrate-carry-forward-plan": {
-          "help": "Migrate a Carry-Forward Plan to structural-only schema v2 without learner titles.",
-          "arguments": [
-            {
-              "name": "course",
-              "type": "TEXT",
-              "required": true,
-              "help": "Course record ID or Course ID slug"
-            }
-          ],
-          "options": [
-            {
-              "name": "--carry-forward-plan",
-              "type": "TEXT",
-              "required": false,
-              "help": "Replacement schemaVersion 2 Carry-Forward Plan JSON"
-            },
-            {
-              "name": "--carry-forward-plan-file",
-              "type": "PATH",
-              "required": false,
-              "help": "File containing the schemaVersion 2 Carry-Forward Plan"
-            },
-            {
-              "name": "--reason",
-              "type": "TEXT",
-              "required": true,
-              "help": "Why the reviewed migration is required"
-            },
             {
               "name": "--profile",
               "type": "TEXT",
