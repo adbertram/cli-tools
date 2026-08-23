@@ -175,8 +175,30 @@ class BrickOwlBrowser:
             "all": "messages/all",
         }.get(folder, "messages")
 
-        self._page.goto(f"https://www.brickowl.com/user/{user_id}/{folder_path}")
-        self._page.wait_for_timeout(2000)
+        target_url = f"https://www.brickowl.com/user/{user_id}/{folder_path}"
+        self._page.goto(target_url)
+
+        # Wait for the message list to render instead of a fixed sleep. A fixed
+        # 2s sleep is unreliable under load and can read an empty DOM while the
+        # message table is still loading. Poll for the message rows, retry once
+        # on a slow navigation, and only report an empty inbox after confirming
+        # the page actually reached the messages URL.
+        for attempt in (1, 2):
+            try:
+                self._page.wait_for_selector(
+                    'table tbody tr a[href*="/messages/all/"]', timeout=15000
+                )
+                break
+            except Exception:
+                if attempt == 2:
+                    current = self._page.url or ""
+                    if "/messages" not in current:
+                        raise RuntimeError(
+                            f"Brick Owl message list did not render; "
+                            f"landed at {current!r} (expected {target_url!r})."
+                        )
+                else:
+                    self._page.goto(target_url)
 
         messages = self._page.evaluate("""() => {
             const results = [];
