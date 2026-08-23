@@ -34,11 +34,15 @@ class TimeInForce(str, Enum):
 
 
 class OrderStatus(str, Enum):
-    """Known open order statuses."""
+    """Known order statuses across open and historical orders."""
 
     NEW = "NEW"
     PENDING = "PENDING"
     ACTIVE = "ACTIVE"
+    FILLED = "FILLED"
+    CANCELED = "CANCELED"
+    REJECTED = "REJECTED"
+    EXPIRED = "EXPIRED"
 
 
 class PositionBalance(ExchangeModel):

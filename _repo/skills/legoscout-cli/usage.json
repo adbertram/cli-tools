@@ -1,0 +1,1709 @@
+{
+  "tool": "legoscout",
+  "description": "CLI interface for legoscout",
+  "discovered_at": "2026-08-20T20:54:08Z",
+  "total_commands": 59,
+  "global_options": [],
+  "commands": {
+    "deals": {
+      "help": "The canonical deal ledger",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "build": {
+          "help": "Assemble one ledger-ready record. Prints JSON; persists nothing. `build_deal_record` requires both timestamps and defaults NEITHER, because a record whose `first_seen_at` was invented is a record whose age is fiction. Re-assembling an existing row therefore passes its stored `--first-seen-at`; only a genuinely new sighting takes the clock.",
+          "arguments": [
+            {
+              "name": "candidate",
+              "type": "TEXT",
+              "required": true,
+              "help": "A crawl-phase candidate JSON file"
+            },
+            {
+              "name": "appraisal",
+              "type": "TEXT",
+              "required": true,
+              "help": "The matching appraisal JSON file"
+            }
+          ],
+          "options": [
+            {
+              "name": "--first-seen-at",
+              "type": "TEXT",
+              "required": false,
+              "help": "When this listing was first seen; now (UTC) when omitted"
+            },
+            {
+              "name": "--last-seen-at",
+              "type": "TEXT",
+              "required": false,
+              "help": "When this listing was last seen; now (UTC) when omitted"
+            }
+          ]
+        },
+        "expire": {
+          "help": "Resolve every active listing to available/unavailable/blocked. A real, already-past auction_end_date resolves a row with no live check. A row with no usable date (fixed-price, or an uncaptured date) is live-checked through invalidate/checks.py's per-source dispatch table, honoring a 12-hour freshness cooldown. There is no manual-check bucket: every active row resolves to confirmed_unavailable, confirmed_still_active, check_failed, blocked, or (for an unparseable date) unreadable_end_date.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--apply",
+              "type": "bool",
+              "required": false,
+              "help": "Write confirmed_unavailable/blocked rows and stamp confirmed_still_active rows, batched in one upsert_deals() call"
+            },
+            {
+              "name": "--timeout-seconds",
+              "type": "bool",
+              "required": false,
+              "help": "<float range> [x>=0.001]  Hard limit for the complete sweep",
+              "default": "2700"
+            },
+            {
+              "name": "--listing-timeout-seconds",
+              "type": "bool",
+              "required": false,
+              "help": "<float range> [x>=0.001]  Hard limit for one live listing check",
+              "default": "180"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get one deal record.",
+          "arguments": [
+            {
+              "name": "listing_key",
+              "type": "TEXT",
+              "required": true,
+              "help": "The deal's listing_key"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "list": {
+          "help": "List deals, newest score first.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "bool",
+              "required": false,
+              "help": "<int range> [x>=0]  Maximum number of deals",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "read": {
+          "help": "Read ONE field live off the listing itself, for debugging. This is the source reader, not the ledger: it fetches the marketplace. `--url` is what makes this usable on a FRESH crawl candidate. Without a ledger row the record carries no URL, and a reader that fetches the page could only answer `unknown url type: ''` -- which is exactly the moment a single-field debug read is worth most.",
+          "arguments": [
+            {
+              "name": "listing_key",
+              "type": "TEXT",
+              "required": true,
+              "help": "The deal's listing_key"
+            },
+            {
+              "name": "field",
+              "type": "TEXT",
+              "required": true,
+              "help": "A deal-record column: available_fulfillment, item_location, auction_end_date, shipping_estimate, seller_id, seller_name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--url",
+              "type": "TEXT",
+              "required": false,
+              "help": "The listing URL, for a candidate that has no ledger row yet"
+            }
+          ]
+        },
+        "refresh": {
+          "help": "Re-read one field across the ledger, from the listing itself.",
+          "arguments": [
+            {
+              "name": "field",
+              "type": "FIELD",
+              "required": false,
+              "help": "The ledger field to re-read: auction_end_date, available_fulfillment, fee_breakdown, item_location, shipping_estimate, shipping_estimated"
+            }
+          ],
+          "options": [
+            {
+              "name": "--apply",
+              "type": "bool",
+              "required": false,
+              "help": "Write the answers back"
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Report and write nothing"
+            },
+            {
+              "name": "--source",
+              "type": "TEXT",
+              "required": false,
+              "help": "One listing_key namespace"
+            },
+            {
+              "name": "--include-inactive",
+              "type": "bool",
+              "required": false,
+              "help": "Do not skip dead listings"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Stop after this many rows"
+            },
+            {
+              "name": "--key",
+              "type": "TEXT",
+              "required": false,
+              "help": "Limit to these listing_keys (repeatable)"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Re-answer rows the done-predicate would skip"
+            },
+            {
+              "name": "--ledger",
+              "type": "TEXT",
+              "required": false,
+              "help": "A different ledger path"
+            },
+            {
+              "name": "--set",
+              "type": "bool",
+              "required": false,
+              "help": "KEY=VALUE  Write an agent-read answer for one row, through the same resolve-and-write path the readers use"
+            },
+            {
+              "name": "--list",
+              "type": "bool",
+              "required": false,
+              "help": "The sweeps and what they read"
+            }
+          ]
+        },
+        "replay": {
+          "help": "Replay the stored source-run fixtures through build and validate.",
+          "arguments": [],
+          "options": []
+        },
+        "run-manifest": {
+          "help": "Report active-source artifacts and exact appraisal coverage.",
+          "arguments": [
+            {
+              "name": "run_dir",
+              "type": "TEXT",
+              "required": true,
+              "help": "A source-runs directory"
+            }
+          ],
+          "options": []
+        },
+        "schema": {
+          "help": "Print the deal-record schema for one pipeline phase.",
+          "arguments": [
+            {
+              "name": "phase",
+              "type": "PHASE",
+              "required": false,
+              "help": "crawl / appraisal / synthesis; every field when omitted"
+            }
+          ],
+          "options": [
+            {
+              "name": "--json",
+              "type": "bool",
+              "required": false,
+              "help": "the raw JSON Schema properties, for a machine caller"
+            }
+          ]
+        },
+        "status": {
+          "help": "Set one deal's status.",
+          "arguments": [
+            {
+              "name": "listing_key",
+              "type": "TEXT",
+              "required": true,
+              "help": "The deal's listing_key"
+            },
+            {
+              "name": "status",
+              "type": "TEXT",
+              "required": true,
+              "help": "One of: active / rejected / inquired / bid_placed / purchased"
+            }
+          ],
+          "options": []
+        },
+        "validate": {
+          "help": "Hard gate: a deal record is invalid unless it stores a usable numeric price.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--file",
+              "type": "TEXT",
+              "required": false,
+              "help": "A different ledger path"
+            },
+            {
+              "name": "--strict",
+              "type": "bool",
+              "required": false,
+              "help": "Exit 1 if any ERROR"
+            },
+            {
+              "name": "--include-inactive",
+              "type": "bool",
+              "required": false,
+              "help": "Check dead listings too"
+            }
+          ]
+        }
+      }
+    },
+    "deploy": {
+      "help": "Sync the ledger and app code to adam-server",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "pull-db": {
+          "help": "Snapshot adam-server's shared ledger down to the local working copy.",
+          "arguments": [],
+          "options": []
+        },
+        "push": {
+          "help": "Push the local ledger to adam-server, then deploy code if it changed.",
+          "arguments": [],
+          "options": []
+        },
+        "rollback": {
+          "help": "Roll adam-server back to an earlier release and restart it.",
+          "arguments": [
+            {
+              "name": "target",
+              "type": "TARGET",
+              "required": false,
+              "help": "Releases to go back (a number) or an explicit release directory name",
+              "default": "1"
+            }
+          ],
+          "options": []
+        },
+        "status": {
+          "help": "Whether adam-server's code is in sync, release list, pm2 status.",
+          "arguments": [],
+          "options": []
+        }
+      }
+    },
+    "display": {
+      "help": "The local deals web page",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "rows": {
+          "help": "Print the deals-table rows as JSON. Node is not involved.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--active-only",
+              "type": "bool",
+              "required": false,
+              "help": "Drop rejected rows as well as unavailable and blocked"
+            },
+            {
+              "name": "--db",
+              "type": "TEXT",
+              "required": false,
+              "help": "A different ledger, for probes"
+            }
+          ]
+        },
+        "serve": {
+          "help": "Serve the deals page. Runs until stopped -- ctrl-c locally, pm2 on adam-server.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--host",
+              "type": "TEXT",
+              "required": false,
+              "help": "Interface to bind. adam-server's pm2 deploy uses its Tailscale IP; local debugging keeps the loopback default",
+              "default": "127.0.0.1"
+            },
+            {
+              "name": "--port",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Port to listen on",
+              "default": "8787"
+            },
+            {
+              "name": "--no-open",
+              "type": "bool",
+              "required": false,
+              "help": "Do not open a browser"
+            },
+            {
+              "name": "--db",
+              "type": "TEXT",
+              "required": false,
+              "help": "A different ledger, for probes. Applies to every route"
+            }
+          ]
+        }
+      }
+    },
+    "pricing": {
+      "help": "Deal economics: fees, landed cost, comps and freight",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "auctionninja-fees": {
+          "help": "Discover an AuctionNinja house's published premium, tax and origin.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--url",
+              "type": "TEXT",
+              "required": false,
+              "help": "One AuctionNinja lot URL"
+            },
+            {
+              "name": "--batch",
+              "type": "FILE",
+              "required": false,
+              "help": "A file of lot URLs"
+            },
+            {
+              "name": "--weight-lbs",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Estimate inbound freight at this weight"
+            },
+            {
+              "name": "--register",
+              "type": "bool",
+              "required": false,
+              "help": "Persist the discovered house record"
+            }
+          ]
+        },
+        "comps": {
+          "help": "BrickLink + eBay sold comps for a LEGO set (or several, on one listing), or eBay-only for a bulk lot. The single command the comps-only appraiser calls. Pass --set-no once per detected set number; a single-set listing still passes it once. BrickLink and eBay are independent lookups -- one failing never blocks the other; read `bricklink.lookup_status` and `ebay.available` separately per set.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--set-no",
+              "type": "TEXT",
+              "required": false,
+              "help": "A LEGO set number. Repeatable -- pass it once per detected set on a multi-set listing. Required unless --bulk"
+            },
+            {
+              "name": "--bulk",
+              "type": "bool",
+              "required": false,
+              "help": "Bulk-lot mode: eBay $/lb comps only, no BrickLink"
+            },
+            {
+              "name": "--condition",
+              "type": "TEXT",
+              "required": false,
+              "help": "N or U. Required unless --bulk"
+            },
+            {
+              "name": "--description",
+              "type": "TEXT",
+              "required": false,
+              "help": "Extra search keywords: set name/theme, or bulk lot description"
+            },
+            {
+              "name": "--dollars-per-lb",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Bulk mode only: the target listing's own $/lb, for comparison"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Max eBay results to search",
+              "default": "50"
+            }
+          ]
+        },
+        "comps-batch": {
+          "help": "Price a whole appraiser batch in ONE call: BrickLink + eBay sold comps for every candidate, concurrently. Each result is exactly what `pricing comps` would print for that candidate, plus `listing_key`. One candidate's failure becomes that candidate's `blocked` result -- it never fails the batch. The root `timings` object reports wall seconds vs the serial equivalent.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--input",
+              "type": "FILE",
+              "required": true,
+              "help": "JSON array file of the classifier's comps hand-offs: listing_key, listing_category, and set_numbers/condition/description (set) or description/dollars_per_lb (bulk)"
+            },
+            {
+              "name": "--output",
+              "type": "FILE",
+              "required": true,
+              "help": "Write the full batch JSON here (timings + one result per candidate)"
+            },
+            {
+              "name": "--workers",
+              "type": "INTEGER",
+              "required": false,
+              "default": "4",
+              "help": "Concurrent candidates. Keep narrow: eBay is a browser-session scrape"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "default": "50",
+              "help": "Max eBay results per search"
+            }
+          ]
+        },
+        "ebay-comps": {
+          "help": "eBay sold comps for one LEGO set, or one bulk lot with --bulk. Never fails on an eBay auth lapse -- returns `{\"available\": false, \"reason\": \"ebay_auth_required\", ...}` instead. Run `ebay auth login --credential-type browser_session` to authenticate completed/sold search.",
+          "arguments": [
+            {
+              "name": "set_no",
+              "type": "SET_NO",
+              "required": false,
+              "help": "A LEGO set number. Required unless --bulk"
+            }
+          ],
+          "options": [
+            {
+              "name": "--bulk",
+              "type": "bool",
+              "required": false,
+              "help": "Bulk-lot mode: match by weight, not a set number"
+            },
+            {
+              "name": "--condition",
+              "type": "TEXT",
+              "required": false,
+              "help": "N or U. Required unless --bulk"
+            },
+            {
+              "name": "--description",
+              "type": "TEXT",
+              "required": false,
+              "help": "Extra search keywords: set name/theme, or bulk lot description"
+            },
+            {
+              "name": "--dollars-per-lb",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Bulk mode only: the target listing's own $/lb, for comparison"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Max eBay results to search",
+              "default": "50"
+            }
+          ]
+        },
+        "fees": {
+          "help": "The published fee configuration for one source.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--source",
+              "type": "TEXT",
+              "required": true,
+              "help": "A namespace or listing_key"
+            }
+          ]
+        },
+        "images": {
+          "help": "Fetch a listing's images for the vision pass.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--url",
+              "type": "TEXT",
+              "required": false,
+              "help": "A listing URL to read"
+            },
+            {
+              "name": "--key",
+              "type": "TEXT",
+              "required": false,
+              "help": "A ledger listing_key"
+            },
+            {
+              "name": "--urls",
+              "type": "TEXT",
+              "required": false,
+              "help": "Explicit image URLs (repeatable)"
+            },
+            {
+              "name": "--max",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Stop after this many images"
+            }
+          ]
+        },
+        "landed-cost": {
+          "help": "Landed cost from a hammer price plus whatever freight is known. An unknown freight cost is NEVER passed as 0.0: the row is marked `shipping_unknown` and `landed_is_floor` instead.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--source",
+              "type": "TEXT",
+              "required": true,
+              "help": "A namespace or listing_key"
+            },
+            {
+              "name": "--hammer",
+              "type": "FLOAT",
+              "required": true,
+              "help": "The price actually paid"
+            },
+            {
+              "name": "--shipping",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Known freight; omit with --shipping-unknown"
+            },
+            {
+              "name": "--shipping-unknown",
+              "type": "bool",
+              "required": false,
+              "help": "No freight is known, so the landed total is a FLOOR"
+            },
+            {
+              "name": "--handling",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Handling fee"
+            },
+            {
+              "name": "--premium-pct",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Override the source's buyer premium"
+            },
+            {
+              "name": "--sales-tax-pct",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Override the source's sales tax"
+            },
+            {
+              "name": "--buyer-protection-fee",
+              "type": "FLOAT",
+              "required": false,
+              "help": "The listing's numeric buyer protection fee"
+            }
+          ]
+        },
+        "pickup-area": {
+          "help": "Can Adam drive there? Resolves a stated location against the radius. A bare town name raises: Chandler IN is 15 miles away and Chandler AZ is 1,500.",
+          "arguments": [
+            {
+              "name": "location",
+              "type": "TEXT",
+              "required": true,
+              "help": "A stated listing location"
+            }
+          ],
+          "options": []
+        },
+        "preflight": {
+          "help": "Mandatory pre-run gate for both comps-pricing credentials. Verifies BrickLink and eBay auth status BEFORE any source worker starts. `pricing comps` degrades a per-candidate eBay auth lapse to `{\"available\": false, \"reason\": \"ebay_auth_required\", ...}` rather than raising -- correct within a run, but it means a session-wide eBay auth lapse is invisible until an appraiser batch is already many candidates deep. Run this first: a dead credential blocks the run at the door instead of surfacing 20 candidates later.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Check this profile on BOTH tools instead of each tool's own active profile"
+            }
+          ]
+        },
+        "profit": {
+          "help": "Net-of-fees profit from a comp average, landed cost, and fee rate. Pure math -- no network call. The one place the orchestrator turns a classifier's landed cost plus an appraiser's comp average into `potential_profit`, so the two agents' outputs never get hand-merged.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--estimated-total",
+              "type": "FLOAT",
+              "required": true,
+              "help": "Landed cost"
+            },
+            {
+              "name": "--fee-rate",
+              "type": "FLOAT",
+              "required": true,
+              "help": "Resale fee rate, as a decimal"
+            },
+            {
+              "name": "--avg-price",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Selected-condition six-month avg sold price; omit for 'no comp'"
+            },
+            {
+              "name": "--price-detail-count",
+              "type": "INTEGER",
+              "required": false,
+              "help": "How many sold listings backed --avg-price"
+            }
+          ]
+        },
+        "rebuild-pickup-area": {
+          "help": "Rebuild the pickup-area table from the public geography sources.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--radius-miles",
+              "type": "FLOAT",
+              "required": false,
+              "help": "The drive radius to build for"
+            },
+            {
+              "name": "--csv",
+              "type": "TEXT",
+              "required": false,
+              "help": "ZIP centroid CSV"
+            },
+            {
+              "name": "--zcta-place",
+              "type": "TEXT",
+              "required": false,
+              "help": "ZCTA place file"
+            },
+            {
+              "name": "--place-gazetteer",
+              "type": "TEXT",
+              "required": false,
+              "help": "Census place gazetteer"
+            },
+            {
+              "name": "--geonames",
+              "type": "TEXT",
+              "required": false,
+              "help": "GeoNames dump"
+            },
+            {
+              "name": "--out",
+              "type": "TEXT",
+              "required": false,
+              "help": "Write the table here"
+            }
+          ]
+        },
+        "set-sales": {
+          "help": "BrickLink sold comps for one set number. The flag is `--refresh`, not `--no-cache`. `cli_tools_shared.create_app` registers `--no-cache` as an APP-level option and `_hoist_no_cache_flag()` moves the token to the front of `sys.argv`, so a subcommand of the same name never receives it. This one was silently inert until 2026-08-06.",
+          "arguments": [
+            {
+              "name": "set_no",
+              "type": "TEXT",
+              "required": true,
+              "help": "A LEGO set number"
+            }
+          ],
+          "options": [
+            {
+              "name": "--condition",
+              "type": "TEXT",
+              "required": true,
+              "help": "N or U"
+            },
+            {
+              "name": "--purchase-price",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Landed cost of the lot. Omit together with --fee-rate for a comps-only lookup with no potential_profit"
+            },
+            {
+              "name": "--fee-rate",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Resale fee rate. Omit together with --purchase-price"
+            },
+            {
+              "name": "--refresh",
+              "type": "bool",
+              "required": false,
+              "help": "Call BrickLink directly, ignoring and not writing the call cache"
+            }
+          ]
+        },
+        "shipping": {
+          "help": "A carrier rate for a listing whose SOURCE publishes none. Auction houses invoice freight after the sale, so the rate that decides the bid does not exist at bid time. A row with no stated weight cannot be quoted, and this NEVER invents one. The flag is `--refresh`, not `--no-cache`: `cli_tools_shared` hoists a `--no-cache` token to the front of `sys.argv` for its own app-level option, so a subcommand flag of that name never arrives.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--origin-zip",
+              "type": "TEXT",
+              "required": false,
+              "help": "Ship-from ZIP"
+            },
+            {
+              "name": "--origin-city",
+              "type": "TEXT",
+              "required": false,
+              "help": "Ship-from city"
+            },
+            {
+              "name": "--origin-state",
+              "type": "TEXT",
+              "required": false,
+              "help": "Ship-from state"
+            },
+            {
+              "name": "--house",
+              "type": "TEXT",
+              "required": false,
+              "help": "A curated auction house name from seller_origins.json"
+            },
+            {
+              "name": "--hibid-lot",
+              "type": "TEXT",
+              "required": false,
+              "help": "Read the origin off a HiBid lot"
+            },
+            {
+              "name": "--weight-lbs",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Parcel weight"
+            },
+            {
+              "name": "--refresh",
+              "type": "bool",
+              "required": false,
+              "help": "Re-quote the carrier, ignoring the rate cache"
+            }
+          ]
+        }
+      }
+    },
+    "prospects": {
+      "help": "Prospecting: new inventory sources and their contacts",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "contacts": {
+          "help": "Contacts on a prospect",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Record one contact on a prospect.",
+              "arguments": [
+                {
+                  "name": "record",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "A contact JSON file"
+                }
+              ],
+              "options": []
+            },
+            "get": {
+              "help": "Get one contact row.",
+              "arguments": [
+                {
+                  "name": "contact_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The contact's id"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "list": {
+              "help": "List every recorded contact.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of contacts",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter results (field:op:value)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to include",
+                  "short": "-p"
+                }
+              ]
+            }
+          }
+        },
+        "create": {
+          "help": "Record one evidence-backed prospect.",
+          "arguments": [
+            {
+              "name": "record",
+              "type": "TEXT",
+              "required": true,
+              "help": "A prospect JSON file"
+            }
+          ],
+          "options": []
+        },
+        "get": {
+          "help": "Get one prospect, with its contacts and outreach.",
+          "arguments": [
+            {
+              "name": "prospect_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The prospect's id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "hypotheses": {
+          "help": "Registered prospecting hypothesis types",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "get": {
+              "help": "Get one registered hypothesis type.",
+              "arguments": [
+                {
+                  "name": "hypothesis_type",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "A registered type key"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "list": {
+              "help": "List every registered hypothesis type. An unregistered type cannot be stored: this registry is the gate.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of types",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter results (field:op:value)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to include",
+                  "short": "-p"
+                }
+              ]
+            }
+          }
+        },
+        "list": {
+          "help": "List every recorded prospect.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of prospects",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "outreach": {
+          "help": "Outreach to a prospect",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "get": {
+              "help": "Get one outreach row and its state.",
+              "arguments": [
+                {
+                  "name": "outreach_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The outreach row's id"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "list": {
+              "help": "List every outreach row and its state.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of rows",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter results (field:op:value)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "send": {
+              "help": "Send one approved outreach email. Without `--confirm` this previews and sends nothing. LegoScout never contacts anyone without Adam's explicit per-action approval.",
+              "arguments": [
+                {
+                  "name": "outreach_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The outreach row to send"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--confirm",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Adam approved THIS exact body; send it"
+                },
+                {
+                  "name": "--db",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "A different ledger path"
+                }
+              ]
+            }
+          }
+        },
+        "runs": {
+          "help": "Prospecting runs",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Record one prospecting run.",
+              "arguments": [
+                {
+                  "name": "record",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "A run JSON file"
+                }
+              ],
+              "options": []
+            },
+            "get": {
+              "help": "Get one prospecting run.",
+              "arguments": [
+                {
+                  "name": "run_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The run's id"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "list": {
+              "help": "List every prospecting run.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of runs",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter results (field:op:value)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to include",
+                  "short": "-p"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "score": {
+      "help": "The deterministic 0-100 deal score",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "deal": {
+          "help": "Score one or more stored deals. A model reports what it OBSERVES; this decides what that is worth. No model ever picks a point value.",
+          "arguments": [
+            {
+              "name": "listing_key",
+              "type": "TEXT",
+              "required": true,
+              "help": "One or more listing_keys"
+            }
+          ],
+          "options": []
+        },
+        "rescore": {
+          "help": "Recompute every live deal's score through the current rules.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--apply",
+              "type": "bool",
+              "required": false,
+              "help": "Write the new scores"
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Report and write nothing"
+            },
+            {
+              "name": "--include-rejected",
+              "type": "bool",
+              "required": false,
+              "help": "Rescore rejected rows too"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Stop after this many rows"
+            },
+            {
+              "name": "--ledger",
+              "type": "TEXT",
+              "required": false,
+              "help": "Score against this ledger copy, not the live one"
+            }
+          ]
+        }
+      }
+    },
+    "sellers": {
+      "help": "Sellers, and Adam's favorite flag",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "backfill": {
+          "help": "Build seller rows from the seller identity already on the deal records.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--apply",
+              "type": "bool",
+              "required": false,
+              "help": "Write the rows"
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Report and write nothing"
+            },
+            {
+              "name": "--db",
+              "type": "TEXT",
+              "required": false,
+              "help": "A different ledger path"
+            }
+          ]
+        },
+        "favorite": {
+          "help": "Flag a seller as a favorite. This changes every one of their deal scores.",
+          "arguments": [
+            {
+              "name": "source",
+              "type": "TEXT",
+              "required": true,
+              "help": "The canonical source"
+            },
+            {
+              "name": "seller_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The marketplace's own seller key"
+            }
+          ],
+          "options": [
+            {
+              "name": "--off",
+              "type": "bool",
+              "required": false,
+              "help": "Clear the flag instead of setting it"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get one seller row.",
+          "arguments": [
+            {
+              "name": "source",
+              "type": "TEXT",
+              "required": true,
+              "help": "The canonical source, e.g. shopgoodwill"
+            },
+            {
+              "name": "seller_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The marketplace's own seller key"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "list": {
+          "help": "List every seller the ledger has seen.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of sellers",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "sources": {
+      "help": "The source registry: which marketplaces, and how to reach each one",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "add": {
+          "help": "Register a researched source, or print the template to research it.",
+          "arguments": [
+            {
+              "name": "entry",
+              "type": "ENTRY",
+              "required": false,
+              "help": "Path to a filled entry JSON file (from --template)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--template",
+              "type": "TEXT",
+              "required": false,
+              "help": "Print a skeleton entry for this namespace and exit"
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Run every validation rule and write nothing"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get one source's payload.",
+          "arguments": [
+            {
+              "name": "source",
+              "type": "TEXT",
+              "required": true,
+              "help": "A namespace, alias or listing_key"
+            }
+          ],
+          "options": [
+            {
+              "name": "--notes",
+              "type": "bool",
+              "required": false,
+              "help": "Include learning notes"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "list": {
+          "help": "List every registered source.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of sources",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "notes": {
+          "help": "Per-source learning notes",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "add": {
+              "help": "Append a learning note to a source.",
+              "arguments": [
+                {
+                  "name": "source",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "A namespace, alias or listing_key"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--text",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The note text"
+                },
+                {
+                  "name": "--date",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "ISO date for the note; today when omitted"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get one learning note by its id.",
+              "arguments": [
+                {
+                  "name": "note_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "A note id, e.g. ebay-2026-08-06-1"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "list": {
+              "help": "List a source's current learning notes. A note another note supersedes is hidden: this is the current position, not the whole archaeology.",
+              "arguments": [
+                {
+                  "name": "source",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "A namespace, alias or listing_key"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of notes",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter results (field:op:value)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to include",
+                  "short": "-p"
+                }
+              ]
+            }
+          }
+        },
+        "remove": {
+          "help": "Delete a source and its notes: the reverse of `add`. Refuses when the ledger already holds deals on that namespace.",
+          "arguments": [
+            {
+              "name": "namespace",
+              "type": "TEXT",
+              "required": true,
+              "help": "The namespace to retract"
+            }
+          ],
+          "options": []
+        },
+        "validate": {
+          "help": "Report every structural problem with the registry. Exits 1 on any.",
+          "arguments": [],
+          "options": []
+        },
+        "watermarks": {
+          "help": "Per-source crawl watermarks: how far back the next run must reach.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--apply",
+              "type": "bool",
+              "required": false,
+              "help": "Write the computed watermarks back to the ledger"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "triage": {
+      "help": "Filter, categorize and optionally detail a batch of raw eBay candidates.",
+      "arguments": [
+        {
+          "name": "candidates",
+          "type": "TEXT",
+          "required": true,
+          "help": "PATH to a JSON file holding an array of eBay candidate dicts"
+        }
+      ],
+      "options": [
+        {
+          "name": "--min-price",
+          "type": "FLOAT",
+          "required": false,
+          "help": "Price floor; the rules file states the default"
+        },
+        {
+          "name": "--fetch-details",
+          "type": "bool",
+          "required": false,
+          "help": "Run `ebay listings get` per kept candidate and write the run artifact (live eBay calls)"
+        },
+        {
+          "name": "--jobs",
+          "type": "INTEGER",
+          "required": false,
+          "help": "Concurrent `ebay listings get` calls; each worker still waits between its own calls"
+        },
+        {
+          "name": "--run-key",
+          "type": "TEXT",
+          "required": false,
+          "help": "The source-runs directory name to write into"
+        },
+        {
+          "name": "--out",
+          "type": "TEXT",
+          "required": false,
+          "help": "Write the artifact under this directory instead"
+        }
+      ]
+    }
+  },
+  "usage_instructions": "Use the `legoscout` CLI. Run `legoscout --help` to discover command groups and `--help` on any subcommand for its options."
+}

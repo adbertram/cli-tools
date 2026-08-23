@@ -395,6 +395,50 @@ class CryptocomClient:
         orders = self._filter_models(orders, filters, OpenOrder)
         return self._limit_models(orders, limit)
 
+    def create_order(
+        self,
+        instrument_name: str,
+        side: str,
+        quantity: str,
+        order_type: str = "LIMIT",
+        limit_price: Optional[str] = None,
+        time_in_force: Optional[str] = None,
+        client_oid: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Create a new order via private/create-order."""
+        params: Dict[str, Any] = {
+            "instrument_name": instrument_name,
+            "side": side,
+            "type": order_type,
+            "quantity": quantity,
+        }
+        if order_type == "LIMIT":
+            if limit_price is None:
+                raise ClientError("Limit orders require a limit price")
+            params["price"] = limit_price
+        elif limit_price is not None:
+            raise ClientError(f"Limit price is only valid for LIMIT orders, not {order_type}")
+        if time_in_force:
+            params["time_in_force"] = time_in_force
+        if client_oid:
+            params["client_oid"] = client_oid
+        return self._make_private_request("private/create-order", params=params)
+
+    def get_order_detail(self, order_id: str) -> OpenOrder:
+        """Get one order by ID via private/get-order-detail."""
+        result = self._make_private_request(
+            "private/get-order-detail",
+            params={"order_id": order_id},
+        )
+        return OpenOrder(**result)
+
+    def cancel_order(self, order_id: str) -> Dict[str, Any]:
+        """Cancel one order by ID via private/cancel-order."""
+        return self._make_private_request(
+            "private/cancel-order",
+            params={"order_id": order_id},
+        )
+
 
 _client: Optional[CryptocomClient] = None
 
