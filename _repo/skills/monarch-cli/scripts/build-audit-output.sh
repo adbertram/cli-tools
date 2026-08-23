@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""build-audit-output.sh — render a report-only audit table from an audit JSON file.
+"""build-audit-output.sh — render a deterministic report-only Monarch audit.
 
 This script is the deterministic renderer for report-only Monarch audits (for
 example a business-expense audit). It is the companion of `build-output.sh`,
@@ -7,21 +7,28 @@ which renders the approval-driven review table. Use this script when the task
 classifies transactions into buckets and reports findings, and when the task
 does NOT propose per-row category changes for approval.
 
-It prints three blocks:
-  1. the 10-column audit table,
-  2. the summary totals block (one line per bucket plus a grand total),
-  3. the count reconciliation block.
+It prints exactly three top-level blocks:
+  1. the selected audit mode's item table,
+  2. its summary totals and supporting cross-checks,
+  3. its count reconciliation.
 
-Every `recommended_category` is validated against the live Monarch category map.
-Every row must carry a known bucket. The script exits non-zero with field-level
-errors when anything is malformed, unknown, or unclassified. There is no
-fallback and no silent repair.
+In legacy `--audit` mode, every `recommended_category` is validated against the
+Monarch category map and every row must carry a known bucket. In
+`--recurring-audit` mode, every item, exclusion, transaction ID, and declared
+count is validated before rendering. The script exits non-zero with field-level
+errors when anything is malformed, unknown, unclassified, duplicated, or
+unreconciled. There is no fallback and no silent repair.
 
 Usage:
   build-audit-output.sh --audit PATH                  # render the audit report to stdout
   build-audit-output.sh --audit -                     # read the audit JSON from stdin
+  build-audit-output.sh --recurring-audit PATH        # render recurring expenses
+  build-audit-output.sh --recurring-audit -           # read recurring JSON from stdin
   build-audit-output.sh --audit PATH --validate-only  # exit 0 if valid, 1 + errors otherwise
   build-audit-output.sh --audit PATH --categories PATH  # use a saved category map
+
+`--audit` and `--recurring-audit` are mutually exclusive. `--validate-only`
+works with either selected mode. `--categories` applies only to `--audit`.
 
 Category map source (exactly one path, chosen explicitly):
   * default            — run `monarch categories list --limit 500` live.
@@ -53,6 +60,77 @@ already categorized correctly):
       ...
     ]
   }
+
+Recurring-expense audit JSON schema:
+  {
+    "audit_kind": "recurring_expenses",
+    "scope_label": "Bills account recurring expenses",
+    "account": {"id": "acc-1", "name": "Bills"},
+    "analysis_window": {
+      "requested_start": "2025-01-01",
+      "requested_end": "2026-08-22",
+      "earliest_transaction_date": "2025-01-03",
+      "latest_transaction_date": "2026-08-20",
+      "source_transaction_count": 24,
+      "history_limit": 500,
+      "history_complete": true
+    },
+    "recurring_cross_check": {
+      "monarch_streams_total": 12,
+      "monarch_streams_matched_account": 3,
+      "history_detected_items": 2,
+      "history_only_items": 1,
+      "monarch_only_items": 1,
+      "evidence": "Raw Monarch recurring streams were cross-checked against history."
+    },
+    "items": [
+      {
+        "row": 1,
+        "stable_name": "Example utility",
+        "aliases": ["EXAMPLE UTIL"],
+        "cadence": "monthly",
+        "transaction_ids": ["txn-1", "txn-2"],
+        "netting_transaction_ids": [],
+        "observed_dates": ["2026-06-01", "2026-07-01"],
+        "observed_amounts": [-50.0, -52.0],
+        "occurrence_count": 2,
+        "amount_range": {"min": 50.0, "max": 52.0},
+        "detection_basis": "Two monthly charges.",
+        "projection_window": "2026-06-01..2026-07-01",
+        "projection_basis": "Mean observed monthly charge.",
+        "normalized_monthly_average": 51.0,
+        "status": "verified",
+        "monarch_recurring_evidence": "Matched one Monarch recurring stream."
+      }
+    ],
+    "excluded_transactions": [
+      {
+        "transaction_id": "txn-3",
+        "date": "2026-07-02",
+        "merchant": "Example refund",
+        "amount": 10.0,
+        "classification": "refund/reversal",
+        "reason": "Refund is not a recurring charge."
+      }
+    ],
+    "reconciliation": {
+      "source_transactions": 3,
+      "recurring_charge_transactions": 2,
+      "netting_transactions": 0,
+      "excluded_transactions": 1,
+      "recurring_items": 1,
+      "unique_transaction_ids": 3,
+      "reconciled": true
+    }
+  }
+
+Recurring cadence values are `monthly`, `quarterly`, `semiannual`, `annual`,
+and `irregular recurring`. Item status is exactly `verified` or `UNVERIFIED`.
+Exclusion classification is exactly `transfer`, `deposit/income`,
+`one-off purchase`, `refund/reversal`, or `ambiguous`. Transaction IDs must be
+globally unique across item charges, item netting IDs, and exclusions. Every
+reconciliation count must equal the derived count and the unique ID union must
+equal `analysis_window.source_transaction_count`.
 """
 
 from __future__ import annotations
@@ -62,6 +140,7 @@ import json
 import re
 import subprocess
 import sys
+from datetime import date
 
 REQUIRED_ROOT_FIELDS = ["scope_label", "source_transaction_count", "rows"]
 
@@ -79,6 +158,55 @@ ALLOWED_CONFIDENCE = ["high", "medium", "low"]
 UNCATEGORIZED = "Uncategorized"
 
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+RECURRING_ROOT_FIELDS = [
+    "audit_kind", "scope_label", "account", "analysis_window",
+    "recurring_cross_check", "items", "excluded_transactions", "reconciliation",
+]
+
+ACCOUNT_FIELDS = ["id", "name"]
+
+ANALYSIS_WINDOW_FIELDS = [
+    "requested_start", "requested_end", "earliest_transaction_date",
+    "latest_transaction_date", "source_transaction_count", "history_limit",
+    "history_complete",
+]
+
+RECURRING_CROSS_CHECK_FIELDS = [
+    "monarch_streams_total", "monarch_streams_matched_account",
+    "history_detected_items", "history_only_items", "monarch_only_items",
+    "evidence",
+]
+
+RECURRING_ITEM_FIELDS = [
+    "row", "stable_name", "aliases", "cadence", "transaction_ids",
+    "netting_transaction_ids", "observed_dates", "observed_amounts",
+    "occurrence_count", "amount_range", "detection_basis", "projection_window",
+    "projection_basis", "normalized_monthly_average", "status",
+    "monarch_recurring_evidence",
+]
+
+AMOUNT_RANGE_FIELDS = ["min", "max"]
+
+EXCLUSION_FIELDS = [
+    "transaction_id", "date", "merchant", "amount", "classification", "reason",
+]
+
+RECONCILIATION_FIELDS = [
+    "source_transactions", "recurring_charge_transactions", "netting_transactions",
+    "excluded_transactions", "recurring_items", "unique_transaction_ids",
+    "reconciled",
+]
+
+ALLOWED_CADENCES = [
+    "monthly", "quarterly", "semiannual", "annual", "irregular recurring",
+]
+
+ALLOWED_RECURRING_STATUSES = ["verified", "UNVERIFIED"]
+
+ALLOWED_EXCLUSION_CLASSIFICATIONS = [
+    "transfer", "deposit/income", "one-off purchase", "refund/reversal", "ambiguous",
+]
 
 
 def load_json_text(path: str) -> str:
@@ -248,6 +376,343 @@ def validate(audit: dict, category_names: set[str]) -> list[str]:
     return errors
 
 
+def is_integer(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def is_number(value: object) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def require_object_fields(
+    value: object,
+    path: str,
+    required_fields: list[str],
+    errors: list[str],
+) -> bool:
+    if not isinstance(value, dict):
+        errors.append(f"{path} must be an object, got {type(value).__name__}")
+        return False
+    missing = [field for field in required_fields if field not in value]
+    if missing:
+        errors.append(f"{path} is missing fields {missing}")
+        return False
+    return True
+
+
+def validate_nonempty_string(value: object, path: str, errors: list[str]) -> None:
+    if not isinstance(value, str) or not value.strip():
+        errors.append(f"{path} must be a non-empty string")
+
+
+def validate_date(value: object, path: str, errors: list[str]) -> date | None:
+    if not isinstance(value, str) or not DATE_RE.match(value):
+        errors.append(f"{path} must match YYYY-MM-DD, got {value!r}")
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        errors.append(f"{path} must be a valid calendar date, got {value!r}")
+        return None
+
+
+def validate_recurring(audit: object) -> list[str]:
+    errors: list[str] = []
+    if not isinstance(audit, dict):
+        return [f"recurring audit root must be an object, got {type(audit).__name__}"]
+
+    missing_root = [field for field in RECURRING_ROOT_FIELDS if field not in audit]
+    if missing_root:
+        return [f"recurring audit is missing root fields {missing_root}"]
+
+    if audit["audit_kind"] != "recurring_expenses":
+        errors.append(
+            "audit_kind must be exactly 'recurring_expenses', "
+            f"got {audit['audit_kind']!r}"
+        )
+    validate_nonempty_string(audit["scope_label"], "scope_label", errors)
+
+    account = audit["account"]
+    if require_object_fields(account, "account", ACCOUNT_FIELDS, errors):
+        validate_nonempty_string(account["id"], "account.id", errors)
+        validate_nonempty_string(account["name"], "account.name", errors)
+
+    source_count: int | None = None
+    analysis = audit["analysis_window"]
+    if require_object_fields(
+        analysis, "analysis_window", ANALYSIS_WINDOW_FIELDS, errors
+    ):
+        requested_start = validate_date(
+            analysis["requested_start"], "analysis_window.requested_start", errors
+        )
+        requested_end = validate_date(
+            analysis["requested_end"], "analysis_window.requested_end", errors
+        )
+        earliest = validate_date(
+            analysis["earliest_transaction_date"],
+            "analysis_window.earliest_transaction_date",
+            errors,
+        )
+        latest = validate_date(
+            analysis["latest_transaction_date"],
+            "analysis_window.latest_transaction_date",
+            errors,
+        )
+        if requested_start is not None and requested_end is not None and requested_start > requested_end:
+            errors.append("analysis_window.requested_start must be on or before requested_end")
+        if earliest is not None and latest is not None and earliest > latest:
+            errors.append(
+                "analysis_window.earliest_transaction_date must be on or before "
+                "latest_transaction_date"
+            )
+
+        if (
+            not is_integer(analysis["source_transaction_count"])
+            or analysis["source_transaction_count"] < 0
+        ):
+            errors.append(
+                "analysis_window.source_transaction_count must be a non-negative integer"
+            )
+        else:
+            source_count = analysis["source_transaction_count"]
+        if not is_integer(analysis["history_limit"]) or analysis["history_limit"] <= 0:
+            errors.append("analysis_window.history_limit must be a positive integer")
+        if not isinstance(analysis["history_complete"], bool):
+            errors.append("analysis_window.history_complete must be a boolean")
+
+    cross_check = audit["recurring_cross_check"]
+    if require_object_fields(
+        cross_check,
+        "recurring_cross_check",
+        RECURRING_CROSS_CHECK_FIELDS,
+        errors,
+    ):
+        for field in RECURRING_CROSS_CHECK_FIELDS[:-1]:
+            value = cross_check[field]
+            if not is_integer(value) or value < 0:
+                errors.append(
+                    f"recurring_cross_check.{field} must be a non-negative integer"
+                )
+        validate_nonempty_string(
+            cross_check["evidence"], "recurring_cross_check.evidence", errors
+        )
+        total = cross_check["monarch_streams_total"]
+        matched = cross_check["monarch_streams_matched_account"]
+        if is_integer(total) and is_integer(matched) and matched > total:
+            errors.append(
+                "recurring_cross_check.monarch_streams_matched_account cannot exceed "
+                "monarch_streams_total"
+            )
+
+    items_value = audit["items"]
+    if not isinstance(items_value, list) or not items_value:
+        errors.append("items must be a non-empty array")
+        items: list = []
+    else:
+        items = items_value
+
+    exclusions_value = audit["excluded_transactions"]
+    if not isinstance(exclusions_value, list):
+        errors.append("excluded_transactions must be an array")
+        exclusions: list = []
+    else:
+        exclusions = exclusions_value
+
+    seen_ids: dict[str, str] = {}
+    recurring_charge_count = 0
+    netting_count = 0
+
+    def validate_transaction_ids(
+        values: object,
+        path: str,
+        require_nonempty: bool,
+    ) -> int:
+        if not isinstance(values, list) or (require_nonempty and not values):
+            requirement = "a non-empty array" if require_nonempty else "an array"
+            errors.append(f"{path} must be {requirement}")
+            return 0
+        for index, transaction_id in enumerate(values):
+            id_path = f"{path}[{index}]"
+            if not isinstance(transaction_id, str) or not transaction_id:
+                errors.append(f"{id_path} must be a non-empty string")
+            elif transaction_id in seen_ids:
+                errors.append(
+                    f"{id_path}: duplicate transaction_id {transaction_id!r}; "
+                    f"first used at {seen_ids[transaction_id]}"
+                )
+            else:
+                seen_ids[transaction_id] = id_path
+        return len(values)
+
+    for index, item in enumerate(items, start=1):
+        path = f"items[{index - 1}]"
+        if not require_object_fields(item, path, RECURRING_ITEM_FIELDS, errors):
+            continue
+
+        if not is_integer(item["row"]) or item["row"] != index:
+            errors.append(
+                f"{path}.row is {item['row']!r}, expected {index} "
+                "(rows must be sequential starting at 1)"
+            )
+        validate_nonempty_string(item["stable_name"], f"{path}.stable_name", errors)
+
+        aliases = item["aliases"]
+        if not isinstance(aliases, list) or not aliases:
+            errors.append(f"{path}.aliases must be a non-empty array")
+        else:
+            for alias_index, alias in enumerate(aliases):
+                validate_nonempty_string(
+                    alias, f"{path}.aliases[{alias_index}]", errors
+                )
+
+        if item["cadence"] not in ALLOWED_CADENCES:
+            errors.append(
+                f"{path}.cadence must be one of {ALLOWED_CADENCES}, "
+                f"got {item['cadence']!r}"
+            )
+
+        charge_count = validate_transaction_ids(
+            item["transaction_ids"], f"{path}.transaction_ids", True
+        )
+        recurring_charge_count += charge_count
+        netting_count += validate_transaction_ids(
+            item["netting_transaction_ids"],
+            f"{path}.netting_transaction_ids",
+            False,
+        )
+
+        observed_dates = item["observed_dates"]
+        if not isinstance(observed_dates, list):
+            errors.append(f"{path}.observed_dates must be an array")
+            observed_date_count = 0
+        else:
+            observed_date_count = len(observed_dates)
+            for observed_index, observed in enumerate(observed_dates):
+                validate_date(
+                    observed,
+                    f"{path}.observed_dates[{observed_index}]",
+                    errors,
+                )
+
+        observed_amounts = item["observed_amounts"]
+        if not isinstance(observed_amounts, list):
+            errors.append(f"{path}.observed_amounts must be an array")
+            observed_amount_count = 0
+        else:
+            observed_amount_count = len(observed_amounts)
+            for amount_index, amount in enumerate(observed_amounts):
+                if not is_number(amount):
+                    errors.append(
+                        f"{path}.observed_amounts[{amount_index}] must be a number"
+                    )
+
+        occurrence_count = item["occurrence_count"]
+        if not is_integer(occurrence_count) or occurrence_count <= 0:
+            errors.append(f"{path}.occurrence_count must be a positive integer")
+        else:
+            for field, derived_count in (
+                ("transaction_ids", charge_count),
+                ("observed_dates", observed_date_count),
+                ("observed_amounts", observed_amount_count),
+            ):
+                if occurrence_count != derived_count:
+                    errors.append(
+                        f"{path}.occurrence_count={occurrence_count} but "
+                        f"len({field})={derived_count}"
+                    )
+
+        amount_range = item["amount_range"]
+        if require_object_fields(
+            amount_range, f"{path}.amount_range", AMOUNT_RANGE_FIELDS, errors
+        ):
+            range_min = amount_range["min"]
+            range_max = amount_range["max"]
+            if not is_number(range_min):
+                errors.append(f"{path}.amount_range.min must be a number")
+            if not is_number(range_max):
+                errors.append(f"{path}.amount_range.max must be a number")
+            if is_number(range_min) and is_number(range_max) and range_min > range_max:
+                errors.append(f"{path}.amount_range.min must be <= amount_range.max")
+
+        for field in (
+            "detection_basis",
+            "projection_window",
+            "projection_basis",
+            "monarch_recurring_evidence",
+        ):
+            validate_nonempty_string(item[field], f"{path}.{field}", errors)
+
+        item_status = item["status"]
+        if item_status not in ALLOWED_RECURRING_STATUSES:
+            errors.append(
+                f"{path}.status must be one of {ALLOWED_RECURRING_STATUSES}, "
+                f"got {item_status!r}"
+            )
+        projection = item["normalized_monthly_average"]
+        if item_status == "verified":
+            if not is_number(projection) or projection < 0:
+                errors.append(
+                    f"{path}.normalized_monthly_average must be a number >= 0 "
+                    "when status is 'verified'"
+                )
+        elif item_status == "UNVERIFIED" and projection is not None:
+            errors.append(
+                f"{path}.normalized_monthly_average must be null when status is 'UNVERIFIED'"
+            )
+
+    for index, exclusion in enumerate(exclusions):
+        path = f"excluded_transactions[{index}]"
+        if not require_object_fields(exclusion, path, EXCLUSION_FIELDS, errors):
+            continue
+        validate_transaction_ids([exclusion["transaction_id"]], path, True)
+        validate_date(exclusion["date"], f"{path}.date", errors)
+        validate_nonempty_string(exclusion["merchant"], f"{path}.merchant", errors)
+        if not is_number(exclusion["amount"]):
+            errors.append(f"{path}.amount must be a number")
+        if exclusion["classification"] not in ALLOWED_EXCLUSION_CLASSIFICATIONS:
+            errors.append(
+                f"{path}.classification must be one of "
+                f"{ALLOWED_EXCLUSION_CLASSIFICATIONS}, "
+                f"got {exclusion['classification']!r}"
+            )
+        validate_nonempty_string(exclusion["reason"], f"{path}.reason", errors)
+
+    reconciliation = audit["reconciliation"]
+    if require_object_fields(
+        reconciliation, "reconciliation", RECONCILIATION_FIELDS, errors
+    ):
+        for field in RECONCILIATION_FIELDS[:-1]:
+            value = reconciliation[field]
+            if not is_integer(value) or value < 0:
+                errors.append(f"reconciliation.{field} must be a non-negative integer")
+
+        derived_counts = {
+            "source_transactions": source_count,
+            "recurring_charge_transactions": recurring_charge_count,
+            "netting_transactions": netting_count,
+            "excluded_transactions": len(exclusions),
+            "recurring_items": len(items),
+            "unique_transaction_ids": len(seen_ids),
+        }
+        for field, derived_count in derived_counts.items():
+            declared = reconciliation[field]
+            if derived_count is not None and is_integer(declared) and declared != derived_count:
+                errors.append(
+                    f"reconciliation.{field}={declared} but derived count={derived_count}"
+                )
+
+        if reconciliation["reconciled"] is not True:
+            errors.append("reconciliation.reconciled must be true")
+
+    if source_count is not None and len(seen_ids) != source_count:
+        errors.append(
+            "unique transaction ID union does not equal "
+            f"analysis_window.source_transaction_count: {len(seen_ids)} != {source_count}"
+        )
+
+    return errors
+
+
 def money(value: float) -> str:
     return f"-${abs(value):,.2f}" if value < 0 else f"${value:,.2f}"
 
@@ -311,9 +776,215 @@ def render(audit: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def markdown_cell(value: object) -> str:
+    return (
+        str(value)
+        .replace("\\", "\\\\")
+        .replace("|", "\\|")
+        .replace("\r", " ")
+        .replace("\n", " ")
+    )
+
+
+def positive_money(value: float) -> str:
+    return f"${abs(value):,.2f}"
+
+
+def signed_money(value: float) -> str:
+    if value < 0:
+        return f"-${abs(value):,.2f}"
+    if value > 0:
+        return f"+${value:,.2f}"
+    return "$0.00"
+
+
+def positive_range(amount_range: dict) -> str:
+    low, high = sorted(
+        (abs(amount_range["min"]), abs(amount_range["max"]))
+    )
+    if low == high:
+        return positive_money(low)
+    return f"{positive_money(low)}–{positive_money(high)}"
+
+
+def inclusive_date_range(dates: list[str]) -> str:
+    if not dates:
+        return "—"
+    first = min(dates)
+    last = max(dates)
+    return first if first == last else f"{first}..{last}"
+
+
+def render_recurring(audit: dict) -> str:
+    items = audit["items"]
+    analysis = audit["analysis_window"]
+    cross_check = audit["recurring_cross_check"]
+    reconciliation = audit["reconciliation"]
+    exclusions = audit["excluded_transactions"]
+    lines: list[str] = []
+
+    lines.append(
+        f"### Recurring Expense Audit — {markdown_cell(audit['scope_label'])}"
+    )
+    lines.append("")
+    lines.append(
+        "| # | Stable Name | Aliases | Cadence | Occurrences | Observed Dates | "
+        "Observed Amounts | Amount Range | Normalized Monthly Projection | "
+        "Detection Basis | Projection Window | Projection Basis | "
+        "Monarch Recurring Evidence | Status |"
+    )
+    lines.append(
+        "|---|-------------|---------|---------|-------------|----------------|"
+        "------------------|--------------|-------------------------------|"
+        "-----------------|-------------------|------------------|"
+        "----------------------------|--------|"
+    )
+    for item in items:
+        aliases = ", ".join(markdown_cell(alias) for alias in item["aliases"])
+        dates = ", ".join(markdown_cell(value) for value in item["observed_dates"])
+        amounts = ", ".join(signed_money(value) for value in item["observed_amounts"])
+        normalized = (
+            positive_money(item["normalized_monthly_average"])
+            if item["status"] == "verified"
+            else "UNVERIFIED"
+        )
+        lines.append(
+            f"| {item['row']} | {markdown_cell(item['stable_name'])} | {aliases} | "
+            f"{markdown_cell(item['cadence'])} | {item['occurrence_count']} | {dates} | "
+            f"{amounts} | {positive_range(item['amount_range'])} | {normalized} | "
+            f"{markdown_cell(item['detection_basis'])} | "
+            f"{markdown_cell(item['projection_window'])} | "
+            f"{markdown_cell(item['projection_basis'])} | "
+            f"{markdown_cell(item['monarch_recurring_evidence'])} | "
+            f"{markdown_cell(item['status'])} |"
+        )
+
+    verified_total = sum(
+        item["normalized_monthly_average"]
+        for item in items
+        if item["status"] == "verified"
+    )
+    unverified_count = sum(1 for item in items if item["status"] == "UNVERIFIED")
+
+    lines.append("")
+    lines.append("### Summary Totals")
+    lines.append("")
+    lines.append("| Metric | Value |")
+    lines.append("|--------|-------|")
+    lines.append(f"| Account ID | {markdown_cell(audit['account']['id'])} |")
+    lines.append(f"| Account name | {markdown_cell(audit['account']['name'])} |")
+    lines.append(
+        "| Requested range | "
+        f"{analysis['requested_start']}..{analysis['requested_end']} |"
+    )
+    lines.append(
+        "| Exact analyzed transaction range | "
+        f"{analysis['earliest_transaction_date']}..{analysis['latest_transaction_date']} |"
+    )
+    lines.append(
+        f"| Source transaction count | {analysis['source_transaction_count']} |"
+    )
+    lines.append(f"| History limit | {analysis['history_limit']} |")
+    lines.append(
+        f"| History complete | {str(analysis['history_complete']).lower()} |"
+    )
+    lines.append(
+        f"| Verified normalized monthly total | {positive_money(verified_total)} |"
+    )
+    lines.append(f"| UNVERIFIED items | {unverified_count} |")
+
+    lines.append("")
+    lines.append("#### Monarch Recurring Cross-Check")
+    lines.append("")
+    lines.append("| Metric | Value |")
+    lines.append("|--------|-------|")
+    lines.append(
+        f"| Monarch streams total | {cross_check['monarch_streams_total']} |"
+    )
+    lines.append(
+        "| Monarch streams matched account | "
+        f"{cross_check['monarch_streams_matched_account']} |"
+    )
+    lines.append(
+        f"| History-detected items | {cross_check['history_detected_items']} |"
+    )
+    lines.append(f"| History-only items | {cross_check['history_only_items']} |")
+    lines.append(f"| Monarch-only items | {cross_check['monarch_only_items']} |")
+    lines.append(
+        f"| Evidence | {markdown_cell(cross_check['evidence'])} |"
+    )
+
+    lines.append("")
+    lines.append("#### Exclusions and Ambiguities")
+    lines.append("")
+    lines.append(
+        "| Classification | Count | Date Range | Total Amount | Merchants | Reasons |"
+    )
+    lines.append(
+        "|----------------|-------|------------|--------------|-----------|---------|"
+    )
+    for classification in ALLOWED_EXCLUSION_CLASSIFICATIONS:
+        group = [
+            exclusion
+            for exclusion in exclusions
+            if exclusion["classification"] == classification
+        ]
+        dates = [exclusion["date"] for exclusion in group]
+        total_amount = sum(exclusion["amount"] for exclusion in group)
+        merchants = sorted({exclusion["merchant"] for exclusion in group})
+        reasons = sorted({exclusion["reason"] for exclusion in group})
+        lines.append(
+            f"| {markdown_cell(classification)} | {len(group)} | "
+            f"{inclusive_date_range(dates)} | {signed_money(total_amount)} | "
+            f"{markdown_cell('; '.join(merchants) if merchants else '—')} | "
+            f"{markdown_cell('; '.join(reasons) if reasons else '—')} |"
+        )
+
+    unique_ids = {
+        transaction_id
+        for item in items
+        for transaction_id in (
+            item["transaction_ids"] + item["netting_transaction_ids"]
+        )
+    }
+    unique_ids.update(
+        exclusion["transaction_id"] for exclusion in exclusions
+    )
+    derived_counts = {
+        "source_transactions": analysis["source_transaction_count"],
+        "recurring_charge_transactions": sum(
+            len(item["transaction_ids"]) for item in items
+        ),
+        "netting_transactions": sum(
+            len(item["netting_transaction_ids"]) for item in items
+        ),
+        "excluded_transactions": len(exclusions),
+        "recurring_items": len(items),
+        "unique_transaction_ids": len(unique_ids),
+    }
+
+    lines.append("")
+    lines.append("### Count Reconciliation")
+    lines.append("")
+    lines.append("| Count | Declared | Derived |")
+    lines.append("|-------|----------|---------|")
+    for field in RECONCILIATION_FIELDS[:-1]:
+        label = field.replace("_", " ").capitalize()
+        lines.append(
+            f"| {label} | {reconciliation[field]} | {derived_counts[field]} |"
+        )
+    lines.append("| Reconciled | true | PASS |")
+
+    return "\n".join(lines) + "\n"
+
+
 def main() -> int:
     p = argparse.ArgumentParser(add_help=False)
-    p.add_argument("--audit", help="path to audit JSON, or '-' for stdin")
+    input_group = p.add_mutually_exclusive_group()
+    input_group.add_argument("--audit", help="path to legacy audit JSON, or '-' for stdin")
+    input_group.add_argument(
+        "--recurring-audit", help="path to recurring-expense audit JSON, or '-' for stdin"
+    )
     p.add_argument("--categories", help="path to a saved category map (default: live monarch CLI)")
     p.add_argument("--validate-only", action="store_true")
     p.add_argument("-h", "--help", action="store_true")
@@ -323,22 +994,34 @@ def main() -> int:
         sys.stdout.write(__doc__)
         return 0
 
-    if not args.audit:
-        sys.stderr.write("--audit is required (path to audit JSON, or '-' for stdin)\n")
+    if not args.audit and not args.recurring_audit:
+        sys.stderr.write(
+            "exactly one input mode is required: --audit PATH or --recurring-audit PATH\n"
+        )
         return 2
 
-    raw = load_json_text(args.audit)
+    if args.recurring_audit and args.categories:
+        sys.stderr.write("--categories is only valid with --audit\n")
+        return 2
+
+    input_path = args.recurring_audit if args.recurring_audit else args.audit
+    raw = load_json_text(input_path)
     try:
         audit = json.loads(raw)
     except json.JSONDecodeError as e:
-        sys.stderr.write(f"invalid JSON in audit input: {e}\n")
+        input_label = "recurring audit" if args.recurring_audit else "audit"
+        sys.stderr.write(f"invalid JSON in {input_label} input: {e}\n")
         return 2
 
-    category_names = load_category_names(args.categories)
-
-    errors = validate(audit, category_names)
+    if args.recurring_audit:
+        errors = validate_recurring(audit)
+        error_heading = "recurring audit JSON failed validation:"
+    else:
+        category_names = load_category_names(args.categories)
+        errors = validate(audit, category_names)
+        error_heading = "audit JSON failed validation:"
     if errors:
-        sys.stderr.write("audit JSON failed validation:\n")
+        sys.stderr.write(f"{error_heading}\n")
         for err in errors:
             sys.stderr.write(f"  - {err}\n")
         return 1
@@ -347,7 +1030,10 @@ def main() -> int:
         sys.stdout.write("OK\n")
         return 0
 
-    sys.stdout.write(render(audit))
+    if args.recurring_audit:
+        sys.stdout.write(render_recurring(audit))
+    else:
+        sys.stdout.write(render(audit))
     return 0
 
 

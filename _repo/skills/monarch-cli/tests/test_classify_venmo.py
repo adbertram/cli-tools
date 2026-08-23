@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -56,6 +57,39 @@ class ClassifyVenmoTests(unittest.TestCase):
         )
         self.assertEqual(proc.returncode, 0, proc.stderr)
         return json.loads(proc.stdout)
+
+    def test_live_command_failure_preserves_stdout_and_stderr(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            txn_path = write_json(
+                tmp,
+                "txn.json",
+                {"id": "m1", "date": "2026-05-28", "amount": -25.0, "merchant": "Venmo"},
+            )
+            fake_venmo = tmp / "venmo"
+            fake_venmo.write_text(
+                "#!/usr/bin/env python3\n"
+                "import sys\n"
+                "sys.stdout.write('{\"profiles\": []}\\n')\n"
+                "raise SystemExit(2)\n"
+            )
+            fake_venmo.chmod(0o755)
+            env = os.environ.copy()
+            env["PATH"] = os.pathsep.join((str(tmp), env["PATH"]))
+
+            proc = subprocess.run(
+                ["python3", str(SCRIPT), "--transaction-json", str(txn_path)],
+                capture_output=True,
+                text=True,
+                check=False,
+                env=env,
+            )
+
+        self.assertEqual(proc.returncode, 1)
+        self.assertEqual(proc.stdout, "")
+        self.assertIn("venmo auth status failed (exit 2)", proc.stderr)
+        self.assertIn("stdout: '{\"profiles\": []}'", proc.stderr)
+        self.assertIn("stderr: ''", proc.stderr)
 
     def test_multiple_profiles_without_account_user_asks_first(self):
         with tempfile.TemporaryDirectory() as d:
