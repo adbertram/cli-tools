@@ -343,12 +343,17 @@ def labels_print(
                 # PDF format: label is 4x6 (w288h432) from the API. The printer's CUPS
                 # default page size can differ (e.g. 4x5 / w288h360), which causes a
                 # silent no-op: the job reports SUCCESS/completed but nothing feeds
-                # because of the media-size mismatch. Force the correct media size and
-                # fit-to-page so this doesn't depend on the printer's configured default.
+                # because of the media-size mismatch. Force the correct media size so
+                # this doesn't depend on the printer's configured default.
+                #
+                # Do NOT add "-o fit-to-page" here: confirmed live (2026-08-19, Zebra
+                # LP2844, genuine 4x6 stock loaded) that fit-to-page causes the same
+                # silent no-op even when media=w288h432 already matches the physical
+                # label stock -- the job reports SUCCESS/completed but nothing feeds.
+                # Dropping fit-to-page while keeping media=w288h432 printed correctly.
                 print_cmd = [
                     "lp", "-d", printer_name,
                     "-o", "media=w288h432",
-                    "-o", "fit-to-page",
                     tmp_path,
                 ]
             proc = subprocess.run(print_cmd, capture_output=True, text=True)

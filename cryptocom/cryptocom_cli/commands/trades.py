@@ -13,7 +13,7 @@ from typing import List, Optional
 import typer
 
 from cli_tools_shared.filters import apply_filters
-from cli_tools_shared.output import handle_error
+from cli_tools_shared.output import command
 
 from ..client import get_client
 from ._display import emit
@@ -22,6 +22,7 @@ app = typer.Typer(help="Inspect public trades", no_args_is_help=True)
 
 
 @app.command("list")
+@command
 def trades_list(
     instrument_name: str = typer.Argument(..., help="Instrument name, for example BTCUSD-PERP"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -32,25 +33,23 @@ def trades_list(
     end_ts: Optional[str] = typer.Option(None, "--end-ts", help="Exclusive end timestamp"),
 ):
     """List recent trades for an instrument."""
-    try:
-        trades = get_client().list_trades(
-            instrument_name=instrument_name,
-            limit=limit,
-            start_ts=start_ts,
-            end_ts=end_ts,
-            filters=filter,
-        )
-        emit(
-            trades,
-            table=table,
-            columns=["d", "i", "s", "p", "q", "t"],
-            properties=properties,
-        )
-    except Exception as exc:
-        raise typer.Exit(handle_error(exc))
+    trades = get_client().list_trades(
+        instrument_name=instrument_name,
+        limit=limit,
+        start_ts=start_ts,
+        end_ts=end_ts,
+        filters=filter,
+    )
+    emit(
+        trades,
+        table=table,
+        columns=["d", "i", "s", "p", "q", "t"],
+        properties=properties,
+    )
 
 
 @app.command("get")
+@command
 def trades_get(
     trade_id: str = typer.Argument(..., help="Trade ID from trades list"),
     instrument_name: str = typer.Argument(..., help="Instrument name, for example BTCUSD-PERP"),
@@ -58,13 +57,10 @@ def trades_get(
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
     """Get one recent trade by ID."""
-    try:
-        trade = get_client().get_trade(instrument_name=instrument_name, trade_id=trade_id)
-        emit(
-            trade,
-            table=table,
-            columns=["d", "i", "s", "p", "q", "t"],
-            properties=properties,
-        )
-    except Exception as exc:
-        raise typer.Exit(handle_error(exc))
+    trade = get_client().get_trade(instrument_name=instrument_name, trade_id=trade_id)
+    emit(
+        trade,
+        table=table,
+        columns=["d", "i", "s", "p", "q", "t"],
+        properties=properties,
+    )

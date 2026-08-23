@@ -109,3 +109,74 @@ def test_page_list_properties_accepts_quoted_comma_list_with_spaced_name(monkeyp
             "data_source_id": None,
         }
     ]
+
+
+def test_page_list_nonempty_stdout_is_single_json_document(monkeypatch):
+    client = SinglePageClient()
+    monkeypatch.setattr(database_cmd, "get_client", lambda: client)
+
+    result = CliRunner().invoke(
+        database_cmd.page_app,
+        ["list", "-d", "db-leads", "--limit", "10"],
+    )
+
+    assert result.exit_code == 0
+    # stdout must parse as exactly one JSON document (no trailing human line).
+    rows = json.loads(result.stdout)
+    assert rows == [
+        {
+            "id": "page-1",
+            "url": "https://notion.so/page-1",
+            "Name": "Acme",
+            "Website": "https://example.com",
+            "Contact Email": "person@example.com",
+            "Status": "New",
+        }
+    ]
+    # The human count line belongs on stderr, not stdout.
+    assert "1 page(s) found." in result.stderr
+    assert "page(s) found." not in result.stdout
+
+
+
+# ---- comma escaping in --filter values (\, = literal comma, \\ = literal \) ----
+
+FILTER_SCHEMA = {
+    "Title": "title",
+    "Client": "select",
+    "Phase": "status",
+}
+
+
+def test_filter_value_with_escaped_comma_builds_single_condition():
+    # `Title:like:%Four Layers\, Four Failure Modes%` is ONE condition whose
+    # value contains a literal comma; it must not split into two AND parts.
+    filter_obj = database_cmd.build_filter_from_standard(
+        [r"Title:like:%Four Layers\, Four Failure Modes%"],
+        schema=FILTER_SCHEMA,
+    )
+
+    assert filter_obj == {
+        "property": "Title",
+        "rich_text": {"contains": "Four Layers, Four Failure Modes"},
+    }
+
+
+def test_filter_unescaped_comma_still_builds_and_conditions():
+    filter_obj = database_cmd.build_filter_from_standard(
+        ["Client:eq:Progress,Phase:eq:Done"],
+        schema=FILTER_SCHEMA,
+    )
+
+    assert filter_obj == {
+        "and": [
+            {"property": "Client", "select": {"equals": "Progress"}},
+            {"property": "Phase", "status": {"equals": "Done"}},
+        ]
+    }
+
+
+def test_parse_notion_filter_conditions_unescapes_comma():
+    assert database_cmd.parse_notion_filter_conditions(
+        r"Title:like:%Four Layers\, Four Failure Modes%"
+    ) == [("Title", "like", "%Four Layers, Four Failure Modes%")]

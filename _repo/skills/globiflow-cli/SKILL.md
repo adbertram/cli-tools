@@ -25,6 +25,8 @@ globiflow <command-group> <action> [arguments] [options]
 | View flow logs | `globiflow flows logs FLOW_ID --table` |
 | List flow steps | `globiflow flows steps list --flow-id FLOW_ID --table` |
 | Add a step to a flow | `globiflow flows steps add FLOW_ID --action "Add Comment" --comment "text"` |
+| Export a flow's XML | `globiflow flows export FLOW_ID --output flow-<id>.xml` |
+| Import a flow XML | `globiflow flows import --app-id ID --file flow-<id>.xml` |
 | List trigger types | `globiflow triggers list --table` |
 | Search items | `globiflow search query "keyword" --table` |
 </quick_start>
@@ -38,7 +40,7 @@ This file contains complete command syntax, all arguments, all options, and usag
 <principle name="Command Groups">
 - **auth** -- Browser-based authentication (login, status, test, logout)
 - **search** -- Search and browse Globiflow items (query, item, list)
-- **flows** -- Manage automation flows (list, create, get, logs, delete, steps)
+- **flows** -- Manage automation flows (list, create, get, logs, delete, export, import, steps)
 - **triggers** -- View available trigger types for flow creation (list, get)
 </principle>
 </essential_principles>

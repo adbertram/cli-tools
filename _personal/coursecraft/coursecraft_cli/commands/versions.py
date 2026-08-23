@@ -1,4 +1,4 @@
-"""CourseCraft artifact-versioning migration/backfill command.
+"""CourseCraft artifact-versioning sync/backfill command.
 
 The write-time versioning engine (``coursecraft_cli.artifact_versions``,
 wired into ``client.py``'s ``create_record``/``update_record``) is the live
@@ -42,13 +42,7 @@ from ..external_review import (
     transition_record,
     version_evidence,
 )
-from ..objective_override import (
-    AUDIT_FIELD,
-    CARRY_FORWARD_PLAN_SLUG,
-    ObjectiveOverrideError,
-    load_audit,
-    require_no_outline_revision,
-)
+from ..objective_override import AUDIT_FIELD, STATE_FIELD, ObjectiveOverrideError
 
 app = typer.Typer(help="Sync CourseCraft artifact Version Control entries", no_args_is_help=True)
 
@@ -118,42 +112,6 @@ def _course_preservation_snapshot(
     return {field: fields.get(field) for field in sorted(protected)}
 
 
-def _require_carry_forward_recovery_evidence(
-    fields: Dict[str, Any], expected_version: int, expected_live_sha: str
-) -> None:
-    """Bind Carry-Forward Plan recovery to the reviewed structural migration."""
-    events = load_audit(fields)["events"]
-    latest = events[-1] if events else None
-    if not isinstance(latest, dict) or latest.get("type") != "carry_forward_plan_migrated":
-        event_type = latest.get("type") if isinstance(latest, dict) else None
-        raise ClientError(
-            f"{CARRY_FORWARD_PLAN_SLUG} reconciliation requires the latest audit event "
-            f"to be 'carry_forward_plan_migrated'; found {event_type!r}."
-        )
-    source_had_structure = latest.get("sourceHadTargetStructure")
-    if not isinstance(source_had_structure, bool):
-        raise ClientError(
-            "carry_forward_plan_migrated audit event has no boolean "
-            "sourceHadTargetStructure binding."
-        )
-    if source_had_structure is False:
-        require_no_outline_revision(fields)
-    expected_version_entry = {"v": expected_version, "sha256": expected_live_sha}
-    if latest.get("newArtifactVersion") != expected_version_entry:
-        raise ClientError(
-            "Latest carry_forward_plan_migrated audit event does not bind the "
-            f"expected corrected version {expected_version_entry!r}."
-        )
-    expected_identity = (
-        f"{CARRY_FORWARD_PLAN_SLUG}@v{expected_version} sha256:{expected_live_sha}"
-    )
-    if latest.get("newArtifactVersionIdentity") != expected_identity:
-        raise ClientError(
-            "Latest carry_forward_plan_migrated audit identity does not match "
-            f"{expected_identity!r}."
-        )
-
-
 def _airtable_content_reconciliation(
     fields: Dict[str, Any],
     record_id: str,
@@ -220,11 +178,6 @@ def _airtable_content_reconciliation(
             f"{artifact_slug} live content SHA mismatch: expected {expected_live_content_sha}, "
             f"found {actual_live_sha}."
         )
-    if artifact_slug == CARRY_FORWARD_PLAN_SLUG:
-        _require_carry_forward_recovery_evidence(
-            fields, expected_version, expected_live_content_sha
-        )
-
     corrected_entry = {**entry, "sha256": expected_live_content_sha}
     corrected_ledger = {**ledger, artifact_slug: corrected_entry}
     return {
@@ -538,9 +491,8 @@ def _validate_approved_module_deck(path: Optional[Path]) -> Path:
             missing = sorted(required - names)
             if missing:
                 raise ExternalReviewError(
-                    f"Canonical approved module deck is missing PPTX members: "
-                    + ", ".join(missing)
-                    + "."
+                    "Canonical approved module deck is missing PPTX members: "
+                    f"{', '.join(missing)}."
                 )
             corrupt = archive.testzip()
             if corrupt is not None:

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+import shutil
 import subprocess
 import sys
 
@@ -193,12 +195,75 @@ def test_regenerate_usage_json_check_is_stable_after_generate(tmp_path):
     assert json.loads(check.stdout)["changed"] is False
 
 
-def test_regenerate_usage_json_fetches_each_path_help_once(tmp_path):
-    """Each live path's --help runs once for discovery and once for regeneration.
+def test_regenerate_usage_json_uses_existing_binary_for_cli_suffixed_tool(tmp_path):
+    skill_root = Path(__file__).resolve().parents[1]
+    fake_cli, _ = _write_fake_cli_fixture(tmp_path)
+    fixture_skill_root = tmp_path / "repo" / "_repo" / "skills" / "cli-tool"
+    fixture_scripts = fixture_skill_root / "scripts"
+    fixture_tests = fixture_skill_root / "tests"
+    fixture_scripts.mkdir(parents=True)
+    fixture_tests.mkdir()
+    shutil.copy2(skill_root / SCRIPT, fixture_scripts / "regenerate-usage-json")
+    shutil.copy2(skill_root / "tests" / "cli_test_utils.py", fixture_tests)
+    shutil.copy2(skill_root / "tests" / "cli_test_config.toml", fixture_tests)
 
-    Duplicate fetches double the subprocess count, which matters because CLI
-    startup can stall under bursty host contention and each extra invocation
-    is another timeout opportunity.
+    usage_json = (
+        fixture_skill_root.parent / "playwright-cli" / "usage.json"
+    )
+    usage_json.parent.mkdir()
+    usage_json.write_text(
+        json.dumps(
+            {
+                "tool": "playwright-cli",
+                "binary": str(fake_cli),
+                "description": "Fake npm CLI",
+                "commands": {},
+                "total_commands": 0,
+            }
+        )
+    )
+    env = {"PATH": "/usr/bin:/bin", "HOME": str(tmp_path / "home")}
+
+    generate = subprocess.run(
+        [
+            sys.executable,
+            str(fixture_skill_root / SCRIPT),
+            "playwright-cli",
+            "--discovered-at",
+            "2026-01-01T00:00:00Z",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert generate.returncode == 0, generate.stderr
+    assert json.loads(generate.stdout)["changed"] is True
+    assert json.loads(usage_json.read_text())["binary"] == str(fake_cli)
+
+    check = subprocess.run(
+        [
+            sys.executable,
+            str(fixture_skill_root / SCRIPT),
+            "playwright-cli",
+            "--check",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert check.returncode == 0, check.stderr
+    assert json.loads(check.stdout)["changed"] is False
+
+
+def test_regenerate_usage_json_fetches_each_path_help_once(tmp_path):
+    """Each path's --help runs exactly once across discovery and regeneration.
+
+    Discovery records every --help it runs, and regeneration reuses that text
+    instead of re-fetching it. Duplicate fetches double the subprocess count,
+    which matters because CLI startup can stall under bursty host contention
+    and each extra invocation is another timeout opportunity.
     """
     skill_root = __import__("pathlib").Path(__file__).resolve().parents[1]
     fake_cli, usage_json = _write_fake_cli_fixture(tmp_path)
@@ -229,11 +294,12 @@ def test_regenerate_usage_json_fetches_each_path_help_once(tmp_path):
     assert result.returncode == 0, result.stderr
     calls = call_log.read_text().splitlines()
     # Discovery runs --help on the root and on groups it recurses into
-    # ("items"); leaf paths at max depth are discovered from the parent help.
-    # Regeneration then fetches each live path ("items", "items list")
-    # exactly once — a duplicate-fetch regression doubles these counts.
+    # ("items"); leaf paths at max depth ("items list") are discovered from
+    # the parent help. Regeneration reuses discovery's "items" help and
+    # fetches only the not-yet-seen leaf — a regression that re-fetches
+    # "items" bumps its count to 2.
     assert calls.count("--help") == 1
-    assert calls.count("items --help") == 2
+    assert calls.count("items --help") == 1
     assert calls.count("items list --help") == 1
 
 
@@ -517,6 +583,14 @@ def test_regenerate_usage_json_keeps_example_using_custom_negative_flag(tmp_path
         "fake items list --limit 5",
         "fake items list --no-archived",
     ]
+    assert node["options"][1] == {
+        "name": "--include-archived",
+        "type": "bool",
+        "required": False,
+        "help": "Include archived items",
+        "takes_value": False,
+        "secondary": "--no-archived",
+    }
 
 
 def test_regenerate_usage_json_refreshes_help_when_options_are_unchanged(tmp_path):

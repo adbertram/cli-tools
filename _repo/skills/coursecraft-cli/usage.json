@@ -1,8 +1,8 @@
 {
   "tool": "coursecraft",
   "description": "Manage CourseCraft course content in Airtable",
-  "discovered_at": "2026-08-22T23:05:16Z",
-  "total_commands": 77,
+  "discovered_at": "2026-08-23T16:27:44Z",
+  "total_commands": 78,
   "global_options": [
     {
       "name": "--version",
@@ -641,7 +641,6 @@
             "coursecraft clips update recXXX --name \"New Name\"",
             "coursecraft clips update recXXX --order 2",
             "coursecraft clips update recXXX --learning-objectives \"- Objective 1\\n- Objective 2\"",
-            "coursecraft clips update recXXX --brainstorming-outline \"---\"",
             "coursecraft clips update recXXX --content-done"
           ],
           "arguments": [
@@ -706,21 +705,6 @@
               "type": "TEXT",
               "required": false,
               "help": "Internal notes"
-            },
-            {
-              "name": "--brainstorming-outline",
-              "type": "TEXT",
-              "required": false,
-              "help": "Brainstorming outline content",
-              "short": "-b"
-            },
-            {
-              "name": "--brainstorming-outline-fact-checked",
-              "type": "bool",
-              "required": false,
-              "help": "Set or clear the brainstorming outline fact-checked flag",
-              "takes_value": false,
-              "secondary": "--no-brainstorming-outline-fact-checked"
             },
             {
               "name": "--clip-plan-review-ai",
@@ -1127,17 +1111,10 @@
               "short": "-p"
             },
             {
-              "name": "--recording-dictation-method",
-              "type": "bool",
-              "required": false,
-              "help": "<Automatic Narration Generation|Manual Instructor Generation>  Recording dictation method (Automatic Narration Generation, Manual Instructor Generation)",
-              "takes_value": false
-            },
-            {
               "name": "--powerpoint-slide-deck-version",
               "type": "TEXT",
               "required": false,
-              "help": "PowerPoint slide deck version (e.g., '2025.09.a'); stored verbatim in the singleSelect field"
+              "help": "PowerPoint slide deck version (e.g., '2026.05.a'); stored verbatim in the singleSelect field"
             },
             {
               "name": "--short-description",
@@ -1462,43 +1439,6 @@
             }
           ]
         },
-        "migrate-carry-forward-plan": {
-          "help": "Migrate a Carry-Forward Plan to structural-only schema v2 without learner titles.",
-          "arguments": [
-            {
-              "name": "course",
-              "type": "TEXT",
-              "required": true,
-              "help": "Course record ID or Course ID slug"
-            }
-          ],
-          "options": [
-            {
-              "name": "--carry-forward-plan",
-              "type": "TEXT",
-              "required": false,
-              "help": "Replacement schemaVersion 2 Carry-Forward Plan JSON"
-            },
-            {
-              "name": "--carry-forward-plan-file",
-              "type": "PATH",
-              "required": false,
-              "help": "File containing the schemaVersion 2 Carry-Forward Plan"
-            },
-            {
-              "name": "--reason",
-              "type": "TEXT",
-              "required": true,
-              "help": "Why the reviewed migration is required"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ]
-        },
         "request-objective-correction": {
           "help": "Enter the Pluralsight objective-correction lifecycle after a current failed review.",
           "arguments": [
@@ -1627,7 +1567,8 @@
             "coursecraft courses update my-course-slug --name \"New Name\"",
             "coursecraft courses update recXXX --active",
             "coursecraft courses update my-course --target-length 60",
-            "coursecraft courses update my-course --brainstorming-outline-file outline.md"
+            "coursecraft courses update my-course --brainstorming-outline-file outline.md",
+            "coursecraft courses update my-course --course-outline-file course-outline.md"
           ],
           "arguments": [
             {
@@ -1795,6 +1736,18 @@
               "secondary": "--no-outline-draft-human-verified"
             },
             {
+              "name": "--course-outline",
+              "type": "TEXT",
+              "required": false,
+              "help": "Built Course Outline content"
+            },
+            {
+              "name": "--course-outline-file",
+              "type": "PATH",
+              "required": false,
+              "help": "Path to file containing the built Course Outline"
+            },
+            {
               "name": "--notes",
               "type": "TEXT",
               "required": false,
@@ -1819,17 +1772,10 @@
               "help": "Slack channel name for Pluralsight course communication"
             },
             {
-              "name": "--recording-dictation-method",
-              "type": "bool",
-              "required": false,
-              "help": "<Automatic Narration Generation|Manual Instructor       Recording dictation method (Automatic Narration Generation>                                             Generation, Manual Instructor Generation)",
-              "takes_value": false
-            },
-            {
               "name": "--powerpoint-slide-deck-version",
               "type": "TEXT",
               "required": false,
-              "help": "PowerPoint slide deck version (e.g., '2025.09.a'); stored verbatim in the singleSelect field"
+              "help": "PowerPoint slide deck version (e.g., '2026.05.a'); stored verbatim in the singleSelect field"
             },
             {
               "name": "--active",
@@ -1850,14 +1796,6 @@
               "type": "PATH",
               "required": false,
               "help": "Path to file containing brainstorming outline"
-            },
-            {
-              "name": "--brainstorming-outline-fact-checked",
-              "type": "bool",
-              "required": false,
-              "help": "Set or clear the brainstorming outline fact-checked flag",
-              "takes_value": false,
-              "secondary": "--no-brainstorming-outline-fact-checked"
             },
             {
               "name": "--feedback-requested",
@@ -2046,7 +1984,7 @@
               "name": "--recording-dictation-method",
               "type": "bool",
               "required": false,
-              "help": "<Manual Instructor Generation|Automatic Narration Generation>  How this demo's narration is produced: 'Manual Instructor Generation' (Adam reads the Demo Script) or 'Automatic Narration Generation' (ElevenLabs generates it). Set per demo; the course-level field is not inherited",
+              "help": "<Manual Instructor Generation|Automatic Narration Generation>  How this demo's narration is produced: 'Manual Instructor Generation' (Adam reads the Demo Script) or 'Automatic Narration Generation' (ElevenLabs generates it). Set per demo -- it is the only level that carries this field",
               "takes_value": false,
               "default": "Manual Instructor Generation"
             },
@@ -2347,7 +2285,7 @@
               "name": "--recording-dictation-method",
               "type": "bool",
               "required": false,
-              "help": "<Manual Instructor Generation|Automatic Narration            How this demo's narration is produced: 'Manual Instructor Generation>                                                  Generation' (Adam reads the Demo Script) or 'Automatic Narration Generation' (ElevenLabs generates it). Set per demo; the course-level field is not inherited",
+              "help": "<Manual Instructor Generation|Automatic Narration            How this demo's narration is produced: 'Manual Instructor Generation>                                                  Generation' (Adam reads the Demo Script) or 'Automatic Narration Generation' (ElevenLabs generates it). Set per demo -- it is the only level that carries this field",
               "takes_value": false
             },
             {
@@ -2948,6 +2886,31 @@
         }
       ],
       "commands": {
+        "get-formula": {
+          "help": "Read one formula field's current schema definition.",
+          "arguments": [
+            {
+              "name": "table",
+              "type": "TEXT",
+              "required": true,
+              "help": "CourseCraft Airtable table name"
+            },
+            {
+              "name": "field_name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Formula field name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "rename": {
           "help": "Rename one CourseCraft Airtable field and verify the schema read-back.",
           "arguments": [
@@ -2971,6 +2934,37 @@
             }
           ],
           "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "update-formula": {
+          "help": "Update one formula field and verify byte-equivalent schema read-back.",
+          "arguments": [
+            {
+              "name": "table",
+              "type": "TEXT",
+              "required": true,
+              "help": "CourseCraft Airtable table name"
+            },
+            {
+              "name": "field_name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Formula field name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--formula-file",
+              "type": "FILE",
+              "required": true,
+              "help": "UTF-8 file containing the complete formula"
+            },
             {
               "name": "--profile",
               "type": "TEXT",
@@ -3416,14 +3410,6 @@
               "type": "PATH",
               "required": false,
               "help": "Path to file containing brainstorming outline"
-            },
-            {
-              "name": "--brainstorming-outline-fact-checked",
-              "type": "bool",
-              "required": false,
-              "help": "Set or clear the brainstorming outline fact-checked flag",
-              "takes_value": false,
-              "secondary": "--no-brainstorming-outline-fact-checked"
             },
             {
               "name": "--module-plan-complete",
@@ -4118,7 +4104,6 @@
             "coursecraft slides update recXXX --built",
             "coursecraft slides update recXXX --no-built",
             "coursecraft slides update recXXX --dictation-recorded",
-            "coursecraft slides update recXXX --voice-recording-path /path/to/audio.mp3",
             "coursecraft slides update recXXX --recorded",
             "coursecraft slides update recXXX --slide-type-human-verified",
             "coursecraft slides update recXXX --no-slide-type-human-verified",
@@ -4213,12 +4198,6 @@
               "help": "Mark slide dictation audio as recorded",
               "takes_value": false,
               "secondary": "--no-dictation-recorded"
-            },
-            {
-              "name": "--voice-recording-path",
-              "type": "TEXT",
-              "required": false,
-              "help": "Path to the instructor-recorded voice audio for this slide"
             },
             {
               "name": "--recorded",
@@ -4472,7 +4451,7 @@
       }
     },
     "voice-recordings": {
-      "help": "Generate slide and demo voice recordings",
+      "help": "Generate demo voice recordings",
       "arguments": [],
       "options": [
         {
@@ -4484,81 +4463,14 @@
       ],
       "commands": {
         "generate": {
-          "help": "Generate a voice recording for one slide or demo script.",
-          "usage_instructions": "Generate from exactly one Script record: --slide recXXX or --demo recXXX. Demo generation is transactional and supports only --output-format mp3_44100_128 (authoritative suffix .mp3). Production voice precedence is --voice-id, the Demo's current ElevenLabs Voice ID, then exactly one live voice labeled coursecraft_role=production; the chosen voice and --model-id are live-verified. Demo identity includes canonical normalized Script/source hash, voice, model, format, pronunciation dictionary ID/version, all tuning values, and validated output hash. It generates to a unique unregistered staging candidate, validates full decode/one audio stream/positive duration, canonical source hash, no cue leakage, whole-script Whisper recall, peak/clipping policy, and exact request identity, then promotes without overwriting the prior take. One CourseCraft write registers narration metadata plus Voice Recording Path and Dictation Recorded, followed by uncached readback; it never writes Recorded. Adjacent .narration.json metadata exposes authoritative source/output hashes and the derived-WAV adapter policy. Identical validated identity reuses without ElevenLabs spend; timeout or unknown write state is reconciled and automatic retry is blocked until state is known. Slide generation retains the legacy explicit --voice-id behavior.",
+          "help": "Generate the authoritative narration take for one demo Script. Voice, model, output format, tuning, and output location all come from the CourseCraft production narration contract; the command takes no overrides.",
           "arguments": [],
           "options": [
             {
-              "name": "--slide",
-              "type": "TEXT",
-              "required": false,
-              "help": "Slide record ID"
-            },
-            {
               "name": "--demo",
               "type": "TEXT",
-              "required": false,
+              "required": true,
               "help": "Demo record ID"
-            },
-            {
-              "name": "--voice-id",
-              "type": "TEXT",
-              "required": false,
-              "help": "ElevenLabs voice ID (slides only; a supplied demo value must exactly match the CourseCraft production narration contract)"
-            },
-            {
-              "name": "--model-id",
-              "type": "TEXT",
-              "required": false,
-              "help": "ElevenLabs model ID (slides only; demos use the CourseCraft production contract)"
-            },
-            {
-              "name": "--output-format",
-              "type": "TEXT",
-              "required": false,
-              "help": "ElevenLabs output format (slides only; demos use the CourseCraft production contract)"
-            },
-            {
-              "name": "--output-dir",
-              "type": "PATH",
-              "required": false,
-              "help": "Output directory (slides only; demos resolve it from the CourseCraft production contract)"
-            },
-            {
-              "name": "--stability",
-              "type": "bool",
-              "required": false,
-              "help": "<float range> [0<=x<=1]      ElevenLabs voice stability",
-              "takes_value": false
-            },
-            {
-              "name": "--similarity-boost",
-              "type": "bool",
-              "required": false,
-              "help": "<float range> [0<=x<=1]      ElevenLabs similarity boost",
-              "takes_value": false
-            },
-            {
-              "name": "--style",
-              "type": "bool",
-              "required": false,
-              "help": "<float range> [0<=x<=1]      ElevenLabs style exaggeration",
-              "takes_value": false
-            },
-            {
-              "name": "--speaker-boost",
-              "type": "bool",
-              "required": false,
-              "help": "ElevenLabs speaker boost",
-              "takes_value": false,
-              "secondary": "--no-speaker-boost"
-            },
-            {
-              "name": "--speed",
-              "type": "bool",
-              "required": false,
-              "help": "<float range> [0.7<=x<=1.2]  ElevenLabs voice speed",
-              "takes_value": false
             },
             {
               "name": "--profile",

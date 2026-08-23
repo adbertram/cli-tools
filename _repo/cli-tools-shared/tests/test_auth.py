@@ -523,6 +523,129 @@ def test_authenticate_skips_final_navigation_without_auth_check_url(tmp_path, mo
     assert service.goto_calls == []
 
 
+def _handler_browser_class(handler):
+    """Build a declarative browser class that delegates login to ``handler``."""
+
+    class _HandlerBrowser(_TestBrowser):
+        AUTH_LOGIN_HANDLER = staticmethod(handler)
+        AUTH_LOGIN_SETTLE_MS = 10
+
+    return _HandlerBrowser
+
+
+def test_auth_login_handler_defaults_to_none():
+    assert BrowserAutomation.AUTH_LOGIN_HANDLER is None
+
+
+def test_auth_login_handler_runs_headlessly_without_a_prompt(tmp_path, monkeypatch):
+    """A declared handler replaces the headed browser and the Enter prompt."""
+    handled = []
+
+    def _handler(browser, page):
+        handled.append(page)
+
+    browser = _handler_browser_class(_handler)(_TestConfig(tmp_path))
+    service = _Service()
+
+    monkeypatch.setattr(browser, "_get_service", lambda: service)
+    monkeypatch.setattr(
+        "builtins.input", lambda *a, **k: pytest.fail("must not prompt for Enter")
+    )
+    monkeypatch.setattr(browser, "_check_auth", lambda page: True)
+    monkeypatch.setattr(browser, "is_authenticated", lambda: AuthResult(True, live_check=True))
+
+    browser.authenticate(force=True)
+
+    assert handled == [service]
+    _args, kwargs = service.browser_open_calls[0]
+    assert _args == ("https://example.com/login",)
+    assert kwargs.get("headed") is False
+    assert service.goto_calls == ["https://example.com/dashboard"]
+    assert service.browser_close_calls == 1
+
+
+def test_auth_login_handler_is_skipped_when_a_session_already_exists(tmp_path, monkeypatch):
+    def _handler(browser, page):  # pragma: no cover - must not run
+        raise AssertionError("handler must not run for a healthy saved session")
+
+    config = _TestConfig(tmp_path)
+    (config.get_persistent_profile_dir() / "Default").mkdir(parents=True)
+    (config.get_persistent_profile_dir() / "Default" / "Cookies").write_text("")
+
+    browser = _handler_browser_class(_handler)(config)
+    service = _Service()
+    monkeypatch.setattr(browser, "_get_service", lambda: service)
+
+    browser.authenticate(force=False)
+
+    assert service.browser_open_calls == []
+
+
+def test_auth_login_handler_failure_is_not_swallowed(tmp_path, monkeypatch):
+    def _handler(browser, page):
+        raise BrowserAutomationError("the identity provider rejected the sign-in")
+
+    browser = _handler_browser_class(_handler)(_TestConfig(tmp_path))
+    service = _Service()
+    monkeypatch.setattr(browser, "_get_service", lambda: service)
+
+    with pytest.raises(BrowserAutomationError, match="rejected the sign-in"):
+        browser.authenticate(force=True)
+    assert service.browser_close_calls == 1
+
+
+def test_auth_login_handler_must_leave_an_authenticated_session(tmp_path, monkeypatch):
+    def _handler(browser, page):
+        return None
+
+    browser = _handler_browser_class(_handler)(_TestConfig(tmp_path))
+    service = _Service()
+    monkeypatch.setattr(browser, "_get_service", lambda: service)
+    monkeypatch.setattr(browser, "_check_auth", lambda page: False)
+
+    with pytest.raises(BrowserAutomationError, match="not authenticated"):
+        browser.authenticate(force=True)
+
+
+def test_auth_login_handler_session_must_survive_a_browser_restart(tmp_path, monkeypatch):
+    def _handler(browser, page):
+        return None
+
+    browser = _handler_browser_class(_handler)(_TestConfig(tmp_path))
+    service = _Service()
+    monkeypatch.setattr(browser, "_get_service", lambda: service)
+    monkeypatch.setattr(browser, "_check_auth", lambda page: True)
+    monkeypatch.setattr(browser, "is_authenticated", lambda: AuthResult(False, live_check=True))
+
+    with pytest.raises(BrowserAutomationError, match="did not persist after reopening"):
+        browser.authenticate(force=True)
+
+
+def test_auth_login_handler_wins_over_manual_login(tmp_path, monkeypatch):
+    calls = []
+
+    def _handler(browser, page):
+        calls.append("handler")
+
+    class _Both(_handler_browser_class(_handler)):
+        MANUAL_LOGIN = True
+
+    browser = _Both(_TestConfig(tmp_path))
+    service = _Service()
+    monkeypatch.setattr(browser, "_get_service", lambda: service)
+    monkeypatch.setattr(
+        browser,
+        "_authenticate_manual",
+        lambda force=False: pytest.fail("manual login must not run"),
+    )
+    monkeypatch.setattr(browser, "_check_auth", lambda page: True)
+    monkeypatch.setattr(browser, "is_authenticated", lambda: AuthResult(True, live_check=True))
+
+    browser.authenticate(force=True)
+
+    assert calls == ["handler"]
+
+
 def test_authenticate_requires_reopen_probe_to_pass_before_claiming_success(tmp_path, monkeypatch):
     browser = _TestBrowser(_TestConfig(tmp_path))
     service = _Service()

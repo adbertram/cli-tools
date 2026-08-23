@@ -63,6 +63,19 @@ message names the operator and lists the supported set. A typo such as
 `status:bogusop:active` must never fold `bogusop` into the value, match nothing,
 and print an empty result that reads as "nothing matched".
 
+**Escaping commas in values:** a comma joins filter parts with AND logic
+(`status:active,price:gte:100`), so a literal comma inside a value must be
+escaped as `\,`. A literal backslash is `\\`. A backslash before any other
+character stays literal (the backslash is kept), so values such as
+`Path:eq:C:\temp` keep working unchanged. Splitting and unescaping live in
+`cli_tools_shared.filters.split_filter_parts()`; parse one already-split part
+with `parse_filter_part()` — never re-pass a split part through a
+comma-splitting parser, because it may contain unescaped literal commas.
+
+```bash
+mycli items list --filter "Title:like:%Four Layers\, Four Failure Modes%"  # one condition, literal comma
+```
+
 The two-token shorthand `field:value` is unaffected and still means `eq`. A
 value that itself contains a colon needs an explicit operator:
 
@@ -263,6 +276,9 @@ mycli items list --filter "created:gt:2024-01-01"
 # Multiple filters (AND within, OR between flags)
 mycli items list --filter "status:active,price:gte:100"
 mycli items list --filter "status:active" --filter "status:pending"
+
+# Literal comma in a value: escape it with a backslash
+mycli items list --filter "title:like:%Four Layers\, Four Failure Modes%"
 
 # Other operators
 mycli items list --filter "name:like:%widget%"

@@ -1,4 +1,5 @@
 """Crypto.com Exchange REST API client."""
+from decimal import Decimal
 from typing import Any, Dict, List, Optional, TypeVar
 import hashlib
 import hmac
@@ -379,6 +380,29 @@ class CryptocomClient:
         balances = [AccountBalance(**item) for item in result["data"]]
         balances = self._filter_models(balances, filters, AccountBalance)
         return self._limit_models(balances, limit)
+
+    def get_positions(
+        self,
+        limit: Optional[int] = 100,
+        filters: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Get positive non-cash spot holdings from account balances."""
+        balances = self.get_balances(limit=None)
+        positions = [
+            {
+                "instrument_name": position.instrument_name,
+                "quantity": position.quantity,
+                "market_value": position.market_value,
+            }
+            for balance in balances
+            for position in balance.position_balances
+            if position.instrument_name != "USD"
+            and Decimal(position.quantity or "0") > 0
+        ]
+        if filters:
+            validate_filters(filters)
+            positions = apply_filters(positions, filters)
+        return apply_limit(positions, limit)
 
     def list_open_orders(
         self,

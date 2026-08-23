@@ -525,6 +525,151 @@ class GlobiflowClient:
             f"'globiflow flows get {flow_id}' shortly to check."
         )
 
+    def export_flow(self, flow_id: str) -> str:
+        """Export a single flow's XML definition.
+
+        Globiflow's bulk "Export" action navigates to
+        ``inc/exportFlow.php?t=z&f=<flow_ids>``, which returns a ZIP archive
+        containing one ``flow-<id>.xml`` entry per selected flow. This method
+        fetches that archive same-origin (session cookies included), extracts
+        the requested flow's XML, and returns it as text. ``t=x`` (raw XML) is
+        intentionally not used: it returns an empty body on this deployment.
+
+        Args:
+            flow_id: The flow ID to export.
+
+        Returns:
+            The flow's XML definition as a string.
+
+        Raises:
+            ClientError: If the flow does not exist, the export request fails,
+                or the returned ZIP does not contain the expected XML entry.
+        """
+        import base64
+        import io
+        import zipfile
+
+        app_id = self._resolve_flow_app_id(flow_id)
+        self.ensure_authenticated(f"/flows.php?app={app_id}")
+        page = self.browser.get_page()
+
+        b64 = page.evaluate(f"""
+            async () => {{
+                const r = await fetch('inc/exportFlow.php?t=z&f={flow_id}', {{credentials: 'include'}});
+                if (!r.ok) throw new Error('exportFlow.php HTTP ' + r.status);
+                const buf = await r.arrayBuffer();
+                const bytes = new Uint8Array(buf);
+                let bin = '';
+                const chunk = 0x8000;
+                for (let i = 0; i < bytes.length; i += chunk) {{
+                    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+                }}
+                return btoa(bin);
+            }}
+        """)
+        if not b64:
+            raise ClientError(f"Export of flow {flow_id} returned empty content.")
+
+        try:
+            zip_bytes = base64.b64decode(b64)
+        except Exception as e:
+            raise ClientError(f"Export of flow {flow_id} did not decode: {e}")
+
+        try:
+            with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+                expected = f"flow-{flow_id}.xml"
+                if expected not in zf.namelist():
+                    raise ClientError(
+                        f"Exported ZIP did not contain {expected!r}; "
+                        f"entries: {zf.namelist()}"
+                    )
+                return zf.read(expected).decode("utf-8")
+        except zipfile.BadZipFile as e:
+            raise ClientError(f"Export of flow {flow_id} was not a valid ZIP: {e}")
+
+    def import_flow(self, app_id: str, xml_content: str) -> str:
+        """Import a flow XML definition into an app.
+
+        Mirrors the UI's "Import" action (``importFlow(app)``): it opens the
+        Import modal, submits its multipart form with the XML in
+        ``fileToUpload`` (``copy_from=file``, ``copy_to=<app_id>``), and lands
+        on the "Configure New Flow" editor with the imported flow pre-filled.
+        The flow is not persisted until that editor's Save is clicked, so this
+        method then saves and reads the new flow ID from the redirect URL.
+
+        The browser harness has no ``set_input_files`` primitive, so the file
+        input is populated via a ``DataTransfer`` before the form's native
+        submit.
+
+        Args:
+            app_id: The Podio app ID to import the flow into.
+            xml_content: The flow XML definition text.
+
+        Returns:
+            The newly imported flow's ID.
+
+        Raises:
+            ClientError: If the import form cannot be submitted, the editor
+                does not load, or the new flow ID cannot be resolved.
+        """
+        import json
+        import re
+        import time
+
+        self.ensure_authenticated(f"/flows.php?app={app_id}")
+        page = self.browser.get_page()
+
+        page.evaluate(f"""
+            () => {{
+                window.importFlow({json.dumps(app_id)});
+                const input = document.querySelector('#fileToUpload');
+                if (!input) throw new Error('Import file input (#fileToUpload) not found');
+                const file = new File([{json.dumps(xml_content)}], 'flow.xml', {{type: 'text/xml'}});
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                input.files = dt.files;
+                input.closest('form').submit();
+            }}
+        """)
+
+        # The import loads the XML into the "Configure New Flow" editor without
+        # creating the flow yet. The editor's Save control stays disabled
+        # ("Please wait while your flow finishes loading...") until the
+        # imported steps finish loading asynchronously, so wait for it to
+        # enable before clicking Save, which is what actually persists the flow.
+        page.wait_for_selector("#flowName", timeout=20000)
+        deadline = time.time() + 30
+        while True:
+            save_disabled = page.evaluate(
+                "() => { const b = document.querySelector('#saveButton');"
+                " return !b || /disabled/.test(b.className); }"
+            )
+            if not save_disabled:
+                break
+            if time.time() >= deadline:
+                raise ClientError(
+                    f"Save control did not become enabled after importing into app {app_id}"
+                )
+            page.wait_for_timeout(1000)
+
+        self._save_flow(page, timeout=3000)
+
+        current_url = page.url
+        match = re.search(r"node=(\d+)", current_url)
+        if match:
+            return match.group(1)
+
+        heading = page.locator("h4").filter(has_text="Flow:").first
+        if heading.count() > 0:
+            heading_text = heading.text_content() or ""
+            id_match = re.search(r"\(ID:(\d+)\)", heading_text)
+            if id_match:
+                return id_match.group(1)
+
+        raise ClientError(
+            f"Could not extract imported flow ID from URL {current_url!r}"
+        )
+
     def create_flow(
         self,
         app_id: str,

@@ -27,17 +27,17 @@ coursecraft <command-group> <action> [arguments] [options]
 | `coursecraft courses sync-requirements <slug>` | Sync linked Pluralsight requirements; no Deadline/child writes, with gated audit/state transitions during an objective-override exception |
 | `coursecraft courses request-objective-correction <slug>` | Start the gated Pluralsight objective-correction exception after a current NEEDS REVISION review |
 | `coursecraft courses mark-requirements-update-received <slug>` | Move an audited correction request to Update Received after Pluralsight returns it |
+| `coursecraft courses update <slug> --course-outline-file <path>` | Write the built Course Outline from a file |
 | `coursecraft courses submit-outline-for-review <slug>` | Submit or resubmit the exact current Course Outline revision |
 | `coursecraft modules submit-slide-deck-for-review <module>` | Submit or resubmit the exact current Slide Deck revision |
 | `coursecraft modules submit-videos-for-review <module>` | Submit or resubmit the exact current Module Video manifest |
 | `coursecraft courses authorize-objective-override <slug>` | Authorize the initial override after requirements resync, or reauthorize an active override from a current downstream NEEDS REVISION outline review |
 | `coursecraft courses apply-objective-override <slug> --learning-objectives-file <path> --reason <text>` | Write canonical objectives and append the authorized override provenance |
-| `coursecraft courses migrate-carry-forward-plan <slug> --carry-forward-plan-file <path> --reason <text>` | Atomically migrate a Carry-Forward Plan from named schema v1 to structural-only schema v2 |
 | `coursecraft versions reconcile --course <course> --artifact-slug <slug> --expected-version <v> --expected-old-ledger-sha <sha> --expected-live-content-sha <sha> --check` | Read-only safety check for one exact stale Course airtable-content ledger SHA recovery |
 | `coursecraft feedback list --slide <recID>` | List Feedback rows linked to a slide; do not add --filter to linked feedback reads |
 | `coursecraft feedback update <recID> --processing-status Applied --processed-at <iso>` | Stamp a Feedback row after processing |
 | `coursecraft voice-recordings preview --demo <recID>` | Read-only normalized narration/hash and cue/anchor validation before generation |
-| `coursecraft voice-recordings generate --slide <recID> --voice-id <voice> --model-id eleven_multilingual_v2 --output-format <format> --output-dir <dir>` | Generate slide narration audio |
+| `coursecraft voice-recordings generate --demo <recID>` | Generate the authoritative demo narration take (voice/model/format/output come from the production contract; no overrides) |
 </quick_start>
 
 <principle name="Boolean Update Options Are Switches">
@@ -56,10 +56,7 @@ command with `--check` first. The command requires the course, artifact slug,
 version, current stale ledger SHA, and current persisted-content SHA; any drift
 fails before a write. It preserves the target entry's `v` and `at`, every other
 ledger entry, and the Course content/lifecycle/review fields, then verifies an
-uncached readback. For `update.carry_forward_plan`, it also requires the latest
-`carry_forward_plan_migrated` audit event to bind the expected corrected
-version/hash. A migration that added previously missing structure also requires no Outline Draft
-revision. Omit `--check` only for the already-verified repair.
+uncached readback. Omit `--check` only for the already-verified repair.
 </principle>
 
 <essential_principles>
@@ -86,35 +83,8 @@ If a later outline review finds an error in the active objectives, rerun
 either changes. Generic `courses update` rejects both active-lifecycle objective edits and
 post-gap-analysis Carry-Forward Plan edits.
 </principle>
-<principle name="Carry-Forward Plan Migration Is Structural And Pre-Outline">
-Carry-Forward Plan owns inheritance decisions and structural mapping. Course Outline Draft owns
-learner-facing module and clip titles. The only post-review Carry-Forward Plan mutation is the
-explicit pre-outline schema migration; there is no downstream title-amendment lifecycle.
-
-First validate the schemaVersion 2 candidate with explicit record context:
-`coursecraft artifacts validate update.carry_forward_plan <candidate> --course <course>`.
-Then pass that same candidate to `courses migrate-carry-forward-plan`. It preserves
-`module_order` and `clip_order`, strips learner-facing names/titles, requires a non-empty
-`base_record` with no `addition_id` for inherited rows, and requires `base_record: null` plus a
-non-empty `addition_id` for added rows. Each addition's schemaVersion 2 `planning_purpose` must
-be a reviewed, non-editorial planning purpose grounded in the existing reason/gap evidence; it
-must not reuse the learner-facing title. It is the only semantic replacement migration permits.
-Within `verdicts`, migration removes only `target.name` and `target.title`; it preserves target
-`module_order`, `clip_order`, and every other non-title target value exactly.
-A schemaVersion 2 source is accepted only to complete an earlier incomplete migration when its
-live `verdicts.*.target` still contains `name` or `title`; a clean schemaVersion 2 plan is rejected.
-A source that already has non-empty `target_structure` may migrate after Outline Draft exists and
-without a new plan review because no structural decision changes; the candidate structure must be
-its exact non-title projection. A legacy source without `target_structure` requires the canonical
-`carry-forward-plan-review.md` to be PASS and bound to the exact source, and may migrate only when
-no Outline Draft content, review, or Version Control entry exists; the validated candidate supplies
-the missing structural decisions. Every other plan value remains unchanged. The atomic write binds
-both the ledger identity and exact live source bytes (so a stale source ledger SHA is never trusted),
-appends the new identity/reason provenance (plus review provenance for a missing-structure repair),
-and never changes the objective-override state.
-</principle>
 <principle name="External Reviews Use Dedicated Lifecycle Commands">
-Do not mutate legacy Pluralsight submission/approval checkboxes through generic update
+Do not write the Pluralsight review state or submitted-revision fields through generic update
 commands. Course Outline uses `submit-outline-for-review`,
 `mark-outline-changes-requested`, and `mark-outline-approved`. Slide Deck uses
 `submit-slide-deck-for-review`, `mark-slide-deck-changes-requested`, and
@@ -122,25 +92,15 @@ commands. Course Outline uses `submit-outline-for-review`,
 `mark-videos-approved`; the feedback-ingest workflow owns the internal
 `mark-video-changes-requested` action.
 
+`mark-outline-changes-requested` clears the built `Course Outline`,
+`Outline Draft Review (AI)`, and `Outline Draft Human Verified` fields from the
+course-outline instance's lifecycle contract. It does not apply those invalidations
+to Slide Deck or Module Video transitions.
+
 The hidden `accept-approved-slide-deck` action belongs only to the approved-deck release
 workflow. That workflow supplies explicit approval evidence and atomically registers the
 canonical returned deck, replaces submitted revision evidence, enters `Approved`, and
 invalidates AI/human deck-review gates. Do not call it as an operator approval shortcut.
-
-The hidden lifecycle migration commands are planner-only. Ordinary unambiguous legacy
-backfills omit `--resolution-file`. A conflict may run only with the exact immutable
-resolution file sealed and emitted by the lifecycle migration planner; the CLI revalidates
-its hash, record/process identity, live baseline fingerprint, desired evidence, authoritative
-evidence, and conflict semantics. `courses migrate-requirements-return` is resolution-only
-and always requires `--resolution-file`.
-
-The hidden rollback commands are also migration-planner-only: `courses
-rollback-requirements-return`, `courses rollback-outline-review`, `modules
-rollback-slide-deck-review`, and `modules rollback-video-review`. Each accepts only the
-target record plus `--rollback-plan <sealed-path>`. The CLI derives its exact two-field
-restore authority and fixed command prefix from `course-pipeline.json`, accepts only the
-sealed forward result or an already-restored baseline, and rejects arbitrary fields, states,
-commands, and targets. Never use these as operator lifecycle APIs.
 </principle>
 <principle name="Usage Reference">
 **MANDATORY: Consult the adjacent `usage.json` before executing ANY `coursecraft` command.**
@@ -219,7 +179,7 @@ coursecraft feedback update recXXX --processing-status Applied --processed-at "2
 - **slides** -- CRUD for slide records with hierarchical filtering and build-instructions/script fields
 - **slide-templates** -- Manage PowerPoint slide template definitions with --platform filtering
 - **feedback** -- CRUD for CourseCraft Feedback rows with per-level link filters (`--demo`, `--slide`, `--clip`, `--module`, `--course`), `Processing Status`/`Patterns Learned`/`Processed At` writes, write verification, and fail-closed `--remediation-claim` verification for `Applied` stamps. This is the first-class path for Feedback-table I/O; do not use raw `airtable` for the Feedback table.
-- **voice-recordings** -- Generate slide and demo narration audio with ElevenLabs and store recording metadata
+- **voice-recordings** -- Generate demo narration audio with ElevenLabs and store recording metadata (demos only; slides carry an instructor WAV take)
 </principle>
 
 <principle name="Legacy Import Update Intake">
@@ -252,9 +212,9 @@ The sequence-within-parent concept and narrative fields are named differently pe
 <principle name="Voice Recording State">
 Run `coursecraft voice-recordings preview --demo <recID>` before automatic demo narration generation. The preview is read-only: it makes no ElevenLabs call and performs no Airtable mutation. Preview and demo generation require one positive record `Target Length (Min)`, enforce the same `Target Length (Min) * 180` total-word budget through CourseCraft's canonical Demo Script parser, and do so before pronunciation-dictionary, ElevenLabs, or Airtable mutation. Preview emits the normalized spoken narration, deterministic SHA-256, enforced `narrationBudget` identity, cue validation, and manifest-anchor validation as JSON. A nonzero result means paid generation is blocked until the Script/manifest contract is corrected.
 
-`coursecraft voice-recordings generate --slide ...` and `coursecraft voice-recordings generate --demo ...` are only for workflows that need separate generated narration before video capture. They strip non-spoken recording cues, apply packaged regex pronunciation transforms from `coursecraft_cli/voice_pronunciation_patterns.json` and `coursecraft_cli/voice_pronunciation_tokens.json` for dynamic code-shaped text, sync alias rules from `coursecraft_cli/voice_pronunciations.json` into the ElevenLabs pronunciation dictionary named `CourseCraft Voice Pronunciations`, pass that dictionary locator to `elevenlabs speech create`, store generated audio metadata, and set `Dictation Recorded` to true. The regex transforms normalize common code shapes such as PowerShell cmdlets, parameters, variables, dotted module names, Windows paths, file names, pipes, and `%` aliases; static course terms stay in the source text and are handled by the ElevenLabs dictionary. They never set `Recorded`, because final recording also requires the video portion. If video and audio will be recorded together, skip voice recording generation and leave `Dictation Recorded` unset. Slide audio keeps the legacy `<output-dir>/m<module number>/slides/<slide number> - <slide title>.mp3` path; demo narration uses the transactional authority contract below.
+`coursecraft voice-recordings generate --demo <recID>` is the only generation command; it exists for demos whose `Recording Dictation Method` is `Automatic Narration Generation`. Slides have no generated narration: a slide's narration is the instructor's WAV take at its derived take path, and `Dictation Recorded` is the only narration state a slide record carries. Demo generation strips non-spoken recording cues through the canonical Demo Script contract, applies packaged regex pronunciation transforms from `coursecraft_cli/voice_pronunciation_patterns.json` and `coursecraft_cli/voice_pronunciation_tokens.json` for dynamic code-shaped text, syncs alias rules from `coursecraft_cli/voice_pronunciations.json` into the ElevenLabs pronunciation dictionary named `CourseCraft Voice Pronunciations`, passes that dictionary locator to `elevenlabs speech create`, stores generated audio metadata, and sets `Dictation Recorded` to true. The regex transforms normalize common code shapes such as PowerShell cmdlets, parameters, variables, dotted module names, Windows paths, file names, pipes, and `%` aliases; static course terms stay in the source text and are handled by the ElevenLabs dictionary. It never sets `Recorded`, because final recording also requires the video portion.
 
-For `generate --demo`, production voice precedence is deterministic and live-verified: (1) explicit `--voice-id`, (2) the Demo's current `ElevenLabs Voice ID`, then (3) exactly one live ElevenLabs voice labeled `coursecraft_role=production`. Every selected ID is verified with `elevenlabs voices get`; missing or multiple labeled fallbacks fail before generation. The only supported authoritative demo format is `mp3_44100_128`, which derives `.mp3`; unsupported formats fail before spend. `--model-id` defaults to `eleven_multilingual_v2` because CourseCraft narration uses a Professional Voice Clone and Eleven v3 does not currently support PVCs. Legacy tuning flags such as `--style` and `--speaker-boost` are not passed by default; provide tuning flags only after validating the selected ElevenLabs model supports them.
+The command takes no voice, model, format, tuning, or output-directory overrides. Every one of those values comes from the CourseCraft production narration contract (`demo/artifacts/dictation_audio/production-narration.json`), the voice is live-verified with `elevenlabs voices get`, and the only supported authoritative format is `mp3_44100_128`, which derives `.mp3`.
 
 Demo generation is fail-closed and transactional. It keys idempotence on the canonical normalized Script hash plus voice, model, format, pronunciation dictionary ID/version, tuning, and validated output hash. It generates to a UUID staging path, never the current authoritative take; full-decodes the one audio stream; requires positive duration; verifies the canonical source hash, request identity, no cue leakage, whole-script Whisper recall, and a `-1.0 dBFS` peak/no-clipping policy; then promotes to a content-identity path without overwrite. An adjacent `<audio>.narration.json` records source/output hashes, exact identities, validation evidence, and the deterministic derived-WAV input policy (`pcm_s16le`, 48 kHz, mono) for downstream adapters. Only after promotion does one CourseCraft update write narration metadata and `Dictation Recorded=true`, followed by uncached readback; a demo's take path is derived from `Folder Root` plus `Recording Dictation Method` and is never stored on the record; `Recorded` is never in that write. A validated local promotion can be registered after a write failure without another paid generation. Generation timeouts create a pending reconciliation record and block automatic retry until local, CourseCraft, and ElevenLabs history state are reconciled; failures leave the prior authoritative take and CourseCraft fields unchanged.
 </principle>
@@ -280,13 +240,13 @@ uv run --project /Users/adam/Dropbox/GitRepos/cli-tools/_personal/coursecraft --
 
 ## Known Issues
 
-Historical bug postmortems (29 entries) for the `coursecraft` CLI live in `references/known-issues.md`. Read that file only when troubleshooting an error whose symptoms match a documented pattern; it is not required reading for normal CLI usage.
+Historical bug postmortems (28 entries) for the `coursecraft` CLI live in `references/known-issues.md`. Read that file only when troubleshooting an error whose symptoms match a documented pattern; it is not required reading for normal CLI usage.
 
 ## Domain Knowledge
 
 ### Course Artifact Paths and Module Deletion
 **Context:** Relevant when answering whether CourseCraft can locate MP4 clip exports, slide deck files, or generated narration files, and when deleting modules or courses.
-**Key Facts:** `coursecraft modules delete --cascade` and `coursecraft courses delete --cascade` delete Airtable records only; they do not remove MP4, PPTX, demo, or narration files. `coursecraft voice-recordings generate` requires explicit `--output-dir` for slides; slide narration is written under `<output-dir>/m<module number>/slides/<slide number> - <slide title>.mp3` and that path is stored in `Voice Recording Path`. Demo narration rejects `--output-dir`: its location comes from the demo's `Folder Root` plus the production contract's `authoritativeOutput`, and no demo path is stored on the record. The CLI does not store clip MP4 paths or PowerPoint deck paths on standard CourseCraft records.
+**Key Facts:** `coursecraft modules delete --cascade` and `coursecraft courses delete --cascade` delete Airtable records only; they do not remove MP4, PPTX, demo, or narration files. `coursecraft voice-recordings generate --demo` takes no output directory: the take's location comes from the demo's `Folder Root` plus the production contract's `authoritativeOutput`, and no path is stored on the record. Slide narration is never generated; the per-slide WAV take path is derived from the clip's Order and the slide's Clip Order, and no slide field stores it. The CLI does not store clip MP4 paths or PowerPoint deck paths on standard CourseCraft records.
 **Gotchas:** In project-scoped course repos, do not rely on CourseCraft global active course when deriving artifact paths; resolve the Course ID slug for the selected course and pass `--course` where supported. For filesystem cleanup, derive paths separately and verify files before deleting.
 
 ### Projected Dot-Notation Fields Are Flat Keys

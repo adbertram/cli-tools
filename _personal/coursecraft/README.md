@@ -65,9 +65,11 @@ coursecraft courses get my-course-slug --include-clips
 
 # Update a course
 coursecraft courses update my-course-slug --name "New Name"
-coursecraft courses update recXXX --status "Complete" --active
+coursecraft courses update recXXX --active --content-level "Intermediate"
 coursecraft courses update my-course --target-length 60
 coursecraft courses update my-course --research-report-file report.md
+coursecraft courses update my-course --course-outline "# Course Outline"
+coursecraft courses update my-course --course-outline-file course-outline.md
 
 # Create a course
 coursecraft courses create --name "My Course" --course-id "my-course" \
@@ -118,18 +120,6 @@ coursecraft courses authorize-objective-override my-course
 coursecraft courses apply-objective-override my-course \
   --learning-objectives-file ./objectives.md \
   --reason "Pluralsight retained the current-product inaccuracies after feedback."
-
-# Migrate a reviewed schema v1 Carry-Forward Plan to structural-only schema v2
-# before any course.outline_draft revision exists. The candidate carries stable
-# base_record/addition_id identities and no learner-facing module or clip titles,
-# including under verdicts.*.target.
-coursecraft artifacts validate update.carry_forward_plan ./carry-forward-plan-v2.json \
-  --course my-course
-coursecraft courses migrate-carry-forward-plan my-course \
-  --carry-forward-plan-file ./carry-forward-plan-v2.json \
-  --reason "Migrate the reviewed plan to the structural-only schema."
-# The same command narrowly completes an earlier schema v2 migration only when
-# live verdicts.*.target objects still contain forbidden name/title keys.
 ```
 
 The override workflow is fail-closed and Pluralsight-only. It requires these
@@ -320,7 +310,7 @@ coursecraft modules show recXXXXXXXXXXXXXXX
 coursecraft modules create --name "Getting Started" --course my-course-id --order 1
 
 # Update a module
-coursecraft modules update recXXX --name "New Name" --status "Complete"
+coursecraft modules update recXXX --name "New Name" --module-plan-complete
 
 # Delete module only
 coursecraft modules delete recXXX
@@ -374,7 +364,7 @@ coursecraft clips create --module recXXX \
   --json '[{"name":"Clip 1","order":1},{"name":"Clip 2","order":2}]'
 
 # Update a clip
-coursecraft clips update recXXX --name "Updated Name" --status "Complete"
+coursecraft clips update recXXX --name "Updated Name" --content-done
 coursecraft clips update recXXX --module recYYY --order 1
 coursecraft clips update recXXX --content-done
 
@@ -436,14 +426,14 @@ coursecraft demos create --clip recXXX --clip-order 1 --json '[{"name":"Demo 1",
 # (choices: "Automated Walkthrough" | "Manual Instructor")
 coursecraft demos create --clip recXXX --clip-order 1 --name "Setup Demo" --execution-method "Manual Instructor"
 
-# Every created demo gets its own Recording Dictation Method; the course-level
-# field is not inherited. Create defaults to "Manual Instructor Generation"
+# Every created demo gets its own Recording Dictation Method (it is a per-demo
+# field; courses carry none). Create defaults to "Manual Instructor Generation"
 # (Adam reads the Demo Script); pass the flag for ElevenLabs narration.
 coursecraft demos create --clip recXXX --clip-order 1 --name "Setup Demo" --recording-dictation-method "Automatic Narration Generation"
 coursecraft demos update recXXX --recording-dictation-method "Automatic Narration Generation"
 
 # Update a demo
-coursecraft demos update recXXX --name "New Name" --idea "Updated idea"
+coursecraft demos update recXXX --name "New Name" --learner-takeaway "Updated takeaway"
 coursecraft demos update recXXX --script "Updated narration script"
 
 # Re-parent a demo to a different clip
@@ -457,9 +447,10 @@ coursecraft demos update recXXX --execution-method "Automated Walkthrough"
 # <action>/<expect> cue sequence changes: the CLI compares the new text's
 # executable-cue hash against executableCuesSha256 in the demo folder's
 # walkthrough.json, so rewording an <explain>/<observe>/<wait> author cue or the
-# "## Goal" prose keeps AI Tested. With no readable walkthrough.json, any Action
-# Summary change clears it. Each auto-clear prints a notice naming the reason.
-coursecraft demos update recXXX --ai-tested
+# "## Goal" prose keeps the walkthrough test result. With no readable
+# walkthrough.json, any Action Summary change clears it. Each auto-clear
+# prints a notice naming the reason.
+coursecraft demos update recXXX --walkthrough-test-complete
 
 # Delete a demo
 coursecraft demos delete recXXX
@@ -471,7 +462,7 @@ coursecraft demos delete recXXX --force
 Use the CourseCraft-owned schema path instead of calling Airtable directly:
 
 ```bash
-coursecraft fields rename Demos "Tested and Approved" "AI Tested"
+coursecraft fields rename Demos "Tested and Approved" "Walkthrough Test Complete"
 ```
 
 The command resolves the existing field ID, rejects a duplicate destination
@@ -606,25 +597,15 @@ combined with `--filter`.
 # ElevenLabs call and no Airtable mutation.
 coursecraft voice-recordings preview --demo recXXXXXXXXXXXXXXX
 
-# Generate narration audio for a slide script
-coursecraft voice-recordings generate --slide recXXXXXXXXXXXXXXX \
-  --voice-id VOICE_ID \
-  --model-id eleven_multilingual_v2 \
-  --output-format mp3_44100_128 \
-  --output-dir /path/to/course/audio
-
-# Generate one transactional authoritative demo take. --voice-id is optional:
-# explicit ID > current CourseCraft ElevenLabs Voice ID > unique live
-# coursecraft_role=production voice.
-coursecraft voice-recordings generate --demo recXXXXXXXXXXXXXXX \
-  --model-id eleven_multilingual_v2 \
-  --output-format mp3_44100_128 \
-  --output-dir /path/to/course/audio
+# Generate one transactional authoritative demo take. Voice, model, output
+# format, tuning, and output location all come from the CourseCraft production
+# narration contract; there are no overrides. Slides are never generated.
+coursecraft voice-recordings generate --demo recXXXXXXXXXXXXXXX
 ```
 
 `voice-recordings preview` reads the demo Script and its walkthrough manifest, uses CourseCraft's canonical Demo Script parser, and returns JSON containing `normalizedNarration`, `normalizedNarrationSha256`, `cueValidation`, and `anchorValidation`. It exits nonzero when cue/anchor validation fails. Automated Walkthrough generation runs the same validation before any ElevenLabs or Airtable operation.
 
-Voice recording generation uses the ElevenLabs CLI only when separate generated narration is required before video capture. Slide generation retains the legacy explicit voice/path behavior. Demo generation supports only `mp3_44100_128`, derives `.mp3`, live-verifies voice/model/dictionary identity, and generates to a unique `.staging` candidate rather than the current authoritative path. Before promotion it requires a full single-audio-stream decode, positive duration, canonical source hash, no action-cue leakage, whole-script Whisper recall, a peak at or below `-1.0 dBFS`, and exact voice/model/format/dictionary/tuning identity. It promotes without overwrite, then makes one CourseCraft narration update and uncached readback for metadata and `Dictation Recorded=true`; a demo's take path is derived from `Folder Root` and `Recording Dictation Method`, never stored, and it never writes `Recorded`.
+Voice recording generation uses the ElevenLabs CLI only for demos whose Recording Dictation Method is Automatic Narration Generation. Demo generation supports only `mp3_44100_128`, derives `.mp3`, live-verifies voice/model/dictionary identity, and generates to a unique `.staging` candidate rather than the current authoritative path. Before promotion it requires a full single-audio-stream decode, positive duration, canonical source hash, no action-cue leakage, whole-script Whisper recall, a peak at or below `-1.0 dBFS`, and exact voice/model/format/dictionary/tuning identity. It promotes without overwrite, then makes one CourseCraft narration update and uncached readback for metadata and `Dictation Recorded=true`; a demo's take path is derived from `Folder Root` and `Recording Dictation Method`, never stored, and it never writes `Recorded`.
 
 The adjacent `<authoritative-audio>.narration.json` is the durable transaction/adapter contract. It binds normalized source and output SHA-256 values, voice/model/format/dictionary/tuning, validation evidence, request/history IDs, and deterministic derived-WAV input policy (`pcm_s16le`, 48 kHz, mono). Timeout checkpoints contain exactly every narration-owned CourseCraft field plus `Recorded`; any key-set or value mismatch blocks before local adoption, history lookup/download, or paid authorization. Exact history-ID recovery derives character count from a positive official `character_count`, a valid positive `character_count_change_to - character_count_change_from`, or nonempty official `text` length, in that order. If none is available it blocks with `HISTORY_RECOVERY_CHARACTER_COUNT_UNAVAILABLE`. Because official history does not guarantee the original request ID, recovered metadata stores `request_id=""` (the CourseCraft/Airtable empty value) plus explicit status/provenance in the sidecar; final CourseCraft update/readback still compares all owned fields exactly. Recovered download SHA-256 must bind the candidate before narration validation. An identical validated local/CourseCraft identity is reused without paid generation. A promoted take can be registered after a write failure without regeneration. Timeout/unknown state leaves a pending reconciliation record and blocks blind retry, preserving the prior take and fields. If video and audio will be recorded together, skip this command and leave `Dictation Recorded` unset.
 
@@ -770,7 +751,7 @@ so only the boolean word matches it.
 
 **Demos:** `name`, `clip`, `idea`, `action_summary`, `action_summary_review_ai`, `script`, `dictation_recorded`, `voice_recording_id`, `voice_source_hash`, `elevenlabs_voice_id`, `elevenlabs_model_id`, `elevenlabs_output_format`, `elevenlabs_request_id`, `elevenlabs_history_item_id`, `voice_character_count`, `voice_generated_at`
 
-**Slides:** `clip`, `template`, `dictation_recorded`, `voice_recording_id`, `voice_recording_path`, `voice_source_hash`, `elevenlabs_voice_id`, `elevenlabs_model_id`, `elevenlabs_output_format`, `elevenlabs_request_id`, `elevenlabs_history_item_id`, `voice_character_count`, `voice_generated_at`
+**Slides:** `clip`, `template`, `dictation_recorded`
 
 **Feedback:** `timestamp`, `feedback`, `patterns_learned`, `demo`, `slide`
 
@@ -831,12 +812,14 @@ coursecraft courses create \
   ]'
 ```
 
-### Batch Update Module Status
+### Batch Update Modules
+
+`Status` is a read-only Airtable formula — set the fields it reads instead.
 
 ```bash
 # Get all module IDs for a course, then update each
 for id in $(coursecraft modules list --course my-course | jq -r '.[].id'); do
-  coursecraft modules update "$id" --status "In Progress"
+  coursecraft modules update "$id" --demo-density 2
 done
 ```
 
@@ -865,6 +848,5 @@ coursecraft slide-templates update recXXX --requirements "Exactly three points; 
 ## Cache
 
 ```bash
-coursecraft cache status
 coursecraft cache clear
 ```

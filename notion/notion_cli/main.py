@@ -52,6 +52,18 @@ except ImportError:
     pass
 
 try:
+    from .commands import skills
+    register_commands(
+        app,
+        get_config,
+        skills,
+        name="skills",
+        help="List, inspect, and download official Notion Skills",
+    )
+except ImportError:
+    pass
+
+try:
     app.add_typer(create_cache_app(get_config), name="cache")
 except ImportError:
     pass

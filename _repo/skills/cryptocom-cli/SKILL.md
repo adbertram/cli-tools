@@ -4,7 +4,7 @@ description: >-
   Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
   MANDATORY: Use this skill to execute Crypto.com Exchange operations using the `cryptocom` CLI tool.
   Crypto.com Exchange API CLI.
-  Triggers: cryptocom, cryptocom cli, Crypto.com Exchange, crypto.com exchange api, crypto.com market data, crypto.com balances, crypto.com open orders, BTCUSD-PERP ticker, Exchange API profiles
+  Triggers: cryptocom, cryptocom cli, Crypto.com Exchange, crypto.com exchange api, crypto.com market data, crypto.com balances, crypto.com positions, crypto.com open orders, BTCUSD-PERP ticker, Exchange API profiles
 ---
 
 <objective>
@@ -25,6 +25,7 @@ cryptocom <command-group> <action> [arguments] [options]
 | `cryptocom trades list BTCUSD-PERP --limit 10` | List recent public trades |
 | `cryptocom candlesticks list BTCUSD-PERP --timeframe 1m --limit 10` | List OHLCV candles |
 | `cryptocom account balance` | Get authenticated account balances |
+| `cryptocom account positions` | List positive non-USD spot holdings with quantity and market value |
 | `cryptocom account open-orders --instrument-name BTCUSD-PERP` | List authenticated open orders |
 | `cryptocom auth profiles list` | List auth profiles |
 </quick_start>
@@ -36,7 +37,7 @@ This file contains complete command syntax, all arguments, all options, and usag
 </principle>
 
 <principle name="Command Groups">
-- **account**: authenticated balances and open orders
+- **account**: authenticated balances, positive non-USD spot positions, and open orders
 - **book**: order book instrument discovery and snapshots
 - **candlesticks**: OHLCV candle lists and recent candle lookup
 - **instruments**: Exchange instrument discovery and metadata

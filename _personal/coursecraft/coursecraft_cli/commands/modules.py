@@ -13,8 +13,6 @@ from ..filter_map import translate_filters
 from ..field_mappings import collect_mapped_updates
 from ..external_review import (
     ExternalReviewError,
-    execute_migration_initialization,
-    execute_review_migration_rollback,
     execute_transition,
     verified_video_feedback_receipts,
 )
@@ -298,7 +296,6 @@ def update_module(
     notes: Optional[str] = typer.Option(None, "--notes", help="Internal notes"),
     brainstorming_outline: Optional[str] = typer.Option(None, "--brainstorming-outline", "-b", help="Module brainstorming outline content"),
     brainstorming_outline_file: Optional[Path] = typer.Option(None, "--brainstorming-outline-file", help="Path to file containing brainstorming outline"),
-    brainstorming_outline_fact_checked: Optional[bool] = typer.Option(None, "--brainstorming-outline-fact-checked/--no-brainstorming-outline-fact-checked", help="Set or clear the brainstorming outline fact-checked flag"),
     module_plan_complete: Optional[bool] = typer.Option(None, "--module-plan-complete/--no-module-plan-complete", help="Set or clear the module plan complete flag"),
     module_review_complete: Optional[bool] = typer.Option(None, "--module-review-complete/--no-module-review-complete", help="Set or clear the module review complete flag"),
     plan_review_ai: Optional[str] = typer.Option(None, "--plan-review-ai", help="AI review of the module plan"),
@@ -340,8 +337,6 @@ def update_module(
             print_error(f"Module not found: {record_id}")
             raise typer.Exit(1)
 
-        existing_fields = existing.get("fields", {})
-
         # Build fields dictionary with only provided values
         fields = collect_mapped_updates(
             "Modules",
@@ -370,10 +365,6 @@ def update_module(
             },
         )
 
-        # Check for fact-check reset warning
-        existing_fact_checked = existing_fields.get("Brainstorming Outline Fact Checked", False)
-        updating_brainstorming = brainstorming_outline is not None or brainstorming_outline_file is not None
-
         # Handle brainstorming outline (file takes precedence over inline)
         if brainstorming_outline_file:
             if not brainstorming_outline_file.exists():
@@ -382,18 +373,6 @@ def update_module(
             fields["Brainstorming Outline"] = brainstorming_outline_file.read_text()
         elif brainstorming_outline is not None:
             fields["Brainstorming Outline"] = brainstorming_outline
-
-        # If updating brainstorming outline and it was previously fact-checked, warn and reset
-        if updating_brainstorming and existing_fact_checked:
-            print_info("")
-            print_info("⚠️  WARNING: The previous Brainstorming Outline was marked as Fact-Checked.")
-            print_info("   This update resets the fact-check status. Re-verification may be needed.")
-            # Automatically reset the fact-check flag
-            fields["Brainstorming Outline Fact Checked"] = False
-
-        # Handle explicit fact-checked checkbox (overrides auto-reset if explicitly set)
-        if brainstorming_outline_fact_checked is not None:
-            fields["Brainstorming Outline Fact Checked"] = brainstorming_outline_fact_checked
 
         if base_record is not None:
             fields["Base Record"] = [base_record]
@@ -587,7 +566,7 @@ def _print_module_tree(module: Dict, clips: List[Dict], demos_by_clip: Dict[str,
         is_last_clip = clip_idx == len(sorted_clips) - 1
         clip_fields = clip.get("fields", {})
         clip_name = clip_fields.get("Name", clip["id"])
-        clip_status = clip_fields.get("Status Formula", "") or clip_fields.get("Status", "")
+        clip_status = clip_fields.get("Status", "")
 
         # Clip line
         clip_connector = "└── " if is_last_clip else "├── "
@@ -826,122 +805,6 @@ def modules_mark_video_changes_requested(
         raise typer.Exit(1)
 
 
-def _run_module_migration(
-    module: str, instance: str, resolution_file: Optional[Path]
-) -> None:
-    client = get_client()
-    record_id = client.resolve_module_id(module)
-    print_json(
-        execute_migration_initialization(
-            client, instance, record_id, resolution_file
-        )
-    )
-
-
-@app.command("migrate-slide-deck-review", hidden=True)
-@command
-def modules_migrate_slide_deck_review(
-    module: str = typer.Argument(..., help="Module record ID, ID pattern, or name"),
-    resolution_file: Optional[Path] = typer.Option(
-        None,
-        "--resolution-file",
-        exists=True,
-        file_okay=True,
-        dir_okay=False,
-        readable=True,
-        resolve_path=True,
-        help="Planner-sealed resolution artifact; permitted only for an exact conflict baseline",
-    ),
-):
-    """Initialize Slide Deck lifecycle from fixed legacy fields."""
-    try:
-        _run_module_migration(module, "slide_deck", resolution_file)
-    except (ClientError, ExternalReviewError, ObjectiveOverrideError) as exc:
-        print_error(str(exc))
-        raise typer.Exit(1)
-
-
-@app.command("migrate-video-review", hidden=True)
-@command
-def modules_migrate_video_review(
-    module: str = typer.Argument(..., help="Module record ID, ID pattern, or name"),
-    resolution_file: Optional[Path] = typer.Option(
-        None,
-        "--resolution-file",
-        exists=True,
-        file_okay=True,
-        dir_okay=False,
-        readable=True,
-        resolve_path=True,
-        help="Planner-sealed resolution artifact; permitted only for an exact conflict baseline",
-    ),
-):
-    """Initialize Module Video lifecycle from fixed legacy fields."""
-    try:
-        _run_module_migration(module, "module_video", resolution_file)
-    except (ClientError, ExternalReviewError, ObjectiveOverrideError) as exc:
-        print_error(str(exc))
-        raise typer.Exit(1)
-
-
-def _run_module_rollback(
-    module: str, instance: str, rollback_plan: Path
-) -> None:
-    client = get_client()
-    record_id = client.resolve_module_id(module)
-    print_json(
-        execute_review_migration_rollback(
-            client, instance, record_id, rollback_plan
-        )
-    )
-
-
-@app.command("rollback-slide-deck-review", hidden=True)
-@command
-def modules_rollback_slide_deck_review(
-    module: str = typer.Argument(..., help="Module record ID, ID pattern, or name"),
-    rollback_plan: Path = typer.Option(
-        ...,
-        "--rollback-plan",
-        exists=True,
-        file_okay=True,
-        dir_okay=False,
-        readable=True,
-        resolve_path=True,
-        help="Planner-sealed lifecycle rollback plan",
-    ),
-):
-    """Restore Slide Deck migration fields from a sealed baseline."""
-    try:
-        _run_module_rollback(module, "slide_deck", rollback_plan)
-    except (ClientError, ExternalReviewError, ObjectiveOverrideError) as exc:
-        print_error(str(exc))
-        raise typer.Exit(1)
-
-
-@app.command("rollback-video-review", hidden=True)
-@command
-def modules_rollback_video_review(
-    module: str = typer.Argument(..., help="Module record ID, ID pattern, or name"),
-    rollback_plan: Path = typer.Option(
-        ...,
-        "--rollback-plan",
-        exists=True,
-        file_okay=True,
-        dir_okay=False,
-        readable=True,
-        resolve_path=True,
-        help="Planner-sealed lifecycle rollback plan",
-    ),
-):
-    """Restore Module Video migration fields from a sealed baseline."""
-    try:
-        _run_module_rollback(module, "module_video", rollback_plan)
-    except (ClientError, ExternalReviewError, ObjectiveOverrideError) as exc:
-        print_error(str(exc))
-        raise typer.Exit(1)
-
-
 COMMAND_CREDENTIALS = {
     "create": [
         "custom"
@@ -960,10 +823,6 @@ COMMAND_CREDENTIALS = {
     "mark-slide-deck-changes-requested": ["custom"],
     "mark-video-changes-requested": ["custom"],
     "mark-videos-approved": ["custom"],
-    "migrate-slide-deck-review": ["custom"],
-    "migrate-video-review": ["custom"],
-    "rollback-slide-deck-review": ["custom"],
-    "rollback-video-review": ["custom"],
     "show": [
         "custom"
     ],

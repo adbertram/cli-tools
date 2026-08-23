@@ -17,6 +17,8 @@ from .filters import (
     get_nested_value,
     validate_filters,
     parse_filter_string,
+    parse_filter_part,
+    split_filter_parts,
 )
 from .filter_map import FilterMap
 from .bulk import BulkProcessor
@@ -115,6 +117,8 @@ __all__ = [
     "get_nested_value",
     "validate_filters",
     "parse_filter_string",
+    "parse_filter_part",
+    "split_filter_parts",
     # Filter Map
     "FilterMap",
     # Bulk

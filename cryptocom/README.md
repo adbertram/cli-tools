@@ -22,6 +22,7 @@ cryptocom ticker get BTCUSD-PERP
 cryptocom trades list BTCUSD-PERP --limit 10
 cryptocom candlesticks list BTCUSD-PERP --timeframe 1m --limit 10
 cryptocom account balance
+cryptocom account positions
 ```
 
 Private account commands require Exchange API credentials:
@@ -120,6 +121,10 @@ cryptocom account balance
 cryptocom account balance --table
 cryptocom account balance --filter "instrument_name:eq:USD"
 cryptocom account balance --properties "instrument_name,total_available_balance,total_cash_balance"
+cryptocom account positions
+cryptocom account positions --table
+cryptocom account positions --filter "market_value:gt:10"
+cryptocom account positions --properties "instrument_name,quantity,market_value"
 cryptocom account open-orders
 cryptocom account open-orders --instrument-name BTCUSD-PERP
 cryptocom account open-orders --table
@@ -240,6 +245,7 @@ The client returns Pydantic models from `cryptocom_cli.models`:
 | `Trade` | `public/get-trades` |
 | `Candlestick` | `public/get-candlestick` |
 | `AccountBalance` | `private/user-balance` |
+| `PositionBalance` | `private/user-balance` nested position balances |
 | `OpenOrder` | `private/get-open-orders` |
 
 Models preserve extra API response fields so JSON output does not discard fields added by Crypto.com.

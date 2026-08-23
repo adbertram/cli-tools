@@ -34,7 +34,7 @@ def drive_list(
         query = translate_drive_filters(filter) if filter else ""
 
         # Build fields based on requested properties
-        all_fields = ['id', 'name', 'mimeType', 'createdTime', 'modifiedTime', 'size', 'parents', 'webViewLink']
+        all_fields = ['id', 'name', 'mimeType', 'createdTime', 'modifiedTime', 'size', 'parents', 'webViewLink', 'shortcutDetails']
         fields_str = f"files({', '.join(all_fields)})"
 
         results = service.files().list(
@@ -76,7 +76,7 @@ def drive_get(
 
         file = service.files().get(
             fileId=file_id,
-            fields="id, name, mimeType, createdTime, modifiedTime, size, parents, webViewLink"
+            fields="id, name, mimeType, createdTime, modifiedTime, size, parents, webViewLink, shortcutDetails"
         ).execute()
 
         if table:
@@ -106,7 +106,7 @@ def drive_search(
         service = client.get_drive_service()
 
         # Build fields based on requested properties
-        all_fields = ['id', 'name', 'mimeType', 'createdTime', 'modifiedTime', 'size', 'parents', 'webViewLink']
+        all_fields = ['id', 'name', 'mimeType', 'createdTime', 'modifiedTime', 'size', 'parents', 'webViewLink', 'shortcutDetails']
         fields_str = f"files({', '.join(all_fields)})"
 
         results = service.files().list(

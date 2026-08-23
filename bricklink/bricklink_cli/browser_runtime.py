@@ -27,6 +27,62 @@ from .managed_auth import get_bricklink_confirmation_code
 
 activity = get_activity_logger("bricklink")
 
+# Injected into BrickLink's message-list page to scrape inbox/outbox rows.
+# Kept as a module-level constant so the parser can be validated against real
+# DOM snapshots in tests without a live session.
+MESSAGE_LIST_SCRIPT = r"""() => {
+    const results = [];
+    const links = document.querySelectorAll('a[href*="myMsg.asp?msgID="]');
+    const seenIds = new Set();
+
+    for (const link of links) {
+        const href = link.href;
+        const msgIdMatch = href.match(/msgID=(\d+)/);
+        if (!msgIdMatch) continue;
+
+        const messageId = msgIdMatch[1];
+        if (seenIds.has(messageId)) continue;
+        seenIds.add(messageId);
+
+        const row = link.closest('tr');
+        if (!row) continue;
+
+        const cells = row.querySelectorAll('td');
+        let date = '';
+        for (const cell of cells) {
+            const text = cell.textContent?.trim() || '';
+            if (text.match(/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d+,\s+\d{4}$/)) {
+                date = text;
+                break;
+            }
+        }
+
+        let username = '';
+        const userLink = row.querySelector('a[href*="contact.asp?u="]');
+        if (userLink) {
+            username = userLink.textContent?.trim().split('(')[0].trim() || '';
+        }
+
+        // BrickLink marks unread (not-yet-replied) messages with a status icon
+        // in the first column (/images/mailNew16.png, alt/title "Not Yet
+        // Replied"); replied messages use mailNewRe.png ("Already Replied").
+        // The prior heuristic only checked for <b>/<strong> text or a 'unread'
+        // row class, neither of which BrickLink emits on inbox rows, so every
+        // unread inquiry was reported as read and dropped by
+        // `--filter is_unread:eq:true`.
+        const isUnread = row.querySelector(
+            'img[src*="mailNew16"], img[alt="Not Yet Replied"], img[title="Not Yet Replied"]'
+        ) !== null ||
+            row.querySelector('b, strong') !== null ||
+            row.classList.contains('unread');
+
+        const subject = (link.textContent || '').trim().replace(/\s*[(]view order[)]\s*$/i, '');
+        results.push({ message_id: messageId, subject, username, date, is_unread: isUnread, url: href });
+    }
+    return results;
+}"""
+
+
 
 class BricklinkRuntimeBrowser(BricklinkBrowser):
     """Bricklink browser automation using shared BrowserAutomation base."""
@@ -270,54 +326,28 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
         url = f"{self.MESSAGES_URL}?pg={page_num}&a={folder}"
         page = self._get_page_for(url)
 
-        # Wait for message links to appear in the DOM (up to 10s)
-        try:
-            page.wait_for_selector('a[href*="myMsg.asp?msgID="]', timeout=10000)
-        except Exception:
-            # No messages found after waiting — return empty list
-            return []
+        # Wait for message links to appear in the DOM. Under load the message
+        # table can take longer than the page shell to render, so poll
+        # generously and retry once on a slow navigation. Only after the page
+        # is confirmed to still be the messages page do we return an empty
+        # list; a page that failed to load raises instead of silently
+        # reporting an empty inbox.
+        for attempt in (1, 2):
+            try:
+                page.wait_for_selector('a[href*="myMsg.asp?msgID="]', timeout=15000)
+                break
+            except Exception:
+                if attempt == 2:
+                    current = getattr(page, "url", "") or ""
+                    if "myMsg.asp" not in current:
+                        raise RuntimeError(
+                            f"BrickLink message list did not render for {url!r} "
+                            f"(landed at {current!r})."
+                        )
+                    return []
+                page = self._get_page_for(url)
 
-        messages = page.evaluate("""() => {
-            const results = [];
-            const links = document.querySelectorAll('a[href*="myMsg.asp?msgID="]');
-            const seenIds = new Set();
-
-            for (const link of links) {
-                const href = link.href;
-                const msgIdMatch = href.match(/msgID=(\\d+)/);
-                if (!msgIdMatch) continue;
-
-                const messageId = msgIdMatch[1];
-                if (seenIds.has(messageId)) continue;
-                seenIds.add(messageId);
-
-                const row = link.closest('tr');
-                if (!row) continue;
-
-                const cells = row.querySelectorAll('td');
-                let date = '';
-                for (const cell of cells) {
-                    const text = cell.textContent?.trim() || '';
-                    if (text.match(/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+\\d+,\\s+\\d{4}$/)) {
-                        date = text;
-                        break;
-                    }
-                }
-
-                let username = '';
-                const userLink = row.querySelector('a[href*="contact.asp?u="]');
-                if (userLink) {
-                    username = userLink.textContent?.trim().split('(')[0].trim() || '';
-                }
-
-                const isUnread = row.querySelector('b, strong') !== null ||
-                                row.classList.contains('unread');
-
-                const subject = (link.textContent || '').trim().replace(/\\s*[(]view order[)]\\s*$/i, '');
-                results.push({ message_id: messageId, subject, username, date, is_unread: isUnread, url: href });
-            }
-            return results;
-        }""")
+        messages = page.evaluate(MESSAGE_LIST_SCRIPT)
 
         return messages
 
@@ -514,16 +544,78 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
         return {"success": success, "body": body, "subject": subject or "(auto)", **extra,
                 "message": "Message sent successfully" if success else "Message may have failed. Verify on Bricklink."}
 
+    def _message_unread_state(self, message_id: str, max_pages: int = 5) -> Optional[bool]:
+        """Read a message's unread flag from a fresh inbox listing.
+
+        Returns ``True`` (unread / "Not Yet Replied"), ``False`` (read /
+        "Already Replied"), or ``None`` when the message is not found within
+        the first ``max_pages`` pages of the inbox.
+
+        This intentionally bypasses the ``@cached`` ``list_messages`` path so
+        the post-condition check always reflects the live inbox, never a
+        stale on-disk snapshot (which is exactly how a "still unread" result
+        could be masked as "read").
+        """
+        for pg in range(1, max_pages + 1):
+            url = f"{self.MESSAGES_URL}?pg={pg}&a=i"
+            page = self._get_page_for(url)
+            try:
+                page.wait_for_selector('a[href*="myMsg.asp?msgID="]', timeout=15000)
+            except Exception:
+                # No message rows rendered on this page → end of inbox.
+                return None
+            rows = page.evaluate(MESSAGE_LIST_SCRIPT) or []
+            if not rows:
+                return None
+            for row in rows:
+                if str(row.get("message_id")) == str(message_id):
+                    return bool(row.get("is_unread"))
+        return None
+
     def mark_as_read(self, message_id: str) -> dict:
-        """Mark a message as read by viewing it."""
+        """Mark a message as read and verify the state change.
+
+        BrickLink has no standalone "mark as read" action: the inbox "unread"
+        flag is the "Not Yet Replied" icon (``/images/mailNew16.png``), which
+        only flips to "Already Replied" (``/images/mailNewRe.png``) once the
+        seller replies. The previous implementation "marked read by viewing"
+        the message page and looked for the ``Subject:``/``From:`` labels —
+        which are always present on the detail page regardless of read state —
+        so it reported success without changing anything.
+
+        This implementation opens the message (so the message is in fact
+        viewed), then re-queries the live inbox to verify the post-condition.
+        It returns success only when the message is actually no longer unread,
+        and raises (non-zero exit) when the message is still unread after a
+        bounded number of retries.
+        """
         url = f"{self.MESSAGES_URL}?msgID={message_id}&a=i"
         page = self._get_page_for(url)
 
         content = page.evaluate("document.documentElement.outerHTML") or ""
-        success = "Subject:" in content or "From:" in content
+        if "Subject:" not in content and "From:" not in content:
+            raise RuntimeError(
+                f"Message {message_id} did not render on BrickLink "
+                f"(landed at {page.url})."
+            )
 
-        return {"success": success, "message_id": message_id, "action": "mark_as_read",
-                "message": "Message marked as read" if success else "Could not mark message as read."}
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            if self._message_unread_state(message_id) is False:
+                return {
+                    "success": True,
+                    "message_id": message_id,
+                    "action": "mark_as_read",
+                    "message": "Message marked as read",
+                }
+            page.wait_for_timeout(500 * attempt)
+
+        raise RuntimeError(
+            f"Message {message_id} is still unread after {max_attempts} attempts. "
+            "BrickLink has no 'mark as read' action — the 'Not Yet Replied' "
+            "inbox flag only clears once the message is replied to. Reply to "
+            f"mark it read: 'bricklink messages reply {message_id} <body>'."
+        )
 
     def mark_as_unread(self, message_id: str) -> dict:
         """Mark a message as unread using checkbox + action dropdown."""

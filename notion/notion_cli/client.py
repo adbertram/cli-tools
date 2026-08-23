@@ -56,6 +56,17 @@ class BlockAlreadyArchivedError(ClientError):
 _ALREADY_ARCHIVED_MESSAGE = "block that is archived"
 
 
+def flatten_block_tree(blocks: List[Dict]) -> List[Dict]:
+    """Flatten blocks whose recursively fetched children live under ``children``."""
+    flat: List[Dict] = []
+    for block in blocks:
+        flat.append(block)
+        children = block.get("children", [])
+        if children:
+            flat.extend(flatten_block_tree(children))
+    return flat
+
+
 class NotionClient:
     """Client for interacting with Notion API."""
 
@@ -1583,7 +1594,7 @@ class NotionClient:
         )
 
         # Flatten the nested block tree into a single list
-        blocks = self._flatten_block_tree(blocks_tree)
+        blocks = flatten_block_tree(blocks_tree)
 
         if not blocks and not all_comments:
             return []
@@ -1712,22 +1723,6 @@ class NotionClient:
                 return type_content.get("url", f"[{block_type} block]")
 
         return f"[{block_type} block]"
-
-    @staticmethod
-    def _flatten_block_tree(blocks: List[Dict]) -> List[Dict]:
-        """
-        Flatten a nested block tree into a single list.
-
-        The recursive fetch stores children in block["children"].
-        This walks the tree and returns all blocks at every level.
-        """
-        flat: List[Dict] = []
-        for block in blocks:
-            flat.append(block)
-            children = block.get("children", [])
-            if children:
-                flat.extend(NotionClient._flatten_block_tree(children))
-        return flat
 
     def _get_block_text(self, block_id: str) -> str:
         """

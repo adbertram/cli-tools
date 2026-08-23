@@ -277,11 +277,11 @@ def canonical_hash(slug: str, persisted: Any) -> str:
 def _artifact_owning_reference_index() -> Dict[str, str]:
     """artifact_reference -> slug, for every non-review work-phase artifact.
 
-    Used to resolve a review artifact's implicit target when course-pipeline.json
-    omits an explicit ``review_target`` (true for the single-artifact review
-    groups: course-outline-review, course-scaffolding-review, module-review,
-    powerpoint-deck-review). Those entries share their ``artifact_reference``
-    with exactly one content-producing artifact whose ``skill`` IS the slug.
+    Used to resolve a review artifact's implicit target when its
+    course-pipeline.json work-phase entry carries ``review_ai`` but omits an
+    explicit ``review_target`` (today: module-review, powerpoint-deck-review). Such an entry shares its
+    ``artifact_reference`` with exactly one content-producing artifact whose
+    ``skill`` IS the slug.
     """
     index: Dict[str, str] = {}
     for phase in _pipeline_router().get("work_phases", []):
@@ -314,8 +314,8 @@ def _paired_review_targets(slug: str) -> List[str]:
     Both sources can name a field that lives on a DIFFERENT table than
     ``slug``'s own content -- e.g. ``module-slide-build-review``'s
     ``Slide Build Review (AI)`` lives on Modules but is individually targeted
-    at each ``slide.*`` slug (Slides). ``stamp_versions``'s follow-up write
-    always targets the SAME record it just wrote, so a cross-table field is
+    at each ``slide.*`` slug (Slides). ``plan_record_update``'s merged PATCH
+    always targets the SAME record it is planning for, so a cross-table field is
     never a valid write there. This is documented, intentional V1 scope (see
     the versioning framework plan's named follow-up 1: cross-record composite
     review staleness is out of V1 scope on purpose) -- a cross-table field is
@@ -354,28 +354,6 @@ def _paired_review_targets(slug: str) -> List[str]:
     return fields
 
 
-def _uniform_paired_review_fields(candidates: Tuple[str, ...]) -> Optional[List[str]]:
-    """Paired review fields shared identically by every slug in ``candidates``.
-
-    Used by :func:`stamp_versions`'s unresolved-slide-type fallback (Finding
-    5): when a Slides write's real slide type can't be resolved, clearing a
-    review field is still safe if EVERY candidate slug that could plausibly
-    own the touched field agrees on the exact same field(s) to clear -- e.g.
-    every ``slide.*`` slug pairs to the identical ``["Script Human
-    Verified"]`` today (verified against course-pipeline.json's
-    ``human_verified_pairs``), so which one of them the record actually is
-    does not change what gets cleared. If even one candidate disagrees, or
-    ``candidates`` is empty, returns ``None`` -- never guess.
-    """
-    if not candidates:
-        return None
-    sets = [frozenset(_paired_review_targets(slug)) for slug in candidates]
-    first = sets[0]
-    if any(other != first for other in sets[1:]):
-        return None
-    return sorted(first)
-
-
 def check_write_conflict(
     table: str,
     sent_fields: Dict[str, Any],
@@ -385,12 +363,12 @@ def check_write_conflict(
     """Pre-write guard: reject a content+its-own-review write before it lands.
 
     Called from ``client.py``'s ``create_record``/``update_record`` BEFORE
-    the Airtable write is issued. ``stamp_versions``'s own post-write check
-    (below) catches the same conflict too late -- the corrupt content+review
+    the Airtable write is issued. A post-write check would catch
+    the same conflict too late -- the corrupt content+review
     pairing has already reached Airtable by the time that check runs, and by
     then no Version Control entry gets created for the touched slug, so
     ``preflight_lib.ai_review_status()`` reads the record as clean/unsynced
-    rather than stale (Finding 2). Unlike ``stamp_versions``, this makes no
+    rather than stale (Finding 2). This makes no
     attempt to detect whether the content would actually CHANGE first --
     sending a content field and its own paired review field in one call is
     never legitimate regardless of whether the content differs from what is
@@ -433,7 +411,7 @@ def check_write_conflict(
     ``fetch_persisted_fields`` is supplied (``update_record`` passes a
     callback that re-reads the record; ``create_record`` passes none, since
     there is no persisted record yet to read), it resolves the record's real
-    slide-type slug the same way ``stamp_versions`` does, and the reject only
+    slide-type slug the same way ``plan_record_update`` does, and the reject only
     fires if that real slug matches the candidate under test. Without a
     resolver (``create_record``), the check stays conservative and rejects,
     same as it always has.
@@ -657,6 +635,88 @@ def _same_record_lifecycle_invalidation(
     return consequences
 
 
+def _same_record_dependents(table: str, changed_slugs: List[str]) -> List[str]:
+    """Return same-record Airtable artifacts invalidated by changed dependencies."""
+    catalog = _pipeline_router().get("artifact_dependencies")
+    if not isinstance(catalog, dict):
+        raise VersioningError(
+            "course-pipeline.json has no artifact_dependencies object."
+        )
+    changed = set(changed_slugs)
+    dependents: List[str] = []
+    while True:
+        added = False
+        for slug in sorted(catalog):
+            declaration = catalog[slug]
+            if not isinstance(declaration, dict):
+                raise VersioningError(
+                    f"course-pipeline.json artifact dependency {slug!r} must be an object."
+                )
+            dependencies = declaration.get("depends_on", [])
+            if not isinstance(dependencies, list) or not all(
+                isinstance(dependency, str) for dependency in dependencies
+            ):
+                raise VersioningError(
+                    f"course-pipeline.json artifact dependency {slug!r} depends_on "
+                    "must be a list of slugs."
+                )
+            if slug in changed or not changed.intersection(dependencies):
+                continue
+            dependent = coverage_map().get(slug)
+            if not isinstance(dependent, dict):
+                raise VersioningError(
+                    f"course-pipeline.json dependency target {slug!r} is absent from coverage-map.json."
+                )
+            if dependent.get("kind") != "airtable_content":
+                continue
+            dependent_table = _RESOURCE_TABLE.get(dependent.get("table"))
+            if dependent_table != table:
+                continue
+            changed.add(slug)
+            dependents.append(slug)
+            added = True
+        if not added:
+            return dependents
+
+
+def _readiness_gate_invalidations(
+    table: str, changed_slugs: List[str]
+) -> Dict[str, Any]:
+    """Clear same-record lifecycle gates bound to changed artifact slugs."""
+    lifecycle = _pipeline_router().get("artifact_lifecycle")
+    if not isinstance(lifecycle, dict):
+        raise VersioningError("course-pipeline.json has no artifact_lifecycle object.")
+    instances = lifecycle.get("instances")
+    if not isinstance(instances, dict):
+        raise VersioningError(
+            "course-pipeline.json artifact_lifecycle has no instances object."
+        )
+    changed = set(changed_slugs)
+    invalidations: Dict[str, Any] = {}
+    for instance_name, instance in instances.items():
+        if not isinstance(instance, dict) or instance.get("table") != table:
+            continue
+        gates = instance.get("readiness_gates", [])
+        if not isinstance(gates, list):
+            raise VersioningError(
+                f"Lifecycle instance {instance_name!r} readiness_gates must be a list."
+            )
+        for gate in gates:
+            if not isinstance(gate, dict):
+                raise VersioningError(
+                    f"Lifecycle instance {instance_name!r} readiness gate must be an object."
+                )
+            field = gate.get("field")
+            if gate.get("slug") not in changed or field is None:
+                continue
+            if not isinstance(field, str):
+                raise VersioningError(
+                    f"Lifecycle instance {instance_name!r} readiness gate field must be a string."
+                )
+            invalidations[field] = False if field.endswith("Human Verified") else ""
+    return invalidations
+
+
 def plan_record_update(
     table: str,
     record_id: str,
@@ -710,6 +770,33 @@ def plan_record_update(
     if not changed_slugs:
         return dict(proposed_fields)
 
+    planned = dict(proposed_fields)
+    dependent_slugs = _same_record_dependents(table, changed_slugs)
+    for slug in dependent_slugs:
+        content_fields = coverage_map()[slug].get("content_fields") or []
+        if not content_fields or not all(
+            isinstance(field, str) for field in content_fields
+        ):
+            raise VersioningError(
+                f"coverage-map.json artifact {slug!r} has invalid content_fields."
+            )
+        for field in content_fields:
+            if field in proposed_fields and proposed_fields[field] not in (None, ""):
+                raise VersioningError(
+                    f"{table}: cannot change dependency content and dependent artifact "
+                    f"{slug!r} field {field!r} in the same write."
+                )
+            metadata = field_metadata.get(field)
+            if not isinstance(metadata, dict):
+                raise VersioningError(
+                    f"Missing canonicalization metadata for {table}.{field}."
+                )
+            planned[field] = ""
+            predicted_fields[field] = _canonicalize_storage_value(
+                field, "", metadata
+            )
+    changed_slugs.extend(dependent_slugs)
+
     version_field = validate_field(VERSION_CONTROL_CLI_FIELD, table)
     existing_vc = _decode_version_control(
         current_fields.get(version_field) or "{}",
@@ -719,7 +806,6 @@ def plan_record_update(
         "before owner write",
     )
     merged_vc = dict(existing_vc)
-    planned = dict(proposed_fields)
     stamped_at = now_iso()
     for slug in changed_slugs:
         current_entry = existing_vc.get(slug)
@@ -731,6 +817,8 @@ def plan_record_update(
         }
         for review_field in _paired_review_targets(slug):
             planned[review_field] = ""
+
+    planned.update(_readiness_gate_invalidations(table, changed_slugs))
 
     planned.update(
         _same_record_lifecycle_invalidation(table, changed_slugs, current_fields)

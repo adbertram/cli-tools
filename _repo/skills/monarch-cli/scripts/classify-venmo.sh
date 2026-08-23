@@ -42,7 +42,10 @@ def load_json_arg(path: str) -> Any:
 def run_json(argv: list[str]) -> Any:
     proc = subprocess.run(argv, capture_output=True, text=True, check=False)
     if proc.returncode != 0:
-        raise RuntimeError(f"{' '.join(argv)} failed: {proc.stderr.strip()}")
+        raise RuntimeError(
+            f"{' '.join(argv)} failed (exit {proc.returncode}); "
+            f"stdout: {proc.stdout.strip()!r}; stderr: {proc.stderr.strip()!r}"
+        )
     return json.loads(proc.stdout)
 
 

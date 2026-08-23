@@ -1,8 +1,8 @@
 {
   "tool": "globiflow",
   "description": "CLI interface for Globiflow (browser automation)",
-  "discovered_at": "2026-08-15T21:09:27Z",
-  "total_commands": 28,
+  "discovered_at": "2026-08-19T17:21:27Z",
+  "total_commands": 30,
   "global_options": [
     {
       "name": "--version",
@@ -395,6 +395,32 @@
             }
           ]
         },
+        "export": {
+          "help": "Export a single flow's XML definition to a file. Fetches the flow's XML from Globiflow (the same ZIP-backed endpoint its bulk \"Export\" action uses) and writes it to --output. The resulting XML can be re-imported with 'flows import'. Example: globiflow flows export 4321944 globiflow flows export 4321944 --output /tmp/my-flow.xml",
+          "arguments": [
+            {
+              "name": "flow_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Flow ID to export"
+            }
+          ],
+          "options": [
+            {
+              "name": "--output",
+              "type": "TEXT",
+              "required": false,
+              "help": "Output file path (default: flow-<id>.xml)",
+              "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "get": {
           "help": "Get detailed information about a specific flow. Retrieves flow notes, time savings, and log status. Use --include-steps to also retrieve the configured steps. Example: globiflow flows get 4299675 --table globiflow flows get 4299675 --include-steps",
           "usage_instructions": "Retrieve flow details including notes, time savings, and log status. FLOW_ID is required (positional). Use --include-steps/-s to also retrieve configured steps. Use --table/-t for formatted output.",
@@ -420,6 +446,39 @@
               "required": false,
               "help": "Include step details",
               "short": "-s"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "import": {
+          "help": "Import a flow XML definition into an app. Reads the XML from --file and posts it to Globiflow's import endpoint (copy_from=file), creating a new flow in --app-id. Prints the new flow's details. Example: globiflow flows import --app-id 30529466 --file flow-4321944.xml globiflow flows import --app-id 30529466 --file flow-4321944.xml --table",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--app-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Podio app ID to import the flow into",
+              "short": "-a"
+            },
+            {
+              "name": "--file",
+              "type": "TEXT",
+              "required": true,
+              "help": "Flow XML file to import",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
             },
             {
               "name": "--profile",

@@ -141,6 +141,7 @@ def test_help_parameters_parse_rich_sections():
                 "required": False,
                 "help": "Display as table",
                 "short": "-t",
+                "takes_value": False,
             },
         ],
     }

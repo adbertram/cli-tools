@@ -4,7 +4,7 @@ description: >-
   Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
   Execute Notion operations using the `notion` CLI tool.
   CLI interface for Notion API with database query filtering.
-  Triggers: notion, notion cli, notion databases, notion pages, notion comments, notion fields, notion users, notion mention, mention someone in notion, notify notion user, list notion databases, search notion pages, query notion database, create notion page, update notion page, export notion page, notion page content, notion blocks, notion schema, notion templates
+  Triggers: notion, notion cli, notion databases, notion pages, notion comments, notion fields, notion users, notion mention, mention someone in notion, notify notion user, list notion databases, search notion pages, query notion database, create notion page, update notion page, export notion page, download notion page files, download notion skills, notion page content, notion blocks, notion schema, notion templates
 ---
 
 <objective>
@@ -25,6 +25,10 @@ notion <command-group> <action> [arguments] [options]
 | Create database page | `notion database page create DB_ID -t "Title" --status "In progress"` |
 | Search pages by title | `notion pages search "query" --table` |
 | Export page to markdown | `notion pages export PAGE_ID -o file.md -f md` |
+| Download page file attachments | `notion pages files download PAGE_ID -o ./downloads` |
+| List official Notion Skills | `notion skills list --table` |
+| Get an official Notion Skill | `notion skills get SKILL_ID` |
+| Download one official Notion Skill | `notion skills download SKILL_ID -o ./notion-skills` |
 | Replace a section | `notion pages content replace-section PAGE_ID -h "## Heading" -f updated.md` |
 | Get database schema | `notion database schema DB_ID --table` |
 | Add a relation field | `notion field add DB_ID "Imports" --type relation --relation-database TARGET_ID` |
@@ -84,6 +88,35 @@ Notion page exports as a valid zero-byte Markdown file. Inspect or print that
 Markdown file separately. If JSON page metadata is needed, run a separate
 `notion pages get PAGE_ID` command without `--markdown` or `--out-file` and
 parse that command's stdout.
+
+For downloadable attachments, including skill `.zip` files stored in file
+blocks, use:
+
+```bash
+notion pages files download PAGE_ID --output ./skills
+```
+
+The command recursively reads the page's file blocks through the official
+`GET /v1/blocks/{block_id}/children` API and downloads each returned `file.url`
+or `external.url`. The page must be shared with the configured integration;
+public web access alone does not grant API access. Notion-hosted `file.url`
+values expire after one hour, so never reuse a URL from earlier command output.
+</principle>
+
+<principle name="Official Skills Use The Public Notion Page">
+Use `notion skills list` to obtain stable skill IDs, `notion skills get
+SKILL_ID` to inspect one skill, and `notion skills download SKILL_ID --output
+DIRECTORY` to download exactly one ZIP from Notion's official `Notion Skills
+for Claude` page. These commands are anonymous; they read that public page
+through Notion's web JSON API and do not use the configured integration token.
+
+The stable skill ID is the live file block UUID. It is unique in the parsed
+catalog and is the same block ID Notion requires when signing that attachment.
+
+Do not substitute `notion pages files download` for this official page. The
+documented public API returns `object_not_found` for the page because public web
+access does not grant the configured integration access. Use `pages files
+download` only for pages explicitly shared with the integration.
 </principle>
 
 <principle name="Non-Interactive Destructive Commands Require Explicit Confirmation Flags">

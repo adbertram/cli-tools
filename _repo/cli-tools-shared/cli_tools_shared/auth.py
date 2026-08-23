@@ -161,6 +161,20 @@ class BrowserAutomation:
     # in by hand — for sites whose login flow blocks automated browsers — then
     # reads the resulting session through the normal cookie path.
     MANUAL_LOGIN = False
+    # Fully non-interactive login. A callable ``(browser, page) -> None`` that
+    # completes a site-specific sign-in on the already-open HEADLESS page.
+    # Declare it with ``staticmethod(...)`` so the subclass stays declarative.
+    #
+    # Use it when the identity provider's sign-in flow is a multi-step
+    # challenge the selector/secret constants above cannot express (an
+    # alternate-factor picker, a code delivered out of band, a consent
+    # interstitial). When set, ``authenticate()`` never opens a headed browser
+    # and never waits on a terminal: this class still owns the login lifecycle
+    # (when to sign in, how to verify, how to persist), the handler owns only
+    # the choreography on the page.
+    AUTH_LOGIN_HANDLER = None
+    # Milliseconds to let the login page settle before the handler runs.
+    AUTH_LOGIN_SETTLE_MS = 5000
 
     def __init__(self, config):
         self.config = config
@@ -330,6 +344,9 @@ class BrowserAutomation:
         """Interactive login via headed persistent browser."""
         logger.debug("authenticate: force=%s session=%s", force, self._session_name())
 
+        if type(self).AUTH_LOGIN_HANDLER is not None:
+            return self._authenticate_noninteractive(force)
+
         if self.MANUAL_LOGIN:
             return self._authenticate_manual(force)
 
@@ -402,6 +419,62 @@ class BrowserAutomation:
 
         self._auth_verified_at = time.time()
         logger.debug("authenticate: complete")
+        print_success("Authentication complete.")
+
+    def _authenticate_noninteractive(self, force: bool = False) -> None:
+        """Sign in headlessly through ``AUTH_LOGIN_HANDLER``.
+
+        No terminal prompt and no visible browser window: this path exists so a
+        session whose identity provider requires a multi-step challenge can be
+        refreshed by automation.
+
+        ``force`` does NOT wipe the persistent profile here. The Chromium
+        user-data-dir carries the identity provider's device-trust and
+        "remember this device" state; discarding it guarantees a fresh MFA
+        challenge on every refresh. A successful sign-in overwrites the session
+        cookies regardless. (Same reasoning as :meth:`_authenticate_manual`.)
+
+        Raises:
+            BrowserAutomationError: When the handler finishes without an
+                authenticated session, or when that session does not survive a
+                browser restart.
+        """
+        logger.debug("_authenticate_noninteractive: force=%s", force)
+        has_saved = (
+            self.config.has_saved_session()
+            if hasattr(self.config, "has_saved_session")
+            else False
+        )
+        if has_saved and not force:
+            logger.debug("_authenticate_noninteractive: saved session present, nothing to do")
+            return
+
+        handler = type(self).AUTH_LOGIN_HANDLER
+        page = self.get_page(self.LOGIN_URL)
+        try:
+            page.wait_for_timeout(self.AUTH_LOGIN_SETTLE_MS)
+            handler(self, page)
+            if self.AUTH_CHECK_URL:
+                # Verify against the same ground truth ``is_authenticated()``
+                # uses; the flow can land on any post-login page.
+                page.goto(self.AUTH_CHECK_URL)
+                page.wait_for_timeout(2000)
+            if not self._check_auth_settled(page):
+                raise BrowserAutomationError(
+                    "Non-interactive login finished but the session is not authenticated "
+                    f"at {self.AUTH_CHECK_URL or page.url}."
+                )
+        finally:
+            self.close()
+
+        self._auth_verified_at = 0
+        if not self.is_authenticated():
+            raise BrowserAutomationError(
+                "Browser session did not persist after reopening. The service did not keep "
+                "the session across browser restarts."
+            )
+        self._auth_verified_at = time.time()
+        logger.debug("_authenticate_noninteractive: complete")
         print_success("Authentication complete.")
 
     def _complete_noninteractive_login(self, page) -> None:

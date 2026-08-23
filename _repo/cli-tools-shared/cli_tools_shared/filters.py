@@ -1,4 +1,11 @@
-"""Filter validation and application module."""
+"""Filter validation and application module.
+
+Filter strings use ``field:op:value`` parts joined by commas for AND logic.
+A literal comma inside a value is escaped as ``\\,`` and a literal backslash
+as ``\\\\``; a backslash before any other character stays literal (the
+backslash is kept), so values such as ``Path:eq:C:\\temp`` are unchanged.
+See :func:`split_filter_parts`.
+"""
 import re
 from decimal import Decimal, InvalidOperation
 from typing import List, Set, Dict, Any, Tuple, Optional, Iterable
@@ -68,8 +75,8 @@ def validate_filters(
         if not filter_string:
             continue
 
-        # Split by comma for AND logic
-        parts = filter_string.split(',')
+        # Split by unescaped comma for AND logic (see split_filter_parts)
+        parts = split_filter_parts(filter_string)
 
         for part in parts:
             _validate_part(part.strip(), allowed_set, extra_set)
@@ -271,28 +278,89 @@ def _validate_part(
         if not value:
              raise FilterValidationError(f"Value cannot be empty in '{part}'")
 
-def parse_filter_string(filter_string: str) -> List[Tuple[str, str, Optional[str]]]:
-    """Parses a filter string into a list of (field, op, value) tuples (AND logic)."""
-    conditions = []
-    parts = filter_string.split(',')
-    for part in parts:
-        part = part.strip()
-        if not part: continue
+def split_filter_parts(filter_string: str) -> List[str]:
+    """Split a filter string on UNESCAPED commas and unescape each part.
 
-        tokens = part.split(':')
-        field = tokens[0]
+    Commas join filter parts with AND logic. To put a literal comma inside a
+    value, escape it:
 
-        if len(tokens) >= 2 and tokens[1] in OPERATORS:
-            op = tokens[1]
-            if op in NO_VALUE_OPERATORS:
-                val = None
-            else:
-                val = ":".join(tokens[2:])
+    - ``\\,`` becomes a literal ``,`` (and does not split)
+    - ``\\\\`` becomes a literal ``\\``
+    - a backslash before any other character stays literal (the backslash is
+      kept), so existing values such as ``Path:eq:C:\\temp`` keep working
+      unchanged
+
+    Returns the list of unescaped parts. Parts are NOT stripped and empty
+    parts are NOT removed; callers own that, matching the previous
+    ``filter_string.split(',')`` behavior.
+
+    After this split, parts may contain literal commas, so they must never be
+    re-passed through any comma-splitting parser. Parse each part with
+    :func:`parse_filter_part`.
+    """
+    parts: List[str] = []
+    current: List[str] = []
+    i = 0
+    length = len(filter_string)
+    while i < length:
+        char = filter_string[i]
+        if char == '\\' and i + 1 < length:
+            next_char = filter_string[i + 1]
+            if next_char in (',', '\\'):
+                current.append(next_char)
+                i += 2
+                continue
+            # Backslash before any other character stays literal.
+            current.append(char)
+            i += 1
+            continue
+        if char == ',':
+            parts.append(''.join(current))
+            current = []
+            i += 1
+            continue
+        current.append(char)
+        i += 1
+    parts.append(''.join(current))
+    return parts
+
+
+def parse_filter_part(part: str) -> Tuple[str, str, Optional[str]]:
+    """Parse ONE already-split filter part into a (field, op, value) tuple.
+
+    The part must already have been produced by :func:`split_filter_parts`
+    (or otherwise be a single condition). No comma splitting happens here:
+    any comma in ``part`` is a literal character in the value.
+    """
+    tokens = part.split(':')
+    field = tokens[0]
+
+    if len(tokens) >= 2 and tokens[1] in OPERATORS:
+        op = tokens[1]
+        if op in NO_VALUE_OPERATORS:
+            val = None
         else:
-            op = 'eq'
-            val = ":".join(tokens[1:])
+            val = ":".join(tokens[2:])
+    else:
+        op = 'eq'
+        val = ":".join(tokens[1:])
 
-        conditions.append((field, op, val))
+    return (field, op, val)
+
+
+def parse_filter_string(filter_string: str) -> List[Tuple[str, str, Optional[str]]]:
+    """Parses a filter string into a list of (field, op, value) tuples (AND logic).
+
+    Splits on unescaped commas (``\\,`` escapes a literal comma, ``\\\\`` a
+    literal backslash; see :func:`split_filter_parts`), then parses each part
+    with :func:`parse_filter_part`.
+    """
+    conditions = []
+    for part in split_filter_parts(filter_string):
+        part = part.strip()
+        if not part:
+            continue
+        conditions.append(parse_filter_part(part))
     return conditions
 
 def _cast_value(value: str, target_type: type) -> Any:
