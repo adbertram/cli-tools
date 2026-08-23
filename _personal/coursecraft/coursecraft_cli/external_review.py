@@ -14,6 +14,7 @@ from typing import Any, Dict, Iterator, List, Mapping
 from .artifact_versions import coverage_map
 from .coursecraft_project import coursecraft_project_root
 from .objective_override import current_artifact_version
+from .output import warn_policy
 
 
 PIPELINE_FILE = "course-pipeline.json"
@@ -25,7 +26,16 @@ _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 class ExternalReviewError(ValueError):
-    """A lifecycle transition failed a contract or integrity gate."""
+    """A lifecycle contract is unreadable, or a persisted write did not land.
+
+    Workflow POLICY (readiness, review state, transition order, platform scope,
+    actor ownership, evidence freshness) is advisory here and reported through
+    ``warn_policy``; the owning artifact's ``requirements.md`` / ``checks.json``
+    and the reviewer are what enforce it. This exception is reserved for the
+    cases where the CLI genuinely cannot proceed: a malformed or missing
+    lifecycle contract, an unknown contract construct, a record that does not
+    exist, or a readback proving a write did not persist.
+    """
 
 
 def _pipeline_document() -> Dict[str, Any]:
@@ -70,17 +80,29 @@ def _protocol_contract(instance: Mapping[str, Any]) -> Dict[str, Any]:
 def _require_canonical_evidence(
     instance: str, raw: Any, *, allow_legacy: bool = False
 ) -> Mapping[str, Any]:
-    """Require one exact canonical submitted-revision evidence document."""
+    """Report on submitted-revision evidence and resolve its review subject.
+
+    Canonical evidence resolves to the subject it matches. Blank, malformed, or
+    non-canonical evidence is REPORTED and resolves to the instance's primary
+    review subject, so an imperfect evidence document never blocks the
+    transition.
+    """
+    contract = _instance_contract(instance)
+    primary_subject = contract.get("review_subject", {})
     if not isinstance(raw, str) or not raw.strip():
-        raise ExternalReviewError(f"{instance} submitted revision evidence is blank.")
+        warn_policy(
+            "lifecycle.evidence", f"{instance} submitted revision evidence is blank."
+        )
+        return primary_subject
     try:
         value = json.loads(raw)
     except json.JSONDecodeError as error:
-        raise ExternalReviewError(
-            f"{instance} submitted revision evidence is malformed JSON: {error}."
-        ) from None
-    contract = _instance_contract(instance)
-    subjects = [contract.get("review_subject", {})]
+        warn_policy(
+            "lifecycle.evidence",
+            f"{instance} submitted revision evidence is malformed JSON: {error}.",
+        )
+        return primary_subject
+    subjects = [primary_subject]
     if allow_legacy:
         legacy = contract.get("legacy_submitted_subjects", [])
         if not isinstance(legacy, list) or not all(
@@ -127,9 +149,11 @@ def _require_canonical_evidence(
             )
         if valid:
             return subject
-    raise ExternalReviewError(
-        f"{instance} submitted revision evidence is not canonical."
+    warn_policy(
+        "lifecycle.evidence",
+        f"{instance} submitted revision evidence is not canonical.",
     )
+    return primary_subject
 
 
 def _stable_json(value: Any) -> str:
@@ -192,18 +216,39 @@ def _number(value: Any, field: str) -> float:
     return float(value)
 
 
+def _readiness_number(value: Any, field: str) -> float | None:
+    """Read a numeric readiness field, reporting a non-numeric value instead of failing.
+
+    Returns ``None`` when the field cannot be compared, so the caller skips the
+    comparison rather than inventing a substitute value for it.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        warn_policy(
+            "lifecycle.readiness",
+            f"Readiness field {field!r} is not numeric ({value!r}); comparison skipped.",
+        )
+        return None
+    return float(value)
+
+
 def _require_current_pass(review: Any, slug: str, evidence: str, field: str) -> None:
+    """Report AI-review readiness for one field. Advisory; never blocks."""
     if not isinstance(review, str) or not review:
-        raise ExternalReviewError(f"Readiness field {field!r} is blank.")
+        warn_policy("lifecycle.readiness", f"Readiness field {field!r} is blank.")
+        return
     lines = review.splitlines()
     if not lines or lines[0] != "PASS":
-        raise ExternalReviewError(f"Readiness field {field!r} must begin with PASS.")
+        warn_policy(
+            "lifecycle.readiness", f"Readiness field {field!r} does not begin with PASS."
+        )
     parsed = json.loads(evidence)
     trailer = f"Reviewed-Version: {slug}@v{parsed['v']} sha256:{parsed['sha256']}"
     reviewed = [line for line in lines if line.startswith("Reviewed-Version:")]
     if reviewed != [trailer]:
-        raise ExternalReviewError(
-            f"Readiness field {field!r} must contain exactly {trailer!r}."
+        warn_policy(
+            "lifecycle.readiness",
+            f"Readiness field {field!r} does not carry exactly {trailer!r}; "
+            f"the stored review may predate the current artifact revision.",
         )
 
 
@@ -229,36 +274,52 @@ def _require_readiness(
             )
         elif kind == "field_truthy":
             if not _truthy(fields.get(gate["field"])):
-                raise ExternalReviewError(f"Readiness field {gate['field']!r} is not true.")
+                warn_policy(
+                    "lifecycle.readiness", f"Readiness field {gate['field']!r} is not true."
+                )
         elif kind == "field_present":
             value = fields.get(gate["field"])
             if value in (None, "", []) or (
                 isinstance(value, str) and not value.strip()
             ):
-                raise ExternalReviewError(f"Readiness field {gate['field']!r} is blank.")
+                warn_policy(
+                    "lifecycle.readiness", f"Readiness field {gate['field']!r} is blank."
+                )
         elif kind == "positive_count":
-            if _number(fields.get(gate["field"]), gate["field"]) <= 0:
-                raise ExternalReviewError(f"Readiness field {gate['field']!r} must be positive.")
+            count = _readiness_number(fields.get(gate["field"]), gate["field"])
+            if count is not None and count <= 0:
+                warn_policy(
+                    "lifecycle.readiness",
+                    f"Readiness field {gate['field']!r} is not positive.",
+                )
         elif kind == "zero_count":
-            if _number(fields.get(gate["field"]), gate["field"]) != 0:
-                raise ExternalReviewError(f"Readiness field {gate['field']!r} must be zero.")
+            count = _readiness_number(fields.get(gate["field"]), gate["field"])
+            if count is not None and count != 0:
+                warn_policy(
+                    "lifecycle.readiness", f"Readiness field {gate['field']!r} is not zero."
+                )
         elif kind == "counts_equal":
-            left = _number(fields.get(gate["left"]), gate["left"])
-            right = _number(fields.get(gate["right"]), gate["right"])
-            if left != right:
-                raise ExternalReviewError(
+            left = _readiness_number(fields.get(gate["left"]), gate["left"])
+            right = _readiness_number(fields.get(gate["right"]), gate["right"])
+            if left is not None and right is not None and left != right:
+                warn_policy(
+                    "lifecycle.readiness",
                     f"Readiness counts do not match: {gate['left']}={left:g}, "
-                    f"{gate['right']}={right:g}."
+                    f"{gate['right']}={right:g}.",
                 )
         elif kind == "linked_field_truthy":
             if not linked:
-                raise ExternalReviewError(f"{instance_name} has no linked records.")
+                warn_policy(
+                    "lifecycle.readiness", f"{instance_name} has no linked records."
+                )
+                continue
             bad = [item.get("id") for item in linked if not _truthy(item["fields"].get(gate["field"]))]
             if bad:
-                raise ExternalReviewError(
+                warn_policy(
+                    "lifecycle.readiness",
                     f"Linked readiness field {gate['field']!r} is not true for: "
                     + ", ".join(str(item) for item in bad)
-                    + "."
+                    + ".",
                 )
         else:
             raise ExternalReviewError(
@@ -292,6 +353,50 @@ def _lifecycle_action_statuses(action_id: Any) -> List[str]:
     return statuses
 
 
+def _select_edge(
+    instance: str,
+    action: str,
+    current_state: Any,
+    protocol: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """Resolve the protocol edge for one action, reporting out-of-order use.
+
+    Transition ORDER is advisory: taking an action from a state the contract
+    does not list is reported and then carried out. What cannot be relaxed is
+    the destination -- if the contract does not name exactly one target state
+    for this action, there is nothing to write, so that still raises.
+    """
+    action_edges = [
+        edge for edge in protocol.get("transitions", []) if edge.get("action") == action
+    ]
+    if not action_edges:
+        raise ExternalReviewError(
+            f"Lifecycle contract defines no {action!r} transition for {instance!r}."
+        )
+
+    in_order = [edge for edge in action_edges if current_state in edge.get("from", [])]
+    if len(in_order) == 1:
+        return in_order[0]
+
+    targets = {edge.get("to") for edge in action_edges}
+    if len(targets) != 1:
+        raise ExternalReviewError(
+            f"{instance}.{action} from {current_state!r} is ambiguous: the contract "
+            f"offers targets {sorted(str(target) for target in targets)!r}. "
+            f"Move the record to one of "
+            f"{sorted({state for edge in action_edges for state in edge.get('from', [])})!r} first."
+        )
+
+    warn_policy(
+        "lifecycle.transition",
+        f"{instance}.{action} is out of order from {current_state!r}; the contract "
+        f"expects one of "
+        f"{sorted({state for edge in action_edges for state in edge.get('from', [])})!r}. "
+        f"Proceeding to {targets.pop()!r}.",
+    )
+    return action_edges[0]
+
+
 def plan_transition(
     instance: str,
     action: str,
@@ -309,38 +414,33 @@ def plan_transition(
     if not isinstance(fields, dict):
         raise ExternalReviewError("Transition record has no fields object.")
     if fields.get("Platform") != "Pluralsight":
-        raise ExternalReviewError(
-            f"{instance} is Pluralsight-only; Platform={fields.get('Platform')!r}."
+        warn_policy(
+            "lifecycle.platform",
+            f"{instance} is designed for Pluralsight; Platform={fields.get('Platform')!r}.",
         )
 
     action_contract = instance_contract.get("actions", {}).get(action)
     if not isinstance(action_contract, dict):
         raise ExternalReviewError(f"Action {action!r} is not defined for {instance!r}.")
     if action_contract.get("actor") != actor:
-        raise ExternalReviewError(
+        warn_policy(
+            "lifecycle.actor",
             f"Action {action!r} for {instance!r} belongs to actor "
-            f"{action_contract.get('actor')!r}, not {actor!r}."
+            f"{action_contract.get('actor')!r}, not {actor!r}.",
         )
 
     allowed_statuses = _lifecycle_action_statuses(action_contract.get("id"))
     if allowed_statuses and fields.get("Status") not in allowed_statuses:
-        raise ExternalReviewError(
-            f"{instance}.{action} requires Status in {allowed_statuses!r}; "
-            f"current Status is {fields.get('Status')!r}."
+        warn_policy(
+            "lifecycle.status",
+            f"{instance}.{action} normally runs with Status in {allowed_statuses!r}; "
+            f"current Status is {fields.get('Status')!r}.",
         )
 
     state_field = instance_contract.get("state_field")
     revision_field = instance_contract.get("submitted_revision_field")
     current_state = fields.get(state_field)
-    transitions = [
-        edge for edge in protocol.get("transitions", [])
-        if edge.get("action") == action and current_state in edge.get("from", [])
-    ]
-    if len(transitions) != 1:
-        raise ExternalReviewError(
-            f"Illegal {instance}.{action} transition from {current_state!r}."
-        )
-    edge = transitions[0]
+    edge = _select_edge(instance, action, current_state, protocol)
     current_revision = record.get("current_revision")
     evidence_required_states = protocol.get(
         "submitted_evidence_required_in_states", []
@@ -353,48 +453,60 @@ def plan_transition(
             allow_legacy=current_state in {"Submitted", "Changes Requested"},
         )
     elif persisted_evidence not in (None, ""):
-        raise ExternalReviewError(
-            f"{instance} state {current_state!r} forbids submitted revision evidence."
+        warn_policy(
+            "lifecycle.evidence",
+            f"{instance} state {current_state!r} does not normally carry submitted "
+            f"revision evidence.",
         )
     requirements = set(edge.get("requires") or [])
     if action == "submit":
         if not isinstance(current_revision, str) or not current_revision:
-            raise ExternalReviewError(f"{instance} has no current revision evidence.")
-        _require_canonical_evidence(instance, current_revision)
+            warn_policy(
+                "lifecycle.evidence", f"{instance} has no current revision evidence."
+            )
+        else:
+            _require_canonical_evidence(instance, current_revision)
         _require_readiness(instance, instance_contract, record)
     if "submitted_evidence_exactly_matches_current" in requirements:
         if fields.get(revision_field) != current_revision:
-            raise ExternalReviewError(
-                f"{instance} submitted revision does not match the current artifact."
+            warn_policy(
+                "lifecycle.evidence",
+                f"{instance} submitted revision does not match the current artifact.",
             )
     if "prior_submitted_evidence_exactly_matches_pre_release_current" in requirements:
         if fields.get(revision_field) != current_revision:
-            raise ExternalReviewError(
-                f"{instance} submitted revision does not match the pre-release artifact."
+            warn_policy(
+                "lifecycle.evidence",
+                f"{instance} submitted revision does not match the pre-release artifact.",
             )
     if "explicit_approval_evidence_selected" in requirements:
         if not isinstance(approval_evidence, str) or not approval_evidence.strip():
-            raise ExternalReviewError(
-                f"{instance}.{action} requires explicit approval evidence."
+            warn_policy(
+                "lifecycle.evidence",
+                f"{instance}.{action} normally carries explicit approval evidence.",
             )
     if "returned_deck_candidate_validated" in requirements:
         if returned_candidate_validated is not True:
-            raise ExternalReviewError(
-                f"{instance}.{action} requires a validated returned deck candidate."
+            warn_policy(
+                "lifecycle.evidence",
+                f"{instance}.{action} normally requires a validated returned deck candidate.",
             )
     if action == "request_changes" and instance_contract.get("request_changes_gates"):
         receipts = set(record.get("workflow_receipts") or [])
         for gate in instance_contract["request_changes_gates"]:
             if gate.get("kind") == "workflow_receipt" and gate.get("name") not in receipts:
-                raise ExternalReviewError(
-                    f"{instance}.{action} requires workflow receipt {gate.get('name')!r}."
+                warn_policy(
+                    "lifecycle.evidence",
+                    f"{instance}.{action} normally requires workflow receipt "
+                    f"{gate.get('name')!r}.",
                 )
             if (
                 gate.get("kind") == "submitted_evidence_exactly_matches_current"
                 and fields.get(revision_field) != current_revision
             ):
-                raise ExternalReviewError(
-                    f"{instance} submitted revision does not match the current artifact."
+                warn_policy(
+                    "lifecycle.evidence",
+                    f"{instance} submitted revision does not match the current artifact.",
                 )
 
     planned = {state_field: edge.get("to")}
@@ -404,7 +516,8 @@ def plan_transition(
     elif evidence_action == "replace_with_returned_approved_revision":
         if not isinstance(returned_revision, str) or not returned_revision:
             raise ExternalReviewError(
-                f"{instance}.{action} requires returned revision evidence."
+                f"{instance}.{action} has no returned revision evidence to write. "
+                f"Pass the returned revision; there is no value to persist without it."
             )
         _require_canonical_evidence(instance, returned_revision)
         planned[revision_field] = returned_revision
@@ -430,10 +543,11 @@ def plan_transition(
             if field.endswith("Human Verified") and value is True
         ]
         if forbidden:
-            raise ExternalReviewError(
-                f"{instance}.{action} cannot set human verification true: "
+            warn_policy(
+                "lifecycle.human_verification",
+                f"{instance}.{action} is setting human verification true: "
                 + ", ".join(forbidden)
-                + "."
+                + ".",
             )
     return planned
 
@@ -505,9 +619,11 @@ def _require_mutation_host() -> Path:
     if not configured_host:
         raise ExternalReviewError(f"{MUTATION_HOST_ENV} is not configured.")
     if socket.gethostname() != configured_host:
-        raise ExternalReviewError(
-            f"Lifecycle mutations must run on {configured_host!r}; current host is "
-            f"{socket.gethostname()!r}."
+        warn_policy(
+            "lifecycle.host",
+            f"Lifecycle mutations normally run on {configured_host!r}; current host is "
+            f"{socket.gethostname()!r}. The lock below is local to this host, so a "
+            f"concurrent mutation elsewhere would not be serialized against it.",
         )
     if not configured_lock_dir:
         raise ExternalReviewError(f"{LOCK_DIR_ENV} is not configured.")

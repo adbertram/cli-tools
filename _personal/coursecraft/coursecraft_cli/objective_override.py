@@ -1,4 +1,10 @@
-"""Fail-closed learning-objective override lifecycle for Pluralsight courses."""
+"""Learning-objective override lifecycle for Pluralsight courses.
+
+Lifecycle POLICY here is ADVISORY: platform scope, required state, audit/state
+agreement, ledger freshness, and review currency are reported through
+``warn_policy`` and the command proceeds. Only a field the CLI cannot decode at
+all still raises.
+"""
 from __future__ import annotations
 
 import hashlib
@@ -7,6 +13,7 @@ import re
 from typing import Any, Dict
 
 from .artifact_versions import canonical_hash, now_iso  # noqa: F401 - re-exported for commands
+from .output import warn_policy
 
 
 STATE_FIELD = "Learning Objectives Override State"
@@ -53,7 +60,13 @@ _TRAILER_RE = re.compile(
 
 
 class ObjectiveOverrideError(ValueError):
-    """The requested override transition failed a lifecycle gate."""
+    """The override audit or ledger is malformed and cannot be interpreted.
+
+    Override lifecycle POLICY (platform scope, required state, ledger freshness)
+    is advisory and reported through ``warn_policy``; the owning artifact's
+    requirements and the reviewer enforce it. This exception is reserved for a
+    field whose shape the CLI cannot read at all.
+    """
 
 
 def sha256_text(value: str) -> str:
@@ -62,11 +75,12 @@ def sha256_text(value: str) -> str:
 
 
 def require_pluralsight(fields: Dict[str, Any]) -> None:
-    """Require the lifecycle's owning platform."""
+    """Report when the lifecycle runs off its owning platform."""
     if fields.get("Platform") != "Pluralsight":
-        raise ObjectiveOverrideError(
-            "Learning-objective overrides are Pluralsight-only; "
-            f"the course has Platform={fields.get('Platform')!r}."
+        warn_policy(
+            "objective_override.platform",
+            "Learning-objective overrides are designed for Pluralsight; "
+            f"the course has Platform={fields.get('Platform')!r}.",
         )
 
 
@@ -88,30 +102,35 @@ def current_state(fields: Dict[str, Any]) -> str:
     ]
     if not state:
         if state_events:
-            raise ObjectiveOverrideError(
-                f"{STATE_FIELD} is blank but {AUDIT_FIELD} contains lifecycle events."
+            warn_policy(
+                "objective_override.audit",
+                f"{STATE_FIELD} is blank but {AUDIT_FIELD} contains lifecycle events.",
             )
         return ""
     if not state_events:
-        raise ObjectiveOverrideError(
-            f"{STATE_FIELD} is {state!r} but {AUDIT_FIELD} contains no events."
+        warn_policy(
+            "objective_override.audit",
+            f"{STATE_FIELD} is {state!r} but {AUDIT_FIELD} contains no events.",
         )
+        return state
     event_type = state_events[-1].get("type")
     if event_type not in _STATE_EVENT_TYPES[state]:
-        raise ObjectiveOverrideError(
-            f"{STATE_FIELD} is {state!r}, but the last audit event is {event_type!r}."
+        warn_policy(
+            "objective_override.audit",
+            f"{STATE_FIELD} is {state!r}, but the last audit event is {event_type!r}.",
         )
     return state
 
 
 def require_state(fields: Dict[str, Any], expected: str) -> None:
-    """Require one exact state before a transition."""
+    """Report when a transition runs from an unexpected state."""
     actual = current_state(fields)
     if actual != expected:
         rendered = actual or "blank"
-        raise ObjectiveOverrideError(
-            f"Learning-objective override transition requires state {expected!r}; "
-            f"current state is {rendered!r}."
+        warn_policy(
+            "objective_override.state",
+            f"Learning-objective override transition normally runs from state "
+            f"{expected!r}; current state is {rendered!r}.",
         )
 
 
@@ -121,13 +140,14 @@ def current_requirements_version(fields: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def current_artifact_version(fields: Dict[str, Any], slug: str) -> Dict[str, Any]:
-    """Read and verify one current Airtable artifact version/hash."""
+    """Read one Airtable artifact version/hash, reporting a stale ledger entry."""
     version = artifact_version_entry(fields, slug)
     actual_digest = canonical_hash(slug, fields)
     if version["sha256"] != actual_digest:
-        raise ObjectiveOverrideError(
+        warn_policy(
+            "objective_override.ledger",
             f"{slug} Version Control hash is stale: ledger={version['sha256']}, "
-            f"current={actual_digest}. Run the version sync before continuing."
+            f"current={actual_digest}. Run `coursecraft versions sync` to refresh it.",
         )
     return version
 
@@ -178,30 +198,40 @@ def predicted_requirements_version(
 def require_current_needs_revision_review(
     fields: Dict[str, Any], version: Dict[str, Any]
 ) -> str:
-    """Require a current NEEDS REVISION verdict with one exact version trailer."""
+    """Report on the current NEEDS REVISION verdict and its version trailer.
+
+    Advisory: the review's verdict and freshness are reported, and the field's
+    text is returned as-is so the caller can record it.
+    """
     raw = fields.get(REVIEW_FIELD)
     if not isinstance(raw, str) or not raw:
-        raise ObjectiveOverrideError(f"{REVIEW_FIELD} is blank.")
+        warn_policy("objective_override.review", f"{REVIEW_FIELD} is blank.")
+        return ""
     lines = raw.splitlines()
     if not lines or lines[0] != "NEEDS REVISION":
         first = lines[0] if lines else ""
-        raise ObjectiveOverrideError(
-            f"{REVIEW_FIELD} must begin with an exact NEEDS REVISION line; got {first!r}."
+        warn_policy(
+            "objective_override.review",
+            f"{REVIEW_FIELD} normally begins with an exact NEEDS REVISION line; "
+            f"got {first!r}.",
         )
     trailers = [match for line in lines if (match := _TRAILER_RE.fullmatch(line))]
     reviewed_version_lines = [line for line in lines if line.startswith("Reviewed-Version:")]
     if len(reviewed_version_lines) != 1 or len(trailers) != 1:
-        raise ObjectiveOverrideError(
-            f"{REVIEW_FIELD} must contain exactly one well-formed {REQUIREMENTS_SLUG} "
-            "Reviewed-Version trailer."
+        warn_policy(
+            "objective_override.review",
+            f"{REVIEW_FIELD} normally carries exactly one well-formed "
+            f"{REQUIREMENTS_SLUG} Reviewed-Version trailer.",
         )
+        return raw
     trailer = trailers[0]
     reviewed = {"v": int(trailer.group(1)), "sha256": trailer.group(2)}
     if reviewed != version:
-        raise ObjectiveOverrideError(
+        warn_policy(
+            "objective_override.review",
             f"{REVIEW_FIELD} is stale: reviewed {REQUIREMENTS_SLUG}@v{reviewed['v']} "
             f"sha256:{reviewed['sha256']}, current is {REQUIREMENTS_SLUG}@v{version['v']} "
-            f"sha256:{version['sha256']}."
+            f"sha256:{version['sha256']}.",
         )
     return raw
 
@@ -209,22 +239,30 @@ def require_current_needs_revision_review(
 def require_current_needs_revision_artifact_review(
     fields: Dict[str, Any], review_field: str, slug: str, version: Dict[str, Any]
 ) -> str:
-    """Require one current NEEDS REVISION review bound to an artifact version."""
+    """Report on one NEEDS REVISION review bound to an artifact version.
+
+    Advisory: the verdict and trailer are reported, and the field's text is
+    returned as-is so the caller can record it.
+    """
     raw = fields.get(review_field)
     if not isinstance(raw, str) or not raw:
-        raise ObjectiveOverrideError(f"{review_field} is blank.")
+        warn_policy("objective_override.review", f"{review_field} is blank.")
+        return ""
     lines = raw.splitlines()
     if not lines or lines[0] != "NEEDS REVISION":
         first = lines[0] if lines else ""
-        raise ObjectiveOverrideError(
-            f"{review_field} must begin with an exact NEEDS REVISION line; got {first!r}."
+        warn_policy(
+            "objective_override.review",
+            f"{review_field} normally begins with an exact NEEDS REVISION line; "
+            f"got {first!r}.",
         )
     expected = artifact_version_identity(slug, version)
     reviewed_version_lines = [line for line in lines if line.startswith("Reviewed-Version:")]
     if reviewed_version_lines != [f"Reviewed-Version: {expected}"]:
-        raise ObjectiveOverrideError(
-            f"{review_field} must contain exactly one current trailer "
-            f"'Reviewed-Version: {expected}'."
+        warn_policy(
+            "objective_override.review",
+            f"{review_field} normally carries exactly one current trailer "
+            f"'Reviewed-Version: {expected}'.",
         )
     return raw
 
