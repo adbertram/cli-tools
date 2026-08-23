@@ -258,11 +258,12 @@ def test_regenerate_usage_json_uses_existing_binary_for_cli_suffixed_tool(tmp_pa
 
 
 def test_regenerate_usage_json_fetches_each_path_help_once(tmp_path):
-    """Each live path's --help runs once for discovery and once for regeneration.
+    """Each path's --help runs exactly once across discovery and regeneration.
 
-    Duplicate fetches double the subprocess count, which matters because CLI
-    startup can stall under bursty host contention and each extra invocation
-    is another timeout opportunity.
+    Discovery records every --help it runs, and regeneration reuses that text
+    instead of re-fetching it. Duplicate fetches double the subprocess count,
+    which matters because CLI startup can stall under bursty host contention
+    and each extra invocation is another timeout opportunity.
     """
     skill_root = __import__("pathlib").Path(__file__).resolve().parents[1]
     fake_cli, usage_json = _write_fake_cli_fixture(tmp_path)
@@ -293,11 +294,12 @@ def test_regenerate_usage_json_fetches_each_path_help_once(tmp_path):
     assert result.returncode == 0, result.stderr
     calls = call_log.read_text().splitlines()
     # Discovery runs --help on the root and on groups it recurses into
-    # ("items"); leaf paths at max depth are discovered from the parent help.
-    # Regeneration then fetches each live path ("items", "items list")
-    # exactly once — a duplicate-fetch regression doubles these counts.
+    # ("items"); leaf paths at max depth ("items list") are discovered from
+    # the parent help. Regeneration reuses discovery's "items" help and
+    # fetches only the not-yet-seen leaf — a regression that re-fetches
+    # "items" bumps its count to 2.
     assert calls.count("--help") == 1
-    assert calls.count("items --help") == 2
+    assert calls.count("items --help") == 1
     assert calls.count("items list --help") == 1
 
 
