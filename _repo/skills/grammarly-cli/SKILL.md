@@ -1,6 +1,10 @@
 ---
-name: "grammarly-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute grammarly operations using the `grammarly` CLI tool. CLI interface for Grammarly plagiarism and docs. Triggers: grammarly, grammarly cli, plagiarism check, check plagiarism, grammarly documents, grammarly docs, plagiarism detection, grammar check"
+name: grammarly-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute grammarly operations using the `grammarly` CLI tool.
+  CLI interface for Grammarly API -- plagiarism detection and document management.
+  Triggers: grammarly, grammarly cli, plagiarism check, check plagiarism, grammarly documents, grammarly docs, plagiarism detection, grammar check
 ---
 
 <objective>
@@ -25,12 +29,12 @@ grammarly <command-group> <action> [arguments] [options]
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `grammarly` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `grammarly` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 
 <principle name="Command Groups">
-- **auth** -- Manage Grammarly authentication for plagiarism OAuth credentials and docs browser-session cookies
+- **auth** -- Manage Grammarly API OAuth authentication (login, logout, status)
 - **plagiarism** -- Plagiarism detection (check files/text, check status)
 - **docs** -- Manage Grammarly documents (list, get, read, new)
 </principle>

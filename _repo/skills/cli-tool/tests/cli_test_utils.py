@@ -2,10 +2,12 @@
 
 import os
 import subprocess
+import sys
 import json
 import re
+from functools import cache
 from pathlib import Path
-from typing import List, Dict, Optional, Tuple
+from typing import Any, List, Dict, Optional, Tuple
 
 _DISCOVER_NESTED_COMMANDS_CACHE: Dict[
     Tuple[str, str, int, int, Tuple[str, ...], int],
@@ -14,22 +16,38 @@ _DISCOVER_NESTED_COMMANDS_CACHE: Dict[
 
 
 def _clean_path() -> Dict[str, str]:
-    """Return env with test venv bin removed from PATH.
+    """Return env with harness Python state removed.
 
     CLIs are invoked by full path, so the test venv's bin/ is never needed.
     Keeping it in PATH can shadow CLI dependencies — same-named binaries
     installed in the test venv can mask the CLI under test.
+
+    Python interpreter env vars can also make a uv-tool launcher import from
+    the harness interpreter instead of the CLI's own isolated uv tool venv.
     """
     env = os.environ.copy()
     virtual_env = os.environ.get("VIRTUAL_ENV")
+    path_parts = env.get("PATH", "").split(os.pathsep)
     if virtual_env:
         venv_bin = os.path.join(virtual_env, "bin")
-        path_parts = env.get("PATH", "").split(os.pathsep)
         path_parts = [p for p in path_parts if p != venv_bin]
-        env["PATH"] = os.pathsep.join(path_parts)
+    user_bin = str(Path.home() / ".local" / "bin")
+    if user_bin not in path_parts:
+        path_parts.insert(0, user_bin)
+    env["PATH"] = os.pathsep.join(path_parts)
+    for key in ("VIRTUAL_ENV", "PYTHONPATH", "PYTHONHOME", "__PYVENV_LAUNCHER__"):
+        env.pop(key, None)
     env["COLUMNS"] = "200"
     env["NO_COLOR"] = "1"
+    # FORCE_COLOR/CLICOLOR_FORCE override NO_COLOR for rich's terminal
+    # detection: rich still emits bold/dim ANSI codes and box drawing, which
+    # breaks help parsing (parse_help_commands returns zero commands).
+    for key in ("FORCE_COLOR", "CLICOLOR_FORCE"):
+        env.pop(key, None)
     return env
+
+
+RUN_TIMEOUT_ATTEMPTS = 2
 
 
 def run_cli_command(
@@ -38,16 +56,32 @@ def run_cli_command(
     timeout: int = 30,
     check: bool = False
 ) -> subprocess.CompletedProcess:
-    """Execute CLI command with timeout and capture output."""
+    """Execute CLI command with timeout and capture output.
+
+    Retries once on timeout: CLI startup can stall for tens of seconds under
+    bursty host contention (Dropbox sync, parallel agent sessions), and a
+    single stall is not a CLI hang. A second consecutive timeout raises
+    TimeoutExpired so genuine hangs still fail loudly.
+    """
     cmd = [cli_name] + args
-    return subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        check=check,
-        env=_clean_path()
-    )
+    for attempt in range(1, RUN_TIMEOUT_ATTEMPTS + 1):
+        try:
+            return subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                check=check,
+                env=_clean_path()
+            )
+        except subprocess.TimeoutExpired:
+            if attempt == RUN_TIMEOUT_ATTEMPTS:
+                raise
+            print(
+                f"WARNING: {' '.join(cmd)} timed out after {timeout}s "
+                f"(attempt {attempt}/{RUN_TIMEOUT_ATTEMPTS}); retrying",
+                file=sys.stderr,
+            )
 
 
 def _top_level_cache_command_missing(result: subprocess.CompletedProcess) -> bool:
@@ -61,9 +95,20 @@ def _top_level_cache_command_missing(result: subprocess.CompletedProcess) -> boo
     )
 
 
-def clear_cli_cache(cli_executable: str, timeout: int = 30) -> None:
+def _profile_args(args: List[str]) -> List[str]:
+    """Return the explicit profile option from a target command."""
+    for index, arg in enumerate(args):
+        if arg == "--profile" and index + 1 < len(args):
+            return [arg, args[index + 1]]
+        if arg.startswith("--profile="):
+            return [arg]
+    return []
+
+
+def clear_cli_cache(cli_executable: str, args: List[str], timeout: int = 30) -> None:
     """Clear cached CLI responses before a live command executes."""
-    result = run_cli_command(cli_executable, ["cache", "clear"], timeout=timeout)
+    cache_args = ["cache", "clear", *_profile_args(args)]
+    result = run_cli_command(cli_executable, cache_args, timeout=timeout)
     if result.returncode == 0:
         return
     if _top_level_cache_command_missing(result):
@@ -82,7 +127,7 @@ def run_live_cli_command(
     check: bool = False
 ) -> subprocess.CompletedProcess:
     """Execute a live CLI command after clearing the response cache."""
-    clear_cli_cache(cli_executable, timeout=timeout)
+    clear_cli_cache(cli_executable, args, timeout=timeout)
     return run_cli_command(cli_executable, args, timeout=timeout, check=check)
 
 
@@ -94,25 +139,63 @@ def parse_help_commands(help_text: str) -> List[str]:
 
     Only parses from the Commands section to avoid false positives
     from option descriptions (e.g., "copy" in --show-completion help text).
+
+    Column-aware so wrapped help does not create phantom commands.
+    Rich/Typer lays each Commands row out as two aligned columns:
+    the command name in a fixed left column and its help text in a deeper
+    column to the right. When a command's help is long enough to wrap, the
+    overflow renders on continuation lines that are indented to the *help*
+    column, e.g.:
+
+        │ search    Search icons by a single keyword ... a single keyword │
+        │           like 'branch' or 'lightbulb' matches; ...             │
+
+    The bare ``^│\\s+([a-z]...)`` pattern matches the first lowercase token on
+    every line, so the continuation line above yields a phantom ``like``
+    command, and the generator then runs e.g. ``icons like --help`` (exit 2)
+    and aborts. To prevent that, lock onto the command-name column from the
+    first real row in a section and accept a token only when it begins at (or
+    before) that column; tokens that begin at the deeper help column are
+    wrapped continuation text and are rejected. The column is the offset of the
+    command-name token from the ``│`` box char (the pattern anchors on ``^│``,
+    but the ``│`` may be preceded by other chars in some terminals, so measure
+    from the ``│`` rather than from column 0).
     """
-    pattern = r'^│\s+([a-z][a-z0-9_-]*)\s+'
+    pattern = r'^│(\s+)([a-z][a-z0-9_-]*)\s+'
     commands = []
     in_commands_section = False
+    # Command-name column for the current Commands section, learned from its
+    # first matched row. None until the first real command row is seen, and
+    # reset whenever a new Commands section begins so a help screen with more
+    # than one Commands box is handled independently.
+    command_column = None
 
     for line in help_text.split('\n'):
         # Detect Commands section header
         if 'Commands' in line and '─' in line:
             in_commands_section = True
+            command_column = None
             continue
         # Detect end of Commands section (next section header)
         if in_commands_section and '─' in line and 'Commands' not in line:
             in_commands_section = False
+            command_column = None
             continue
 
         if in_commands_section:
             match = re.match(pattern, line)
             if match:
-                commands.append(match.group(1))
+                # Offset of the command-name token from the │ box char, i.e.
+                # the width of the leading whitespace captured before the name.
+                token_column = len(match.group(1))
+                if command_column is None:
+                    # First real command row defines the command-name column.
+                    command_column = token_column
+                if token_column <= command_column:
+                    commands.append(match.group(2))
+                # token_column > command_column => the token starts at the
+                # deeper help column, so this is a wrapped continuation line,
+                # not a command. Skip it.
     return commands
 
 
@@ -146,11 +229,53 @@ def extract_help_sections(help_text: str) -> Dict[str, str]:
     return sections
 
 
+_HELP_METAVAR_TYPES = {
+    "path": "PATH",
+    "str": "TEXT",
+    "int": "INTEGER",
+    "float": "FLOAT",
+}
+
+
+def _normalize_help_metavar(metavar: str) -> str:
+    """Return the canonical usage.json type for a Typer angle metavar."""
+    return _HELP_METAVAR_TYPES.get(metavar, metavar.upper())
+
+
+_ARGUMENT_START_RE = re.compile(
+    r"^\*?\s*[\w-]+\s+(?:\[[A-Z_]+\]|<[^<>\s]+>|[A-Z][A-Z_0-9]+\s)"
+)
+
+
+def _join_wrapped_argument_lines(section_text: str) -> List[str]:
+    """Join a Rich/Typer Arguments section's wrapped continuation lines.
+
+    Rich wraps a long argument help description onto indented continuation
+    lines that repeat none of the name/type columns. A continuation line is
+    told apart from a new argument's line by the absence of the name-plus-
+    type-marker shape every real argument line has (``name  [TYPE]``,
+    ``name  <type>``, or ``name  TYPE``); a continuation line joins onto the
+    previous argument's line instead of starting a new one.
+    """
+    joined_lines: List[str] = []
+
+    for line in section_text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if joined_lines and not _ARGUMENT_START_RE.match(line):
+            joined_lines[-1] += " " + stripped
+        else:
+            joined_lines.append(stripped)
+
+    return joined_lines
+
+
 def parse_help_arguments(section_text: str) -> List[Dict]:
     """Parse a Rich/Typer Arguments section into usage.json argument records."""
     arguments = []
 
-    for line in section_text.splitlines():
+    for line in _join_wrapped_argument_lines(section_text):
         line = line.strip()
         if not line:
             continue
@@ -159,22 +284,30 @@ def parse_help_arguments(section_text: str) -> List[Dict]:
         if required:
             line = line[1:].strip()
 
+        angle_metavar = False
         bracket_match = re.match(r"^(\w[\w-]*)\s+\[([A-Z_]+)\]\s+(.*)", line)
         if bracket_match:
             name = bracket_match.group(1)
             arg_type = bracket_match.group(2)
             rest = bracket_match.group(3).strip()
         else:
-            bare_match = re.match(r"^(\w[\w-]*)\s{2,}([A-Z][A-Z_0-9]+)\s{2,}(.*)", line)
-            if bare_match:
-                name = bare_match.group(1)
-                arg_type = bare_match.group(2)
-                rest = bare_match.group(3).strip()
+            angle_match = re.match(r"^(\w[\w-]*)\s+<([^<>\s]+)>\s+(.*)", line)
+            if angle_match:
+                name = angle_match.group(1)
+                arg_type = _normalize_help_metavar(angle_match.group(2))
+                rest = angle_match.group(3).strip()
+                angle_metavar = True
             else:
-                parts = re.split(r"\s{2,}", line, maxsplit=1)
-                name = parts[0]
-                arg_type = "TEXT"
-                rest = parts[1] if len(parts) > 1 else ""
+                bare_match = re.match(r"^(\w[\w-]*)\s{2,}([A-Z][A-Z_0-9]+)\s{2,}(.*)", line)
+                if bare_match:
+                    name = bare_match.group(1)
+                    arg_type = bare_match.group(2)
+                    rest = bare_match.group(3).strip()
+                else:
+                    parts = re.split(r"\s{2,}", line, maxsplit=1)
+                    name = parts[0]
+                    arg_type = "TEXT"
+                    rest = parts[1] if len(parts) > 1 else ""
 
         default = None
         default_match = re.search(r"\[default:\s*(.+?)\]", rest)
@@ -185,6 +318,13 @@ def parse_help_arguments(section_text: str) -> List[Dict]:
         if "[required]" in rest:
             required = True
             rest = rest.replace("[required]", "").strip()
+
+        # Typer 0.27 split the argument name and scalar type into separate
+        # columns. Preserve the pre-0.27 optional-argument metavar stored by
+        # canonical usage.json files while still recording required scalars by
+        # their actual type.
+        if angle_metavar and not required:
+            arg_type = name.replace("-", "_").upper()
 
         argument = {
             "name": name,
@@ -200,10 +340,13 @@ def parse_help_arguments(section_text: str) -> List[Dict]:
     return arguments
 
 
-def parse_help_options(section_text: str) -> List[Dict]:
-    """Parse a Rich/Typer Options section into usage.json option records."""
-    options = []
-    joined_lines = []
+def _join_wrapped_option_lines(section_text: str) -> List[str]:
+    """Join a Rich/Typer Options section's wrapped continuation lines.
+
+    Shared by parse_help_options and parse_help_option_secondary_tokens so
+    both walk the same one-physical-line-per-option view of the section.
+    """
+    joined_lines: List[str] = []
 
     for line in section_text.splitlines():
         stripped = line.strip()
@@ -213,6 +356,46 @@ def parse_help_options(section_text: str) -> List[Dict]:
             joined_lines.append(stripped)
         elif joined_lines:
             joined_lines[-1] += " " + stripped
+
+    return joined_lines
+
+
+def parse_help_option_secondary_tokens(section_text: str) -> List[str]:
+    """Return every secondary/negative long flag rendered in an Options section.
+
+    Typer allows a custom secondary flag name for a paired boolean option --
+    e.g. ``--include-rules/--no-rules`` or an unrelated pair such as
+    ``--closed/--open`` -- it is not always the mechanical ``--no-<primary>``
+    form. ``parse_help_options`` intentionally strips this secondary token out
+    of the help text and does not keep it anywhere in its returned records.
+    Callers that need to know every token the live CLI currently accepts (for
+    example, a usage.json staleness check) cannot assume the negative form of
+    a boolean is always ``--no-<primary>``; they must recover the actual
+    secondary token from the help text itself, which is what this sibling
+    parser does by walking the same joined option lines.
+    """
+    secondary_tokens: List[str] = []
+
+    for line in _join_wrapped_option_lines(section_text):
+        if line.startswith("*"):
+            line = line[1:].strip()
+
+        flag_match = re.match(r"^(--[\w-]+)(?:,--[\w-]+)*\s+(-\w+)?\s*(.*)", line)
+        if not flag_match:
+            continue
+
+        rest = flag_match.group(3).strip()
+        secondary_match = re.match(r"^(--[\w-]+)(?:\s+-\w+)?\s+", rest)
+        if secondary_match:
+            secondary_tokens.append(secondary_match.group(1))
+
+    return secondary_tokens
+
+
+def parse_help_options(section_text: str) -> List[Dict]:
+    """Parse a Rich/Typer Options section into usage.json option records."""
+    options = []
+    joined_lines = _join_wrapped_option_lines(section_text)
 
     filtered_options = {"--help", "--install-completion", "--show-completion"}
 
@@ -224,7 +407,7 @@ def parse_help_options(section_text: str) -> List[Dict]:
         if any(line.startswith(option) for option in filtered_options):
             continue
 
-        flag_match = re.match(r"^(--[\w-]+)\s+(-\w)?\s*(.*)", line)
+        flag_match = re.match(r"^(--[\w-]+)(?:,--[\w-]+)*\s+(-\w+)?\s*(.*)", line)
         if not flag_match:
             continue
 
@@ -232,8 +415,26 @@ def parse_help_options(section_text: str) -> List[Dict]:
         short_flag = flag_match.group(2)
         rest = flag_match.group(3).strip()
 
+        # Typer renders a paired boolean flag as two long forms on one line,
+        # e.g. "--content-done            --no-content-done   <help>". The
+        # primary regex only consumes an optional short flag, so the negative
+        # secondary form would otherwise be captured as part of the help text.
+        # Strip a leading secondary long flag (with its own optional short
+        # flag) before extracting the type/help so the help stays clean.
+        secondary_flag = None
+        secondary_match = re.match(r"^(--[\w-]+)(?:\s+(-\w+))?\s+(.*)", rest)
+        if secondary_match:
+            secondary_flag = secondary_match.group(1)
+            if short_flag is None and secondary_match.group(2):
+                short_flag = secondary_match.group(2)
+            rest = secondary_match.group(3).strip()
+
+        metavar_match = re.match(r"^<([^<>\s]+)>\s+(.*)", rest)
         type_match = re.match(r"^([A-Z][A-Z_0-9]+)\s+(.*)", rest)
-        if type_match:
+        if metavar_match:
+            opt_type = _normalize_help_metavar(metavar_match.group(1))
+            help_text = metavar_match.group(2).strip()
+        elif type_match:
             opt_type = type_match.group(1)
             help_text = type_match.group(2).strip()
         else:
@@ -264,6 +465,10 @@ def parse_help_options(section_text: str) -> List[Dict]:
         }
         if short_flag:
             option["short"] = short_flag
+        if opt_type == "bool":
+            option["takes_value"] = False
+        if secondary_flag:
+            option["secondary"] = secondary_flag
         if default is not None:
             option["default"] = default
         if env_var:
@@ -283,13 +488,42 @@ def parse_help_parameters(help_text: str) -> Dict[str, List[Dict]]:
     }
 
 
-def validate_json_output(stdout: str) -> Tuple[bool, Optional[Dict]]:
+def describe_json_top_level(data: Any) -> str:
+    """Return a concise description of a parsed JSON document's root shape."""
+    if isinstance(data, list):
+        return f"array[{len(data)}]"
+    if isinstance(data, dict):
+        keys = sorted(str(key) for key in data.keys())
+        preview = ", ".join(keys[:5])
+        suffix = ", ..." if len(keys) > 5 else ""
+        return f"object keys=[{preview}{suffix}]"
+    if data is None:
+        return "null"
+    return type(data).__name__
+
+
+def validate_json_output(stdout: str) -> Tuple[bool, Optional[Any]]:
     """Validate that output is valid JSON and return parsed data."""
     try:
         data = json.loads(stdout)
         return True, data
     except json.JSONDecodeError:
         return False, None
+
+
+def require_json_array_output(
+    stdout: str,
+    *,
+    command: str = "command",
+) -> Tuple[bool, Optional[List[Any]], str]:
+    """Parse stdout and require a top-level JSON array before callers slice it."""
+    valid, data = validate_json_output(stdout)
+    if not valid:
+        return False, None, f"{command} stdout is not a single valid JSON document"
+    if not isinstance(data, list):
+        shape = describe_json_top_level(data)
+        return False, None, f"{command} expected top-level JSON array before slicing, got {shape}"
+    return True, data, ""
 
 
 def filter_commands_by_group(commands: List[str], group: str) -> List[str]:
@@ -312,7 +546,8 @@ def discover_nested_commands(
     depth: int = 0,
     max_depth: int = 3,
     skip_list: List[str] = None,
-    timeout: int = 30
+    timeout: int = 30,
+    help_text_by_path: Optional[Dict[str, str]] = None,
 ) -> List[str]:
     """Recursively discover nested command groups.
 
@@ -333,6 +568,8 @@ def discover_nested_commands(
 
     args = path.split() + ["--help"] if path else ["--help"]
     result = run_cli_command(cli_executable, args, timeout=timeout)
+    if help_text_by_path is not None:
+        help_text_by_path[path] = result.stdout
     commands = parse_help_commands(result.stdout)
 
     discovered = []
@@ -340,9 +577,22 @@ def discover_nested_commands(
         new_path = f"{path} {cmd}".strip()
         discovered.append(new_path)
         # Only recurse into commands not in skip_list
-        # (skip_list prevents recursion, not discovery)
-        if cmd not in skip_list:
-            nested = discover_nested_commands(cli_executable, new_path, depth + 1, max_depth, skip_list, timeout)
+        # (skip_list prevents recursion, not discovery).
+        # The skip_list names LEAF VERBS (list, get, status, login, ...), which only
+        # ever appear below a resource group. At depth 0 every entry is a top-level
+        # GROUP, so the list must not apply there: a CLI whose group is named for an
+        # aggregate noun (`status`, the blessed singular-aggregate group) would
+        # otherwise lose every subcommand under it from the discovered map.
+        if depth == 0 or cmd not in skip_list:
+            nested = discover_nested_commands(
+                cli_executable,
+                new_path,
+                depth + 1,
+                max_depth,
+                skip_list,
+                timeout,
+                help_text_by_path,
+            )
             discovered.extend(nested)
 
     _DISCOVER_NESTED_COMMANDS_CACHE[cache_key] = tuple(discovered)
@@ -468,6 +718,29 @@ def get_list_commands(
     return [cmd for cmd in discovered_commands if cmd.endswith(" list") or cmd == "list"]
 
 
+def resolve_exclusions(test_config: Dict, cli_name: str, key: str) -> List[str]:
+    """Return the exclusion list for ``key``, widened by this CLI's own entries.
+
+    ``[exclusions]`` names apply to every CLI in the repo, so a group name that
+    is only legitimately exempt in one tool (e.g. eBay's ``listings``, which is
+    marketplace search with no enumerable ID space) must not be added there.
+    ``[cli_specific.<cli>]`` may declare the same keys to scope the exemption to
+    that CLI.
+
+    Args:
+        test_config: Parsed cli_test_config.toml
+        cli_name: CLI under test
+        key: Exclusion key, e.g. "excluded_from_list_required"
+
+    Returns:
+        Global exclusions followed by the CLI-scoped ones.
+    """
+    exclusions = list(test_config["exclusions"][key])
+    cli_specific = test_config.get("cli_specific", {}).get(cli_name, {})
+    exclusions.extend(cli_specific.get(key, []))
+    return exclusions
+
+
 def get_fixture_args(
     cli_name: str,
     cmd_path: str,
@@ -492,6 +765,7 @@ def get_fixture_args(
     Special keys:
         - Keys starting with "_pos" are treated as positional arguments (value only, no flag)
         - Example: "_pos1" = "app_id" results in just the value being added
+        - A literal true value adds a valueless flag directly
     """
     param_fixtures = test_config.get("cli_specific", {}).get(cli_name, {}).get("param_fixtures", {})
 
@@ -503,6 +777,12 @@ def get_fixture_args(
     flag_args = []
 
     for param_flag, fixture_key in cmd_params.items():
+        if fixture_key is True:
+            if param_flag.startswith("_pos"):
+                raise ValueError(f"Positional fixture {param_flag} requires a fixture key")
+            flag_args.append(param_flag)
+            continue
+
         # Support nested keys like "comment_params.page_id"
         value = cli_fixtures
         for key in fixture_key.split("."):
@@ -585,6 +865,45 @@ def get_uv_tool_venv_dir(cli_dir: Path, cli_name: str) -> Optional[Path]:
     if uv_tool_dir.exists():
         return uv_tool_dir
     return None
+
+
+@cache
+def get_config_auth_metadata(cli_dir: Path, cli_name: str) -> Optional[Dict[str, Any]]:
+    """Load the target CLI's credential and profile auth metadata."""
+    uv_venv = get_uv_tool_venv_dir(cli_dir, cli_name)
+    if uv_venv is None:
+        return None
+    cli_pkg = cli_name.replace("-", "_") + "_cli"
+    result = subprocess.run(
+        [
+            str(uv_venv / "bin" / "python"),
+            "-c",
+            (
+                "import json; "
+                "from cli_tools_shared.config import get_profile_auth_settings; "
+                f"from {cli_pkg}.config import Config; "
+                "types = getattr(Config, 'CREDENTIAL_TYPES', None); "
+                "settings = get_profile_auth_settings(Config); "
+                "payload = {"
+                "'credential_types': None if types is None else "
+                "[item.value if hasattr(item, 'value') else str(item) for item in types], "
+                "'profile_auth_types': [] if settings is None else list(settings[1])"
+                "}; "
+                "print(json.dumps(payload))"
+            ),
+        ],
+        capture_output=True,
+        text=True,
+        cwd=str(cli_dir),
+        env=_clean_path(),
+    )
+    if result.returncode != 0:
+        return None
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
 
 
 def get_pkg_dir(cli_dir: Path, cli_name: str) -> Path:

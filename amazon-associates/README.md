@@ -1,6 +1,10 @@
 # AmazonAssociates CLI
 
-A command-line interface for the official [Amazon Associates](https://affiliate-program.amazon.com/).
+## DESCRIPTION
+
+The `amazon-associates` CLI provides a command-line interface for AmazonAssociates (browser automation).
+
+Use it when you need repeatable access to amazon-associates workflows that are only available through a signed-in website.
 
 ## Installation
 

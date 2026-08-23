@@ -1,14 +1,19 @@
 """Cross-project search command for Claude Code Sessions CLI."""
+COMMAND_CREDENTIALS = {
+    "run": ["no_auth"],
+}
+
 import typer
 from typing import Optional, List
 from ..client import get_client, ClientError
-from cli_tools_shared.output import print_json, print_table, handle_error
+from cli_tools_shared.output import command, print_json, print_table, handle_error
 from ..parsers import format_local_time
 
 app = typer.Typer(help="Search across session transcripts", no_args_is_help=True)
 
 
 @app.command("run")
+@command
 def search(
     query: str = typer.Argument(..., help="Keyword(s) to search for (case-insensitive)"),
     project: Optional[str] = typer.Option(None, "--project", "-p", help="Restrict to a specific project"),
@@ -42,16 +47,14 @@ def search(
             max_matches_per_session=max_matches,
         )
 
-        if not results:
-            typer.echo(f"No sessions found matching '{query}'")
-            raise typer.Exit(0)
-
         items = [r.model_dump() for r in results]
 
         if table:
             for item in items:
                 item['started'] = format_local_time(item.get('created_at', ''))
                 item['last'] = format_local_time(item.get('last_activity', ''))
+                # Last model used in the matched session; blank when not recorded
+                item['model'] = item.get('model') or ''
                 if snippets and item.get('matches'):
                     # Show first match snippet truncated
                     first = item['matches'][0]
@@ -62,8 +65,8 @@ def search(
                 else:
                     item['first_match'] = ''
 
-            columns = ["session_id", "project", "started", "last", "match_count"]
-            headers = ["Session ID", "Project", "Started", "Last Activity", "Matches"]
+            columns = ["session_id", "project", "started", "last", "model", "match_count"]
+            headers = ["Session ID", "Project", "Started", "Last Activity", "Model", "Matches"]
             if snippets:
                 columns.append("first_match")
                 headers.append("First Match")

@@ -26,6 +26,18 @@ DEFAULT_BASE_DELAY = 1.0
 DEFAULT_MAX_DELAY = 60.0
 DEFAULT_JITTER = 0.1
 
+# Read/HTTP timeout (seconds) for connector-definition writes (the custom
+# connector create POST and update PATCH). These calls compile the OpenAPI spec
+# and any attached .csx policy script server-side, which Power Platform can take
+# well over a minute to apply. The apply keeps running server-side even after a
+# client read timeout, so a short timeout turns a slow-but-successful write into
+# a spurious failure (and triggers redundant retries in callers like Ansible).
+# Override per-environment with COPILOT_CONNECTOR_WRITE_TIMEOUT or per-invocation
+# with the create/update `--timeout` flag. Scoped to these writes only — fast
+# reads (GET/list) keep their own short timeouts.
+DEFAULT_CONNECTOR_WRITE_TIMEOUT = 300.0
+CONNECTOR_WRITE_TIMEOUT_ENV = "COPILOT_CONNECTOR_WRITE_TIMEOUT"
+
 # Power Platform custom connector OAuth identity providers.
 # Each value is a preset that knows the vendor's OAuth dialect (e.g. Google
 # injects access_type=offline, Azure AD expects offline_access scope). Using
@@ -69,6 +81,146 @@ class ClientError(Exception):
     pass
 
 
+# Dataverse componentversion "operation" option values, read live from
+# EntityDefinitions(LogicalName='componentversion')/Attributes(LogicalName='operation').
+AGENT_FLOW_VERSION_OPERATION_LABELS = {
+    0: "Create",
+    1: "Update",
+    2: "Publish",
+    3: "Restore",
+    4: "Solution Import",
+}
+
+# Newest-version operations that leave the component's active row unpublished.
+# "Save draft" in the web designer records an Update; "Restore" replays a past
+# version as the newest draft. Both leave a pending draft that blocks a
+# published definition update.
+AGENT_FLOW_UNPUBLISHED_VERSION_OPERATIONS = frozenset({1, 3})
+
+# Dataverse solution-layer 400 raised when a published update is attempted while
+# an unpublished active row exists. Component type 29 is the Workflow (Process)
+# table.
+_ACTIVE_UNPUBLISHED_MARKERS = (
+    "activeunpublished",
+    "unpublished active row",
+)
+
+
+def resolve_swagger_parameters(
+    swagger: dict, operation_id: str, parameters: list
+) -> list[dict]:
+    """
+    Resolve a Swagger 2.0 operation's parameter list into fully named parameters.
+
+    Connector swaggers routinely express shared parameters as a local JSON
+    pointer, e.g. ``{"$ref": "#/parameters/DynamicApprovalType"}``. Those entries
+    carry no ``name``/``in``/``type`` of their own, so any code that reads
+    ``param["name"]`` directly raises a bare ``KeyError``. Resolving the pointer
+    against the swagger's shared ``parameters`` section restores the real
+    definition (for ``DynamicApprovalType`` that is the required ``approvalType``
+    path parameter).
+
+    Args:
+        swagger: The full connector swagger document
+        operation_id: The operationId being resolved (used in error messages)
+        parameters: The operation's raw ``parameters`` list
+
+    Returns:
+        List of parameter dicts, each with a non-empty ``name``
+
+    Raises:
+        ClientError: If a ``$ref`` cannot be resolved or a parameter has no name
+    """
+    resolved: list[dict] = []
+
+    for index, param in enumerate(parameters):
+        if not isinstance(param, dict):
+            raise ClientError(
+                f"Operation '{operation_id}' parameter #{index} is "
+                f"{type(param).__name__}, not an object. The connector swagger is "
+                "malformed; report it to the connector publisher."
+            )
+
+        definition = param
+        ref = param.get("$ref")
+        if ref:
+            if not ref.startswith("#/"):
+                raise ClientError(
+                    f"Operation '{operation_id}' parameter #{index} uses the external "
+                    f"reference '{ref}', which this CLI cannot resolve. Only local "
+                    "'#/...' swagger references are supported."
+                )
+            node: Any = swagger
+            for segment in ref[2:].split("/"):
+                segment = segment.replace("~1", "/").replace("~0", "~")
+                if not isinstance(node, dict) or segment not in node:
+                    available = sorted(node.keys()) if isinstance(node, dict) else []
+                    raise ClientError(
+                        f"Operation '{operation_id}' parameter #{index} references "
+                        f"'{ref}', but segment '{segment}' is not present in the "
+                        f"connector swagger. Available keys at that level: {available}"
+                    )
+                node = node[segment]
+            if not isinstance(node, dict):
+                raise ClientError(
+                    f"Operation '{operation_id}' parameter #{index} references '{ref}', "
+                    f"which resolved to {type(node).__name__} instead of a parameter object."
+                )
+            # Sibling keys alongside "$ref" override the referenced definition.
+            definition = {**node, **{k: v for k, v in param.items() if k != "$ref"}}
+
+        name = definition.get("name")
+        if not name:
+            raise ClientError(
+                f"Operation '{operation_id}' parameter #{index} has no 'name' in the "
+                "connector swagger, so it cannot be matched to a --param value. "
+                f"Parameter definition: {json.dumps(definition)[:300]}"
+            )
+
+        resolved.append(definition)
+
+    return resolved
+
+
+def is_active_unpublished_conflict(message: str) -> bool:
+    """Return True when a Dataverse error is the ActiveUnpublished publish conflict."""
+    lowered = message.lower()
+    return any(marker in lowered for marker in _ACTIVE_UNPUBLISHED_MARKERS)
+
+
+def _agent_flow_draft_conflict_message(
+    state: dict, dataverse_error: Optional[str] = None
+) -> str:
+    """Build the actionable message for an agent flow blocked by an unpublished draft."""
+    lines = [
+        f"Agent flow '{state.get('name', '')}' ({state.get('workflowid')}) has an "
+        "unpublished draft in Dataverse, so its definition cannot be updated.",
+        "",
+        "Cause: saving a draft in the Power Automate / Copilot Studio web designer "
+        "leaves the flow's active row in the ActiveUnpublished state (Dataverse "
+        "component type 29 = Workflow). Dataverse refuses a published definition "
+        "update while that draft exists.",
+    ]
+    evidence = state.get("draft_evidence")
+    if evidence:
+        lines += ["", f"Detected because {evidence}."]
+    if dataverse_error:
+        lines += ["", f"Dataverse reported: {dataverse_error}"]
+    lines += [
+        "",
+        "Resolve it with one of:",
+        "  1. Open the flow in the web designer and select Publish to keep the draft "
+        "edits, then re-run this import.",
+        "  2. Re-run this command with --discard-draft to publish the pending draft "
+        "and immediately overwrite it with the imported definition. The draft edits "
+        "are lost.",
+        "",
+        "Inspect the draft first with: copilot agent-flow export "
+        f"{state.get('workflowid')} --draft --yaml",
+    ]
+    return "\n".join(lines)
+
+
 def _needs_mustache_template_format(text: str) -> bool:
     """
     Return True if `text` requires the Custom GPT botcomponent's TemplateLine
@@ -99,6 +251,42 @@ def _validate_oauth_identity_provider(value: Optional[str]) -> None:
             f"Invalid OAuth identity provider '{value}'. "
             f"Valid values: {valid_list}"
         )
+
+
+def _resolve_connector_write_timeout(override: Optional[float] = None) -> float:
+    """Resolve the read/HTTP timeout (seconds) for connector-definition writes.
+
+    Precedence (single resolution path, not a fallback):
+        1. Explicit ``override`` (the create/update ``--timeout`` flag)
+        2. ``COPILOT_CONNECTOR_WRITE_TIMEOUT`` environment variable
+        3. :data:`DEFAULT_CONNECTOR_WRITE_TIMEOUT`
+
+    An unset env var is a normal state that yields the default. A present but
+    non-numeric or non-positive value is a configuration error and raises
+    ``ClientError`` — it is never silently swapped for the default.
+    """
+    if override is not None:
+        if override <= 0:
+            raise ClientError(
+                f"Connector write timeout must be greater than 0 seconds, got {override}."
+            )
+        return float(override)
+
+    raw = os.environ.get(CONNECTOR_WRITE_TIMEOUT_ENV)
+    if raw is None or raw.strip() == "":
+        return DEFAULT_CONNECTOR_WRITE_TIMEOUT
+
+    try:
+        value = float(raw)
+    except ValueError:
+        raise ClientError(
+            f"Invalid {CONNECTOR_WRITE_TIMEOUT_ENV}={raw!r}: must be a number of seconds."
+        )
+    if value <= 0:
+        raise ClientError(
+            f"Invalid {CONNECTOR_WRITE_TIMEOUT_ENV}={raw!r}: must be greater than 0 seconds."
+        )
+    return value
 
 
 class DataverseClient:
@@ -1268,6 +1456,14 @@ beginDialog:
                 publish job fails with a diagnostic error, or if the job
                 does not complete within poll_timeout.
         """
+        from .capacity import (
+            ensure_tools_and_knowledge_entitled,
+            resolve_environment_id,
+        )
+
+        ensure_tools_and_knowledge_entitled(
+            resolve_environment_id(), action="publish agent"
+        )
         baseline_operation_end, _ = self._read_publish_sync_state(bot_id)
 
         url = f"{self.api_url}/bots({bot_id})/Microsoft.Dynamics.CRM.PvaPublish"
@@ -1319,10 +1515,15 @@ beginDialog:
         if status != "Succeeded":
             diag_messages = []
             for dd in lfpo.get("diagnosticDetails") or []:
-                component_id = dd.get("componentId", "?")
+                component_id = dd.get("componentId") or "?"
                 for d in dd.get("diagnosticList") or []:
+                    fields = [
+                        d.get("errorCode"),
+                        d.get("violationType"),
+                        d.get("errorMessage", "unknown error"),
+                    ]
                     diag_messages.append(
-                        f"component {component_id}: {d.get('errorMessage', 'unknown error')}"
+                        f"component {component_id}: " + " | ".join(str(field) for field in fields if field)
                     )
             diag_str = "; ".join(diag_messages) if diag_messages else "no diagnostic details returned"
             raise ClientError(
@@ -1506,6 +1707,9 @@ beginDialog:
         description: Optional[str] = None,
         orchestration: Optional[bool] = None,
         content_moderation: Optional[str] = None,
+        use_model_knowledge: Optional[bool] = None,
+        file_analysis: Optional[bool] = None,
+        semantic_search: Optional[bool] = None,
     ) -> None:
         """
         Update an existing Copilot Studio agent (bot) metadata.
@@ -1516,6 +1720,9 @@ beginDialog:
             description: New description for the agent
             orchestration: Enable/disable generative AI orchestration
             content_moderation: Content moderation level (Low, Moderate, High)
+            use_model_knowledge: Enable/disable model knowledge
+            file_analysis: Enable/disable file analysis
+            semantic_search: Enable/disable semantic search
 
         Note:
             Instructions must be updated via update_gpt_instructions() which uses
@@ -1548,6 +1755,24 @@ beginDialog:
             if "aISettings" not in current_config:
                 current_config["aISettings"] = {"$kind": "AISettings"}
             current_config["aISettings"]["contentModeration"] = content_moderation
+            config_changed = True
+
+        if use_model_knowledge is not None:
+            if "aISettings" not in current_config:
+                current_config["aISettings"] = {"$kind": "AISettings"}
+            current_config["aISettings"]["useModelKnowledge"] = use_model_knowledge
+            config_changed = True
+
+        if file_analysis is not None:
+            if "aISettings" not in current_config:
+                current_config["aISettings"] = {"$kind": "AISettings"}
+            current_config["aISettings"]["isFileAnalysisEnabled"] = file_analysis
+            config_changed = True
+
+        if semantic_search is not None:
+            if "aISettings" not in current_config:
+                current_config["aISettings"] = {"$kind": "AISettings"}
+            current_config["aISettings"]["isSemanticSearchEnabled"] = semantic_search
             config_changed = True
 
         if config_changed:
@@ -4294,12 +4519,59 @@ schemaName: {schema_name}
         try:
             connector = self._get_connector_from_dataverse(connector_id)
             if connector:
+                # The Dataverse connector entity carries the OpenAPI definition
+                # (swagger) but structurally never carries connectionParameters /
+                # connectionParameterSets. Those auth fields live only on the
+                # Power Apps apihub representation. Merge them in so OAuth
+                # detection and raw output see the real auth configuration.
+                self._merge_apihub_auth_into_connector(connector, connector_id, environment_id)
                 return connector
         except ClientError:
             pass  # Not found in Dataverse, try Power Apps API
 
         # Then try Power Apps API (managed connectors)
         return self._get_connector_from_powerapps(connector_id, environment_id)
+
+    def _merge_apihub_auth_into_connector(
+        self, connector: dict, connector_id: str, environment_id: str
+    ) -> None:
+        """
+        Merge apihub-only auth fields into a Dataverse connector record in place.
+
+        The Dataverse `connector` entity exposes the OpenAPI definition but not
+        `connectionParameters` / `connectionParameterSets`; those exist only on
+        the Power Apps apihub representation
+        (GET /providers/Microsoft.PowerApps/apis/{id}). When the Dataverse record
+        already contains those auth fields nothing is fetched. If the apihub GET
+        fails the Dataverse record is left untouched so callers degrade to the
+        same behavior as before this merge.
+
+        Args:
+            connector: Dataverse connector record (mutated in place).
+            connector_id: The connector's unique identifier.
+            environment_id: Power Platform environment ID.
+        """
+        props = connector.get("properties", {})
+        if not isinstance(props, dict):
+            return
+
+        # Nothing to do if the auth fields are already present.
+        if props.get("connectionParameters") or props.get("connectionParameterSets"):
+            return
+
+        try:
+            apihub_connector = self._get_connector_from_powerapps(connector_id, environment_id)
+        except ClientError:
+            return  # apihub representation unavailable; leave Dataverse record as-is
+
+        apihub_props = apihub_connector.get("properties", {})
+        if not isinstance(apihub_props, dict):
+            return
+
+        for auth_field in ("connectionParameters", "connectionParameterSets"):
+            value = apihub_props.get(auth_field)
+            if value:
+                props[auth_field] = value
 
     def _get_connector_from_dataverse(self, connector_id: str) -> Optional[dict]:
         """
@@ -4941,6 +5213,7 @@ schemaName: {schema_name}
         oauth_identity_provider: Optional[str] = None,
         script_file: Optional[str] = None,
         script_operations: Optional[list[str]] = None,
+        timeout: Optional[float] = None,
     ) -> dict:
         """
         Create a custom connector in the current environment via Power Apps API.
@@ -4963,6 +5236,9 @@ schemaName: {schema_name}
             script_file: Path to C# script file (.csx) for custom code (optional)
             script_operations: List of operation IDs that use the script (optional,
                 defaults to all operations if script_file is provided)
+            timeout: Read/HTTP timeout (seconds) for the connector-definition
+                write. Defaults to COPILOT_CONNECTOR_WRITE_TIMEOUT or
+                DEFAULT_CONNECTOR_WRITE_TIMEOUT when not provided.
 
         Returns:
             dict: Created connector details including connector_id
@@ -4971,6 +5247,7 @@ schemaName: {schema_name}
             ClientError: If creation fails
         """
         _validate_oauth_identity_provider(oauth_identity_provider)
+        write_timeout = _resolve_connector_write_timeout(timeout)
         import re
 
         # Get environment ID
@@ -5079,8 +5356,9 @@ schemaName: {schema_name}
         }
 
         try:
-            # Use longer timeout for connector creation (involves script compilation)
-            response = self._http_client.post(url, headers=headers, json=payload, timeout=180.0)
+            # Use a generous timeout for connector creation: the write compiles the
+            # OpenAPI spec (and any script) server-side. See _resolve_connector_write_timeout.
+            response = self._http_client.post(url, headers=headers, json=payload, timeout=write_timeout)
             response.raise_for_status()
             result = response.json()
 
@@ -5098,6 +5376,7 @@ schemaName: {schema_name}
                     script_file=script_file,
                     script_operations=script_operations,
                     environment_id=environment_id,
+                    timeout=write_timeout,
                 )
 
             return {
@@ -5132,6 +5411,7 @@ schemaName: {schema_name}
         oauth_identity_provider: Optional[str] = None,
         script_file: Optional[str] = None,
         script_operations: Optional[list[str]] = None,
+        timeout: Optional[float] = None,
     ) -> dict:
         """
         Update an existing custom connector via Power Apps API.
@@ -5152,6 +5432,9 @@ schemaName: {schema_name}
                 (oauth2|aad|google|github|facebook). Optional.
             script_file: Path to C# script file (.csx) for custom code (optional)
             script_operations: List of operation IDs that use the script (optional)
+            timeout: Read/HTTP timeout (seconds) for the connector-definition
+                write. Defaults to COPILOT_CONNECTOR_WRITE_TIMEOUT or
+                DEFAULT_CONNECTOR_WRITE_TIMEOUT when not provided.
 
         Returns:
             dict: Updated connector details
@@ -5160,6 +5443,7 @@ schemaName: {schema_name}
             ClientError: If update fails
         """
         _validate_oauth_identity_provider(oauth_identity_provider)
+        write_timeout = _resolve_connector_write_timeout(timeout)
         # Get environment ID
         if not environment_id:
             config = get_config()
@@ -5247,7 +5531,16 @@ schemaName: {schema_name}
             backend_url = f"{scheme}://{host}{base_path}"
             payload["properties"]["backendService"] = {"serviceUrl": backend_url}
 
-        # Handle OAuth credential updates even without new OpenAPI definition
+        # Handle OAuth credential updates even without new OpenAPI definition.
+        #
+        # The apihub PATCH endpoint rejects a connectionParameters-only payload
+        # with HTTP 500. It requires a full property set, so we rebuild the
+        # payload from the connector's existing definition: re-include the
+        # existing OpenApiDefinition, regenerate apiProperties (iconBrandColor,
+        # capabilities, policyTemplateInstances, connectionParameters), preserve
+        # the existing backendService, and carry forward any existing custom-code
+        # script configuration. The OAuth credential updates are then merged onto
+        # connectionParameters.token.oAuthSettings.
         if (
             oauth_client_id
             or oauth_client_secret
@@ -5258,27 +5551,86 @@ schemaName: {schema_name}
             token_settings = existing_conn_params.get("token", {})
 
             if token_settings.get("type") == "oauthSetting":
-                # Update OAuth settings with new credentials
-                oauth_settings = token_settings.get("oAuthSettings", {})
+                # The apihub returns the spec under "swagger" (not "OpenApiDefinition")
+                existing_openapi = (
+                    existing_props.get("swagger")
+                    or existing_props.get("OpenApiDefinition")
+                    or {}
+                )
+
+                # Regenerate the full apiProperties from the existing definition so
+                # the payload carries iconBrandColor, capabilities,
+                # policyTemplateInstances, and a structurally complete
+                # connectionParameters block — not connectionParameters alone.
+                api_properties = self._generate_api_properties(
+                    existing_openapi,
+                    icon_brand_color or existing_props.get("iconBrandColor", "#007ee5"),
+                    oauth_client_id,
+                    oauth_client_secret,
+                    oauth_redirect_url,
+                    oauth_identity_provider,
+                )
+                payload["properties"]["OpenApiDefinition"] = existing_openapi
+                payload["properties"].update(api_properties.get("properties", {}))
+
+                # Merge the credential updates onto the existing oAuthSettings so
+                # any previously stored fields the swagger does not reproduce
+                # (e.g. an existing clientId when only the secret rotates, a
+                # custom redirectUrl) are preserved.
+                existing_oauth_settings = dict(token_settings.get("oAuthSettings", {}))
+                regenerated_conn_params = payload["properties"].get("connectionParameters", {})
+                regenerated_token = regenerated_conn_params.get("token", {})
+                regenerated_oauth_settings = regenerated_token.get("oAuthSettings", {})
+
+                merged_oauth_settings = existing_oauth_settings
+                merged_oauth_settings.update(regenerated_oauth_settings)
 
                 if oauth_client_id:
-                    oauth_settings["clientId"] = oauth_client_id
+                    merged_oauth_settings["clientId"] = oauth_client_id
                 if oauth_client_secret:
-                    oauth_settings["clientSecret"] = oauth_client_secret
+                    merged_oauth_settings["clientSecret"] = oauth_client_secret
                 if oauth_redirect_url:
-                    oauth_settings["redirectUrl"] = oauth_redirect_url
-                    oauth_settings["redirectMode"] = "Global"
+                    merged_oauth_settings["redirectUrl"] = oauth_redirect_url
+                    merged_oauth_settings["redirectMode"] = "Global"
                 if oauth_identity_provider:
-                    oauth_settings["identityProvider"] = oauth_identity_provider
+                    merged_oauth_settings["identityProvider"] = oauth_identity_provider
 
-                # Build updated connection parameters
+                # Rebuild connectionParameters: start from the existing set (to
+                # keep any non-token parameters), then apply the merged token.
                 updated_conn_params = dict(existing_conn_params)
+                updated_conn_params.update(regenerated_conn_params)
                 updated_conn_params["token"] = {
                     "type": "oauthSetting",
-                    "oAuthSettings": oauth_settings
+                    "oAuthSettings": merged_oauth_settings,
                 }
-
                 payload["properties"]["connectionParameters"] = updated_conn_params
+
+                # Preserve the existing backend service so the full payload the
+                # apihub requires is present. Rebuild it from the existing swagger
+                # host/basePath/schemes if the connector does not expose one.
+                existing_backend = existing_props.get("backendService")
+                if existing_backend:
+                    payload["properties"]["backendService"] = existing_backend
+                elif existing_openapi:
+                    schemes = existing_openapi.get("schemes", ["https"])
+                    scheme = schemes[0] if schemes else "https"
+                    host = existing_openapi.get("host", "")
+                    base_path = existing_openapi.get("basePath", "")
+                    payload["properties"]["backendService"] = {
+                        "serviceUrl": f"{scheme}://{host}{base_path}"
+                    }
+
+                # Carry forward any existing custom-code configuration WITHOUT
+                # touching it. The apihub PATCH drops scriptOperations if omitted,
+                # so existing custom code must be re-sent. This path never uploads
+                # a script (that only happens when the caller passes --script).
+                if not script_url:
+                    existing_script_url = existing_props.get("scriptDefinitionUrl")
+                    if existing_script_url:
+                        payload["properties"]["scriptDefinitionUrl"] = existing_script_url
+                        existing_script_operations = existing_props.get("scriptOperations")
+                        if existing_script_operations:
+                            payload["properties"]["scriptOperations"] = existing_script_operations
 
         if description is not None:
             payload["properties"]["description"] = description
@@ -5300,7 +5652,11 @@ schemaName: {schema_name}
         }
 
         try:
-            response = self._http_client.patch(update_url, headers=headers, params=params, json=payload, timeout=60.0)
+            # Use a generous timeout: applying the OpenAPI spec + any .csx policy
+            # script server-side can take well over a minute, and the apply
+            # continues even after a client read timeout. See
+            # _resolve_connector_write_timeout.
+            response = self._http_client.patch(update_url, headers=headers, params=params, json=payload, timeout=write_timeout)
             response.raise_for_status()
 
             # PATCH returns 204 No Content on success
@@ -5594,16 +5950,28 @@ schemaName: {schema_name}
         result = self.get(endpoint)
         return result.get("value", [])
 
-    def get_agent_flow(self, workflow_id: str) -> dict:
+    def get_agent_flow(self, workflow_id: str, expand_definition: bool = False) -> dict:
         """
         Get a specific agent flow by ID.
 
         Args:
             workflow_id: The agent flow's unique identifier (GUID)
+            expand_definition: If True, include the flow definition in
+                clientdata and retrieve unpublished/draft flows.
 
         Returns:
             Agent flow (workflow) record
         """
+        if expand_definition:
+            select_fields = (
+                "workflowid,name,description,clientdata,statecode,statuscode,type,"
+                "parentworkflowid,createdon,modifiedon"
+            )
+            return self.get(
+                f"workflows({workflow_id})/Microsoft.Dynamics.CRM.RetrieveUnpublished()"
+                f"?$select={select_fields}"
+            )
+
         return self.get(f"workflows({workflow_id})")
 
     def update_agent_flow(
@@ -5667,6 +6035,138 @@ schemaName: {schema_name}
         self.patch(f"workflows({workflow_id})", data)
         return {}
 
+    def get_agent_flow_publish_state(self, workflow_id: str) -> dict:
+        """
+        Read an agent flow's published and unpublished (draft) publish state.
+
+        Dataverse stores a publishable component twice: the published row that a
+        plain ``GET workflows(id)`` returns, and the unpublished row that the
+        ``RetrieveUnpublished`` function returns. Microsoft documents that the
+        two reads return different data only when the record was updated but not
+        published — which is exactly the ``ActiveUnpublished`` condition that a
+        "Save draft" in the Power Automate / Copilot Studio web designer leaves
+        behind.
+
+        Version history for solution-aware cloud flows lives in the component
+        version rows exposed through the ``componentversionnrddatasourceset``
+        navigation property. The newest row's ``operation`` value says whether
+        the newest version was published (``Publish``) or only saved
+        (``Update`` / ``Restore``).
+
+        Args:
+            workflow_id: The agent flow's unique identifier (GUID)
+
+        Returns:
+            Dict containing:
+                - workflowid / name / description / statecode / type
+                - published_clientdata: clientdata of the published row ("" when
+                  the flow has no published row)
+                - unpublished_clientdata: clientdata of the unpublished row
+                - published_exists: True when a published row was returned
+                - has_unpublished_draft: True when an unpublished draft exists
+                - draft_evidence: human readable reason the draft was detected
+                - latest_version_operation / latest_version_operation_label /
+                  latest_version_createdon: newest component version metadata
+
+        Raises:
+            ClientError: If the flow is not found
+        """
+        select = "workflowid,name,description,clientdata,statecode,type,category"
+
+        published: Optional[dict] = None
+        published_error: Optional[str] = None
+        try:
+            published = self.get(f"workflows({workflow_id})?$select={select}")
+        except ClientError as e:
+            if "404" not in str(e):
+                raise
+            published_error = str(e)
+
+        try:
+            unpublished = self.get(
+                f"workflows({workflow_id})/Microsoft.Dynamics.CRM.RetrieveUnpublished()"
+                f"?$select={select}"
+            )
+        except ClientError as e:
+            if "404" in str(e) and published is None:
+                raise ClientError(f"Agent flow {workflow_id} not found")
+            raise
+
+        published_clientdata = (published or {}).get("clientdata") or ""
+        unpublished_clientdata = unpublished.get("clientdata") or ""
+
+        versions = self.get(
+            f"workflows({workflow_id})/componentversionnrddatasourceset"
+            "?$select=componentversionnrddatasourceid,operation,createdon,componentversionname"
+            "&$orderby=createdon desc&$top=1"
+        ).get("value", [])
+        latest_version = versions[0] if versions else {}
+        latest_operation = latest_version.get("operation")
+
+        evidence: list[str] = []
+        if published is None:
+            evidence.append(
+                "the flow has no published row in Dataverse "
+                f"(published read failed: {published_error})"
+            )
+        elif published_clientdata != unpublished_clientdata:
+            evidence.append(
+                "RetrieveUnpublished returned a different definition than the "
+                f"published row ({len(unpublished_clientdata)} vs "
+                f"{len(published_clientdata)} clientdata characters)"
+            )
+        if latest_operation in AGENT_FLOW_UNPUBLISHED_VERSION_OPERATIONS:
+            evidence.append(
+                "the newest component version is "
+                f"'{AGENT_FLOW_VERSION_OPERATION_LABELS.get(latest_operation, latest_operation)}'"
+                f" (created {latest_version.get('createdon')}), not 'Publish'"
+            )
+
+        source = published if published is not None else unpublished
+        return {
+            "workflowid": source.get("workflowid", workflow_id),
+            "name": source.get("name", ""),
+            "description": source.get("description", ""),
+            "statecode": source.get("statecode"),
+            "type": source.get("type"),
+            "published_exists": published is not None,
+            "published_clientdata": published_clientdata,
+            "unpublished_clientdata": unpublished_clientdata,
+            "has_unpublished_draft": bool(evidence),
+            "draft_evidence": "; ".join(evidence),
+            "latest_version_operation": latest_operation,
+            "latest_version_operation_label": AGENT_FLOW_VERSION_OPERATION_LABELS.get(
+                latest_operation
+            ),
+            "latest_version_createdon": latest_version.get("createdon"),
+        }
+
+    def publish_agent_flow(self, workflow_id: str) -> dict:
+        """
+        Publish an agent flow's pending definition with the PublishXml action.
+
+        ``PublishXml`` is the documented Dataverse message for publishing a
+        specific solution component. Publishing promotes the flow's unpublished
+        row to the published row, which clears the ``ActiveUnpublished`` state
+        that blocks a definition update.
+
+        Args:
+            workflow_id: The agent flow's unique identifier (GUID)
+
+        Returns:
+            Dict with the flow ID and publish status
+
+        Raises:
+            ClientError: If the publish request fails
+        """
+        parameter_xml = (
+            "<importexportxml><workflows>"
+            f"<workflow>{workflow_id}</workflow>"
+            "</workflows></importexportxml>"
+        )
+        self.post("PublishXml", {"ParameterXml": parameter_xml})
+        return {"workflowid": workflow_id, "status": "published"}
+
     def export_agent_flow(self, workflow_id: str, draft: bool = False) -> dict:
         """
         Export an agent flow's definition.
@@ -5676,9 +6176,10 @@ schemaName: {schema_name}
 
         Args:
             workflow_id: The agent flow's unique identifier (GUID)
-            draft: If True, retrieve the draft version instead of published.
-                   For solution-aware flows, draft and published versions are
-                   stored as separate workflow records.
+            draft: If True, return the unpublished (draft) definition read
+                   through ``RetrieveUnpublished``. Raises ``ClientError`` when
+                   the flow has no unpublished draft, so published content is
+                   never labeled ``draft``.
 
         Returns:
             Dict containing:
@@ -5689,69 +6190,58 @@ schemaName: {schema_name}
                 - connectionReferences: Connection references used by the flow
                 - raw_clientdata: Original clientdata string (for debugging)
                 - version: "draft" or "published" indicating which version
+                - has_unpublished_draft: True when an unpublished draft exists
 
         Raises:
-            ClientError: If the flow is not found or clientdata is missing
+            ClientError: If the flow is not found, clientdata is missing, or
+                ``draft`` was requested and no unpublished draft exists
         """
-        # Fetch workflow with clientdata field, including type and parentworkflowid
-        endpoint = (
-            f"workflows({workflow_id})"
-            "?$select=workflowid,name,description,clientdata,statecode,category,type,parentworkflowid"
-        )
-        flow = self.get(endpoint)
+        state = self.get_agent_flow_publish_state(workflow_id)
+        return self._build_agent_flow_export(state, draft=draft)
+
+    def _build_agent_flow_export(self, state: dict, draft: bool = False) -> dict:
+        """Turn a publish-state read into an export payload.
+
+        Split out so ``import_agent_flow`` can reuse a publish-state read it has
+        already made instead of querying Dataverse twice.
+        """
+        workflow_id = state["workflowid"]
 
         if draft:
-            # For draft version, we need to find the definition record (type=1)
-            # If current workflow is type=2 (Activation), find its parent
-            # If current workflow is type=1 (Definition), use it directly
-            workflow_type = flow.get("type")
+            if not state["has_unpublished_draft"]:
+                raise ClientError(
+                    f"Agent flow '{state['name']}' ({workflow_id}) has no unpublished "
+                    "draft: the Dataverse unpublished row matches the published row "
+                    "and the newest component version is published. Re-run without "
+                    "--draft to export the published definition. If the web designer "
+                    "shows this flow as 'Draft', the draft has not reached the "
+                    "Dataverse unpublished layer this CLI reads — publish it in the "
+                    "designer first."
+                )
+            clientdata_str = state["unpublished_clientdata"]
+            version = "draft"
+        else:
+            if not state["published_exists"]:
+                raise ClientError(
+                    f"Agent flow '{state['name']}' ({workflow_id}) has no published "
+                    "definition in Dataverse. Use --draft to export the unpublished "
+                    "definition, or publish the flow first."
+                )
+            clientdata_str = state["published_clientdata"]
+            version = "published"
 
-            if workflow_type == 2:
-                # This is an activation, get the parent (definition) workflow
-                parent_id = flow.get("_parentworkflowid_value") or flow.get("parentworkflowid")
-                if parent_id:
-                    endpoint = (
-                        f"workflows({parent_id})"
-                        "?$select=workflowid,name,description,clientdata,statecode,category,type"
-                    )
-                    flow = self.get(endpoint)
-                else:
-                    # Try to find definition by name with type=1
-                    flow_name = flow.get("name", "")
-                    search_endpoint = (
-                        f"workflows?$filter=name eq '{flow_name}' and type eq 1"
-                        "&$select=workflowid,name,description,clientdata,statecode,category,type"
-                        "&$top=1"
-                    )
-                    results = self.get(search_endpoint)
-                    flows = results.get("value", [])
-                    if flows:
-                        flow = flows[0]
-                    else:
-                        raise ClientError(
-                            f"Draft version not found for workflow {workflow_id}. "
-                            "The flow may not have a separate draft version."
-                        )
-
-        if not flow:
-            raise ClientError(f"Agent flow {workflow_id} not found")
-
-        actual_workflow_id = flow.get("workflowid", workflow_id)
-        clientdata_str = flow.get("clientdata", "")
         if not clientdata_str:
             raise ClientError(
-                f"Agent flow {actual_workflow_id} has no clientdata. "
+                f"Agent flow {workflow_id} has no {version} clientdata. "
                 "This may not be a modern flow or the definition is empty."
             )
 
-        # Parse the clientdata JSON
         try:
             clientdata = json.loads(clientdata_str)
         except json.JSONDecodeError as e:
             raise ClientError(f"Failed to parse flow clientdata: {e}")
 
-        # Extract the flow definition and connection references
-        # clientdata typically has structure: {"properties": {"definition": {...}, "connectionReferences": {...}}}
+        # clientdata structure: {"properties": {"definition": {...}, "connectionReferences": {...}}}
         properties = clientdata.get("properties", {})
         definition = properties.get("definition", clientdata.get("definition", {}))
         connection_refs = properties.get(
@@ -5759,20 +6249,17 @@ schemaName: {schema_name}
             clientdata.get("connectionReferences", {})
         )
 
-        # Determine version type based on workflow type field
-        workflow_type = flow.get("type")
-        version = "draft" if workflow_type == 1 else "published" if workflow_type == 2 else "unknown"
-
         return {
-            "name": flow.get("name", ""),
-            "workflowid": actual_workflow_id,
-            "description": flow.get("description", ""),
+            "name": state["name"],
+            "workflowid": workflow_id,
+            "description": state["description"],
             "definition": definition,
             "connectionReferences": connection_refs,
             "raw_clientdata": clientdata_str,
             "version": version,
-            "statecode": flow.get("statecode"),
-            "type": workflow_type,
+            "has_unpublished_draft": state["has_unpublished_draft"],
+            "statecode": state["statecode"],
+            "type": state["type"],
         }
 
     def import_agent_flow(
@@ -5780,6 +6267,8 @@ schemaName: {schema_name}
         workflow_id: str,
         definition: dict,
         connection_references: Optional[dict] = None,
+        discard_draft: bool = False,
+        publish: bool = False,
     ) -> dict:
         """
         Import/update an agent flow's definition.
@@ -5787,23 +6276,48 @@ schemaName: {schema_name}
         Updates the flow's clientdata field with a new definition. Can optionally
         update connection references as well.
 
+        A definition update is a *published* update of a publishable Dataverse
+        component. Dataverse rejects it with HTTP 400 while an unpublished
+        (``ActiveUnpublished``) row exists — the state a "Save draft" in the web
+        designer leaves behind. This method reads the publish state first and
+        refuses with an actionable message instead of leaking that raw error.
+
         Args:
             workflow_id: The agent flow's unique identifier (GUID)
             definition: The flow definition dict (triggers, actions, parameters, etc.)
             connection_references: Optional dict of connection references. If not
                 provided, existing connection references are preserved.
+            discard_draft: Opt in to resolving an existing unpublished draft by
+                publishing it and then overwriting it with ``definition``. The
+                draft's edits are lost.
+            publish: Publish the flow after the definition update so the imported
+                definition becomes the published version.
 
         Returns:
             Dict with update status
 
         Raises:
-            ClientError: If the flow is not found or update fails
+            ClientError: If the flow is not found, an unpublished draft blocks
+                the update, or the update fails
         """
-        # First, get the current flow to retrieve existing clientdata structure
-        current_flow = self.export_agent_flow(workflow_id)
+        state = self.get_agent_flow_publish_state(workflow_id)
+
+        if state["has_unpublished_draft"]:
+            if not discard_draft:
+                raise ClientError(_agent_flow_draft_conflict_message(state))
+            self.publish_agent_flow(workflow_id)
+            state = self.get_agent_flow_publish_state(workflow_id)
+            if state["has_unpublished_draft"]:
+                raise ClientError(
+                    f"Agent flow '{state['name']}' ({workflow_id}) still reports an "
+                    "unpublished draft after --discard-draft published it. "
+                    f"Evidence: {state['draft_evidence']}. Resolve the draft in the "
+                    "web designer before importing."
+                )
 
         # If no connection_references provided, preserve existing ones
         if connection_references is None:
+            current_flow = self._build_agent_flow_export(state)
             connection_references = current_flow.get("connectionReferences", {})
 
         # Build the new clientdata structure
@@ -5829,13 +6343,27 @@ schemaName: {schema_name}
             )
 
         # Update the workflow
-        self.patch(f"workflows({workflow_id})", {"clientdata": clientdata_str})
+        try:
+            self.patch(f"workflows({workflow_id})", {"clientdata": clientdata_str})
+        except ClientError as e:
+            if is_active_unpublished_conflict(str(e)):
+                raise ClientError(
+                    _agent_flow_draft_conflict_message(state, dataverse_error=str(e))
+                )
+            raise
 
-        return {
+        result = {
             "workflowid": workflow_id,
             "status": "updated",
-            "message": f"Flow definition updated successfully",
+            "message": "Flow definition updated successfully",
         }
+
+        if publish:
+            self.publish_agent_flow(workflow_id)
+            result["status"] = "updated and published"
+            result["message"] = "Flow definition updated and published successfully"
+
+        return result
 
     def create_agent_flow(
         self,
@@ -9093,8 +9621,14 @@ schemaName: {schema_name}
 
         url_path = target_path
 
-        # Classify parameters from swagger definition
-        swagger_params = {p["name"]: p for p in target_op.get("parameters", [])}
+        # Classify parameters from swagger definition. Shared parameters arrive as
+        # local "$ref" pointers and must be resolved before they can be named.
+        swagger_params = {
+            p["name"]: p
+            for p in resolve_swagger_parameters(
+                swagger, operation_id, target_op.get("parameters", [])
+            )
+        }
 
         # Replace path parameters (including {connectionId})
         path_params = {
@@ -10705,12 +11239,71 @@ def _is_az_cli_installed() -> bool:
     return shutil.which("az") is not None
 
 
+def _find_cached_azure_account(az: str, tenant_id: str, expected_user: Optional[str] = None) -> Optional[dict]:
+    """Find a cached az account matching a tenant (and optionally a user).
+
+    Reads the full local Azure CLI account cache via ``az account list`` —
+    every previously logged-in identity, not just whichever one is currently
+    the machine-wide default — so switching between profiles that live in
+    different Azure AD tenants never requires ``az account set`` or a fresh
+    ``az login`` when the right identity is already cached. Returns ``None``
+    (never raises for cache-read failures) so callers fall back to today's
+    default-account behavior/error.
+    """
+    result = subprocess.run(
+        [az, "account", "list", "-o", "json"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        return None
+    try:
+        accounts = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(accounts, list):
+        return None
+
+    tenant_lower = tenant_id.lower()
+    matches = [a for a in accounts if (a.get("tenantId") or "").lower() == tenant_lower]
+    if expected_user:
+        user_lower = expected_user.lower()
+        matches = [a for a in matches if ((a.get("user") or {}).get("name") or "").lower() == user_lower]
+    if not matches:
+        return None
+    for account in matches:
+        if account.get("isDefault"):
+            return account
+    return matches[0]
+
+
+def _default_az_user(az: str) -> str:
+    """Return the machine-wide default az account's user name.
+
+    Raises ``subprocess.CalledProcessError`` (propagated to the caller)
+    exactly like the inline call this was extracted from — callers that want
+    a soft failure must catch it themselves.
+    """
+    result = subprocess.run(
+        [az, "account", "show", "--query", "user.name", "-o", "tsv"],
+        capture_output=True, text=True, check=True,
+    )
+    return result.stdout.strip()
+
+
 def get_access_token_from_azure_cli(resource: str) -> str:
     """
     Get an access token using Azure CLI.
 
     Validates that the current Azure CLI user matches the profile's
     AZURE_CLI_EXPECTED_USER before acquiring a token.
+
+    When the profile sets AZURE_TENANT_ID, resolves the token against that
+    tenant's cached az account (via ``az account list``) instead of
+    whichever account is the machine-wide default — so switching between
+    profiles in different Azure AD tenants never requires ``az account set``
+    or a fresh ``az login`` when the right identity is already logged in and
+    cached. Profiles without AZURE_TENANT_ID keep validating against the
+    default account, as before.
 
     Args:
         resource: The resource URL to get a token for
@@ -10719,42 +11312,67 @@ def get_access_token_from_azure_cli(resource: str) -> str:
         Access token string
 
     Raises:
-        ClientError: If token acquisition fails or user mismatch
+        CredentialError: If token acquisition fails or the active Azure CLI
+            identity does not match the profile's expected user/tenant. Subclass of
+            ClientError, so existing ``except ClientError`` callers still catch
+            it; the more specific type lets the shared error handler map auth
+            failures to exit code 2 (consistent with ``copilot auth status``).
     """
+    # CredentialError is a subclass of the shared ClientError. Raising it for
+    # genuine auth/identity failures lets cli_tools_shared.handle_error exit 2
+    # (instead of the generic 1) for any command wrapped by the shared
+    # @command decorator, matching `copilot auth status` semantics.
+    from cli_tools_shared.exceptions import CredentialError
+
     try:
         az = _resolve_az_command()
-
-        # Validate Azure CLI user matches profile expectation
         config = get_config()
         expected_user = config.expected_user
-        if expected_user:
-            user_result = subprocess.run(
-                [az, "account", "show", "--query", "user.name", "-o", "tsv"],
-                capture_output=True, text=True, check=True,
-            )
-            actual_user = user_result.stdout.strip()
-            if actual_user.lower() != expected_user.lower():
-                raise ClientError(
+        tenant_id = config.tenant_id
+
+        subscription_id = None
+        if tenant_id:
+            account = _find_cached_azure_account(az, tenant_id, expected_user)
+            if account is not None:
+                subscription_id = account["id"]
+            elif expected_user:
+                actual_user = _default_az_user(az)
+                raise CredentialError(
                     f"Azure CLI is logged in as '{actual_user}' but profile "
                     f"'{config.get_active_profile_name()}' requires '{expected_user}'.\n\n"
-                    f"  Run: az login --tenant {config.tenant_id or '<tenant-id>'}\n\n"
+                    f"  Run: az login --tenant {tenant_id}\n\n"
+                    f"  Then authenticate as {expected_user}."
+                )
+            else:
+                raise CredentialError(
+                    f"No cached Azure CLI login found for tenant '{tenant_id}' "
+                    f"required by profile '{config.get_active_profile_name()}'.\n\n"
+                    f"  Run: az login --tenant {tenant_id}"
+                )
+        elif expected_user:
+            # Legacy behavior: no AZURE_TENANT_ID on this profile — validate
+            # against whichever account is currently the machine default.
+            actual_user = _default_az_user(az)
+            if actual_user.lower() != expected_user.lower():
+                raise CredentialError(
+                    f"Azure CLI is logged in as '{actual_user}' but profile "
+                    f"'{config.get_active_profile_name()}' requires '{expected_user}'.\n\n"
+                    f"  Run: az login --tenant <tenant-id>\n\n"
                     f"  Then authenticate as {expected_user}."
                 )
 
-        result = subprocess.run(
-            [az, "account", "get-access-token", "--resource", resource, "--query", "accessToken", "-o", "tsv"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
+        cmd = [az, "account", "get-access-token", "--resource", resource, "--query", "accessToken", "-o", "tsv"]
+        if subscription_id:
+            cmd += ["--subscription", subscription_id]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         return result.stdout.strip()
     except subprocess.CalledProcessError as e:
-        raise ClientError(
+        raise CredentialError(
             f"Failed to get access token from Azure CLI. "
             f"Make sure you're logged in with 'az login'. Error: {e.stderr}"
         )
     except FileNotFoundError:
-        raise ClientError(
+        raise CredentialError(
             "Azure CLI not found. Please install Azure CLI and login with 'az login'."
         )
 
@@ -10795,13 +11413,33 @@ def _get_access_token_from_service_principal(resource: str) -> str:
 def get_access_token(resource: str) -> str:
     """Get an access token for general CLI operations.
 
-    The public Copilot CLI contract uses Azure CLI delegated auth for its
-    normal Dataverse/Graph command surface. Service principal credentials can
-    coexist in the active profile for command groups that explicitly opt into
-    client-credential auth, but they must not silently hijack the default
-    Dataverse client path.
+    Dispatches on the active profile's ``get_auth_method()``:
+
+    - ``service_principal`` — profile has AZURE_TENANT_ID, AZURE_CLIENT_ID,
+      and AZURE_CLIENT_SECRET all set (in addition to DATAVERSE_URL). Uses
+      MSAL client-credentials auth, which is not subject to interactive
+      user sign-in-frequency conditional access policies.
+    - ``azure_cli`` — profile has only DATAVERSE_URL (plus optionally
+      AZURE_CLI_EXPECTED_USER/AZURE_TENANT_ID for identity validation). Uses
+      delegated ``az login`` auth as before.
+
+    A profile opts into service-principal auth by setting all three
+    AZURE_TENANT_ID/AZURE_CLIENT_ID/AZURE_CLIENT_SECRET fields; profiles
+    that only set DATAVERSE_URL keep today's Azure CLI behavior unchanged.
     """
-    return get_access_token_from_azure_cli(resource)
+    from cli_tools_shared.exceptions import CredentialError
+
+    config = get_config()
+    auth_method = config.get_auth_method()
+    if auth_method == "service_principal":
+        return _get_access_token_from_service_principal(resource)
+    if auth_method == "azure_cli":
+        return get_access_token_from_azure_cli(resource)
+    raise CredentialError(
+        "No usable credentials for the active copilot profile. Run "
+        "'copilot auth login' (Azure CLI) or configure AZURE_TENANT_ID/"
+        "AZURE_CLIENT_ID/AZURE_CLIENT_SECRET (service principal)."
+    )
 
 
 def get_client_for_environment(environment_id: str) -> "DataverseClient":
@@ -10919,6 +11557,12 @@ def get_client(dataverse_url: str = None, config=None) -> DataverseClient:
         _client = DataverseClient(dataverse_url, access_token)
         return _client
     except Exception as e:
+        # Preserve CredentialError so the shared error handler exits 2 for auth
+        # failures (e.g. `copilot whoami` against a profile/identity mismatch),
+        # matching `copilot auth status`. Other failures stay generic.
+        from cli_tools_shared.exceptions import CredentialError
+        if isinstance(e, CredentialError):
+            raise CredentialError(f"Failed to authenticate: {e}")
         raise ClientError(f"Failed to authenticate: {e}")
 
 

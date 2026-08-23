@@ -41,3 +41,26 @@ def test_fields_list_returns_schema_fields(monkeypatch):
             },
         }
     ]
+
+
+def test_fields_delete_fails_clearly_without_api_call(monkeypatch):
+    monkeypatch.setattr(fields, "resolve_base_id", lambda base_id: "appBase")
+    monkeypatch.setattr(fields, "get_client", lambda: (_ for _ in ()).throw(AssertionError("client should not be used")))
+
+    result = runner.invoke(fields.app, ["delete", "tblSlides", "fldObsolete", "--yes"])
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "Airtable's public Web/Meta API does not support deleting fields." in result.stderr
+    assert "airtable fields list --filter name:eq:<field name>" in result.stderr
+
+
+def test_fields_delete_does_not_prompt_without_confirmation(monkeypatch):
+    monkeypatch.setattr(fields, "resolve_base_id", lambda base_id: "appBase")
+    monkeypatch.setattr(fields, "get_client", lambda: (_ for _ in ()).throw(AssertionError("client should not be used")))
+
+    result = runner.invoke(fields.app, ["delete", "tblSlides", "fldObsolete"])
+
+    assert result.exit_code == 1
+    assert "Are you sure you want to delete field fldObsolete from table tblSlides?" not in result.stdout
+    assert "Airtable's public Web/Meta API does not support deleting fields." in result.stderr

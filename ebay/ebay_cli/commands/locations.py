@@ -3,6 +3,7 @@
 Uses the eBay Inventory API to manage merchant inventory locations.
 API Docs: https://developer.ebay.com/api-docs/sell/inventory/resources/location/methods/getInventoryLocations
 """
+from cli_tools_shared.output import command
 COMMAND_CREDENTIALS = {
     "list": ["oauth_authorization_code"],
     "get": ["oauth_authorization_code"],
@@ -24,6 +25,7 @@ app = typer.Typer(help="Manage eBay merchant inventory locations")
 
 
 @app.command("list")
+@command
 def locations_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(25, "--limit", "-l", help="Maximum number of locations to return"),
@@ -107,6 +109,7 @@ def locations_list(
 
 
 @app.command("get")
+@command
 def locations_get(
     location_key: str = typer.Argument(..., help="The merchant location key"),
     table: bool = typer.Option(False, "--table", "-t", help="Display summary as table"),
@@ -157,6 +160,7 @@ def locations_get(
 
 
 @app.command("create")
+@command
 def locations_create(
     location_key: str = typer.Argument(..., help="Unique identifier for this location (e.g., 'home', 'warehouse-1')"),
     name: str = typer.Option(..., "--name", "-n", help="Display name for the location"),
@@ -177,7 +181,7 @@ def locations_create(
 
     Examples:
         ebay locations create home --name "Home Office" --address "123 Main St" \\
-            --city "Evansville" --state "IN" --postal "47725"
+            --city "New York" --state "NY" --postal "10001"
         ebay locations create warehouse-1 --name "Main Warehouse" \\
             --address "456 Industrial Blvd" --city "Chicago" --state "IL" --postal "60601"
     """
@@ -230,6 +234,7 @@ def locations_create(
 
 
 @app.command("delete")
+@command
 def locations_delete(
     location_key: str = typer.Argument(..., help="The merchant location key to delete"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
@@ -264,6 +269,7 @@ def locations_delete(
 
 
 @app.command("enable")
+@command
 def locations_enable(
     location_key: str = typer.Argument(..., help="The merchant location key to enable"),
 ):
@@ -283,6 +289,7 @@ def locations_enable(
 
 
 @app.command("disable")
+@command
 def locations_disable(
     location_key: str = typer.Argument(..., help="The merchant location key to disable"),
 ):

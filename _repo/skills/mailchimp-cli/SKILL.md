@@ -25,14 +25,12 @@ mailchimp <command-group> <action> [arguments] [options]
 | Detect sponsor domain | `mailchimp campaigns report CAMPAIGN_ID --sponsor-domain specopssoft.com` |
 | Pause RSS campaign | `mailchimp campaigns pause CAMPAIGN_ID` |
 | Resume RSS campaign | `mailchimp campaigns resume CAMPAIGN_ID` |
-| List signup forms | `mailchimp forms list LIST_ID --table` |
 | List templates | `mailchimp templates list --table` |
-| List cache entries | `mailchimp cache list --table` |
 </quick_start>
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `mailchimp` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `mailchimp` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 
@@ -41,9 +39,7 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **audiences** -- Manage audiences/lists (list, get, create)
 - **members** -- Manage subscribers (list, get, add, update, remove, search)
 - **campaigns** -- Manage email campaigns (list, get, create, send, pause, resume, report, content, children)
-- **forms** -- Manage audience signup forms (list, get, create)
 - **templates** -- Manage email templates (list, get)
-- **cache** -- Inspect and clear cached command responses
 </principle>
 </essential_principles>
 

@@ -1,6 +1,10 @@
 # Udemy CLI
 
-Command-line access to Udemy instructor courses. Course list/get commands use the Udemy Instructor API. Course management read/update commands use an authenticated browser session because Udemy does not provide an API for those manage pages.
+## DESCRIPTION
+
+The `udemy` CLI provides a command-line interface for Udemy API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 
@@ -222,7 +226,7 @@ JSON is the default output format. Use `--table` for human-readable output.
 
 ## Configuration
 
-Credentials are stored in a `.env` file in the package directory:
+Authentication profile files live under `~/.local/share/cli-tools/udemy/authentication_profiles/<profile>/`; non-auth defaults live in `~/.local/share/cli-tools/udemy/.env`:
 
 ```bash
 ACTIVE=true

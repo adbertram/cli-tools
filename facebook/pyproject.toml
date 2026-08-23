@@ -15,6 +15,11 @@ dependencies = [
     "cli-tools-shared",
 ]
 
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+]
+
 [project.scripts]
 facebook = "facebook_cli.main:main"
 

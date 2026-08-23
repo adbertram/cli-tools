@@ -18,6 +18,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/gmail.modify",
     "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/gmail.settings.basic",
     "https://www.googleapis.com/auth/calendar.readonly",
     "https://www.googleapis.com/auth/webmasters",
     "https://www.googleapis.com/auth/cloud-platform",
@@ -28,6 +29,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/chat.memberships.readonly",
     "https://www.googleapis.com/auth/chromewebstore",
     "https://www.googleapis.com/auth/datastudio",
+    "https://www.googleapis.com/auth/contacts.readonly",
 ]
 
 class ClientError(Exception):
@@ -135,8 +137,8 @@ class GoogleClient:
             if self.creds and self.creds.expired and self.creds.refresh_token:
                 self.creds.refresh(Request())
             else:
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    self.config.credentials_path, SCOPES
+                flow = InstalledAppFlow.from_client_config(
+                    self.config.oauth_client_config(), SCOPES
                 )
                 self.creds = flow.run_local_server(port=0)
 
@@ -178,6 +180,10 @@ class GoogleClient:
     def get_calendar_service(self):
         """Get Google Calendar service."""
         return self.get_service("calendar", "v3")
+
+    def get_people_service(self):
+        """Get Google People service."""
+        return self.get_service("people", "v1")
 
     def get_webmasters_service(self):
         """Get Google Search Console v1 service (for URL Inspection API)."""

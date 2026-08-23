@@ -1,6 +1,10 @@
 ---
-name: "podio-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute podio operations using the `podio` CLI tool. CLI interface for Podio API - Manage apps, items, tasks, and more. Triggers: podio, podio cli, podio items, podio apps, podio tasks, list podio items, podio workspace, podio conversations, podio files, podio webhooks, my podio"
+name: podio-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute podio operations using the `podio` CLI tool.
+  CLI interface for Podio API - Manage apps, items, tasks, and more.
+  Triggers: podio, podio cli, podio items, podio apps, podio tasks, list podio items, podio workspace, podio conversations, podio files, podio webhooks, my podio
 ---
 
 <objective>
@@ -23,12 +27,11 @@ podio <command-group> <action> [arguments] [options]
 | Get item field values | `podio item values ITEM_ID` |
 | Create a task | `podio task create "Task text"` |
 | Upload a file | `podio file upload ./file.pdf` |
-| List cache entries | `podio cache list --table` |
 </quick_start>
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `podio` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `podio` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 
@@ -45,7 +48,6 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **file** -- File operations (upload, attach, list, get, download, copy)
 - **webform** -- Manage webforms (list, get, submit, field, attachments)
 - **auth** -- Authentication commands and nested `auth profiles` management
-- **cache** -- Inspect and clear cached command responses
 </principle>
 </essential_principles>
 

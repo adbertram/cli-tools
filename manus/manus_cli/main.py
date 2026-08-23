@@ -12,11 +12,12 @@ from cli_tools_shared.command_registry import register_commands
 app = create_app(name="manus", help="CLI interface for Manus AI API", version=__version__)
 
 # Register command modules
-from .commands import auth, task
+from .commands import auth, task, usage
 from .config import get_config
 
 app.add_typer(auth.app, name="auth", help="Manage API authentication")
 register_commands(app, get_config, task, name="task", help="Manage AI tasks")
+register_commands(app, get_config, usage, name="usage", help="Inspect Manus credit usage")
 app.add_typer(create_cache_app(get_config), name="cache")
 
 

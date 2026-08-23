@@ -34,7 +34,7 @@ impact <command-group> <action> [arguments] [options]
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `impact` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `impact` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 
@@ -93,7 +93,7 @@ After every `impact` command, inspect stdout. If it is JSON with `type: "ai_inst
 - In `build_list_categories_instruction`, click 'All Brands' first, then click the 'Categories' filter chip to open its dropdown.
 
 **Verification:**
-1. Reinstall: `uv tool install -e <cli-tools-root>/impact --force --refresh`.
+1. Reinstall: `uv tool install -e ~/Dropbox/GitRepos/cli-tools/impact --force --refresh`.
 2. Check emitted URL: `impact marketplace search --keyword "PowerShell" --text` must show `Target URL: https://app.impact.com/secure/mediapartner/marketplace/new-campaign-marketplace-flow.ihtml#joinState=all&q=PowerShell`.
 3. End-to-end: with an authenticated `playwright-cli -s=impact` session, `playwright-cli -s=impact goto "<the new target URL>"` must produce a page with title `impact.com - Brand Marketplace` (NOT `Page Not Found`) and a result grid with `N rows` count above it.
 
@@ -128,7 +128,7 @@ After every `impact` command, inspect stdout. If it is JSON with `type: "ai_inst
 
 **Cause:** The skill historically referenced LastPass as the credential source. Adam's vault has no `app.impact.com` entry; impact credentials live in the CLI-tools Keychain-backed secret manager under names `impact-username` and `impact-password`. An authenticated persistent browser profile also exists at `.playwright-cli/profiles/impact`.
 
-**Fix:** All marketplace instruction outputs and SKILL guidance now reference `<cli-tools-root>/_repo/_secret-manager/secrets.sh get impact-username|impact-password`. The `_common_login_steps()` action arguments include `credentials_source: "cli-tools-secret-manager"`, `username_secret`, `password_secret`, and `profile_path` so future agents look in the right place first.
+**Fix:** All marketplace instruction outputs and SKILL guidance now reference `/Users/adam/Dropbox/GitRepos/cli-tools/secret-manager/secrets.sh get impact-username|impact-password`. The `_common_login_steps()` action arguments include `credentials_source: "cli-tools-secret-manager"`, `username_secret`, `password_secret`, and `profile_path` so future agents look in the right place first.
 
 **Verification:** `impact marketplace search --keyword X | jq '.steps[0].arguments'` must show `credentials_source: cli-tools-secret-manager` and the secret names — not a `lastpass_entry` reference.
 

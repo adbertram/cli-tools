@@ -76,6 +76,7 @@ def _parse_fast_groups_posts_list(argv: list[str]):
     group_id = None
     table = False
     limit = 20
+    full_threads = False
     filters: list[str] = []
     properties = None
     index = 3
@@ -91,6 +92,9 @@ def _parse_fast_groups_posts_list(argv: list[str]):
             index += 2
         elif arg.startswith("--limit="):
             limit = int(arg.split("=", 1)[1])
+            index += 1
+        elif arg == "--full-threads":
+            full_threads = True
             index += 1
         elif arg in ("--filter", "-f"):
             if index + 1 >= len(argv):
@@ -118,9 +122,9 @@ def _parse_fast_groups_posts_list(argv: list[str]):
 
     if group_id is None:
         return None
-    if limit < 1 or limit > 20:
+    if limit < 1 or limit > 25:
         return None
-    return group_id, table, limit, filters or None, properties
+    return group_id, table, limit, full_threads, filters or None, properties
 
 
 def _parse_fast_groups_posts_get(argv: list[str]):
@@ -223,12 +227,12 @@ def _fast_groups_posts_list(argv: list[str]) -> Optional[int]:
     if parsed is None:
         return None
 
-    group_id, table, limit, filters, properties = parsed
+    group_id, table, limit, full_threads, filters, properties = parsed
     from .client import ClientError, get_client
 
     client = get_client()
     try:
-        posts = client.list_group_posts(group_id, limit=limit)
+        posts = client.list_group_posts(group_id, limit=limit, full_threads=full_threads)
     except ClientError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 2

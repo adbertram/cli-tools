@@ -56,6 +56,8 @@ class AuthVerifier:
                                   "expired"|"no_token"
               browser_session   - Browser types only. bool: live session?
               browser_available - Browser types only. bool: can we probe?
+              browser_error     - Browser types only. probe failure detail
+                                  when browser_available is false.
               api_test          - API/custom types only. "passed"|"failed: ..."|
                                   "skipped". Extra handler fields (e.g. "email")
                                   are merged into the same block.
@@ -146,6 +148,8 @@ class AuthVerifier:
                 "browser_available": browser_check["available"],
                 "authenticated": browser_check["authenticated"],
             }
+            if "browser_error" in browser_check:
+                block["browser_error"] = browser_check["browser_error"]
             if not block["authenticated"]:
                 return block
 
@@ -270,8 +274,13 @@ class AuthVerifier:
             return None
         try:
             has_session = bool(self.config.has_saved_session())
-        except Exception:
-            return {"authenticated": False, "available": False, "has_session": False}
+        except Exception as exc:
+            return {
+                "authenticated": False,
+                "available": False,
+                "has_session": False,
+                "browser_error": str(exc),
+            }
 
         if not has_session:
             return {"authenticated": False, "available": False, "has_session": False}
@@ -284,11 +293,16 @@ class AuthVerifier:
                     browser.close()
                 except Exception:
                     pass
-        except Exception:
-            return {"authenticated": False, "available": False, "has_session": True}
+        except Exception as exc:
+            return {
+                "authenticated": False,
+                "available": False,
+                "has_session": True,
+                "browser_error": str(exc),
+            }
 
         authenticated = bool(live)
-        available = bool(getattr(live, "available", authenticated))
+        available = bool(getattr(live, "available", True))
         return {
             "authenticated": authenticated,
             "available": available,

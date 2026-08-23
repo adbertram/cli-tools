@@ -1,19 +1,27 @@
 """Conversations commands for claude-code-sessions CLI."""
+COMMAND_CREDENTIALS = {
+    "list": ["no_auth"],
+    "get": ["no_auth"],
+}
+
 import typer
 from typing import Optional, List
 
 from ..client import get_client, ClientError
 from cli_tools_shared.filters import apply_filters
-from cli_tools_shared.output import print_json, print_table, handle_error
+from cli_tools_shared.output import command, print_json, print_table, handle_error
 from ..parsers import format_local_time
+from .session_arg import resolve_session_arg
 
 app = typer.Typer(help="List conversations within sessions", no_args_is_help=True)
 
 
 @app.command("list")
+@command
 def list_conversations(
     project: str = typer.Option(..., "--project", "-p", help="Project name (required)"),
-    session_id: Optional[str] = typer.Option(None, "--session-id", "-s", help="Filter to specific session"),
+    session_id: Optional[str] = typer.Option(None, "--session-id", "-s", help="Session ID (UUID or name)"),
+    session_name: Optional[str] = typer.Option(None, "--session-name", "-N", help="Session name (exact, case-insensitive)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum results"),
     since: Optional[str] = typer.Option(None, "--since", help="Time filter: 5h, 1d, 7d"),
@@ -33,6 +41,7 @@ def list_conversations(
     """
     try:
         client = get_client()
+        session_id = resolve_session_arg(client, session_id, session_name, project=project)
         conversations = client.list_conversations(
             project=project,
             session_id=session_id,
@@ -68,8 +77,10 @@ def list_conversations(
                 # Format timestamps in local timezone
                 item['first_msg'] = format_local_time(item.get('created_at', ''))
                 item['last_msg'] = format_local_time(item.get('ended_at', ''))
-            columns = ["session_id", "conversation_id", "message_count", "first_msg", "last_msg", "in_tok", "out_tok", "cache_read", "cache_create", "effective"]
-            headers = ["Session", "Conv", "Msgs", "First Msg", "Last Msg", "In Tok", "Out Tok", "Cache Read", "Cache Create", "Effective"]
+                # Last model used in the conversation; blank when not recorded
+                item['model'] = item.get('model') or ''
+            columns = ["session_id", "conversation_id", "model", "message_count", "first_msg", "last_msg", "in_tok", "out_tok", "cache_read", "cache_create", "effective"]
+            headers = ["Session", "Conv", "Model", "Msgs", "First Msg", "Last Msg", "In Tok", "Out Tok", "Cache Read", "Cache Create", "Effective"]
             print_table(items, columns, headers, max_columns=0)
         else:
             print_json(items)
@@ -79,56 +90,86 @@ def list_conversations(
 
 
 @app.command("get")
+@command
 def get_conversation(
-    conversation_id: str = typer.Argument(..., help="Conversation ID (session_id:conv_number, e.g. abc123:1)"),
-    project: str = typer.Option(..., "--project", "-p", help="Project name (required)"),
+    conversation_id: Optional[str] = typer.Argument(None, help="Conversation ID (session_or_name:conv_number, e.g. abc123:1); omit when using --session-name"),
+    project: Optional[str] = typer.Option(None, "--project", "-p", help="Project name (auto-derived from session when omitted)"),
+    session_name: Optional[str] = typer.Option(None, "--session-name", "-N", help="Session name (exact, case-insensitive); requires --conversation-id"),
+    conv_number: Optional[int] = typer.Option(None, "--conversation-id", "-C", help="Conversation number (used with --session-name)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
 ):
     """
-    Get a specific conversation by ID.
+    Get a specific conversation by ID, including user and assistant messages.
 
-    The conversation ID format is session_id:conversation_number (e.g., abc123:1).
+    Two ways to identify the conversation:
+    - Positional: session:conversation_number (e.g., abc123:1), where session is
+      a UUID or a session name. The number is split off the right, so names
+      containing colons (e.g. "Course: ...") are accepted.
+    - Flags: --session-name NAME --conversation-id N (useful when you prefer not
+      to embed the number in a colon-containing name).
+
+    --project is optional; omit it to auto-derive from the session.
 
     Example:
+        claude-code-sessions conversations get abc123:1
+        claude-code-sessions conversations get "Course: OpenAI Codex Advanced Features Module 2:1"
+        claude-code-sessions conversations get --session-name "Course: OpenAI Codex Advanced Features Module 2" -C 1
         claude-code-sessions conversations get abc123:1 --project MyProject
     """
     try:
-        # Parse conversation_id as session_id:conv_number
-        if ":" not in conversation_id:
-            print_json({"error": "Conversation ID must be in format session_id:conv_number (e.g., abc123:1)"})
-            raise typer.Exit(1)
+        # Resolve the session and conversation number from either the positional
+        # form or the --session-name/--conversation-id flags (mutually exclusive).
+        if conversation_id is not None and session_name is not None:
+            raise typer.BadParameter(
+                "use either the positional session:conv argument or "
+                "--session-name (with --conversation-id), not both"
+            )
 
-        session_id, conv_num_str = conversation_id.rsplit(":", 1)
-        try:
-            conv_num = int(conv_num_str)
-        except ValueError:
-            print_json({"error": f"Invalid conversation number '{conv_num_str}'. Must be an integer."})
-            raise typer.Exit(1)
+        if session_name is not None:
+            if conv_number is None:
+                raise typer.BadParameter("--session-name requires --conversation-id")
+            session_arg = session_name
+            conv_num = conv_number
+        else:
+            if conversation_id is None:
+                raise typer.BadParameter(
+                    "provide session:conv as the positional argument, or use "
+                    "--session-name with --conversation-id"
+                )
+            # Split the conversation number off the RIGHT because names may
+            # contain colons.
+            if ":" not in conversation_id:
+                print_json({"error": "Conversation ID must be in format session_id:conv_number (e.g., abc123:1)"})
+                raise typer.Exit(1)
+            session_arg, conv_num_str = conversation_id.rsplit(":", 1)
+            try:
+                conv_num = int(conv_num_str)
+            except ValueError:
+                print_json({"error": f"Invalid conversation number '{conv_num_str}'. Must be an integer."})
+                raise typer.Exit(1)
 
         client = get_client()
-        conversations = client.list_conversations(
+        session_id = client.resolve_session_id(session_arg, project=project)
+        if project is None:
+            project = client.get_session_project(session_id)
+        conversation = client.get_conversation(
             project=project,
             session_id=session_id,
+            conversation_id=conv_num,
         )
 
-        # Find the matching conversation
-        match = None
-        for c in conversations:
-            if c.conversation_id == conv_num:
-                match = c
-                break
-
-        if not match:
+        if conversation is None:
             print_json({"error": f"Conversation {conv_num} not found in session '{session_id}'"})
             raise typer.Exit(1)
 
-        item = match.model_dump()
+        item = conversation.model_dump()
 
         if table:
             rows = [
                 {"field": "Session ID", "value": item.get("session_id", "")},
                 {"field": "Conversation", "value": str(item.get("conversation_id", ""))},
                 {"field": "Project", "value": item.get("project", "")},
+                {"field": "Model", "value": item.get("model") or "N/A"},
                 {"field": "Messages", "value": str(item.get("message_count", 0))},
                 {"field": "User Messages", "value": str(item.get("user_message_count", 0))},
                 {"field": "Assistant Messages", "value": str(item.get("assistant_message_count", 0))},
@@ -139,6 +180,13 @@ def get_conversation(
                 {"field": "Output Tokens", "value": f"{item.get('total_output_tokens', 0):,}"},
                 {"field": "Effective Tokens", "value": f"{item.get('effective_tokens', 0):,}"},
             ]
+            rows.extend(
+                {
+                    "field": f"Message {index} ({message.get('type', '')})",
+                    "value": message.get("content", ""),
+                }
+                for index, message in enumerate(item.get("messages", []), start=1)
+            )
             print_table(rows, ["field", "value"], ["Field", "Value"])
         else:
             print_json(item)

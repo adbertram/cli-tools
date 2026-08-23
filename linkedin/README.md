@@ -1,7 +1,10 @@
 # LinkedIn CLI
 
-Create and manage LinkedIn member and page posts through LinkedIn's official
-OAuth APIs only.
+## DESCRIPTION
+
+The `linkedin` CLI lets you create and manage LinkedIn personal and page posts.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## What It Supports
 

@@ -1,7 +1,10 @@
 # Awin CLI
 
-CLI for the [Awin Publisher API](https://help.awin.com/apidocs). Lists
-publisher accounts and advertiser programmes you have access to.
+## DESCRIPTION
+
+The `awin` CLI provides a command-line interface for Awin API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

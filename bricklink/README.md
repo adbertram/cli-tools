@@ -1,6 +1,8 @@
 # Bricklink CLI
 
-A command-line interface for the [Bricklink API](https://www.bricklink.com/v3/api.page). Bricklink marketplace API
+## DESCRIPTION
+
+A command-line interface for the [Bricklink API]. Use it to query and manage Bricklink marketplace API data for orders, inventory, catalog records, messages, coupons, and refunds from the terminal.
 
 ## Installation
 
@@ -10,6 +12,25 @@ pip install -e .
 ```
 
 After installation, the `bricklink` command will be available in your terminal.
+
+## Testing
+
+From this directory, run BrickLink's tests through the uv project environment and
+add pytest for the run:
+
+```bash
+uv run --with pytest python -m pytest tests
+```
+
+For a focused regression test:
+
+```bash
+uv run --with pytest python -m pytest tests/test_browser_runtime.py::test_get_page_for_does_not_require_networkidle -vv
+```
+
+Do not use bare `python -m pytest` or `uv run python -m pytest` for this repo.
+The first misses project dependencies such as `cli_tools_shared`; the second
+does not include pytest unless it is supplied for the run.
 
 ## Quick Start
 
@@ -45,6 +66,82 @@ Browser-backed commands prompt for BrickLink email confirmation codes when
 BrickLink redirects the active browser page to `confirmation_code_required`.
 The command keeps the browser session open, asks for the emailed code on
 stderr, submits it, and retries the original request.
+
+#### Browser Session Recovery Notes
+
+When browser-backed commands report an expired session or a persistent AWS WAF
+challenge, rebuild only the browser session first:
+
+```bash
+bricklink auth login --credential-type browser_session
+```
+
+This login is fully non-interactive. It opens a headed Chrome profile at
+`~/.local/share/cli-tools/bricklink/authentication_profiles/default/browser-data/chromium-profile`,
+auto-fills the LEGO identity login form with the managed credentials, completes
+LEGO's enforced email two-factor step, submits any emailed six-digit
+confirmation code, then verifies and closes the browser — no terminal Enter and
+no human login step. In a non-interactive runner it uses the live authenticated
+browser state as the completion signal.
+
+LEGO identity enforces a two-factor email code after a correct email+password
+(`identity.lego.com/.../auth/two-factor-authentication?isenforced=True`). This is
+a separate step from BrickLink's legacy confirmation page. The login fetches the
+LEGO code from the managed Gmail account (`account@mail.identity.lego.com`,
+subject `Your LEGO® code: NNNNNN`, profile `adbertram`), enters it, and submits —
+so no human relays the code. This is an automatable email OTP, not a CAPTCHA or
+device-trust wall.
+
+Managed browser-login credentials come from the **cli-tools secret manager**
+(macOS Keychain, service namespace `cli-tools`), NOT LastPass and NOT any
+`.env` file:
+
+- `bricklink-username` — the LEGO account email/username used at
+  https://identity.lego.com (this is the LEGO login identifier, NOT the
+  BrickLink store username; LEGO rejects the store username `geeklife`).
+- `bricklink-password` — the LEGO web password.
+
+Store or update them with (never echo the value):
+
+```bash
+printf '%s' "$VALUE" | \
+  ~/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh \
+  set --tool bricklink --type username
+printf '%s' "$VALUE" | \
+  ~/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh \
+  set --tool bricklink --type password
+```
+
+Important gotchas from live recovery attempts:
+
+- `--force` clears the saved browser profile before opening login. If the
+  managed credentials are wrong, the prior session is gone. Prefer the
+  non-force command first; it already re-runs the login when the saved session
+  is invalid.
+- The OAuth/API secrets (`bricklink-client-id`, `bricklink-client-secret`,
+  `bricklink-access-token`, `bricklink-refresh-token`) are unrelated to the
+  browser login. A valid OAuth status does NOT imply a valid `browser_session`.
+- If either login secret is missing, the login fails fast with the exact
+  `secrets.sh set` command to run. Do not reset the LEGO password without
+  explicit approval.
+- The CLI-owned auth browser is opened through the shared Playwright harness and
+  is not exposed as an attachable CDP browser. For diagnostics, a Codex run can
+  launch the same persistent profile with Playwright and interact with the LEGO
+  form directly, then return to `bricklink auth status` for verification.
+- For email codes, use the newest Gmail result. Known BrickLink confirmation
+  subject: `Your BrickLink confirmation code`. If the local `google` CLI lacks
+  Gmail scopes, use the Gmail connector instead of asking the user to relay the
+  code.
+- `bricklink messages list` may be cached. Use `bricklink cache clear` and a
+  live browser-backed command such as `bricklink messages get <message-id>` to
+  verify the session.
+- Copying cookies from the normal Chrome profile did not restore CLI auth in
+  the observed recovery. BrickLink/LEGO auth cookies were `HttpOnly` and
+  encrypted (`v10`); reading Chrome Safe Storage required a macOS Keychain
+  Allow prompt, and a temporary copy of the normal Chrome profile still opened
+  BrickLink at the LEGO login page with only non-auth cookies exposed. Chrome
+  also refused remote debugging on the default profile with: `DevTools remote
+  debugging requires a non-default data directory`.
 
 ### Items
 
@@ -150,6 +247,28 @@ bricklink refund issue <order-id> --amount 5.00
 bricklink refund full <order-id>
 ```
 
+### store
+
+Manage store settings (browser-based).
+
+```bash
+bricklink store vacation enable 07/15/2026 --dry-run
+bricklink store vacation enable 07/15/2026 --yes
+bricklink store vacation disable --dry-run
+bricklink store vacation disable --yes
+```
+
+`vacation enable` appends or replaces the trailing notice on the store
+announcement, banner, and every enabled shipping method note:
+
+```text
+ | ATTENTION: All orders will ship M/D/YY!
+```
+
+`vacation disable` removes that trailing notice from the announcement, banner,
+and enabled shipping method notes. Commands refuse to save changes unless
+`--yes` is supplied; use `--dry-run` to preview without saving.
+
 ### notification
 
 Manage notifications (browser-based).
@@ -209,7 +328,7 @@ bricklink items list --limit 5
 
 ## Configuration
 
-Credentials are stored in a `.env` file in the package directory:
+Authentication profile files live under `~/.local/share/cli-tools/bricklink/authentication_profiles/<profile>/`; non-auth defaults live in `~/.local/share/cli-tools/bricklink/.env`:
 
 ```bash
 # API Key
@@ -267,3 +386,5 @@ Commands emit plain JSON-compatible dictionaries and lists. Table output is a re
 ## License
 
 MIT
+
+[Bricklink API]: https://www.bricklink.com/v3/api.page

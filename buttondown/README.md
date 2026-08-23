@@ -1,6 +1,10 @@
 # Buttondown CLI
 
-Command-line access to the Buttondown REST API for subscribers, emails, and tags.
+## DESCRIPTION
+
+The `buttondown` CLI provides a command-line interface for Buttondown API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 
@@ -71,6 +75,13 @@ buttondown subscribers remind SUBSCRIBER_ID_OR_EMAIL
 
 Supported subscriber filters include `email_address`, `domain`, `tag`, `type`, `source`, `creation_date`, `open_rate`, `click_rate`, `risk_score`, `utm_campaign`, `utm_medium`, and `utm_source`.
 
+**Filtering here is server-side, so the shared `like` semantics do not apply.** Each
+`field:op:value` maps to a Buttondown API query parameter and the API decides what matches; this CLI
+runs no client-side matching. Do not add SQL `%` wildcards — a `%` is sent to the API literally.
+`eq`, `like`, and `ilike` all map to the same API parameter for a given field, so they behave
+identically. An unsupported `field:op` pair fails loudly with
+`Filter '<field>:<op>' is not supported for <resource>.`
+
 ### Emails
 
 ```bash
@@ -91,6 +102,9 @@ buttondown emails update EMAIL_ID --body-file ./updated.md
 buttondown emails delete EMAIL_ID --force
 buttondown emails send-draft EMAIL_ID --recipient test@example.com
 buttondown emails send-draft EMAIL_ID --subscriber SUBSCRIBER_ID
+
+buttondown emails analytics EMAIL_ID
+buttondown emails analytics EMAIL_ID --table
 ```
 
 Supported email filters include `status`, `source`, `subject`, `archival_mode`, `email_type`, `creation_date`, `publish_date`, `deliveries`, `open_rate`, and `click_rate`.
@@ -184,6 +198,7 @@ The client returns Pydantic models for all API resources.
 | --- | --- |
 | `Subscriber` | Subscriber list, get, create, and update responses |
 | `Email` | Email list, get, create, and update responses |
+| `EmailAnalytics` | Email analytics responses |
 | `Tag` | Tag list, get, create, and update responses |
 | `TagAnalytics` | Tag analytics responses |
 | `ActionResult` | Delete and send-action acknowledgements |

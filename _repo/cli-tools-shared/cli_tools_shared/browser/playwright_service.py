@@ -1,0 +1,501 @@
+"""Playwright-backed browser service for CLI tools.
+
+This service implements the same small synchronous surface as
+``BrowserHarnessService`` while launching a persistent Chrome profile through
+Playwright. It is intentionally optional: tools that need it add ``playwright``
+to their own dependencies.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import signal
+import shutil
+import subprocess
+import time
+import fcntl
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+from urllib.parse import parse_qsl, urlsplit, urlunsplit
+
+from . import BrowserHarnessError
+from ._elements import _ServiceElement, _ServiceLocator
+from .processes import (
+    ProcessCommand,
+    ProcessTableUnavailableError,
+    command_user_data_dir,
+    list_process_commands,
+    pid_is_running,
+    profile_process_pids,
+)
+
+
+class PlaywrightServiceError(BrowserHarnessError):
+    """Error from PlaywrightBrowserService operations."""
+
+
+def _chrome_binary() -> str:
+    candidates = [
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        "/usr/bin/google-chrome",
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    raise PlaywrightServiceError(
+        "Could not locate a Chrome/Chromium binary. Install Google Chrome "
+        "or set CLI_TOOLS_CHROME_BINARY."
+    )
+
+
+def _parse_window_size(window_size: str | None) -> tuple[int, int] | None:
+    if not window_size:
+        return None
+    cleaned = window_size.lower().replace(",", "x")
+    parts = cleaned.split("x")
+    if len(parts) != 2:
+        raise PlaywrightServiceError(
+            f"window_size must be formatted as WIDTHxHEIGHT, got {window_size!r}."
+        )
+    try:
+        width = int(parts[0].strip())
+        height = int(parts[1].strip())
+    except ValueError as exc:
+        raise PlaywrightServiceError(
+            f"window_size must contain integer width and height, got {window_size!r}."
+        ) from exc
+    if width <= 0 or height <= 0:
+        raise PlaywrightServiceError(
+            f"window_size values must be positive, got {window_size!r}."
+        )
+    return width, height
+
+
+class PlaywrightBrowserService:
+    """Synchronous browser service backed by Playwright persistent context."""
+
+    def __init__(
+        self,
+        session: str,
+        *,
+        timeout: int = 60,
+        executable_path: Optional[str] = None,
+    ):
+        self.session = session
+        self.default_timeout = timeout
+        self.executable_path = executable_path
+        self._playwright = None
+        self._context = None
+        self._page = None
+        self._opened = False
+        self._user_data_dir: Optional[Path] = None
+        self._lifecycle_lock_file = None
+
+    @staticmethod
+    def _safe_url_for_log(url: str) -> str:
+        if not url:
+            return ""
+        try:
+            parts = urlsplit(url)
+            query = "&".join(
+                f"{name}=<redacted>"
+                for name, _value in parse_qsl(parts.query, keep_blank_values=True)
+            )
+            fragment = "<redacted>" if parts.fragment else ""
+            return urlunsplit((parts.scheme, parts.netloc, parts.path, query, fragment))
+        except Exception:
+            return "<unparseable url>"
+
+    def _require_open(self) -> None:
+        if not self._opened or self._context is None or self._page is None:
+            raise PlaywrightServiceError(
+                f"No browser open for session '{self.session}'. Call browser_open() first."
+            )
+
+    def _page_info(self) -> Dict[str, Any]:
+        if not self._opened or self._page is None:
+            return {"url": "", "title": "", "console_errors": 0, "console_warnings": 0}
+        try:
+            title = self._page.title()
+        except Exception:
+            title = ""
+        return {
+            "url": self._page.url or "",
+            "title": title,
+            "console_errors": 0,
+            "console_warnings": 0,
+        }
+
+    def _list_process_table(self) -> List[ProcessCommand]:
+        """Return process-table rows for the local process table."""
+        try:
+            return list_process_commands()
+        except ProcessTableUnavailableError:
+            raise
+        except RuntimeError as exc:
+            raise PlaywrightServiceError(f"Failed to inspect process table: {exc}") from exc
+
+    def _list_process_commands(self) -> List[tuple[int, str, str]]:
+        """Return legacy `(pid, stat, command)` process rows."""
+        return [(proc.pid, proc.stat, proc.command) for proc in self._list_process_table()]
+
+    def _session_process_pids(self) -> List[int]:
+        """Return PIDs for Chrome helpers using this service's profile."""
+        if self._user_data_dir is None:
+            return []
+        return profile_process_pids(self._user_data_dir, processes=self._list_process_table())
+
+    def _pid_running(self, pid: int) -> bool:
+        return pid_is_running(pid)
+
+    def _terminate_session_pid(self, pid: int) -> None:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return
+        except OSError as exc:
+            raise PlaywrightServiceError(
+                f"Failed to stop stale browser process {pid}: {exc}"
+            ) from exc
+
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            if not self._pid_running(pid):
+                return
+            time.sleep(0.1)
+
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            return
+        except OSError as exc:
+            raise PlaywrightServiceError(
+                f"Failed to force-stop stale browser process {pid}: {exc}"
+            ) from exc
+
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            if not self._pid_running(pid):
+                return
+            time.sleep(0.1)
+
+        raise PlaywrightServiceError(
+            f"Stale browser process {pid} for session '{self.session}' did not exit"
+        )
+
+    def _cleanup_stale_profile_processes(self) -> None:
+        """Terminate Chrome helpers that still own this exact user-data-dir."""
+        try:
+            pids = self._session_process_pids()
+        except ProcessTableUnavailableError:
+            return
+        for pid in pids:
+            self._terminate_session_pid(pid)
+
+    def _acquire_profile_lifecycle_lock(self) -> None:
+        """Serialize browser ownership for this exact persistent profile."""
+        if self._lifecycle_lock_file is not None:
+            return
+        if self._user_data_dir is None:
+            raise PlaywrightServiceError("Cannot lock a browser profile before it is resolved.")
+        lock_path = self._user_data_dir.parent / f".{self._user_data_dir.name}.lifecycle.lock"
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_file = open(lock_path, "a+")
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        except Exception:
+            lock_file.close()
+            raise
+        self._lifecycle_lock_file = lock_file
+
+    def _release_profile_lifecycle_lock(self) -> None:
+        """Release this service's persistent-profile ownership lock."""
+        if self._lifecycle_lock_file is None:
+            return
+        try:
+            fcntl.flock(self._lifecycle_lock_file.fileno(), fcntl.LOCK_UN)
+        finally:
+            self._lifecycle_lock_file.close()
+            self._lifecycle_lock_file = None
+
+    @staticmethod
+    def _command_user_data_dir(command: str) -> Optional[str]:
+        return command_user_data_dir(command)
+
+    def _raise_if_profile_in_use(self) -> None:
+        try:
+            pids = self._session_process_pids()
+        except ProcessTableUnavailableError:
+            return
+        if not pids:
+            return
+        raise PlaywrightServiceError(
+            "Playwright profile is already in use by Chrome process(es) "
+            f"{', '.join(str(pid) for pid in pids)}: {self._user_data_dir}"
+        )
+
+    def _cleanup_stale_profile_locks(self) -> None:
+        """Remove singleton artifacts only after proving no profile owner exists."""
+        try:
+            pids = self._session_process_pids()
+        except ProcessTableUnavailableError:
+            return
+        if pids:
+            raise PlaywrightServiceError(
+                "Playwright profile is already in use by Chrome process(es) "
+                f"{', '.join(str(pid) for pid in pids)}: {self._user_data_dir}"
+            )
+        if self._user_data_dir is None:
+            return
+        for name in ("SingletonCookie", "SingletonLock", "SingletonSocket", "DevToolsActivePort"):
+            path = self._user_data_dir / name
+            if not path.exists() and not path.is_symlink():
+                continue
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                continue
+            except OSError as exc:
+                raise PlaywrightServiceError(
+                    f"Failed to remove stale browser lock file {path}: {exc}"
+                ) from exc
+
+    def browser_open(
+        self,
+        url: Optional[str] = None,
+        headed: bool = False,
+        persistent_profile_dir: Optional[Path] = None,
+        user_agent: Optional[str] = None,
+        window_size: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        if persistent_profile_dir is None:
+            raise PlaywrightServiceError(
+                "browser_open: persistent_profile_dir is required. "
+                "Pass config.get_persistent_profile_dir() from the caller."
+            )
+        if headed and os.getenv("CLI_TOOL_TEST_NO_HEADED_BROWSER") == "1":
+            headed = False
+        if self._opened:
+            self.browser_close()
+
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError as exc:
+            raise PlaywrightServiceError(
+                "Playwright is not installed in this CLI environment."
+            ) from exc
+
+        profile_dir = Path(persistent_profile_dir)
+        profile_dir.mkdir(parents=True, exist_ok=True)
+        self._user_data_dir = profile_dir
+        self._acquire_profile_lifecycle_lock()
+
+        try:
+            self._cleanup_stale_profile_locks()
+
+            launch_args = [
+                "--restore-last-session",
+                "--disable-blink-features=AutomationControlled",
+                "--disable-features=AutomationControlled,Translate",
+            ]
+            if user_agent:
+                launch_args.append(f"--user-agent={user_agent}")
+
+            width_height = _parse_window_size(window_size)
+            kwargs: dict[str, Any] = {
+                "headless": not headed,
+                "executable_path": self.executable_path or os.getenv("CLI_TOOLS_CHROME_BINARY") or _chrome_binary(),
+                "args": launch_args,
+                "timeout": self.default_timeout * 1000,
+            }
+            if width_height is not None:
+                kwargs["viewport"] = {"width": width_height[0], "height": width_height[1]}
+
+            self._playwright = sync_playwright().start()
+            self._context = self._playwright.chromium.launch_persistent_context(
+                str(profile_dir),
+                **kwargs,
+            )
+            self._page = self._context.pages[0] if self._context.pages else self._context.new_page()
+            self._page.set_default_timeout(self.default_timeout * 1000)
+            self._page.set_default_navigation_timeout(self.default_timeout * 1000)
+            self._opened = True
+            if url:
+                self.page_goto(url)
+            return self._page_info()
+        except Exception as exc:
+            self._opened = False
+            try:
+                if self._context is not None:
+                    self._context.close()
+            finally:
+                self._context = None
+                self._page = None
+                if self._playwright is not None:
+                    self._playwright.stop()
+                    self._playwright = None
+                self._release_profile_lifecycle_lock()
+            raise PlaywrightServiceError(f"Failed to open Playwright browser: {exc}") from exc
+
+    def browser_close(self) -> Dict[str, Any]:
+        context = self._context
+        playwright = self._playwright
+        cleanup_owned_profile = self._opened or context is not None or playwright is not None
+        self._context = None
+        self._page = None
+        self._playwright = None
+        self._opened = False
+        try:
+            if context is not None:
+                context.close()
+        finally:
+            try:
+                if playwright is not None:
+                    playwright.stop()
+            finally:
+                try:
+                    if cleanup_owned_profile:
+                        self._cleanup_stale_profile_processes()
+                finally:
+                    self._release_profile_lifecycle_lock()
+        return {"success": True, "message": "Browser closed"}
+
+    def page_goto(self, url: str, wait_until: str | None = "domcontentloaded") -> Dict[str, Any]:
+        self._require_open()
+        self._page.goto(url, wait_until=wait_until or "domcontentloaded")
+        return self._page_info()
+
+    def goto(self, url: str, wait_until: str = None) -> None:
+        self.page_goto(url, wait_until=wait_until or "domcontentloaded")
+
+    def evaluate(self, js: str, arg: Any = None) -> Any:
+        self._require_open()
+        if arg is None:
+            return self._page.evaluate(js)
+        return self._page.evaluate(js, arg)
+
+    def iframe_target(self, url_substr: str) -> Optional[str]:
+        self._require_open()
+        if not url_substr:
+            raise PlaywrightServiceError("iframe_target: url_substr must be non-empty")
+        for frame in self._page.frames:
+            if url_substr in (frame.url or ""):
+                return frame.url
+        return None
+
+    def evaluate_in_iframe(self, url_substr: str, js: str, arg: Any = None) -> Any:
+        self._require_open()
+        frame = next(
+            (candidate for candidate in self._page.frames if url_substr in (candidate.url or "")),
+            None,
+        )
+        if frame is None:
+            return None
+        if arg is None:
+            return frame.evaluate(js)
+        return frame.evaluate(js, arg)
+
+    def page_eval(self, js: str, arg: Any = None) -> Dict[str, Any]:
+        return {"result": self.evaluate(js, arg)}
+
+    def keyboard_press(self, key: str) -> Dict[str, Any]:
+        self._require_open()
+        self._page.keyboard.press(key)
+        return self._page_info()
+
+    def type_text(self, text: str) -> Dict[str, Any]:
+        self._require_open()
+        self._page.keyboard.type(text)
+        return self._page_info()
+
+    def cookie_list(self) -> List[Dict[str, Any]]:
+        self._require_open()
+        cookies = self._context.cookies()
+        if not isinstance(cookies, list):
+            raise PlaywrightServiceError(
+                f"Playwright context.cookies() returned unexpected payload: {cookies!r}"
+            )
+        return cookies
+
+    def localstorage_list(self) -> List[Dict[str, str]]:
+        result = self.evaluate(
+            "() => Object.entries(localStorage).map(([key, value]) => ({key, value}))"
+        )
+        return result or []
+
+    def data_delete(self) -> Dict[str, Any]:
+        self.browser_close()
+        if self._user_data_dir is not None and self._user_data_dir.exists():
+            self._cleanup_stale_profile_processes()
+            self._raise_if_profile_in_use()
+            shutil.rmtree(self._user_data_dir)
+        return {"success": True, "message": "Session data deleted"}
+
+    def locator(self, selector: str) -> _ServiceLocator:
+        return _ServiceLocator(self, selector)
+
+    def get_by_role(self, role: str, *, name=None, exact: bool = False) -> _ServiceLocator:
+        return _ServiceLocator.from_role(self, role, name, exact=exact)
+
+    def get_by_placeholder(self, text: str) -> _ServiceLocator:
+        return _ServiceLocator(self, f'[placeholder="{text}"]')
+
+    def wait_for_timeout(self, ms: int) -> None:
+        time.sleep(ms / 1000)
+
+    def wait_for_selector(
+        self,
+        selector: str,
+        *,
+        state: str = "visible",
+        timeout: int = 30000,
+    ) -> Optional[_ServiceElement]:
+        valid_states = ("attached", "visible", "hidden", "detached")
+        if state not in valid_states:
+            raise PlaywrightServiceError(
+                f"wait_for_selector: state must be one of {valid_states}, got {state!r}"
+            )
+        self._require_open()
+        self._page.wait_for_selector(selector, state=state, timeout=timeout)
+        if state in ("hidden", "detached"):
+            return None
+        return _ServiceElement(self, css=selector)
+
+    def query_selector(self, selector: str) -> Optional[_ServiceElement]:
+        self._require_open()
+        present = self.evaluate(
+            f"() => !!document.querySelector({json.dumps(selector)})"
+        )
+        if not present:
+            return None
+        return _ServiceElement(self, css=selector)
+
+    def fill(self, selector: str, text: str) -> None:
+        """Fill the first element matching ``selector`` with ``text``.
+
+        Playwright-compatible page-level shim: callers written against the
+        Playwright ``page.fill(selector, text)`` API expect this method on the
+        page object. Resolves ``selector`` against the live DOM and reuses the
+        same fill behavior as the element/locator wrappers, mirroring
+        :meth:`BrowserHarnessService.fill` so both browser backends expose the
+        same page-level surface.
+        """
+        self._require_open()
+        _ServiceElement(self, css=selector).fill(text)
+
+    def aria_snapshot(self, selector: str = "body", *, timeout: int = 5000) -> str:
+        self._require_open()
+        return self._page.locator(selector).aria_snapshot(timeout=timeout)
+
+    @property
+    def url(self) -> str:
+        try:
+            return self._page_info().get("url", "")
+        except Exception:
+            return ""

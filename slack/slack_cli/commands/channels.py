@@ -27,7 +27,7 @@ COMMAND_CREDENTIALS = {
 import typer
 from typing import Optional, List
 from ..client import get_client, ClientError
-from cli_tools_shared.output import print_json, print_table, print_success, print_warning, handle_error
+from cli_tools_shared.output import print_json, print_table, print_success, print_warning, handle_error, command
 from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError, apply_properties_filter
 
 app = typer.Typer(help="Manage Slack channels")
@@ -43,6 +43,7 @@ def _get_channel_unread_count(client, channel_id: str) -> dict:
 
 
 @app.command("list")
+@command
 def list_channels(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of channels"),
@@ -139,6 +140,7 @@ def list_channels(
 
 
 @app.command("get")
+@command
 def channel_get(
     channel_id: str = typer.Argument(..., help="Channel ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -181,6 +183,7 @@ def channel_get(
 
 
 @app.command("create")
+@command
 def create_channel(
     name: str = typer.Argument(..., help="Channel name"),
     private: bool = typer.Option(False, "--private", help="Create a private channel"),
@@ -205,6 +208,7 @@ def create_channel(
 
 
 @app.command("archive")
+@command
 def archive_channel(
     channel_id: str = typer.Argument(..., help="Channel ID to archive"),
 ):
@@ -224,6 +228,7 @@ def archive_channel(
 
 
 @app.command("join")
+@command
 def join_channel(
     channel_id: str = typer.Argument(..., help="Channel ID to join"),
 ):
@@ -245,6 +250,7 @@ def join_channel(
 
 
 @app.command("leave")
+@command
 def leave_channel(
     channel_id: str = typer.Argument(..., help="Channel ID to leave"),
 ):
@@ -264,6 +270,7 @@ def leave_channel(
 
 
 @app.command("members")
+@command
 def list_members(
     channel_id: str = typer.Argument(..., help="Channel ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),

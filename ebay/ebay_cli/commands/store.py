@@ -3,23 +3,35 @@
 Uses the eBay Stores API to manage store settings and categories.
 API Docs: https://developer.ebay.com/api-docs/sell/stores/resources/store/methods/getStoreCategories
 """
+from cli_tools_shared.output import command
 COMMAND_CREDENTIALS = {
     "list": ["oauth_authorization_code"],
+    "create": ["no_auth"],
     "categories": ["oauth_authorization_code"],
+    "time-away": ["browser_session"],
 }
 
+from datetime import date, datetime
 from typing import Optional, List
 
 import typer
 
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_table, handle_error, print_error
+from ..config import get_config
+from .. import time_away
+from cli_tools_shared.output import print_json, print_table, handle_error, print_error, print_success
 from cli_tools_shared.filters import validate_filters, apply_filters, FilterValidationError
 from ..properties import validate_and_filter_properties, PropertyValidationError
 
 app = typer.Typer(help="Manage eBay store")
-categories_app = typer.Typer(help="Manage eBay store categories")
+categories_app = typer.Typer(help="Manage eBay store categories", no_args_is_help=True)
+time_away_app = typer.Typer(help="Manage eBay Time Away settings", no_args_is_help=True)
 app.add_typer(categories_app, name="categories", help="Manage eBay store categories")
+app.add_typer(time_away_app, name="time-away", help="Manage eBay Time Away settings")
+
+DATE_INPUT_FORMATS = ("%m/%d/%Y", "%m/%d/%y", "%Y-%m-%d")
+DATE_HELP = "M/D/YY, MM/DD/YYYY, or YYYY-MM-DD"
+TIME_AWAY_MODES = {"allow-sales", "pause-sales"}
 
 
 def _flatten_categories(categories: list, parent_path: str = "") -> list:
@@ -58,7 +70,176 @@ def _flatten_categories(categories: list, parent_path: str = "") -> list:
     return result
 
 
+def _parse_time_away_date(value: str) -> date:
+    """Parse a Time Away date from the accepted CLI formats."""
+    for date_format in DATE_INPUT_FORMATS:
+        try:
+            return datetime.strptime(value, date_format).date()
+        except ValueError:
+            continue
+    raise ValueError(f"date must be {DATE_HELP}")
+
+
+def _format_display_date(value: date) -> str:
+    return f"{value.month}/{value.day}/{value.year}"
+
+
+def _format_result(action: str, result: dict, *, dry_run: bool = False) -> dict:
+    return {
+        "success": True,
+        "action": action,
+        "dry_run": dry_run,
+        "url": result.get("url"),
+        "title": result.get("title"),
+        "enabled": result.get("enabled"),
+        "mode": result.get("mode"),
+        "has_schedule_action": result.get("has_schedule_action"),
+        "has_cancel_action": result.get("has_cancel_action"),
+        "text_excerpt": result.get("text_excerpt"),
+    }
+
+
+def _get_browser(profile: Optional[str] = None):
+    return get_config(profile=profile).get_browser()
+
+
+def _print_time_away_result(result: dict, table: bool) -> None:
+    if result.get("success") and result.get("submitted"):
+        print_success(result["message"])
+    if table:
+        print_table(
+            [result],
+            ["action", "dry_run", "submitted", "enabled", "mode", "url"],
+            ["Action", "Dry Run", "Submitted", "Enabled", "Mode", "URL"],
+        )
+    else:
+        print_json(result)
+
+
+@time_away_app.command("get")
+@command
+def time_away_get(
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Profile name"),
+):
+    """Get current eBay Time Away settings."""
+    browser = _get_browser(profile=profile)
+    try:
+        result = _format_result("get", time_away.read_settings(browser))
+        _print_time_away_result(result, table)
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+    finally:
+        browser.close()
+
+
+@time_away_app.command("enable")
+@command
+def time_away_enable(
+    end_date: str = typer.Argument(..., help=f"Time Away end date in {DATE_HELP} format"),
+    start_date: Optional[str] = typer.Option(None, "--start-date", help=f"Time Away start date in {DATE_HELP} format; defaults to today"),
+    mode: str = typer.Option("allow-sales", "--mode", help="Time Away mode: allow-sales or pause-sales"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview changes without saving"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Save changes to eBay"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Profile name"),
+):
+    """Schedule eBay Time Away."""
+    if mode not in TIME_AWAY_MODES:
+        print_error("mode must be allow-sales or pause-sales")
+        raise typer.Exit(1)
+    if not dry_run and not yes:
+        print_error("Refusing to update eBay Time Away without --yes or --dry-run.")
+        raise typer.Exit(1)
+
+    try:
+        parsed_start = _parse_time_away_date(start_date) if start_date else date.today()
+        parsed_end = _parse_time_away_date(end_date)
+        if parsed_end < parsed_start:
+            raise ValueError("end_date must be on or after start_date")
+
+        browser = _get_browser(profile=profile)
+        try:
+            if dry_run:
+                state = time_away.read_settings(browser)
+                result = _format_result("enable", state, dry_run=True)
+                result.update(
+                    {
+                        "submitted": False,
+                        "start_date": parsed_start.isoformat(),
+                        "end_date": parsed_end.isoformat(),
+                        "mode": mode,
+                        "message": "Dry run: eBay Time Away enable changes were not saved.",
+                    }
+                )
+            else:
+                state = time_away.enable(
+                    browser,
+                    start_date_iso=parsed_start.isoformat(),
+                    start_date_display=_format_display_date(parsed_start),
+                    end_date_iso=parsed_end.isoformat(),
+                    end_date_display=_format_display_date(parsed_end),
+                    mode=mode,
+                )
+                result = _format_result("enable", state)
+                result.update(
+                    {
+                        "submitted": True,
+                        "start_date": parsed_start.isoformat(),
+                        "end_date": parsed_end.isoformat(),
+                        "mode": mode,
+                        "message": "eBay Time Away enable saved.",
+                    }
+                )
+            _print_time_away_result(result, table)
+        finally:
+            browser.close()
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+@time_away_app.command("disable")
+@command
+def time_away_disable(
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview changes without saving"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Save changes to eBay"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Profile name"),
+):
+    """Cancel eBay Time Away."""
+    if not dry_run and not yes:
+        print_error("Refusing to update eBay Time Away without --yes or --dry-run.")
+        raise typer.Exit(1)
+
+    browser = _get_browser(profile=profile)
+    try:
+        if dry_run:
+            state = time_away.read_settings(browser)
+            result = _format_result("disable", state, dry_run=True)
+            result.update(
+                {
+                    "submitted": False,
+                    "message": "Dry run: eBay Time Away disable changes were not saved.",
+                }
+            )
+        else:
+            state = time_away.disable(browser)
+            result = _format_result("disable", state)
+            result.update(
+                {
+                    "submitted": True,
+                    "message": "eBay Time Away disable saved.",
+                }
+            )
+        _print_time_away_result(result, table)
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+    finally:
+        browser.close()
+
+
 @categories_app.command("list")
+@command
 def categories_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     flat: bool = typer.Option(False, "--flat", help="Flatten category hierarchy into a flat list"),
@@ -177,7 +358,39 @@ def categories_list(
         raise typer.Exit(handle_error(e))
 
 
+@categories_app.command("create")
+@command
+def categories_create(
+    category_name: str = typer.Argument(..., help="Top-level store category name"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview the request without creation"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Create the category"),
+):
+    """Create a top-level store category."""
+    if not category_name.strip():
+        print_error("The category name cannot be empty.")
+        raise typer.Exit(1)
+    if len(category_name) > 35:
+        print_error("The category name cannot exceed 35 characters.")
+        raise typer.Exit(1)
+    if not dry_run and not yes:
+        print_error("Refusing to create an eBay store category without --yes or --dry-run.")
+        raise typer.Exit(1)
+
+    payload = {"categoryName": category_name}
+    if dry_run:
+        print_json({"dry_run": True, "request": payload})
+        return
+
+    try:
+        result = get_client().create_store_category(payload)
+        print_success(f"Store category creation accepted: {category_name}")
+        print_json({"categoryName": category_name, **result})
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
 @categories_app.command("get")
+@command
 def categories_get(
     category_id: str = typer.Argument(..., help="Store category ID to look up"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),

@@ -1,4 +1,5 @@
 """MCP server commands for listing Model Context Protocol servers available as agent tools."""
+from cli_tools_shared.output import command
 import typer
 import json as _json
 from typing import Optional
@@ -304,6 +305,7 @@ def format_mcp_for_display(connector: dict, truncate: bool = False) -> dict:
 
 
 @app.command("list")
+@command
 def mcp_list(
     filter: Optional[list[str]] = typer.Option(
         None,
@@ -459,6 +461,7 @@ def format_mcp_record_for_display(record: dict, truncate: bool = False) -> dict:
 
 
 @app.command("get")
+@command
 def mcp_get(
     connector_id: str = typer.Argument(
         ...,
@@ -506,6 +509,7 @@ def mcp_get(
 
 
 @app.command("create")
+@command
 def mcp_create(
     name: str = typer.Option(
         ...,
@@ -609,6 +613,7 @@ def mcp_create(
 
 
 @app.command("remove")
+@command
 def mcp_remove(
     mcp_server_id: str = typer.Argument(
         ...,
@@ -675,6 +680,7 @@ def mcp_remove(
 
 
 @app.command("auth")
+@command
 def mcp_auth(
     url: str = typer.Option(
         ...,
@@ -756,6 +762,7 @@ def mcp_auth(
 
 
 @tools_app.command("list")
+@command
 def mcp_tools_list(
     url: str = typer.Option(
         ...,
@@ -896,6 +903,7 @@ def mcp_tools_list(
 
 
 @tools_app.command("invoke")
+@command
 def mcp_tools_invoke(
     url: str = typer.Option(
         ...,
@@ -1049,6 +1057,7 @@ def mcp_tools_invoke(
 
 
 @tools_app.command("get")
+@command
 def mcp_tools_get(
     url: str = typer.Option(
         ...,

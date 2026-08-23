@@ -1,14 +1,25 @@
-"""Cache commands for Cloudflare CLI."""
+"""Cache commands for Cloudflare CLI.
+
+The local response-cache `clear` command comes from the shared
+`create_cache_app` helper so it keeps the standard `--profile` option and the
+standard `{files_removed, bytes_freed}` output. Cloudflare's own `purge`
+command (which purges the CDN edge cache for a zone) is added on top.
+"""
+
 import typer
 
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_table, print_success, handle_error
+from ..config import get_config
+from cli_tools_shared.cache_commands import create_cache_app
+from cli_tools_shared.output import command, print_json, print_table, print_success
 
 
-app = typer.Typer(help="Manage Cloudflare cache", no_args_is_help=True)
+app = create_cache_app(get_config)
+app.info.help = "Manage Cloudflare cache"
 
 
 @app.command("purge")
+@command
 def cache_purge(
     zone_id: str = typer.Argument(..., help="The zone ID to purge cache for"),
     force: bool = typer.Option(False, "--force", "-F", help="Skip confirmation prompt"),
@@ -24,33 +35,36 @@ def cache_purge(
         cloudflare cache purge ZONE_ID --force
         cloudflare cache purge ZONE_ID --table
     """
-    try:
-        # Confirmation prompt unless --force is specified
-        if not force:
-            confirm = typer.confirm(
-                f"Purge ALL cache for zone {zone_id}? This cannot be undone.",
-                default=False
-            )
-            if not confirm:
-                print_success("Cache purge cancelled")
-                raise typer.Exit(0)
+    # Confirmation prompt unless --force is specified
+    if not force:
+        confirm = typer.confirm(
+            f"Purge ALL cache for zone {zone_id}? This cannot be undone.",
+            default=False
+        )
+        if not confirm:
+            print_success("Cache purge cancelled")
+            raise typer.Exit(0)
 
-        client = get_client()
-        # Returns PurgeResult model
-        result = client.purge_cache(zone_id)
+    client = get_client()
+    # Returns PurgeResult model
+    result = client.purge_cache(zone_id)
 
-        if table:
-            print_table(
-                [{"id": result.id, "status": "purged"}],
-                ["id", "status"],
-                ["Purge ID", "Status"],
-            )
-        else:
-            print_json({"id": result.id, "status": "purged", "zone_id": zone_id})
+    if table:
+        print_table(
+            [{"id": result.id, "status": "purged"}],
+            ["id", "status"],
+            ["Purge ID", "Status"],
+        )
+    else:
+        print_json({"id": result.id, "status": "purged", "zone_id": zone_id})
 
-        print_success(f"Cache purged successfully for zone {zone_id}")
+    print_success(f"Cache purged successfully for zone {zone_id}")
 
-    except typer.Exit:
-        raise
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+
+# "clear" only removes local cached CLI responses, so it needs no credentials.
+COMMAND_CREDENTIALS = {
+    "clear": [],
+    "purge": [
+        "api_key"
+    ]
+}

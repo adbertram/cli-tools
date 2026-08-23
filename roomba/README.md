@@ -1,6 +1,10 @@
 # Roomba CLI
 
-A command-line interface to control iRobot Roomba vacuums using the [roombapy](https://github.com/pschmitt/roombapy) library.
+## DESCRIPTION
+
+The `roomba` CLI provides a command-line interface for Roomba API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

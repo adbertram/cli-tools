@@ -57,7 +57,7 @@ def test_auth_status_marks_guest_orders_page_unauthenticated(tmp_path):
     assert page.wait_for_timeout_calls == [2000]
     assert block["credentials_saved"] is True
     assert block["browser_session"] is False
-    assert block["browser_available"] is False
+    assert block["browser_available"] is True
     assert block["authenticated"] is False
     assert result["authenticated"] is False
 

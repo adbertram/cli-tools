@@ -173,6 +173,15 @@ def shipments_create(
     width: float = typer.Option(4.0, "--width", help="Parcel width in inches (default: 4)"),
     height: float = typer.Option(1.0, "--height", help="Parcel height in inches (default: 1)"),
     weight: float = typer.Option(8.0, "--weight", "-w", help="Parcel weight in oz (default: 8)"),
+    # Customs declaration (for international shipments)
+    customs_description: Optional[str] = typer.Option(None, "--customs-description", "--description", help="Customs item description, e.g. 'LEGO building blocks'"),
+    customs_value: Optional[float] = typer.Option(None, "--customs-value", "--value", help="Customs item value in USD"),
+    customs_quantity: int = typer.Option(1, "--customs-quantity", "--quantity", min=1, help="Customs item quantity"),
+    customs_signer: Optional[str] = typer.Option(None, "--customs-signer", help="Name certifying the customs declaration"),
+    customs_tax_id: Optional[str] = typer.Option(None, "--customs-tax-id", help="Tax/VAT/IOSS number to transmit in customs data"),
+    customs_tax_id_type: str = typer.Option("IOSS", "--customs-tax-id-type", help="Tax ID type: EIN, VAT, IOSS, or ARN"),
+    customs_vat_collected: bool = typer.Option(False, "--customs-vat-collected", help="Set when VAT was collected by the marketplace"),
+    customs_invoice: Optional[str] = typer.Option(None, "--customs-invoice", help="Invoice or order reference for customs"),
     # Output
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
 ):
@@ -194,6 +203,14 @@ def shipments_create(
             --to-name "Recipient" --to-address "200 Second Ave" \\
             --to-city "Chicago" --to-state IL --to-zip 60601 \\
             --weight 16 --length 10 --width 8 --height 4
+
+        shippo shipments create \\
+            --to-name "Bram Akkermans" --to-address "Spinveld 34A" \\
+            --to-city BREDA --to-state NB --to-zip "4815 HS" --to-country NL \\
+            --weight 2 --customs-description "LEGO building blocks" \\
+            --customs-value 22.81 --customs-quantity 5 \\
+            --customs-tax-id IOSS_NUMBER --customs-tax-id-type IOSS \\
+            --customs-vat-collected --customs-invoice 32005565
     """
     try:
         client = get_client()
@@ -227,6 +244,19 @@ def shipments_create(
                 f"Missing from-address fields. Set in .env or pass as options: {', '.join(missing)}"
             )
 
+        is_international = to_country.upper() != actual_from_country.upper()
+        has_partial_customs = any([
+            customs_description,
+            customs_value is not None,
+            customs_tax_id,
+            customs_vat_collected,
+            customs_invoice,
+        ])
+        if is_international and has_partial_customs and not (customs_description and customs_value is not None):
+            raise typer.BadParameter(
+                "International customs requires both --customs-description and --customs-value"
+            )
+
         shipment = client.create_shipment(
             from_name=actual_from_name,
             from_street1=actual_from_street1,
@@ -249,6 +279,14 @@ def shipments_create(
             width=width,
             height=height,
             weight=weight,
+            customs_item_description=customs_description,
+            customs_item_value=customs_value,
+            customs_item_quantity=customs_quantity,
+            customs_signer=customs_signer,
+            customs_tax_id_number=customs_tax_id,
+            customs_tax_id_type=customs_tax_id_type,
+            customs_is_vat_collected=customs_vat_collected if customs_vat_collected else None,
+            customs_invoice=customs_invoice,
         )
 
         if table:

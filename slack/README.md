@@ -1,6 +1,10 @@
 # Slack CLI
 
-A command-line interface for the [Slack API](https://docs.slack.dev). Manage channels, messages, users, files, notifications, and more from the terminal.
+## DESCRIPTION
+
+The `slack` CLI provides a command-line interface for Slack API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

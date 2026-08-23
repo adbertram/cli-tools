@@ -1,6 +1,10 @@
 # ElevenLabs CLI
 
-A command-line interface for the [ElevenLabs API](https://elevenlabs.io/docs/api-reference). It supports API-key authentication, voice discovery, model inspection, subscription quota checks, pronunciation dictionaries, and text-to-speech audio generation.
+## DESCRIPTION
+
+The `elevenlabs` CLI provides a command-line interface for Elevenlabs API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 
@@ -18,6 +22,7 @@ elevenlabs auth login
 elevenlabs auth status
 elevenlabs voices list --table
 elevenlabs models list --table
+elevenlabs history list --limit 10
 elevenlabs pronunciation-dictionaries list --table
 elevenlabs speech create VOICE_ID "The first move is what sets everything in motion." --output speech.mp3
 ```
@@ -120,6 +125,28 @@ elevenlabs speech create VOICE_ID "Hello sysadmins." --output hello.mp3 --pronun
 # Output result metadata as a table
 elevenlabs speech create VOICE_ID "Hello." --output hello.mp3 --table
 ```
+
+### History
+
+```bash
+# List with the official cursor and server-side filters
+elevenlabs history list --page-size 100 --start-after-history-item-id HISTORY_ITEM_ID
+elevenlabs history list --voice-id VOICE_ID --search "text" --source text_to_speech
+
+# Inspect one exact generated item
+elevenlabs history get HISTORY_ITEM_ID
+
+# Atomically download that exact item's audio
+elevenlabs history download HISTORY_ITEM_ID --output recovered.mp3
+```
+
+History lookup is by `history_item_id`. The official History API does not expose
+request-ID lookup or a no-charge conclusion for a missing/incomplete result.
+Download output is published only after same-directory temporary-file validation:
+HTTP status, supported Content-Type, nonempty bytes, matching container magic,
+bounded `ffprobe`, and bounded full `ffmpeg` decode. Success JSON includes the
+HTTP status, byte count, SHA-256, and media evidence; failure preserves any prior
+destination.
 
 ### Pronunciation Dictionaries
 

@@ -28,3 +28,15 @@ _CLICK_JS = (
     "if (typeof el.click === 'function') el.click();"
     " else el.dispatchEvent(new MouseEvent('click', {bubbles: true}));"
 )
+
+
+def _check_js(checked: bool) -> str:
+    """JS body that clicks a checkbox/radio only when it is not already in
+    the requested ``checked`` state.
+
+    Mirrors Playwright's ``check()``/``uncheck()`` semantics: both are
+    idempotent, so a click is dispatched only when the live ``el.checked``
+    state differs from the target state.
+    """
+    negate = "!" if checked else ""
+    return f"if ({negate}el.checked) {{ {_CLICK_JS} }}"

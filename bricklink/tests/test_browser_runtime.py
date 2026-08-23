@@ -19,6 +19,69 @@ class _Page:
         self.url = url
 
 
+class _NoNetworkIdlePage:
+    def __init__(self):
+        self.url = None
+        self.goto_calls = []
+        self.waited_selectors = []
+
+    def goto(self, url, wait_until=None):
+        self.url = url
+        self.goto_calls.append((url, wait_until))
+        if wait_until == "networkidle":
+            raise TimeoutError("Page.goto: Timeout 60000ms exceeded")
+
+    def wait_for_selector(self, selector, **_kwargs):
+        self.waited_selectors.append(selector)
+        return object()
+
+    def evaluate(self, script):
+        if "document.title" in script:
+            return "BrickLink"
+        return None
+
+    def query_selector(self, _selector):
+        return None
+
+    def wait_for_timeout(self, _timeout):
+        return None
+
+
+class _WafChallengePage(_NoNetworkIdlePage):
+    def __init__(self, *, clear_after):
+        super().__init__()
+        self.clear_after = clear_after
+
+    def _waf_active(self):
+        return len(self.goto_calls) <= self.clear_after
+
+    def evaluate(self, script):
+        if "document.title" in script:
+            return "Human Verification" if self._waf_active() else "BrickLink"
+        return None
+
+    def query_selector(self, selector):
+        if selector == "#amzn-captcha-verify-button" and self._waf_active():
+            return object()
+        return None
+
+
+class _AbortedNavigationPage(_NoNetworkIdlePage):
+    def __init__(self, *, body_visible=True):
+        super().__init__()
+        self.body_visible = body_visible
+
+    def goto(self, url, wait_until=None):
+        self.url = url
+        self.goto_calls.append((url, wait_until))
+        raise RuntimeError(f"Page.goto: net::ERR_ABORTED at {url}")
+
+    def wait_for_selector(self, selector, **_kwargs):
+        if selector == "body" and not self.body_visible:
+            raise TimeoutError("body not visible")
+        return super().wait_for_selector(selector, **_kwargs)
+
+
 def _make_runtime(monkeypatch):
     """Build a BricklinkRuntimeBrowser without invoking its __init__.
 
@@ -44,14 +107,16 @@ def test_check_session_expired_clears_session_and_raises_actionable_error(monkey
     runtime.clear_session.assert_called_once_with()
     msg = str(ei.value)
     assert "Bricklink session expired" in msg
-    assert "bricklink auth login --force" in msg
+    assert "bricklink auth login --credential-type browser_session" in msg
 
 
 def test_check_session_expired_matches_v2_login_page(monkeypatch):
     runtime = _make_runtime(monkeypatch)
     page = _Page("https://www.bricklink.com/v2/login.page")
 
-    with pytest.raises(RuntimeError, match="bricklink auth login --force"):
+    with pytest.raises(
+        RuntimeError, match="bricklink auth login --credential-type browser_session"
+    ):
         runtime._check_session_expired(page)
 
     runtime.clear_session.assert_called_once_with()
@@ -65,6 +130,24 @@ def test_check_session_expired_no_match_does_not_clear(monkeypatch):
     result = runtime._check_session_expired(page)
     assert result is None
     runtime.clear_session.assert_not_called()
+
+
+def test_check_session_expired_raises_for_select_account(monkeypatch):
+    """LEGO select-account is a login-flow state, not a refund page."""
+    runtime = _make_runtime(monkeypatch)
+    page = _Page(
+        "https://identity.lego.com/select-account"
+        "?clientname=BrickLink&returnUrl=%2Fconnect%2Fauthorize%2Fcallback"
+        "%3Fprompt%3Dselect_account"
+    )
+
+    with pytest.raises(RuntimeError) as ei:
+        runtime._check_session_expired(page)
+
+    runtime.clear_session.assert_called_once_with()
+    msg = str(ei.value)
+    assert "Bricklink session expired" in msg
+    assert "bricklink auth login --credential-type browser_session" in msg
 
 
 @pytest.mark.parametrize(
@@ -115,6 +198,78 @@ def test_check_auth_accepts_message_page(monkeypatch):
     assert runtime._check_auth(page) is True
 
 
+def test_get_page_for_does_not_require_networkidle(monkeypatch):
+    runtime = _make_runtime(monkeypatch)
+    page = _NoNetworkIdlePage()
+    runtime.get_page = MagicMock(return_value=page)
+    url = "https://www.bricklink.com/myMsg.asp?pg=1&a=i"
+
+    result = runtime._get_page_for(url)
+
+    assert result is page
+    runtime.get_page.assert_called_once_with()
+    assert page.goto_calls == [(url, "domcontentloaded")]
+    assert "body" in page.waited_selectors
+
+
+def test_get_page_for_accepts_aborted_navigation_when_body_rendered(monkeypatch):
+    runtime = _make_runtime(monkeypatch)
+    page = _AbortedNavigationPage(body_visible=True)
+    runtime.get_page = MagicMock(return_value=page)
+    url = "https://www.bricklink.com/v3/order/refund.page?id=31816264"
+
+    result = runtime._get_page_for(url)
+
+    assert result is page
+    assert page.goto_calls == [(url, "domcontentloaded")]
+    assert "body" in page.waited_selectors
+
+
+def test_get_page_for_reraises_aborted_navigation_when_body_missing(monkeypatch):
+    runtime = _make_runtime(monkeypatch)
+    page = _AbortedNavigationPage(body_visible=False)
+    runtime.get_page = MagicMock(return_value=page)
+    url = "https://www.bricklink.com/v3/order/refund.page?id=31816264"
+
+    with pytest.raises(TimeoutError, match="body not visible"):
+        runtime._get_page_for(url)
+
+
+def test_get_page_for_reloads_until_waf_challenge_clears(monkeypatch):
+    runtime = _make_runtime(monkeypatch)
+    page = _WafChallengePage(clear_after=2)
+    runtime.get_page = MagicMock(return_value=page)
+    url = "https://www.bricklink.com/contact.asp?orderID=31874336"
+
+    result = runtime._get_page_for(url)
+
+    assert result is page
+    assert page.goto_calls == [
+        (url, "domcontentloaded"),
+        (url, "domcontentloaded"),
+        (url, "domcontentloaded"),
+    ]
+
+
+def test_get_page_for_raises_actionable_error_when_waf_challenge_persists(monkeypatch):
+    runtime = _make_runtime(monkeypatch)
+    page = _WafChallengePage(clear_after=99)
+    runtime.get_page = MagicMock(return_value=page)
+    url = "https://www.bricklink.com/contact.asp?orderID=31874336"
+
+    with pytest.raises(RuntimeError) as ei:
+        runtime._get_page_for(url, max_waf_retries=2)
+
+    msg = str(ei.value)
+    assert "AWS WAF CAPTCHA challenge" in msg
+    assert "did not clear after 2 reloads" in msg
+    assert page.goto_calls == [
+        (url, "domcontentloaded"),
+        (url, "domcontentloaded"),
+        (url, "domcontentloaded"),
+    ]
+
+
 def test_check_session_expired_raises_actionable_even_if_clear_session_fails(monkeypatch):
     runtime = _make_runtime(monkeypatch)
     runtime.clear_session.side_effect = RuntimeError("disk full")
@@ -124,8 +279,8 @@ def test_check_session_expired_raises_actionable_even_if_clear_session_fails(mon
     # either: (a) the original Bricklink message wraps the clear failure
     # (RuntimeError "Bricklink session expired..."), or (b) the clear
     # failure surfaces with the Bricklink message attached. The contract
-    # is "the user sees `bricklink auth login --force` in the final
-    # message".
+    # is "the user sees `bricklink auth login --credential-type browser_session`
+    # in the final message".
     with pytest.raises(RuntimeError) as ei:
         runtime._check_session_expired(page)
 
@@ -135,7 +290,7 @@ def test_check_session_expired_raises_actionable_even_if_clear_session_fails(mon
     # failure). The clear failure may be chained via __context__.
     final_msg = str(ei.value)
     assert "Bricklink session expired" in final_msg
-    assert "bricklink auth login --force" in final_msg
+    assert "bricklink auth login --credential-type browser_session" in final_msg
 
 
 # ============================================================================
@@ -347,3 +502,357 @@ def test_search_orders_by_item_splits_set_sequence(monkeypatch):
     assert healthy_page.submissions[0]["itemNo"] == "30103"
     assert healthy_page.submissions[0]["itemSeq"] == "1"
     assert healthy_page.submissions[0]["itemType"] == "S"
+
+
+def test_list_nss_alerts(monkeypatch):
+    class MockPage:
+        def __init__(self):
+            self.url = "https://www.bricklink.com/orderReceived.asp?st=s"
+        def wait_for_selector(self, selector, timeout=0):
+            return None
+        def evaluate(self, script):
+            return [
+                {
+                    "order_id": "31748542",
+                    "date": "May 31, 2026",
+                    "buyer": "1mom",
+                    "items_cost": "16.69",
+                    "grand_total": "US $22.69",
+                    "final_total": "US $21.13",
+                    "status": "NSS",
+                    "url": "https://www.bricklink.com/orderDetail.asp?ID=31748542"
+                }
+            ]
+
+    page = MockPage()
+    runtime = _make_runtime(monkeypatch)
+    runtime._get_page_for = MagicMock(return_value=page)
+
+    result = runtime.list_nss_alerts()
+    assert len(result) == 1
+    assert result[0]["order_id"] == "31748542"
+    assert result[0]["buyer"] == "1mom"
+    runtime._get_page_for.assert_called_once_with("https://www.bricklink.com/orderReceived.asp?st=s")
+
+
+def test_get_nss_alert(monkeypatch):
+    class MockPage:
+        def __init__(self):
+            self.url = "https://www.bricklink.com/retractOrder.asp?ID=31748542"
+        def evaluate(self, script):
+            return {
+                "status": "Non-Shipping Seller Alert is in effect and was filed on Jun 8, 2026 12:51 by 1mom (1)",
+                "cancellation_info": "This order can be cancelled after Jun 22, 2026 12:51 by 1mom (1)",
+                "reason": "Seller shipped order but order was incomplete",
+                "details": "[Used] Yellow Technic, Liftarm Thick 1 x 13 (x2) ..... US $0.25 each = US $0.50",
+                "comments": [
+                    {
+                        "user": "1mom",
+                        "date": "Jun 8, 2026 12:51",
+                        "message": "1mom initiated Non-Shipping Seller alert."
+                    }
+                ]
+            }
+
+    page = MockPage()
+    runtime = _make_runtime(monkeypatch)
+    runtime._get_page_for = MagicMock(return_value=page)
+
+    result = runtime.get_nss_alert("31748542")
+    assert result["order_id"] == "31748542"
+    assert "cancellation_info" in result
+    assert result["reason"] == "Seller shipped order but order was incomplete"
+    runtime._get_page_for.assert_called_once_with("https://www.bricklink.com/retractOrder.asp?ID=31748542")
+
+
+def test_get_refund_info_payment_not_found(monkeypatch):
+    class MockPage:
+        def __init__(self):
+            self.url = "https://www.bricklink.com/v3/order/refund.page?id=31748542"
+        def evaluate(self, script, *args):
+            # The first evaluate check is for error_msg (checking .empty-state__title)
+            if "empty-state__title" in script:
+                return "Payment Not Found: We weren't able to find your payment attached to this order."
+            return None
+
+    page = MockPage()
+    runtime = _make_runtime(monkeypatch)
+    runtime.REFUND_URL = "https://www.bricklink.com/v3/order/refund.page"
+    runtime._get_page_for = MagicMock(return_value=page)
+
+    with pytest.raises(RuntimeError) as ei:
+        runtime.get_refund_info("31748542")
+
+    assert "Payment Not Found" in str(ei.value)
+    runtime._get_page_for.assert_called_once_with("https://www.bricklink.com/v3/order/refund.page?id=31748542")
+
+
+# ---------------------------------------------------------------------------
+# Refund verification — stale/eventually-consistent refund page.
+#
+# Incident 2026-07-30, order 32175236: `bricklink refund issue 32175236 1` posted
+# a real $1.00 refund, then exited non-zero with "The refund did NOT post to
+# Bricklink." The activity log shows the refund page still reading $0.00 eleven
+# seconds after the confirm click and $1.00 five minutes later. A false "did not
+# post" invites the operator to re-issue and double-refund a real buyer.
+# ---------------------------------------------------------------------------
+
+
+class _CountingPage:
+    """Records wait_for_timeout calls so a test can assert the retry budget."""
+
+    def __init__(self):
+        self.waits_ms = []
+
+    def wait_for_timeout(self, ms):
+        self.waits_ms.append(ms)
+
+
+def _refund_runtime(monkeypatch, reads):
+    """Runtime whose refund-page reads replay ``reads`` in order.
+
+    Each entry is either a float (a parsed amount), ``None`` (page rendered but
+    no readable amount), or an Exception instance (the read itself blew up).
+    """
+    runtime = _make_runtime(monkeypatch)
+    runtime.REFUND_URL = "https://www.bricklink.com/v3/order/refund.page"
+    remaining = list(reads)
+
+    def _read(order_id):
+        value = remaining.pop(0)
+        if isinstance(value, Exception):
+            raise value
+        return value
+
+    runtime._read_prior_refunds_total = _read
+    return runtime
+
+
+def test_parse_prior_refunds_returns_none_when_unreadable(monkeypatch):
+    """Missing/unparseable must be None, never a fabricated 0.0.
+
+    Bricklink renders a literal "US $0.00" for a never-refunded order, so an
+    absent value can only mean the page failed to render.
+    """
+    runtime = _make_runtime(monkeypatch)
+
+    assert runtime._parse_prior_refunds_amount("US $0.00") == 0.0
+    assert runtime._parse_prior_refunds_amount("US $3.50") == 3.50
+    assert runtime._parse_prior_refunds_amount(None) is None
+    assert runtime._parse_prior_refunds_amount("") is None
+    assert runtime._parse_prior_refunds_amount("--") is None
+
+
+def test_verify_refund_posted_confirms_after_stale_reads(monkeypatch):
+    """The exact incident shape: page lags, then catches up. Must confirm."""
+    runtime = _refund_runtime(monkeypatch, [0.0, 0.0, 0.0, 1.0])
+    page = _CountingPage()
+
+    prior_after, delta = runtime._verify_refund_posted(page, "32175236", 0.0, 1.0)
+
+    assert prior_after == 1.0
+    assert delta == 1.0
+    # Four attempts consumed, so the budget must outlast the ~6s the old code
+    # allowed. The incident needed more than 11 seconds.
+    assert sum(page.waits_ms) / 1000 >= 11
+
+
+def test_verify_refund_budget_outlasts_observed_lag(monkeypatch):
+    """The total retry budget must exceed the lag measured in the incident."""
+    from bricklink_cli.browser_runtime import BricklinkRuntimeBrowser
+
+    assert sum(BricklinkRuntimeBrowser.REFUND_VERIFY_BACKOFF_SECONDS) >= 60
+
+
+def test_verify_refund_unconfirmed_never_claims_refund_did_not_post(monkeypatch):
+    """Budget exhausted on a stale page => UNCONFIRMED, not a failure claim."""
+    reads = [0.0] * len(
+        __import__("bricklink_cli.browser_runtime", fromlist=["x"])
+        .BricklinkRuntimeBrowser.REFUND_VERIFY_BACKOFF_SECONDS
+    )
+    runtime = _refund_runtime(monkeypatch, reads)
+    page = _CountingPage()
+
+    with pytest.raises(RuntimeError) as ei:
+        runtime._verify_refund_posted(page, "32175236", 0.0, 1.0)
+
+    message = str(ei.value)
+    assert "UNCONFIRMED" in message
+    assert "did NOT post" not in message
+    assert "DO NOT re-issue" in message
+    assert "bricklink refund info 32175236" in message
+    # The observation trail must be in the error so the operator can see what
+    # was actually read and when.
+    assert "prior_refunds=$0.00" in message
+
+
+def test_verify_refund_unconfirmed_when_page_never_readable(monkeypatch):
+    """All reads unreadable => UNCONFIRMED, and never a $0.00 claim.
+
+    The old code collapsed an unreadable page to 0.0 and reported a $0.00
+    delta as proof the refund had not posted.
+    """
+    reads = [None] * len(
+        __import__("bricklink_cli.browser_runtime", fromlist=["x"])
+        .BricklinkRuntimeBrowser.REFUND_VERIFY_BACKOFF_SECONDS
+    )
+    runtime = _refund_runtime(monkeypatch, reads)
+    page = _CountingPage()
+
+    with pytest.raises(RuntimeError) as ei:
+        runtime._verify_refund_posted(page, "32175236", 0.0, 1.0)
+
+    message = str(ei.value)
+    assert "UNCONFIRMED" in message
+    assert "did NOT post" not in message
+    assert "never read successfully" in message
+
+
+def test_verify_refund_unconfirmed_when_every_read_raises(monkeypatch):
+    """All reads raise => UNCONFIRMED naming the errors, not a silent zero.
+
+    The old loop swallowed read exceptions with a bare `continue`, left
+    prior_after at prior_before, and reported delta $0.00 as proof of failure.
+    """
+    reads = [RuntimeError("Bricklink server error at /v3/error/500.page")] * len(
+        __import__("bricklink_cli.browser_runtime", fromlist=["x"])
+        .BricklinkRuntimeBrowser.REFUND_VERIFY_BACKOFF_SECONDS
+    )
+    runtime = _refund_runtime(monkeypatch, reads)
+    page = _CountingPage()
+
+    with pytest.raises(RuntimeError) as ei:
+        runtime._verify_refund_posted(page, "32175236", 0.0, 1.0)
+
+    message = str(ei.value)
+    assert "UNCONFIRMED" in message
+    assert "did NOT post" not in message
+    assert "Bricklink server error" in message
+
+
+def test_verify_full_refund_confirms_on_any_increase(monkeypatch):
+    """Full refunds have no expected amount — any increase confirms."""
+    runtime = _refund_runtime(monkeypatch, [0.0, 44.64])
+    page = _CountingPage()
+
+    prior_after, delta = runtime._verify_refund_posted(page, "30850160", 0.0, None)
+
+    assert prior_after == 44.64
+    assert delta == 44.64
+
+
+def test_verify_partial_refund_on_top_of_existing_refund(monkeypatch):
+    """A second partial refund must clear prior_before + amount, not just > 0."""
+    runtime = _refund_runtime(monkeypatch, [8.43, 8.43, 10.43])
+    page = _CountingPage()
+
+    prior_after, delta = runtime._verify_refund_posted(page, "30850160", 8.43, 2.0)
+
+    assert prior_after == 10.43
+    assert delta == 2.0
+
+
+def test_submit_refund_refuses_when_presubmit_read_is_unreadable(monkeypatch):
+    """An unreadable page BEFORE the click is a hard stop with no side effect."""
+    runtime = _refund_runtime(monkeypatch, [None])
+    runtime._get_page_for = MagicMock()
+
+    with pytest.raises(RuntimeError) as ei:
+        runtime._submit_refund("32175236", "missing-unsatisfactory", amount=1.0)
+
+    message = str(ei.value)
+    assert "NO refund was submitted" in message
+    # Must fail before ever loading the refund form for submission.
+    runtime._get_page_for.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# `_reveal_refund_reason_dropdown` — order 32187623 (2026-08-11) proved
+# BrickLink's refund page has two distinct reason-control states: the
+# editable <select> appears directly when an order has no saved reason
+# details, but when reason details already exist (e.g. a prior partial
+# refund on the same order), BrickLink instead shows a read-only summary
+# with an "Edit reason details" button, and the <select> only enters the DOM
+# after that button is clicked. `_submit_refund` previously assumed only the
+# first state, so it raised "Refund reason dropdown not found" on any order
+# with reason details already on file — a false "not eligible" even though
+# the order plainly was refund-eligible (it already had a prior refund).
+# ---------------------------------------------------------------------------
+
+
+class _ReasonDropdownPage:
+    """Simulates BrickLink's two refund-page reason-control states."""
+
+    def __init__(self, *, dropdown_present=False, has_edit_button=False,
+                 dropdown_appears_after_click=False):
+        self.dropdown_present = dropdown_present
+        self.has_edit_button = has_edit_button
+        self.dropdown_appears_after_click = dropdown_appears_after_click
+        self.click_calls = 0
+
+    def evaluate(self, script):
+        assert "select" in script
+        return self.dropdown_present
+
+    def wait_for_timeout(self, _ms):
+        return None
+
+    def get_by_role(self, role, name=None):
+        assert role == "button"
+        assert name == "Edit reason details"
+        return _EditButtonLocator(self)
+
+
+class _EditButtonLocator:
+    def __init__(self, page):
+        self._page = page
+
+    def count(self):
+        return 1 if self._page.has_edit_button else 0
+
+    @property
+    def first(self):
+        return self
+
+    def click(self):
+        self._page.click_calls += 1
+        if self._page.dropdown_appears_after_click:
+            self._page.dropdown_present = True
+
+
+def test_reveal_refund_reason_dropdown_noop_when_already_present(monkeypatch):
+    """Normal case (no prior reason details): nothing to reveal, no clicks."""
+    runtime = _make_runtime(monkeypatch)
+    page = _ReasonDropdownPage(dropdown_present=True)
+
+    runtime._reveal_refund_reason_dropdown(page, "32302732")
+
+    assert page.click_calls == 0
+
+
+def test_reveal_refund_reason_dropdown_clicks_edit_button_when_hidden_behind_summary(monkeypatch):
+    """Order 32187623 case: saved reason details hide the <select> behind a
+    read-only summary until 'Edit reason details' is clicked."""
+    runtime = _make_runtime(monkeypatch)
+    page = _ReasonDropdownPage(
+        dropdown_present=False,
+        has_edit_button=True,
+        dropdown_appears_after_click=True,
+    )
+
+    runtime._reveal_refund_reason_dropdown(page, "32187623")
+
+    assert page.click_calls == 1
+    assert page.dropdown_present is True
+
+
+def test_reveal_refund_reason_dropdown_noop_when_no_edit_button_found(monkeypatch):
+    """Neither the dropdown nor the edit button ever appear — leave it to the
+    caller's own 'dropdown not found' error rather than raising here."""
+    runtime = _make_runtime(monkeypatch)
+    page = _ReasonDropdownPage(dropdown_present=False, has_edit_button=False)
+
+    runtime._reveal_refund_reason_dropdown(page, "99999999")
+
+    assert page.click_calls == 0
+    assert page.dropdown_present is False

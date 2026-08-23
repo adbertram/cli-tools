@@ -150,6 +150,11 @@ class ReplacementPartTask(CLIModel):
     """Parsed replacement part task from standardized format.
 
     Format: [REPLACEMENT] | Platform: <platform> | Customer: <name> | Order: <orderId> | Part: <itemNo> <itemName> | Color: <color> | Qty: <qty> | Loc: <location>
+
+    Also parses the `[REPLACEMENT/ADDITION]` variant, which adds one or more
+    items to an already-packed order (see `from_replacement_addition_text`).
+    One `ReplacementPartTask` is emitted per added item in that case, all
+    sharing the same task `index` and `raw_text`.
     """
     index: int = Field(description="1-based task index")
     completed: bool = Field(default=False, description="Whether task is completed")
@@ -162,6 +167,16 @@ class ReplacementPartTask(CLIModel):
     qty: int = Field(description="Quantity")
     location: Optional[str] = Field(default=None, description="Bin location")
     raw_text: str = Field(alias="rawText", description="Original task text")
+    task_kind: str = Field(
+        default="replacement",
+        alias="taskKind",
+        description="'replacement' for [REPLACEMENT] rows, 'replacement_addition' for [REPLACEMENT/ADDITION] rows",
+    )
+    action_note: Optional[str] = Field(
+        default=None,
+        alias="actionNote",
+        description="Free-text 'Action:' note from [REPLACEMENT/ADDITION] rows (e.g. amount owed)",
+    )
 
     class Config:
         populate_by_name = True
@@ -228,6 +243,52 @@ class ReplacementPartTask(CLIModel):
         return None
 
     @classmethod
+    def from_replacement_addition_text(
+        cls, index: int, text: str, completed: bool = False
+    ) -> List["ReplacementPartTask"]:
+        """Parse a `[REPLACEMENT/ADDITION]` task into one task per added item.
+
+        Format: [REPLACEMENT/ADDITION] | Platform: <platform> | Customer: <name> | Order: <orderId> | Add: <itemNo1> <itemName1> (<color1>, Loc <location1>, Qty <qty1>), <itemNo2> ... | Action: <note>
+
+        Used when replacement parts are added to an already-packed order
+        instead of swapped in place of a defective part. Returns one
+        `ReplacementPartTask` per item listed after `Add:`, all sharing the
+        same `index`/`raw_text`/`action_note`. Returns an empty list if the
+        text does not match this format.
+        """
+        import re
+
+        header = r'^\[REPLACEMENT/ADDITION\] \| Platform: (bricklink|brickowl) \| Customer: (.+?) \| Order: (\d+) \| Add: (.+?) \| Action: (.+)$'
+        match = re.match(header, text)
+        if not match:
+            return []
+
+        platform, customer_name, order_id, items_text, action_note = match.groups()
+
+        item_pattern = re.compile(
+            r'([^\s,]+)\s+(.+?)\s*\(([^,()]+),\s*Loc\s+(\S+),\s*Qty\s+(\d+)\)'
+        )
+        tasks = [
+            cls(
+                index=index,
+                completed=completed,
+                platform=Platform(platform),
+                customer_name=customer_name,
+                order_id=order_id,
+                item_no=item_no,
+                item_name=item_name.strip(),
+                color=color.strip(),
+                qty=int(qty),
+                location=location,
+                raw_text=text,
+                task_kind="replacement_addition",
+                action_note=action_note,
+            )
+            for item_no, item_name, color, location, qty in item_pattern.findall(items_text)
+        ]
+        return tasks
+
+    @classmethod
     def format_task_text(
         cls,
         platform: str,
@@ -292,6 +353,48 @@ class MissingPart(CLIModel):
 
     class Config:
         populate_by_name = True
+
+    @classmethod
+    def from_task_texts(
+        cls, index: int, text: str, completed: bool = False
+    ) -> List["MissingPart"]:
+        """Parse one dashboard task row into all missing parts it contains."""
+        import re
+
+        compound_pattern = re.compile(
+            r'^(Bricklink|Brickowl) Order #(\d+) missing '
+            r'(\d+) x (\S+) \(in ([^)]+)\) at location (\S+)'
+            r'(?: and (\d+) x (\S+) \(in ([^)]+)\) at location (\S+))+$',
+            re.IGNORECASE,
+        )
+        if compound_pattern.match(text):
+            header = re.match(
+                r'^(Bricklink|Brickowl) Order #(\d+) missing (.+)$', text, re.IGNORECASE
+            )
+            assert header is not None
+            platform, order_id, items_text = header.groups()
+            item_pattern = re.compile(
+                r'(?:^| and )(\d+) x (\S+) \(in ([^)]+)\) at location (\S+)',
+                re.IGNORECASE,
+            )
+            return [
+                cls(
+                    index=index,
+                    platform=Platform(platform.lower()),
+                    order_id=order_id,
+                    quantity=int(quantity),
+                    item_number=item_number,
+                    item_name=None,
+                    color_name=color_name,
+                    location=location,
+                    completed=completed,
+                    raw_text=text,
+                )
+                for quantity, item_number, color_name, location in item_pattern.findall(items_text)
+            ]
+
+        parsed = cls.from_task_text(index, text, completed)
+        return [parsed] if parsed is not None else []
 
     @classmethod
     def from_task_text(cls, index: int, text: str, completed: bool = False) -> Optional["MissingPart"]:

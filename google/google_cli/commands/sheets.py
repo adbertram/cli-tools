@@ -13,7 +13,7 @@ import typer
 from typing import Optional
 from googleapiclient.errors import HttpError
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_table, handle_error, print_success, print_error
+from cli_tools_shared.output import command, print_json, print_table, handle_error, print_success, print_error
 from cli_tools_shared.filters import apply_filters as _client_side_filter_reference
 from ..filter_translator import translate_sheets_filters
 
@@ -21,6 +21,7 @@ app = typer.Typer(help="Manage Google Sheets spreadsheets")
 
 
 @app.command("list")
+@command
 def sheets_list(
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of spreadsheets to list"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -93,6 +94,7 @@ def parse_spreadsheet_id(spreadsheet_id_or_url: str) -> str:
     return spreadsheet_id_or_url
 
 @app.command("get")
+@command
 def sheets_get(
     spreadsheet_id_or_url: str = typer.Argument(..., help="Spreadsheet ID or URL"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -124,9 +126,10 @@ def sheets_get(
         raise typer.Exit(handle_error(e))
 
 @app.command("read")
+@command
 def sheets_read(
     spreadsheet_id_or_url: str = typer.Argument(..., help="Spreadsheet ID or URL"),
-    range_name: str = typer.Option("Sheet1", "--range", "-r", help="Range to read (e.g., Sheet1!A1:D10)"),
+    range_name: str = typer.Option("A:Z", "--range", "-r", help="Range to read (e.g., A1:D10 or TabName!A1:D10)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
 ):
@@ -175,6 +178,7 @@ def sheets_read(
         raise typer.Exit(handle_error(e))
 
 @app.command("create")
+@command
 def sheets_create(
     title: str = typer.Option(..., "--title", "-t", help="Spreadsheet title"),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
@@ -202,9 +206,10 @@ def sheets_create(
         raise typer.Exit(handle_error(e))
 
 @app.command("append")
+@command
 def sheets_append(
     spreadsheet_id_or_url: str = typer.Argument(..., help="Spreadsheet ID or URL"),
-    range_name: str = typer.Option("Sheet1", "--range", "-r", help="Range to append to"),
+    range_name: str = typer.Option("A:Z", "--range", "-r", help="Range to append to"),
     values: str = typer.Option(..., "--values", "-v", help="Values to append (comma-separated)"),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
 ):
@@ -239,6 +244,7 @@ def sheets_append(
 
 
 @app.command("update")
+@command
 def sheets_update(
     spreadsheet_id_or_url: str = typer.Argument(..., help="Spreadsheet ID or URL"),
     range_name: str = typer.Option(..., "--range", "-r", help="Cell or range to update (e.g., Sheet1!A1, Sheet1!A1:C3)"),

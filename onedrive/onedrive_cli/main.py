@@ -12,7 +12,7 @@ from cli_tools_shared.command_registry import register_commands
 app = create_app(name="onedrive", help="OneDrive for Business CLI via Microsoft Graph API", version=__version__)
 
 # Register command modules
-from .commands import auth, drives, folders, items, link
+from .commands import auth, drives, folders, items, link, shares
 from .config import get_config
 
 app.add_typer(auth.app, name="auth", help="Manage authentication via Azure CLI")
@@ -20,6 +20,7 @@ register_commands(app, get_config, drives, name="drives", help="Manage OneDrive 
 register_commands(app, get_config, folders, name="folders", help="Manage folders")
 register_commands(app, get_config, items, name="items", help="Manage files and folders")
 register_commands(app, get_config, link, name="link", help="Manage sharing links")
+register_commands(app, get_config, shares, name="shares", help="Resolve and download sharing URLs")
 app.add_typer(create_cache_app(get_config), name="cache")
 
 

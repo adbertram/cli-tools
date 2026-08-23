@@ -5,9 +5,16 @@ max_nested_depth = 3  # global default, can be overridden per CLI
 [command_discovery]
 skip_list = ["list", "get", "create", "update", "delete", "login", "status", "logout"]
 
+# Names here are exempt in EVERY CLI. Scope a one-tool exemption to
+# [cli_specific.<cli>] with the same key instead of widening these.
 [exclusions]
 excluded_from_get_required = ["search", "profiles", "cart", "rules", "ideas", "responses", "capture", "credentials", "models", "lists"]
 excluded_from_list_required = ["statistics", "metrics", "health", "summary", "status", "content", "profiles", "search", "folders", "agent-traffic", "payouts"]
+# The --table/-t flag renders ONE RECORD as a table. A singular-aggregate group's
+# `get` returns a computed report, not a record, so there is no row set to render
+# and a --table flag would have to invent one. Same aggregate nouns the
+# list-requirement exemption above names.
+excluded_from_table_flag_required = ["statistics", "metrics", "health", "summary", "status"]
 no_auth_clis = [
     "reminders",
     "cliclick",
@@ -16,10 +23,12 @@ no_auth_clis = [
     "msword",
     "notifier",
     "things",
-    "whisper",
+    "openai-whisper",
+    "macspeech",
     "snagit",
-    "claude-code-sessions",
     "powerpoint-slide-recorder",
+    "harmony",
+    "weather",
 ]
 
 # Orchestration/framework CLIs that don't follow standard resource patterns
@@ -27,13 +36,13 @@ no_auth_clis = [
 orchestration_clis = []
 
 # CLIs that don't need filters.py (orchestration CLIs, simple wrappers)
-no_filters_clis = ["reminders", "cliclick", "powerpoint-slide-recorder"]
+no_filters_clis = ["reminders", "cliclick", "powerpoint-slide-recorder", "macspeech"]
 
 # Browser automation CLIs (use BrowserAutomation backed by browser-harness)
-browser_clis = ["bricklink", "brickowl", "globiflow", "ahrefs", "brickfreedom", "raptive", "facebook_marketplace", "facebook"]
+browser_clis = ["bricklink", "brickowl", "globiflow", "ahrefs", "brickfreedom", "raptive", "facebook"]
 
 # Wrapper CLIs that don't use profiles (wrap system commands, not services)
-wrapper_clis = ["lastpass", "imessage", "whisper", "cliclick", "notifier", "claude-code-sessions", "powerpoint-slide-recorder"]
+wrapper_clis = ["lastpass", "imessage", "openai-whisper", "cliclick", "notifier", "claude-code-sessions", "powerpoint-slide-recorder"]
 
 [output]
 # Rich table requirements
@@ -57,9 +66,32 @@ operators = ["eq", "ne", "gt", "gte", "lt", "lte", "contains", "in", "nin", "sta
 # agent knowledge azure-ai-search add are at depth 4.
 max_nested_depth = 4
 
+[cli_specific.copilot.param_fixtures]
+"agent trigger list" = { "--agentId" = "agent_id" }
+"connections test" = { "--connector-id" = "connector_id", "--connection-id" = "connection_id" }
+
 [cli_specific.ebay]
 # eBay seller store categories commands live at seller store categories <action>.
 max_nested_depth = 4
+# `listings` is marketplace-wide search: eBay exposes no way to enumerate
+# listings without a query, and `listings search` is the documented ID-discovery
+# command. `time-away` is a single store setting (get/enable/disable) with no ID
+# space at all. Neither has anything a `list` command could return.
+excluded_from_list_required = ["listings", "time-away"]
+
+[cli_specific.vinted]
+# `listings` is marketplace-wide search: Vinted's catalog endpoint answers a
+# query, and it exposes no way to enumerate listings without one.
+# `listings search` is the ID-discovery command that feeds `listings get`.
+excluded_from_list_required = ["listings"]
+# `listings search` IS the collection command, so the list-command flag and
+# execution tests must run against it rather than skip.
+list_commands = ["listings search"]
+
+# Both listings commands take a positional argument.
+[cli_specific.vinted.param_fixtures]
+"listings search" = { "_pos1" = "search_query" }
+"listings get" = { "_pos1" = "item_id" }
 
 [cli_specific.wordpress]
 # Profiles is a utility command from cli_tools_shared, not a resource list command
@@ -86,6 +118,10 @@ list_commands = [
 ]
 
 [cli_specific.ata-blog]
+# `shoutouts site` is the one site-wide shoutout slot: `get` reads it and `set`
+# writes it. There is no ID space, so a `list` command would have nothing to
+# enumerate.
+excluded_from_list_required = ["site"]
 list_commands = [
     "notion-page list",
     "wordpress-post list",
@@ -166,6 +202,13 @@ list_commands = [
     "channel videos list",
 ]
 
+[cli_specific.x]
+# X tweet reads are credit-gated by the live developer account; requiring
+# generic compliance runs to call `tweet list` would force a paid credit state.
+list_commands = [
+    "auth profiles list",
+]
+
 [cli_specific.raptive]
 # Raptive uses non-standard command names for list-style operations
 # These commands return lists and should be tested for --filter, --limit, etc.
@@ -225,7 +268,7 @@ max_nested_depth = 4
 "database template list" = { "--database-id" = "database_id" }
 "field list" = { "--database-id" = "database_id" }
 "pages blocks list" = { "--page-id" = "page_id" }
-"comments list" = { "--page-id" = "page_id" }
+"comments list" = { "--page-id" = "page_id", "--open-only" = true }
 
 # Airtable fixtures: records/fields commands require table args
 [cli_specific.airtable.param_fixtures]
@@ -236,13 +279,6 @@ max_nested_depth = 4
 # Podio fixtures: uses _pos prefix for positional arguments
 [cli_specific.podio.param_fixtures]
 "item list" = { "_pos1" = "app_id" }
-
-# Descript fixtures: compositions commands need project_id positional arg
-[cli_specific.descript.param_fixtures]
-"compositions list" = { "_pos1" = "project_id" }
-"compositions get" = { "_pos1" = "project_id" }
-"compositions export" = { "_pos1" = "project_id", "_pos2" = "asset_id" }
-"compositions assets" = { "_pos1" = "project_id" }
 
 # Ahrefs fixtures: site-audit commands require project_id positional arg
 [cli_specific.ahrefs.param_fixtures]
@@ -274,3 +310,26 @@ command_timeout = 120
 [cli_specific.msword.param_fixtures]
 "docs comments list" = { "_pos1" = "docx_file" }
 "docs comments get" = { "_pos1" = "docx_file" }
+
+[cli_specific.weather.param_fixtures]
+"conditions list" = { "_pos1" = "zip_code" }
+"forecast list" = { "_pos1" = "zip_code" }
+
+[cli_specific.target]
+list_commands = [
+    "products list",
+]
+
+[cli_specific.target.param_fixtures]
+"products list" = { "_pos1" = "query" }
+
+[cli_specific.depop]
+# Depop's only resource is public marketplace search; "search" is a
+# top-level command (not "<group> list"), so it needs an explicit
+# list_commands override to be exercised by the list-command flag tests.
+list_commands = [
+    "search",
+]
+
+[cli_specific.depop.param_fixtures]
+"search" = { "_pos1" = "query" }

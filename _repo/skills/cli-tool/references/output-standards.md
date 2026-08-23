@@ -29,6 +29,64 @@ handle_error(error)     # Centralized error handling
 
 **Why this matters:** Enables clean piping: `mycli list | jq '.field'`
 
+### No Color/Escape Bytes On Non-TTY stdout
+
+The shared Rich console (`cli_tools_shared.output.console`) is gated at
+construction so it emits color and terminal control/detection escape sequences
+**only** when stdout is a genuine interactive TTY and the environment has not
+opted out of color. When stdout is a pipe or file — or a PTY-backed capture
+sets `FORCE_COLOR` / `TTY_COMPATIBLE` to fake a terminal — the console is built
+with `force_terminal=False, no_color=True`, so `print_table` output is plain
+and `NO_COLOR` / `TERM=dumb` are honored even on a real terminal. `print_json`
+writes raw UTF-8 bytes to `sys.stdout.buffer` and never touches the console.
+
+Consequence: a CLI's piped stdout is byte-clean JSON/data with no leading
+escape prefix. Do NOT add a "slice at the first `{`" / strip-leading-escape
+workaround in calling automation — if you ever see an OSC color response such
+as `]11;<rgb>` leading captured output, it came from the surrounding shell or
+terminal responding to its own query, not from the CLI; fix the capture
+environment, not the parser. This policy lives in exactly one place
+(`_build_console` in the shared `output.py`); do not re-gate per command.
+
+### Parsing Wrapper Output In Smokes
+
+Smoke probes that validate wrapper commands must preserve the stdout/stderr
+contract. Do not merge streams and then parse the combined transcript as JSON;
+stderr may contain log paths or status messages after valid stdout JSON.
+
+Use this shape:
+
+```bash
+stdout_file="$(mktemp)"
+stderr_file="$(mktemp)"
+trap 'rm -f "$stdout_file" "$stderr_file"' EXIT
+
+set +e
+./scripts/invoke-gmail.sh filters list --profile adbertram --limit 1 --properties id \
+  >"$stdout_file" 2>"$stderr_file"
+rc=$?
+set -e
+
+if [ "$rc" -ne 0 ]; then
+  printf 'COMMAND_FAILED rc=%s stderr_lines=%s\n' \
+    "$rc" "$(wc -l < "$stderr_file" | tr -d ' ')" >&2
+  exit "$rc"
+fi
+
+python3 - "$stdout_file" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+json.loads(path.read_text())
+PY
+```
+
+Only parse the saved stdout file. Keep stderr available as diagnostic evidence,
+but do not feed it to `json.loads`, `jq`, or another structured parser. For
+sensitive probes, report stderr metadata instead of printing raw stderr content.
+
 ---
 
 ## AI Instruction Results
@@ -159,6 +217,32 @@ def format_item_for_display(item: dict) -> dict:
 ```json
 // DON'T DO THIS
 {"data": [...], "total": 100, "page": 1}
+```
+
+### Verifying JSON Root Shape Before Slicing
+
+Live verification scripts must parse stdout, inspect the top-level JSON shape,
+and require a list before slicing preview rows. Do not assume a decoded JSON
+document is sliceable.
+
+Use the shared test helper when running inside the cli-tool compliance harness:
+
+```python
+from cli_test_utils import require_json_array_output
+
+valid, rows, error = require_json_array_output(stdout, command="amazon orders match")
+if not valid:
+    raise AssertionError(error)
+preview = rows[:5]
+```
+
+For standalone scripts, copy the same shape check instead of slicing directly:
+
+```python
+payload = json.loads(stdout)
+if not isinstance(payload, list):
+    raise AssertionError(f"expected top-level JSON array, got {type(payload).__name__}")
+preview = payload[:5]
 ```
 
 ---

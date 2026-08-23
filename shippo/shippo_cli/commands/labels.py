@@ -340,8 +340,17 @@ def labels_print(
                 # ZPL format: send raw to Zebra printer using lp -o raw
                 print_cmd = ["lp", "-d", printer_name, "-o", "raw", tmp_path]
             else:
-                # PDF format: simple print (label should already be 4x6 from API)
-                print_cmd = ["lp", "-d", printer_name, tmp_path]
+                # PDF format: label is 4x6 (w288h432) from the API. The printer's CUPS
+                # default page size can differ (e.g. 4x5 / w288h360), which causes a
+                # silent no-op: the job reports SUCCESS/completed but nothing feeds
+                # because of the media-size mismatch. Force the correct media size and
+                # fit-to-page so this doesn't depend on the printer's configured default.
+                print_cmd = [
+                    "lp", "-d", printer_name,
+                    "-o", "media=w288h432",
+                    "-o", "fit-to-page",
+                    tmp_path,
+                ]
             proc = subprocess.run(print_cmd, capture_output=True, text=True)
 
             if proc.returncode != 0:

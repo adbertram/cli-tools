@@ -503,6 +503,7 @@ class SlackClient:
         channels: Optional[str] = None,
         title: Optional[str] = None,
         initial_comment: Optional[str] = None,
+        thread_ts: Optional[str] = None,
     ) -> Dict:
         """Upload a file to Slack using the 3-step external upload flow.
 
@@ -549,6 +550,8 @@ class SlackClient:
                 complete_data["channel_id"] = channels
         if initial_comment:
             complete_data["initial_comment"] = initial_comment
+        if thread_ts:
+            complete_data["thread_ts"] = thread_ts
 
         complete_response = self._make_request(
             "POST",

@@ -30,6 +30,23 @@ COMMENTS_REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relat
 COMMENTS_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml"
 
 
+def _find_comments_part(doc):
+    """Return the word/comments.xml part, or None when the document has no comments.
+
+    Matches the relationship type exactly. A substring test such as
+    ``"comments" in rel.reltype`` also matches the sibling parts
+    ``commentsIds``, ``commentsExtended``, and ``commentsExtensible``; those
+    parts hold metadata, not ``w:comment`` elements, so selecting one of them
+    yields zero comments.
+    """
+    for rel in doc.part.rels.values():
+        if getattr(rel, "is_external", False):
+            continue
+        if rel.reltype == COMMENTS_REL_TYPE:
+            return rel.target_part
+    return None
+
+
 def _validate_file(file_path: str) -> str:
     """Validate that the file exists and is a .docx file."""
     path = os.path.expanduser(file_path)
@@ -102,27 +119,25 @@ class MswordClient:
         path = _validate_file(file_path)
         doc = docx.Document(path)
 
-        # Extract comments from comments.xml part
-        comments_part = None
-        for rel in doc.part.rels.values():
-            if "comments" in rel.reltype:
-                comments_part = rel.target_part
-                break
-
+        # Extract comments from the word/comments.xml part (exact reltype match).
+        comments_part = _find_comments_part(doc)
         if comments_part is None:
             return []
 
-        # Parse comments XML
+        # Parse comments XML. Both classic comments (small integer w:id) and
+        # modern threaded comments (large integer w:id, w:date without a
+        # trailing "Z", an extra xmlns:w redeclaration on the element) live in
+        # this part and are read identically.
         comments_xml = ET.fromstring(comments_part.blob)
         comment_data = {}
-        for comment_el in comments_xml.findall("w:comment", NSMAP):
-            cid = comment_el.get(f'{{{NSMAP["w"]}}}id')
-            author = comment_el.get(f'{{{NSMAP["w"]}}}author', "Unknown")
-            date = comment_el.get(f'{{{NSMAP["w"]}}}date')
+        for comment_el in comments_xml.findall(qn("w:comment")):
+            cid = comment_el.get(qn("w:id"))
+            author = comment_el.get(qn("w:author"), "Unknown")
+            date = comment_el.get(qn("w:date"))
 
-            # Get comment text from all paragraphs/runs
+            # Get comment text from all paragraphs/runs.
             texts = []
-            for t_el in comment_el.iter(f'{{{NSMAP["w"]}}}t'):
+            for t_el in comment_el.iter(qn("w:t")):
                 if t_el.text:
                     texts.append(t_el.text)
 
@@ -309,9 +324,9 @@ class MswordClient:
 
     def _get_comments_part(self, doc):
         """Get existing comments part or create a new one."""
-        for rel in doc.part.rels.values():
-            if "comments" in rel.reltype:
-                return rel.target_part
+        existing = _find_comments_part(doc)
+        if existing is not None:
+            return existing
 
         from docx.oxml import parse_xml
 

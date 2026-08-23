@@ -1,0 +1,738 @@
+#!/usr/bin/env python3
+"""Regenerate a repo-owned CLI skill usage.json from the installed CLI help."""
+
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+import sys
+
+# The shebang resolves to whatever ``python3`` is first on PATH, which on this
+# machine is system Python 3.9.6. ``tomllib`` (used below) only entered the
+# stdlib in 3.11, so re-exec under a 3.11+ interpreter when the current one is
+# too old. This early-returns when already on 3.11+, so a caller that invokes
+# the script with a modern interpreter is unaffected.
+if sys.version_info < (3, 11):
+    _REEXEC_GUARD = "_REGEN_USAGE_JSON_REEXEC"
+    if os.environ.get(_REEXEC_GUARD):
+        raise SystemExit(
+            "regenerate-usage-json needs Python 3.11+ for tomllib, but re-exec landed "
+            f"on {sys.version.split()[0]}. Install Python 3.11 or newer and retry."
+        )
+    for _candidate in ("python3.14", "python3.13", "python3.12", "python3.11"):
+        _interpreter = shutil.which(_candidate)
+        if _interpreter:
+            result = subprocess.run(
+                [_interpreter, os.path.abspath(__file__), *sys.argv[1:]],
+                env={**os.environ, _REEXEC_GUARD: "1"},
+            )
+            raise SystemExit(result.returncode)
+    raise SystemExit(
+        "regenerate-usage-json needs Python 3.11+ for tomllib, but the current "
+        f"interpreter is {sys.version.split()[0]} and no python3.11/3.12/3.13/3.14 was "
+        "found on PATH. Install one (e.g. `brew install python@3.11`) and retry."
+    )
+
+import argparse  # noqa: E402
+import json  # noqa: E402
+import re  # noqa: E402
+import shlex  # noqa: E402
+import tomllib  # noqa: E402
+from datetime import datetime, timezone  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+
+SKILL_DIR = Path(__file__).resolve().parents[1]
+REPO_ROOT = SKILL_DIR.parents[2]
+CLI_TOOL_TESTS = SKILL_DIR / "tests"
+TEST_CONFIG = CLI_TOOL_TESTS / "cli_test_config.toml"
+OPTION_TOKEN_RE = re.compile(r"(?<![\w-])--[A-Za-z0-9][A-Za-z0-9-]*")
+ALWAYS_VALID_OPTION_TOKENS = {"--help"}
+MACHINE_OPTION_TYPES = {
+    "boolean": "bool",
+    "string": "TEXT",
+}
+
+sys.path.insert(0, str(CLI_TOOL_TESTS))
+
+from cli_test_utils import (  # noqa: E402
+    discover_nested_commands,
+    extract_help_sections,
+    leaf_command_paths,
+    parse_help_option_secondary_tokens,
+    parse_help_parameters,
+    run_cli_command,
+)
+
+
+def load_config() -> dict:
+    with TEST_CONFIG.open("rb") as handle:
+        return tomllib.load(handle)
+
+
+def resolve_usage_path(cli_name: str, usage_json: Path | None) -> Path:
+    if usage_json is not None:
+        return usage_json
+    skill_name = cli_name if cli_name.endswith("-cli") else f"{cli_name}-cli"
+    return REPO_ROOT / "_repo" / "skills" / skill_name / "usage.json"
+
+
+def resolve_cli_executable(
+    cli_name: str, cli_executable: str | None, usage_path: Path
+) -> str:
+    if cli_executable:
+        return cli_executable
+    if usage_path.is_file():
+        usage = json.loads(usage_path.read_text())
+        usage_binary = usage.get("binary")
+        if usage_binary is not None:
+            if not isinstance(usage_binary, str) or not usage_binary:
+                raise SystemExit(f"usage.json binary must be a non-empty string: {usage_path}")
+            configured_launcher = Path(usage_binary).expanduser()
+            if not configured_launcher.is_absolute():
+                raise SystemExit(
+                    f"usage.json binary must be an absolute path: {configured_launcher}"
+                )
+            if not configured_launcher.is_file() or not os.access(configured_launcher, os.X_OK):
+                raise SystemExit(
+                    "CLI executable from usage.json binary is missing or not executable: "
+                    f"{configured_launcher}"
+                )
+            return str(configured_launcher)
+    canonical_launcher = Path.home() / ".local" / "bin" / cli_name
+    if not canonical_launcher.is_file() or not os.access(canonical_launcher, os.X_OK):
+        raise SystemExit(
+            "CLI executable is missing or not executable at canonical uv launcher: "
+            f"{canonical_launcher}. Pass --cli-executable for a new non-uv map or test fixture."
+        )
+    return str(canonical_launcher)
+
+
+def help_text(cli_executable: str, command_path: str, timeout: int) -> str:
+    args = command_path.split() + ["--help"] if command_path else ["--help"]
+    result = run_cli_command(cli_executable, args, timeout=timeout)
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()
+        raise SystemExit(
+            f"{cli_executable} {' '.join(args)} exited {result.returncode}: {detail[:500]}"
+        )
+    return result.stdout
+
+
+def extract_help_line(text: str) -> str:
+    lines: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if (
+            not stripped
+            or stripped.startswith("Usage:")
+            or stripped.startswith("─")
+        ):
+            continue
+        if stripped == "Examples:":
+            break
+        if stripped.startswith(("╭", "│", "╰")):
+            break
+        lines.append(stripped)
+    return " ".join(lines)
+
+
+def node_package(cli_executable: str) -> tuple[Path, dict] | None:
+    """Return the npm package that owns an executable, when one exists."""
+    launcher = Path(cli_executable).expanduser()
+    if not launcher.is_file():
+        resolved_launcher = shutil.which(cli_executable)
+        if resolved_launcher is None:
+            return None
+        launcher = Path(resolved_launcher)
+    executable = launcher.resolve()
+
+    for directory in executable.parents:
+        package_json = directory / "package.json"
+        if not package_json.is_file():
+            continue
+        try:
+            package = json.loads(package_json.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        declared_bin = package.get("bin")
+        if isinstance(declared_bin, str):
+            bin_paths = [declared_bin]
+        elif isinstance(declared_bin, dict):
+            bin_paths = [value for value in declared_bin.values() if isinstance(value, str)]
+        else:
+            bin_paths = []
+        if any((directory / bin_path).resolve() == executable for bin_path in bin_paths):
+            return directory, package
+    return None
+
+
+def resolve_node_dependency(package_root: Path, dependency: str) -> Path | None:
+    """Resolve one npm dependency using Node's ancestor node_modules layout."""
+    relative_dependency = Path(*dependency.split("/"))
+    for directory in (package_root, *package_root.parents):
+        candidate = directory / "node_modules" / relative_dependency
+        if (candidate / "package.json").is_file():
+            return candidate
+    return None
+
+
+def valid_machine_help_manifest(value: object) -> bool:
+    """Return whether a JSON value has the supported flat machine-help schema."""
+    if not isinstance(value, dict) or not isinstance(value.get("commands"), dict):
+        return False
+    commands = value["commands"]
+    if not commands:
+        return False
+    for name, command in commands.items():
+        if not isinstance(name, str) or not isinstance(command, dict):
+            return False
+        if not isinstance(command.get("help"), str):
+            return False
+        if not isinstance(command.get("flags"), dict):
+            return False
+        if not all(isinstance(key, str) and isinstance(kind, str) for key, kind in command["flags"].items()):
+            return False
+        if not isinstance(command.get("args"), list) or not all(
+            isinstance(argument, str) for argument in command["args"]
+        ):
+            return False
+    return True
+
+
+def visible_manifest_commands(
+    root_help: str, commands: dict[str, dict]
+) -> tuple[list[str], dict[str, str]]:
+    """Return manifest commands that the live root help exposes, in display order."""
+    visible: list[str] = []
+    categories: dict[str, str] = {}
+    category: str | None = None
+
+    for line in root_help.splitlines():
+        stripped = line.strip()
+        if line[:1] and not line[:1].isspace() and stripped.endswith(":"):
+            candidate = stripped[:-1]
+            category = None if candidate.lower().endswith("options") else candidate
+            continue
+        if category is None or not line[:1].isspace() or not stripped:
+            continue
+        name = stripped.split(maxsplit=1)[0]
+        if name in commands and name not in categories:
+            visible.append(name)
+            categories[name] = category
+
+    return visible, categories
+
+
+def machine_help_manifest(
+    cli_executable: str, root_help: str
+) -> tuple[dict[str, dict], list[str], dict[str, str]] | None:
+    """Load a package-owned flat help manifest that matches the live root help."""
+    package_details = node_package(cli_executable)
+    if package_details is None:
+        return None
+    package_root, package = package_details
+    search_roots = [package_root]
+    dependencies = package.get("dependencies")
+    if isinstance(dependencies, dict):
+        for dependency in dependencies:
+            dependency_root = resolve_node_dependency(package_root, dependency)
+            if dependency_root is not None and dependency_root not in search_roots:
+                search_roots.append(dependency_root)
+
+    matches: list[tuple[Path, dict[str, dict], list[str], dict[str, str]]] = []
+    seen_candidates: set[Path] = set()
+    for search_root in search_roots:
+        for candidate in search_root.rglob("help.json"):
+            resolved_candidate = candidate.resolve()
+            if resolved_candidate in seen_candidates:
+                continue
+            seen_candidates.add(resolved_candidate)
+            try:
+                manifest = json.loads(resolved_candidate.read_text())
+            except (OSError, json.JSONDecodeError):
+                continue
+            if not valid_machine_help_manifest(manifest):
+                continue
+            commands = manifest["commands"]
+            visible, categories = visible_manifest_commands(root_help, commands)
+            if visible:
+                matches.append((resolved_candidate, commands, visible, categories))
+
+    if len(matches) > 1:
+        paths = ", ".join(str(path) for path, _, _, _ in matches)
+        raise SystemExit(f"Multiple package-owned help manifests match live help: {paths}")
+    if not matches:
+        return None
+    _, commands, visible, categories = matches[0]
+    return commands, visible, categories
+
+
+def extract_plain_help_line(text: str) -> str:
+    """Extract the description paragraph from flat command help."""
+    paragraphs = [part.strip() for part in re.split(r"\n\s*\n", text) if part.strip()]
+    if len(paragraphs) < 2:
+        return ""
+    return " ".join(paragraphs[1].splitlines())
+
+
+def plain_help_sections(text: str) -> dict[str, list[str]]:
+    """Extract Arguments and Options rows from flat command help."""
+    sections: dict[str, list[str]] = {"Arguments": [], "Options": []}
+    current: str | None = None
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped in {"Arguments:", "Options:"}:
+            current = stripped[:-1]
+            continue
+        if stripped.endswith(":") and line[:1] and not line[:1].isspace():
+            current = None
+            continue
+        if current is not None and stripped:
+            sections[current].append(line)
+    return sections
+
+
+def manifest_parameters(command: dict, previous: dict) -> dict[str, list[dict]]:
+    """Convert a machine-help command entry to usage.json parameters."""
+    sections = plain_help_sections(command["help"])
+    previous_argument_types = {
+        argument.get("name"): argument.get("type")
+        for argument in previous.get("arguments", [])
+        if isinstance(argument, dict)
+        and isinstance(argument.get("name"), str)
+        and isinstance(argument.get("type"), str)
+    }
+
+    arguments: list[dict] = []
+    for line in sections["Arguments"]:
+        match = re.match(r"^\s*(<[^>]+>|\[[^]]+\])\s+(.*)$", line)
+        if not match:
+            continue
+        token, argument_help = match.groups()
+        name = token[1:-1].removesuffix("...")
+        arguments.append(
+            {
+                "name": name,
+                "type": previous_argument_types.get(name, "TEXT"),
+                "required": token.startswith("<"),
+                "help": argument_help.strip(),
+            }
+        )
+    if [argument["name"] for argument in arguments] != command["args"]:
+        raise SystemExit("Machine-help arguments do not match the command help text")
+
+    flags = command["flags"]
+    options: list[dict] = []
+    for line in sections["Options"]:
+        match = re.match(r"^\s*(--[A-Za-z0-9][A-Za-z0-9-]*)\s+(.*)$", line)
+        if not match:
+            continue
+        name, option_help = match.groups()
+        flag_name = name[2:]
+        if flag_name not in flags:
+            raise SystemExit(f"Machine-help option {name} is absent from the flags map")
+        raw_type = flags[flag_name]
+        option_type = MACHINE_OPTION_TYPES.get(raw_type, raw_type.upper())
+        option = {
+            "name": name,
+            "type": option_type,
+            "required": False,
+            "help": option_help.strip(),
+        }
+        if option_type == "bool":
+            option["takes_value"] = False
+        options.append(option)
+    expected_options = [f"--{name}" for name in flags]
+    if [option["name"] for option in options] != expected_options:
+        raise SystemExit("Machine-help flags do not match the command help text")
+    return {"arguments": arguments, "options": options}
+
+
+def existing_node_meta(old_usage: dict) -> dict[str, dict]:
+    meta: dict[str, dict] = {}
+
+    def walk(tree: dict | None, prefix: str) -> None:
+        for name, node in (tree or {}).items():
+            path = f"{prefix} {name}".strip()
+            entry = {
+                key: node[key]
+                for key in ("help", "examples", "usage_instructions")
+                if key in node
+            }
+            meta[path] = entry
+            walk(node.get("commands"), path)
+
+    walk(old_usage.get("commands", {}), "")
+    return meta
+
+
+def live_option_tokens(parameters: dict, secondary_tokens: set[str] | None = None) -> set[str]:
+    tokens = set(ALWAYS_VALID_OPTION_TOKENS)
+    for option in parameters.get("options", []):
+        name = option.get("name")
+        if not isinstance(name, str) or not name.startswith("--"):
+            continue
+        tokens.add(name)
+        if option.get("type") == "bool":
+            # Typer's mechanical "--no-<primary>" convention is only a
+            # fallback: parse_help_option_secondary_tokens below recovers the
+            # CLI's actual declared secondary flag (e.g. --include-rules's
+            # real pair is --no-rules, not --no-include-rules), which is the
+            # authoritative token when the live help text provided one.
+            tokens.add(f"--no-{name[2:]}")
+    if secondary_tokens:
+        tokens.update(secondary_tokens)
+    return tokens
+
+
+def stale_option_tokens(value: object, live_tokens: set[str]) -> set[str]:
+    if isinstance(value, list):
+        text = "\n".join(str(item) for item in value)
+    else:
+        text = str(value)
+    return {
+        token
+        for token in OPTION_TOKEN_RE.findall(text)
+        if token not in live_tokens
+    }
+
+
+def stale_example_commands(value: object, command_path: str) -> list[str]:
+    examples = value if isinstance(value, list) else [value]
+    expected_parts = command_path.split()
+    stale: list[str] = []
+    for example in examples:
+        try:
+            parts = shlex.split(str(example))
+        except ValueError:
+            stale.append(str(example))
+            continue
+        if parts[1 : 1 + len(expected_parts)] != expected_parts:
+            stale.append(str(example))
+    return stale
+
+
+def extract_live_examples(text: str, command_path: str) -> list[str] | None:
+    """Return command examples from the live help ``Examples:`` section.
+
+    ``None`` means the help has no examples section, so manually enriched
+    usage.json examples can still be carried forward. An empty list means the
+    section exists but contains no command for this node, so old examples must
+    not survive as stale metadata.
+    """
+    expected_parts = command_path.split()
+    examples: list[str] = []
+    in_examples = False
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped == "Examples:":
+            in_examples = True
+            continue
+        if not in_examples:
+            continue
+        if stripped.startswith(("╭", "│", "╰")):
+            break
+        if not stripped or stripped.startswith("#"):
+            continue
+        try:
+            parts = shlex.split(stripped)
+        except ValueError:
+            continue
+        if parts[1 : 1 + len(expected_parts)] == expected_parts:
+            examples.append(stripped)
+
+    return examples if in_examples else None
+
+
+def filter_valid_examples(
+    value: object, command_path: str, live_tokens: set[str]
+) -> list[str]:
+    """Keep only examples that match the live command and option surface.
+
+    A command's examples array commonly accumulates independent lines added at
+    different times. One line going stale must not discard every other valid
+    example. Filter one example at a time instead of gating the whole array on
+    the presence of any stale token.
+    """
+    examples = value if isinstance(value, list) else [value]
+    renamed_command_examples = set(stale_example_commands(examples, command_path))
+    return [
+        example
+        for example in examples
+        if example not in renamed_command_examples
+        and not stale_option_tokens(example, live_tokens)
+    ]
+
+
+def assemble_commands(
+    live_paths: list[str],
+    parameters_by_path: dict[str, dict],
+    help_by_path: dict[str, str],
+    old_meta: dict[str, dict],
+    secondary_tokens_by_path: dict[str, set[str]] | None = None,
+    live_examples_by_path: dict[str, list[str] | None] | None = None,
+) -> dict:
+    root: dict = {}
+    secondary_tokens_by_path = secondary_tokens_by_path or {}
+    live_examples_by_path = live_examples_by_path or {}
+
+    for command_path in live_paths:
+        parts = command_path.split()
+        cursor = root
+        for index, part in enumerate(parts):
+            current_path = " ".join(parts[: index + 1])
+            node = cursor.setdefault(part, {})
+            meta = old_meta.get(current_path, {})
+            parsed_help = help_by_path.get(current_path, "")
+
+            node["help"] = parsed_help
+
+            parameters = parameters_by_path.get(current_path, {"arguments": [], "options": []})
+            valid_option_tokens = live_option_tokens(
+                parameters, secondary_tokens_by_path.get(current_path)
+            )
+            live_examples = live_examples_by_path.get(current_path)
+            if live_examples is not None:
+                valid_examples = filter_valid_examples(
+                    live_examples, current_path, valid_option_tokens
+                )
+                if valid_examples:
+                    node["examples"] = valid_examples
+            elif "examples" in meta:
+                valid_examples = filter_valid_examples(
+                    meta["examples"], current_path, valid_option_tokens
+                )
+                if valid_examples:
+                    node["examples"] = valid_examples
+            if "usage_instructions" in meta and not stale_option_tokens(meta["usage_instructions"], valid_option_tokens):
+                node["usage_instructions"] = meta["usage_instructions"]
+
+            if index == len(parts) - 1:
+                parameters = parameters_by_path.get(current_path, {"arguments": [], "options": []})
+                node["arguments"] = parameters["arguments"]
+                node["options"] = parameters["options"]
+            else:
+                cursor = node.setdefault("commands", {})
+
+    return root
+
+
+def assemble_manifest_commands(
+    live_paths: list[str],
+    manifest_commands: dict[str, dict],
+    categories: dict[str, str],
+    old_usage: dict,
+) -> dict:
+    """Assemble flat command nodes from a package-owned machine-help manifest."""
+    old_commands = old_usage.get("commands")
+    if not isinstance(old_commands, dict):
+        old_commands = {}
+    root: dict = {}
+
+    for command_path in live_paths:
+        previous = old_commands.get(command_path)
+        if not isinstance(previous, dict):
+            previous = {}
+        parameters = manifest_parameters(manifest_commands[command_path], previous)
+        node: dict = {
+            "category": categories[command_path],
+            "help": extract_plain_help_line(manifest_commands[command_path]["help"]),
+        }
+        valid_option_tokens = live_option_tokens(parameters)
+        if "examples" in previous:
+            valid_examples = filter_valid_examples(
+                previous["examples"], command_path, valid_option_tokens
+            )
+            if valid_examples:
+                node["examples"] = valid_examples
+        if "usage_instructions" in previous and not stale_option_tokens(
+            previous["usage_instructions"], valid_option_tokens
+        ):
+            node["usage_instructions"] = previous["usage_instructions"]
+        if parameters["arguments"]:
+            node["arguments"] = parameters["arguments"]
+        if parameters["options"]:
+            node["options"] = parameters["options"]
+        root[command_path] = node
+
+    return root
+
+
+def seed_usage(cli_name: str) -> dict:
+    """Minimal top-level usage.json skeleton for a brand-new CLI skill.
+
+    Matches the canonical schema other tools ship (see openai-whisper-cli):
+    ``commands``/``total_commands`` are placeholders populated from live
+    ``--help`` discovery; ``discovered_at`` is stamped on write.
+    """
+    return {
+        "tool": cli_name,
+        "description": f"CLI interface for {cli_name}",
+        "discovered_at": "",
+        "total_commands": 0,
+        "global_options": [],
+        "commands": {},
+        "usage_instructions": (
+            f"Use the `{cli_name}` CLI. Run `{cli_name} --help` to discover "
+            "command groups and `--help` on any subcommand for its options."
+        ),
+    }
+
+
+def build_usage(
+    cli_name: str,
+    cli_executable: str,
+    usage_path: Path,
+    discovered_at: str | None = None,
+) -> tuple[dict, int]:
+    if usage_path.is_file():
+        old_usage = json.loads(usage_path.read_text())
+    else:
+        old_usage = seed_usage(cli_name)
+    config = load_config()
+    skip_list = config["command_discovery"]["skip_list"]
+    timeout = config["general"]["command_timeout"]
+    max_depth = config["general"]["max_nested_depth"]
+    max_depth = config.get("cli_specific", {}).get(cli_name, {}).get("max_nested_depth", max_depth)
+
+    discovery_help_by_path: dict[str, str] = {}
+    discovered_paths = discover_nested_commands(
+        cli_executable,
+        "",
+        depth=0,
+        max_depth=max_depth,
+        skip_list=skip_list,
+        timeout=timeout,
+        help_text_by_path=discovery_help_by_path,
+    )
+    new_usage = dict(old_usage)
+    if discovered_paths:
+        live_paths = sorted(discovered_paths)
+        # Fetch each path's --help exactly once; both maps derive from it.
+        help_text_by_path = {
+            path: discovery_help_by_path.get(path)
+            or help_text(cli_executable, path, timeout)
+            for path in live_paths
+        }
+        parameters_by_path = {
+            path: parse_help_parameters(text)
+            for path, text in help_text_by_path.items()
+        }
+        help_by_path = {
+            path: extract_help_line(text)
+            for path, text in help_text_by_path.items()
+        }
+        # Typer allows a custom secondary flag name for a paired boolean (e.g.
+        # --include-rules's real pair is --no-rules, not the mechanical
+        # --no-include-rules live_option_tokens would otherwise assume), so
+        # recover the CLI's actual declared secondary tokens from the same
+        # already-fetched help text rather than guessing.
+        secondary_tokens_by_path = {
+            path: set(
+                parse_help_option_secondary_tokens(
+                    extract_help_sections(text).get("Options", "")
+                )
+            )
+            for path, text in help_text_by_path.items()
+        }
+        live_examples_by_path = {
+            path: extract_live_examples(text, path)
+            for path, text in help_text_by_path.items()
+        }
+        new_usage["commands"] = assemble_commands(
+            live_paths,
+            parameters_by_path,
+            help_by_path,
+            existing_node_meta(old_usage),
+            secondary_tokens_by_path,
+            live_examples_by_path,
+        )
+    else:
+        root_help = help_text(cli_executable, "", timeout)
+        manifest_details = machine_help_manifest(cli_executable, root_help)
+        if manifest_details is None:
+            live_paths = []
+            new_usage["commands"] = {}
+        else:
+            manifest_commands, live_paths, categories = manifest_details
+            new_usage["commands"] = assemble_manifest_commands(
+                live_paths,
+                manifest_commands,
+                categories,
+                old_usage,
+            )
+    new_usage["total_commands"] = len(leaf_command_paths(set(live_paths)))
+    preserved_discovered_at = discovered_at or old_usage.get("discovered_at")
+    if preserved_discovered_at is not None:
+        new_usage["discovered_at"] = preserved_discovered_at
+    else:
+        new_usage.pop("discovered_at", None)
+    return new_usage, len(live_paths)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Regenerate <cli-tools-root>/_repo/skills/<tool>-cli/usage.json."
+    )
+    parser.add_argument("cli_name", help="Tool name used by the skill directory, for example jira")
+    parser.add_argument(
+        "--cli-executable",
+        help="Executable to inspect for a new non-uv map or test fixture",
+    )
+    parser.add_argument("--usage-json", type=Path, help="usage.json path to update")
+    parser.add_argument("--check", action="store_true", help="Exit 1 if usage.json would change")
+    parser.add_argument("--discovered-at", help=argparse.SUPPRESS)
+    args = parser.parse_args(argv)
+
+    usage_path = resolve_usage_path(args.cli_name, args.usage_json)
+    cli_executable = resolve_cli_executable(
+        args.cli_name, args.cli_executable, usage_path
+    )
+    new_usage, command_count = build_usage(
+        args.cli_name,
+        cli_executable,
+        usage_path,
+        discovered_at=args.discovered_at,
+    )
+    old_text = usage_path.read_text() if usage_path.is_file() else ""
+    new_text = json.dumps(new_usage, indent=2, ensure_ascii=False) + "\n"
+    changed = new_text != old_text
+
+    if args.check:
+        print(
+            json.dumps(
+                {
+                    "cli": args.cli_name,
+                    "usage_json": str(usage_path),
+                    "commands": command_count,
+                    "changed": changed,
+                },
+                sort_keys=True,
+            )
+        )
+        return 1 if changed else 0
+
+    if changed:
+        if args.discovered_at is None:
+            new_usage["discovered_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            new_text = json.dumps(new_usage, indent=2, ensure_ascii=False) + "\n"
+        usage_path.write_text(new_text)
+    print(
+        json.dumps(
+            {
+                "cli": args.cli_name,
+                "usage_json": str(usage_path),
+                "commands": command_count,
+                "changed": changed,
+            },
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

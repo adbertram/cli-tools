@@ -9,6 +9,7 @@ import time
 import requests
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import quote
 
 
 GLOBAL_ERROR_HANDLER_ID = "F79g2nlj6f1glf8u"
@@ -267,11 +268,18 @@ class N8nApiClient:
         if trigger_name:
             payload["triggerToStartFrom"] = {"name": trigger_name}
 
-        return self._rest_request(
+        response = self._rest_request(
             "POST",
             f"/rest/workflows/{workflow_id}/run",
             json=payload,
         )
+        if not isinstance(response, dict) or not isinstance(
+            response.get("data"), dict
+        ):
+            raise N8nApiError(
+                "Workflow execution response did not include a data object"
+            )
+        return response["data"]
 
     def trigger_webhook(self, webhook_path: str, data: Optional[Dict] = None) -> Any:
         """Trigger a webhook on the n8n server (production path).
@@ -591,7 +599,7 @@ class N8nApiClient:
 
     def list_community_packages(self) -> List[Dict]:
         """List packages installed through n8n's community package manager."""
-        data = self._rest_request("GET", "/rest/community-packages")
+        data = self._request("GET", "/community-packages")
         if isinstance(data, dict):
             return data.get("data", [])
         return data
@@ -606,14 +614,15 @@ class N8nApiClient:
         payload: Dict[str, Any] = {"name": package_name, "verify": verify}
         if version:
             payload["version"] = version
-        data = self._rest_request("POST", "/rest/community-packages", json=payload, timeout=300)
+        data = self._request("POST", "/community-packages", json=payload, timeout=300)
         if isinstance(data, dict) and "data" in data:
             return data["data"]
         return data
 
     def uninstall_community_package(self, package_name: str) -> None:
         """Uninstall a community package through the running n8n instance."""
-        self._rest_request("DELETE", "/rest/community-packages", params={"name": package_name}, timeout=300)
+        encoded_name = quote(package_name, safe="")
+        self._request("DELETE", f"/community-packages/{encoded_name}", timeout=300)
 
     def resolve_node_type(self, node_name: str) -> Optional[str]:
         """Resolve a short node name to its full node type by querying the server.

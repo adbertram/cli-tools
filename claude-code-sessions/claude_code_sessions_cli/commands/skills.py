@@ -1,18 +1,26 @@
 """Skill/command invocation commands for Claude Code Sessions CLI."""
+COMMAND_CREDENTIALS = {
+    "list": ["no_auth"],
+    "get": ["no_auth"],
+}
+
 import typer
 from typing import Optional, List
 from ..client import get_client, ClientError
 from cli_tools_shared.filters import apply_filters
-from cli_tools_shared.output import print_json, print_table, handle_error
+from cli_tools_shared.output import command, print_json, print_table, handle_error
 from ..parsers import format_local_time
+from .session_arg import resolve_session_arg
 
 app = typer.Typer(help="Query skill/command invocations", no_args_is_help=True)
 
 
 @app.command("list")
+@command
 def list_skills(
     project: str = typer.Option(..., "--project", "-p", help="Project name (required)"),
-    session_id: Optional[str] = typer.Option(None, "--session-id", "-S", help="Filter to specific session"),
+    session_id: Optional[str] = typer.Option(None, "--session-id", "-S", help="Session ID (UUID or name)"),
+    session_name: Optional[str] = typer.Option(None, "--session-name", "-N", help="Session name (exact, case-insensitive)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum results"),
     since: Optional[str] = typer.Option(None, "--since", "-s", help="Time filter: 5h, 1d, 7d"),
@@ -23,13 +31,14 @@ def list_skills(
     List all skill/command invocations for a project.
 
     Example:
-        claude-code-sessions skills list --project Agent-ATABlogger
-        claude-code-sessions skills list --project Agent-ATABlogger --since 1h
-        claude-code-sessions skills list --project Agent-ATABlogger --filter "name:eq:start-post-pipeline"
-        claude-code-sessions skills list --project Agent-ATABlogger --session-id abc123
+        claude-code-sessions skills list --project ExampleProject
+        claude-code-sessions skills list --project ExampleProject --since 1h
+        claude-code-sessions skills list --project ExampleProject --filter "name:eq:start-post-pipeline"
+        claude-code-sessions skills list --project ExampleProject --session-id abc123
     """
     try:
         client = get_client()
+        session_id = resolve_session_arg(client, session_id, session_name, project=project)
         skills = client.list_skills(project=project, limit=limit, since=since)
 
         # Convert to dicts for filtering/output
@@ -63,6 +72,7 @@ def list_skills(
 
 
 @app.command("get")
+@command
 def get_skill(
     skill_id: str = typer.Argument(..., help="Skill invocation ID"),
     project: str = typer.Option(..., "--project", "-p", help="Project name (required)"),
@@ -72,7 +82,7 @@ def get_skill(
     Get details for a specific skill/command invocation.
 
     Example:
-        claude-code-sessions skills get <skill-id> --project Agent-ATABlogger
+        claude-code-sessions skills get <skill-id> --project ExampleProject
     """
     try:
         client = get_client()

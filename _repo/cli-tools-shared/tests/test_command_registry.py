@@ -19,6 +19,7 @@ from cli_tools_shared.command_registry import (
     _check_credentials,
     _resolve_runtime_profile_context,
     register_commands,
+    register_root_commands,
 )
 from cli_tools_shared.config import BaseConfig, get_profiles_base_dir
 from cli_tools_shared.credentials import CredentialType
@@ -112,6 +113,26 @@ def test_browser_session_gate_does_not_consider_browser_class_attributes():
     # because ``has_saved_session()`` is False. The hooks have no effect.
     with pytest.raises(typer.Exit):
         _check_credentials(config, ["browser_session"], "tool")
+
+
+def test_profile_auth_label_is_not_checked_as_credential(caplog):
+    class ProfileAuthConfig:
+        PROFILE_AUTH_TYPE_FIELD = "AUTH_METHOD"
+        PROFILE_AUTH_TYPES = {"author_kit": []}
+
+        def __init__(self):
+            self.checked_session = False
+
+        def has_saved_session(self):
+            self.checked_session = True
+            return True
+
+    config = ProfileAuthConfig()
+
+    _check_credentials(config, ["author_kit", "browser_session"], "tool")
+
+    assert config.checked_session is True
+    assert "Unknown credential type 'author_kit'" not in caplog.text
 
 
 class MultiProfileConfig(BaseConfig):
@@ -279,6 +300,50 @@ def test_registered_group_help_exposes_profile_option():
 
     assert result.exit_code == 0, result.output
     assert "--profile" in result.output
+
+
+def test_registered_root_commands_enforce_credentials_and_expose_profile_option():
+    calls = []
+    ran = []
+
+    class SingleProfileConfig:
+        CREDENTIAL_TYPES = [CredentialType.API_KEY]
+
+        def _get(self, name):
+            return {"API_KEY": "saved-key"}.get(name)
+
+    def get_config(profile=None) -> SingleProfileConfig:
+        calls.append(profile)
+        return SingleProfileConfig()
+
+    command_app = typer.Typer()
+
+    @command_app.command("import")
+    def import_media():
+        ran.append("import")
+        typer.echo("ok")
+
+    root = typer.Typer()
+    register_root_commands(
+        root,
+        get_config,
+        SimpleNamespace(
+            app=command_app,
+            COMMAND_CREDENTIALS={"import": ["api_key"]},
+        ),
+        cli_name="tool",
+    )
+
+    help_result = CliRunner().invoke(root, ["import", "--help"])
+    assert help_result.exit_code == 0, help_result.output
+    assert "--profile" in help_result.output
+
+    result = CliRunner().invoke(root, ["import", "--profile", "staging"])
+
+    assert result.exit_code == 0, result.output
+    assert "ok" in result.output
+    assert calls == ["staging"]
+    assert ran == ["import"]
 
 
 def test_registered_group_accepts_profile_option_before_leaf_command():

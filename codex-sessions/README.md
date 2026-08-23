@@ -1,12 +1,10 @@
 # CodexSessions CLI
 
-Query and analyze OpenAI Codex session transcripts stored under `~/.codex`.
+## DESCRIPTION
 
-Codex stores session rollouts as append-only JSONL files under paths like
-`~/.codex/sessions/YYYY/MM/DD/rollout-YYYY-MM-DDThh-mm-ss-<session-id>.jsonl`.
-This CLI reads those local files and presents projects, sessions, turns, tool calls,
-subagents, update-plan items, skill mentions, and timelines with standard JSON and
-table output.
+The `codex-sessions` CLI lets you query and analyze OpenAI Codex session transcripts from ~/.codex.
+
+Use it when you need scriptable reads, exports, or evidence collection without opening the service UI.
 
 ## Installation
 

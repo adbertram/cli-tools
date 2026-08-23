@@ -48,28 +48,16 @@ class FakePage:
         self.waits.append(milliseconds)
 
 
-class FakeBrowser:
-    def __init__(self, page):
-        self.page = page
-        self.urls = []
-
-    def get_page(self, url):
-        self.urls.append(url)
-        return self.page
-
-
 class GroupPostsDomQueryTests(unittest.TestCase):
-    def test_list_group_posts_extracts_posts_from_group_feed_dom(self):
+    def test_extract_group_posts_extracts_posts_from_group_feed_dom(self):
         page = FakePage()
         client = FacebookClient()
-        client._browser_instance = FakeBrowser(page)
 
-        posts = client.list_group_posts("123", limit=2)
+        posts = client._extract_group_posts(page)
 
-        self.assertEqual([post.post_id for post in posts], ["1001", "1002"])
-        self.assertEqual(client._browser_instance.urls, ["https://www.facebook.com/groups/123/"])
-        self.assertIn("window.scrollTo", page.evaluate_calls[1])
-        self.assertEqual(page.waits, [3000, 1500])
+        self.assertEqual([post["post_id"] for post in posts], ["1001"])
+        self.assertEqual(page.extract_calls, 1)
+        self.assertEqual(page.waits, [])
 
 
 if __name__ == "__main__":

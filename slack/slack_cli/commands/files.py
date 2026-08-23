@@ -22,13 +22,14 @@ import typer
 from typing import Optional, List
 from pathlib import Path
 from ..client import get_client, ClientError
-from cli_tools_shared.output import print_json, print_table, print_success, print_warning, handle_error
+from cli_tools_shared.output import print_json, print_table, print_success, print_warning, handle_error, command
 from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError, apply_properties_filter
 
 app = typer.Typer(help="Manage Slack files")
 
 
 @app.command("list")
+@command
 def list_files(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     channel: Optional[str] = typer.Option(None, "--channel", "-c", help="Filter by channel ID (API filter)"),
@@ -125,11 +126,17 @@ def list_files(
 
 
 @app.command("upload")
+@command
 def upload_file(
     file_path: str = typer.Argument(..., help="Path to file to upload"),
     channels: Optional[str] = typer.Option(None, "--channels", "-c", help="Comma-separated channel IDs"),
     title: Optional[str] = typer.Option(None, "--title", "-t", help="File title"),
     comment: Optional[str] = typer.Option(None, "--comment", help="Initial comment"),
+    thread_ts: Optional[str] = typer.Option(
+        None,
+        "--thread-ts",
+        help="Parent message timestamp for a threaded reply",
+    ),
 ):
     """
     Upload a file to Slack.
@@ -150,6 +157,7 @@ def upload_file(
             channels=channels,
             title=title or path.name,
             initial_comment=comment,
+            thread_ts=thread_ts,
         )
 
         file_info = response.get("file", {})
@@ -165,6 +173,7 @@ def upload_file(
 
 
 @app.command("get")
+@command
 def file_get(
     file_id: str = typer.Argument(..., help="File ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -206,6 +215,7 @@ def file_get(
 
 
 @app.command("delete")
+@command
 def delete_file(
     file_id: str = typer.Argument(..., help="File ID to delete"),
 ):
@@ -225,6 +235,7 @@ def delete_file(
 
 
 @app.command("download")
+@command
 def download_file(
     file_id: str = typer.Argument(..., help="File ID to download"),
     output: Optional[str] = typer.Option(

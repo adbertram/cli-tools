@@ -63,15 +63,6 @@ class Config(BaseConfig):
 
     # --- Storage (required by @cached and BrowserAutomation) ---------------------
 
-    @property
-    def storage_dir(self):
-        """Profile-aware storage directory for runtime data.
-
-        Required by the shared ``@cached`` decorator -- cached method
-        returns live at ``<storage_dir>/cache/<method>_<hash>.json``.
-        """
-        return self.get_profile_data_dir()
-
     # --- Affiliate nickname (used to build hoplinks) -----------------------------
 
     @property

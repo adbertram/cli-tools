@@ -1,8 +1,8 @@
 {
   "tool": "lastpass",
   "description": "LastPass password manager CLI wrapper",
-  "discovered_at": "2026-05-20T16:04:59.473591+00:00",
-  "total_commands": 20,
+  "discovered_at": "2026-08-03T23:40:04Z",
+  "total_commands": 22,
   "global_options": [
     {
       "name": "--version",
@@ -19,18 +19,16 @@
     }
   ],
   "commands": {
-    "sync": {
-      "help": "Sync local vault cache with LastPass servers.",
-      "examples": [
-        "lastpass sync"
-      ],
-      "usage_instructions": "Use `lastpass sync` with the documented arguments and options shown below."
-    },
     "auth": {
       "help": "Manage LastPass authentication",
+      "usage_instructions": "Use `lastpass auth` to access this command group. Run `--help` on a subcommand for details.",
+      "arguments": [],
+      "options": [],
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Use `lastpass auth login` with the documented arguments and options shown below.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -43,14 +41,15 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
+              "help": "Clear existing ephemeral auth state and re-authenticate",
               "short": "-F"
             }
-          ],
-          "usage_instructions": "Use `lastpass auth login` with the documented arguments and options shown below."
+          ]
         },
         "logout": {
           "help": "Clear stored credentials.",
+          "usage_instructions": "Use `lastpass auth logout` with the documented arguments and options shown below.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -59,61 +58,73 @@
               "help": "Profile name to clear credentials from",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Use `lastpass auth logout` with the documented arguments and options shown below."
-        },
-        "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to check (defaults to all profiles)",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Use `lastpass auth status` with the documented arguments and options shown below."
-        },
-        "test": {
-          "help": "Test authentication by verifying credentials work across profiles.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--verbose",
-              "type": "bool",
-              "required": false,
-              "help": "Show detailed checks",
-              "short": "-v"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name (defaults to all profiles)",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Use `lastpass auth test` with the documented arguments and options shown below."
+          ]
         },
         "profiles": {
           "help": "Manage authentication profiles",
+          "usage_instructions": "Use `lastpass auth profiles` to access this command group. Run `--help` on a subcommand for details.",
+          "arguments": [],
+          "options": [],
           "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Use `lastpass auth profiles create` with the documented arguments and options shown below.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Use `lastpass auth profiles delete` with the documented arguments and options shown below.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Use `lastpass auth profiles get` with the documented arguments and options shown below.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
             "list": {
               "help": "List all profiles and show their auth types and active state.",
+              "usage_instructions": "Use `lastpass auth profiles list` with the documented arguments and options shown below.",
+              "arguments": [],
               "options": [
                 {
                   "name": "--table",
@@ -143,74 +154,7 @@
                   "help": "Comma-separated list of fields to include",
                   "short": "-p"
                 }
-              ],
-              "usage_instructions": "Use `lastpass auth profiles list` with the documented arguments and options shown below."
-            },
-            "get": {
-              "help": "Get details for a specific profile.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to get details for"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "usage_instructions": "Use `lastpass auth profiles get` with the documented arguments and options shown below."
-            },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ],
-              "usage_instructions": "Use `lastpass auth profiles create` with the documented arguments and options shown below."
-            },
-            "select": {
-              "help": "Activate a profile within its auth type.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to activate within its auth type"
-                }
-              ],
-              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ],
-              "usage_instructions": "Use `lastpass auth profiles delete` with the documented arguments and options shown below."
+              ]
             },
             "remove": {
               "help": "Delete a profile and its data.",
@@ -230,187 +174,146 @@
                   "help": "Skip confirmation",
                   "short": "-F"
                 }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
               ],
-              "usage_instructions": "Use `lastpass auth profiles delete` with the documented arguments and options shown below."
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
             }
-          },
-          "usage_instructions": "Use `lastpass auth profiles` to access this command group. Run `--help` on a subcommand for details."
+          }
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "usage_instructions": "Use `lastpass auth status` with the documented arguments and options shown below.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Use `lastpass auth test` with the documented arguments and options shown below.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
         }
-      },
-      "usage_instructions": "Use `lastpass auth` to access this command group. Run `--help` on a subcommand for details."
+      }
     },
     "cache": {
       "help": "Manage response cache",
+      "usage_instructions": "Use `lastpass cache` to access this command group. Run `--help` on a subcommand for details.",
+      "arguments": [],
+      "options": [],
       "commands": {
         "clear": {
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Use `lastpass cache clear` with the documented arguments and options shown below."
+          "usage_instructions": "Use `lastpass cache clear` with the documented arguments and options shown below.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
-      },
-      "usage_instructions": "Use `lastpass cache` to access this command group. Run `--help` on a subcommand for details."
+      }
     },
     "items": {
       "help": "Manage vault entries",
+      "usage_instructions": "Use `lastpass items` to access this command group. Run `--help` on a subcommand for details.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
-        "list": {
-          "help": "List vault entries.",
-          "arguments": [
-            {
-              "name": "group",
-              "type": "GROUP",
-              "required": false,
-              "help": "Folder/group to list (e.g., 'Work' or 'Work/Servers')"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of entries to return",
-              "short": "-l",
-              "default": "50"
-            },
-            {
-              "name": "--category",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter by LastPass category/note type (e.g., 'Credit Card' or 'Payment Cards')",
-              "short": "-c"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated list of properties to include (supports dot notation)",
-              "short": "-p"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ],
-          "examples": [
-            "lastpass items list",
-            "lastpass items list --table",
-            "lastpass items list Work --table",
-            "lastpass items list --category \"Payment Cards\" --table",
-            "lastpass items list --filter \"name:like:%github%\""
-          ],
-          "usage_instructions": "Use `lastpass items list` with the documented arguments and options shown below."
-        },
-        "get": {
-          "help": "Get details of a vault entry.",
-          "arguments": [
-            {
-              "name": "item_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Entry ID or unique name"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--show-password",
-              "type": "bool",
-              "required": false,
-              "help": "Show password (default: masked)",
-              "short": "-p"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ],
-          "examples": [
-            "lastpass items get 1234567890",
-            "lastpass items get \"Work/GitHub\" --table",
-            "lastpass items get github.com --show-password"
-          ],
-          "usage_instructions": "Use `lastpass items get` with the documented arguments and options shown below."
-        },
-        "password": {
-          "help": "Get just the password for an entry.",
-          "arguments": [
-            {
-              "name": "item_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Entry ID or unique name"
-            }
-          ],
-          "options": [
-            {
-              "name": "--clip",
-              "type": "bool",
-              "required": false,
-              "help": "Copy password to clipboard",
-              "short": "-c"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ],
-          "examples": [
-            "lastpass items password github.com",
-            "lastpass items password 1234567890 --clip"
-          ],
-          "usage_instructions": "Use `lastpass items password` with the documented arguments and options shown below."
-        },
-        "username": {
-          "help": "Get just the username for an entry.",
-          "arguments": [
-            {
-              "name": "item_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Entry ID or unique name"
-            }
-          ],
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ],
-          "examples": [
-            "lastpass items username github.com",
-            "lastpass items username 1234567890"
-          ],
-          "usage_instructions": "Use `lastpass items username` with the documented arguments and options shown below."
-        },
         "create": {
           "help": "Create a new vault entry.",
+          "examples": [
+            "lastpass items create \"My Site\" --username me@email.com --url https://mysite.com",
+            "lastpass items create \"Work/VPN\" --username admin --group Work"
+          ],
+          "usage_instructions": "Use `lastpass items create` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "name",
@@ -460,72 +363,15 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "lastpass items create \"My Site\" --username me@email.com --password secret123 --url https://mysite.com",
-            "lastpass items create \"Work/VPN\" --username admin --password hunter2 --group Work"
-          ],
-          "usage_instructions": "Use `lastpass items create` with the documented arguments and options shown below."
-        },
-        "update": {
-          "help": "Update an existing vault entry.",
-          "arguments": [
-            {
-              "name": "item_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Entry ID or unique name"
-            }
-          ],
-          "options": [
-            {
-              "name": "--username",
-              "type": "TEXT",
-              "required": false,
-              "help": "New username",
-              "short": "-u"
-            },
-            {
-              "name": "--password",
-              "type": "TEXT",
-              "required": false,
-              "help": "New password",
-              "short": "-P"
-            },
-            {
-              "name": "--url",
-              "type": "TEXT",
-              "required": false,
-              "help": "New URL"
-            },
-            {
-              "name": "--notes",
-              "type": "TEXT",
-              "required": false,
-              "help": "New notes",
-              "short": "-n"
-            },
-            {
-              "name": "--name",
-              "type": "TEXT",
-              "required": false,
-              "help": "New name"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ],
-          "examples": [
-            "lastpass items update \"Amazon.com\" --password newpassword123",
-            "lastpass items update 1234567890 --username newuser@email.com --url https://new.example.com"
-          ],
-          "usage_instructions": "Use `lastpass items update` with the documented arguments and options shown below."
+          ]
         },
         "delete": {
           "help": "Delete a vault entry.",
+          "examples": [
+            "lastpass items delete \"Old Entry\"",
+            "lastpass items delete 1234567890 --force"
+          ],
+          "usage_instructions": "Use `lastpass items delete` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "item_id",
@@ -548,15 +394,41 @@
               "required": false,
               "help": "Auth profile name"
             }
+          ]
+        },
+        "fields": {
+          "help": "List an entry's field names and sensitivity metadata without field values. The upstream lpass CLI has no field-name-only operation, so this command uses the existing masked item-detail path and projects only field names. Synthetic header metadata (id, full_path, group, name) is excluded.",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Entry ID or unique name"
+            }
           ],
-          "examples": [
-            "lastpass items delete \"Old Entry\"",
-            "lastpass items delete 1234567890 --force"
-          ],
-          "usage_instructions": "Use `lastpass items delete` with the documented arguments and options shown below."
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "generate": {
           "help": "Generate a random password for a new or existing entry.",
+          "examples": [
+            "lastpass items generate \"New Site\" --length 30",
+            "lastpass items generate \"Work/API Key\" --username admin --no-symbols --clip"
+          ],
+          "usage_instructions": "Use `lastpass items generate` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "name",
@@ -606,15 +478,246 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ],
+          ]
+        },
+        "get": {
+          "help": "Get details of a vault entry. Property selection never emits secret values: requesting a secret field (password, secret, token, ...) with --properties is an error, and --properties cannot be combined with --show-password. Use `items password` for the password value.",
           "examples": [
-            "lastpass items generate \"New Site\" --length 30",
-            "lastpass items generate \"Work/API Key\" --username admin --no-symbols --clip"
+            "lastpass items get 1234567890",
+            "lastpass items get \"Work/GitHub\" --table",
+            "lastpass items get github.com --show-password"
           ],
-          "usage_instructions": "Use `lastpass items generate` with the documented arguments and options shown below."
+          "usage_instructions": "Use `lastpass items get` with the documented arguments and options shown below.",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Entry ID or unique name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--show-password",
+              "type": "bool",
+              "required": false,
+              "help": "Show secret fields unmasked (cannot be combined with --properties)"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of non-secret fields to include (supports dot notation). Secret fields (e.g. password) are refused",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List vault entries. Only metadata fields are returned, so --filter only supports: id, name, group, full_path. The `name:like:`/`ilike:` wildcard match is case-insensitive, so `name:like:%google%` also matches an entry named \"Google\". Filtering on a non-metadata field such as Username or URL is an error (those values require fetching the entry with `items get`). The default limit is 50; pass `--limit 0` for unlimited. When results are truncated a notice is printed to stderr. Category filtering checks each remaining candidate's NoteType and refuses more than 50 candidates. Pass a group argument or metadata --filter before --category; do not run category-only scans with --limit 0.",
+          "examples": [
+            "lastpass items list",
+            "lastpass items list --table",
+            "lastpass items list Work --table",
+            "lastpass items list --filter \"name:like:%hsa%\" --category \"Payment Cards\" --table",
+            "lastpass items list --filter \"name:like:%github%\"",
+            "lastpass items list --filter \"name:like:%google%\" --limit 0",
+            "lastpass items list --filter \"group:eq:Home\" --limit 0"
+          ],
+          "usage_instructions": "Use `lastpass items list` with the documented arguments and options shown below. When using `--category`, first narrow candidates with a group argument or metadata `--filter`; category-only scans fail above 50 candidates.",
+          "arguments": [
+            {
+              "name": "[group]",
+              "type": "TEXT",
+              "required": false,
+              "help": "TEXT  Folder/group to list (e.g., 'Work' or 'Work/Servers')"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum entries to return (default 50; use 0 for unlimited). A truncation notice is printed to stderr when results are capped",
+              "short": "-l",
+              "default": "50"
+            },
+            {
+              "name": "--category",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter already-narrowed entries by LastPass category/note type; broad category scans over 50 candidates are refused",
+              "short": "-c"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value. Only metadata fields are filterable (id, name, group, full_path); name:like/ilike is case-insensitive. An unsupported field (e.g. Username, URL) errors instead of returning empty. E.g. name:like:%github%, group:eq:Home",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of properties to include (supports dot notation)",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "password": {
+          "help": "Get just the password for an entry.",
+          "examples": [
+            "lastpass items password github.com",
+            "lastpass items password 1234567890 --clip"
+          ],
+          "usage_instructions": "Use `lastpass items password` with the documented arguments and options shown below.",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Entry ID or unique name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--clip",
+              "type": "bool",
+              "required": false,
+              "help": "Copy password to clipboard",
+              "short": "-c"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "update": {
+          "help": "Update an existing vault entry.",
+          "examples": [
+            "lastpass items update \"Amazon.com\" --password-stdin <<<\"$NEW_PASSWORD\"",
+            "lastpass items update 1234567890 --username newuser@email.com --url https://new.example.com"
+          ],
+          "usage_instructions": "Use `lastpass items update` with the documented arguments and options shown below.",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Entry ID or unique name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--username",
+              "type": "TEXT",
+              "required": false,
+              "help": "New username",
+              "short": "-u"
+            },
+            {
+              "name": "--password",
+              "type": "TEXT",
+              "required": false,
+              "help": "New password",
+              "short": "-P"
+            },
+            {
+              "name": "--password-stdin",
+              "type": "bool",
+              "required": false,
+              "help": "Read the new password from standard input"
+            },
+            {
+              "name": "--url",
+              "type": "TEXT",
+              "required": false,
+              "help": "New URL"
+            },
+            {
+              "name": "--notes",
+              "type": "TEXT",
+              "required": false,
+              "help": "New notes",
+              "short": "-n"
+            },
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": false,
+              "help": "New name"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "username": {
+          "help": "Get just the username for an entry.",
+          "examples": [
+            "lastpass items username github.com",
+            "lastpass items username 1234567890"
+          ],
+          "usage_instructions": "Use `lastpass items username` with the documented arguments and options shown below.",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Entry ID or unique name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
-      },
-      "usage_instructions": "Use `lastpass items` to access this command group. Run `--help` on a subcommand for details."
+      }
+    },
+    "sync": {
+      "help": "Sync local vault cache with LastPass servers.",
+      "examples": [
+        "lastpass sync"
+      ],
+      "usage_instructions": "Use `lastpass sync` with the documented arguments and options shown below.",
+      "arguments": [],
+      "options": []
     }
   },
   "usage_instructions": "Use `` with the documented arguments and options shown below."

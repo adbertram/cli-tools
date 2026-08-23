@@ -17,6 +17,11 @@ dependencies = [
 [project.scripts]
 slack = "slack_cli.main:app"
 
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["slack_cli*"]

@@ -1,8 +1,8 @@
 {
   "tool": "freshbooks",
   "description": "CLI interface for FreshBooks accounting API",
-  "discovered_at": "2026-05-20T16:19:44.159367+00:00",
-  "total_commands": 25,
+  "discovered_at": "2026-08-18T18:46:08Z",
+  "total_commands": 26,
   "global_options": [
     {
       "name": "--version",
@@ -21,9 +21,14 @@
   "commands": {
     "auth": {
       "help": "Manage authentication",
+      "usage_instructions": "Use `freshbooks auth` to access this command group. Run `--help` on a subcommand for details.",
+      "arguments": [],
+      "options": [],
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Use `freshbooks auth login` with the documented arguments and options shown below.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -36,14 +41,15 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
+              "help": "Clear existing ephemeral auth state and re-authenticate",
               "short": "-F"
             }
-          ],
-          "usage_instructions": "Use `freshbooks auth login` with the documented arguments and options shown below."
+          ]
         },
         "logout": {
           "help": "Clear stored credentials.",
+          "usage_instructions": "Use `freshbooks auth logout` with the documented arguments and options shown below.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -52,81 +58,73 @@
               "help": "Profile name to clear credentials from",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Use `freshbooks auth logout` with the documented arguments and options shown below."
-        },
-        "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to check (defaults to all profiles)",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Use `freshbooks auth status` with the documented arguments and options shown below."
-        },
-        "refresh": {
-          "help": "Refresh OAuth access token using stored refresh token.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Use `freshbooks auth refresh` with the documented arguments and options shown below."
-        },
-        "test": {
-          "help": "Test authentication by verifying credentials work across profiles.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--verbose",
-              "type": "bool",
-              "required": false,
-              "help": "Show detailed checks",
-              "short": "-v"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name (defaults to all profiles)",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Use `freshbooks auth test` with the documented arguments and options shown below."
+          ]
         },
         "profiles": {
           "help": "Manage authentication profiles",
+          "usage_instructions": "Use `freshbooks auth profiles` to access this command group. Run `--help` on a subcommand for details.",
+          "arguments": [],
+          "options": [],
           "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Use `freshbooks auth profiles create` with the documented arguments and options shown below.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Use `freshbooks auth profiles delete` with the documented arguments and options shown below.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Use `freshbooks auth profiles get` with the documented arguments and options shown below.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
             "list": {
               "help": "List all profiles and show their auth types and active state.",
+              "usage_instructions": "Use `freshbooks auth profiles list` with the documented arguments and options shown below.",
+              "arguments": [],
               "options": [
                 {
                   "name": "--table",
@@ -156,74 +154,7 @@
                   "help": "Comma-separated list of fields to include",
                   "short": "-p"
                 }
-              ],
-              "usage_instructions": "Use `freshbooks auth profiles list` with the documented arguments and options shown below."
-            },
-            "get": {
-              "help": "Get details for a specific profile.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to get details for"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "usage_instructions": "Use `freshbooks auth profiles get` with the documented arguments and options shown below."
-            },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ],
-              "usage_instructions": "Use `freshbooks auth profiles create` with the documented arguments and options shown below."
-            },
-            "select": {
-              "help": "Activate a profile within its auth type.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to activate within its auth type"
-                }
-              ],
-              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ],
-              "usage_instructions": "Use `freshbooks auth profiles delete` with the documented arguments and options shown below."
+              ]
             },
             "remove": {
               "help": "Delete a profile and its data.",
@@ -243,77 +174,292 @@
                   "help": "Skip confirmation",
                   "short": "-F"
                 }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
               ],
-              "usage_instructions": "Use `freshbooks auth profiles delete` with the documented arguments and options shown below."
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
             }
-          },
-          "usage_instructions": "Use `freshbooks auth profiles` to access this command group. Run `--help` on a subcommand for details."
+          }
+        },
+        "refresh": {
+          "help": "Refresh OAuth access token using stored refresh token.",
+          "usage_instructions": "Use `freshbooks auth refresh` with the documented arguments and options shown below.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "usage_instructions": "Use `freshbooks auth status` with the documented arguments and options shown below.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Use `freshbooks auth test` with the documented arguments and options shown below.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
         }
-      },
-      "usage_instructions": "Use `freshbooks auth` to access this command group. Run `--help` on a subcommand for details."
+      }
     },
     "cache": {
       "help": "Manage CLI cache",
+      "usage_instructions": "Use `freshbooks cache` to access this command group. Run `--help` on a subcommand for details.",
+      "arguments": [],
+      "options": [],
       "commands": {
         "clear": {
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Use `freshbooks cache clear` with the documented arguments and options shown below."
+          "usage_instructions": "Use `freshbooks cache clear` with the documented arguments and options shown below.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
-      },
-      "usage_instructions": "Use `freshbooks cache` to access this command group. Run `--help` on a subcommand for details."
+      }
     },
-    "invoice": {
-      "help": "Manage invoices",
+    "customer": {
+      "help": "Manage customers/clients",
+      "usage_instructions": "Use `freshbooks customer` to access this command group. Run `--help` on a subcommand for details.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "create": {
+          "help": "Create a new customer.",
+          "examples": [
+            "freshbooks customer create -e john@acme.com -f John -l Doe -o \"Acme Corp\""
+          ],
+          "usage_instructions": "Use `freshbooks customer create` with the documented arguments and options shown below.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--email",
+              "type": "TEXT",
+              "required": true,
+              "help": "Customer email address",
+              "short": "-e"
+            },
+            {
+              "name": "--first-name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Contact first name",
+              "short": "-f"
+            },
+            {
+              "name": "--last-name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Contact last name",
+              "short": "-l"
+            },
+            {
+              "name": "--organization",
+              "type": "TEXT",
+              "required": true,
+              "help": "Organization/company name",
+              "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "find": {
+          "help": "Find a customer by email address.",
+          "examples": [
+            "freshbooks customer find client@example.com"
+          ],
+          "usage_instructions": "Use `freshbooks customer find` with the documented arguments and options shown below.",
+          "arguments": [
+            {
+              "name": "email",
+              "type": "TEXT",
+              "required": true,
+              "help": "Email address to search for"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get details for a specific customer.",
+          "examples": [
+            "freshbooks customer get 12345",
+            "freshbooks customer get 12345 --table"
+          ],
+          "usage_instructions": "Use `freshbooks customer get` with the documented arguments and options shown below.",
+          "arguments": [
+            {
+              "name": "customer_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The customer ID to retrieve"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display output as a formatted table instead of JSON",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
-          "help": "List all invoices. Shows all invoices in your FreshBooks account with optional status filtering.",
+          "help": "List all customers/clients. Shows all customers in your FreshBooks account. Filterable fields: id, organization, name, email. Substring searches use 'contains', or 'like' with explicit SQL wildcards ('%acme%'). A bare 'like:acme' is an anchored, case-insensitive exact match.",
+          "examples": [
+            "freshbooks customer list",
+            "freshbooks customer list --table",
+            "freshbooks customer list --filter organization:contains:acme --table",
+            "freshbooks customer list --filter organization:like:%acme% --table",
+            "freshbooks customer list --filter email:eq:john@acme.com",
+            "freshbooks customer list --limit 10",
+            "freshbooks customer list --properties id,organization,email"
+          ],
+          "usage_instructions": "Use `freshbooks customer list` with the documented arguments and options shown below.",
+          "arguments": [],
           "options": [
             {
               "name": "--filter",
               "type": "TEXT",
               "required": false,
-              "help": "Filter results (field:op:value, e.g., client:like:acme)",
+              "help": "Filter results (field:op:value, e.g., organization:contains:acme). Fields: id, organization, name, email. Note that 'like' is SQL LIKE, so a substring search needs wildcards: organization:like:%acme%",
               "short": "-f"
-            },
-            {
-              "name": "--status",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter by status (draft, sent, viewed, paid, overdue)",
-              "short": "-s"
-            },
-            {
-              "name": "--unpaid",
-              "type": "bool",
-              "required": false,
-              "help": "Filter to show only unpaid invoices (sent, viewed, overdue)",
-              "short": "-u"
             },
             {
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "Maximum number of invoices to return (default: 100)",
+              "help": "Maximum number of customers to return (default: 100)",
               "short": "-l",
               "default": "100"
-            },
-            {
-              "name": "--from",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter invoices created on or after this date (YYYY-MM-DD)"
-            },
-            {
-              "name": "--to",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter invoices created on or before this date (YYYY-MM-DD)"
             },
             {
               "name": "--properties",
               "type": "TEXT",
               "required": false,
-              "help": "Comma-separated list of properties to display (e.g., 'id,number,client')",
+              "help": "Comma-separated list of properties to display (e.g., 'id,organization,email')",
               "short": "-p"
             },
             {
@@ -329,35 +475,51 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "freshbooks invoice list",
-            "freshbooks invoice list --table",
-            "freshbooks invoice list --status sent --table",
-            "freshbooks invoice list --unpaid --table",
-            "freshbooks invoice list --filter client:like:acme",
-            "freshbooks invoice list --limit 10",
-            "freshbooks invoice list --from 2024-01-01 --to 2024-12-31"
-          ],
-          "usage_instructions": "Use `freshbooks invoice list` with the documented arguments and options shown below."
+          ]
         },
-        "get": {
-          "help": "Get details for a specific invoice.",
+        "update": {
+          "help": "Update an existing customer.",
+          "examples": [
+            "freshbooks customer update 12345 --email newemail@acme.com",
+            "freshbooks customer update 12345 -o \"New Company Name\""
+          ],
+          "usage_instructions": "Use `freshbooks customer update` with the documented arguments and options shown below.",
           "arguments": [
             {
-              "name": "invoice_id",
+              "name": "customer_id",
               "type": "TEXT",
               "required": true,
-              "help": "The invoice ID to retrieve"
+              "help": "The customer ID to update"
             }
           ],
           "options": [
             {
-              "name": "--table",
-              "type": "bool",
+              "name": "--email",
+              "type": "TEXT",
               "required": false,
-              "help": "Display output as a formatted table instead of JSON",
-              "short": "-t"
+              "help": "New email address",
+              "short": "-e"
+            },
+            {
+              "name": "--first-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "New first name",
+              "short": "-f"
+            },
+            {
+              "name": "--last-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "New last name",
+              "short": "-l"
+            },
+            {
+              "name": "--organization",
+              "type": "TEXT",
+              "required": false,
+              "help": "New organization name",
+              "short": "-o"
             },
             {
               "name": "--profile",
@@ -365,15 +527,36 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "freshbooks invoice get 1234567",
-            "freshbooks invoice get 1234567 --table"
-          ],
-          "usage_instructions": "Use `freshbooks invoice get` with the documented arguments and options shown below."
-        },
+          ]
+        }
+      }
+    },
+    "invoice": {
+      "help": "Manage invoices",
+      "usage_instructions": "Use `freshbooks invoice` to access this command group. Run `--help` on a subcommand for details.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
         "create": {
           "help": "Create a new invoice. Supports multiple line items by repeating -d and -a flags. Each -d is paired with the corresponding -a by position. Use -q to set quantity per line item (defaults to 1). Payment terms are automatically added from DEFAULT_TERMS in .env unless --no-terms is specified or --terms provides custom terms.",
+          "examples": [
+            "freshbooks invoice create -c 12345 -d \"Consulting Services\" -a 500.00",
+            "freshbooks invoice create -c 12345 -d \"Article Writing\" -a 750.00 -n \"Thank you!\" -p \"REF-001\"",
+            "freshbooks invoice create -c 12345 -d \"Contract Work\" -a 1000.00 -f ./contract.pdf",
+            "freshbooks invoice create -c 12345 -d \"Consulting\" -a 500.00 --due-days 60",
+            "freshbooks invoice create -c 12345 -d \"Consulting\" -a 500.00 --no-terms",
+            "freshbooks invoice create -c 12345 -d \"Line 1\" -a 500 -d \"Line 2\" -a 1000",
+            "freshbooks invoice create -c 12345 -d \"Item A\" -a 500 -q 2 -d \"Item B\" -a 300 -q 1"
+          ],
+          "usage_instructions": "Use `freshbooks invoice create` with the documented arguments and options shown below.",
+          "arguments": [],
           "options": [
             {
               "name": "--customer-id",
@@ -450,59 +633,15 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "freshbooks invoice create -c 12345 -d \"Consulting Services\" -a 500.00",
-            "freshbooks invoice create -c 12345 -d \"Article Writing\" -a 750.00 -n \"Thank you!\" -p \"REF-001\"",
-            "freshbooks invoice create -c 12345 -d \"Contract Work\" -a 1000.00 -f ./contract.pdf",
-            "freshbooks invoice create -c 12345 -d \"Consulting\" -a 500.00 --due-days 60",
-            "freshbooks invoice create -c 12345 -d \"Consulting\" -a 500.00 --no-terms",
-            "freshbooks invoice create -c 12345 -d \"Line 1\" -a 500 -d \"Line 2\" -a 1000",
-            "freshbooks invoice create -c 12345 -d \"Item A\" -a 500 -q 2 -d \"Item B\" -a 300 -q 1"
-          ],
-          "usage_instructions": "Use `freshbooks invoice create` with the documented arguments and options shown below."
-        },
-        "send": {
-          "help": "Send an invoice via email.",
-          "arguments": [
-            {
-              "name": "invoice_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The invoice ID to send"
-            }
-          ],
-          "options": [
-            {
-              "name": "--email",
-              "type": "TEXT",
-              "required": false,
-              "help": "Override recipient email address",
-              "short": "-e"
-            },
-            {
-              "name": "--force",
-              "type": "bool",
-              "required": false,
-              "help": "Skip confirmation prompt",
-              "short": "-F"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ],
-          "examples": [
-            "freshbooks invoice send 1234567",
-            "freshbooks invoice send 1234567 --email client@example.com",
-            "freshbooks invoice send 1234567 -F"
-          ],
-          "usage_instructions": "Use `freshbooks invoice send` with the documented arguments and options shown below."
+          ]
         },
         "delete": {
           "help": "Delete/void an invoice.",
+          "examples": [
+            "freshbooks invoice delete 1234567",
+            "freshbooks invoice delete 1234567 -F"
+          ],
+          "usage_instructions": "Use `freshbooks invoice delete` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "invoice_id",
@@ -525,15 +664,156 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ],
+          ]
+        },
+        "download": {
+          "help": "Download an invoice as a PDF.",
           "examples": [
-            "freshbooks invoice delete 1234567",
-            "freshbooks invoice delete 1234567 -F"
+            "freshbooks invoice download 1234567",
+            "freshbooks invoice download 1234567 -o ~/Downloads/invoice.pdf",
+            "freshbooks invoice download 1234567 --output ./my-invoice.pdf"
           ],
-          "usage_instructions": "Use `freshbooks invoice delete` with the documented arguments and options shown below."
+          "usage_instructions": "Use `freshbooks invoice download` with the documented arguments and options shown below.",
+          "arguments": [
+            {
+              "name": "invoice_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The invoice ID to download"
+            }
+          ],
+          "options": [
+            {
+              "name": "--output",
+              "type": "TEXT",
+              "required": false,
+              "help": "Output file path (default: invoice_{number}.pdf in current directory)",
+              "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get details for a specific invoice.",
+          "examples": [
+            "freshbooks invoice get 1234567",
+            "freshbooks invoice get 1234567 --table"
+          ],
+          "usage_instructions": "Use `freshbooks invoice get` with the documented arguments and options shown below.",
+          "arguments": [
+            {
+              "name": "invoice_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The invoice ID to retrieve"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display output as a formatted table instead of JSON",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List all invoices. Shows all invoices in your FreshBooks account with optional status filtering. Filterable fields: id, number, client, status, amount, outstanding, created, due_date. Substring searches use 'contains', or 'like' with explicit SQL wildcards ('%acme%'). A bare 'like:acme' is an anchored, case-insensitive exact match.",
+          "examples": [
+            "freshbooks invoice list",
+            "freshbooks invoice list --table",
+            "freshbooks invoice list --status sent --table",
+            "freshbooks invoice list --unpaid --table",
+            "freshbooks invoice list --filter client:contains:acme",
+            "freshbooks invoice list --filter client:like:%acme%",
+            "freshbooks invoice list --limit 10",
+            "freshbooks invoice list --from 2024-01-01 --to 2024-12-31"
+          ],
+          "usage_instructions": "Use `freshbooks invoice list` with the documented arguments and options shown below.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value, e.g., client:contains:acme). Fields: id, number, client, status, amount, outstanding, created, due_date. Note that 'like' is SQL LIKE, so a substring search needs wildcards: client:like:%acme%",
+              "short": "-f"
+            },
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by status (draft, sent, viewed, paid, overdue)",
+              "short": "-s"
+            },
+            {
+              "name": "--unpaid",
+              "type": "bool",
+              "required": false,
+              "help": "Filter to show only unpaid invoices (sent, viewed, overdue)",
+              "short": "-u"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of invoices to return (default: 100)",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--from",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter invoices created on or after this date (YYYY-MM-DD)"
+            },
+            {
+              "name": "--to",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter invoices created on or before this date (YYYY-MM-DD)"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of properties to display (e.g., 'id,number,client')",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display output as a formatted table instead of JSON",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "mark-paid": {
           "help": "Mark an invoice as paid.",
+          "examples": [
+            "freshbooks invoice mark-paid 1234567 -a 500.00",
+            "freshbooks invoice mark-paid 1234567 -a 500.00 -d 2024-01-15"
+          ],
+          "usage_instructions": "Use `freshbooks invoice mark-paid` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "invoice_id",
@@ -563,15 +843,57 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ],
+          ]
+        },
+        "send": {
+          "help": "Send an invoice via email.",
           "examples": [
-            "freshbooks invoice mark-paid 1234567 -a 500.00",
-            "freshbooks invoice mark-paid 1234567 -a 500.00 -d 2024-01-15"
+            "freshbooks invoice send 1234567",
+            "freshbooks invoice send 1234567 --email client@example.com",
+            "freshbooks invoice send 1234567 -F"
           ],
-          "usage_instructions": "Use `freshbooks invoice mark-paid` with the documented arguments and options shown below."
+          "usage_instructions": "Use `freshbooks invoice send` with the documented arguments and options shown below.",
+          "arguments": [
+            {
+              "name": "invoice_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The invoice ID to send"
+            }
+          ],
+          "options": [
+            {
+              "name": "--email",
+              "type": "TEXT",
+              "required": false,
+              "help": "Override recipient email address",
+              "short": "-e"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation prompt",
+              "short": "-F"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "update": {
           "help": "Update an existing invoice.",
+          "examples": [
+            "freshbooks invoice update 1234567 -f ./contract.pdf",
+            "freshbooks invoice update 1234567 -n \"Updated notes\"",
+            "freshbooks invoice update 1234567 -f ./receipt.pdf -n \"Added receipt\"",
+            "freshbooks invoice update 1234567 --terms-from-config",
+            "freshbooks invoice update 1234567 -t \"Net 30\""
+          ],
+          "usage_instructions": "Use `freshbooks invoice update` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "invoice_id",
@@ -621,254 +943,9 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ],
-          "examples": [
-            "freshbooks invoice update 1234567 -f ./contract.pdf",
-            "freshbooks invoice update 1234567 -n \"Updated notes\"",
-            "freshbooks invoice update 1234567 -f ./receipt.pdf -n \"Added receipt\"",
-            "freshbooks invoice update 1234567 --terms-from-config",
-            "freshbooks invoice update 1234567 -t \"Net 30\""
-          ],
-          "usage_instructions": "Use `freshbooks invoice update` with the documented arguments and options shown below."
-        },
-        "download": {
-          "help": "Download an invoice as a PDF.",
-          "arguments": [
-            {
-              "name": "invoice_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The invoice ID to download"
-            }
-          ],
-          "options": [
-            {
-              "name": "--output",
-              "type": "TEXT",
-              "required": false,
-              "help": "Output file path (default: invoice_{number}.pdf in current directory)",
-              "short": "-o"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ],
-          "examples": [
-            "freshbooks invoice download 1234567",
-            "freshbooks invoice download 1234567 -o ~/Downloads/invoice.pdf",
-            "freshbooks invoice download 1234567 --output ./my-invoice.pdf"
-          ],
-          "usage_instructions": "Use `freshbooks invoice download` with the documented arguments and options shown below."
+          ]
         }
-      },
-      "usage_instructions": "Use `freshbooks invoice` to access this command group. Run `--help` on a subcommand for details."
-    },
-    "customer": {
-      "help": "Manage customers/clients",
-      "commands": {
-        "list": {
-          "help": "List all customers/clients. Shows all customers in your FreshBooks account.",
-          "options": [
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter results (field:op:value, e.g., organization:like:acme)",
-              "short": "-f"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum number of customers to return (default: 100)",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated list of properties to display (e.g., 'id,organization,email')",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display output as a formatted table instead of JSON",
-              "short": "-t"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ],
-          "examples": [
-            "freshbooks customer list",
-            "freshbooks customer list --table",
-            "freshbooks customer list --filter organization:like:acme --table",
-            "freshbooks customer list --filter email:eq:john@acme.com",
-            "freshbooks customer list --limit 10",
-            "freshbooks customer list --properties id,organization,email"
-          ],
-          "usage_instructions": "Use `freshbooks customer list` with the documented arguments and options shown below."
-        },
-        "get": {
-          "help": "Get details for a specific customer.",
-          "arguments": [
-            {
-              "name": "customer_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The customer ID to retrieve"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display output as a formatted table instead of JSON",
-              "short": "-t"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ],
-          "examples": [
-            "freshbooks customer get 12345",
-            "freshbooks customer get 12345 --table"
-          ],
-          "usage_instructions": "Use `freshbooks customer get` with the documented arguments and options shown below."
-        },
-        "find": {
-          "help": "Find a customer by email address.",
-          "arguments": [
-            {
-              "name": "email",
-              "type": "TEXT",
-              "required": true,
-              "help": "Email address to search for"
-            }
-          ],
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ],
-          "examples": [
-            "freshbooks customer find client@example.com"
-          ],
-          "usage_instructions": "Use `freshbooks customer find` with the documented arguments and options shown below."
-        },
-        "create": {
-          "help": "Create a new customer.",
-          "options": [
-            {
-              "name": "--email",
-              "type": "TEXT",
-              "required": true,
-              "help": "Customer email address",
-              "short": "-e"
-            },
-            {
-              "name": "--first-name",
-              "type": "TEXT",
-              "required": true,
-              "help": "Contact first name",
-              "short": "-f"
-            },
-            {
-              "name": "--last-name",
-              "type": "TEXT",
-              "required": true,
-              "help": "Contact last name",
-              "short": "-l"
-            },
-            {
-              "name": "--organization",
-              "type": "TEXT",
-              "required": true,
-              "help": "Organization/company name",
-              "short": "-o"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ],
-          "examples": [
-            "freshbooks customer create -e john@acme.com -f John -l Doe -o \"Acme Corp\""
-          ],
-          "usage_instructions": "Use `freshbooks customer create` with the documented arguments and options shown below."
-        },
-        "update": {
-          "help": "Update an existing customer.",
-          "arguments": [
-            {
-              "name": "customer_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "The customer ID to update"
-            }
-          ],
-          "options": [
-            {
-              "name": "--email",
-              "type": "TEXT",
-              "required": false,
-              "help": "New email address",
-              "short": "-e"
-            },
-            {
-              "name": "--first-name",
-              "type": "TEXT",
-              "required": false,
-              "help": "New first name",
-              "short": "-f"
-            },
-            {
-              "name": "--last-name",
-              "type": "TEXT",
-              "required": false,
-              "help": "New last name",
-              "short": "-l"
-            },
-            {
-              "name": "--organization",
-              "type": "TEXT",
-              "required": false,
-              "help": "New organization name",
-              "short": "-o"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ],
-          "examples": [
-            "freshbooks customer update 12345 --email newemail@acme.com",
-            "freshbooks customer update 12345 -o \"New Company Name\""
-          ],
-          "usage_instructions": "Use `freshbooks customer update` with the documented arguments and options shown below."
-        }
-      },
-      "usage_instructions": "Use `freshbooks customer` to access this command group. Run `--help` on a subcommand for details."
+      }
     }
   },
   "usage_instructions": "Use `freshbooks` to access this CLI. Run `--help` on a command for details."

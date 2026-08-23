@@ -35,12 +35,15 @@ import typer
 from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 from ..client import get_client
 from ..output import print_json, print_output, print_error, print_success, print_warning, handle_api_error, format_response
+from cli_tools_shared.output import command
+from pypodio2.transport import TransportException
 from ..filter_map import FilterMap, apply_properties
 
 app = typer.Typer(help="Manage Podio items")
 
 
 @app.command("get")
+@command
 def get_item(
     item_id: Optional[int] = typer.Argument(None, help="Item ID to retrieve"),
     external_id: Optional[str] = typer.Option(None, "--external-id", "-e", help="External ID to look up (requires --app-id)"),
@@ -75,12 +78,13 @@ def get_item(
 
         formatted = format_response(result)
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("list")
+@command
 def list_items(
     app_id: int = typer.Argument(..., help="Application ID to list items from"),
     filter: Optional[str] = typer.Option(
@@ -147,12 +151,13 @@ def list_items(
             formatted = apply_properties(formatted, properties)
 
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("create")
+@command
 def create_item(
     app_id: int = typer.Argument(..., help="Application ID to create item in"),
     json_file: Optional[Path] = typer.Option(
@@ -214,12 +219,13 @@ def create_item(
         )
         formatted = format_response(result)
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("update")
+@command
 def update_item(
     item_id: int = typer.Argument(..., help="Item ID to update"),
     json_file: Optional[Path] = typer.Option(
@@ -275,12 +281,13 @@ def update_item(
         formatted = format_response(result)
         print_success(f"Item {item_id} updated successfully")
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("delete")
+@command
 def delete_item(
     item_id: int = typer.Argument(..., help="Item ID to delete"),
     silent: bool = typer.Option(False, "--silent", help="Suppress Podio notifications"),
@@ -300,12 +307,13 @@ def delete_item(
         client.Item.delete(item_id=item_id, silent=silent, hook=not no_hook)
         print_success(f"Item {item_id} deleted successfully")
         print_output({"item_id": item_id, "deleted": True}, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("values")
+@command
 def get_item_values(
     item_id: int = typer.Argument(..., help="Item ID to get values from"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
@@ -324,12 +332,13 @@ def get_item_values(
         result = client.Item.values_v2(item_id=item_id)
         formatted = format_response(result)
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("field-value")
+@command
 def get_field_value(
     item_id: int = typer.Argument(..., help="Item ID to get field value from"),
     field: str = typer.Argument(..., help="Field ID or external_id to retrieve"),
@@ -352,12 +361,13 @@ def get_field_value(
         result = client.Item.field_value_v2(item_id=item_id, field_or_external_id=field)
         formatted = format_response(result)
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("get-by-external-id", hidden=True)
+@command
 def get_item_by_external_id(
     app_id: int = typer.Argument(..., help="Application ID"),
     external_id: str = typer.Argument(..., help="External ID of the item"),
@@ -374,6 +384,6 @@ def get_item_by_external_id(
         result = client.Item.find_by_external_id(app_id=app_id, external_id=external_id)
         formatted = format_response(result)
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)

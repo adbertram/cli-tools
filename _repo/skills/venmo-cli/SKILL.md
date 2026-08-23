@@ -30,8 +30,8 @@ venmo auth test
 # Multi-account profiles
 venmo auth profiles list
 venmo auth profiles create staging
-venmo auth profiles select adam-bertram
-venmo transactions list --profile staging          # any command accepts --profile via the underlying client
+venmo auth profiles set-default adam-bertram
+venmo transactions list --profile staging          # query this auth profile without changing the active profile
 
 # Transaction history (data plane is read-only — records are the FULL raw Venmo API payload)
 venmo transactions list                            # 50 most recent, JSON envelope, every field Venmo returns
@@ -51,16 +51,16 @@ venmo cache clear                                  # wipe cache for the active p
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `venmo` command.** It contains the complete command tree, every flag, defaults, and per-command usage instructions. Never guess at command syntax.
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `venmo` command.** It contains the complete command tree, every flag, defaults, and per-command usage instructions. Never guess at command syntax.
 </principle>
 
 <principle name="Credentials Come From the Keychain">
 The CLI does NOT prompt for a username or password. Both are stored once in the CLI-tools macOS keychain (`cli-tools` service):
 ```bash
-<cli-tools-root>/_repo/_secret-manager/secrets.sh set venmo-username
-<cli-tools-root>/_repo/_secret-manager/secrets.sh set venmo-password
+/Users/adam/Dropbox/GitRepos/cli-tools/secret-manager/secrets.sh set venmo-username
+/Users/adam/Dropbox/GitRepos/cli-tools/secret-manager/secrets.sh set venmo-password
 ```
-Never store them in `.env`. After `venmo auth login` succeeds, a long-lived access token + trusted device id are persisted to `~/.local/share/cli-tools/venmo/authentication_profiles/<profile>/.env` — they survive across sessions.
+Never store them in `.env`. After `venmo auth login` succeeds, a long-lived access token + trusted device id are persisted to `~/.local/share/cli-tools/venmo/.profiles/<profile>/.env` — they survive across sessions.
 </principle>
 
 <principle name="OTP Handling">

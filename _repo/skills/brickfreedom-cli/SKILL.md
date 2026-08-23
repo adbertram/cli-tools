@@ -1,6 +1,10 @@
 ---
-name: "brickfreedom-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute brickfreedom operations using the `brickfreedom` CLI tool. CLI interface for BrickFreedom dashboard automation -- manage LEGO orders and tasks across Bricklink and Brick Owl. Triggers: brickfreedom, brickfreedom cli, brickfreedom orders, brickfreedom tasks, LEGO orders, process orders, ship orders, replacement parts, missing parts, order tracking"
+name: brickfreedom-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute brickfreedom operations using the `brickfreedom` CLI tool.
+  CLI interface for BrickFreedom dashboard automation -- manage LEGO orders and tasks across Bricklink and Brick Owl.
+  Triggers: brickfreedom, brickfreedom cli, brickfreedom orders, brickfreedom tasks, LEGO orders, process orders, ship orders, replacement parts, missing parts, order tracking
 ---
 
 <objective>
@@ -28,7 +32,7 @@ brickfreedom <command-group> <action> [arguments] [options]
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `brickfreedom` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `brickfreedom` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 
@@ -46,6 +50,8 @@ This file contains complete command syntax, all arguments, all options, and usag
 </reference_index>
 
 <gotchas>
+**LegoSellerAssistant BrickFreedom state changes must use the repo wrapper script.** When working from `/Users/adam/Dropbox/GitRepos/Agents/LegoSellerAssistant`, create/list/complete/delete BrickFreedom tasks through `./scripts/invoke-brickfreedom.sh ...` so the action runner records the operation. Do not create customer replacement tasks manually as free-text dashboard tasks. Structured replacements must use `task create --type customer-replacement-part --platform ... --customer-name ... --order-id ... --item-no ... --item-name ... --color ... --qty ... --location ...`.
+
 **`task list` — `-t` is `--table`, NOT `--type`.** The `-t` short flag toggles table output (boolean). To filter by task type, you MUST spell out `--type`. Valid `--type` values: `customer-replacement-part`, `missing-part`. Passing `-t customer-replacement-part` fails with `Got unexpected extra argument (customer-replacement-part)` because `customer-replacement-part` gets parsed as a positional arg after the boolean `-t` consumes nothing.
 
 ```bash
@@ -72,6 +78,17 @@ brickfreedom task complete \
 # Exit 1 + JSON {"success": false, "error": "no matching missing-part task"} on zero matches.
 # Exit 1 + JSON {"success": false, "error": "ambiguous match ...", "matches": [...]} on multiple matches -- pass --match-quantity to disambiguate.
 ```
+
+When one dashboard row contains multiple missing parts, complete the physical row once by passing its complete item set. Do not issue one completion per parsed part:
+
+```bash
+brickfreedom task complete \
+    --match-platform bricklink \
+    --match-order-id 31971224 \
+    --match-items-json '[{"itemNumber":"32952","quantity":1},{"itemNumber":"3456","quantity":1}]'
+```
+
+The item-set match is exact and order-independent. A partial set fails instead of completing a row whose other missing parts were not included in the caller's workflow.
 
 **Silent missing-part parser misses are visible.** `task list --type missing-part` includes a top-level `unparsed_count` field in JSON output and prints a stderr warning when it is > 0. When BF ships a new task text format, run `task list --type missing-part --debug-unparsed` to print the raw unparsed rows to stderr so the parser can be updated.
 </gotchas>

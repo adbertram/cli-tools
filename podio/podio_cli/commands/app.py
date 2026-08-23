@@ -39,6 +39,8 @@ from cli_tools_shared.filters import apply_filters, validate_filters, FilterVali
 from ..client import get_client
 from ..config import get_config
 from ..output import print_json, print_output, print_error, handle_api_error, format_response
+from cli_tools_shared.output import command
+from pypodio2.transport import TransportException
 from ..filter_map import FilterMap, apply_properties
 
 app = typer.Typer(help="Manage Podio applications")
@@ -75,6 +77,7 @@ def _flatten_apps(data: Any) -> Any:
 
 
 @app.command("get")
+@command
 def get_app(
     app_id: int = typer.Argument(..., help="Application ID to retrieve"),
     fields: bool = typer.Option(False, "--fields", "-f", help="Return only the field schema"),
@@ -109,12 +112,13 @@ def get_app(
 
         formatted = format_response(result)
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("list")
+@command
 def list_apps(
     space_id: Optional[int] = typer.Option(None, "--space-id", "-s", help="Space ID to list apps from (defaults to PODIO_WORKSPACE_ID)"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum apps to return"),
@@ -166,12 +170,13 @@ def list_apps(
             formatted = apply_properties(formatted, properties)
 
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("items")
+@command
 def get_app_items(
     app_id: int = typer.Argument(..., help="Application ID to get items from"),
     limit: int = typer.Option(30, "--limit", help="Maximum number of items to return"),
@@ -191,12 +196,13 @@ def get_app_items(
         result = client.Application.get_items(app_id=app_id, limit=limit, offset=offset)
         formatted = format_response(result)
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("activate")
+@command
 def activate_app(
     app_id: int = typer.Argument(..., help="Application ID to activate"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
@@ -213,12 +219,13 @@ def activate_app(
         result = client.Application.activate(app_id=app_id)
         formatted = format_response(result)
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("deactivate")
+@command
 def deactivate_app(
     app_id: int = typer.Argument(..., help="Application ID to deactivate"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
@@ -235,12 +242,13 @@ def deactivate_app(
         result = client.Application.deactivate(app_id=app_id)
         formatted = format_response(result)
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("create")
+@command
 def create_app(
     json_file: Optional[Path] = typer.Option(None, "--json-file", "-f", help="JSON file with app configuration"),
     space_id: Optional[int] = typer.Option(None, "--space-id", "-s", help="Space ID to create app in (defaults to PODIO_WORKSPACE_ID)"),
@@ -289,12 +297,13 @@ def create_app(
         print(f"✓ App created successfully", file=sys.stderr)
         print_output(formatted, table=table)
 
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("update")
+@command
 def update_app(
     app_id: int = typer.Argument(..., help="Application ID to update"),
     json_file: Optional[Path] = typer.Option(None, "--json-file", "-f", help="JSON file with app configuration to update"),
@@ -389,12 +398,13 @@ def update_app(
         print(f"✓ App {app_id} updated successfully", file=sys.stderr)
         print_output(formatted, table=table)
 
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("export")
+@command
 def export_app(
     app_id: int = typer.Argument(..., help="Application ID to export"),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file path (defaults to app_name.xlsx)"),
@@ -495,13 +505,14 @@ def export_app(
         print(f"Export timed out after {max_attempts * 5} seconds", file=sys.stderr)
         raise typer.Exit(1)
 
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 # Field subcommands
 @field_app.command("add")
+@command
 def add_field(
     app_id: int = typer.Argument(..., help="Application ID to add field to"),
     field_type: Optional[str] = typer.Option(None, "--type", help="Field type (text, number, image, date, app, money, progress, location, duration, contact, calculation, embed, question, file, tel)"),
@@ -571,12 +582,13 @@ def add_field(
         print(f"✓ Field '{field_label}' added successfully", file=sys.stderr)
         print_output(formatted, table=table)
 
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @field_app.command("get")
+@command
 def get_field(
     app_id: int = typer.Argument(..., help="Application ID"),
     field_id: int = typer.Argument(..., help="Field ID to retrieve"),
@@ -594,7 +606,7 @@ def get_field(
         result = client.Application.get_field(app_id=app_id, field_id=field_id)
         formatted = format_response(result)
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
@@ -614,6 +626,7 @@ def _deep_merge(base: dict, updates: dict) -> dict:
 
 
 @field_app.command("update")
+@command
 def update_field(
     app_id: int = typer.Argument(..., help="Application ID"),
     field_id: int = typer.Argument(..., help="Field ID to update"),
@@ -665,7 +678,7 @@ def update_field(
         print(f"✓ Field updated successfully", file=sys.stderr)
         print_output(formatted, table=table)
 
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
@@ -728,6 +741,7 @@ def _clear_field_values_from_items(client, app_id: int, field_id: int, external_
 
 
 @field_app.command("delete")
+@command
 def delete_field(
     app_id: int = typer.Argument(..., help="Application ID"),
     field_id: int = typer.Argument(..., help="Field ID to delete"),
@@ -787,12 +801,13 @@ def delete_field(
         print(f"✓ Field deleted successfully", file=sys.stderr)
         print_output(formatted, table=table)
 
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @field_app.command("list")
+@command
 def list_fields(
     app_id: int = typer.Argument(..., help="Application ID"),
     include_deleted: bool = typer.Option(False, "--include-deleted", "-d", help="Include deleted fields"),
@@ -848,6 +863,6 @@ def list_fields(
 
         print_output(output, table=table)
 
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)

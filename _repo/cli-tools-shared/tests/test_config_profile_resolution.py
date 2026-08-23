@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 import cli_tools_shared.config as config_module
-from cli_tools_shared.config import BaseConfig, get_profiles_base_dir
+from cli_tools_shared.config import BaseConfig, config_env_path_for_tool, get_profiles_base_dir
 from cli_tools_shared.credentials import CredentialType
 from cli_tools_shared.exceptions import ConfigError
 from cli_tools_shared.profiles import (
@@ -92,6 +92,17 @@ def test_config_uses_active_profile_marker(tmp_path, monkeypatch, isolated_data_
     assert config._get("API_URL") == "https://active.example.com"
 
 
+def test_storage_dir_uses_active_profile_data_dir(tmp_path, isolated_data_home):
+    tool_dir = _tool_dir(tmp_path)
+    active = get_profiles_base_dir(tool_dir.name) / "active" / ".env"
+    _write_profile(active, active=True, api_url="https://active.example.com")
+
+    config = CustomConfig(tool_dir=tool_dir)
+
+    assert config.storage_dir == config.get_profile_data_dir()
+    assert config.storage_dir == active.parent
+
+
 def test_config_allows_explicit_profile_argument(tmp_path, monkeypatch, isolated_data_home):
     tool_dir = _tool_dir(tmp_path)
     profiles_base = get_profiles_base_dir(tool_dir.name)
@@ -106,6 +117,22 @@ def test_config_allows_explicit_profile_argument(tmp_path, monkeypatch, isolated
 
     assert config.env_file_path == explicit
     assert config._get("API_URL") == "https://explicit.example.com"
+
+
+def test_process_env_overrides_root_config_env(tmp_path, monkeypatch, isolated_data_home):
+    tool_dir = _tool_dir(tmp_path)
+    root_env = config_env_path_for_tool(tool_dir.name)
+    root_env.parent.mkdir(parents=True, exist_ok=True)
+    root_env.write_text("CACHE_ENABLED=true\nCACHE_TTL=3600\n")
+    profile = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
+    _write_profile(profile, active=True, api_url="https://active.example.com")
+    monkeypatch.setenv("CACHE_ENABLED", "false")
+    monkeypatch.setenv("CACHE_TTL", "0")
+
+    config = CustomConfig(tool_dir=tool_dir)
+
+    assert config._get("CACHE_ENABLED") == "false"
+    assert config._get("CACHE_TTL") == "0"
 
 
 def test_save_tokens_clears_refresh_token_when_missing(tmp_path, isolated_data_home):
@@ -389,3 +416,31 @@ def test_clear_session_removes_browser_data_without_deleting_profile_env(tmp_pat
     assert env_file.exists()
     assert "ACCESS_TOKEN=secret://exampletool-access-token" in env_file.read_text()
     assert not (config.get_profile_data_dir() / "browser-data").exists()
+
+
+def test_clear_session_removes_browser_data_when_browser_configured(tmp_path, isolated_data_home):
+    """Config-level session cleanup owns profile data deletion."""
+    tool_dir = _tool_dir(tmp_path)
+    profile = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
+    _write_profile(profile, active=True, api_url="https://x")
+
+    calls = []
+
+    class _Browser:
+        def clear_session(self):
+            calls.append("clear_session")
+
+    class BrowserConfig(CustomConfig):
+        CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
+
+        def get_browser(self):
+            return _Browser()
+
+    config = BrowserConfig(tool_dir=tool_dir)
+    browser_data = config.get_profile_data_dir() / "browser-data"
+    browser_data.mkdir(parents=True)
+
+    config.clear_session()
+
+    assert calls == []
+    assert not browser_data.exists()

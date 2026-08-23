@@ -1,7 +1,9 @@
 """WordPress API client with automatic retry and Pydantic models."""
 import json
 import os
-from datetime import datetime, timedelta
+import re
+import xmlrpc.client
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 import random
@@ -33,6 +35,7 @@ from .models import (
 )
 from .wpcom import (
     acquire_wpcom_access_token,
+    build_wpcom_missing_credentials_message,
     extract_wpcom_error_message,
     wpcom_response_indicates_invalid_token,
 )
@@ -49,14 +52,23 @@ RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 # User agent for all requests
 DEFAULT_USER_AGENT = "WordPressClient/1.0"
+
+# XML-RPC transport for post mutations (see update_post/delete_post). WordPress
+# ignores the blog_id argument on single-site installs, but it is a required
+# positional in every wp.* method, so send a constant.
+XMLRPC_BLOG_ID = 1
+
 WPCOM_API_BASE_URL = "https://public-api.wordpress.com/rest/v1.1"
+WPVULNERABILITY_API_BASE_URL = "https://api.wpvulnerability.com"
 JETPACK_PLUGIN_MANAGEMENT_ERROR = (
     "Jetpack is not connected to a WordPress.com account that can manage plugins for this site. "
     "Connect the current WordPress admin user to WordPress.com through Jetpack before plugin updates can run."
 )
 WPCOM_PLUGIN_AUTHORIZATION_ERROR = (
-    "WordPress.com still denied plugin-management access after browser authorization. "
-    "Log in in the browser, approve the configured app for this site, then retry the plugin update."
+    "WordPress.com denied plugin-management access for the configured WPCOM_SITE even though the "
+    "WordPress.com token is present. This is not a missing-token state. Confirm the OAuth app is "
+    "authorized by the same WordPress.com account that can manage plugins for the Jetpack-connected "
+    "site, and confirm WPCOM_SITE identifies that exact site."
 )
 
 
@@ -173,6 +185,22 @@ class WordPressClient:
             # Could be HTTP-date format, but we'll skip that complexity
             return None
 
+    @staticmethod
+    def _clean_text(value: Any) -> Optional[str]:
+        """Return the useful text from common WordPress raw/rendered fields."""
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value
+        if isinstance(value, dict):
+            raw = value.get("raw")
+            if isinstance(raw, str):
+                return raw
+            rendered = value.get("rendered")
+            if isinstance(rendered, str):
+                return rendered
+        raise ClientError(f"Expected text field to be a string or dict, got {type(value)}")
+
     def _make_request(
         self,
         method: str,
@@ -210,6 +238,19 @@ class WordPressClient:
         request_headers = self.headers.copy()
         if headers:
             request_headers.update(headers)
+
+        # The WordPress origin issues a canonical 301 redirect that strips the
+        # query string (and downgrades https->http) for any REST request that
+        # carries query parameters. That silently breaks pagination, filtering,
+        # and search: every paginated request collapses back to the default
+        # first page, so callers only ever see the first 10 items. Carry GET
+        # query parameters in a JSON body via X-HTTP-Method-Override so they
+        # survive the redirect and reach WP_REST_Request intact.
+        if method.upper() == "GET" and params:
+            request_headers["X-HTTP-Method-Override"] = "GET"
+            method = "POST"
+            data = params
+            params = None
 
         last_exception: Optional[Exception] = None
         last_response: Optional[requests.Response] = None
@@ -288,6 +329,74 @@ class WordPressClient:
             return json_data, dict(last_response.headers)
         return json_data
 
+    def get_site_settings(self) -> dict:
+        """Read site settings exposed through the authenticated WordPress REST API."""
+        response = self._make_request("GET", "/settings")
+        if not isinstance(response, dict):
+            raise ClientError(f"Expected settings response to be a dict, got {type(response)}")
+        return response
+
+    def list_themes(self) -> List[dict]:
+        """List installed WordPress themes from the authenticated REST API."""
+        response = self._make_request("GET", "/themes")
+        if not isinstance(response, list):
+            raise ClientError(f"Expected theme list response to be a list, got {type(response)}")
+
+        themes: List[dict] = []
+        for raw_theme in response:
+            if not isinstance(raw_theme, dict):
+                raise ClientError(f"Expected theme entry to be a dict, got {type(raw_theme)}")
+            stylesheet = raw_theme.get("stylesheet")
+            version = raw_theme.get("version")
+            status = raw_theme.get("status")
+            if not isinstance(stylesheet, str) or not stylesheet:
+                raise ClientError("Theme entry did not include a non-empty stylesheet")
+            if not isinstance(version, str) or not version:
+                raise ClientError(f"Theme {stylesheet} did not include a non-empty version")
+            if not isinstance(status, str) or not status:
+                raise ClientError(f"Theme {stylesheet} did not include a non-empty status")
+            themes.append(
+                {
+                    "theme": stylesheet,
+                    "name": self._clean_text(raw_theme.get("name")) or stylesheet,
+                    "version": version,
+                    "status": status,
+                    "requires_wp": raw_theme.get("requires_wp"),
+                    "requires_php": raw_theme.get("requires_php"),
+                    "textdomain": raw_theme.get("textdomain"),
+                }
+            )
+        return themes
+
+    @staticmethod
+    def _theme_identifier_values(theme: dict) -> List[str]:
+        """Return exact identifiers users can discover from theme list output."""
+        values = [theme["theme"], theme["name"]]
+        textdomain = theme.get("textdomain")
+        if textdomain:
+            values.append(textdomain)
+        return values
+
+    def get_theme(self, theme: str) -> dict:
+        """Get a specific theme by stylesheet, textdomain, or exact name."""
+        if not theme or not theme.strip():
+            raise ValueError("theme cannot be empty")
+
+        normalized = theme.strip().casefold()
+        matches = [
+            installed
+            for installed in self.list_themes()
+            if normalized in {value.casefold() for value in self._theme_identifier_values(installed)}
+        ]
+        if not matches:
+            raise ClientError(
+                f"Theme not found: {theme}. Use a stylesheet, textdomain, or exact name from themes list."
+            )
+        if len(matches) > 1:
+            match_names = ", ".join(sorted(match["theme"] for match in matches))
+            raise ClientError(f"Theme identifier is ambiguous: {theme}. Matches: {match_names}")
+        return matches[0]
+
     def _wp_json_base_url(self) -> str:
         suffix = "/wp/v2"
         base_url = self.base_url.rstrip("/")
@@ -301,9 +410,15 @@ class WordPressClient:
         endpoint: str,
         data: Optional[Dict] = None,
         retry_on_forbidden: bool = False,
+        interactive_token_refresh: bool = True,
     ) -> Any:
         token = self.config.wpcom_access_token
         if not token:
+            if not interactive_token_refresh:
+                raise ClientError(
+                    "WordPress.com access token is missing. Run `wordpress org token` interactively, "
+                    "verify `wordpress org token status` reports ready true, then retry the command."
+                )
             acquire_wpcom_access_token(self.config)
             token = self.config.wpcom_access_token
         if not token:
@@ -314,6 +429,11 @@ class WordPressClient:
 
         if wpcom_response_indicates_invalid_token(response):
             self.config.clear_wpcom_access_token()
+            if not interactive_token_refresh:
+                raise ClientError(
+                    "WordPress.com access token is invalid or expired. Run `wordpress org token` "
+                    "interactively, verify `wordpress org token status` reports ready true, then retry the command."
+                )
             acquire_wpcom_access_token(self.config)
             token = self.config.wpcom_access_token
             if not token:
@@ -321,6 +441,8 @@ class WordPressClient:
             response = self._dispatch_wpcom_request(method, url, token, data)
 
         if response.status_code == 403 and retry_on_forbidden:
+            if not interactive_token_refresh:
+                raise ClientError(WPCOM_PLUGIN_AUTHORIZATION_ERROR)
             self.config.clear_wpcom_access_token()
             acquire_wpcom_access_token(self.config)
             token = self.config.wpcom_access_token
@@ -383,13 +505,13 @@ class WordPressClient:
 
         all_posts: List[Post] = []
         page = 1
-        remaining = limit
 
-        while remaining > 0:
-            # Request up to WP_MAX_PER_PAGE or remaining, whichever is smaller
-            per_page = min(remaining, WP_MAX_PER_PAGE)
-
-            params = {"per_page": per_page, "page": page}
+        # Always request full pages. WordPress computes the result offset as
+        # (page - 1) * per_page, so shrinking per_page on later pages would
+        # re-read an earlier window and return duplicates. Request WP_MAX_PER_PAGE
+        # every page and trim to the caller's limit after collection.
+        while len(all_posts) < limit:
+            params = {"per_page": WP_MAX_PER_PAGE, "page": page}
 
             # Add filters if provided
             if filters:
@@ -405,9 +527,8 @@ class WordPressClient:
             posts = [create_post(post) for post in response]
             all_posts.extend(posts)
 
-            # Check if we've exhausted available posts
-            if len(posts) < per_page:
-                # Got fewer than requested, no more pages
+            # Got a short page - no more posts available
+            if len(posts) < WP_MAX_PER_PAGE:
                 break
 
             # Check total pages from headers (lowercase per requests library)
@@ -415,10 +536,9 @@ class WordPressClient:
             if page >= total_pages:
                 break
 
-            remaining -= len(posts)
             page += 1
 
-        return all_posts
+        return all_posts[:limit]
 
     def get_post(self, post_id: int, context: str = "view") -> PostDetail:
         """
@@ -488,7 +608,10 @@ class WordPressClient:
         if slug is not None:
             data["slug"] = slug
         if date is not None:
-            data["date"] = date
+            # date_gmt is unambiguous UTC; date is relative to whatever
+            # timezone the site happens to be configured with. WordPress
+            # derives date from date_gmt automatically.
+            data["date_gmt"] = self._rest_date_gmt(date)
         if categories is not None:
             data["categories"] = categories
         if tags is not None:
@@ -506,13 +629,241 @@ class WordPressClient:
 
         return create_post_detail(response)
 
+    def _site_root_url(self) -> str:
+        """Return the site origin (no /wp-json/wp/v2 suffix) for non-REST endpoints."""
+        suffix = "/wp-json/wp/v2"
+        base_url = self.base_url.rstrip("/")
+        if not base_url.endswith(suffix):
+            raise ClientError(f"Expected WordPress API base URL to end with {suffix}, got {self.base_url}")
+        return base_url[: -len(suffix)]
+
+    def _xmlrpc_call(self, method: str, *params: Any) -> Any:
+        """
+        Call a WordPress XML-RPC method at /xmlrpc.php.
+
+        Post mutations must not use the /wp/v2/<type>/<id> REST item routes on
+        this host: the origin issues a canonical 301 that strips the trailing
+        numeric id (and downgrades https->http), collapsing the request onto the
+        collection endpoint. requests then follows it and, for a POST, converts
+        it to GET, so an update lands on `GET /posts` (a list) and a delete lands
+        on `DELETE /posts` (404 rest_no_route). get_post already avoids this for
+        reads via an `include=` collection query, but there is no collection-level
+        write. /xmlrpc.php is a fixed path with no trailing numeric segment, so
+        the strip rule never matches it and the id travels safely in the request
+        body. Jetpack (connected here) keeps XML-RPC enabled.
+        """
+        payload = xmlrpc.client.dumps(params, method, allow_none=True)
+        url = f"{self._site_root_url()}/xmlrpc.php"
+        response = requests.post(
+            url,
+            data=payload.encode("utf-8"),
+            headers={"Content-Type": "text/xml", "User-Agent": DEFAULT_USER_AGENT},
+            timeout=60,
+        )
+        if not response.ok:
+            raise ClientError(f"XML-RPC request failed ({response.status_code}): {response.text}")
+        try:
+            result, _ = xmlrpc.client.loads(response.content)
+        except xmlrpc.client.Fault as fault:
+            raise ClientError(f"XML-RPC {method} fault ({fault.faultCode}): {fault.faultString}")
+        return result[0] if result else None
+
+    @staticmethod
+    def _parse_utc_date(value: str) -> datetime:
+        """Parse an ISO 8601 date string that must represent UTC, returning a naive UTC datetime.
+
+        Both the REST date_gmt field and the XML-RPC post_date_gmt field are
+        unambiguous UTC, unlike date/post_date which are relative to
+        whatever timezone the WordPress site happens to be configured with.
+        Writing dates through this helper keeps both write paths correct
+        regardless of the site's configured timezone.
+
+        Accepts an explicit UTC offset (Z or +00:00) or a naive string the
+        caller guarantees is already UTC. Any other offset is a caller bug
+        and fails loudly rather than silently writing the wrong instant.
+        """
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo is not None:
+            if parsed.utcoffset() != timedelta(0):
+                raise ClientError(
+                    f"date {value!r} must be UTC (offset +00:00); got offset {parsed.utcoffset()}"
+                )
+            parsed = parsed.replace(tzinfo=None)
+        return parsed
+
+    @classmethod
+    def _xmlrpc_post_date_gmt(cls, value: str) -> xmlrpc.client.DateTime:
+        """Convert an ISO 8601 UTC date string to the XML-RPC DateTime for post_date_gmt.
+
+        wp.editPost/wp.newPost accept both post_date (site-timezone-relative)
+        and post_date_gmt (unambiguous UTC). WordPress core derives post_date
+        from post_date_gmt using wp_timezone() when only post_date_gmt is
+        supplied, so sending post_date_gmt here is correct regardless of
+        what the site's configured timezone is.
+        """
+        return xmlrpc.client.DateTime(cls._parse_utc_date(value).strftime("%Y%m%dT%H:%M:%S"))
+
+    @classmethod
+    def _rest_date_gmt(cls, value: str) -> str:
+        """Convert an ISO 8601 UTC date string to the REST date_gmt field format.
+
+        The REST create/update payload accepts both date (site-timezone-
+        relative) and date_gmt (unambiguous UTC); WordPress derives date
+        from date_gmt automatically. Same UTC contract as
+        _xmlrpc_post_date_gmt.
+        """
+        return cls._parse_utc_date(value).strftime("%Y-%m-%dT%H:%M:%S")
+
+    # Page fields the /wp/v2/pages REST route accepts but this host's wp.editPost
+    # silently drops: wp_insert_post via XML-RPC only honors its whitelisted keys
+    # plus post_parent, so menu_order and page_template never take effect
+    # (verified live). Reject them loudly instead of reporting a false success.
+    _XMLRPC_UNSUPPORTED_PAGE_FIELDS = ("menu_order", "template")
+
+    def _post_fields_to_xmlrpc_struct(self, fields: Dict[str, Any]) -> Dict[str, Any]:
+        """Map REST post/page fields (as built by the update commands) to an XML-RPC content_struct.
+
+        Covers both posts and pages. `parent` (post_parent) is additive and
+        mapped only when supplied, so a post update that never sends it is
+        unaffected. menu_order and page_template are intentionally not mapped
+        here; wp.editPost drops them on this host, so update_page rejects them
+        rather than mapping a no-op.
+        """
+        rest_to_xmlrpc = {
+            "title": "post_title",
+            "content": "post_content",
+            "excerpt": "post_excerpt",
+            "slug": "post_name",
+        }
+        struct: Dict[str, Any] = {}
+        for rest_key, xmlrpc_key in rest_to_xmlrpc.items():
+            if rest_key in fields:
+                struct[xmlrpc_key] = fields[rest_key]
+
+        if "status" in fields:
+            status = fields["status"]
+            struct["post_status"] = getattr(status, "value", status)
+        if "date" in fields:
+            struct["post_date_gmt"] = self._xmlrpc_post_date_gmt(fields["date"])
+        if "featured_media" in fields:
+            struct["post_thumbnail"] = int(fields["featured_media"])
+        if "parent" in fields:
+            struct["post_parent"] = int(fields["parent"])
+
+        terms: Dict[str, List[int]] = {}
+        if "categories" in fields:
+            terms["category"] = [int(t) for t in fields["categories"]]
+        if "tags" in fields:
+            terms["post_tag"] = [int(t) for t in fields["tags"]]
+        if terms:
+            struct["terms"] = terms
+
+        if "meta" in fields:
+            struct["custom_fields"] = [
+                {"key": key, "value": str(value)} for key, value in fields["meta"].items()
+            ]
+        return struct
+
+    def _term_fields_to_xmlrpc_struct(self, taxonomy: str, fields: Dict[str, Any]) -> Dict[str, Any]:
+        """Map REST term fields (as built by the category/tag update commands) to an XML-RPC content_struct.
+
+        wp.editTerm requires the taxonomy in the struct and accepts partial
+        updates of name/slug/description/parent. parent applies only to
+        hierarchical taxonomies (category); post_tag never supplies it.
+        """
+        struct: Dict[str, Any] = {"taxonomy": taxonomy}
+        for key in ("name", "slug", "description"):
+            if key in fields:
+                struct[key] = fields[key]
+        if "parent" in fields:
+            struct["parent"] = int(fields["parent"])
+        return struct
+
+    def _xmlrpc_delete_term(self, taxonomy: str, term_id: int) -> dict:
+        """Delete a term via wp.deleteTerm. Categories and tags have no trash, so this is permanent."""
+        result = self._xmlrpc_call(
+            "wp.deleteTerm",
+            XMLRPC_BLOG_ID,
+            self.config.username,
+            self.config.app_password,
+            taxonomy,
+            term_id,
+        )
+        if result is not True:
+            raise ClientError(
+                f"XML-RPC wp.deleteTerm did not confirm deleting {taxonomy} term {term_id}: {result!r}"
+            )
+        return {"deleted": True, "id": term_id, "taxonomy": taxonomy}
+
+    def _xmlrpc_post_status(self, post_id: int) -> Optional[str]:
+        """Return an object's post_status via wp.getPost, or None if it no longer exists.
+
+        Only the "invalid post ID" 404 fault is swallowed (mapped to None);
+        every other fault (permissions, transport) still raises. Used to decide
+        whether a second wp.deletePost is needed for a permanent delete without
+        assuming the object is trashable.
+        """
+        try:
+            current = self._xmlrpc_call(
+                "wp.getPost",
+                XMLRPC_BLOG_ID,
+                self.config.username,
+                self.config.app_password,
+                post_id,
+                ["post_id", "post_status"],
+            )
+        except ClientError as exc:
+            if "fault (404)" in str(exc):
+                return None
+            raise
+        if not isinstance(current, dict):
+            raise ClientError(f"XML-RPC wp.getPost returned a non-struct for {post_id}: {current!r}")
+        status = current.get("post_status")
+        if not isinstance(status, str):
+            raise ClientError(f"XML-RPC wp.getPost did not include post_status for {post_id}: {current!r}")
+        return status
+
+    def _xmlrpc_trash_post(self, post_id: int, force: bool) -> dict:
+        """Trash or permanently delete a trashable post-type object via wp.deletePost.
+
+        wp.deletePost moves a live (published/draft/etc.) object to trash;
+        calling it again on the now-trashed object permanently deletes it. For
+        force=True the current status is queried first so exactly the right
+        number of calls is issued whether the object is live or already trashed.
+        Shared by delete_post and delete_page; both post types support trash.
+        """
+        username = self.config.username
+        app_password = self.config.app_password
+
+        already_trashed = False
+        if force:
+            already_trashed = self._xmlrpc_post_status(post_id) == "trash"
+
+        result = self._xmlrpc_call("wp.deletePost", XMLRPC_BLOG_ID, username, app_password, post_id)
+        if result is not True:
+            raise ClientError(f"XML-RPC wp.deletePost did not confirm deleting {post_id}: {result!r}")
+
+        if force and not already_trashed:
+            permanent = self._xmlrpc_call("wp.deletePost", XMLRPC_BLOG_ID, username, app_password, post_id)
+            if permanent is not True:
+                raise ClientError(
+                    f"XML-RPC wp.deletePost did not confirm permanent deletion of {post_id}: {permanent!r}"
+                )
+
+        return {"deleted": True, "id": post_id, "forced": force}
+
     def update_post(self, post_id: int, fields: Dict[str, Any]) -> PostDetail:
         """
-        Update an existing post.
+        Update an existing post via XML-RPC (wp.editPost).
+
+        The /wp/v2/posts/<id> REST route is unreachable on this host (see
+        _xmlrpc_call), so item writes go through /xmlrpc.php. The updated post is
+        read back through the working REST include= path so the return type and
+        rendered fields stay identical to the previous behavior.
 
         Args:
             post_id: The post ID
-            fields: Dictionary of fields to update
+            fields: Dictionary of fields to update (REST field names)
 
         Returns:
             PostDetail model of updated post
@@ -520,14 +871,33 @@ class WordPressClient:
         if not fields:
             raise ValueError("fields cannot be empty when updating a post")
 
-        endpoint = f"/posts/{post_id}"
-        response = self._make_request("POST", endpoint, data=fields)
+        struct = self._post_fields_to_xmlrpc_struct(fields)
+        if not struct:
+            raise ClientError(f"No updatable fields mapped for post {post_id}: {sorted(fields)}")
 
-        return create_post_detail(response)
+        result = self._xmlrpc_call(
+            "wp.editPost",
+            XMLRPC_BLOG_ID,
+            self.config.username,
+            self.config.app_password,
+            post_id,
+            struct,
+        )
+        if result is not True:
+            raise ClientError(f"XML-RPC wp.editPost did not confirm the update for post {post_id}: {result!r}")
+
+        return self.get_post(post_id)
 
     def delete_post(self, post_id: int, force: bool = False) -> dict:
         """
-        Delete a post.
+        Delete a post via XML-RPC (wp.deletePost).
+
+        The /wp/v2/posts/<id> REST route is unreachable on this host (see
+        _xmlrpc_call), so deletion goes through /xmlrpc.php. wp.deletePost moves a
+        live (published/draft/etc.) post to trash; calling it again on the
+        now-trashed post permanently deletes it. For force=True the current
+        status is queried first so exactly the right number of calls is issued
+        whether the post is live or already in the trash.
 
         Args:
             post_id: The post ID
@@ -536,18 +906,17 @@ class WordPressClient:
         Returns:
             Dict with deletion result
         """
-        endpoint = f"/posts/{post_id}"
-        params = None
-        if force:
-            params = {"force": "true"}
-
-        response = self._make_request("DELETE", endpoint, params=params)
-
-        return response
+        return self._xmlrpc_trash_post(post_id, force)
 
     # Schedule reservation directory for preventing race conditions between
     # concurrent auto-schedule calls (e.g., parallel pipeline runs)
-    _RESERVATION_DIR = Path.home() / ".cache" / "ata-blog" / "schedule-reservations"
+    _RESERVATION_DIR = Path.home() / ".cache" / "wordpress-cli" / "schedule-reservations"
+
+    # Minimum lead time a returned slot must have over true UTC now. Acts as
+    # a defense-in-depth guard independent of the timezone-correctness of
+    # the code above it: if a future bug reintroduces a naive/local "now",
+    # this still refuses to hand back a slot that isn't safely in the future.
+    _MIN_SCHEDULE_LEAD = timedelta(minutes=30)
 
     def _read_schedule_reservations(self) -> List[datetime]:
         """Read pending schedule reservations, cleaning up expired ones."""
@@ -558,10 +927,17 @@ class WordPressClient:
             try:
                 data = json.loads(f.read_text())
                 expires = datetime.fromisoformat(data["expires"])
-                if expires < datetime.now():
+                slot = datetime.fromisoformat(data["slot"])
+                if expires.tzinfo is None or slot.tzinfo is None:
+                    # Reservation was written before reservations became
+                    # UTC-aware; it is incompatible with the aware
+                    # comparisons below, so treat it as stale.
+                    f.unlink()
+                    continue
+                if expires < datetime.now(timezone.utc):
                     f.unlink()  # Expired reservation
                 else:
-                    times.append(datetime.fromisoformat(data["slot"]))
+                    times.append(slot.astimezone(timezone.utc))
             except (json.JSONDecodeError, KeyError, ValueError):
                 f.unlink()  # Corrupt reservation
         return times
@@ -571,7 +947,7 @@ class WordPressClient:
         self._RESERVATION_DIR.mkdir(parents=True, exist_ok=True)
         reservation = {
             "slot": slot,
-            "expires": (datetime.now() + timedelta(minutes=10)).isoformat(),
+            "expires": (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat(),
             "pid": os.getpid(),
         }
         path = self._RESERVATION_DIR / f"{os.getpid()}_{int(time.time())}.json"
@@ -583,6 +959,18 @@ class WordPressClient:
             for f in self._RESERVATION_DIR.glob(f"{os.getpid()}_*.json"):
                 f.unlink()
 
+    @staticmethod
+    def _ceil_to_hour(value: datetime) -> datetime:
+        """Round a datetime UP to the next hour boundary (never truncates past it).
+
+        A value already exactly on the hour is returned unchanged; any other
+        value rolls forward to the next hour. This guarantees the result is
+        never earlier than the input, which "add 1 hour then truncate" does
+        not guarantee once minutes/seconds/microseconds enter the picture.
+        """
+        truncated = value.replace(minute=0, second=0, microsecond=0)
+        return truncated if truncated == value else truncated + timedelta(hours=1)
+
     def find_next_schedule_slot(self) -> str:
         """
         Find next available publication slot respecting scheduling rules.
@@ -591,11 +979,17 @@ class WordPressClient:
         - Max 2 posts per weekday
         - 4+ hour gap between posts
         - No weekends (rolls to Monday)
-        - Posts scheduled between 9am-5pm only
+        - Posts scheduled between 9am-5pm UTC only
         - Pending reservations from concurrent processes
 
+        All arithmetic here is in UTC. The host machine's local timezone is
+        never read: WordPress interprets the written date in the site's
+        configured timezone (UTC for this site), so "now" must be true UTC
+        now, not the CLI process's local wall-clock time.
+
         Returns:
-            ISO 8601 datetime string (e.g., "2026-01-10T09:00:00")
+            ISO 8601 UTC datetime string with an explicit +00:00 offset
+            (e.g., "2026-01-10T09:00:00+00:00").
         """
         # Get scheduled posts (status=future)
         scheduled = self.list_posts(limit=100, filters={"status": "future"})
@@ -603,24 +997,27 @@ class WordPressClient:
         # Get recently published posts (last 20 for gap checking)
         published = self.list_posts(limit=20, filters={"status": "publish"})
 
-        # Parse dates from all posts
-        occupied_times = []
+        # Parse dates from all posts. date_gmt is WordPress's unambiguous UTC
+        # timestamp; date is site-timezone-relative and must not be used here
+        # (mixing it with a UTC "now" is exactly the bug this function had).
+        occupied_times: List[datetime] = []
         for post in scheduled + published:
-            # Post model has date attribute
-            date_str = getattr(post, "date", None)
-            if date_str:
-                try:
-                    dt = datetime.fromisoformat(str(date_str).replace("Z", "+00:00"))
-                    occupied_times.append(dt.replace(tzinfo=None))
-                except ValueError:
-                    continue
+            date_gmt_str = getattr(post, "date_gmt", None)
+            if not date_gmt_str:
+                raise ClientError(
+                    f"Post {getattr(post, 'id', '?')} (status={getattr(post, 'status', '?')}) "
+                    "has no date_gmt; cannot safely compute schedule occupancy"
+                )
+            dt = datetime.fromisoformat(str(date_gmt_str).replace("Z", "+00:00"))
+            occupied_times.append(dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc))
 
         # Include pending reservations from concurrent processes
         occupied_times.extend(self._read_schedule_reservations())
 
-        # Start from now, round UP to next hour to ensure future time
-        now = datetime.now()
-        candidate = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+        # Start from true UTC now, round UP to the next hour boundary so the
+        # slot is never earlier than "now" plus a full hour of lead time.
+        now = datetime.now(timezone.utc)
+        candidate = self._ceil_to_hour(now + timedelta(hours=1))
 
         # If before 9am, start at 9am
         if candidate.hour < 9:
@@ -649,8 +1046,17 @@ class WordPressClient:
                     candidate = (candidate + timedelta(days=1)).replace(hour=9, minute=0)
                 continue
 
+            # Defense-in-depth guard: refuse to hand back a slot that is not
+            # genuinely, safely in the future relative to true UTC now, no
+            # matter how "candidate" was derived above.
+            if candidate < datetime.now(timezone.utc) + self._MIN_SCHEDULE_LEAD:
+                candidate = self._ceil_to_hour(datetime.now(timezone.utc) + timedelta(hours=1))
+                if candidate.hour < 9:
+                    candidate = candidate.replace(hour=9)
+                continue
+
             # Found valid slot - reserve it before returning
-            slot = candidate.strftime("%Y-%m-%dT%H:%M:%S")
+            slot = candidate.isoformat()
             self._create_schedule_reservation(slot)
             return slot
 
@@ -669,11 +1075,13 @@ class WordPressClient:
 
         all_pages: List[Page] = []
         page = 1
-        remaining = limit
 
-        while remaining > 0:
-            per_page = min(remaining, WP_MAX_PER_PAGE)
-            params = {"per_page": per_page, "page": page}
+        # Always request full pages. WordPress computes the result offset as
+        # (page - 1) * per_page, so shrinking per_page on later pages would
+        # re-read an earlier window and return duplicates. Request WP_MAX_PER_PAGE
+        # every page and trim to the caller's limit after collection.
+        while len(all_pages) < limit:
+            params = {"per_page": WP_MAX_PER_PAGE, "page": page}
             if filters:
                 params.update(filters)
 
@@ -685,17 +1093,16 @@ class WordPressClient:
             pages_batch = [create_page(p) for p in response]
             all_pages.extend(pages_batch)
 
-            if len(pages_batch) < per_page:
+            if len(pages_batch) < WP_MAX_PER_PAGE:
                 break
 
             total_pages = int(headers.get("x-wp-totalpages", 1))
             if page >= total_pages:
                 break
 
-            remaining -= len(pages_batch)
             page += 1
 
-        return all_pages
+        return all_pages[:limit]
 
     def get_page(self, page_id: int, context: str = "view") -> PageDetail:
         """Get a specific page by ID.
@@ -744,7 +1151,10 @@ class WordPressClient:
         if slug is not None:
             data["slug"] = slug
         if date is not None:
-            data["date"] = date
+            # date_gmt is unambiguous UTC; date is relative to whatever
+            # timezone the site happens to be configured with. WordPress
+            # derives date from date_gmt automatically.
+            data["date_gmt"] = self._rest_date_gmt(date)
         if excerpt is not None:
             data["excerpt"] = excerpt
         if parent is not None:
@@ -760,28 +1170,204 @@ class WordPressClient:
         return create_page_detail(response)
 
     def update_page(self, page_id: int, fields: Dict[str, Any]) -> PageDetail:
-        """Update an existing page."""
+        """Update an existing page via XML-RPC (wp.editPost with post_type=page).
+
+        The /wp/v2/pages/<id> REST route is unreachable on this host (see
+        _xmlrpc_call), so item writes go through /xmlrpc.php. A page is a post
+        with post_type "page"; the updated page is read back through the working
+        REST include= path so the return type stays identical to the previous
+        behavior.
+
+        Args:
+            page_id: The page ID
+            fields: Dictionary of fields to update (REST field names)
+
+        Returns:
+            PageDetail model of updated page
+        """
         if not fields:
             raise ValueError("fields cannot be empty when updating a page")
 
-        endpoint = f"/pages/{page_id}"
-        response = self._make_request("POST", endpoint, data=fields)
-        return create_page_detail(response)
+        unsupported = [name for name in self._XMLRPC_UNSUPPORTED_PAGE_FIELDS if name in fields]
+        if unsupported:
+            raise ClientError(
+                f"Cannot update page field(s) {unsupported} on this host: the REST item route is "
+                "unreachable (canonical redirect strips the id), and this site's XML-RPC wp.editPost "
+                "silently drops menu_order and page_template. Set these in wp-admin, or update the "
+                "server-side redirect so the native REST route works."
+            )
+
+        struct = self._post_fields_to_xmlrpc_struct(fields)
+        struct["post_type"] = "page"
+
+        result = self._xmlrpc_call(
+            "wp.editPost",
+            XMLRPC_BLOG_ID,
+            self.config.username,
+            self.config.app_password,
+            page_id,
+            struct,
+        )
+        if result is not True:
+            raise ClientError(f"XML-RPC wp.editPost did not confirm the update for page {page_id}: {result!r}")
+
+        return self.get_page(page_id)
 
     def delete_page(self, page_id: int, force: bool = False) -> dict:
-        """Delete a page.
+        """Delete a page via XML-RPC (wp.deletePost).
+
+        The /wp/v2/pages/<id> REST route is unreachable on this host (see
+        _xmlrpc_call). A page is a trashable post type, so deletion follows the
+        same trash-then-permanent flow as delete_post.
 
         Args:
             page_id: The page ID
             force: If True, permanently delete. If False, move to trash.
         """
-        endpoint = f"/pages/{page_id}"
-        params = None
-        if force:
-            params = {"force": "true"}
+        return self._xmlrpc_trash_post(page_id, force)
 
-        response = self._make_request("DELETE", endpoint, params=params)
+    # ==================== Navigation Menu Methods ====================
+
+    def list_menus(self) -> List[dict]:
+        """List WordPress navigation menus."""
+        response = self._make_request("GET", "/menus", params={"per_page": 100})
+        if not isinstance(response, list):
+            raise ClientError(f"Expected menu list response to be a list, got {type(response)}")
         return response
+
+    def get_menu(self, menu: str) -> dict:
+        """Get a single navigation menu by ID, slug, or name."""
+        menu_id = self.resolve_menu_id(menu=menu)
+        response = self._make_request("GET", f"/menus/{menu_id}")
+        if not isinstance(response, dict):
+            raise ClientError(f"Expected menu response to be a dict, got {type(response)}")
+        return response
+
+    def list_menu_locations(self) -> dict:
+        """List WordPress navigation menu locations."""
+        response = self._make_request("GET", "/menu-locations")
+        if not isinstance(response, dict):
+            raise ClientError(f"Expected menu locations response to be a dict, got {type(response)}")
+        return response
+
+    def resolve_menu_id(self, *, menu: Optional[str] = None, location: Optional[str] = None) -> int:
+        """Resolve a menu ID from a menu ID/slug/name or a theme location."""
+        if bool(menu) == bool(location):
+            raise ValueError("Provide exactly one of menu or location")
+
+        if location is not None:
+            locations = self.list_menu_locations()
+            location_data = locations.get(location)
+            if not isinstance(location_data, dict):
+                raise ClientError(f"Menu location not found: {location}")
+            menu_id = location_data.get("menu")
+            if not isinstance(menu_id, int) or menu_id <= 0:
+                raise ClientError(f"Menu location has no assigned menu: {location}")
+            return menu_id
+
+        assert menu is not None
+        menu_identifier = menu.strip()
+        if not menu_identifier:
+            raise ValueError("menu cannot be empty")
+        if menu_identifier.isdigit():
+            return int(menu_identifier)
+
+        normalized = menu_identifier.casefold()
+        matches = [
+            raw_menu
+            for raw_menu in self.list_menus()
+            if str(raw_menu.get("slug", "")).casefold() == normalized
+            or str(raw_menu.get("name", "")).casefold() == normalized
+        ]
+        if not matches:
+            raise ClientError(f"Menu not found: {menu}")
+        if len(matches) > 1:
+            names = ", ".join(sorted(str(match.get("name", match.get("id"))) for match in matches))
+            raise ClientError(f"Menu identifier is ambiguous: {menu}. Matches: {names}")
+        menu_id = matches[0].get("id")
+        if not isinstance(menu_id, int):
+            raise ClientError(f"Resolved menu did not include an integer id: {menu}")
+        return menu_id
+
+    def list_menu_items(self, menu_id: int, limit: int = 100) -> List[dict]:
+        """List items in a navigation menu with automatic pagination."""
+        if menu_id <= 0:
+            raise ValueError("menu_id must be a positive integer")
+        if limit <= 0:
+            raise ValueError("limit must be a positive integer")
+
+        WP_MAX_PER_PAGE = 100
+
+        all_items: List[dict] = []
+        page = 1
+
+        # Always request full pages. WordPress computes the result offset as
+        # (page - 1) * per_page, so shrinking per_page on later pages would
+        # re-read an earlier window and return duplicates. Request WP_MAX_PER_PAGE
+        # every page and trim to the caller's limit after collection.
+        while len(all_items) < limit:
+            response, headers = self._make_request(
+                "GET",
+                "/menu-items",
+                params={
+                    "menus": menu_id,
+                    "per_page": WP_MAX_PER_PAGE,
+                    "page": page,
+                    "orderby": "menu_order",
+                    "order": "asc",
+                },
+                return_headers=True,
+            )
+            if not isinstance(response, list):
+                raise ClientError(f"Expected menu item list response to be a list, got {type(response)}")
+            all_items.extend(response)
+            if len(response) < WP_MAX_PER_PAGE:
+                break
+            total_pages = int(headers.get("x-wp-totalpages", 1))
+            if page >= total_pages:
+                break
+            page += 1
+        return all_items[:limit]
+
+    def add_page_to_menu(
+        self,
+        *,
+        page_id: int,
+        menu_id: int,
+        title: Optional[str] = None,
+        menu_order: Optional[int] = None,
+    ) -> dict:
+        """Add a page to a navigation menu, returning an existing item when already present."""
+        if page_id <= 0:
+            raise ValueError("page_id must be a positive integer")
+        if menu_id <= 0:
+            raise ValueError("menu_id must be a positive integer")
+
+        for item in self.list_menu_items(menu_id):
+            if (
+                item.get("type") == "post_type"
+                and item.get("object") == "page"
+                and item.get("object_id") == page_id
+            ):
+                return {"created": False, "menu_id": menu_id, "item": item}
+
+        data: Dict[str, Any] = {
+            "status": "publish",
+            "type": "post_type",
+            "object": "page",
+            "object_id": page_id,
+            "menus": menu_id,
+            "parent": 0,
+        }
+        if title is not None:
+            data["title"] = title
+        if menu_order is not None:
+            data["menu_order"] = menu_order
+
+        item = self._make_request("POST", "/menu-items", data=data)
+        if not isinstance(item, dict):
+            raise ClientError(f"Expected created menu item response to be a dict, got {type(item)}")
+        return {"created": True, "menu_id": menu_id, "item": item}
 
     # ==================== Media Methods ====================
 
@@ -849,13 +1435,13 @@ class WordPressClient:
 
         all_media: List[Media] = []
         page = 1
-        remaining = limit
 
-        while remaining > 0:
-            # Request up to WP_MAX_PER_PAGE or remaining, whichever is smaller
-            per_page = min(remaining, WP_MAX_PER_PAGE)
-
-            params = {"per_page": per_page, "page": page}
+        # Always request full pages. WordPress computes the result offset as
+        # (page - 1) * per_page, so shrinking per_page on later pages would
+        # re-read an earlier window and return duplicates. Request WP_MAX_PER_PAGE
+        # every page and trim to the caller's limit after collection.
+        while len(all_media) < limit:
+            params = {"per_page": WP_MAX_PER_PAGE, "page": page}
 
             # Add filters if provided
             if filters:
@@ -871,9 +1457,8 @@ class WordPressClient:
             media_items = [create_media(item) for item in response]
             all_media.extend(media_items)
 
-            # Check if we've exhausted available media
-            if len(media_items) < per_page:
-                # Got fewer than requested, no more pages
+            # Got a short page - no more media available
+            if len(media_items) < WP_MAX_PER_PAGE:
                 break
 
             # Check total pages from headers (lowercase per requests library)
@@ -881,10 +1466,9 @@ class WordPressClient:
             if page >= total_pages:
                 break
 
-            remaining -= len(media_items)
             page += 1
 
-        return all_media
+        return all_media[:limit]
 
     def get_media(self, media_id: int) -> Media:
         """
@@ -909,23 +1493,44 @@ class WordPressClient:
 
     def delete_media(self, media_id: int, force: bool = False) -> dict:
         """
-        Delete a media item.
+        Delete a media item via XML-RPC (wp.deletePost).
+
+        The /wp/v2/media/<id> REST route is unreachable on this host (see
+        _xmlrpc_call), and there is no clean XML-RPC media edit/delete method. A
+        media item is an "attachment" post type, so wp.deletePost is the
+        reachable path. Attachments only support trash when the site defines
+        MEDIA_TRASH; otherwise the first call already deletes the file
+        permanently. Rather than assume the site's MEDIA_TRASH setting, the item
+        is deleted once and, when force is requested, its existence is re-checked
+        so a still-present (trashed) attachment is permanently removed by a
+        second call.
 
         Args:
             media_id: The media ID
-            force: If True, permanently delete. If False, move to trash.
+            force: If True, guarantee a permanent delete even where MEDIA_TRASH
+                keeps the first call as a trash. If False, a single delete
+                (trash where supported, otherwise permanent).
 
         Returns:
             Dict with deletion result
         """
-        endpoint = f"/media/{media_id}"
-        params = None
-        if force:
-            params = {"force": "true"}
+        username = self.config.username
+        app_password = self.config.app_password
 
-        response = self._make_request("DELETE", endpoint, params=params)
+        result = self._xmlrpc_call("wp.deletePost", XMLRPC_BLOG_ID, username, app_password, media_id)
+        if result is not True:
+            raise ClientError(f"XML-RPC wp.deletePost did not confirm deleting media {media_id}: {result!r}")
 
-        return response
+        if force and self._xmlrpc_post_status(media_id) is not None:
+            # MEDIA_TRASH is enabled: the first call only trashed the attachment,
+            # so a second call permanently deletes it.
+            permanent = self._xmlrpc_call("wp.deletePost", XMLRPC_BLOG_ID, username, app_password, media_id)
+            if permanent is not True:
+                raise ClientError(
+                    f"XML-RPC wp.deletePost did not confirm permanent deletion of media {media_id}: {permanent!r}"
+                )
+
+        return {"deleted": True, "id": media_id, "forced": force}
 
     # ==================== Category Methods ====================
 
@@ -954,13 +1559,13 @@ class WordPressClient:
 
         all_categories: List[Category] = []
         page = 1
-        remaining = limit
 
-        while remaining > 0:
-            # Request up to WP_MAX_PER_PAGE or remaining, whichever is smaller
-            per_page = min(remaining, WP_MAX_PER_PAGE)
-
-            params = {"per_page": per_page, "page": page}
+        # Always request full pages. WordPress computes the result offset as
+        # (page - 1) * per_page, so shrinking per_page on later pages would
+        # re-read an earlier window and return duplicates. Request WP_MAX_PER_PAGE
+        # every page and trim to the caller's limit after collection.
+        while len(all_categories) < limit:
+            params = {"per_page": WP_MAX_PER_PAGE, "page": page}
 
             # Add filters if provided
             if filters:
@@ -976,9 +1581,8 @@ class WordPressClient:
             categories = [create_category(cat) for cat in response]
             all_categories.extend(categories)
 
-            # Check if we've exhausted available categories
-            if len(categories) < per_page:
-                # Got fewer than requested, no more pages
+            # Got a short page - no more categories available
+            if len(categories) < WP_MAX_PER_PAGE:
                 break
 
             # Check total pages from headers (lowercase per requests library)
@@ -986,10 +1590,9 @@ class WordPressClient:
             if page >= total_pages:
                 break
 
-            remaining -= len(categories)
             page += 1
 
-        return all_categories
+        return all_categories[:limit]
 
     def get_category(self, category_id: int) -> Category:
         """
@@ -1059,29 +1662,39 @@ class WordPressClient:
         if not fields:
             raise ValueError("fields cannot be empty when updating a category")
 
-        endpoint = f"/categories/{category_id}"
-        response = self._make_request("POST", endpoint, data=fields)
+        struct = self._term_fields_to_xmlrpc_struct("category", fields)
+        result = self._xmlrpc_call(
+            "wp.editTerm",
+            XMLRPC_BLOG_ID,
+            self.config.username,
+            self.config.app_password,
+            category_id,
+            struct,
+        )
+        if result is not True:
+            raise ClientError(
+                f"XML-RPC wp.editTerm did not confirm the update for category {category_id}: {result!r}"
+            )
 
-        return create_category(response)
+        return self.get_category(category_id)
 
     def delete_category(self, category_id: int, force: bool = True) -> dict:
         """
-        Delete a category.
+        Delete a category via XML-RPC (wp.deleteTerm).
+
+        The /wp/v2/categories/<id> REST route is unreachable on this host (see
+        _xmlrpc_call), so deletion goes through /xmlrpc.php. Categories have no
+        trash, so this is always a permanent delete (force is accepted for
+        signature compatibility).
 
         Args:
             category_id: The category ID
-            force: Must be True for categories (no trash support)
+            force: Accepted for compatibility; categories have no trash support
 
         Returns:
             Dict with deletion result
         """
-        endpoint = f"/categories/{category_id}"
-        # Categories don't support trash, force must be true
-        params = {"force": "true"}
-
-        response = self._make_request("DELETE", endpoint, params=params)
-
-        return response
+        return self._xmlrpc_delete_term("category", category_id)
 
     # ==================== Tag Methods ====================
 
@@ -1110,13 +1723,13 @@ class WordPressClient:
 
         all_tags: List[Tag] = []
         page = 1
-        remaining = limit
 
-        while remaining > 0:
-            # Request up to WP_MAX_PER_PAGE or remaining, whichever is smaller
-            per_page = min(remaining, WP_MAX_PER_PAGE)
-
-            params = {"per_page": per_page, "page": page}
+        # Always request full pages. WordPress computes the result offset as
+        # (page - 1) * per_page, so shrinking per_page on later pages would
+        # re-read an earlier window and return duplicates. Request WP_MAX_PER_PAGE
+        # every page and trim to the caller's limit after collection.
+        while len(all_tags) < limit:
+            params = {"per_page": WP_MAX_PER_PAGE, "page": page}
 
             # Add filters if provided
             if filters:
@@ -1132,9 +1745,8 @@ class WordPressClient:
             tags = [create_tag(tag) for tag in response]
             all_tags.extend(tags)
 
-            # Check if we've exhausted available tags
-            if len(tags) < per_page:
-                # Got fewer than requested, no more pages
+            # Got a short page - no more tags available
+            if len(tags) < WP_MAX_PER_PAGE:
                 break
 
             # Check total pages from headers (lowercase per requests library)
@@ -1142,10 +1754,9 @@ class WordPressClient:
             if page >= total_pages:
                 break
 
-            remaining -= len(tags)
             page += 1
 
-        return all_tags
+        return all_tags[:limit]
 
     def get_tag(self, tag_id: int) -> Tag:
         """
@@ -1227,29 +1838,37 @@ class WordPressClient:
         if not fields:
             raise ValueError("fields cannot be empty when updating a tag")
 
-        endpoint = f"/tags/{tag_id}"
-        response = self._make_request("POST", endpoint, data=fields)
+        struct = self._term_fields_to_xmlrpc_struct("post_tag", fields)
+        result = self._xmlrpc_call(
+            "wp.editTerm",
+            XMLRPC_BLOG_ID,
+            self.config.username,
+            self.config.app_password,
+            tag_id,
+            struct,
+        )
+        if result is not True:
+            raise ClientError(f"XML-RPC wp.editTerm did not confirm the update for tag {tag_id}: {result!r}")
 
-        return create_tag(response)
+        return self.get_tag(tag_id)
 
     def delete_tag(self, tag_id: int, force: bool = True) -> dict:
         """
-        Delete a tag.
+        Delete a tag via XML-RPC (wp.deleteTerm).
+
+        The /wp/v2/tags/<id> REST route is unreachable on this host (see
+        _xmlrpc_call), so deletion goes through /xmlrpc.php. Tags have no trash,
+        so this is always a permanent delete (force is accepted for signature
+        compatibility).
 
         Args:
             tag_id: The tag ID
-            force: Must be True for tags (no trash support)
+            force: Accepted for compatibility; tags have no trash support
 
         Returns:
             Dict with deletion result
         """
-        endpoint = f"/tags/{tag_id}"
-        # Tags don't support trash, force must be true
-        params = {"force": "true"}
-
-        response = self._make_request("DELETE", endpoint, params=params)
-
-        return response
+        return self._xmlrpc_delete_term("post_tag", tag_id)
 
     # ==================== Plugin Methods ====================
 
@@ -1297,13 +1916,17 @@ class WordPressClient:
             raise ClientError(f"Could not normalize site identifier: {value}")
         return host
 
-    def _get_wpcom_site_record(self) -> dict:
+    def _get_wpcom_site_record(self, *, interactive_token_refresh: bool = True) -> dict:
         configured_site = self.config.wpcom_site
         if not configured_site:
             raise ClientError("Missing WordPress.com site identifier: WPCOM_SITE")
         normalized_configured_site = self._normalize_site_identifier(configured_site)
 
-        response = self._make_wpcom_request("GET", "/me/sites")
+        response = self._make_wpcom_request(
+            "GET",
+            "/me/sites",
+            interactive_token_refresh=interactive_token_refresh,
+        )
         if not isinstance(response, dict):
             raise ClientError(f"Expected WordPress.com /me/sites response to be a dict, got {type(response)}")
         sites = response.get("sites")
@@ -1346,7 +1969,7 @@ class WordPressClient:
         if not allowed:
             raise ClientError(JETPACK_PLUGIN_MANAGEMENT_ERROR)
 
-    def _assert_jetpack_plugin_management_connected(self) -> None:
+    def _assert_jetpack_plugin_management_connected(self, *, interactive_token_refresh: bool = True) -> None:
         connection = self._get_jetpack_connection_data()
         current_user = connection.get("currentUser")
         if not isinstance(current_user, dict):
@@ -1366,16 +1989,17 @@ class WordPressClient:
         if not manage_plugins:
             raise ClientError(JETPACK_PLUGIN_MANAGEMENT_ERROR)
 
-        wpcom_site = self._get_wpcom_site_record()
-        self._assert_wpcom_site_has_plugin_management_access(wpcom_site)
-        self._assert_wpcom_plugin_endpoint_access()
+        self._assert_wpcom_plugin_endpoint_access(
+            interactive_token_refresh=interactive_token_refresh,
+        )
 
-    def _assert_wpcom_plugin_endpoint_access(self) -> None:
+    def _assert_wpcom_plugin_endpoint_access(self, *, interactive_token_refresh: bool = True) -> None:
         site = quote(self.config.wpcom_site, safe="")
         self._make_wpcom_request(
             "GET",
             f"/sites/{site}/plugins",
             retry_on_forbidden=True,
+            interactive_token_refresh=interactive_token_refresh,
         )
 
     def get_wordpress_org_plugin_info(self, slug: str) -> dict:
@@ -1498,6 +2122,42 @@ class WordPressClient:
             return self.enrich_plugins_with_update_status(plugins)
         return plugins
 
+    @staticmethod
+    def _plugin_identifier_values(plugin: Plugin) -> List[str]:
+        """Return exact identifiers users can discover from plugin list output."""
+        values = [plugin.plugin, plugin.plugin.split("/", 1)[0], plugin.name]
+        if plugin.textdomain:
+            values.append(plugin.textdomain)
+        return values
+
+    def resolve_plugin_identifier(self, plugin: str) -> str:
+        """
+        Resolve a user-facing plugin identifier to the REST API plugin path.
+
+        WordPress.com plugin detail endpoints require the full plugin path, but
+        list output exposes several practical identifiers: plugin path, slug,
+        name, and textdomain.
+        """
+        if not plugin or not plugin.strip():
+            raise ValueError("plugin cannot be empty")
+
+        normalized = plugin.strip().casefold()
+        matches = [
+            installed
+            for installed in self.list_plugins()
+            if normalized in {value.casefold() for value in self._plugin_identifier_values(installed)}
+        ]
+
+        if not matches:
+            raise ClientError(
+                f"Plugin not found: {plugin}. Use a plugin path, slug, textdomain, or exact name from plugins list."
+            )
+        if len(matches) > 1:
+            match_names = ", ".join(sorted(match.plugin for match in matches))
+            raise ClientError(f"Plugin identifier is ambiguous: {plugin}. Matches: {match_names}")
+
+        return matches[0].plugin
+
     def get_plugin(self, plugin: str, include_update_status: bool = False) -> Plugin:
         """
         Get a specific plugin by its identifier.
@@ -1509,7 +2169,8 @@ class WordPressClient:
         Returns:
             Plugin model
         """
-        endpoint = f"/plugins/{plugin}"
+        plugin_path = self.resolve_plugin_identifier(plugin)
+        endpoint = f"/plugins/{plugin_path}"
         response = self._make_request("GET", endpoint)
 
         result = create_plugin(response)
@@ -1546,8 +2207,31 @@ class WordPressClient:
         Returns:
             Dict with deletion result
         """
-        endpoint = f"/plugins/{plugin}"
-        response = self._make_request("DELETE", endpoint)
+        current = self.get_plugin(plugin)
+        if current.status != "inactive":
+            raise ClientError(f"Plugin {current.plugin} is {current.status}; deactivate it before deleting")
+
+        endpoint = f"/plugins/{current.plugin}"
+        try:
+            response = self._make_request("DELETE", endpoint, retry=False)
+        except ClientError as exc:
+            message = str(exc)
+            if "Could not fully remove the plugin" not in message:
+                raise
+            still_installed = [installed for installed in self.list_plugins() if installed.plugin == current.plugin]
+            if still_installed:
+                installed = still_installed[0]
+                raise ClientError(
+                    "Plugin deletion failed and readback confirms the plugin is still installed: "
+                    f"plugin={installed.plugin}, status={installed.status}, version={installed.version}. "
+                    f"API error: {message}"
+                ) from exc
+            return {
+                "deleted": True,
+                "plugin": current.plugin,
+                "status": "absent_after_partial_delete_error",
+                "api_error": message,
+            }
 
         return response
 
@@ -1581,18 +2265,23 @@ class WordPressClient:
         Returns:
             Plugin model with updated version
         """
+        missing_wpcom_credentials = self.config.get_missing_wpcom_credentials()
+        if missing_wpcom_credentials:
+            raise ClientError(build_wpcom_missing_credentials_message(missing_wpcom_credentials))
+
         current = self.get_plugin(plugin, include_update_status=True)
         if current.update_status != "available":
             raise ClientError(f"Plugin {plugin} does not have an available update")
         if not current.latest_version:
             raise ClientError(f"Plugin {plugin} does not have a known latest version")
-        self._assert_jetpack_plugin_management_connected()
+        self._assert_jetpack_plugin_management_connected(interactive_token_refresh=False)
 
         site = quote(self.config.wpcom_site, safe="")
         plugin_id = quote(plugin, safe="")
         response = self._make_wpcom_request(
             "POST",
             f"/sites/{site}/plugins/{plugin_id}/update/",
+            interactive_token_refresh=False,
         )
         if not isinstance(response, dict):
             raise ClientError(f"Expected WordPress.com plugin update response to be a dict, got {type(response)}")
@@ -1607,6 +2296,301 @@ class WordPressClient:
             )
 
         return upgraded
+
+    # ==================== Maintenance Report Methods ====================
+
+    @staticmethod
+    def _version_numbers(value: str) -> List[int]:
+        if not isinstance(value, str) or not value.strip():
+            raise ClientError(f"Expected non-empty version string, got {value!r}")
+        numbers = [int(part) for part in re.findall(r"\d+", value)]
+        if not numbers:
+            raise ClientError(f"Version string did not contain numeric components: {value}")
+        return numbers
+
+    @classmethod
+    def _compare_versions(cls, installed: str, expected: str) -> int:
+        installed_parts = cls._version_numbers(installed)
+        expected_parts = cls._version_numbers(expected)
+        width = max(len(installed_parts), len(expected_parts))
+        installed_parts.extend([0] * (width - len(installed_parts)))
+        expected_parts.extend([0] * (width - len(expected_parts)))
+        if installed_parts < expected_parts:
+            return -1
+        if installed_parts > expected_parts:
+            return 1
+        return 0
+
+    @staticmethod
+    def _operator_matches(compare_result: int, operator: str) -> bool:
+        normalized = operator.strip().lower()
+        if normalized in {"lt", "<"}:
+            return compare_result < 0
+        if normalized in {"lte", "le", "<="}:
+            return compare_result <= 0
+        if normalized in {"gt", ">"}:
+            return compare_result > 0
+        if normalized in {"gte", "ge", ">="}:
+            return compare_result >= 0
+        if normalized in {"eq", "=", "=="}:
+            return compare_result == 0
+        raise ClientError(f"Unsupported vulnerability version operator: {operator}")
+
+    @classmethod
+    def vulnerability_affects_version(cls, installed_version: str, vulnerability: dict) -> bool:
+        """Return whether a WPVulnerability record applies to an installed version."""
+        operator_data = vulnerability.get("operator")
+        if not isinstance(operator_data, dict):
+            raise ClientError("Vulnerability record did not include operator data")
+
+        checks: List[bool] = []
+        for version_key, operator_key in (("min_version", "min_operator"), ("max_version", "max_operator")):
+            expected_version = operator_data.get(version_key)
+            operator = operator_data.get(operator_key)
+            if expected_version is None and operator is None:
+                continue
+            if not isinstance(expected_version, str) or not expected_version:
+                raise ClientError(f"Vulnerability operator did not include {version_key}")
+            if not isinstance(operator, str) or not operator:
+                raise ClientError(f"Vulnerability operator did not include {operator_key}")
+            checks.append(cls._operator_matches(cls._compare_versions(installed_version, expected_version), operator))
+
+        if checks:
+            return all(checks)
+
+        unfixed = operator_data.get("unfixed")
+        if unfixed in {"1", 1, True}:
+            return True
+        raise ClientError("Vulnerability operator did not include a version range")
+
+    def get_wpvulnerability_record(self, component_type: str, slug: str) -> dict:
+        """Fetch a component record from the public WPVulnerability API."""
+        if component_type not in {"plugin", "theme", "core"}:
+            raise ValueError(f"Unsupported component type: {component_type}")
+        if not slug or not slug.strip():
+            raise ValueError("slug cannot be empty")
+
+        url = f"{WPVULNERABILITY_API_BASE_URL}/{component_type}/{quote(slug.strip(), safe='')}"
+        response = requests.get(
+            url,
+            headers={"Accept": "application/json", "User-Agent": DEFAULT_USER_AGENT},
+            timeout=30,
+        )
+
+        if response.status_code == 404:
+            return {
+                "error": 1,
+                "message": "Component was not found in WPVulnerability",
+                "data": None,
+                "updated": None,
+            }
+        if not response.ok:
+            raise ClientError(f"WPVulnerability lookup failed for {component_type}:{slug} ({response.status_code}): {response.text}")
+
+        data = response.json()
+        if not isinstance(data, dict):
+            raise ClientError(f"Expected WPVulnerability response to be a dict, got {type(data)}")
+        if "data" not in data:
+            raise ClientError("WPVulnerability response did not include data")
+        return data
+
+    @staticmethod
+    def _vulnerability_severity(vulnerability: dict) -> Optional[str]:
+        impact = vulnerability.get("impact")
+        if not isinstance(impact, dict):
+            return None
+        for key in ("cvss3", "cvss"):
+            score_data = impact.get(key)
+            if isinstance(score_data, dict) and isinstance(score_data.get("severity"), str):
+                return score_data["severity"]
+        return None
+
+    @staticmethod
+    def _vulnerability_score(vulnerability: dict) -> Optional[str]:
+        impact = vulnerability.get("impact")
+        if not isinstance(impact, dict):
+            return None
+        for key in ("cvss3", "cvss"):
+            score_data = impact.get(key)
+            if isinstance(score_data, dict) and score_data.get("score") is not None:
+                return str(score_data["score"])
+        return None
+
+    @classmethod
+    def _summarize_vulnerability(cls, vulnerability: dict) -> dict:
+        if not isinstance(vulnerability, dict):
+            raise ClientError(f"Expected vulnerability entry to be a dict, got {type(vulnerability)}")
+        uuid = vulnerability.get("uuid")
+        name = vulnerability.get("name")
+        if not isinstance(uuid, str) or not uuid:
+            raise ClientError("Vulnerability entry did not include uuid")
+        if not isinstance(name, str) or not name:
+            raise ClientError("Vulnerability entry did not include name")
+        source = vulnerability.get("source") or []
+        if not isinstance(source, list):
+            raise ClientError("Vulnerability source was not a list")
+        source_ids = [
+            item.get("id")
+            for item in source
+            if isinstance(item, dict) and isinstance(item.get("id"), str) and item.get("id")
+        ]
+        return {
+            "uuid": uuid,
+            "name": name,
+            "severity": cls._vulnerability_severity(vulnerability),
+            "score": cls._vulnerability_score(vulnerability),
+            "source_ids": source_ids,
+        }
+
+    def _scan_component(self, component_type: str, slug: str, name: str, installed_version: str, status: str) -> dict:
+        record = self.get_wpvulnerability_record(component_type, slug)
+        data = record.get("data")
+        if data is None:
+            return {
+                "component_type": component_type,
+                "slug": slug,
+                "name": name,
+                "installed_version": installed_version,
+                "status": status,
+                "database_status": "not_found",
+                "affected_vulnerability_count": 0,
+                "vulnerabilities": [],
+            }
+        if not isinstance(data, dict):
+            raise ClientError(f"Expected WPVulnerability data to be a dict, got {type(data)}")
+
+        vulnerability_entries = data.get("vulnerability") or []
+        if not isinstance(vulnerability_entries, list):
+            raise ClientError("WPVulnerability data.vulnerability was not a list")
+
+        affected = [
+            self._summarize_vulnerability(vulnerability)
+            for vulnerability in vulnerability_entries
+            if self.vulnerability_affects_version(installed_version, vulnerability)
+        ]
+        return {
+            "component_type": component_type,
+            "slug": slug,
+            "name": name,
+            "installed_version": installed_version,
+            "status": status,
+            "database_status": "found",
+            "affected_vulnerability_count": len(affected),
+            "vulnerabilities": affected,
+        }
+
+    def security_scan(self, active_only: bool = False) -> dict:
+        """Scan installed plugins and themes against WPVulnerability."""
+        plugins = self.list_plugins(include_update_status=True)
+        themes = self.list_themes()
+        settings = self.get_site_settings()
+
+        plugin_results = []
+        for plugin in plugins:
+            if active_only and plugin.status != "active":
+                continue
+            plugin_results.append(
+                self._scan_component(
+                    "plugin",
+                    self._plugin_slug(plugin),
+                    plugin.name,
+                    plugin.version,
+                    plugin.status,
+                )
+            )
+
+        theme_results = [
+            self._scan_component("theme", theme["theme"], theme["name"], theme["version"], theme["status"])
+            for theme in themes
+        ]
+
+        affected = [
+            result
+            for result in plugin_results + theme_results
+            if result["affected_vulnerability_count"] > 0
+        ]
+
+        return {
+            "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+            "source": {
+                "name": "WPVulnerability",
+                "url": WPVULNERABILITY_API_BASE_URL,
+            },
+            "site": {
+                "title": settings.get("title"),
+                "url": settings.get("url"),
+            },
+            "summary": {
+                "plugins_checked": len(plugin_results),
+                "themes_checked": len(theme_results),
+                "affected_component_count": len(affected),
+                "affected_vulnerability_count": sum(result["affected_vulnerability_count"] for result in affected),
+                "core_status": "unavailable",
+            },
+            "core": {
+                "status": "unavailable",
+                "reason": "The authenticated WordPress REST endpoints used by this CLI do not expose the installed core version.",
+            },
+            "plugins": plugin_results,
+            "themes": theme_results,
+            "affected_components": affected,
+        }
+
+    def health_report(self) -> dict:
+        """Build a structured WordPress maintenance health report."""
+        plugins = self.list_plugins(include_update_status=True)
+        themes = self.list_themes()
+        settings = self.get_site_settings()
+        plugin_records = [plugin.model_dump() for plugin in plugins]
+        theme_records = themes
+
+        updates_available = [
+            plugin for plugin in plugin_records if plugin.get("update_status") == "available"
+        ]
+        closed_plugins = [
+            plugin for plugin in plugin_records if plugin.get("update_status") == "closed"
+        ]
+        unverified_plugins = [
+            plugin for plugin in plugin_records if plugin.get("update_status") == "unverified"
+        ]
+
+        return {
+            "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+            "site": {
+                "title": settings.get("title"),
+                "url": settings.get("url"),
+                "description": settings.get("description"),
+                "timezone": settings.get("timezone"),
+            },
+            "wordpress": {
+                "core_version": None,
+                "status": "unavailable",
+                "reason": "The authenticated WordPress REST endpoints used by this CLI do not expose the installed core version.",
+            },
+            "php": {
+                "version": None,
+                "status": "unavailable",
+                "reason": "The authenticated WordPress REST endpoints used by this CLI do not expose PHP runtime version.",
+            },
+            "plugins": {
+                "count": len(plugin_records),
+                "active_count": sum(1 for plugin in plugin_records if plugin.get("status") == "active"),
+                "inactive_count": sum(1 for plugin in plugin_records if plugin.get("status") == "inactive"),
+                "updates_available_count": len(updates_available),
+                "closed_count": len(closed_plugins),
+                "unverified_count": len(unverified_plugins),
+                "updates_available": updates_available,
+                "closed": closed_plugins,
+                "unverified": unverified_plugins,
+                "items": plugin_records,
+            },
+            "themes": {
+                "count": len(theme_records),
+                "active": [theme for theme in theme_records if theme["status"] == "active"],
+                "inactive": [theme for theme in theme_records if theme["status"] != "active"],
+                "items": theme_records,
+            },
+        }
 
 
 # Module-level client instance - singleton pattern

@@ -23,7 +23,6 @@ PRUNE_DIRS = {
     ".mypy_cache",
     ".ruff_cache",
 }
-ADAM_REPO_PATH_RE = re.compile(r"(/Users/adam/Dropbox/GitRepos[^\s\"'`<>()\]]*|~/Dropbox/GitRepos[^\s\"'`<>()\]]*)")
 RETIRED_SHARED_NAMES = (
     "-".join(("cli", "tools", "common")),
     "_".join(("cli", "tools", "common")),
@@ -80,14 +79,6 @@ def _add_issue(issues: set[Issue], category: str, path: Path, detail: str) -> No
 def _scan_text_file(path: Path, issues: set[Issue]) -> None:
     text = _read_text(path)
     rel = path.relative_to(REPO_ROOT)
-
-    for match in ADAM_REPO_PATH_RE.finditer(text):
-        _add_issue(
-            issues,
-            "absolute_adam_repo_path",
-            path,
-            f"{rel}: contains machine-specific repo path `{match.group(1)}`",
-        )
 
     for match in RETIRED_SHARED_RE.finditer(text):
         _add_issue(

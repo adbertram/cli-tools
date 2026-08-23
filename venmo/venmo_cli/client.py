@@ -8,7 +8,7 @@ exposes Venmo's private mobile API. This module wraps it for the CLI:
 - Transaction history retrieval via UserApi.get_user_transactions().
 - Output contract: records are returned as the raw Venmo API JSON payload
   (i.e. the `_json` attribute the venmo-api library hangs off each
-  Transaction object). This is intentional — Adam wants the full,
+  Transaction object). This is intentional: the CLI preserves the full,
   unfiltered transaction shape from the source by default. If Venmo adds
   fields server-side, downstream consumers see them immediately without
   a CLI release. We inject ONE convenience field at the top level:

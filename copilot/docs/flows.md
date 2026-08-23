@@ -98,22 +98,35 @@ copilot agent-flow export <flow-id> --definition-only --yaml
 
 # Export raw clientdata (for debugging)
 copilot agent-flow export <flow-id> --raw
+
+# Export the unpublished draft left by a "Save draft" in the web designer
+copilot agent-flow export <flow-id> --draft --yaml
 ```
 
 | Option | Description |
 |--------|-------------|
-| `-y, --yaml` | Output as YAML instead of JSON |
+| `-Y, --yaml` | Output as YAML instead of JSON |
 | `-o, --output` | Write output to file instead of stdout |
 | `-d, --definition-only` | Output only the flow definition (excludes metadata and connection references) |
 | `-r, --raw` | Output the raw clientdata string without parsing |
+| `--draft` | Export the unpublished (draft) definition instead of the published one |
 
 **Output Structure:**
 The export includes:
 - `name` - Flow display name
 - `workflowid` - Flow GUID
+- `version` - `published` or `draft`, matching the content actually returned
 - `description` - Flow description
 - `definition` - The flow definition containing triggers and actions
 - `connectionReferences` - Connection references used by the flow
+
+**`--draft` semantics:** the draft is read through the Dataverse
+`RetrieveUnpublished` function, which returns different data from a plain read
+only when the record was updated but not published. When the flow has no
+unpublished draft, `--draft` **fails** rather than returning the published
+definition labeled `draft`. A published export prints a stderr note when an
+unpublished draft exists, so the operator knows the export is not the newest
+definition.
 
 ### Import Agent Flow Definition
 
@@ -129,8 +142,14 @@ copilot agent-flow import <flow-id> -f flow.json
 # Also update connection references from the file
 copilot agent-flow import <flow-id> -f flow.yaml --include-connections
 
-# Dry run - validate without making changes
+# Dry run - validate without making changes (also reports the publish state)
 copilot agent-flow import <flow-id> -f flow.yaml --dry-run
+
+# Publish the flow after the import so the imported definition goes live
+copilot agent-flow import <flow-id> -f flow.yaml --publish
+
+# Overwrite an existing unpublished web-designer draft
+copilot agent-flow import <flow-id> -f flow.yaml --discard-draft
 ```
 
 | Option | Description |
@@ -138,6 +157,51 @@ copilot agent-flow import <flow-id> -f flow.yaml --dry-run
 | `-f, --file` | **(Required)** Path to YAML or JSON file containing the flow definition |
 | `-c, --include-connections` | Also update connection references from the file (default: preserve existing) |
 | `--dry-run` | Parse and validate the file without updating the flow |
+| `--discard-draft` | Publish an existing unpublished draft and immediately overwrite it with the imported definition. The draft edits are lost. |
+| `--publish` | Publish the flow after the import |
+
+#### Unpublished drafts block an import
+
+Saving a draft in the Power Automate or Copilot Studio web designer leaves the
+flow's active row in the Dataverse `ActiveUnpublished` state. Dataverse then
+rejects any published definition update with:
+
+```
+You are attempting to do a published update of publishable component in an
+unmodified active context when there exists an unpublished active row.
+... Component Type: 29 ... CurrentState=ActiveUnpublished
+```
+
+`agent-flow import` reads the publish state before it writes, so it refuses with
+an explanation instead of leaking that raw error. Component type 29 is the
+Dataverse Workflow (Process) table.
+
+Resolve it with one of:
+
+1. Keep the draft edits — publish the flow, then re-run the import:
+   ```bash
+   copilot agent-flow export <flow-id> --draft --yaml   # inspect the draft first
+   copilot agent-flow publish <flow-id>
+   copilot agent-flow import <flow-id> -f flow.yaml
+   ```
+2. Discard the draft edits in one command:
+   ```bash
+   copilot agent-flow import <flow-id> -f flow.yaml --discard-draft
+   ```
+   This publishes the pending draft to clear the `ActiveUnpublished` state and
+   immediately overwrites it with the imported definition.
+
+### Publish Agent Flow
+
+Promote an agent flow's unpublished (draft) definition to the published
+definition using the Dataverse `PublishXml` action.
+
+```bash
+copilot agent-flow publish <flow-id>
+```
+
+`publish` is distinct from `enable`/`disable`, which change the flow's
+activation state (`statecode`) rather than its publish layer.
 
 **Supported Input Formats:**
 
@@ -205,7 +269,52 @@ copilot agent-flow validate --list-rules
 - Invalid parameters that don't exist in the API
 - Connection reference format issues
 - Missing required fields
+- A missing `$connections` definition parameter
 - Expression syntax errors
+
+**The `$connections` Parameter:**
+
+A definition that uses connector operations, or that declares connection
+references, must declare `$connections` under `definition.parameters`:
+
+```yaml
+parameters:
+  $authentication:
+    defaultValue: {}
+    type: SecureObject
+  $connections:
+    defaultValue: {}
+    type: Object
+```
+
+Without it, `agent-flow create` and the Dataverse API accept the flow, and
+`agent-flow enable` then fails with:
+
+```
+HTTP 400 InvalidPowerFlow: The provided flow definition with a recurrent
+trigger is missing the required parameter '$connections'.
+```
+
+The `connections-parameter` rule raises that as a validation error, so
+`validate`, `create`, and `import` all reject the definition before a flow row
+exists.
+
+**Validation Scope:**
+
+The connection-reference and parameter rules inspect every connector-backed
+operation in the definition:
+
+- Both triggers and actions.
+- All six connector operation types: `OpenApiConnection`,
+  `OpenApiConnectionWebhook`, `OpenApiConnectionNotification`, `ApiConnection`,
+  `ApiConnectionWebhook`, and `ApiConnectionNotification`.
+- Operations nested inside `Scope`, `If` (including `else`), `Foreach`,
+  `Switch` (including each case and the default branch), and `Until`
+  containers, at any depth.
+
+The parameter rule checks path and query parameters only. Request-body
+parameters (`body` and `body/<field>`) hold per-app field values, so the rule
+does not flag them.
 
 **Exit Codes:**
 - `0` - Validation passed (may include warnings)

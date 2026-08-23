@@ -7,7 +7,7 @@ COMMAND_CREDENTIALS = {
 from typing import List, Optional
 
 import typer
-from cli_tools_shared.output import handle_error, print_json, print_table
+from cli_tools_shared.output import command, handle_error, print_json, print_table
 
 from ..client import get_client
 from .common import apply_properties, key_value_rows, properties_columns
@@ -17,6 +17,7 @@ app = typer.Typer(help="Manage ElevenLabs models", no_args_is_help=True)
 
 
 @app.command("list")
+@command
 def models_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", min=1, help="Maximum models to return"),
@@ -45,6 +46,7 @@ def models_list(
 
 
 @app.command("get")
+@command
 def models_get(
     model_id: str = typer.Argument(..., help="Model ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),

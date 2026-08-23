@@ -4,7 +4,7 @@ import httpx
 from typing import Optional
 
 from ..client import get_access_token, ClientError
-from cli_tools_shared.output import print_json, print_table, handle_error
+from cli_tools_shared.output import print_json, print_table, handle_error, command
 
 
 app = typer.Typer(help="Check user license assignments via Microsoft Graph")
@@ -125,6 +125,7 @@ def _list_options(
 
 
 @app.command("list")
+@command
 def list_licenses(
     user_principal_name: str = typer.Argument(
         ...,
@@ -141,6 +142,7 @@ def list_licenses(
 
 
 @app.command("get")
+@command
 def get_licenses(
     user_principal_name: str = typer.Argument(..., help="User principal name (e.g., user@domain.com)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display flat table of all service plans"),

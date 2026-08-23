@@ -96,6 +96,25 @@ def test_parse_no_name_no_color_strips_only_trailing_null_literal():
     assert parsed.location == "B-1"
 
 
+def test_parse_compound_missing_part_row_returns_each_part():
+    text = (
+        "Bricklink Order #31971224 missing 1 x 3456 (in Light Bluish Gray) "
+        "at location E-0947 and 1 x 32952 (in Tan) at location F-0124"
+    )
+
+    parsed = MissingPart.from_task_texts(7, text, completed=False)
+
+    assert [
+        (part.item_number, part.quantity, part.color_name, part.location)
+        for part in parsed
+    ] == [
+        ("3456", 1, "Light Bluish Gray", "E-0947"),
+        ("32952", 1, "Tan", "F-0124"),
+    ]
+    assert all(part.order_id == "31971224" for part in parsed)
+    assert all(part.item_name is None for part in parsed)
+
+
 # ============================================================================
 # `task complete --match-*` CliRunner tests
 # ============================================================================
@@ -151,6 +170,65 @@ def test_complete_match_single_match_completes_resolved_index(runner):
     assert '"index": 1' in result.stdout
     assert '"orderId": "30823995"' in result.stdout
     assert '"itemNumber": "75270-1"' in result.stdout
+
+
+def test_complete_match_item_set_completes_compound_row_once(runner):
+    rows = [
+        (
+            7,
+            "Bricklink Order #31971224 missing 1 x 3456 (in Light Bluish Gray) "
+            "at location E-0947 and 1 x 32952 (in Tan) at location F-0124",
+            False,
+        ),
+    ]
+    client = _build_fake_client(
+        _make_task_list(rows),
+        complete_result=TaskResult(success=True, message="Task 7 marked as complete"),
+    )
+
+    with patch("brickfreedom_cli.commands.task.get_client", return_value=client):
+        result = runner.invoke(
+            task_app,
+            [
+                "complete",
+                "--match-platform", "bricklink",
+                "--match-order-id", "31971224",
+                "--match-items-json",
+                '[{"itemNumber":"32952","quantity":1},{"itemNumber":"3456","quantity":1}]',
+            ],
+        )
+
+    assert result.exit_code == 0, result.output + (result.stderr or "")
+    client.complete_task.assert_called_once_with(7)
+    assert '"index": 7' in result.stdout
+    assert '"items"' in result.stdout
+
+
+def test_complete_match_item_set_rejects_partial_compound_row(runner):
+    rows = [
+        (
+            7,
+            "Bricklink Order #31971224 missing 1 x 3456 (in Light Bluish Gray) "
+            "at location E-0947 and 1 x 32952 (in Tan) at location F-0124",
+            False,
+        ),
+    ]
+    client = _build_fake_client(_make_task_list(rows))
+
+    with patch("brickfreedom_cli.commands.task.get_client", return_value=client):
+        result = runner.invoke(
+            task_app,
+            [
+                "complete",
+                "--match-platform", "bricklink",
+                "--match-order-id", "31971224",
+                "--match-items-json", '[{"itemNumber":"32952","quantity":1}]',
+            ],
+        )
+
+    assert result.exit_code != 0
+    assert "no matching missing-part task" in result.stdout
+    client.complete_task.assert_not_called()
 
 
 def test_complete_match_zero_matches_errors(runner):

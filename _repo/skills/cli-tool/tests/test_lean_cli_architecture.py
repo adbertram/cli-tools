@@ -77,11 +77,70 @@ def _contains_call(node: ast.AST) -> bool:
     return any(isinstance(child, ast.Call) for child in ast.walk(node))
 
 
+_LEAN_ALLOW_MARKER = "lean-cli-allow:"
+
+
+def _lean_allow_reason(source_lines: list[str], node: ast.stmt) -> str | None:
+    """Return the justification from an inline ``# lean-cli-allow: <reason>`` marker
+    on the statement's own source line(s), or ``None`` when absent.
+
+    Sanctioned, audited escape hatch for the rare package-init statement that must
+    run before any submodule import on every entry path: Python guarantees the
+    package ``__init__`` runs ahead of ``<pkg>.main`` / ``<pkg>.commands.*`` on a
+    bare ``import`` as well as the console script, so a command-path wrapper cannot
+    cover bare imports (e.g. a stale-bytecode purge for an editable, Dropbox-synced
+    install). A non-empty reason is required so the exception is self-documenting
+    and greppable in review; the rule stays strict for every unannotated statement.
+    """
+    start = node.lineno - 1
+    end = getattr(node, "end_lineno", node.lineno)
+    for line in source_lines[start:end]:
+        marker_index = line.find(_LEAN_ALLOW_MARKER)
+        if marker_index == -1:
+            continue
+        reason = line[marker_index + len(_LEAN_ALLOW_MARKER):].strip()
+        if reason:
+            return reason
+    return None
+
+
 def _is_browser_automation_base(base: ast.expr) -> bool:
     if isinstance(base, ast.Name):
         return base.id == "BrowserAutomation"
     if isinstance(base, ast.Attribute):
         return base.attr == "BrowserAutomation"
+    return False
+
+
+def _is_base_config_base(base: ast.expr) -> bool:
+    if isinstance(base, ast.Name):
+        return base.id == "BaseConfig"
+    if isinstance(base, ast.Attribute):
+        return base.attr == "BaseConfig"
+    return False
+
+
+def _defines_storage_dir(class_node: ast.ClassDef) -> bool:
+    """Return True if the class body defines ``storage_dir`` directly.
+
+    Covers a property/method (``def storage_dir``, sync or async) as well as a
+    plain class-level ``storage_dir = ...`` assignment. Inherited definitions on
+    BaseConfig do not appear in the subclass body and are correctly ignored.
+    """
+    for stmt in class_node.body:
+        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)) and stmt.name == "storage_dir":
+            return True
+        if isinstance(stmt, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "storage_dir"
+            for target in stmt.targets
+        ):
+            return True
+        if (
+            isinstance(stmt, ast.AnnAssign)
+            and isinstance(stmt.target, ast.Name)
+            and stmt.target.id == "storage_dir"
+        ):
+            return True
     return False
 
 
@@ -149,7 +208,15 @@ def test_command_credential_modules_are_metadata_only(cli_name, cli_dir, command
 
 
 def test_package_init_has_no_runtime_work(cli_name, cli_dir, command_filter):
-    """Package import must not run setup, warnings filters, or other side effects."""
+    """Package import must not run setup, warnings filters, or other side effects.
+
+    A single statement may opt out with an inline ``# lean-cli-allow: <reason>``
+    marker when the work genuinely must run at package-import time on every entry
+    path (Python guarantees ``__init__`` runs before any submodule import, so a
+    command-path wrapper cannot cover bare ``import <pkg>.main``). The reason is
+    required and reviewed in code review; the rule stays strict for every
+    unannotated statement.
+    """
     if command_filter:
         pytest.skip("Skipping (command filter active)")
 
@@ -157,16 +224,24 @@ def test_package_init_has_no_runtime_work(cli_name, cli_dir, command_filter):
     if not init_file.exists():
         return
 
-    tree = ast.parse(init_file.read_text())
+    source = init_file.read_text()
+    source_lines = source.splitlines()
+    tree = ast.parse(source)
     for node in tree.body:
         if _is_docstring(node) or isinstance(node, (ast.Import, ast.ImportFrom)):
             continue
         if isinstance(node, (ast.Assign, ast.AnnAssign)) and not _contains_call(node):
             continue
+        if _lean_allow_reason(source_lines, node):
+            continue
         pytest.fail(
             f"{init_file.relative_to(cli_dir)} performs runtime work at import time.\n"
             "Fix: keep package __init__.py to docstrings, imports, and static "
-            "metadata assignments. Put executable setup in the command path."
+            "metadata assignments. Put executable setup in the command path.\n"
+            "If the statement genuinely must run before any submodule import on "
+            "every entry path (e.g. a stale-bytecode purge for an editable, "
+            "Dropbox-synced install), annotate that one statement with an inline "
+            "'# lean-cli-allow: <reason>' marker."
         )
 
 
@@ -197,4 +272,38 @@ def test_browser_automation_subclasses_are_declarative(cli_name, cli_dir, comman
                 "methods or nested code on top of BrowserAutomation.\n"
                 "Fix: leave auth lifecycle behavior in cli_tools_shared and keep "
                 "the subclass to declarative hook constants only."
+            )
+
+
+def test_config_does_not_override_storage_dir(cli_name, cli_dir, command_filter):
+    """A tool's Config subclass must not override ``storage_dir``.
+
+    ``BaseConfig.storage_dir`` already returns ``self.get_profile_data_dir()``,
+    the per-profile data directory. A per-tool override that merely re-returns
+    ``get_profile_data_dir()`` is dead redundancy, and a variant that returns
+    anything else (e.g. ``self.tool_dir``) reintroduces the slack cross-profile
+    cache bleed-through bug. Either way, tools must inherit the base definition.
+    """
+    if command_filter:
+        pytest.skip("Skipping (command filter active)")
+
+    config_file = _pkg_dir(cli_dir, cli_name) / "config.py"
+    if not config_file.exists():
+        pytest.skip("No config.py")
+
+    tree = ast.parse(config_file.read_text())
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef):
+            continue
+        if not any(_is_base_config_base(base) for base in node.bases):
+            continue
+        if _defines_storage_dir(node):
+            pytest.fail(
+                f"{config_file.relative_to(cli_dir)} class {node.name} overrides "
+                "storage_dir.\n"
+                "Fix: delete the storage_dir override. BaseConfig.storage_dir "
+                "already returns the per-profile data dir "
+                "(self.get_profile_data_dir()). A redundant override invites "
+                "drift, and a tool_dir-style variant causes cross-profile cache "
+                "bleed-through (the slack bug)."
             )

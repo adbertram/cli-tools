@@ -22,17 +22,31 @@ manus <command-group> <action> [arguments] [options]
 | Get task metadata | `manus task get TASK_ID` |
 | List recent tasks | `manus task list --table` |
 | List task messages | `manus task messages TASK_ID --limit 20` |
+| Check available credits | `manus usage available-credits` |
 | Confirm a waiting task | `manus task confirm TASK_ID EVENT_ID` |
 | List profiles | `manus auth profiles list --table` |
 | Set default profile | `manus auth profiles select PROFILE_NAME` |
 | Inspect cache commands | `manus cache --help` |
 
 Auth status output uses the shared profile shape: `{"profiles":[{"name":"default","authenticated":true,"credential_types":{...}}]}`. Read `auth profiles[].authenticated` for per-profile status; do not expect a flat top-level `authenticated` field.
+
+`manus task create` checks `usage.availableCredits` and fails before submission when the authoritative `total_credits` field is present and at or below zero. It does not treat `max_refresh_credits` (the next refresh grant cap) or `pro_monthly_credits` (the plan quota) as current spendable balance. When the live response omits `total_credits`, `task.create` remains the admission authority because Manus does not publish a reliable per-task cost estimate. Only a 429 with `error.code: rate_limited` is retried; `resource_exhausted` credit failures return immediately.
+
+**A balance above zero is not proof that a run is affordable.** `task create` performs a zero check, not an affordability check, so it admits any positive balance. A run admitted at a 98-credit balance burned 100 credits, ended at `-2`, and produced no output. Real per-task costs read from the API's own `credit_usage` field (`manus task list --limit 200`, 2026-07-27): fact-check chunks cost 42 to 152 credits; link-validation tasks cost 89 to 443 credits.
+
+Any caller that submits Manus tasks must therefore add its own pre-submission gate:
+
+- Reserve an observed `credit_usage` floor per task, taken from that workload's own past tasks. Scale the requirement by the number of tasks the run submits.
+- Read the live balance with `manus usage available-credits` and use `total_credits` only.
+- Treat an omitted `total_credits` as "balance undisclosed", not zero: admit the run and report that the gate could not predict affordability.
+- Refuse before submission, name the observed balance and the required amount, and exit non-zero. Never guess a balance when the query fails or breaks its contract.
+
+Reference gates: `/Users/adam/Dropbox/GitRepos/Agents/skills/global/fact-check/scripts/manus_fact_check.js` (150 credits per chunk, raised from the live `task.credit_usage`) and `/Users/adam/Dropbox/GitRepos/Agents/ClientContentWriter/scripts/manus_link_validation_gate.js` (450 credits per link-validation task). Test a gate with a stubbed `manus` executable; never spend credits to test one.
 </quick_start>
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `manus` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `manus` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 
@@ -40,6 +54,33 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **auth** -- Manage API authentication (login, logout, status, refresh, test)
 - **task** -- Manage Manus API v2 tasks (create, send, continue alias, get, wait, list, messages, update, stop, delete, confirm)
 - **auth** -- Authentication commands and nested `auth profiles` management
+</principle>
+
+<principle name="Wait Semantics">
+`task create`, `task send`, and `task wait` with `--wait` (the default) poll until the task reaches `stopped`, `error`, or a `waiting` status with a confirmable event (`status_update.status_detail.waiting_for_event_id`, for example `messageAskUser`). A `waiting` status without a confirmation event (queued task that has not started running) is non-terminal; the CLI keeps polling. Do not add manual `task get` polling loops around `--wait`. On `--timeout` expiry the command exits non-zero with a timeout error.
+</principle>
+
+<principle name="Structured Output Schema Constraints">
+`--structured-output-schema` / `--structured-output-schema-file` only accept the restricted JSON Schema subset documented at `https://open.manus.ai/docs/v2/structured-output` (basic `type`, `properties`, `required`, `additionalProperties`, `items`, `enum`, `description`, `anyOf`, `$ref`/`$defs`). Validation-constraint keywords -- `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`, `pattern`, `format`, `minLength`, `maxLength`, `minItems`, `maxItems`, `uniqueItems`, `minProperties`, `maxProperties`, `allOf`, `oneOf`, `not`, `if`/`then`/`else` -- are rejected by the API with a generic `400 invalid_argument: "unexpected error from node server"` that gives no hint which keyword caused it (confirmed by live repro against the API). The CLI strips these keywords automatically before submission and prints a `Warning:` line naming what it removed; it does not silently change schema shape. If a field needs a bound communicated to the model, put it in that field's `description` (e.g. `"description": "Integer, must be 0 or greater"`) instead of a constraint keyword.
+</principle>
+
+<principle name="Preserve Producer Status">
+When wrapping `manus task create`, `manus task send`, `manus task wait`, or any other Manus producer command with trailing reporting, raw-output printing, cleanup, or JSON inspection, capture the Manus command status immediately and exit with that status after reporting. Do not let a later successful `printf`, `cat`, `jq`, `rm`, or summary command mask a timeout or API failure.
+
+Use this shape:
+```bash
+set +e
+manus task create --prompt-file "$prompt_file" --agent-profile manus-1.6 --timeout 1200 --poll 5 --title "$title" >"$output_file" 2>"$stderr_file"
+manus_rc=$?
+set -e
+
+if [ "$manus_rc" -ne 0 ]; then
+  printf '%s\n' 'MANUS_COMMAND_FAILED'
+  cat "$stderr_file" >&2
+fi
+
+exit "$manus_rc"
+```
 </principle>
 </essential_principles>
 

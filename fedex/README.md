@@ -1,6 +1,10 @@
 # Fedex CLI
 
-A command-line interface for the [FedEx Pickup API](https://developer.fedex.com/api/en-us/catalog/pickup/v1/docs.html). Schedule, check availability, and cancel FedEx pickups.
+## DESCRIPTION
+
+The `fedex` CLI provides a command-line interface for Fedex API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 
@@ -101,7 +105,7 @@ fedex pickup availability --table
 
 ## Configuration
 
-Credentials are stored in a `.env` file in the package directory:
+Authentication profile files live under `~/.local/share/cli-tools/fedex/authentication_profiles/<profile>/`; non-auth defaults live in `~/.local/share/cli-tools/fedex/.env`:
 
 ```bash
 # OAuth Credentials

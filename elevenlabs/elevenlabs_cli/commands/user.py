@@ -6,7 +6,7 @@ COMMAND_CREDENTIALS = {
 from typing import Optional
 
 import typer
-from cli_tools_shared.output import handle_error, print_json, print_table
+from cli_tools_shared.output import command, handle_error, print_json, print_table
 
 from ..client import get_client
 from .common import apply_properties, key_value_rows
@@ -16,6 +16,7 @@ app = typer.Typer(help="Inspect ElevenLabs user account data", no_args_is_help=T
 
 
 @app.command("subscription")
+@command
 def user_subscription(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),

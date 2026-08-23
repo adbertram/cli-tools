@@ -6,6 +6,9 @@ COMMAND_CREDENTIALS = {
     "create": [
         "personal_access_token"
     ],
+    "delete": [
+        "personal_access_token"
+    ],
     "list": [
         "personal_access_token"
     ],
@@ -22,9 +25,15 @@ import typer
 from ..client import get_client
 from ..commands.records import resolve_base_id
 from cli_tools_shared.filters import apply_filters, apply_properties_filter, validate_filters
-from cli_tools_shared.output import print_json, print_table, handle_error, print_success
+from cli_tools_shared.output import print_json, print_table, print_success, command
 
 app = typer.Typer(help="Manage Airtable fields", no_args_is_help=True)
+
+UNSUPPORTED_FIELD_DELETE_MESSAGE = (
+    "Airtable's public Web/Meta API does not support deleting fields. "
+    "Delete the field in Airtable's web UI, then verify removal with "
+    "`airtable fields get` or `airtable fields list --filter name:eq:<field name>`."
+)
 
 
 def parse_options(options: Optional[str]) -> Optional[Dict[str, Any]]:
@@ -57,6 +66,7 @@ def print_field(result: Dict[str, Any], table: bool) -> None:
 
 
 @app.command("list")
+@command
 def fields_list(
     table_id: str = typer.Argument(..., help="The table ID or table name"),
     base_id: Optional[str] = typer.Option(None, "--base", "-b", help="The base ID (defaults to AIRTABLE_BASE_ID)"),
@@ -76,39 +86,37 @@ def fields_list(
         airtable fields list tblXXXXXXXXXXXXXX
         airtable fields list "Slides" --table
     """
-    try:
-        resolved_base_id = resolve_base_id(base_id)
-        client = get_client()
-        result = client.list_fields(
-            base_id=resolved_base_id,
-            table_id=table_id,
-        )
-        if filter:
-            validate_filters(filter)
-            result = apply_filters(result, filter)
-        if limit and len(result) > limit:
-            result = result[:limit]
-        if properties:
-            result = apply_properties_filter(result, properties)
-        if not table:
-            print_json(result)
-            return
+    resolved_base_id = resolve_base_id(base_id)
+    client = get_client()
+    result = client.list_fields(
+        base_id=resolved_base_id,
+        table_id=table_id,
+    )
+    if filter:
+        validate_filters(filter)
+        result = apply_filters(result, filter)
+    if limit and len(result) > limit:
+        result = result[:limit]
+    if properties:
+        result = apply_properties_filter(result, properties)
+    if not table:
+        print_json(result)
+        return
 
-        rows = []
-        for field in result:
-            rows.append({
-                "id": field.get("id", ""),
-                "name": field.get("name", ""),
-                "type": field.get("type", ""),
-                "description": field.get("description", ""),
-                "options": json.dumps(field.get("options", {}), sort_keys=True),
-            })
-        print_table(rows, ["id", "name", "type", "description", "options"], ["ID", "Name", "Type", "Description", "Options"])
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    rows = []
+    for field in result:
+        rows.append({
+            "id": field.get("id", ""),
+            "name": field.get("name", ""),
+            "type": field.get("type", ""),
+            "description": field.get("description", ""),
+            "options": json.dumps(field.get("options", {}), sort_keys=True),
+        })
+    print_table(rows, ["id", "name", "type", "description", "options"], ["ID", "Name", "Type", "Description", "Options"])
 
 
 @app.command("get")
+@command
 def fields_get(
     table_id: str = typer.Argument(..., help="The table ID or table name"),
     field_id: str = typer.Argument(..., help="The field ID or field name"),
@@ -116,25 +124,22 @@ def fields_get(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
 ):
     """Get a single field schema by ID or name."""
-    try:
-        resolved_base_id = resolve_base_id(base_id)
-        client = get_client()
-        result = client.get_field(
-            base_id=resolved_base_id,
-            table_id=table_id,
-            field_id=field_id,
-        )
-        print_field(result, table)
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
-
+    resolved_base_id = resolve_base_id(base_id)
+    client = get_client()
+    result = client.get_field(
+        base_id=resolved_base_id,
+        table_id=table_id,
+        field_id=field_id,
+    )
+    print_field(result, table)
 
 
 @app.command("create")
+@command
 def fields_create(
-    table_id: str = typer.Argument(..., help="The table ID, beginning with tbl"),
+    table_id: str = typer.Argument(..., help="The table ID or table name"),
     name: str = typer.Argument(..., help="The field name"),
-    field_type: str = typer.Argument(..., help="The Airtable field type, such as singleLineText"),
+    field_type: str = typer.Argument(..., help="The Airtable create-field type, such as singleLineText or checkbox"),
     base_id: Optional[str] = typer.Option(None, "--base", "-b", help="The base ID (defaults to AIRTABLE_BASE_ID)"),
     description: Optional[str] = typer.Option(None, "--description", "-d", help="Field description"),
     options: Optional[str] = typer.Option(None, "--options", "-o", help="Field options as a JSON object"),
@@ -144,30 +149,37 @@ def fields_create(
     Create a field in an Airtable table.
 
     Examples:
+        airtable fields create "Tasks" "Status" singleLineText
         airtable fields create tblXXXXXXXXXXXXXX "Status" singleLineText
-        airtable fields create tblXXXXXXXXXXXXXX "Done" checkbox --options '{"icon":"check","color":"greenBright"}'
+        airtable fields create "Tasks" "Done" checkbox --options '{"icon":"check","color":"greenBright"}'
+
+    Do not create lookup fields through this command. Airtable has rejected
+    both the fields-list read type multipleLookupValues and the documented
+    create-field type lookup for lookup creation; create lookup fields in
+    Airtable's web UI, then verify them with fields list/get.
+    Do not treat rollup creation as a reliable production schema path through
+    this command; create rollups in Airtable's web UI, then verify them with
+    fields list/get.
     """
-    try:
-        parsed_options = parse_options(options)
-        resolved_base_id = resolve_base_id(base_id)
-        client = get_client()
-        result = client.create_field(
-            base_id=resolved_base_id,
-            table_id=table_id,
-            name=name,
-            field_type=field_type,
-            description=description,
-            options=parsed_options,
-        )
-        print_success(f"Field created with ID: {result.get('id')}")
-        print_field(result, table)
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    parsed_options = parse_options(options)
+    resolved_base_id = resolve_base_id(base_id)
+    client = get_client()
+    result = client.create_field(
+        base_id=resolved_base_id,
+        table_id=table_id,
+        name=name,
+        field_type=field_type,
+        description=description,
+        options=parsed_options,
+    )
+    print_success(f"Field created with ID: {result.get('id')}")
+    print_field(result, table)
 
 
 @app.command("update")
+@command
 def fields_update(
-    table_id: str = typer.Argument(..., help="The table ID, beginning with tbl"),
+    table_id: str = typer.Argument(..., help="The table ID or table name"),
     field_id: str = typer.Argument(..., help="The field ID, beginning with fld"),
     base_id: Optional[str] = typer.Option(None, "--base", "-b", help="The base ID (defaults to AIRTABLE_BASE_ID)"),
     name: Optional[str] = typer.Option(None, "--name", "-n", help="New field name"),
@@ -178,25 +190,45 @@ def fields_update(
     """
     Update a field's name, description, or options.
 
+    Note: Airtable's API cannot edit a select field's choices (add/remove/
+    rename/recolor/reorder) here. Add a choice via `records update ... --typecast`;
+    remove or rename choices in the Airtable web UI.
+
     Examples:
+        airtable fields update "Tasks" fldXXXXXXXXXXXXXX --name "New Status"
         airtable fields update tblXXXXXXXXXXXXXX fldXXXXXXXXXXXXXX --name "New Status"
-        airtable fields update tblXXXXXXXXXXXXXX fldXXXXXXXXXXXXXX --options '{"formula":"{Hours} * {Rate}"}'
+        airtable fields update "Tasks" fldXXXXXXXXXXXXXX --options '{"formula":"{Hours} * {Rate}"}'
     """
-    try:
-        parsed_options = parse_options(options)
-        if name is None and description is None and parsed_options is None:
-            raise ValueError("At least one of --name, --description, or --options must be specified")
-        resolved_base_id = resolve_base_id(base_id)
-        client = get_client()
-        result = client.update_field(
-            base_id=resolved_base_id,
-            table_id=table_id,
-            field_id=field_id,
-            name=name,
-            description=description,
-            options=parsed_options,
-        )
-        print_success(f"Field {field_id} updated successfully")
-        print_field(result, table)
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    parsed_options = parse_options(options)
+    if name is None and description is None and parsed_options is None:
+        raise ValueError("At least one of --name, --description, or --options must be specified")
+    resolved_base_id = resolve_base_id(base_id)
+    client = get_client()
+    result = client.update_field(
+        base_id=resolved_base_id,
+        table_id=table_id,
+        field_id=field_id,
+        name=name,
+        description=description,
+        options=parsed_options,
+    )
+    print_success(f"Field {field_id} updated successfully")
+    print_field(result, table)
+
+
+@app.command("delete")
+@command
+def fields_delete(
+    table_id: str = typer.Argument(..., help="The table ID or table name"),
+    field_id: str = typer.Argument(..., help="The field ID, beginning with fld"),
+    base_id: Optional[str] = typer.Option(None, "--base", "-b", help="The base ID (defaults to AIRTABLE_BASE_ID)"),
+    confirm: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+):
+    """
+    Report that field deletion is not supported by Airtable's public API.
+
+    Examples:
+        airtable fields delete tblXXXXXXXXXXXXXX fldXXXXXXXXXXXXXX
+        airtable fields delete tblXXXXXXXXXXXXXX fldXXXXXXXXXXXXXX --yes
+    """
+    raise ValueError(UNSUPPORTED_FIELD_DELETE_MESSAGE)

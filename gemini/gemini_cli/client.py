@@ -10,6 +10,7 @@ from google.genai import errors as genai_errors
 
 from .config import get_config
 from .usage import record_usage
+from .file_types import resolve_upload_mime_type
 
 _RATE_LIMIT_DELAYS = [30, 60, 120, 240]
 _FILES_LIST_TIMEOUT_MS = 25_000
@@ -111,7 +112,14 @@ class GeminiClient:
             if not file_path_obj.exists():
                 raise ClientError(f"File not found: {file_path}")
 
-            uploaded_file = _retry_on_rate_limit(self.client.files.upload, file=file_path)
+            # Resolve an explicit mimetype so the Files API never fails on its
+            # own mimetype auto-detection (e.g. "Unknown mime type" for .md).
+            mime_type = resolve_upload_mime_type(file_path_obj)
+            uploaded_file = _retry_on_rate_limit(
+                self.client.files.upload,
+                file=file_path,
+                config=types.UploadFileConfig(mime_type=mime_type),
+            )
             return uploaded_file
         except Exception as e:
             raise ClientError(f"Failed to upload file: {e}")

@@ -1,6 +1,7 @@
 """Configuration management for Facebook CLI."""
 from pathlib import Path
 
+from cli_tools_shared.browser.user_agent import derive_real_chrome_user_agent
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
 from cli_tools_shared.credentials import CredentialType
 
@@ -12,8 +13,8 @@ class Config(BaseConfig):
 
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.facebook.com"
-    ADDITIONAL_AUTH_FIELDS = ("USERNAME", "PASSWORD")
-    ADDITIONAL_SENSITIVE_AUTH_FIELDS = ("USERNAME", "PASSWORD")
+    ADDITIONAL_AUTH_FIELDS = ("USERNAME", "PASSWORD", "AUTH_COOKIES_JSON")
+    ADDITIONAL_SENSITIVE_AUTH_FIELDS = ("USERNAME", "PASSWORD", "AUTH_COOKIES_JSON")
 
     def __init__(self, profile=None):
         super().__init__(
@@ -22,9 +23,12 @@ class Config(BaseConfig):
         )
 
     @property
-    def storage_dir(self) -> Path:
-        """Get profile data directory used by shared cache helpers."""
-        return self.get_profile_data_dir()
+    def browser_user_agent(self) -> str:
+        """Use the installed real-Chrome UA for headed and headless sessions."""
+        override = self._get("BROWSER_USER_AGENT")
+        if override:
+            return override
+        return derive_real_chrome_user_agent()
 
     @property
     def cache_dir(self) -> Path:

@@ -1,8 +1,10 @@
 # Medium CLI
 
-Browser-based draft creation for Medium through Medium's real web composer.
+## DESCRIPTION
 
-This CLI no longer uses Medium integration tokens. Medium's legacy API is archived and Medium no longer issues new integration tokens, so this tool now authenticates with a saved browser session and automates the real `medium.com/new-story` editor.
+The `medium` CLI lets you create Medium drafts through Medium's web composer.
+
+Use it when you need repeatable access to medium workflows that are only available through a signed-in website.
 
 ## Installation
 

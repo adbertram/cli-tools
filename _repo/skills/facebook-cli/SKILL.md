@@ -58,13 +58,10 @@ This file contains complete command syntax, all arguments, all options, and usag
 - `verification`: `"confirmed"` (any stage fired) or `"render-timeout-likely-success"` (stage 1 fired, stages 2-3 inconclusive — treat as success).
 - `verificationDetails.signal`: which stage confirmed (`composer-cleared`, `count-delta`, `text-appeared`, or `composer-cleared-but-no-other-evidence`).
 - `verificationDetails.commentCountBefore` / `commentCountAfter`: `[role="article"]` count delta inside the post.
-- Exact-post verification (`groups posts get`) additionally returns `render-timeout-likely-success` with signal `composer-cleared-but-no-other-evidence` when the composer cleared but the comment sits outside the extracted window — NEVER retry that outcome either; a retry creates a real duplicate (2026-08-22: four retries produced five identical comments on one post).
 
-A non-zero exit ONLY happens when all three verification signals fail (true submit failure). Never retry on `render-timeout-likely-success` — duplicate comments are worse than missed verification. Facebook also collapses identical duplicate comments server-side: retrying the exact same text after an ambiguous result may leave ONE comment, not several (observed live 2026-08-22), but never rely on that — the retry discipline above is the contract.
+A non-zero exit ONLY happens when all three verification signals fail (true submit failure). Never retry on `render-timeout-likely-success` — duplicate comments are worse than missed verification.
 
 Facebook strips Markdown (`**bold**`, `[label](url)`) when rendering comments — never use raw substring matching against submitted text to verify a comment landed.
-
-`groups posts get` merges the Relay payload window with the rendered-DOM comment tree (which expands "View more replies" controls), so `hasCommented`-style checks see the complete visible thread. If rendered extraction fails, it falls back to the Relay window only and logs a warning naming the gap.
 </principle>
 
 <principle name="Marketplace Prices, Currency, and Empty Results">

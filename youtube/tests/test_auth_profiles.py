@@ -44,7 +44,7 @@ def _configure_temp_profile_store(monkeypatch, tmp_path):
 def test_profiles_create_requires_auth_type(monkeypatch, tmp_path):
     _configure_temp_profile_store(monkeypatch, tmp_path)
 
-    result = RUNNER.invoke(app, ["profiles", "create", "brickbuddy"])
+    result = RUNNER.invoke(app, ["profiles", "create", "demo-profile"])
 
     assert result.exit_code == 2, result.output
     assert "Missing option '--auth-type'" in result.output
@@ -58,7 +58,7 @@ def test_profiles_create_prompts_for_client_credentials(monkeypatch, tmp_path):
         [
             "profiles",
             "create",
-            "brickbuddy",
+            "demo-profile",
             "--auth-type",
             YOUTUBE_PROFILE_AUTH_TYPE,
         ],
@@ -68,10 +68,10 @@ def test_profiles_create_prompts_for_client_credentials(monkeypatch, tmp_path):
     assert result.exit_code == 0, result.output
     assert "Enter OAuth Client ID" in result.output
 
-    content = (profiles_dir / "brickbuddy" / ".env").read_text()
+    content = (profiles_dir / "demo-profile" / ".env").read_text()
     assert "AUTH_TYPE='google_oauth_desktop'" in content
     assert "CLIENT_ID='client-id-123'" in content
-    assert "CLIENT_SECRET='secret://youtube-brickbuddy-client-secret'" in content
+    assert "CLIENT_SECRET='secret://youtube-demo-profile-client-secret'" in content
 
 
 def test_profiles_create_accepts_auth_params(monkeypatch, tmp_path):
@@ -82,7 +82,7 @@ def test_profiles_create_accepts_auth_params(monkeypatch, tmp_path):
         [
             "profiles",
             "create",
-            "brickbuddy",
+            "demo-profile",
             "--auth-type",
             YOUTUBE_PROFILE_AUTH_TYPE,
             "--auth-param",
@@ -96,7 +96,7 @@ def test_profiles_create_accepts_auth_params(monkeypatch, tmp_path):
     assert result.exit_code == 0, result.output
     assert "Enter OAuth Client ID" not in result.output
 
-    content = (profiles_dir / "brickbuddy" / ".env").read_text()
+    content = (profiles_dir / "demo-profile" / ".env").read_text()
     assert "AUTH_TYPE='google_oauth_desktop'" in content
     assert "CLIENT_ID='client-id-123'" in content
-    assert "CLIENT_SECRET='secret://youtube-brickbuddy-client-secret'" in content
+    assert "CLIENT_SECRET='secret://youtube-demo-profile-client-secret'" in content

@@ -22,11 +22,6 @@ class Config(BaseConfig):
         )
 
     @property
-    def storage_dir(self) -> Path:
-        """Profile-aware storage directory for runtime data."""
-        return self.get_profile_data_dir()
-
-    @property
     def headless(self) -> bool:
         val = self._get("HEADLESS")
         if val is None:

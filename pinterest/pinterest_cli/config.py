@@ -1,5 +1,4 @@
 """Configuration management for Pinterest CLI."""
-from pathlib import Path
 from typing import Optional
 
 import requests
@@ -29,11 +28,6 @@ class Config(BaseConfig):
     def OAUTH_TOKEN_URL(self) -> str:
         """Pinterest token endpoint follows the configured API host."""
         return f"{self.base_url}/oauth/token"
-
-    @property
-    def storage_dir(self) -> Path:
-        """Directory used by shared cache/profile helpers."""
-        return self.get_profile_data_dir()
 
     @property
     def refresh_token_expires_at(self) -> Optional[str]:

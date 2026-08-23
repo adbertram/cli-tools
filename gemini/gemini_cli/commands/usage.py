@@ -3,7 +3,7 @@ from enum import Enum
 import typer
 
 from ..usage import get_usage_summary, get_model_breakdown, clear_usage_data
-from cli_tools_shared.output import print_json, print_table, print_error, print_success, print_info, handle_error
+from cli_tools_shared.output import command, print_json, print_table, print_error, print_success, print_info, handle_error
 
 app = typer.Typer(help="View API usage statistics")
 
@@ -191,6 +191,7 @@ def _show_cloud(days: int, table: bool, by_model: bool, daily: bool):
 
 
 @app.command("show")
+@command
 def usage_show(
     days: int = typer.Option(30, "--days", "-d", help="Number of days to show"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -224,6 +225,7 @@ def usage_show(
 
 
 @app.command("setup")
+@command
 def usage_setup(
     table_id: str = typer.Argument(..., help="BigQuery billing table ID (project.dataset.table)"),
     save_anyway: bool = typer.Option(
@@ -280,6 +282,7 @@ def usage_setup(
 
 
 @app.command("clear")
+@command
 def usage_clear(
     confirm: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
 ):

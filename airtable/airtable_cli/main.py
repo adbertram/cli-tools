@@ -22,10 +22,11 @@ app.add_typer(create_auth_app(get_config, tool_name="airtable"), name="auth", he
 app.add_typer(create_cache_app(get_config), name="cache")
 
 # Register command modules
-from .commands import fields, records, tables
+from .commands import bases, fields, records, tables
 register_commands(app, get_config, records, name="records", help="Manage Airtable records")
 register_commands(app, get_config, fields, name="fields", help="Manage Airtable fields")
 register_commands(app, get_config, tables, name="tables", help="Manage Airtable tables")
+register_commands(app, get_config, bases, name="bases", help="Discover Airtable bases")
 
 
 def main():

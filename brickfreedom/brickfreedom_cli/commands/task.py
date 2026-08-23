@@ -76,17 +76,40 @@ def task_list(
 
         # Filter by task type
         if task_type == TaskType.CUSTOMER_REPLACEMENT_PART:
+            import sys
             from ..models import ReplacementPartTask, ReplacementPartTaskList
             replacement_tasks = []
+            unparsed_texts: List[str] = []
             for task in tasks:
-                parsed = ReplacementPartTask.from_task_text(task.index, task.text, task.completed)
-                if parsed:
+                single = ReplacementPartTask.from_task_text(task.index, task.text, task.completed)
+                if single:
+                    parsed_items = [single]
+                else:
+                    parsed_items = ReplacementPartTask.from_replacement_addition_text(
+                        task.index, task.text, task.completed
+                    )
+                    if not parsed_items:
+                        unparsed_texts.append(task.text)
+
+                for parsed in parsed_items:
                     # Apply order_id filter if specified
                     if order_id:
                         if parsed.order_id == order_id:
                             replacement_tasks.append(parsed)
                     else:
                         replacement_tasks.append(parsed)
+
+            unparsed_count = len(unparsed_texts)
+            if unparsed_count:
+                print(
+                    f"[brickfreedom] WARNING: {unparsed_count} task row(s) did not match any known "
+                    f"customer-replacement-part format ([REPLACEMENT] or [REPLACEMENT/ADDITION]) and were dropped. "
+                    f"Run `brickfreedom task list --type customer-replacement-part --debug-unparsed` to see them.",
+                    file=sys.stderr,
+                )
+            if debug_unparsed:
+                for raw in unparsed_texts:
+                    print(f"[unparsed] {raw}", file=sys.stderr)
 
             # Apply limit
             replacement_tasks = replacement_tasks[:limit]
@@ -102,14 +125,18 @@ def task_list(
                         "color": t.color[:15],
                         "qty": t.qty,
                         "loc": t.location or "",
+                        "kind": "ADD" if t.task_kind == "replacement_addition" else "",
                         "done": "✓" if t.completed else "",
                     }
                     for t in replacement_tasks
                 ]
-                print_table(rows, ["index", "platform", "customer", "order", "part", "color", "qty", "loc", "done"],
-                           ["#", "PL", "Customer", "Order", "Part", "Color", "Qty", "Loc", "Done"])
+                print_table(rows, ["index", "platform", "customer", "order", "part", "color", "qty", "loc", "kind", "done"],
+                           ["#", "PL", "Customer", "Order", "Part", "Color", "Qty", "Loc", "Kind", "Done"])
             else:
-                print_json(ReplacementPartTaskList(tasks=replacement_tasks))
+                result_model = ReplacementPartTaskList(tasks=replacement_tasks)
+                payload = result_model.model_dump()
+                payload["unparsed_count"] = unparsed_count
+                print_json(payload)
             return
 
         if task_type == TaskType.MISSING_PART:
@@ -118,14 +145,15 @@ def task_list(
             missing_parts = []
             unparsed_texts: List[str] = []
             for task in tasks:
-                parsed = MissingPart.from_task_text(task.index, task.text, task.completed)
-                if parsed:
-                    # Apply order_id filter if specified
-                    if order_id:
-                        if parsed.order_id == order_id:
+                parsed_parts = MissingPart.from_task_texts(task.index, task.text, task.completed)
+                if parsed_parts:
+                    for parsed in parsed_parts:
+                        # Apply order_id filter if specified
+                        if order_id:
+                            if parsed.order_id == order_id:
+                                missing_parts.append(parsed)
+                        else:
                             missing_parts.append(parsed)
-                    else:
-                        missing_parts.append(parsed)
                 else:
                     unparsed_texts.append(task.text)
 
@@ -398,6 +426,11 @@ def task_complete(
         "--match-quantity",
         help="Match a missing-part task by quantity (use to disambiguate when multiple rows match). Cannot be combined with positional index.",
     ),
+    match_items_json: Optional[str] = typer.Option(
+        None,
+        "--match-items-json",
+        help='Match one physical missing-part task row by its complete item set as JSON: [{"itemNumber":"3001","quantity":1}]. Requires --match-platform and --match-order-id.',
+    ),
 ):
     """
     Mark a task as complete by 1-based index, by content match, or --bulk.
@@ -434,7 +467,7 @@ def task_complete(
             "item_number": match_item_number,
             "quantity": match_quantity,
         }
-        any_match_flag = any(v is not None for v in match_flags.values())
+        any_match_flag = any(v is not None for v in match_flags.values()) or match_items_json is not None
 
         if any_match_flag:
             # Match mode: cannot mix with positional or --bulk.
@@ -443,7 +476,16 @@ def task_complete(
                     "--match-* flags cannot be combined with a positional index or --bulk. "
                     "Use either positional, --bulk, or --match-* (not multiple)."
                 )
-            _complete_by_match(match_flags)
+            if match_items_json is not None:
+                if match_item_number is not None or match_quantity is not None:
+                    raise ClientError(
+                        "--match-items-json cannot be combined with --match-item-number or --match-quantity"
+                    )
+                if match_platform is None or match_order_id is None:
+                    raise ClientError(
+                        "--match-items-json requires --match-platform and --match-order-id"
+                    )
+            _complete_by_match(match_flags, match_items_json)
             return
 
         client = get_client()
@@ -466,7 +508,38 @@ def task_complete(
         raise typer.Exit(handle_error(e))
 
 
-def _complete_by_match(match_flags: dict) -> None:
+def _parse_match_items(match_items_json: Optional[str]) -> Optional[list[tuple[str, int]]]:
+    if match_items_json is None:
+        return None
+
+    import json
+
+    try:
+        raw_items = json.loads(match_items_json)
+    except json.JSONDecodeError as exc:
+        raise ClientError(f"--match-items-json must be valid JSON: {exc.msg}") from exc
+    if not isinstance(raw_items, list) or not raw_items:
+        raise ClientError("--match-items-json must be a non-empty JSON array")
+
+    items = []
+    for raw_item in raw_items:
+        if not isinstance(raw_item, dict) or set(raw_item) != {"itemNumber", "quantity"}:
+            raise ClientError(
+                '--match-items-json entries must contain exactly "itemNumber" and "quantity"'
+            )
+        item_number = raw_item["itemNumber"]
+        quantity = raw_item["quantity"]
+        if not isinstance(item_number, str) or not item_number.strip():
+            raise ClientError("--match-items-json itemNumber values must be non-empty strings")
+        if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity < 1:
+            raise ClientError("--match-items-json quantity values must be positive integers")
+        items.append((item_number, quantity))
+    if len(set(items)) != len(items):
+        raise ClientError("--match-items-json must not contain duplicate item entries")
+    return items
+
+
+def _complete_by_match(match_flags: dict, match_items_json: Optional[str] = None) -> None:
     """Complete a single missing-part task selected by content match.
 
     Re-fetches the live task list (bypassing the @cached layer) so the resolved
@@ -476,6 +549,7 @@ def _complete_by_match(match_flags: dict) -> None:
     import os
     from ..models import MissingPart
 
+    match_items = _parse_match_items(match_items_json)
     client = get_client()
     try:
         # Bypass the @cached layer so prior completions in this session can't leave
@@ -497,24 +571,39 @@ def _complete_by_match(match_flags: dict) -> None:
         for task in tasks:
             if task.completed:
                 continue
-            parsed = MissingPart.from_task_text(task.index, task.text, task.completed)
-            if parsed is None:
+            parsed_parts = MissingPart.from_task_texts(task.index, task.text, task.completed)
+            if match_items is not None:
+                matching_order_parts = [
+                    parsed for parsed in parsed_parts
+                    if parsed.platform.value.lower() == match_flags["platform"].lower()
+                    and parsed.order_id == match_flags["order_id"]
+                ]
+                actual_items = [(parsed.item_number, parsed.quantity) for parsed in matching_order_parts]
+                if sorted(actual_items) == sorted(match_items):
+                    candidates.append(matching_order_parts[0])
                 continue
-            if match_flags["platform"] is not None:
-                if parsed.platform.value.lower() != match_flags["platform"].lower():
-                    continue
-            if match_flags["order_id"] is not None:
-                if parsed.order_id != match_flags["order_id"]:
-                    continue
-            if match_flags["item_number"] is not None:
-                if parsed.item_number != match_flags["item_number"]:
-                    continue
-            if match_flags["quantity"] is not None:
-                if parsed.quantity != match_flags["quantity"]:
-                    continue
-            candidates.append(parsed)
+
+            for parsed in parsed_parts:
+                if match_flags["platform"] is not None:
+                    if parsed.platform.value.lower() != match_flags["platform"].lower():
+                        continue
+                if match_flags["order_id"] is not None:
+                    if parsed.order_id != match_flags["order_id"]:
+                        continue
+                if match_flags["item_number"] is not None:
+                    if parsed.item_number != match_flags["item_number"]:
+                        continue
+                if match_flags["quantity"] is not None:
+                    if parsed.quantity != match_flags["quantity"]:
+                        continue
+                candidates.append(parsed)
 
         criteria = {k: v for k, v in match_flags.items() if v is not None}
+        if match_items is not None:
+            criteria["items"] = [
+                {"itemNumber": item_number, "quantity": quantity}
+                for item_number, quantity in match_items
+            ]
 
         if len(candidates) == 0:
             print_json({
@@ -556,6 +645,10 @@ def _complete_by_match(match_flags: dict) -> None:
             "itemNumber": matched.item_number,
             "quantity": matched.quantity,
         })
+        if match_items is not None:
+            payload.pop("itemNumber")
+            payload.pop("quantity")
+            payload["items"] = criteria["items"]
         print_json(payload)
     finally:
         client.close()

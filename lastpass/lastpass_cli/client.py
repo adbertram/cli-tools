@@ -1,7 +1,9 @@
 """Lastpass wrapper client using subprocess to call underlying CLI."""
+import json
 import logging
 import os
 import random
+import re
 import signal
 import subprocess
 import sys
@@ -33,11 +35,87 @@ CRASH_EXIT_CODES = {-6, -10, -11, 134, 138, 139}
 LPASS_DIR = os.path.expanduser("~/.lpass")
 AGENT_SOCK_PATH = os.path.join(LPASS_DIR, "agent.sock")
 PLAINTEXT_KEY_PATH = os.path.join(LPASS_DIR, "plaintext_key")
+MASKED_SECRET_VALUE = "********"
+SENSITIVE_ITEM_DETAIL_KEY_MARKERS = (
+    "password",
+    "passwd",
+    "pwd",
+    "passphrase",
+    "secret",
+    "token",
+    "apikey",
+    "privatekey",
+    "email",
+    "otp",
+)
+CATEGORY_SCAN_LIMIT = 50
+
+# lpass prints this exact sentinel to STDOUT (exit 0) when a name/ID lookup
+# matches more than one vault entry, followed by one "Group/Name [id: <id>]"
+# line per candidate. Detect it so the wrapper can return structured data
+# instead of leaking this prose to a caller that expects a value or JSON.
+MULTIPLE_MATCHES_SENTINEL = "Multiple matches found."
 
 
 class ClientError(Exception):
     """Custom exception for Lastpass wrapper errors."""
     pass
+
+
+class MultipleMatchesError(ClientError):
+    """Raised when an lpass lookup is ambiguous (matched multiple entries).
+
+    Carries the structured candidate list so a caller can disambiguate by ID
+    programmatically instead of parsing lpass's freeform "Multiple matches
+    found." text.
+    """
+
+    def __init__(self, query: str, matches: List[Dict]):
+        self.query = query
+        self.matches = matches
+        super().__init__(
+            f"Multiple entries match '{query}'. Specify the exact entry by ID."
+        )
+
+
+def is_sensitive_item_detail_key(key: str) -> bool:
+    """Return True for item detail fields that should be hidden by default.
+
+    This is the single source of truth for what counts as a secret-bearing
+    field. Both the default masking in ``get_item`` and the ``--properties``
+    secret-field guard in the ``items`` commands use it.
+    """
+    normalized = re.sub(r"[^a-z0-9]", "", str(key).casefold())
+    return any(marker in normalized for marker in SENSITIVE_ITEM_DETAIL_KEY_MARKERS)
+
+
+def _mask_json_string_secrets(value: str) -> str:
+    """Mask sensitive fields inside a JSON-encoded string value."""
+    stripped = value.strip()
+    if not stripped or stripped[0] not in "[{":
+        return value
+    try:
+        decoded = json.loads(value)
+    except json.JSONDecodeError:
+        return value
+    masked = _mask_item_detail_secrets(decoded)
+    return json.dumps(masked, separators=(",", ":"))
+
+
+def _mask_item_detail_secrets(value: Any) -> Any:
+    """Mask sensitive item detail fields recursively."""
+    if isinstance(value, dict):
+        return {
+            key: MASKED_SECRET_VALUE
+            if is_sensitive_item_detail_key(key)
+            else _mask_item_detail_secrets(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_mask_item_detail_secrets(item) for item in value]
+    if isinstance(value, str):
+        return _mask_json_string_secrets(value)
+    return value
 
 
 class LastpassClient:
@@ -140,8 +218,13 @@ class LastpassClient:
                 )
                 last_result = result
 
-                debug.debug("_run_command attempt %d: rc=%d stdout=%r stderr=%r",
-                           attempt, result.returncode, result.stdout[:200], result.stderr[:200])
+                debug.debug(
+                    "_run_command attempt %d: rc=%d stdout_bytes=%d stderr_bytes=%d",
+                    attempt,
+                    result.returncode,
+                    len((result.stdout or "").encode()),
+                    len((result.stderr or "").encode()),
+                )
                 crashed = self._is_crash(result)
 
                 if crashed:
@@ -169,8 +252,10 @@ class LastpassClient:
                         )
 
                 if check and result.returncode != 0:
-                    error_msg = result.stderr.strip() or result.stdout.strip() or "Command failed"
-                    raise ClientError(f"{self.config.cli_command} error: {error_msg}")
+                    raise ClientError(
+                        f"{self.config.cli_command} command failed "
+                        f"(exit {result.returncode})"
+                    )
 
                 return result
 
@@ -399,7 +484,7 @@ class LastpassClient:
         result = self._run_command(args)
         items = self._parse_lpass_ls(result.stdout)
         if category is not None:
-            items = self._filter_items_by_category(items, category)
+            items = self.filter_items_by_category(items, category)
         return items
 
     @staticmethod
@@ -423,13 +508,26 @@ class LastpassClient:
         error_msg = result.stderr.strip() or result.stdout.strip() or "Command failed"
         raise ClientError(f"{self.config.cli_command} error: {error_msg}")
 
-    def _filter_items_by_category(self, items: List[Dict], category: str) -> List[Dict]:
+    def filter_items_by_category(self, items: List[Dict], category: str) -> List[Dict]:
         """Filter entries by LastPass category/note type."""
         expected = self._normalize_category(category)
+        candidates = [item for item in items if not item.get("is_folder")]
+        if len(candidates) > CATEGORY_SCAN_LIMIT:
+            activity.warning(
+                "Refusing category scan category=%s candidate_count=%d limit=%d",
+                category,
+                len(candidates),
+                CATEGORY_SCAN_LIMIT,
+            )
+            raise ClientError(
+                "LastPass category filtering requires inspecting each candidate "
+                "with 'lpass show --field=NoteType'. "
+                f"Refusing to scan {len(candidates)} entries. Narrow the list "
+                f"with a group or --filter first (limit {CATEGORY_SCAN_LIMIT})."
+            )
+
         matches = []
-        for item in items:
-            if item.get("is_folder"):
-                continue
+        for item in candidates:
             actual = self._get_item_category(item["id"])
             if self._normalize_category(actual) == expected:
                 item["category"] = actual
@@ -451,11 +549,11 @@ class LastpassClient:
         args = ["show", item_id]
 
         result = self._run_command(args)
+        self._raise_if_multiple_matches(item_id, result.stdout.strip())
         parsed = self._parse_lpass_show(result.stdout)
 
-        # Optionally mask password
-        if not show_password and "Password" in parsed:
-            parsed["Password"] = "********"
+        if not show_password:
+            parsed = _mask_item_detail_secrets(parsed)
 
         return parsed
 
@@ -471,6 +569,7 @@ class LastpassClient:
         """
         args = ["show", "--password", item_id]
         result = self._run_command(args)
+        self._raise_if_multiple_matches(item_id, result.stdout.strip())
         return result.stdout.strip()
 
     def get_username(self, item_id: str) -> str:
@@ -485,6 +584,7 @@ class LastpassClient:
         """
         args = ["show", "--username", item_id]
         result = self._run_command(args)
+        self._raise_if_multiple_matches(item_id, result.stdout.strip())
         return result.stdout.strip()
 
     def create_item(
@@ -699,22 +799,56 @@ class LastpassClient:
 
         return items
 
+    # lpass `show` prints a header line before the `Key: Value` fields, in the
+    # same "Group/Name [id: <id>]" / "Name [id: <id>]" shape as `lpass ls`. That
+    # header contains ': ' inside "[id: ...]", so a naive `Key: Value` split
+    # mangles it into a bogus "<name> [id" key. Match the header with the same
+    # pattern `_parse_lpass_ls` uses and structure it instead of emitting junk.
+    _SHOW_HEADER_PATTERN = re.compile(r'^(.+?)\s+\[id:\s*(\d+)\]$')
+
     def _parse_lpass_show(self, output: str) -> Dict:
         """
         Parse lpass show output.
 
         Format:
-            Name: EntryName
+            Group/Name [id: 1234567890123456789]
             URL: https://example.com
             Username: myuser
             Password: secret
             Notes: Some notes here
+
+        The first line is a "Group/Name [id: <id>]" (or "Name [id: <id>]")
+        header, not a real field. It is parsed into structured ``id``,
+        ``full_path``, ``name`` and ``group`` keys rather than being split as a
+        ``Key: Value`` pair. Only the leading header line gets this treatment;
+        every subsequent ``Key: Value`` field (including multiline ``Notes:``)
+        parses exactly as before.
         """
         result = {}
         current_key = None
         current_value = []
 
-        for line in output.strip().split('\n'):
+        lines = output.strip().split('\n')
+
+        # Pull the leading "Group/Name [id: <id>]" header off the top so its
+        # embedded ': ' can't be misread as a field separator. Everything after
+        # it is parsed as normal Key: Value fields.
+        if lines:
+            header_match = self._SHOW_HEADER_PATTERN.match(lines[0].strip())
+            if header_match:
+                full_path = header_match.group(1).strip()
+                result["id"] = header_match.group(2)
+                result["full_path"] = full_path
+                if '/' in full_path:
+                    group, _, name = full_path.rpartition('/')
+                    result["group"] = group
+                    result["name"] = name
+                else:
+                    result["group"] = ""
+                    result["name"] = full_path
+                lines = lines[1:]
+
+        for line in lines:
             if ': ' in line and not line.startswith(' '):
                 # Save previous key-value if exists
                 if current_key:
@@ -733,6 +867,30 @@ class LastpassClient:
             result[current_key] = '\n'.join(current_value).strip()
 
         return result
+
+    def _raise_if_multiple_matches(self, query: str, output: str) -> None:
+        """Raise MultipleMatchesError if lpass returned its ambiguous-match list.
+
+        lpass `show` emits "Multiple matches found." on stdout (exit 0) when a
+        name/ID matches several entries, followed by "Group/Name [id: <id>]"
+        candidate lines in the same format as `lpass ls`. Parse those candidates
+        and raise so the command layer can return structured JSON instead of
+        passing this prose straight through to the caller.
+        """
+        lines = output.split("\n")
+        if not lines or lines[0].strip() != MULTIPLE_MATCHES_SENTINEL:
+            return
+        candidate_block = "\n".join(lines[1:])
+        matches = [
+            item for item in self._parse_lpass_ls(candidate_block)
+            if item.get("id")
+        ]
+        # Only treat this as ambiguous when lpass actually listed candidates.
+        # Without candidates there is nothing to disambiguate, so fall through
+        # and let the normal value/parse path handle the output.
+        if not matches:
+            return
+        raise MultipleMatchesError(query, matches)
 
 
 # Module-level client instance - singleton pattern

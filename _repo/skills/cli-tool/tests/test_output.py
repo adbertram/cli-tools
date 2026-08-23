@@ -50,8 +50,8 @@ def test_output_imports_from_cli_tools_shared(cli_dir, cli_name, command_filter)
 
     All standard output functions (print_json, print_table, print_error, etc.)
     must be imported from cli_tools_shared.output rather than defined locally.
-    This ensures all CLIs get shared functionality like cache_hit injection,
-    Pydantic model serialization, and consistent error handling.
+    This ensures all CLIs get shared functionality like Pydantic model
+    serialization and consistent error handling.
     """
     output_path = _get_output_path(cli_dir, cli_name)
     if not output_path.exists():
@@ -76,7 +76,7 @@ def test_output_no_local_standard_functions(cli_dir, cli_name, command_filter):
 
     Standard functions like print_json, print_table, handle_error etc. must
     come from cli_tools_shared.output. Local redefinitions cause divergence
-    and miss shared features (cache_hit injection, model serialization).
+    and miss shared features (model serialization, consistent error handling).
     """
     output_path = _get_output_path(cli_dir, cli_name)
     if not output_path.exists():

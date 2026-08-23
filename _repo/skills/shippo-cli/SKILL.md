@@ -1,6 +1,10 @@
 ---
-name: "shippo-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute shippo operations using the `shippo` CLI tool. CLI interface for Shippo shipping API - Create USPS labels, compare rates, track packages. Triggers: shippo, shippo cli, shipping label, create label, shipping rates, track package, shippo shipment, compare shipping, USPS label, shipping address"
+name: shippo-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute shippo operations using the `shippo` CLI tool.
+  CLI interface for Shippo shipping API - Create USPS labels, compare rates, track packages.
+  Triggers: shippo, shippo cli, shipping label, create label, shipping rates, track package, shippo shipment, compare shipping, USPS label, shipping address
 ---
 
 <objective>
@@ -26,7 +30,7 @@ shippo <command-group> <action> [arguments] [options]
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `shippo` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `shippo` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 

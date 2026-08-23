@@ -4,6 +4,7 @@ Uses MSAL (Microsoft Authentication Library) to obtain access tokens for Microso
 Implements exponential backoff retry for transient errors.
 Tokens are cached locally for persistence.
 """
+import base64
 import json
 import os
 import random
@@ -45,6 +46,12 @@ SIMPLE_UPLOAD_MAX_SIZE = 4 * 1024 * 1024  # 4MB
 
 # Resumable upload chunk size (320 KiB - recommended by Microsoft)
 UPLOAD_CHUNK_SIZE = 320 * 1024  # 320 KiB
+
+
+def encode_share_url(share_url: str) -> str:
+    """Encode a sharing URL as a Microsoft Graph ``shares`` identifier."""
+    encoded = base64.urlsafe_b64encode(share_url.encode("utf-8")).decode("ascii")
+    return f"u!{encoded.rstrip('=')}"
 
 
 class ClientError(Exception):
@@ -437,8 +444,31 @@ class OneDriveClient:
 
         # Make streaming request
         response = self._make_request("GET", endpoint, stream=True)
+        return self._write_stream_to_file(response, local_path)
 
-        # Save to file
+    def resolve_shared_item(self, share_url: str) -> DriveItemDetail:
+        """Resolve a OneDrive or SharePoint sharing URL to drive-item metadata."""
+        share_id = encode_share_url(share_url)
+        response = self._make_request("GET", f"/shares/{share_id}/driveItem")
+        return create_drive_item_detail(response)
+
+    def download_shared_item(self, share_url: str, local_path: str) -> str:
+        """Resolve a sharing URL and download its file content."""
+        share_id = encode_share_url(share_url)
+        item = self.resolve_shared_item(share_url)
+        if item.folder:
+            raise ClientError("Cannot download a folder. Use a file sharing URL.")
+
+        response = self._make_request(
+            "GET",
+            f"/shares/{share_id}/driveItem/content",
+            stream=True,
+        )
+        return self._write_stream_to_file(response, local_path)
+
+    @staticmethod
+    def _write_stream_to_file(response: requests.Response, local_path: str) -> str:
+        """Write a streaming HTTP response to a local file."""
         local_path_obj = Path(local_path)
         local_path_obj.parent.mkdir(parents=True, exist_ok=True)
 

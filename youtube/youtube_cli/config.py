@@ -22,7 +22,7 @@ class Config(BaseConfig):
 
     DIST_NAME = "youtube-cli"
 
-    CREDENTIAL_TYPES = [CredentialType.CUSTOM]
+    CREDENTIAL_TYPES = [CredentialType.CUSTOM, CredentialType.BROWSER_SESSION]
     CUSTOM_REQUIRED_FIELDS = ["CLIENT_ID", "CLIENT_SECRET"]
     CUSTOM_ALL_FIELDS = ["AUTH_TYPE", "CLIENT_ID", "CLIENT_SECRET"]
     PROFILE_AUTH_TYPE_FIELD = "AUTH_TYPE"
@@ -69,6 +69,12 @@ class Config(BaseConfig):
         return str(self.token_path_obj)
 
     @property
+    def headless(self) -> bool:
+        """Whether browser-session commands should run without a visible window."""
+        val = self._get("HEADLESS")
+        return val is None or val.lower() == "true"
+
+    @property
     def credentials_path(self) -> Optional[str]:
         """String path to credentials.json in the active profile's data dir."""
         profile_creds = self.get_profile_data_dir() / "credentials.json"
@@ -97,6 +103,12 @@ class Config(BaseConfig):
             return {"api_test": f"failed: {e}"}
         except Exception as e:
             return {"api_test": f"failed: {e}"}
+
+    def get_browser(self):
+        """Return browser automation for YouTube web-only channel actions."""
+        from .browser import YouTubeBrowser
+
+        return YouTubeBrowser(self)
 
 
 _configs: dict = {}

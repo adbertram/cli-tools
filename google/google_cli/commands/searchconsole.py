@@ -11,7 +11,7 @@ import typer
 from typing import Optional, List
 from googleapiclient.errors import HttpError
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_table, print_success, print_error, handle_error
+from cli_tools_shared.output import command, print_json, print_table, print_success, print_error, handle_error
 from ..config import get_config
 
 app = typer.Typer(help="Access Google Search Console")
@@ -47,6 +47,7 @@ app.add_typer(sites_app, name="sites")
 
 
 @app.command("index")
+@command
 def searchconsole_index(
     url: str = typer.Argument(..., help="URL to request indexing for"),
     site_url: Optional[str] = typer.Option(
@@ -98,6 +99,7 @@ def searchconsole_index(
 
 
 @sites_app.command("list")
+@command
 def searchconsole_sites_list(
     table: bool = typer.Option(
         False,
@@ -182,6 +184,7 @@ def searchconsole_sites_list(
 
 
 @sites_app.command("get")
+@command
 def searchconsole_sites_get(
     site_url: str = typer.Argument(..., help="Site URL to get details for"),
     table: bool = typer.Option(
@@ -261,6 +264,7 @@ def _build_dimension_filter(filter_str: str) -> dict:
 
 
 @urls_app.command("list")
+@command
 def searchconsole_urls_list(
     site_url: Optional[str] = typer.Option(
         None,
@@ -404,6 +408,7 @@ def searchconsole_urls_list(
 
 
 @urls_app.command("get")
+@command
 def searchconsole_urls_get(
     url: str = typer.Argument(..., help="URL to inspect"),
     site_url: Optional[str] = typer.Option(

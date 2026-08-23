@@ -8,6 +8,8 @@ import stat
 import subprocess
 from pathlib import Path
 
+import pytest
+
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -346,7 +348,10 @@ printf '%s\n' "$*" >>"${FAKE_REMOTE_LOG_DIR:?}/scp_args.log"
     env = _base_env(fake_bin, tmp_path)
     env["FAKE_REMOTE_LOG_DIR"] = str(remote_log_dir)
 
-    master_fd, slave_fd = pty.openpty()
+    try:
+        master_fd, slave_fd = pty.openpty()
+    except OSError as exc:
+        pytest.skip(f"PTY allocation is unavailable on this host: {exc}")
     proc = subprocess.Popen(
         ["bash", str(SECRETS_SCRIPT), "--remote-host", "example-host", "set", "example-secret"],
         stdin=subprocess.PIPE,
@@ -452,7 +457,7 @@ printf '%s\n' "$*" >>"${FAKE_REMOTE_LOG_DIR:?}/scp_args.log"
             "--remote-host",
             "example-host",
             "--remote-unlock-secret",
-            "cli-tools-adam-server-sudo",
+            "cli-tools-remote-unlock",
             "set",
             "example-secret",
             "topsecret",
@@ -510,7 +515,7 @@ exit 99
     env["FAKE_SECURITY_LOG"] = str(security_log)
     env["CLI_TOOLS_KEYCHAIN"] = str(tmp_path / "custom.keychain-db")
     env["CLI_TOOLS_SECRETS_REMOTE_CONTEXT"] = "1"
-    env["CLI_TOOLS_SECRETS_REMOTE_HOST"] = "adam-server"
+    env["CLI_TOOLS_SECRETS_REMOTE_HOST"] = "example-host"
 
     result = subprocess.run(
         ["bash", str(SECRETS_SCRIPT), "set", "example-secret", "topsecret"],
@@ -522,7 +527,7 @@ exit 99
 
     assert result.returncode != 0
     assert (
-        "remote host adam-server requires an interactive TTY to unlock keychain"
+        "remote host example-host requires an interactive TTY to unlock keychain"
         in result.stderr
     )
     security_log_text = security_log.read_text()
@@ -630,6 +635,79 @@ exit 99
     )
 
     assert result.returncode == 0, result.stderr
+
+
+def test_no_arguments_prints_usage_to_stderr_and_exits_non_zero(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    env = _base_env(fake_bin, tmp_path)
+
+    result = subprocess.run(
+        ["bash", str(SECRETS_SCRIPT)],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "Usage:" in result.stderr
+    assert "unbound variable" not in result.stderr
+    assert result.stdout == ""
+
+
+def test_global_help_prints_usage_to_stdout_and_exits_zero(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    env = _base_env(fake_bin, tmp_path)
+
+    for help_arg in ("--help", "-h", "help"):
+        result = subprocess.run(
+            ["bash", str(SECRETS_SCRIPT), help_arg],
+            text=True,
+            capture_output=True,
+            env=env,
+            check=False,
+        )
+        assert result.returncode == 0, f"{help_arg}: {result.stderr}"
+        assert "Usage:" in result.stdout
+
+
+def test_per_subcommand_help_prints_usage_and_exits_zero(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    env = _base_env(fake_bin, tmp_path)
+
+    for subcommand in ("set", "get", "has", "delete", "rename", "list"):
+        for help_arg in ("--help", "-h"):
+            result = subprocess.run(
+                ["bash", str(SECRETS_SCRIPT), subcommand, help_arg],
+                text=True,
+                capture_output=True,
+                env=env,
+                check=False,
+            )
+            assert result.returncode == 0, (
+                f"{subcommand} {help_arg}: {result.stderr}"
+            )
+            assert "Usage:" in result.stdout
+
+
+def test_unknown_command_still_dies_non_zero(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    env = _base_env(fake_bin, tmp_path)
+
+    result = subprocess.run(
+        ["bash", str(SECRETS_SCRIPT), "bogus-command"],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "unknown command: bogus-command" in result.stderr
 
 
 def test_has_returns_missing_only_for_keychain_not_found_status(tmp_path: Path) -> None:

@@ -3,8 +3,11 @@ import subprocess
 import json
 import os
 import re
+import time
 from pathlib import Path
 from typing import Dict, List, Optional, Set
+
+from .config import get_config
 
 
 class ClientError(Exception):
@@ -551,6 +554,7 @@ class YoutubeClient:
 
 # Module-level client instance - singleton pattern
 _client: Optional[YoutubeClient] = None
+_browser_client = None
 
 
 def get_client() -> YoutubeClient:
@@ -559,3 +563,157 @@ def get_client() -> YoutubeClient:
     if _client is None:
         _client = YoutubeClient()
     return _client
+
+
+POST_PLACEHOLDER_SELECTOR = "ytd-backstage-post-dialog-renderer #commentbox-placeholder"
+POST_EDITOR_SELECTOR = (
+    'ytd-backstage-post-dialog-renderer #contenteditable-root[contenteditable="true"]'
+)
+POST_SUBMIT_SELECTOR = "ytd-backstage-post-dialog-renderer #submit-button button"
+
+COMPOSER_STATE_JS = """
+() => {
+  const visible = (el) => !!(el && (el.offsetParent || el.getClientRects().length));
+  const root = Array.from(document.querySelectorAll('ytd-backstage-post-dialog-renderer'))
+    .find((el) => visible(el));
+  if (!root) {
+    return {composer_visible: false};
+  }
+  const placeholder = root.querySelector('#commentbox-placeholder');
+  const editor = root.querySelector('#contenteditable-root[contenteditable="true"]');
+  const submit = root.querySelector('#submit-button button, ytd-button-renderer#submit-button button');
+  const visibility = root.querySelector('#header-default-visibility');
+  const buttonClass = submit ? String(submit.className || '') : '';
+  const ariaDisabled = submit ? submit.getAttribute('aria-disabled') : null;
+  const submitEnabled = !!(
+    submit &&
+    visible(submit) &&
+    !submit.disabled &&
+    ariaDisabled !== 'true' &&
+    !buttonClass.includes('Disabled')
+  );
+  return {
+    composer_visible: true,
+    placeholder_visible: visible(placeholder),
+    editor_visible: visible(editor),
+    submit_visible: visible(submit),
+    submit_enabled: submitEnabled,
+    editor_text: editor ? editor.textContent || '' : '',
+    visibility: visibility ? visibility.textContent.trim() : null,
+  };
+}
+"""
+
+CLEAR_EDITOR_JS = """
+() => {
+  const root = Array.from(document.querySelectorAll('ytd-backstage-post-dialog-renderer'))
+    .find((el) => !!(el && (el.offsetParent || el.getClientRects().length)));
+  const editor = root ? root.querySelector('#contenteditable-root[contenteditable="true"]') : null;
+  if (!editor) {
+    throw new Error('YouTube community post editor not found.');
+  }
+  editor.textContent = '';
+  editor.dispatchEvent(new InputEvent('input', {bubbles: true, inputType: 'deleteContentBackward'}));
+  editor.dispatchEvent(new Event('change', {bubbles: true}));
+}
+"""
+
+
+class YouTubeBrowserClient:
+    """Browser-backed client for YouTube web-only channel actions."""
+
+    def __init__(self, profile: Optional[str] = None, browser=None):
+        self.config = get_config(profile=profile)
+        self.browser = browser if browser is not None else self.config.get_browser()
+
+    def _composer_state(self, page) -> dict:
+        return page.evaluate(COMPOSER_STATE_JS)
+
+    def _wait_for_composer_state(
+        self,
+        page,
+        predicate,
+        failure_message: str,
+        timeout_seconds: float = 10,
+    ) -> dict:
+        deadline = time.monotonic() + timeout_seconds
+        last_state = {}
+        while time.monotonic() < deadline:
+            last_state = self._composer_state(page)
+            if predicate(last_state):
+                return last_state
+            page.wait_for_timeout(250)
+        raise ClientError(f"{failure_message}: {last_state}")
+
+    def create_community_post(self, channel_url: str, message: str, dry_run: bool = False) -> dict:
+        auth = self.browser.is_authenticated()
+        if not auth:
+            raise ClientError(
+                "YouTube browser session is not authenticated. "
+                "Run 'youtube auth login --credential-type browser_session' for this profile first."
+            )
+
+        page = self.browser.get_page(channel_url)
+        try:
+            page.wait_for_timeout(1000)
+            state = self._composer_state(page)
+            if not state.get("composer_visible"):
+                raise ClientError(
+                    "YouTube community post composer not found. "
+                    "Confirm the browser profile owns this channel and can post from the channel page."
+                )
+
+            if not state.get("editor_visible"):
+                page.locator(POST_PLACEHOLDER_SELECTOR).click()
+                state = self._wait_for_composer_state(
+                    page,
+                    lambda current: current.get("editor_visible"),
+                    "YouTube community post editor did not open",
+                )
+
+            page.evaluate(CLEAR_EDITOR_JS)
+            page.locator(POST_EDITOR_SELECTOR).click()
+            page.type_text(message)
+            state = self._wait_for_composer_state(
+                page,
+                lambda current: current.get("submit_enabled") and current.get("editor_text") == message,
+                "YouTube post button stayed disabled after message text was entered",
+            )
+
+            if dry_run:
+                return {
+                    "posted": False,
+                    "dry_run": True,
+                    "channel_url": channel_url,
+                    "visibility": state.get("visibility"),
+                    "message": message,
+                }
+
+            page.locator(POST_SUBMIT_SELECTOR).click()
+            self._wait_for_composer_state(
+                page,
+                lambda current: not current.get("submit_enabled") and not current.get("editor_text"),
+                "YouTube post did not complete after clicking Post",
+                timeout_seconds=20,
+            )
+
+            return {
+                "posted": True,
+                "dry_run": False,
+                "channel_url": channel_url,
+                "visibility": state.get("visibility"),
+                "message": message,
+            }
+        finally:
+            self.browser.close()
+
+
+def get_browser_client(profile: Optional[str] = None) -> YouTubeBrowserClient:
+    """Get or create the global YouTube browser client instance."""
+    global _browser_client
+    key = profile or "_default"
+    if not isinstance(_browser_client, dict):
+        _browser_client = {}
+    if key not in _browser_client:
+        _browser_client[key] = YouTubeBrowserClient(profile=profile)
+    return _browser_client[key]

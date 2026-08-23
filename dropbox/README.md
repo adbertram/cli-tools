@@ -1,6 +1,10 @@
 # Dropbox CLI
 
-A command-line interface for [Dropbox](https://www.dropbox.com). Manage files, folders, and account information directly from your terminal.
+## DESCRIPTION
+
+The `dropbox` CLI provides a command-line interface for Dropbox API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 
@@ -32,7 +36,7 @@ dropbox auth login
 
 ### Authentication
 
-Authentication is required for all operations. Create a Dropbox app first, then use the login command.
+Authentication is required for Dropbox API operations. Create a Dropbox app first, then use the login command.
 
 ```bash
 # Login (will prompt for app key)
@@ -112,6 +116,7 @@ dropbox files mkdir /Projects/NewProject
 # Delete a file or folder
 dropbox files rm /Documents/old-file.txt
 dropbox files rm /Temp --force
+dropbox files rm /Temp --force --timeout 120
 
 # Move a file or folder
 dropbox files mv /Documents/report.pdf /Archive/report.pdf
@@ -148,6 +153,26 @@ dropbox account info
 # Display storage usage
 dropbox account usage
 dropbox account usage
+```
+
+### Desktop Sync
+
+Inspect the local Dropbox desktop sync queue. This reads the local desktop
+`nucleus.sqlite3` database in read-only mode and does not require Dropbox API
+authentication.
+
+```bash
+# Show pending desktop sync queue items
+dropbox sync pending
+
+# Show table output
+dropbox sync pending --table
+
+# Read a specific desktop DB path
+dropbox sync pending --db ~/.dropbox/instance1/sync/nucleus.sqlite3
+
+# Disable heuristic filesystem path candidates
+dropbox sync pending --no-resolve-paths
 ```
 
 ### Sharing
@@ -237,7 +262,7 @@ Before first use, you need to create a Dropbox app:
 4. Name your app and create it
 5. Copy the App key (and optionally App secret)
 
-Credentials are stored in a `.env` file in the package directory:
+Authentication profile files live under `~/.local/share/cli-tools/dropbox/authentication_profiles/<profile>/`; non-auth defaults live in `~/.local/share/cli-tools/dropbox/.env`:
 
 ```bash
 # App credentials (required)

@@ -8,13 +8,14 @@ COMMAND_CREDENTIALS = {
 import typer
 from typing import Optional, List
 from ..client import get_client, ClientError
-from cli_tools_shared.output import print_json, print_table, handle_error
+from cli_tools_shared.output import print_json, print_table, handle_error, command
 from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError, apply_properties_filter
 
 app = typer.Typer(help="Manage Slack channel bookmarks")
 
 
 @app.command("list")
+@command
 def list_bookmarks(
     channel_id: str = typer.Argument(..., help="Channel ID to list bookmarks for"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -77,6 +78,7 @@ def list_bookmarks(
 
 
 @app.command("get")
+@command
 def get_bookmark(
     channel_id: str = typer.Argument(..., help="Channel ID where bookmark exists"),
     bookmark_id: str = typer.Argument(..., help="Bookmark ID to get"),

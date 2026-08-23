@@ -19,7 +19,7 @@ import re
 import typer
 from typing import Optional, Dict, List
 from ..client import get_client, ClientError
-from cli_tools_shared.output import print_json, print_table, print_success, handle_error
+from cli_tools_shared.output import print_json, print_table, print_success, handle_error, command
 from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError, apply_properties_filter
 
 app = typer.Typer(help="Manage direct messages")
@@ -141,7 +141,7 @@ def _get_dm_with_unread_count(client, channel_id: str) -> Dict:
 def _get_group_dm_display_name(client, channel: Dict) -> str:
     """Get a human-readable display name for a group DM.
 
-    Uses the channel name (e.g. 'mpdm-adbertram--mo--maxtrottie...')
+    Uses the channel name (e.g. 'mpdm-user1--user2--user3...')
     and attempts to resolve member names. Falls back to the raw name.
     """
     # If Slack provides a purpose or topic, prefer that
@@ -168,6 +168,7 @@ def _get_group_dm_display_name(client, channel: Dict) -> str:
 
 
 @app.command("list")
+@command
 def list_dms(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of DMs to list"),
@@ -282,6 +283,7 @@ def list_dms(
 
 
 @app.command("get")
+@command
 def dm_get(
     user: str = typer.Argument(..., help="User ID, email, or @username"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -314,6 +316,7 @@ def dm_get(
 
 
 @app.command("send")
+@command
 def send_dm(
     user: str = typer.Argument(..., help="User ID, email, @username, or channel ID (for group DMs)"),
     text: str = typer.Argument(..., help="Message text"),
@@ -389,6 +392,7 @@ def _is_channel_id(value: str) -> bool:
 
 
 @app.command("read")
+@command
 def read_dm(
     user: str = typer.Argument(..., help="User ID, email, @username, or channel ID (for group DMs)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),

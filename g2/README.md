@@ -1,8 +1,10 @@
 # G2 CLI
 
-CLI for finding G2 products and mining negative reviews through the official G2 APIs at `https://data.g2.com`.
+## DESCRIPTION
 
-This tool uses the authenticated API at `https://data.g2.com`. It does not scrape public G2 review pages.
+The `g2` CLI provides a command-line interface for G2 API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

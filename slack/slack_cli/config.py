@@ -1,5 +1,4 @@
 """Configuration management for Slack CLI."""
-from pathlib import Path
 from typing import Optional
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
 from cli_tools_shared.credentials import CredentialType
@@ -81,11 +80,6 @@ class Config(BaseConfig):
             tool_dir=resolve_tool_dir(self.DIST_NAME),
             profile=profile,
         )
-
-    @property
-    def storage_dir(self) -> Path:
-        """Storage directory for cache and runtime data."""
-        return self.tool_dir
 
     def get_browser(self):
         """Return browser automation instance for Slack."""

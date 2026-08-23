@@ -1,6 +1,10 @@
 # Raptive CLI
 
-A command-line interface for [Raptive](https://dashboard.raptive.com) using browser automation. Interact with Raptive
+## DESCRIPTION
+
+The `raptive` CLI provides a command-line interface for Raptive (browser automation).
+
+Use it when you need repeatable access to raptive workflows that are only available through a signed-in website.
 
 ## Installation
 

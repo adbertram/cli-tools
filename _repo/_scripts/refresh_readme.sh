@@ -11,7 +11,7 @@ REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"
 usage() {
     printf 'Usage: %s [--check]\n' "$(basename "$0")"
     printf '\n'
-    printf 'Refresh README.md from top-level CLI tool folders outside _personal.\n'
+    printf 'Refresh README.md from top-level CLI tool folders.\n'
     printf '\n'
     printf 'Options:\n'
     printf '  --check   Exit non-zero if README.md is not current; do not write it.\n'
@@ -156,8 +156,8 @@ def replace_catalog(readme: str, catalog: str) -> str:
 
 
 def replace_count(readme: str, count: int) -> str:
-    pattern = r"^- \d+ active CLI packages outside `_personal`\.$"
-    replacement = f"- {count} active CLI packages outside `_personal`."
+    pattern = r"^- \d+ active CLI packages\.$"
+    replacement = f"- {count} active CLI packages."
     updated, replacements = re.subn(pattern, replacement, readme, count=1, flags=re.MULTILINE)
     if replacements != 1:
         raise ValueError("README.md active CLI package count line was not found exactly once")

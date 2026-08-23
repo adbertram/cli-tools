@@ -1,5 +1,8 @@
 from pathlib import Path
 
+import cli_tools_shared.config as shared_config
+
+import shippo_cli.config as shippo_config
 from shippo_cli.config import get_config
 
 
@@ -8,9 +11,11 @@ def test_get_config_reads_migrated_default_profile(tmp_path, monkeypatch):
     profile_dir = data_home / "cli-tools" / "shippo" / "authentication_profiles" / "default"
     profile_dir.mkdir(parents=True)
     env_file = profile_dir / ".env"
-    env_file.write_text("ACTIVE=true\nAPI_KEY=test-key\n")
+    env_file.write_text("ACTIVE=true\nAPI_KEY=secret://shippo-test-key\n")
 
     monkeypatch.setenv("XDG_DATA_HOME", str(data_home))
+    monkeypatch.setattr(shared_config, "read_cli_tool_secret", lambda name: "test-key")
+    shippo_config._configs.clear()
 
     config = get_config(profile="default")
 

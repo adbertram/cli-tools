@@ -9,7 +9,7 @@ import typer
 from cli_tools_shared.output import command, print_json, print_success
 
 from ..config import get_config
-from ..wpcom import acquire_wpcom_access_token, save_wpcom_credentials
+from ..wpcom import WPCOM_SAVE_CREDENTIAL_COMMAND, acquire_wpcom_access_token, save_wpcom_credentials
 
 
 app = typer.Typer(help="Manage WordPress.com organization access")
@@ -68,3 +68,23 @@ def save_credential(
     )
     print_success(f"WordPress.com credentials saved for {result['site']}")
     print_json(result)
+
+
+@token_app.command("status")
+@command
+def status() -> None:
+    """Report whether the active profile is ready for WordPress.com plugin updates."""
+    config = get_config()
+    missing_fields = config.get_missing_wpcom_credentials()
+    token_saved = bool(config.wpcom_access_token)
+    print_json(
+        {
+            "site": config.wpcom_site,
+            "credentials_saved": not missing_fields,
+            "token_saved": token_saved,
+            "ready": not missing_fields and token_saved,
+            "missing_fields": missing_fields,
+            "setup_command": WPCOM_SAVE_CREDENTIAL_COMMAND,
+            "token_command": "wordpress org token",
+        }
+    )

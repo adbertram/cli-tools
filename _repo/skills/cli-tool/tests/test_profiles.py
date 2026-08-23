@@ -13,9 +13,12 @@ inside the tool directory. The single source of truth for this path is
 
 import os
 import pytest
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 from cli_tools_shared.config import get_profiles_base_dir
+from cli_test_utils import parse_help_commands, run_cli_command
 
 
 def _get_user_data_profiles_dir(cli_name: str) -> Path:
@@ -24,13 +27,19 @@ def _get_user_data_profiles_dir(cli_name: str) -> Path:
     return base / "cli-tools" / cli_name / "authentication_profiles"
 
 
-def _skip_if_no_auth(cli_name, test_config):
-    """Skip the test if the CLI is in the no_auth_clis exclusion list.
+def _help_has_command(help_text: str, command: str) -> bool:
+    """Check whether a help page lists a command."""
+    return command in parse_help_commands(help_text) or f" {command} " in help_text or f"│ {command}" in help_text
+
+
+def _skip_if_no_auth(cli_name, cli_executable, test_config):
+    """Skip the test if the CLI has no auth/profile system.
 
     no_auth CLIs (e.g. things, reminders, cliclick) are local-only tools
     with no remote credentials and no auth subcommand. They intentionally
     have no .env / profile infrastructure, so profile-validation tests do
-    not apply to them.
+    not apply to them. The static exclusion list is not the only source of
+    truth; fresh ``--auth-type none`` scaffolds may not be listed there yet.
     """
     no_auth_clis = test_config["exclusions"].get("no_auth_clis", [])
     if cli_name in no_auth_clis:
@@ -38,6 +47,31 @@ def _skip_if_no_auth(cli_name, test_config):
             f"{cli_name} is in no_auth_clis exclusion list "
             f"(no auth subcommand, no profile infrastructure required)"
         )
+    result = run_cli_command(cli_executable, ["--help"], timeout=15)
+    if result.returncode == 0 and not _help_has_command(result.stdout, "auth"):
+        pytest.skip(
+            f"{cli_name} has no auth subcommand "
+            f"(no profile infrastructure required)"
+        )
+
+
+def test_skip_if_no_auth_skips_cli_without_auth_subcommand(monkeypatch):
+    """Fresh no-auth scaffolds skip profile tests even before config catches up."""
+    def fake_run_cli_command(cli_executable, args, timeout=30):
+        assert cli_executable == "/tmp/fresh-noauth"
+        assert args == ["--help"]
+        return SimpleNamespace(returncode=0, stdout="Commands:\n  conditions\n", stderr="")
+
+    monkeypatch.setattr(sys.modules[__name__], "run_cli_command", fake_run_cli_command)
+
+    with pytest.raises(pytest.skip.Exception) as exc_info:
+        _skip_if_no_auth(
+            "fresh-noauth",
+            "/tmp/fresh-noauth",
+            {"exclusions": {"no_auth_clis": []}},
+        )
+
+    assert "has no auth subcommand" in str(exc_info.value)
 
 
 def test_each_auth_type_has_one_active_profile(cli_name, cli_dir, cli_executable, test_config):
@@ -48,16 +82,12 @@ def test_each_auth_type_has_one_active_profile(cli_name, cli_dir, cli_executable
     ``cli_tools_shared.config.get_profiles_base_dir`` — the single source of
     truth — so this test never hardcodes the location.
     """
-    _skip_if_no_auth(cli_name, test_config)
+    _skip_if_no_auth(cli_name, cli_executable, test_config)
 
     # Invoke the CLI once so BaseConfig auto-initialises the active profile
     # (and migrates any legacy repo-local .env files into the user data dir).
     # This must be deterministic — no try/except, no fallback.
-    import subprocess
-    result = subprocess.run(
-        [cli_executable, "--help"],
-        capture_output=True, text=True, timeout=15,
-    )
+    result = run_cli_command(cli_executable, ["--help"], timeout=15)
     assert result.returncode == 0, (
         f"'{cli_name} --help' failed with exit code {result.returncode}. "
         f"Cannot verify profile state without a working CLI install. "
@@ -80,9 +110,10 @@ def test_each_auth_type_has_one_active_profile(cli_name, cli_dir, cli_executable
     )
 
     import json
-    profiles_result = subprocess.run(
-        [cli_executable, "auth", "profiles", "list"],
-        capture_output=True, text=True, timeout=15,
+    profiles_result = run_cli_command(
+        cli_executable,
+        ["auth", "profiles", "list"],
+        timeout=15,
     )
     assert profiles_result.returncode == 0, (
         f"'{cli_name} auth profiles list' failed with exit code {profiles_result.returncode}. "
@@ -108,9 +139,9 @@ def test_each_auth_type_has_one_active_profile(cli_name, cli_dir, cli_executable
     )
 
 
-def test_env_example_has_active_profile_marker(cli_name, cli_dir, test_config):
+def test_env_example_has_active_profile_marker(cli_name, cli_dir, cli_executable, test_config):
     """All auth-capable CLIs: .env.example includes ACTIVE=."""
-    _skip_if_no_auth(cli_name, test_config)
+    _skip_if_no_auth(cli_name, cli_executable, test_config)
     env_example = cli_dir / ".env.example"
     assert env_example.exists(), (
         f"'{cli_name}' has no .env.example file. "
@@ -180,9 +211,7 @@ def test_profiles_stored_in_user_data_dir(cli_name, cli_dir, cli_executable, tes
     is only created when profile data is actually written, so an empty authentication_profiles/
     directory is acceptable.
     """
-    _skip_if_no_auth(cli_name, test_config)
-
-    import subprocess
+    _skip_if_no_auth(cli_name, cli_executable, test_config)
 
     user_data_dir = _get_user_data_profiles_dir(cli_name)
     old_dir = cli_dir / "authentication_profiles"
@@ -196,9 +225,10 @@ def test_profiles_stored_in_user_data_dir(cli_name, cli_dir, cli_executable, tes
     )
 
     # Verify the profiles command can list profiles (proves profile system works)
-    result = subprocess.run(
-        [cli_executable, "auth", "profiles", "list"],
-        capture_output=True, text=True, timeout=15
+    result = run_cli_command(
+        cli_executable,
+        ["auth", "profiles", "list"],
+        timeout=15,
     )
     assert result.returncode == 0, (
         f"'{cli_name} auth profiles list' failed with exit code {result.returncode}. "

@@ -5,7 +5,15 @@ from pathlib import Path
 from typing import Optional, List
 
 from ..n8n_api import get_n8n_api_client, N8nApiError, GLOBAL_ERROR_HANDLER_ID
-from cli_tools_shared.output import print_json, print_table, print_error, print_success, print_info, handle_error
+from cli_tools_shared.output import (
+    command,
+    handle_error,
+    print_error,
+    print_info,
+    print_json,
+    print_success,
+    print_table,
+)
 from cli_tools_shared.filters import apply_filters, apply_properties_filter, apply_limit
 from ..parsers import format_local_time
 from ..server import run_on_server
@@ -53,6 +61,7 @@ COMMAND_CREDENTIALS = {
 
 
 @app.command("list")
+@command
 def workflows_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of results"),
@@ -109,6 +118,7 @@ def workflows_list(
 
 
 @app.command("get")
+@command
 def workflows_get(
     workflow_id: str = typer.Argument(..., help="Workflow ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -141,6 +151,7 @@ def workflows_get(
 
 
 @app.command("create")
+@command
 def workflows_create(
     file: str = typer.Argument(..., help="Path to workflow JSON file"),
     name: Optional[str] = typer.Option(None, "--name", "-n", help="Override workflow name"),
@@ -205,6 +216,7 @@ def workflows_create(
 
 
 @app.command("update")
+@command
 def workflows_update(
     workflow_id: str = typer.Argument(..., help="Workflow ID to update"),
     file: Optional[str] = typer.Option(None, "--file", "-f", help="Path to workflow JSON file"),
@@ -269,6 +281,7 @@ def workflows_update(
 
 
 @app.command("delete")
+@command
 def workflows_delete(
     workflow_id: str = typer.Argument(..., help="Workflow ID to delete"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
@@ -304,6 +317,7 @@ def workflows_delete(
 
 
 @app.command("activate")
+@command
 def workflows_activate(
     workflow_id: str = typer.Argument(..., help="Workflow ID to activate"),
 ):
@@ -323,6 +337,7 @@ def workflows_activate(
 
 
 @app.command("deactivate")
+@command
 def workflows_deactivate(
     workflow_id: str = typer.Argument(..., help="Workflow ID to deactivate"),
 ):
@@ -342,6 +357,7 @@ def workflows_deactivate(
 
 
 @app.command("export")
+@command
 def workflows_export(
     workflow_id: str = typer.Argument(..., help="Workflow ID to export"),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file path (default: stdout)"),
@@ -377,6 +393,7 @@ def workflows_export(
 
 
 @app.command("execute")
+@command
 def workflows_execute(
     workflow_id: str = typer.Argument(..., help="Workflow ID to execute"),
 ):
@@ -394,13 +411,18 @@ def workflows_execute(
     try:
         api = get_n8n_api_client()
         print_info(f"Executing workflow '{workflow_id}'...")
-        result = api.execute_workflow(workflow_id)
-        data = result.get("data", result)
+        data = api.execute_workflow(workflow_id)
 
         if data.get("waitingForWebhook"):
+            print_json(data)
             print_info("Workflow is waiting for webhook input")
         else:
-            execution_id = data.get("executionId", "unknown")
+            execution_id = data.get("executionId")
+            if not execution_id:
+                raise N8nApiError(
+                    "Workflow execution response did not include an execution ID"
+                )
+            print_json(data)
             print_success(f"Workflow '{workflow_id}' executed (execution: {execution_id})")
 
     except Exception as e:
@@ -408,6 +430,7 @@ def workflows_execute(
 
 
 @app.command("assign-error-handler")
+@command
 def workflows_assign_error_handler(
     workflow_id: Optional[str] = typer.Option(None, "--workflow-id", "-w", help="Assign to a single workflow"),
     all_workflows: bool = typer.Option(False, "--all", help="Assign to all workflows"),

@@ -128,6 +128,35 @@ class TestShippingLabelsCreate:
         assert data["tracking_number"] == "9400111899223100012345"
         assert data["label_file"] == out_path
 
+    def test_interactive_purchase_uses_shared_prompt_selection(self, runner, mock_config, tmp_path):
+        """Interactive mode uses the shared prompt and honors its selected rate."""
+        client, cfg_p, cli_p = _mock_client(mock_config)
+        client.get_order.return_value = SAMPLE_ORDER
+        client.create_shipping_quote.return_value = SAMPLE_QUOTE_RESPONSE
+        client.create_from_shipping_quote.return_value = SAMPLE_SHIPMENT_RESPONSE
+        client.download_label_file.return_value = b"%PDF-fake"
+
+        out_path = str(tmp_path / "test_label.pdf")
+
+        with cfg_p, cli_p, patch(
+            "ebay_cli.commands.orders.prompt_text",
+            return_value="2",
+        ) as prompt:
+            result = runner.invoke(app, [
+                "seller", "shipping-labels", "create", "04-08365-42542",
+                "--weight", "2", "--length", "10", "--width", "8", "--height", "4",
+                "--out", out_path,
+            ], input="y\n")
+
+        assert result.exit_code == 0
+        prompt.assert_called_once_with(
+            "Select a rate to purchase (1-2)",
+            default="1",
+        )
+        call_kwargs = client.create_from_shipping_quote.call_args.kwargs
+        assert call_kwargs["quote_id"] == "Q-test-001"
+        assert call_kwargs["rate_id"] == "R-priority-001"
+
     def test_purchase_with_insurance(self, runner, mock_config, tmp_path):
         client, cfg_p, cli_p = _mock_client(mock_config)
         client.get_order.return_value = SAMPLE_ORDER

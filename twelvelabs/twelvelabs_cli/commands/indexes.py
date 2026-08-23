@@ -142,14 +142,14 @@ def indexes_get(
 @app.command("create")
 def indexes_create(
     name: str = typer.Argument(..., help="Name for the new index"),
-    engine: str = typer.Option("pegasus1.2", "--engine", "-e", help="Engine to use (default: pegasus1.2)"),
+    engine: str = typer.Option("pegasus1.5", "--engine", "-e", help="Engine to use (default: pegasus1.5)"),
 ):
     """
     Create a new index.
 
     Examples:
         twelvelabs indexes create my-course-index
-        twelvelabs indexes create ai-102-nlp --engine pegasus1.2
+        twelvelabs indexes create ai-102-nlp --engine pegasus1.5
     """
     try:
         client = get_client()

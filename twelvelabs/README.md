@@ -1,6 +1,10 @@
 # TwelveLabs CLI
 
-A command-line interface for the [TwelveLabs API](https://docs.twelvelabs.io) - video AI for video understanding, indexing, and text generation.
+## DESCRIPTION
+
+The `twelvelabs` CLI provides a command-line interface for Twelvelabs API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 
@@ -64,7 +68,8 @@ twelvelabs indexes get INDEX_ID --table
 
 # Create a new index
 twelvelabs indexes create my-course-index
-twelvelabs indexes create ai-102-nlp --engine pegasus1.2
+twelvelabs indexes create ai-102-nlp --engine pegasus1.5
+twelvelabs indexes create ai-102-nlp-pegasus15 --engine pegasus1.5
 
 # Delete an index (with confirmation)
 twelvelabs indexes delete INDEX_ID
@@ -113,11 +118,17 @@ twelvelabs generate text VIDEO_ID --prompt "Describe what happens in this video"
 # Generate text with prompt from file
 twelvelabs generate text VIDEO_ID --prompt-file review_prompt.md
 
+# Generate text with Pegasus 1.5
+twelvelabs generate text VIDEO_ID --prompt-file review_prompt.md --engine pegasus1.5 --index-id INDEX_ID
+
 # Pipe output to file
 twelvelabs generate text VIDEO_ID --prompt "List all issues" > output.txt
 
 # Generate JSON output (validates JSON structure)
 twelvelabs generate json VIDEO_ID --prompt "Return a JSON array of issues"
+
+# Generate JSON with Pegasus 1.5
+twelvelabs generate json VIDEO_ID --prompt-file review_prompt.md --engine pegasus1.5 --index-id INDEX_ID
 
 # Generate JSON without validation
 twelvelabs generate json VIDEO_ID --prompt "Return JSON" --no-validate
@@ -177,7 +188,7 @@ twelvelabs indexes list --table --limit 5
 
 ## Configuration
 
-Credentials are stored in a `.env` file in the package directory:
+Authentication profile files live under `~/.local/share/cli-tools/twelvelabs/authentication_profiles/<profile>/`; non-auth defaults live in `~/.local/share/cli-tools/twelvelabs/.env`:
 
 ```bash
 # API Key (required)

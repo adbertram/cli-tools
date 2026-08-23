@@ -16,7 +16,12 @@ VALID_CREDENTIAL_TYPES = {
 }
 
 
-def validate_profile(profile: dict, errors: list[str]) -> None:
+def validate_profile(
+    profile: dict,
+    errors: list[str],
+    *,
+    require_authenticated: bool = True,
+) -> None:
     name = profile.get("name")
     if not isinstance(name, str):
         errors.append("profile missing or non-string name")
@@ -33,9 +38,13 @@ def validate_profile(profile: dict, errors: list[str]) -> None:
         elif not isinstance(profile[field], expected_type):
             errors.append(f"profile {name} {field} must be {expected_type.__name__}")
 
-    if profile.get("active") is not True:
+    if require_authenticated and profile.get("active") is not True:
         errors.append(f"profile {name} active must be true in auth status output")
-    if isinstance(profile.get("authenticated"), bool) and profile["authenticated"] is not True:
+    if (
+        require_authenticated
+        and isinstance(profile.get("authenticated"), bool)
+        and profile["authenticated"] is not True
+    ):
         errors.append(f"profile {name} authenticated must be true in auth status output")
 
     cred_types = profile.get("credential_types")
@@ -80,7 +89,7 @@ def validate_profile(profile: dict, errors: list[str]) -> None:
         )
 
 
-def validate_payload(payload: object) -> list[str]:
+def validate_payload(payload: object, *, require_authenticated: bool = True) -> list[str]:
     errors: list[str] = []
     if not isinstance(payload, dict):
         return ["top-level must be object"]
@@ -93,15 +102,23 @@ def validate_payload(payload: object) -> list[str]:
 
     for profile in payload["profiles"]:
         if isinstance(profile, dict):
-            validate_profile(profile, errors)
+            validate_profile(
+                profile,
+                errors,
+                require_authenticated=require_authenticated,
+            )
         else:
             errors.append("profile must be object")
     return errors
 
 
-def parse_and_validate_stdout(stdout: str) -> tuple[object | None, list[str]]:
+def parse_and_validate_stdout(
+    stdout: str,
+    *,
+    require_authenticated: bool = True,
+) -> tuple[object | None, list[str]]:
     try:
         payload = json.loads(stdout)
     except json.JSONDecodeError as exc:
         return None, [f"stdout is not a single valid JSON document: {exc}"]
-    return payload, validate_payload(payload)
+    return payload, validate_payload(payload, require_authenticated=require_authenticated)

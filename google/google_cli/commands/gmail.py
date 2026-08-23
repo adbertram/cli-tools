@@ -6,12 +6,15 @@ COMMAND_CREDENTIALS = {
     "search": ["custom"],
     "send": ["custom"],
     "archive": ["custom"],
+    "trash": ["custom"],
     "download-attachment": ["custom"],
     "draft": ["custom"],
+    "draft-get": ["custom"],
     "send-draft": ["custom"],
     "reply": ["custom"],
     "reply-all": ["custom"],
     "labels": ["custom"],
+    "filters": ["custom"],
 }
 
 import typer
@@ -29,7 +32,7 @@ from typing import Optional, List
 from pathlib import Path
 from googleapiclient.errors import HttpError
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_table, handle_error, print_success, print_error, print_info
+from cli_tools_shared.output import print_json, print_table, handle_error, print_success, print_error, print_info, command
 from cli_tools_shared.filters import apply_filters
 from ..filter_translator import translate_gmail_filters
 
@@ -68,6 +71,59 @@ def _resolve_wsl_path(file_path: Path) -> Path:
 app = typer.Typer(help="Access Gmail messages")
 labels_app = typer.Typer(help="Manage message labels")
 app.add_typer(labels_app, name="labels")
+filters_app = typer.Typer(help="Manage Gmail filters")
+app.add_typer(filters_app, name="filters")
+
+GMAIL_MESSAGE_PROPERTIES = {
+    'id',
+    'name',
+    'from',
+    'to',
+    'subject',
+    'date',
+    'threadId',
+    'labelIds',
+    'attachments',
+}
+
+
+def confirm_gmail_send(action: str) -> None:
+    """Record that --confirm approved a Gmail send action."""
+    print_info(f"Confirmed with --confirm; about to {action}.")
+
+
+def resolve_output_properties(properties: Optional[List[str]]) -> List[str]:
+    if not properties:
+        return []
+
+    return [
+        item.strip()
+        for value in properties
+        for item in value.split(',')
+        if item.strip()
+    ]
+
+
+def resolve_gmail_message_properties(properties: Optional[List[str]], include_body: bool = False) -> List[str]:
+    if not properties:
+        return ['id', 'from', 'subject', 'date']
+
+    supported_properties = set(GMAIL_MESSAGE_PROPERTIES)
+    if include_body:
+        supported_properties.add('body')
+
+    parsed_properties = resolve_output_properties(properties)
+    invalid_properties = [
+        item for item in parsed_properties if item not in supported_properties
+    ]
+    if invalid_properties:
+        supported = ', '.join(sorted(supported_properties))
+        raise ValueError(
+            f"Unsupported Gmail message properties: {', '.join(invalid_properties)}. "
+            f"Supported properties: {supported}"
+        )
+
+    return parsed_properties
 
 
 def normalize_filename(name: str) -> str:
@@ -206,16 +262,19 @@ def decode_body_from_payload(payload: dict) -> str:
     return ''
 
 @app.command("list")
+@command
 def gmail_list(
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of messages to list"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     label: Optional[str] = typer.Option(None, "--label", help="Filter by label (e.g., INBOX, SENT)"),
     filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)"),
-    properties: Optional[List[str]] = typer.Option(None, "--properties", "-p", help="Properties to include in output"),
+    properties: Optional[List[str]] = typer.Option(None, "--properties", "-p", help="Properties to include in output: id, name, from, to, subject, date, threadId, labelIds, attachments, body with --include-body"),
+    include_body: bool = typer.Option(False, "--include-body", help="Include decoded message body text in each result"),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
 ):
     """List Gmail messages."""
     try:
+        props_to_include = resolve_gmail_message_properties(properties, include_body=include_body)
         client = get_client(profile=profile)
         service = client.get_gmail_service()
 
@@ -235,12 +294,8 @@ def gmail_list(
         messages = results.get('messages', [])
 
         if not messages:
-            # No messages - exit silently with success
+            print_json([])
             return
-
-        # Default properties
-        default_props = ['id', 'from', 'subject', 'date']
-        props_to_include = properties if properties else default_props
 
         # Get details for each message
         detailed_messages = []
@@ -259,6 +314,7 @@ def gmail_list(
 
             full_msg = {
                 'id': msg_detail['id'],
+                'name': headers.get('Subject', ''),
                 'from': headers.get('From', ''),
                 'to': headers.get('To', ''),
                 'subject': headers.get('Subject', ''),
@@ -271,14 +327,22 @@ def gmail_list(
             if attachments:
                 full_msg['attachments'] = attachments
 
+            if include_body:
+                full_msg['body'] = decode_body_from_payload(payload)
+
             # Filter to requested properties
             if properties:
-                full_msg = {k: v for k, v in full_msg.items() if k in props_to_include}
+                allowed_properties = set(props_to_include)
+                if include_body:
+                    allowed_properties.add('body')
+                full_msg = {k: v for k, v in full_msg.items() if k in allowed_properties}
 
             detailed_messages.append(full_msg)
 
         if table:
             table_cols = [p for p in ['subject', 'from', 'date'] if p in props_to_include or not properties]
+            if include_body:
+                table_cols.append('body')
             table_headers = [p.title() for p in table_cols]
             print_table(detailed_messages, table_cols, table_headers)
         else:
@@ -291,10 +355,12 @@ def gmail_list(
         raise typer.Exit(handle_error(e))
 
 @app.command("get")
+@command
 def gmail_get(
     message_id: str = typer.Argument(..., help="Message ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     raw: bool = typer.Option(False, "--raw", "-r", help="Return raw API response without processing"),
+    include_body: bool = typer.Option(False, "--include-body", help="Include decoded message body text in the result"),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
 ):
     """Get a specific message."""
@@ -313,7 +379,7 @@ def gmail_get(
             return
 
         payload = message.get('payload', {})
-        headers = {h['name']: h['value'] for h in payload.get('headers', [])}
+        headers = {h['name'].lower(): h['value'] for h in payload.get('headers', [])}
 
         # Decode the body
         body = decode_body_from_payload(payload)
@@ -324,21 +390,27 @@ def gmail_get(
         if table:
             data = [{
                 'id': message['id'],
-                'from': headers.get('From', ''),
-                'subject': headers.get('Subject', ''),
-                'date': headers.get('Date', ''),
+                'from': headers.get('from', ''),
+                'subject': headers.get('subject', ''),
+                'date': headers.get('date', ''),
             }]
-            print_table(data, ['subject', 'from', 'date'], ['Subject', 'From', 'Date'])
+            table_cols = ['subject', 'from', 'date']
+            table_headers = ['Subject', 'From', 'Date']
+            if include_body:
+                data[0]['body'] = body
+                table_cols.append('body')
+                table_headers.append('Body')
+            print_table(data, table_cols, table_headers)
         else:
             result = {
                 'id': message['id'],
                 'threadId': message.get('threadId', ''),
                 'labelIds': message.get('labelIds', []),
-                'from': headers.get('From', ''),
-                'to': headers.get('To', ''),
-                'cc': headers.get('Cc', ''),
-                'subject': headers.get('Subject', ''),
-                'date': headers.get('Date', ''),
+                'from': headers.get('from', ''),
+                'to': headers.get('to', ''),
+                'cc': headers.get('cc', ''),
+                'subject': headers.get('subject', ''),
+                'date': headers.get('date', ''),
                 'body': body,
             }
             # Remove empty cc field
@@ -356,6 +428,7 @@ def gmail_get(
         raise typer.Exit(handle_error(e))
 
 @app.command("read")
+@command
 def gmail_read(
     message_id: str = typer.Argument(..., help="Message ID"),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
@@ -395,15 +468,17 @@ def gmail_read(
         raise typer.Exit(handle_error(e))
 
 @app.command("search")
+@command
 def gmail_search(
     query: str = typer.Argument(..., help="Search query (Gmail search syntax)"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of results"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
-    properties: Optional[List[str]] = typer.Option(None, "--properties", "-p", help="Properties to include in output"),
+    properties: Optional[List[str]] = typer.Option(None, "--properties", "-p", help="Properties to include in output: id, from, to, subject, date, threadId, labelIds, attachments"),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
 ):
     """Search Gmail messages."""
     try:
+        props_to_include = resolve_gmail_message_properties(properties)
         client = get_client(profile=profile)
         service = client.get_gmail_service()
 
@@ -416,12 +491,8 @@ def gmail_search(
         messages = results.get('messages', [])
 
         if not messages:
-            # No messages - exit silently with success
+            print_json([])
             return
-
-        # Default properties
-        default_props = ['id', 'from', 'subject', 'date']
-        props_to_include = properties if properties else default_props
 
         # Get details for each message
         detailed_messages = []
@@ -473,6 +544,7 @@ def gmail_search(
 
 
 @app.command("send")
+@command
 def gmail_send(
     to: str = typer.Option(..., "--to", help="Recipient email address"),
     subject: str = typer.Option(..., "--subject", "-s", help="Email subject"),
@@ -571,10 +643,13 @@ def gmail_send(
                 preview['attachments'] = attachment_info
 
             print_json(preview)
-            print_info("Use --confirm to actually send this email. The --confirm flag must be approved by a human, not AI.")
+            print_info(
+                "To send, rerun the same command with --confirm."
+            )
             return
 
-        # Send the message
+        confirm_gmail_send("send this email")
+
         sent_message = service.users().messages().send(
             userId='me',
             body={'raw': raw_message}
@@ -586,7 +661,7 @@ def gmail_send(
             'to': to,
             'subject': subject,
             'attachments': attachment_info,
-            'status': 'sent'
+            'status': 'sent',
         })
 
     except HttpError as e:
@@ -597,6 +672,7 @@ def gmail_send(
 
 
 @app.command("archive")
+@command
 def gmail_archive(
     message_ids: List[str] = typer.Argument(..., help="Message ID(s) to archive"),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
@@ -624,7 +700,37 @@ def gmail_archive(
         raise typer.Exit(handle_error(e))
 
 
+@app.command("trash")
+@command
+def gmail_trash(
+    message_ids: List[str] = typer.Argument(..., help="Message ID(s) to move to trash"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+):
+    """Move messages to trash by adding the TRASH label."""
+    try:
+        client = get_client(profile=profile)
+        service = client.get_gmail_service()
+
+        trashed_count = 0
+        for message_id in message_ids:
+            service.users().messages().modify(
+                userId='me',
+                id=message_id,
+                body={'addLabelIds': ['TRASH']}
+            ).execute()
+            trashed_count += 1
+
+        print_success(f"Moved {trashed_count} message(s) to trash")
+
+    except HttpError as e:
+        print_error(f"HTTP error: {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
 @app.command("download-attachment")
+@command
 def gmail_download_attachment(
     message_id: str = typer.Argument(..., help="Message ID containing the attachment"),
     filename: Optional[str] = typer.Option(None, "--filename", "-f", help="Attachment filename to download"),
@@ -731,6 +837,7 @@ def gmail_download_attachment(
 
 
 @app.command("draft")
+@command
 def gmail_draft(
     to: str = typer.Option(..., "--to", help="Recipient email address"),
     subject: str = typer.Option(..., "--subject", "-s", help="Email subject"),
@@ -830,7 +937,80 @@ def gmail_draft(
         raise typer.Exit(handle_error(e))
 
 
+@app.command("draft-get")
+@command
+def gmail_draft_get(
+    draft_id: str = typer.Argument(..., help="Gmail draft ID (returned by `gmail draft`)"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    raw: bool = typer.Option(False, "--raw", "-r", help="Return raw API response without processing"),
+    include_body: bool = typer.Option(False, "--include-body", help="Include decoded draft body text in the result"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+):
+    """Get an existing Gmail draft by draft ID.
+
+    Use the draft ID returned by `gmail draft` (for example, `r123...`). Draft
+    metadata is fetched through Gmail's drafts API so headers such as To and
+    Subject are preserved; `gmail get` is for message IDs and can return
+    incomplete draft headers.
+    """
+    try:
+        client = get_client(profile=profile)
+        service = client.get_gmail_service()
+
+        draft = service.users().drafts().get(
+            userId='me',
+            id=draft_id,
+            format='full',
+        ).execute()
+
+        if raw:
+            print_json(draft)
+            return
+
+        message = draft.get('message', {})
+        payload = message.get('payload', {})
+        headers = {h['name'].lower(): h['value'] for h in payload.get('headers', [])}
+        attachments = extract_attachments(payload)
+
+        result = {
+            'draft_id': draft.get('id', draft_id),
+            'message_id': message.get('id', ''),
+            'threadId': message.get('threadId', ''),
+            'labelIds': message.get('labelIds', []),
+            'from': headers.get('from', ''),
+            'to': headers.get('to', ''),
+            'cc': headers.get('cc', ''),
+            'bcc': headers.get('bcc', ''),
+            'subject': headers.get('subject', ''),
+            'date': headers.get('date', ''),
+        }
+        for optional_field in ['cc', 'bcc']:
+            if not result[optional_field]:
+                del result[optional_field]
+        if include_body:
+            result['body'] = decode_body_from_payload(payload)
+        if attachments:
+            result['attachments'] = attachments
+
+        if table:
+            table_cols = ['draft_id', 'to', 'subject', 'date']
+            table_headers = ['Draft ID', 'To', 'Subject', 'Date']
+            if include_body:
+                table_cols.append('body')
+                table_headers.append('Body')
+            print_table([result], table_cols, table_headers)
+        else:
+            print_json(result)
+
+    except HttpError as e:
+        print_error(f"HTTP error: {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
 @app.command("send-draft")
+@command
 def gmail_send_draft(
     draft_id: str = typer.Argument(..., help="Gmail draft ID (returned by `gmail draft`)"),
     confirm: bool = typer.Option(False, "--confirm", help="Actually send the draft. Without this flag, only previews the draft."),
@@ -865,8 +1045,12 @@ def gmail_send_draft(
             if 'bcc' in headers:
                 preview['bcc'] = headers['bcc']
             print_json(preview)
-            print_info("Use --confirm to actually send this draft. The --confirm flag must be approved by a human, not AI.")
+            print_info(
+                "To send this draft, rerun the same command with --confirm."
+            )
             return
+
+        confirm_gmail_send("send this draft")
 
         sent = service.users().drafts().send(
             userId='me',
@@ -903,6 +1087,7 @@ def get_current_user_email(service) -> str:
 
 
 @app.command("reply")
+@command
 def gmail_reply(
     message_id: str = typer.Argument(..., help="Message ID to reply to"),
     body: str = typer.Option(..., "--body", "-b", help="Reply body (plain text)"),
@@ -1027,10 +1212,13 @@ def gmail_reply(
                 preview['attachments'] = attachment_info
 
             print_json(preview)
-            print_info("Use --confirm to actually send this reply. The --confirm flag must be approved by a human, not AI.")
+            print_info(
+                "To send this reply, rerun the same command with --confirm."
+            )
             return
 
-        # Send the reply in the same thread
+        confirm_gmail_send("send this reply")
+
         sent_message = service.users().messages().send(
             userId='me',
             body={'raw': raw_message, 'threadId': thread_id}
@@ -1043,7 +1231,7 @@ def gmail_reply(
             'subject': reply_subject,
             'thread_id': thread_id,
             'attachments': attachment_info,
-            'status': 'sent'
+            'status': 'sent',
         })
 
     except HttpError as e:
@@ -1054,6 +1242,7 @@ def gmail_reply(
 
 
 @app.command("reply-all")
+@command
 def gmail_reply_all(
     message_id: str = typer.Argument(..., help="Message ID to reply to"),
     body: str = typer.Option(..., "--body", "-b", help="Reply body (plain text)"),
@@ -1211,8 +1400,12 @@ def gmail_reply_all(
                 preview['attachments'] = attachment_info
 
             print_json(preview)
-            print_info("Use --confirm to actually send this reply. The --confirm flag must be approved by a human, not AI.")
+            print_info(
+                "To send this reply-all, rerun the same command with --confirm."
+            )
             return
+
+        confirm_gmail_send("send this reply-all")
 
         # Send the reply in the same thread
         sent_message = service.users().messages().send(
@@ -1239,6 +1432,7 @@ def gmail_reply_all(
 
 
 @labels_app.command("list")
+@command
 def labels_list(
     message_id: str = typer.Argument(..., help="Message ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -1269,11 +1463,15 @@ def labels_list(
         if filter:
             labels = apply_filters(labels, filter)
         labels = labels[:limit]
-        if properties:
-            labels = [{k: v for k, v in label_item.items() if k in properties} for label_item in labels]
+        props_to_include = resolve_output_properties(properties)
+        if props_to_include:
+            labels = [
+                {k: v for k, v in label_item.items() if k in props_to_include}
+                for label_item in labels
+            ]
 
         if table:
-            table_cols = properties[:3] if properties else ["id", "name"]
+            table_cols = props_to_include[:3] if props_to_include else ["id", "name"]
             print_table(labels, table_cols, table_cols)
         else:
             print_json({
@@ -1289,6 +1487,7 @@ def labels_list(
 
 
 @labels_app.command("get")
+@command
 def labels_get(
     label_id: str = typer.Argument(..., help="Label ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -1322,6 +1521,7 @@ def labels_get(
 
 
 @labels_app.command("add")
+@command
 def labels_add(
     message_id: str = typer.Argument(..., help="Message ID"),
     label: List[str] = typer.Option(..., "--label", "-l", help="Label ID(s) to add"),
@@ -1349,6 +1549,7 @@ def labels_add(
 
 
 @labels_app.command("remove")
+@command
 def labels_remove(
     message_id: str = typer.Argument(..., help="Message ID"),
     label: List[str] = typer.Option(..., "--label", "-l", help="Label ID(s) to remove"),
@@ -1367,6 +1568,197 @@ def labels_remove(
 
         print_success(f"Removed {len(label)} label(s) from message {message_id}")
         print_json({'message_id': message_id, 'removed_labels': label})
+
+    except HttpError as e:
+        print_error(f"HTTP error: {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+def normalize_gmail_filter(raw: dict) -> dict:
+    """Flatten a Gmail API filter resource into a single-level record."""
+    criteria = raw.get('criteria', {})
+    action = raw.get('action', {})
+    return {
+        'id': raw['id'],
+        'from': criteria.get('from'),
+        'to': criteria.get('to'),
+        'subject': criteria.get('subject'),
+        'query': criteria.get('query'),
+        'negated_query': criteria.get('negatedQuery'),
+        'has_attachment': criteria.get('hasAttachment'),
+        'exclude_chats': criteria.get('excludeChats'),
+        'size': criteria.get('size'),
+        'size_comparison': criteria.get('sizeComparison'),
+        'add_label_ids': action.get('addLabelIds'),
+        'remove_label_ids': action.get('removeLabelIds'),
+        'forward': action.get('forward'),
+    }
+
+
+@filters_app.command("list")
+@command
+def filters_list(
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of filters to list"),
+    filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., from:contains:newsletter)"),
+    properties: Optional[List[str]] = typer.Option(None, "--properties", "-p", help="Properties to include in output"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+):
+    """List Gmail filters."""
+    try:
+        client = get_client(profile=profile)
+        service = client.get_gmail_service()
+
+        response = service.users().settings().filters().list(userId='me').execute()
+        filters = [normalize_gmail_filter(raw) for raw in response.get('filter', [])]
+
+        if filter:
+            filters = apply_filters(filters, filter)
+        filters = filters[:limit]
+        props_to_include = resolve_output_properties(properties)
+        if props_to_include:
+            filters = [
+                {k: v for k, v in record.items() if k in props_to_include}
+                for record in filters
+            ]
+
+        if table:
+            table_cols = props_to_include[:4] if props_to_include else ["id", "from", "subject", "add_label_ids"]
+            print_table(filters, table_cols, table_cols)
+        else:
+            print_json(filters)
+
+    except HttpError as e:
+        print_error(f"HTTP error: {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+@filters_app.command("get")
+@command
+def filters_get(
+    filter_id: str = typer.Argument(..., help="Filter ID"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+):
+    """Get a Gmail filter by ID."""
+    try:
+        client = get_client(profile=profile)
+        service = client.get_gmail_service()
+
+        raw = service.users().settings().filters().get(
+            userId='me',
+            id=filter_id
+        ).execute()
+
+        if table:
+            record = normalize_gmail_filter(raw)
+            cols = ["id", "from", "to", "subject", "query", "add_label_ids", "remove_label_ids", "forward"]
+            print_table([record], cols, cols)
+        else:
+            print_json(raw)
+
+    except HttpError as e:
+        print_error(f"HTTP error: {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+@filters_app.command("create")
+@command
+def filters_create(
+    from_: Optional[str] = typer.Option(None, "--from", help="Match sender address/pattern"),
+    to: Optional[str] = typer.Option(None, "--to", help="Match recipient address/pattern"),
+    subject: Optional[str] = typer.Option(None, "--subject", help="Match subject text"),
+    query: Optional[str] = typer.Option(None, "--query", help="Gmail search query the message must match"),
+    negated_query: Optional[str] = typer.Option(None, "--negated-query", help="Gmail search query the message must NOT match"),
+    has_attachment: bool = typer.Option(False, "--has-attachment", help="Match only messages with attachments"),
+    exclude_chats: bool = typer.Option(False, "--exclude-chats", help="Exclude chat messages"),
+    size: Optional[int] = typer.Option(None, "--size", help="Message size in bytes (use with --size-comparison)"),
+    size_comparison: Optional[str] = typer.Option(None, "--size-comparison", help="Size comparison: larger or smaller"),
+    add_label: Optional[List[str]] = typer.Option(None, "--add-label", help="Label ID to add (repeatable)"),
+    remove_label: Optional[List[str]] = typer.Option(None, "--remove-label", help="Label ID to remove, e.g. INBOX, UNREAD, SPAM (repeatable)"),
+    forward: Optional[str] = typer.Option(None, "--forward", help="Forward matching messages to this verified address"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+):
+    """Create a Gmail filter.
+
+    Requires at least one matching criterion and at least one action.
+    Common actions: --add-label <LABEL_ID>, --remove-label INBOX (archive),
+    --remove-label UNREAD (mark read), --add-label TRASH (delete).
+    """
+    try:
+        criteria = {
+            'from': from_,
+            'to': to,
+            'subject': subject,
+            'query': query,
+            'negatedQuery': negated_query,
+            'hasAttachment': has_attachment or None,
+            'excludeChats': exclude_chats or None,
+            'size': size,
+            'sizeComparison': size_comparison,
+        }
+        criteria = {k: v for k, v in criteria.items() if v is not None}
+
+        action = {
+            'addLabelIds': add_label or None,
+            'removeLabelIds': remove_label or None,
+            'forward': forward,
+        }
+        action = {k: v for k, v in action.items() if v is not None}
+
+        if not criteria:
+            print_error("At least one criterion is required (--from, --to, --subject, --query, --negated-query, --has-attachment, --size)")
+            raise typer.Exit(1)
+        if not action:
+            print_error("At least one action is required (--add-label, --remove-label, --forward)")
+            raise typer.Exit(1)
+
+        client = get_client(profile=profile)
+        service = client.get_gmail_service()
+
+        created = service.users().settings().filters().create(
+            userId='me',
+            body={'criteria': criteria, 'action': action}
+        ).execute()
+
+        print_json(created)
+
+    except HttpError as e:
+        print_error(f"HTTP error: {e}")
+        raise typer.Exit(1)
+    except typer.Exit:
+        raise
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+@filters_app.command("delete")
+@command
+def filters_delete(
+    filter_id: str = typer.Argument(..., help="Filter ID"),
+    confirm: bool = typer.Option(False, "--confirm", "-y", help="Skip confirmation prompt"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+):
+    """Delete a Gmail filter."""
+    try:
+        if not confirm:
+            typer.confirm(f"Are you sure you want to delete filter '{filter_id}'?", abort=True)
+
+        client = get_client(profile=profile)
+        service = client.get_gmail_service()
+
+        service.users().settings().filters().delete(
+            userId='me',
+            id=filter_id
+        ).execute()
+
+        print_json({'filter_id': filter_id, 'deleted': True})
 
     except HttpError as e:
         print_error(f"HTTP error: {e}")

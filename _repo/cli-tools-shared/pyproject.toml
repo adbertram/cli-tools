@@ -19,6 +19,11 @@ dependencies = [
     "websockets==15.0.1",
 ]
 
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["cli_tools_shared*", "browser_harness*"]

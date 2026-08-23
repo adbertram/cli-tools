@@ -1,6 +1,10 @@
 # Reminders CLI
 
-Command-line interface for managing macOS Reminders using the EventKit framework.
+## DESCRIPTION
+
+The `reminders` CLI provides a command-line interface for macOS Reminders.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Features
 

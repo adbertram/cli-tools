@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from pathlib import Path
 from tempfile import mkdtemp
 from types import SimpleNamespace
 
@@ -41,6 +42,107 @@ def config():
         get_missing_credentials=lambda: [],
         has_api_credentials=lambda: True,
         get_missing_api_credentials=lambda: [],
+    )
+
+
+def post_payload(commentary="Launch update", lifecycle_state="PUBLISHED"):
+    return {
+        "id": "urn:li:share:1",
+        "author": "urn:li:organization:123456",
+        "commentary": commentary,
+        "visibility": "PUBLIC",
+        "lifecycleState": lifecycle_state,
+        "distribution": {"feedDistribution": "MAIN_FEED"},
+        "isReshareDisabledByAuthor": False,
+        "createdAt": 1716030000000,
+        "publishedAt": 1716030060000,
+        "lastModifiedAt": 1716030120000,
+    }
+
+
+def assert_successful_mutation_invalidates_post_read_caches(monkeypatch, mutation):
+    monkeypatch.setenv("CACHE_ENABLED", "true")
+    test_config = config()
+    session = FakeSession(
+        [
+            FakeResponse(post_payload(commentary="Before")),
+            FakeResponse({"elements": [post_payload(commentary="Before")]}),
+            mutation["response"],
+            FakeResponse(post_payload(commentary="After")),
+        ]
+    )
+    client = LinkedInClient(config=test_config, session=session)
+
+    assert client.get_post(
+        post_urn="urn:li:share:1",
+        permission_author="urn:li:organization:123456",
+    )["commentary"] == "Before"
+    assert client.list_posts(author="urn:li:organization:123456", limit=10)[0]["commentary"] == "Before"
+    assert client.search_posts(query="Before", author="urn:li:organization:123456")
+
+    cache_dir = Path(test_config.storage_dir) / "cache"
+    assert sorted(path.name.split("_", 2)[0] for path in cache_dir.glob("*.json")) == [
+        "get",
+        "list",
+        "search",
+    ]
+
+    mutation["call"](client)
+
+    assert not list(cache_dir.glob("get_post_*.json"))
+    assert not list(cache_dir.glob("list_posts_*.json"))
+    assert not list(cache_dir.glob("search_posts_*.json"))
+    assert client.get_post(
+        post_urn="urn:li:share:1",
+        permission_author="urn:li:organization:123456",
+    )["commentary"] == "After"
+    assert [call["method"] for call in session.calls] == ["GET", "GET", mutation["method"], "GET"]
+
+
+def test_create_post_invalidates_post_read_caches(monkeypatch):
+    assert_successful_mutation_invalidates_post_read_caches(
+        monkeypatch,
+        {
+            "method": "POST",
+            "response": FakeResponse(
+                {},
+                status_code=201,
+                headers={"x-restli-id": "urn:li:share:99"},
+            ),
+            "call": lambda client: client.create_post(
+                commentary="New post",
+                author="urn:li:organization:123456",
+            ),
+        },
+    )
+
+
+def test_update_post_invalidates_post_read_caches(monkeypatch):
+    assert_successful_mutation_invalidates_post_read_caches(
+        monkeypatch,
+        {
+            "method": "POST",
+            "response": FakeResponse({}, status_code=204),
+            "call": lambda client: client.update_post(
+                post_urn="urn:li:share:1",
+                commentary="Updated commentary",
+                permission_author="urn:li:organization:123456",
+            ),
+        },
+    )
+
+
+def test_delete_post_invalidates_post_read_caches(monkeypatch):
+    assert_successful_mutation_invalidates_post_read_caches(
+        monkeypatch,
+        {
+            "method": "DELETE",
+            "response": FakeResponse({}, status_code=204),
+            "call": lambda client: client.delete_post(
+                post_urn="urn:li:share:1",
+                permission_author="urn:li:organization:123456",
+            ),
+        },
     )
 
 

@@ -1,0 +1,2055 @@
+{
+  "tool": "deepseek-sessions",
+  "description": "CLI interface for deepseek-sessions",
+  "discovered_at": "2026-08-20T00:59:32Z",
+  "total_commands": 38,
+  "global_options": [],
+  "commands": {
+    "approvals": {
+      "help": "Query permission escalation requests",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get details for one approval request. Example: deepseek-sessions approvals get 49ff56e3-4b0a-4b1a-99d6-8aae2a288de7 -p BricklinkBook",
+          "arguments": [
+            {
+              "name": "approval_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Approval ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project name, path, or directory key (required)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List permission escalation requests and their decisions. Example: deepseek-sessions approvals list --project BricklinkBook --table deepseek-sessions approvals list -p BricklinkBook --filter \"outcome:eq:allowed-once\"",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project name, path, or directory key (required)",
+              "short": "-p"
+            },
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session ID or title",
+              "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session title (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time filter: 5h, 1d, 7d",
+              "short": "-s"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., outcome:eq:allowed-once)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "auth": {
+      "help": "Check local dsh access",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing ephemeral auth state and re-authenticate",
+              "short": "-F"
+            }
+          ]
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show their auth types and active state.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "conversations": {
+      "help": "List conversations within sessions",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get one conversation, including its user and assistant messages. Identify it either positionally as session:number, or with --session-name plus --conversation-id. The number is split off the right, so titles that contain a colon still work. Example: deepseek-sessions conversations get session-53a213f2-c5ac-4950-a2c7-8011f2281e55:1 deepseek-sessions conversations get --session-name \"Fix Lego deal run issues\" -C 1",
+          "arguments": [
+            {
+              "name": "conversation_id",
+              "type": "CONVERSATION_ID",
+              "required": false,
+              "help": "Conversation ID (session:number, e.g. session-abc:1); omit when using --session-name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project name (auto-derived from the session when omitted)",
+              "short": "-p"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session title; requires --conversation-id",
+              "short": "-N"
+            },
+            {
+              "name": "--conversation-id",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Conversation number (used with --session-name)",
+              "short": "-C"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List conversations within a project's sessions. Example: deepseek-sessions conversations list --project LegoScout deepseek-sessions conversations list -p LegoScout --session-id session-53a213f2-c5ac-4950-a2c7-8011f2281e55 deepseek-sessions conversations list -p LegoScout --filter \"started_by:eq:compaction\" --table",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project name, path, or directory key (required)",
+              "short": "-p"
+            },
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session ID or title",
+              "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session title (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time filter: 5h, 1d, 7d",
+              "short": "-s"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., started_by:eq:compaction)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "goals": {
+      "help": "Query standing goals and their revisions",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get every recorded revision of one goal. Example: deepseek-sessions goals get goal-c6c1f5cf-b816-4ab4-90aa-59c6ef7987bb -p BricklinkBook",
+          "arguments": [
+            {
+              "name": "goal_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Goal ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project name, path, or directory key (required)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List standing-goal revisions in a project. Example: deepseek-sessions goals list --project BricklinkBook --table deepseek-sessions goals list -p BricklinkBook --filter \"phase:eq:active\"",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project name, path, or directory key (required)",
+              "short": "-p"
+            },
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session ID or title",
+              "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session title (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time filter: 5h, 1d, 7d",
+              "short": "-s"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., phase:eq:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "projects": {
+      "help": "List and query projects",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get details for a specific project. Example: deepseek-sessions projects get LegoScout deepseek-sessions projects get /Users/adam/Dropbox/GitRepos/Agents/LegoScout",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project name, absolute path, or directory key"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List all projects that have dsh sessions. Example: deepseek-sessions projects list deepseek-sessions projects list --table deepseek-sessions projects list --filter \"session_count:gt:5\"",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:LegoScout, session_count:gt:5)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "retries": {
+      "help": "Query LLM retries and failure codes",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get details for one retry. Example: deepseek-sessions retries get 79da67c3-9ac4-463e-b2af-7f20b4f2b416 -p LegoScout",
+          "arguments": [
+            {
+              "name": "retry_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Retry ID (dsh retryId)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project name, path, or directory key (required)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List retryable provider failures in a project. Example: deepseek-sessions retries list --project LegoScout --table deepseek-sessions retries list -p LegoScout --filter \"error_code:eq:TIMEOUT\" deepseek-sessions retries list -p LegoScout --filter \"started:eq:false\"",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project name, path, or directory key (required)",
+              "short": "-p"
+            },
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session ID or title",
+              "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session title (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time filter: 5h, 1d, 7d",
+              "short": "-s"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., error_code:eq:TIMEOUT)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "search": {
+      "help": "Search keywords across all session transcripts",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "run": {
+          "help": "Search keywords across every dsh session transcript. Searches user messages, assistant messages, and tool results. Searches all projects by default. Example: deepseek-sessions search run \"legoscout\" deepseek-sessions search run \"timeout\" --since 30d --table deepseek-sessions search run \"auctionzip\" --snippets --table deepseek-sessions search run \"docker\" --project CourseCraft",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Keyword(s) to search for (case-insensitive)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Restrict to one project",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum sessions to return",
+              "short": "-l",
+              "default": "20"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time filter: 5h, 1d, 7d, 30d",
+              "short": "-s"
+            },
+            {
+              "name": "--max-matches",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Max snippet matches per session",
+              "short": "-m",
+              "default": "5"
+            },
+            {
+              "name": "--snippets",
+              "type": "bool",
+              "required": false,
+              "help": "Show the first matching snippet in table mode"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., origin:eq:subagent)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "sessions": {
+      "help": "List, get, and search sessions",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get full session details including messages, tool calls, and subagents. Example: deepseek-sessions sessions get session-53a213f2-c5ac-4950-a2c7-8011f2281e55 deepseek-sessions sessions get \"Fix Lego deal run issues\" --table",
+          "arguments": [
+            {
+              "name": "session_id",
+              "type": "SESSION_ID",
+              "required": false,
+              "help": "Session ID or title; omit when using --session-name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session title (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List sessions. With no --project, returns sessions across all projects. Example: deepseek-sessions sessions list --table deepseek-sessions sessions list --project LegoScout --no-subagents deepseek-sessions sessions list --date-alias yesterday --limit 5 deepseek-sessions sessions list --filter \"origin:eq:subagent\" --table deepseek-sessions sessions list --date-alias today --include-prompts first:2,last:1",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project name, path, or directory key",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time filter: 5h, 1d, 7d",
+              "short": "-s"
+            },
+            {
+              "name": "--date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sessions whose last activity falls on this local date (YYYY-MM-DD). Mutually exclusive with --date-range, --date-alias, --since"
+            },
+            {
+              "name": "--date-range",
+              "type": "TEXT",
+              "required": false,
+              "help": "Inclusive local range START..END (YYYY-MM-DD..YYYY-MM-DD)"
+            },
+            {
+              "name": "--date-alias",
+              "type": "TEXT",
+              "required": false,
+              "help": "One of today, yesterday, this_week, last_week (ISO weeks, Monday-Sunday)"
+            },
+            {
+              "name": "--min-tool-calls",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Drop sessions whose tool_call_count is below this threshold"
+            },
+            {
+              "name": "--subagents",
+              "type": "bool",
+              "required": false,
+              "help": "Include spawned subagent sessions (origin=subagent)",
+              "default": "subagents"
+            },
+            {
+              "name": "--include-prompts",
+              "type": "TEXT",
+              "required": false,
+              "help": "Embed first/last user prompts on each row. Format: first:N,last:N"
+            },
+            {
+              "name": "--prompts-clean",
+              "type": "bool",
+              "required": false,
+              "help": "With --include-prompts, skip harness-injected tag messages"
+            },
+            {
+              "name": "--prompts-max-chars",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Truncate each embedded prompt to this many characters",
+              "default": "400"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., origin:eq:subagent, turn_count:gt:3)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "search": {
+          "help": "Search for sessions whose transcript contains a query string. Returns session summaries. Use `search run` for matching snippets. Example: deepseek-sessions sessions search \"legoscout\" deepseek-sessions sessions search \"timeout\" --since 7d --table",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search query"
+            }
+          ],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project name, path, or directory key",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time filter: 5h, 1d, 7d",
+              "short": "-s"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "skills": {
+      "help": "Query skill loads and slash commands",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get details for a specific skill load or slash command. Example: deepseek-sessions skills get cmd-a9d512b7-1 --project BricklinkBook",
+          "arguments": [
+            {
+              "name": "skill_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Skill tool call ID or command ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project name, path, or directory key (required)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List skill loads (`skill` tool calls) and slash commands in a project. Example: deepseek-sessions skills list --project LegoScout --table deepseek-sessions skills list -p LegoScout --filter \"kind:eq:command\" deepseek-sessions skills list -p CourseCraft --filter \"name:eq:caveman\"",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project name, path, or directory key (required)",
+              "short": "-p"
+            },
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session ID or title",
+              "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session title (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time filter: 5h, 1d, 7d",
+              "short": "-s"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., kind:eq:skill, name:eq:caveman)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "subagent-activity": {
+      "help": "Query subagent invocations",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get full details for a subagent, including its child session messages. Example: deepseek-sessions subagent-activity get 72a1b775-435d-4a28-bd38-3f693adac2eb",
+          "arguments": [
+            {
+              "name": "subagent_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Subagent (child) session ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project name (auto-derived when omitted)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List every subagent session spawned inside a project. Example: deepseek-sessions subagent-activity list --project LegoScout --table deepseek-sessions subagent-activity list -p LegoScout --filter \"status:eq:error\" deepseek-sessions subagent-activity list -p CourseCraft -S session-0d8e00ea-2658-432c-89ed-7800d5b965bd",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project name, path, or directory key (required)",
+              "short": "-p"
+            },
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Parent session ID or title",
+              "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Parent session title (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time filter: 5h, 1d, 7d",
+              "short": "-s"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., status:eq:error)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "timeline": {
+      "help": "View unified activity timeline",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "consolidated": {
+          "help": "Show one session plus every subagent it spawned in a single timeline. Example: deepseek-sessions timeline consolidated -S session-53a213f2-c5ac-4950-a2c7-8011f2281e55 --table deepseek-sessions timeline consolidated -S session-53a213f2-c5ac-4950-a2c7-8011f2281e55 --hide-agent-tools",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session ID or title",
+              "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session title (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project name (auto-derived when omitted)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show full input/output (no truncation)",
+              "short": "-w"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum entries",
+              "short": "-l",
+              "default": "500"
+            },
+            {
+              "name": "--show-agent-tools",
+              "type": "bool",
+              "required": false,
+              "help": "Include tool calls made inside subagent sessions",
+              "default": "show-agent-tools"
+            },
+            {
+              "name": "--show-thinking",
+              "type": "bool",
+              "required": false,
+              "help": "Include assistant reasoning blocks"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get the timeline for one session. Example: deepseek-sessions timeline get session-53a213f2-c5ac-4950-a2c7-8011f2281e55 --table deepseek-sessions timeline get --session-name \"Fix Lego deal run issues\" --table",
+          "arguments": [
+            {
+              "name": "session_id",
+              "type": "SESSION_ID",
+              "required": false,
+              "help": "Session ID or title; omit when using --session-name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project name (auto-derived when omitted)",
+              "short": "-p"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session title (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show full input/output (no truncation)",
+              "short": "-w"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum entries",
+              "short": "-l",
+              "default": "200"
+            },
+            {
+              "name": "--show-thinking",
+              "type": "bool",
+              "required": false,
+              "help": "Include assistant reasoning blocks"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "Show a unified timeline across a project's sessions. Example: deepseek-sessions timeline list --project LegoScout --since 1d --table deepseek-sessions timeline list -p LegoScout --errors-only --table deepseek-sessions timeline list -p LegoScout --filter \"event_type:eq:retry\"",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project name, path, or directory key (required)",
+              "short": "-p"
+            },
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session ID or title",
+              "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session title (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--conversation-id",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Filter to one conversation (requires a session)",
+              "short": "-C"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show full input/output (no truncation)",
+              "short": "-w"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum entries",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time filter: 5h, 1d, 7d",
+              "short": "-s"
+            },
+            {
+              "name": "--show-thinking",
+              "type": "bool",
+              "required": false,
+              "help": "Include assistant reasoning blocks"
+            },
+            {
+              "name": "--errors-only",
+              "type": "bool",
+              "required": false,
+              "help": "Show only error rows",
+              "short": "-e"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., event_type:eq:tool_call)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "todos": {
+      "help": "Query todo items from sessions",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get a specific todo by ID. Example: deepseek-sessions todos get session-a084bd95-95f4-489f-9ac2-92d9546eb8f4:0 -p BricklinkBook",
+          "arguments": [
+            {
+              "name": "todo_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Todo ID in the form <session id>:<position>"
+            }
+          ],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project name, path, or directory key (required)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List the final todo list of each session in a project. Example: deepseek-sessions todos list --project BricklinkBook --table deepseek-sessions todos list -p BricklinkBook --filter \"status:eq:in_progress\"",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project name, path, or directory key (required)",
+              "short": "-p"
+            },
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session ID or title",
+              "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session title (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time filter: 5h, 1d, 7d",
+              "short": "-s"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., status:eq:pending)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "tool-calls": {
+      "help": "Query tool call history",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get details for a specific tool call. Example: deepseek-sessions tool-calls get call_00_3eobTHgeR5qdfDWKVuYA6448 --project LegoScout",
+          "arguments": [
+            {
+              "name": "tool_call_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Tool call ID (dsh callId)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project name, path, or directory key (required)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List tool calls in a project. Example: deepseek-sessions tool-calls list --project LegoScout --table deepseek-sessions tool-calls list -p LegoScout --filter \"tool:eq:bash\" deepseek-sessions tool-calls list -p LegoScout --filter \"status:eq:error\" --wide --table deepseek-sessions tool-calls list -p LegoScout --include-subagents deepseek-sessions tool-calls list -p LegoScout --subagent-id 72a1b775-435d-4a28-bd38-3f693adac2eb",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project name, path, or directory key (required)",
+              "short": "-p"
+            },
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session ID or title",
+              "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session title (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show full input/output (no truncation)",
+              "short": "-w"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time filter: 5h, 1d, 7d",
+              "short": "-s"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., tool:eq:bash, status:eq:error)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--include-subagents",
+              "type": "bool",
+              "required": false,
+              "help": "Include tool calls made inside subagent sessions",
+              "short": "-a"
+            },
+            {
+              "name": "--subagent-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Only tool calls from one subagent (its child session ID)"
+            },
+            {
+              "name": "--code-dispatch",
+              "type": "bool",
+              "required": false,
+              "help": "Include run_code sub-calls (tool/code-dispatch)",
+              "default": "code-dispatch"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "turns": {
+      "help": "Query agent turns and their steps",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get one turn plus the model round-trips (steps) inside it. Example: deepseek-sessions turns get 3 -S session-0d8e00ea-2658-432c-89ed-7800d5b965bd --table",
+          "arguments": [
+            {
+              "name": "turn",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Turn number within the session"
+            }
+          ],
+          "options": [
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session ID or title",
+              "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session title (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project name (auto-derived when omitted)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List agent turns with their finish reason, duration, and token cost. Example: deepseek-sessions turns list --project LegoScout --table deepseek-sessions turns list -p LegoScout --filter \"finish_reason:eq:error\" deepseek-sessions turns list -p CourseCraft -S session-0d8e00ea-2658-432c-89ed-7800d5b965bd --table",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project name, path, or directory key (required)",
+              "short": "-p"
+            },
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session ID or title",
+              "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session title (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time filter: 5h, 1d, 7d",
+              "short": "-s"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., finish_reason:eq:error)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "usage_instructions": "Use the `deepseek-sessions` CLI. Run `deepseek-sessions --help` to discover command groups and `--help` on any subcommand for its options."
+}

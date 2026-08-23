@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock
 
+from cli_tools_shared.testing.auth_matrix import seed_auth_profile
 from typer.testing import CliRunner
 
 
@@ -48,29 +49,52 @@ class _CodeInput:
 
 
 def _fake_runtime_init(self, config=None):
-    self.config = MagicMock()
+    assert config is not None
+    self.config = config
     self.confirmation = MagicMock()
     self.confirmation.is_pending.return_value = False
     self.clear_session = MagicMock()
     self._confirmation_handler = None
 
 
-def test_messages_list_prompts_for_confirmation_code_and_retries(monkeypatch):
+def test_messages_list_uses_managed_confirmation_code_and_retries(tmp_path, monkeypatch):
+    data_home = tmp_path / "data-home"
+    profiles_dir = data_home / "cli-tools" / "bricklink" / "authentication_profiles"
+    seed_auth_profile(
+        profiles_dir,
+        "default",
+        active=True,
+        browser_session=True,
+    )
+    monkeypatch.setenv("XDG_DATA_HOME", str(data_home))
+
     from bricklink_cli.main import app
     from bricklink_cli.browser_runtime import BricklinkRuntimeBrowser
 
     page = _ConfirmationPage()
+    requested_after_values = []
+
+    def fake_confirmation_code(*, requested_after):
+        requested_after_values.append(requested_after)
+        return "123456"
 
     monkeypatch.setattr(BricklinkRuntimeBrowser, "__init__", _fake_runtime_init)
-    monkeypatch.setattr(BricklinkRuntimeBrowser, "get_page", lambda self, url: page)
+    monkeypatch.setattr(BricklinkRuntimeBrowser, "get_page", lambda self: page)
     monkeypatch.setattr(BricklinkRuntimeBrowser, "close", lambda self: None)
+    monkeypatch.setattr("bricklink_cli.browser_runtime.time.time", lambda: 1_774_000_120)
+    monkeypatch.setattr(
+        "bricklink_cli.browser_runtime.get_bricklink_confirmation_code",
+        fake_confirmation_code,
+    )
 
     runner = CliRunner()
-    result = runner.invoke(app, ["messages", "list"], input="123456\n")
+    result = runner.invoke(app, ["messages", "list"])
 
     assert result.exit_code == 0
     assert page.entered_code == "123456"
+    assert requested_after_values == [1_774_000_000]
     assert page.goto_calls == [
         "https://www.bricklink.com/myMsg.asp?pg=1&a=i",
         "https://www.bricklink.com/myMsg.asp?pg=1&a=i",
     ]
+    assert len(list(data_home.rglob("list_messages_*.json"))) == 1

@@ -1,7 +1,7 @@
 """Filter validation and application module."""
 import re
 from decimal import Decimal, InvalidOperation
-from typing import List, Set, Dict, Any, Tuple, Optional
+from typing import List, Set, Dict, Any, Tuple, Optional, Iterable
 
 class FilterValidationError(Exception):
     """Custom exception for filter validation errors."""
@@ -17,21 +17,52 @@ OPERATORS: Set[str] = {
 # Operators that don't require a value
 NO_VALUE_OPERATORS: Set[str] = {'null', 'notnull'}
 
-def validate_filters(filter_strings: List[str]) -> List[str]:
+def validate_filters(
+    filter_strings: List[str],
+    allowed_fields: Optional[Iterable[str]] = None,
+    extra_operators: Optional[Iterable[str]] = None,
+) -> List[str]:
     """
     Validates a list of filter strings.
 
     Args:
         filter_strings: List of filter strings from command line
+        allowed_fields: Optional iterable of field names that may be filtered.
+            When provided, any filter referencing a field outside this set
+            raises ``FilterValidationError`` listing the supported fields. This
+            is opt-in: when ``None`` (the default), no field-name restriction is
+            applied and behavior is unchanged for callers that do not declare
+            their filterable fields.
+
+            Pass this whenever the data being filtered only carries a known,
+            fixed set of fields (e.g. a metadata-only listing). Without it, a
+            filter on a non-existent field silently matches nothing and a caller
+            cannot tell "no rows matched" apart from "that field isn't
+            filterable" -- a false negative.
+        extra_operators: Optional iterable of service-native operator names that
+            this caller accepts in addition to :data:`OPERATORS` (e.g. Notion's
+            ``on_or_after``). Only the operator NAME is validated here; the
+            caller owns the value arity and the translation of its own
+            operators, because this module cannot evaluate them.
+
+            Do not pass service-native operators to :func:`apply_filters`.
+            Client-side matching only implements :data:`OPERATORS`, so an
+            operator this module cannot evaluate would match nothing.
 
     Returns:
         The validated filter strings
 
     Raises:
-        FilterValidationError: If any filter string is invalid
+        FilterValidationError: If any filter string is invalid, names an
+            operator that is neither in :data:`OPERATORS` nor in
+            ``extra_operators``, or references a field not in
+            ``allowed_fields`` when that set is provided.
     """
     if not filter_strings:
         return []
+
+    allowed_set = _normalize_allowed_fields(allowed_fields)
+    extra_set = _normalize_extra_operators(extra_operators)
 
     for filter_string in filter_strings:
         if not filter_string:
@@ -41,25 +72,52 @@ def validate_filters(filter_strings: List[str]) -> List[str]:
         parts = filter_string.split(',')
 
         for part in parts:
-            _validate_part(part.strip())
+            _validate_part(part.strip(), allowed_set, extra_set)
 
     return filter_strings
 
-def apply_filters(data: List[Dict], filter_strings: Optional[List[str]]) -> List[Dict]:
+def apply_filters(
+    data: List[Dict],
+    filter_strings: Optional[List[str]],
+    allowed_fields: Optional[Iterable[str]] = None,
+) -> List[Dict]:
     """
     Apply filters to a list of dictionaries (client-side filtering).
 
     Args:
         data: List of dictionaries to filter
         filter_strings: List of filter strings (field:op:value)
+        allowed_fields: Optional iterable of filterable field names. When
+            provided, a filter on any other field raises
+            ``FilterValidationError`` instead of silently returning an empty
+            list. See :func:`validate_filters`. Opt-in; ``None`` preserves the
+            previous unrestricted behavior.
 
     Returns:
         Filtered list of dictionaries
+
+    Raises:
+        FilterValidationError: If a filter is malformed, names an operator
+            outside :data:`OPERATORS`, or references a field outside
+            ``allowed_fields`` when that set is provided.
+
+    There is deliberately no ``extra_operators`` parameter here. This function
+    only implements :data:`OPERATORS`, so accepting a service-native operator
+    would let it fall through to a no-match and return the empty result this
+    validation exists to prevent. Translate service-native operators in the
+    owning CLI and use :func:`validate_filters` there.
     """
-    if not filter_strings or not data:
+    # Field validation must run even when there is nothing to filter against.
+    # An unsupported-field filter is a caller error regardless of whether the
+    # dataset happens to be empty; skipping validation here would let
+    # `Username:like:%x%` look like a clean "no matches" on an empty list.
+    if not filter_strings:
         return data
 
-    validate_filters(filter_strings)
+    validate_filters(filter_strings, allowed_fields)
+
+    if not data:
+        return data
 
     filtered_data = []
 
@@ -86,7 +144,85 @@ def apply_filters(data: List[Dict], filter_strings: Optional[List[str]]) -> List
 
     return filtered_data
 
-def _validate_part(part: str):
+def _normalize_allowed_fields(
+    allowed_fields: Optional[Iterable[str]],
+) -> Optional[Set[str]]:
+    """Normalize an allowed-field declaration into a set, or None when unset.
+
+    Returns ``None`` when ``allowed_fields`` is ``None`` (no restriction).
+    Raises ``FilterValidationError`` for an explicitly empty allowlist, because
+    "filtering is enabled but no field is filterable" is a caller bug, not a
+    silent no-op.
+    """
+    if allowed_fields is None:
+        return None
+    allowed_set = {str(f) for f in allowed_fields}
+    if not allowed_set:
+        raise FilterValidationError(
+            "No filterable fields are configured for this command, so --filter "
+            "cannot be satisfied."
+        )
+    return allowed_set
+
+
+def _normalize_extra_operators(
+    extra_operators: Optional[Iterable[str]],
+) -> Optional[Set[str]]:
+    """Normalize a service-native operator declaration into a set, or None.
+
+    Returns ``None`` when ``extra_operators`` is ``None``. An explicitly empty
+    iterable also yields ``None``: "no extra operators" is the same state as
+    "none declared", unlike ``allowed_fields``, where an empty allowlist makes
+    every filter unsatisfiable.
+    """
+    if extra_operators is None:
+        return None
+    extra_set = {str(op) for op in extra_operators}
+    return extra_set or None
+
+
+def _unknown_operator_message(
+    part: str,
+    operator: str,
+    extra_set: Optional[Set[str]],
+) -> str:
+    """Build the error for an unrecognized operator in the field:op:value form."""
+    known = set(OPERATORS)
+    if extra_set:
+        known |= extra_set
+    supported = ", ".join(sorted(known))
+    return (
+        f"Unknown operator '{operator}' in '{part}'. "
+        f"Supported operators: {supported}. "
+        f"If '{operator}' is part of the value, state the operator explicitly, "
+        f"for example '{part.split(':', 1)[0]}:eq:{part.split(':', 1)[1]}'."
+    )
+
+
+def _check_field_allowed(field: str, allowed_set: Optional[Set[str]]):
+    """Raise a clear error if ``field`` is not filterable.
+
+    The check is case-sensitive and exact. Field lookup at match time
+    (``get_nested_value``) is itself case-sensitive, so accepting a different
+    case here (e.g. ``Name`` for ``name``) would let the filter pass validation
+    and then silently match nothing -- recreating the very false-negative this
+    validation exists to prevent. Reject a wrong-case field loudly instead.
+    A no-op when ``allowed_set`` is ``None`` (no restriction configured).
+    """
+    if allowed_set is None:
+        return
+    if field not in allowed_set:
+        supported = ", ".join(sorted(allowed_set))
+        raise FilterValidationError(
+            f"Field '{field}' is not filterable. Supported fields: {supported}."
+        )
+
+
+def _validate_part(
+    part: str,
+    allowed_set: Optional[Set[str]] = None,
+    extra_set: Optional[Set[str]] = None,
+):
     """Validate a single filter part (field:op:value)."""
     if not part:
         raise FilterValidationError("Empty filter part")
@@ -99,6 +235,8 @@ def _validate_part(part: str):
     field = tokens[0]
     if not field:
         raise FilterValidationError(f"Field cannot be empty in '{part}'")
+
+    _check_field_allowed(field, allowed_set)
 
     # Check if second token is an operator
     second_token = tokens[1]
@@ -115,8 +253,21 @@ def _validate_part(part: str):
             value = ":".join(tokens[2:])
             if not value:
                 raise FilterValidationError(f"Value cannot be empty for operator '{op}' in '{part}'")
+    elif extra_set is not None and second_token in extra_set:
+        # A service-native operator declared by the caller. Only the name is
+        # checked here; this module cannot evaluate the operator, so the caller
+        # owns its value arity and its translation.
+        return
+    elif len(tokens) > 2:
+        # Three or more tokens means the caller wrote field:op:value, so the
+        # middle token is an operator position. An unrecognized token there is
+        # a typo, not a value. Reject it: the implicit-eq reading would fold
+        # 'bogusop' into the value, match nothing, and print an empty result
+        # that reads as "nothing matched" instead of "your filter is wrong".
+        raise FilterValidationError(_unknown_operator_message(part, second_token, extra_set))
     else:
-        value = ":".join(tokens[1:])
+        # Exactly two tokens: the unambiguous 'field:value' shorthand for eq.
+        value = tokens[1]
         if not value:
              raise FilterValidationError(f"Value cannot be empty in '{part}'")
 
@@ -227,11 +378,15 @@ def _matches_condition(item: Dict, field: str, op: str, value: Optional[str]) ->
         typed_options = [_cast_value(opt, type(item_val)) for opt in options]
         return item_val not in typed_options
 
-    if op == 'like':
-        pattern = re.escape(value).replace('%', '.*')
-        return bool(re.search(f"^{pattern}$", str(item_val)))
-
-    if op == 'ilike':
+    if op in ('like', 'ilike'):
+        # SQL-LIKE semantics: '%' is a wildcard. Both 'like' and 'ilike' are
+        # case-insensitive here. Users expect `name:like:%google%` to match an
+        # entry named "Google" (the same way SQL LIKE is case-insensitive on
+        # most default collations); a case-sensitive 'like' silently drops
+        # real matches and reads as "not found". 'ilike' is kept as an explicit
+        # synonym. Case-insensitive is a strict superset of the old behavior,
+        # so existing 'like' callers keep matching everything they matched
+        # before.
         pattern = re.escape(value).replace('%', '.*')
         return bool(re.search(f"^{pattern}$", str(item_val), re.IGNORECASE))
 
@@ -290,10 +445,12 @@ def apply_properties_filter(data: List[Dict], properties: Optional[str]) -> List
     for item in data:
         filtered_item = {}
         for prop in prop_list:
-            value = get_nested_value(item, prop)
-            if value is not None:
-                # Store with the original property path as key
-                filtered_item[prop] = value
+            # Always project the requested property, even when its value is
+            # None or the field is absent. Emit an explicit null instead of
+            # silently dropping the key, so a missing/empty value can never be
+            # mistaken for "this property was not requested." Dropping the key
+            # here would let a populated-but-currently-empty field read as gone.
+            filtered_item[prop] = get_nested_value(item, prop)
         filtered_data.append(filtered_item)
 
     return filtered_data

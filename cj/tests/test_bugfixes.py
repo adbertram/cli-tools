@@ -288,7 +288,7 @@ def test_bug6_apply_url_targets_findAdvertisers_not_dead_detail_page(monkeypatch
     monkeypatch.setattr(rel_mod, "get_config", lambda: fake_config)
 
     url = rel_mod._find_advertisers_url(
-        "7453049", publisher_account_id="7627660", keyword="Pluralsight"
+        "7453049", publisher_account_id="7627660", keyword="Example Advertiser"
     )
 
     # The dead URL must be gone -- it now serves a "link not active" stub.
@@ -301,7 +301,7 @@ def test_bug6_apply_url_targets_findAdvertisers_not_dead_detail_page(monkeypatch
     )
     # The advertiser NAME must be the keyword filter — CJ's keyword field
     # matches names, not ids.  Passing the raw id returns 0 results.
-    assert '"keywords":"Pluralsight"' in url, (
+    assert '"keywords":"Example Advertiser"' in url, (
         f"_find_advertisers_url must use the name as keyword: {url!r}"
     )
     # The URL path uses the account id; the hash state uses publisher_id.
@@ -403,7 +403,7 @@ def test_bug6_apply_single_uses_row_scoped_locator_and_findAdvertisers_url(monke
     # Force the REST helper to report "not joined" so the apply proceeds.
     advertiser_detail = MagicMock()
     advertiser_detail.relationship_status = RelationshipStatus.NOT_JOINED
-    advertiser_detail.advertiser_name = "Pluralsight"
+    advertiser_detail.advertiser_name = "Example Advertiser"
     fake_client = MagicMock()
     fake_client.get_advertiser.return_value = advertiser_detail
     monkeypatch.setattr(rel_mod, "get_client", lambda: fake_client)
@@ -952,6 +952,5 @@ def test_links_deeplink_command_verifies_relationship(monkeypatch):
             sid=None,
             verify=True,
         )
-
 
 

@@ -1,6 +1,10 @@
 ---
-name: "brickowl-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute brickowl operations using the `brickowl` CLI tool. CLI interface for Brick Owl API -- manage orders, inventory, catalog, messages, refunds, coupons, and quotes. Triggers: brickowl, brickowl cli, brick owl, brickowl orders, brickowl inventory, brickowl catalog, brickowl messages, brickowl quotes, brick owl store"
+name: brickowl-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute brickowl operations using the `brickowl` CLI tool.
+  CLI interface for Brick Owl API -- manage orders, inventory, catalog, messages, refunds, coupons, quotes, and store settings.
+  Triggers: brickowl, brickowl cli, brick owl, brickowl orders, brickowl inventory, brickowl catalog, brickowl messages, brickowl quotes, brick owl store
 ---
 
 <objective>
@@ -22,12 +26,14 @@ brickowl <command-group> <action> [arguments] [options]
 | Send a message | `brickowl messages send <user_id> <subject> <body>` |
 | Issue a refund | `brickowl refund issue <order_id> <amount>` |
 | List quotes | `brickowl quotes list` |
+| Enable store vacation notice | `brickowl store vacation enable <ship_out_date> --yes` |
+| Disable store vacation notice | `brickowl store vacation disable --yes` |
 | Check auth | `brickowl auth status` |
 </quick_start>
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `brickowl` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `brickowl` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 
@@ -41,6 +47,7 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **refund** -- Refund management (info, issue, full)
 - **coupon** -- Coupon management (list, get, create-user, create-code, delete)
 - **quotes** -- Quote management (list, get, submit)
+- **store** -- Store settings (vacation enable, vacation disable)
 - **cache** -- Response cache (clear)
 - **auth** -- Authentication commands and nested `auth profiles` management
 </principle>

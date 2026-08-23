@@ -26,6 +26,173 @@ def _save_image(path, size, image_format, color="navy", data=None):
     image.save(path, format=image_format)
 
 
+def _fake_service_returning(channel_items):
+    """Build a fake YouTube service whose channels().list returns channel_items."""
+
+    class FakeRequest:
+        def __init__(self, response):
+            self.response = response
+
+        def execute(self):
+            return self.response
+
+    class FakeChannelsResource:
+        def list(self, **kwargs):
+            return FakeRequest({"items": channel_items})
+
+    class FakeService:
+        def channels(self):
+            return FakeChannelsResource()
+
+    class FakeClient:
+        def get_youtube_service(self):
+            return FakeService()
+
+    return FakeClient()
+
+
+def _channel_item(channel_id, title):
+    return {
+        "id": channel_id,
+        "snippet": {"title": title, "customUrl": f"@{title.lower().replace(' ', '')}"},
+        "statistics": {"subscriberCount": "1", "videoCount": "2", "viewCount": "3"},
+        "contentDetails": {"relatedPlaylists": {"uploads": f"UU{channel_id}"}},
+        "brandingSettings": {"image": {}},
+    }
+
+
+def _patch_profiles(monkeypatch, profile_channels, failing=None):
+    """Wire up multi-profile aggregation.
+
+    profile_channels: {profile_name: [channel_item, ...]}
+    failing: {profile_name: exception_message} for profiles whose token errors.
+    """
+    failing = failing or {}
+    monkeypatch.setattr(channels, "_all_profile_names", lambda: list(profile_channels.keys()))
+
+    def fake_get_api_client(profile=None):
+        if profile in failing:
+            raise RuntimeError(failing[profile])
+        return _fake_service_returning(profile_channels.get(profile, []))
+
+    monkeypatch.setattr(channels, "get_api_client", fake_get_api_client)
+
+
+def test_channels_list_aggregates_across_profiles(monkeypatch):
+    _patch_profiles(
+        monkeypatch,
+        {
+            "adam": [_channel_item("UC_ADAM", "Adam Bertram")],
+            "brick": [_channel_item("UC_BRICK", "Brick Buddy")],
+            "farm": [_channel_item("UC_FARM", "Geek Farm Life")],
+        },
+    )
+
+    result = runner.invoke(app, ["channels", "list"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert {c["id"] for c in payload} == {"UC_ADAM", "UC_BRICK", "UC_FARM"}
+    by_id = {c["id"]: c["profile"] for c in payload}
+    assert by_id == {"UC_ADAM": "adam", "UC_BRICK": "brick", "UC_FARM": "farm"}
+
+
+def test_channels_list_dedupes_channels_shared_across_profiles(monkeypatch):
+    _patch_profiles(
+        monkeypatch,
+        {
+            "brick_a": [_channel_item("UC_BRICK", "Brick Buddy")],
+            "brick_b": [_channel_item("UC_BRICK", "Brick Buddy")],
+        },
+    )
+
+    result = runner.invoke(app, ["channels", "list"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert len(payload) == 1
+    # First profile wins the annotation.
+    assert payload[0]["profile"] == "brick_a"
+
+
+def test_aggregate_single_profile_skips_enumeration(monkeypatch):
+    """When a profile is passed, only that profile is queried (no enumeration)."""
+    called_profiles = []
+
+    monkeypatch.setattr(
+        channels,
+        "_all_profile_names",
+        lambda: (_ for _ in ()).throw(AssertionError("must not enumerate profiles")),
+    )
+
+    def fake_get_api_client(profile=None):
+        called_profiles.append(profile)
+        return _fake_service_returning([_channel_item("UC_FARM", "Geek Farm Life")])
+
+    monkeypatch.setattr(channels, "get_api_client", fake_get_api_client)
+
+    rows, errors = channels._aggregate_owned_channels("farm")
+
+    assert errors == []
+    assert len(rows) == 1
+    assert rows[0]["profile"] == "farm"
+    assert called_profiles == ["farm"]
+
+
+def test_channels_list_reports_failing_profile_and_exits_nonzero(monkeypatch):
+    _patch_profiles(
+        monkeypatch,
+        {
+            "good": [_channel_item("UC_GOOD", "Good Channel")],
+            "bad": [],
+        },
+        failing={"bad": "invalid_grant: Token has been expired or revoked."},
+    )
+
+    result = runner.invoke(app, ["channels", "list"])
+
+    # Good channel still returned, but failure is reported loudly and exit is nonzero.
+    assert result.exit_code == 1
+    assert "Profile 'bad' failed" in result.stderr
+    assert "expired or revoked" in result.stderr
+    payload = json.loads(result.stdout)
+    assert [c["id"] for c in payload] == ["UC_GOOD"]
+
+
+def test_channels_list_aggregated_limit_caps_total(monkeypatch):
+    _patch_profiles(
+        monkeypatch,
+        {
+            "a": [_channel_item("UC_A", "A")],
+            "b": [_channel_item("UC_B", "B")],
+            "c": [_channel_item("UC_C", "C")],
+        },
+    )
+
+    result = runner.invoke(app, ["channels", "list", "--limit", "2"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert len(payload) == 2
+
+
+def test_channels_get_searches_across_profiles(monkeypatch):
+    _patch_profiles(
+        monkeypatch,
+        {
+            "adam": [_channel_item("UC_ADAM", "Adam Bertram")],
+            "farm": [_channel_item("UC_FARM", "Geek Farm Life")],
+        },
+    )
+
+    result = runner.invoke(app, ["channels", "get", "UC_FARM"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["id"] == "UC_FARM"
+    assert payload["profile"] == "farm"
+
+
 def test_channels_create_help_lists_command():
     result = runner.invoke(app, ["channels", "create", "--help"])
 

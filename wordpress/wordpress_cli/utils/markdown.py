@@ -4,8 +4,8 @@ This module provides functionality to convert Markdown content to WordPress Bloc
 (Gutenberg) format. Markdown is first converted to HTML, then the HTML is wrapped in
 WordPress block comments for proper Gutenberg block rendering.
 
-This implementation mirrors the JavaScript markdownToHtml function from the ATA Blog
-Helper Tool to ensure consistent formatting.
+This implementation mirrors the JavaScript markdownToHtml function from the
+Markdown Helper Tool to ensure consistent formatting.
 
 Module: wordpress_cli.utils.markdown
 """
@@ -98,10 +98,10 @@ def postprocess_html(html_content: str) -> str:
 
 
 def convert_markdown_to_html(markdown_content: str) -> str:
-    """Convert markdown content to HTML matching the ATA Blog Helper Tool format.
+    """Convert markdown content to HTML matching the Markdown Helper Tool format.
 
-    This function mirrors the JavaScript markdownToHtml function from the ATA
-    Blog Helper Tool.
+    This function mirrors the JavaScript markdownToHtml function from the
+    Markdown Helper Tool.
 
     JavaScript showdown options mirrored:
     - noHeaderId: true -> Don't add IDs to headers

@@ -1,3 +1,4 @@
+from functools import cache
 from pathlib import Path
 
 import pytest
@@ -116,6 +117,27 @@ def test_auth_status_returns_only_active_profiles(tmp_path, isolated_data_home):
     assert '"auth_type": "device_code"' in result.stdout
     assert '"active": true' in result.stdout
     assert "is_default" not in result.stdout
+
+
+def test_profile_commands_preserve_auth_type_with_cached_get_config(tmp_path, isolated_data_home):
+    tool_dir = _tool_dir(tmp_path)
+    profiles_base = get_profiles_base_dir(tool_dir.name)
+
+    _write_profile(profiles_base / "device-primary" / ".env", active=True, auth_method="device_code")
+
+    @cache
+    def get_config(profile=None, profile_auth_type=None) -> MultiAuthTypeConfig:
+        return MultiAuthTypeConfig(
+            tool_dir=tool_dir,
+            profile=profile,
+            profile_auth_type=profile_auth_type,
+        )
+
+    app = create_auth_app(get_config, tool_name=tool_dir.name)
+    result = CliRunner().invoke(app, ["profiles", "list"])
+
+    assert result.exit_code == 0, result.output
+    assert '"auth_type": "device_code"' in result.stdout
 
 
 def test_delete_profile_refuses_only_active_profile_for_auth_type(tmp_path, isolated_data_home):

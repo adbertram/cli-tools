@@ -1,6 +1,10 @@
 # Kick CLI
 
-A command-line interface for [Kick.co](https://www.kick.co) - the self-driving bookkeeping platform.
+## DESCRIPTION
+
+The `kick` CLI provides a command-line interface for Kick API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 
@@ -288,7 +292,7 @@ Showing 5 of 10359 transactions (page 1 of 2072)
 
 ## Configuration
 
-Credentials are stored in a `.env` file in the package directory. They are managed automatically after `kick auth login`.
+Authentication profile files live under `~/.local/share/cli-tools/kick/authentication_profiles/<profile>/`; non-auth defaults live in `~/.local/share/cli-tools/kick/.env`. They are managed automatically after `kick auth login`.
 
 ```bash
 # OAuth tokens (managed automatically after login)

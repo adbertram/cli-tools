@@ -1,0 +1,507 @@
+{
+  "commands": {
+    "auth": {
+      "help": "Manage nextdoor authentication",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing ephemeral auth state and re-authenticate",
+              "short": "-F"
+            }
+          ]
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show their auth types and active state.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
+        }
+      }
+    },
+    "classifieds": {
+      "help": "Browse the For Sale & Free classifieds",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "get": {
+          "help": "Get one For Sale & Free listing with its full description and details.",
+          "arguments": [
+            {
+              "name": "classified_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Listing ID (the UUID in the listing URL)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "list": {
+          "help": "List For Sale & Free listings with their direct listing URLs. QUERY is Nextdoor's own For Sale & Free keyword box, not a filter. Nextdoor ranks results by relevance and applies no relevance floor, so a keyword with little or no local inventory comes back padded with unrelated listings, and the same keyword can return a different row count on consecutive runs. Add ``--filter \"type:eq:ORGANIC,title:contains:<keyword>\"`` when the caller needs rows that actually contain the keyword.",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "QUERY",
+              "required": false,
+              "help": "Relevance keyword, NOT a filter (default: browse all). See description"
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of listings",
+              "short": "-l",
+              "default": "25"
+            },
+            {
+              "name": "--sort",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sort field: 'newest' (default; most recent first, server-side) or 'relevance' (Nextdoor's 'Most Relevant' order)",
+              "short": "-s",
+              "default": "newest"
+            },
+            {
+              "name": "--desc",
+              "type": "bool",
+              "required": false,
+              "help": "Reverse the sort's natural order (newest -> oldest-first, over the fetched pages)",
+              "short": "-d"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "feed": {
+      "help": "View the feed (default: newest first).",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--limit",
+          "type": "INTEGER",
+          "required": false,
+          "help": "Maximum number of items",
+          "short": "-l",
+          "default": "10"
+        },
+        {
+          "name": "--sort",
+          "type": "TEXT",
+          "required": false,
+          "help": "Sort field: 'newest' (default; most recent first, server-side) or 'relevance' (algorithmic feed)",
+          "short": "-s",
+          "default": "newest"
+        },
+        {
+          "name": "--desc",
+          "type": "bool",
+          "required": false,
+          "help": "Reverse the sort's natural order (newest -> oldest-first, over the fetched page)",
+          "short": "-d"
+        },
+        {
+          "name": "--filter",
+          "type": "TEXT",
+          "required": false,
+          "help": "Filter results (field:op:value)",
+          "short": "-f"
+        },
+        {
+          "name": "--table",
+          "type": "bool",
+          "required": false,
+          "help": "Display as table",
+          "short": "-t"
+        },
+        {
+          "name": "--properties",
+          "type": "TEXT",
+          "required": false,
+          "help": "Comma-separated fields to include",
+          "short": "-p"
+        }
+      ]
+    },
+    "me": {
+      "help": "View current user profile.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--table",
+          "type": "bool",
+          "required": false,
+          "help": "Display as table",
+          "short": "-t"
+        },
+        {
+          "name": "--properties",
+          "type": "TEXT",
+          "required": false,
+          "help": "Comma-separated fields to include",
+          "short": "-p"
+        }
+      ]
+    },
+    "notifications": {
+      "help": "View unread notifications and badges.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--limit",
+          "type": "INTEGER",
+          "required": false,
+          "help": "Maximum number of items",
+          "short": "-l",
+          "default": "50"
+        },
+        {
+          "name": "--filter",
+          "type": "TEXT",
+          "required": false,
+          "help": "Filter results (field:op:value)",
+          "short": "-f"
+        },
+        {
+          "name": "--table",
+          "type": "bool",
+          "required": false,
+          "help": "Display as table",
+          "short": "-t"
+        },
+        {
+          "name": "--properties",
+          "type": "TEXT",
+          "required": false,
+          "help": "Comma-separated fields to include",
+          "short": "-p"
+        }
+      ]
+    },
+    "search": {
+      "help": "Search Nextdoor content (listings, neighbors, events, businesses, posts). Results are grouped by Nextdoor's own relevance ranking; the operation accepts no sort or paging arguments, so there is no --sort and --limit caps the returned rows.",
+      "arguments": [
+        {
+          "name": "query",
+          "type": "TEXT",
+          "required": true,
+          "help": "Search query"
+        }
+      ],
+      "options": [
+        {
+          "name": "--limit",
+          "type": "INTEGER",
+          "required": false,
+          "help": "Maximum number of results",
+          "short": "-l",
+          "default": "25"
+        },
+        {
+          "name": "--filter",
+          "type": "TEXT",
+          "required": false,
+          "help": "Filter results (field:op:value)",
+          "short": "-f"
+        },
+        {
+          "name": "--table",
+          "type": "bool",
+          "required": false,
+          "help": "Display as table",
+          "short": "-t"
+        },
+        {
+          "name": "--properties",
+          "type": "TEXT",
+          "required": false,
+          "help": "Comma-separated fields to include",
+          "short": "-p"
+        }
+      ]
+    }
+  },
+  "total_commands": 18,
+  "discovered_at": "2026-08-05T12:49:30Z"
+}

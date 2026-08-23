@@ -66,26 +66,93 @@ The plan MUST document:
 
 Understanding existing patterns before modifying prevents introducing inconsistencies. The plan ensures changes align with established conventions.
 
-## Step 2: Navigate to CLI Directory
+## Step 1.6: Browser Automation Approval Gate
+
+When an added or changed command needs a web action that is not already covered
+by the CLI's current API client, investigate in this order before writing code:
+
+1. Public API or official SDK support for the exact action
+2. Internal XHR/JSON API support in the authenticated web app
+3. Browser automation only if neither API path is usable
+
+If no public or internal API path is available and the command must use browser
+automation, stop before adding browser code, browser credentials, or selectors
+and ask Adam:
+
+```
+No usable public or internal API path is available for this action. Should I make this command browser-driven?
+```
+
+Continue only after explicit approval, then document the approval in the
+implementation notes and validate browser selectors against real DOM captures.
+
+## Step 1.7: Patch Against Current File Anchors
+
+Before using `apply_patch` in this workflow, reread the exact target file and
+copy anchors from the current on-disk lines. Do not build a hunk from a sentence
+in the plan, prior diff, test failure, or expected converted text unless that
+exact line currently exists. If the target text is embedded in a longer
+paragraph, anchor on the whole current line or an existing verified heading and
+insert relative to that.
+
+## Step 2: Resolve and Navigate to CLI Source Directory
+
+Before any source inspection command, prove the target CLI source directory.
+Do not assume `<cli-tools-root>/<name>` exists, and do not pass that guessed
+path to `cd`, `ls`, `find`, `rg`, `sed`, `cat`, `nl`, `wc`, `head`, `tail`, or
+similar commands.
+
+Use `<cli-tools-root>/_repo/scripts/find-cli-tools.sh` to enumerate available
+CLI tools, match the exact `name` from its JSON output, and derive the source
+directory from the matching record's `readme` parent. You may pass the exact
+tool name as a positional filter, for example
+`<cli-tools-root>/_repo/scripts/find-cli-tools.sh --json upwork`; the output is
+still a JSON array. If `readme` is relative, resolve it against
+`<cli-tools-root>` first; do not resolve it against the current shell working
+directory. Then prove that directory exists and contains `pyproject.toml` before
+navigating. If there is no exact record, report `CLI_SOURCE_NOT_FOUND: <name>`
+and stop or ask which discovered CLI name to update.
+
+Only after the source directory is proven:
 
 ```bash
-cd <cli-tools-root>/<name>
+cd "$tool_dir"
 ```
 
 Verify the CLI structure:
 ```bash
-ls -la <name>_cli/
-ls -la <name>_cli/commands/
+find . -maxdepth 1 -type d -name '*_cli' -print
+find . -maxdepth 2 -type f | sort
 ```
+
+When reading existing tests, discover the real test files first and pass only
+those discovered paths to `sed`, `cat`, `nl`, or similar readers. Do not infer
+conventional filenames such as `tests/test_commands.py`; if discovery returns
+multiple candidates, inspect the candidate list or narrow it with `rg --files`
+against the proven `tests` directory before reading a file.
+
+If a test or cleanup step requires flattening a single
+`<name>_cli/commands/<group>.py` package into `<name>_cli/commands.py`, move the
+real module first, update imports, and delete `<name>_cli/commands/__init__.py`.
+Before `rmdir <name>_cli/commands`, remove only generated cache directories:
+
+```bash
+find <name>_cli/commands -type d -name __pycache__ -prune -exec rm -rf {} +
+rmdir <name>_cli/commands
+```
+
+Keep `rmdir` as the final deletion check. If it still fails, inspect and handle
+the remaining real files instead of recursively deleting the package directory.
 
 ## Step 3: Implement Changes by Type
 
 ### Adding a New Command to Existing Resource
 
-Edit `<name>_cli/commands/<resource>.py`:
+Edit `<name>_cli/main.py` for the scaffold-default layout, or
+`<name>_cli/commands/<resource>.py` if this CLI is already split:
 
 ```python
-@app.command("new-command")
+@items_app.command("new-command")
 def new_command(
     # Required parameters
     id: str = typer.Argument(..., help="Resource ID"),
@@ -126,7 +193,10 @@ def normalize_new_resource(raw: dict) -> dict:
 
 **Step 2: Create Command File**
 
-Create `<name>_cli/commands/newresource.py`:
+For the scaffold-default layout, add the new command group in
+`<name>_cli/main.py`. Only create `<name>_cli/commands/newresource.py` when the
+CLI already uses split command modules or the extra group clearly justifies the
+split:
 
 ```python
 import typer
@@ -168,17 +238,21 @@ def get_resource(
         print_json(result)
 ```
 
-2. Register in `<name>_cli/commands/__init__.py`:
+2. Mount the subcommand app in `<name>_cli/main.py`. If the command module
+declares `COMMAND_CREDENTIALS`, use `register_commands()` so credential checks
+and the shared `--profile` option are installed:
 
 ```python
-from . import auth, existingresource, newresource
+from cli_tools_shared.command_registry import register_commands
+
+register_commands(app, get_config, newresource, name="newresource", help="Manage new resources")
 ```
 
-3. Add to `<name>_cli/main.py`:
+3. If you created `commands/newresource.py`, import it in `main.py` before the
+mount:
 
 ```python
 from .commands import newresource
-app.add_typer(newresource.app, name="newresource")
 ```
 
 4. Implement client methods in `<name>_cli/client.py`:
@@ -206,7 +280,9 @@ def get_new_resource(self, id: str) -> dict:
 
 ### Modifying Authentication
 
-Edit `<name>_cli/client.py` and `<name>_cli/commands/auth.py`:
+Edit `<name>_cli/client.py` and the auth mount in `<name>_cli/main.py` (or
+`<name>_cli/commands/auth.py` only if this CLI already uses split auth
+modules):
 
 1. Update auth methods in client:
 ```python
@@ -272,13 +348,50 @@ Invoke the `debloat` skill on the CLI directory.
 
 ## Step 4: Reinstall the CLI
 
-After changes, use the install script:
+After changes, use the install script as a health check:
 
 ```bash
 <cli-tools-root>/_repo/skills/cli-tool/scripts/install-cli-tool.sh <name>
 ```
 
-The script returns JSON with `success`, `install_output`, and `help_works`. Verify `"success": true` before proceeding.
+The script returns JSON with `success`, `install_output`, and `help_works`.
+When the existing editable install is healthy and dependency metadata is older
+than the launcher, it skips `uv tool install` to avoid replacing the active
+`~/.local/bin/<name>` launcher during unrelated CLI use. Verify `"success":
+true` before proceeding.
+
+Use the explicit refresh path when you changed dependency metadata, entry
+points, Python requirements, overrides, or a broken install must be rebuilt:
+
+```bash
+<cli-tools-root>/_repo/skills/cli-tool/scripts/install-cli-tool.sh --force-refresh <name>
+```
+
+For remote installs such as `adam-server`, verify the remote checkout contains
+the intended changed file content before reinstalling. If Dropbox sync may lag,
+copy the changed source files to the same absolute paths with `scp`, reinstall
+on the remote host, then verify through the installed launcher's Python
+environment that the exact patched symbol or source marker is present.
+
+## Step 4.5: Wrapper Upstream CLI Provisioning Gate
+
+For wrapper CLIs, read the configured `CLI_COMMAND` from the wrapper's runtime
+config or `.env.example`, then verify the official upstream binary is installed
+and executable before reporting the update complete:
+
+```bash
+command -v <cli-command>
+<cli-command> --help
+```
+
+If the official upstream binary is missing, install or bootstrap it through the
+wrapper source or repo-owned install path before continuing. For upstream CLIs
+distributed outside Homebrew, use the official package manager or vendor
+installer for that CLI instead of leaving the binary as a manual prerequisite.
+
+Missing `CLI_COMMAND` is an implementation blocker, not a live API smoke-test or
+API-key-auth blocker. API-key auth may remain user-configured only after the
+official upstream binary is present and executable.
 
 ## Step 5: Test Changes
 
@@ -293,7 +406,43 @@ Test the specific changes:
 <name> newresource get <id>
 ```
 
-## Step 6: Run Full Test Suite (MANDATORY - ZERO FAILURES ALLOWED)
+## Step 6: Final Code Simplification
+
+Run `/debloat` one final time on all changes before committing.
+
+Invoke the `debloat` skill on the CLI directory.
+
+**If issues are found:**
+1. Fix them
+2. Re-run the focused tests for the changed behavior
+3. Continue only when `/debloat` is clean and the focused tests pass
+
+## Step 6.5: Refresh CLI Tool Skill Usage (if exists)
+
+If commands or parameters were added, modified, or removed, check for a corresponding CLI tool skill:
+
+```bash
+test -f <cli-tools-root>/_repo/skills/<name>-cli/usage.json
+```
+
+If the file exists, refresh its command map with the repo-owned generator:
+
+```bash
+<cli-tools-root>/_repo/skills/cli-tool/scripts/regenerate-usage-json <name>
+```
+
+Launcher resolution follows the `Usage JSON Lives In The CLI Skill` principle
+in the repo-owned `cli-tool` skill.
+
+Do not import `cli_test_utils` from ad-hoc Python snippets. The generator owns
+the test-helper import path and keeps the skill-folder `usage.json` in sync with
+the installed CLI help.
+
+## Step 6.6: Run Full Test Suite (MANDATORY - ZERO FAILURES ALLOWED)
+
+Run the full suite only after the generated command map reflects the final
+installed help surface. The suite validates that generated metadata alongside
+the CLI implementation.
 
 ```bash
 <cli-tools-root>/_repo/skills/cli-tool/scripts/test-cli-tool.sh --cli-name <name>
@@ -309,38 +458,25 @@ The script returns JSON with `success`, `summary`, `failures[]`, and `auth_requi
 - Warnings are acceptable; failures are not
 - NEVER dismiss failures as "pre-existing", "auth-required", or "environment-related" without PROVING it by showing the same test passed before your changes
 - If `"success": false`, you are NOT done. Investigate every failure -- even if you believe the cause is external.
+- For auth-required CLIs without real credentials, follow `workflows/test-cli.md` live-auth blocker handling. Static/source work can be complete, but live compliance remains `LIVE_AUTH_BLOCKED` until real credentials authenticate.
 
-## Step 6.5: Final Code Simplification
+## Step 6.7: Verify CLI Tool Skill Usage Is Stable (if exists)
 
-Run `/debloat` one final time on all changes before committing.
-
-Invoke the `debloat` skill on the CLI directory.
-
-**If issues are found:**
-1. Fix them
-2. Re-run `test-cli-tool.sh` to confirm zero failures
-3. Only proceed when both `/debloat` is clean and tests pass
-
-## Step 6.6: Update CLI Tool Skill (if exists)
-
-If commands or parameters were added, modified, or removed, check for a corresponding CLI tool skill:
+After the full suite passes, prove the canonical usage map still matches the
+installed CLI help:
 
 ```bash
-ls <cli-tools-root>/_repo/skills/<name>-cli/usage.json 2>/dev/null
+<cli-tools-root>/_repo/skills/cli-tool/scripts/regenerate-usage-json <name> --check
 ```
 
-If the file exists, invoke the `create-cli-tool-skill` skill with "update" intent to re-discover commands and merge changes into `usage.json`:
-
-```
-/create-cli-tool-skill update <name>
-```
-
-This keeps the skill's command reference in sync with the actual CLI.
+The check must return `"changed": false`. If it reports drift, refresh the map,
+rerun the full suite, and repeat the check. Do not complete the lifecycle with a
+post-test generated change that the full suite never validated.
 
 ## Step 7: Commit Changes
 
 ```bash
-cd <cli-tools-root>/<name>
+cd "$tool_dir"
 git add -A
 git commit -m "Add <description of changes>"
 git push
@@ -397,8 +533,10 @@ Update is complete when:
 - [ ] New/modified commands work as expected
 - [ ] List commands have --table, --filter, --limit, --properties options
 - [ ] Get commands have --table option
-- [ ] **⛔ test-cli-tool.sh passes with ZERO FAILURES** (warnings acceptable)
-- [ ] `/debloat` final pass completed (Step 6.5) — tests still pass after fixes
+- [ ] `/debloat` final pass completed (Step 6)
+- [ ] CLI tool skill usage refreshed before the full suite (Step 6.5, if the skill exists)
+- [ ] **⛔ test-cli-tool.sh passes with ZERO FAILURES** (Step 6.6; warnings acceptable)
+- [ ] Final usage stability check reports `"changed": false` (Step 6.7, if the skill exists)
 - [ ] Changes committed to git
 - [ ] User asked about n8n deployment (if applicable — new/modified commands or auth changes)
 - [ ] n8n node rebuild offered (if deployed)

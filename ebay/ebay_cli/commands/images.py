@@ -3,6 +3,7 @@
 Uses the eBay Commerce Media API to upload and manage images.
 API Docs: https://developer.ebay.com/api-docs/commerce/media/resources/image/methods/createImageFromFile
 """
+from cli_tools_shared.output import command
 COMMAND_CREDENTIALS = {
     "upload": ["oauth_authorization_code"],
     "list": ["oauth_authorization_code"],
@@ -37,6 +38,7 @@ def _image_record(image: dict) -> dict:
 
 
 @app.command("upload")
+@command
 def images_upload(
     file: Optional[str] = typer.Option(
         None, "--file", "-f",
@@ -158,6 +160,7 @@ def images_upload(
 
 
 @app.command("list")
+@command
 def images_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of results to return"),
@@ -241,6 +244,7 @@ def images_list(
 
 
 @app.command("get")
+@command
 def images_get(
     image_id: str = typer.Argument(..., help="The eBay image ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),

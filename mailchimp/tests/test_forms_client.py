@@ -66,7 +66,7 @@ class FormsClientTests(unittest.TestCase):
 
         result = client.customize_signup_form(
             list_id="abc123",
-            header_text="BrickBuddy beta",
+            header_text="Example beta",
             signup_message="Join the beta tester list.",
             signup_thank_you_title="You are on the list",
         )
@@ -78,7 +78,7 @@ class FormsClientTests(unittest.TestCase):
                     "method": "POST",
                     "endpoint": "/lists/abc123/signup-forms",
                     "data": {
-                        "header": {"text": "BrickBuddy beta"},
+                        "header": {"text": "Example beta"},
                         "contents": [
                             {
                                 "section": "signup_message",

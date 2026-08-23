@@ -15,7 +15,7 @@ import typer
 from typing import Optional, List
 
 from cli_tools_shared.filters import apply_filters, apply_limit, apply_properties_filter
-from cli_tools_shared.output import handle_error, print_error, print_json, print_success
+from cli_tools_shared.output import command, handle_error, print_error, print_json, print_success
 from ..display import print_detail, print_list
 from . import run_browser
 
@@ -36,6 +36,7 @@ NOTIFICATIONS_BY_KEY = {
 
 
 @app.command("list")
+@command
 def notification_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum results"),
@@ -73,6 +74,7 @@ def notification_list(
 
 
 @app.command("get")
+@command
 def notification_get(
     notification_type: str = typer.Argument("wanted_list", help="Notification type"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -101,6 +103,7 @@ def notification_get(
 
 
 @app.command("send-wanted-list")
+@command
 def notification_send_wanted_list():
     """
     Send wanted list notification to all matching stores.

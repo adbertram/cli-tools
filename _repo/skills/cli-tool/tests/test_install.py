@@ -11,12 +11,101 @@ from pathlib import Path
 from cli_test_utils import run_cli_command, get_uv_tool_venv_dir
 
 
+def _canonical_uv_tool_env() -> dict[str, str]:
+    """Return the repo's canonical uv tool registry environment."""
+    home = Path(os.environ["HOME"])
+    env = os.environ.copy()
+    env["UV_TOOL_DIR"] = str(home / ".local" / "share" / "uv" / "tools")
+    env["UV_TOOL_BIN_DIR"] = str(home / ".local" / "bin")
+    return env
+
+
 def _find_cli_tools_root(cli_dir: Path) -> Path | None:
     """Find the cli-tools repo root from a CLI directory."""
     for candidate in [cli_dir, *cli_dir.parents]:
         if (candidate / "_repo" / "cli-tools-shared").is_dir():
             return candidate
     return None
+
+
+def _primary_checkout_root(repo_root: Path) -> Path | None:
+    """Resolve the primary checkout root when ``repo_root`` is a linked git worktree.
+
+    ``uv tool install`` targets a single global venv per CLI at
+    ``~/.local/share/uv/tools/<name>``, shared across every git worktree on
+    the machine -- there is no per-worktree install. Whichever checkout most
+    recently ran the installer is the one the global venv's editable pointer
+    references, so a test invoked from a *different* linked worktree must
+    still recognize that checkout's path as valid.
+
+    A linked worktree's ``.git`` is a file containing
+    ``gitdir: <primary>/.git/worktrees/<name>``. ``git rev-parse
+    --git-common-dir`` resolves that back to the primary checkout's shared
+    ``.git`` directory (an absolute path from a linked worktree, or the
+    relative ``.git`` from the primary checkout itself), so its parent is the
+    primary checkout root. Returns None when ``repo_root`` is not inside a
+    git worktree (for example an unpacked archive) so callers can skip the
+    extra candidate instead of failing.
+    """
+    try:
+        is_worktree = subprocess.run(
+            ["git", "-C", str(repo_root), "rev-parse", "--is-inside-work-tree"],
+            capture_output=True, text=True,
+        )
+    except FileNotFoundError:
+        return None
+    if is_worktree.returncode != 0 or is_worktree.stdout.strip() != "true":
+        return None
+
+    common_dir = subprocess.run(
+        ["git", "-C", str(repo_root), "rev-parse", "--git-common-dir"],
+        capture_output=True, text=True,
+    )
+    if common_dir.returncode != 0 or not common_dir.stdout.strip():
+        return None
+
+    git_dir = Path(common_dir.stdout.strip())
+    if not git_dir.is_absolute():
+        git_dir = (repo_root / git_dir).resolve()
+    return git_dir.parent
+
+
+def _package_module_names(pkg_dir: Path, cli_dir: Path) -> list[str]:
+    """Return importable package modules, excluding Dropbox conflict copies."""
+    modules = []
+    for py_file in sorted(pkg_dir.rglob("*.py")):
+        if "__pycache__" in py_file.parts or "conflicted copy" in py_file.name:
+            continue
+        rel = py_file.relative_to(cli_dir)
+        mod_path = str(rel).replace("/", ".").removesuffix(".py")
+        if mod_path.endswith(".__init__"):
+            mod_path = mod_path.removesuffix(".__init__")
+        modules.append(mod_path)
+    return modules
+
+
+def test_package_module_names_ignore_dropbox_conflict_copies(tmp_path):
+    cli_dir = tmp_path / "demo"
+    pkg_dir = cli_dir / "demo_cli"
+    pkg_dir.mkdir(parents=True)
+    (pkg_dir / "__init__.py").write_text("")
+    (pkg_dir / "recorder.py").write_text("")
+    (pkg_dir / "recorder (Adam's MacBook Pro's conflicted copy 2026-06-27).py").write_text("")
+
+    assert _package_module_names(pkg_dir, cli_dir) == ["demo_cli", "demo_cli.recorder"]
+
+
+def test_canonical_uv_tool_env_overrides_isolated_xdg(monkeypatch, tmp_path):
+    home = tmp_path / "home"
+    isolated_xdg = tmp_path / "xdg"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("XDG_DATA_HOME", str(isolated_xdg))
+
+    env = _canonical_uv_tool_env()
+
+    assert env["XDG_DATA_HOME"] == str(isolated_xdg)
+    assert env["UV_TOOL_DIR"] == str(home / ".local" / "share" / "uv" / "tools")
+    assert env["UV_TOOL_BIN_DIR"] == str(home / ".local" / "bin")
 
 
 def test_uv_tool_registered(cli_name, cli_dir, command_filter):
@@ -30,7 +119,9 @@ def test_uv_tool_registered(cli_name, cli_dir, command_filter):
 
     result = subprocess.run(
         ["uv", "tool", "list"],
-        capture_output=True, text=True
+        capture_output=True,
+        text=True,
+        env=_canonical_uv_tool_env(),
     )
     assert result.returncode == 0, "Failed to run 'uv tool list'"
 
@@ -146,9 +237,23 @@ def test_cli_tools_shared_uses_local_editable_repo_when_available(cli_name, cli_
         f"cli-tools-shared not installed in {cli_name}'s uv tool venv. "
         f"Fix: uv tool install -e {cli_dir} --force --refresh"
     )
-    assert f"Editable project location: {local_shared_dir}" in result.stdout, (
+
+    # uv tool install is not worktree-scoped (see _primary_checkout_root), so
+    # when this suite runs from a linked worktree, the global venv's editable
+    # pointer legitimately targets the primary checkout instead of this
+    # worktree. Accept either -- a pointer anywhere else is still a failure.
+    acceptable_shared_dirs = {local_shared_dir}
+    primary_checkout_root = _primary_checkout_root(cli_tools_root)
+    if primary_checkout_root is not None and primary_checkout_root != cli_tools_root:
+        acceptable_shared_dirs.add(primary_checkout_root / "_repo" / "cli-tools-shared")
+
+    assert any(
+        f"Editable project location: {shared_dir}" in result.stdout
+        for shared_dir in acceptable_shared_dirs
+    ), (
         f"{cli_name} is not executing against the local cli-tools-shared repo.\n"
-        f"Expected Editable project location: {local_shared_dir}\n"
+        f"Expected Editable project location to be one of: "
+        f"{sorted(str(shared_dir) for shared_dir in acceptable_shared_dirs)}\n"
         f"Actual uv pip show output:\n{result.stdout}\n"
         f"Fix: reinstall with install-cli-tool.sh so cli-tools-shared overlays "
         f"the local repo as an editable dependency."
@@ -342,15 +447,7 @@ def test_package_imports_cleanly(cli_name, cli_dir, command_filter):
     if not venv_python.exists():
         pytest.skip(f"{cli_name} uv tool venv has no python")
 
-    modules = []
-    for py_file in sorted(pkg_dir.rglob("*.py")):
-        if "__pycache__" in str(py_file):
-            continue
-        rel = py_file.relative_to(cli_dir)
-        mod_path = str(rel).replace("/", ".").removesuffix(".py")
-        if mod_path.endswith(".__init__"):
-            mod_path = mod_path.removesuffix(".__init__")
-        modules.append(mod_path)
+    modules = _package_module_names(pkg_dir, cli_dir)
 
     if not modules:
         pytest.skip(f"{cli_name} has no Python modules")

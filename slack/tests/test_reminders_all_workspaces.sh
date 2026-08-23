@@ -3,9 +3,9 @@
 # Expected: Only Devolutions should have pending (in_progress) reminders
 #
 # Prerequisites:
-#   slack auth login                         (ATA Learning - default profile)
-#   slack auth login --profile ps-authors    (PS Authors workspace)
-#   slack auth login --profile devolutions   (Devolutions workspace)
+#   slack auth login                         (Default workspace)
+#   slack auth login --profile partner       (Partner workspace)
+#   slack auth login --profile demo          (Demo workspace)
 
 set -euo pipefail
 
@@ -27,9 +27,9 @@ for p in json.load(sys.stdin):
 
 display_name() {
     case "$1" in
-        default)      echo "ATA Learning" ;;
-        ps-authors)   echo "PS Authors" ;;
-        devolutions)  echo "Devolutions" ;;
+        default)      echo "Default Workspace" ;;
+        partner)      echo "Partner Workspace" ;;
+        demo)         echo "Demo Workspace" ;;
         *)            echo "$1" ;;
     esac
 }
@@ -38,7 +38,7 @@ echo "=== Reminders List - All Workspaces ==="
 echo "Original active profile: $ORIGINAL_ACTIVE"
 echo ""
 
-for PROFILE in default ps-authors devolutions; do
+for PROFILE in default partner demo; do
     DISPLAY=$(display_name "$PROFILE")
     echo "--- $DISPLAY ($PROFILE) ---"
 

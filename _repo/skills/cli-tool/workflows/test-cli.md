@@ -21,6 +21,209 @@ $TOOL_NAME --help >/dev/null 2>&1
 
 If this fails, investigate the CLI startup error BEFORE running tests.
 
+**Harness-only collection:** When validating changes to the cli-tool test
+harness itself, collect tests with the batch confirmation flag so
+`pytest_configure` does not abort:
+
+```bash
+uv run --project <cli-tools-root>/_repo/skills/cli-tool python -m pytest --collect-only <cli-tools-root>/_repo/skills/cli-tool/tests --force
+```
+
+This only proves the harness collects. It is not a replacement for CLI-specific validation through `<cli-tools-root>/_repo/skills/cli-tool/scripts/test-cli-tool.sh --cli-name "$TOOL_NAME"`.
+
+**Harness batch execution:** When validating harness unit tests without a
+specific CLI target, run pytest through the cli-tool skill uv project and pass
+the batch confirmation flag:
+
+```bash
+uv run --project <cli-tools-root>/_repo/skills/cli-tool python -m pytest <cli-tools-root>/_repo/skills/cli-tool/tests --force
+```
+
+Do not run `python3 -m pytest <cli-tools-root>/_repo/skills/cli-tool/tests`
+directly. That bypasses the skill project's declared `cli-tools-shared`
+dependency, and CLI-dependent tests are only valid without `--cli-name` when
+`--force` explicitly confirms a batch/collect-only harness run where those
+tests may skip.
+
+**UV validation serialization:** Run `uv run`, `uv sync`, `uv lock`,
+`uv pip install`, `uv tool install`, and related environment-mutating
+validation commands sequentially for this repo unless each command uses a
+proven separate project directory, virtual environment, and `UV_CACHE_DIR`.
+Do not launch multiple `uv run --project ... --with ...` pytest validations in
+parallel from the same cli-tools checkout or shared uv cache; uv's project and
+ephemeral overlay/cache state is mutable and parallel runs can corrupt import
+paths. If a prior parallel run produced a malformed `_uv_ephemeral_overlay.pth`
+or unexpected `ModuleNotFoundError`, remove or isolate the affected uv cache and
+rerun the validations one at a time.
+
+**Targeted harness execution:** If you run a direct `pytest -k ...` selection
+against harness tests and the selection includes any CLI-dependent test, pass
+`--cli-name "$TOOL_NAME"`. Use `--force` only for batch or collect-only harness
+checks where CLI-dependent tests are allowed to skip.
+
+Run focused shared harness tests through the harness project directory:
+
+```bash
+uv run --project <cli-tools-root>/_repo/skills/cli-tool python -m pytest <cli-tools-root>/_repo/skills/cli-tool/tests/test_command_error_wrapping.py::test_typer_commands_handle_errors --cli-name "$TOOL_NAME" -q
+```
+
+Do not use `<cli-tools-root>/_repo/cli-tool-tests` as the uv project path. That
+is the harness package name in `pyproject.toml`, not a source directory, and
+pytest will not load the harness `conftest.py` that defines `--cli-name`.
+
+**Direct per-tool pytest execution:** First resolve the actual tool directory
+that contains the target CLI's `pyproject.toml`; do not derive it from the CLI
+command name. Some tools live below `_personal/`, for example `ata-blog` lives at
+`<cli-tools-root>/_personal/ata-blog`, so `<cli-tools-root>/$TOOL_NAME` is not a
+safe project path. Every CLI must declare `pytest` as a dev dependency
+(`[dependency-groups]` `dev = ["pytest>=7.0.0"]`) so `uv sync` installs it into
+the project `.venv`. Run a tool's own tests through the project venv
+interpreter, not a bare global `pytest`. The always-safe command is the uv
+project run below, which injects pytest with `--with pytest` and works whether or
+not the dev group has been synced. After `uv sync`, `uv run pytest` (from the
+tool dir) and `.venv/bin/python -m pytest` are equally valid because both resolve
+the project `.venv` where editable `cli_tools_shared` imports cleanly.
+
+Do not run a bare `pytest` executable, `PYTHONPATH=. pytest`, ambient
+`python3 -m pytest`, or any other interpreter outside the tool's `.venv`/uv
+project. When `pytest` is missing from the project `.venv`, `uv run pytest`
+silently falls back to the global pipx pytest, whose interpreter cannot import
+editable `cli_tools_shared`; the suite then fails collection with
+`ModuleNotFoundError: No module named 'cli_tools_shared'`. If you hit that error,
+the fix is to declare+sync the dev group (or use the `--with pytest` command
+below), not to switch to another ambient interpreter.
+
+Before reading or passing a tool's test paths to `sed`, `cat`, `nl`, `wc`,
+`head`, `tail`, `grep`, `rg`, or direct `pytest`, discover the real test files
+or prove the `tests` directory exists. Do not infer conventional filenames such
+as `tests/test_<tool>.py`, `tests/test_cli.py`, or `tests/test_commands.py`. If
+no tests directory exists, report `SKIP_MISSING` and use the harness script
+below instead of a guessed file path.
+
+For ad-hoc diagnostics that reuse a helper from a tool test file, do not import
+plain pytest directories as package modules such as `tests.test_client`; most
+tool `tests/` directories do not have `__init__.py`. Load the exact proven test
+file with `importlib.util.spec_from_file_location(...)` before accessing the
+helper.
+
+Apply the same rule to shared harness paths. Do not assume root-level paths such
+as `<cli-tools-root>/tests/conftest.py` exist. Discover the harness files under
+`<cli-tools-root>/_repo/skills/cli-tool/tests` or the shared-package files under
+`<cli-tools-root>/_repo/cli-tools-shared/tests`, keep only proven regular files,
+and read or pass only those proven paths.
+
+```bash
+uv run --project <tool-dir> --with pytest python -m pytest <tool-dir>/tests
+```
+
+**Direct shared-package pytest execution:** When running tests for
+`<cli-tools-root>/_repo/cli-tools-shared`, treat `cli-tools-shared` as its own
+uv project, not as a CLI tool directory. Do not run `uv run pytest` from inside
+`_repo/cli-tools-shared`; that can resolve the `pytest` executable without the
+shared package on the import path, causing `ModuleNotFoundError:
+cli_tools_shared` while loading `tests/conftest.py`.
+
+Use `python -m pytest` through the shared package project and inject pytest into
+that run:
+
+```bash
+uv run --project <cli-tools-root>/_repo/cli-tools-shared --with pytest python -m pytest <cli-tools-root>/_repo/cli-tools-shared/tests
+```
+
+Do not combine shared-package test paths and per-tool test paths in one pytest
+invocation. Run the shared-package command above separately from the direct
+per-tool pytest command so each suite resolves imports through its own uv
+project.
+
+**Expected-red test-first runs:** When a direct per-tool or shared-package
+pytest run is intended to fail before implementation, do not run the bare
+pytest command. Wrap it, capture the status and output, validate the expected
+failure text, and exit `0` only for the intended red result. Expected red text
+may be an assertion diff, exception type, or exact exception message. Unexpected
+pass, unexpected failure text, or any other status remains a tool failure.
+For `cli-tools-shared`, use the direct shared-package pytest command above in
+the wrapper instead of a `$TOOL_NAME` project path.
+
+When the red proof is a pytest assertion diff for a list or dict comparison, do
+not key the wrapper only to directional pytest diff prose. Pytest can describe
+the same cardinality bug as `Left contains one more item` or
+`Right contains one more item` depending on operand order. Prefer a stable
+domain-specific assertion message, exception type, or exact value from the diff;
+if pytest prose is the only signal, require the test node name and accept both
+directional variants.
+
+**Table-output assertions:** Table output is display-only and may shorten cell
+values for readability, while still showing every returned row. Do not assert
+full untruncated URLs, UUIDs, descriptions, or other long scalar values in
+Rich-rendered table stdout. Assert those full values against default JSON
+output instead. For table stdout, assert stable headers, row presence, visible
+labels, and the absence of row truncation; a cell-level ellipsis is acceptable
+when the JSON output preserves the full value.
+
+**Typer/Rich parser-error assertions:** Removed command or option tests should
+assert the stable behavior: exit code `2`, the generic parser-error class such
+as `"No such option"` or `"No such command"`, the removed token, and no mutation
+on the fake client. Do not assert exact formatted strings such as
+`"No such option: --status"`; Typer/Rich may wrap that text in panels or split
+punctuation while preserving the same command contract.
+
+```bash
+tmp_output="$(mktemp)"
+if uv run --project <tool-dir> --with pytest python -m pytest <tool-dir>/tests/test_new_feature.py >"$tmp_output" 2>&1; then
+  status=0
+else
+  status=$?
+fi
+cat "$tmp_output"
+if [ "$status" -ne 0 ] && rg -q -F -- 'expected assertion, exception type, or exception message' "$tmp_output"; then
+  printf '%s\n' 'EXPECTED_RED: test-first failure confirmed before implementation.'
+  rm -f "$tmp_output"
+  exit 0
+fi
+rm -f "$tmp_output"
+if [ "$status" -eq 0 ]; then
+  printf '%s\n' 'UNEXPECTED_PASS: test-first run passed before implementation.' >&2
+  exit 1
+fi
+exit "$status"
+```
+
+**Harness unit monkeypatches:** When a harness unit test patches an imported
+helper such as `run_cli_command`, patch the module object that owns the
+reference used by the code under test (for example,
+`monkeypatch.setattr(sys.modules[__name__], "run_cli_command", fake)`) or import
+the module under test and patch that object. Do not use a bare string target
+such as `"test_profiles.run_cli_command"`; pytest may collect the file under a
+different module name, causing the real helper to execute.
+
+**Command test fake lifecycle methods:** When a command test replaces a
+production client or browser client with a fake, the fake must implement every
+method the command can call on that object, including cleanup methods reached in
+`finally` blocks such as `close()`. Missing lifecycle methods are test-fixture
+bugs; add the method to the fake instead of changing the production cleanup
+path.
+
+**Command test fake helper signatures:** When a command test monkeypatches a
+helper function, keep the fake signature compatible with the production call,
+including keyword-only arguments such as `profile`. Capture and assert those
+arguments in the test. A `TypeError` from a fake that omits a new keyword
+argument is a test-stub bug, not an implementation bug.
+
+**Direct Typer command calls:** When a unit test calls a `@app.command` function
+directly instead of using `CliRunner`, pass every Typer argument and option
+parameter explicitly, including newly added options whose CLI defaults are
+`typer.Option(...)`. A direct Python call does not apply Typer's CLI default
+conversion; omitted parameters can reach command logic as `typer.models.OptionInfo`
+objects and make truthiness checks take the wrong branch. Prefer extracting a
+pure helper for command logic and testing that helper when direct invocation
+would require many CLI-only option defaults.
+
+When a direct-called command helper is expected to exit via `raise typer.Exit(...)`,
+assert `pytest.raises(typer.Exit)` or `pytest.raises(click.exceptions.Exit)`, not
+`pytest.raises(SystemExit)`. `typer.Exit` is Click's `Exit` exception and is not a
+`SystemExit`; `SystemExit` assertions belong around wrappers such as `run_app(app)`
+that intentionally convert CLI execution into a process exit.
+
 **Run the test script for structured JSON results:**
 
 ```bash
@@ -34,6 +237,22 @@ The script returns JSON with:
 - `auth_command`: string - command to authenticate (if auth_required)
 - `failures`: array - each failure with test_name, file, message, and pre-formatted todo
 
+The full compliance run can take several minutes because live command tests have
+bounded subprocess timeouts and retries. An execution-tool yield such as
+`Script running with cell ID ...` is not a shell exit and is not a harness
+result. Continue waiting on that exact session until the process exits. Treat a
+capture that ends in pytest progress characters (for example `.......F...`) and
+has no JSON document on stdout as `HARNESS_STILL_RUNNING`, even if the execution
+adapter's interim response contains a zero status field. Do not launch a second
+harness run against the same CLI or shared uv environment while the first is
+still active.
+
+Completion requires all three checks: the shell process exited, stdout parses
+as one JSON document with a boolean `success` field, and the shell exit status
+agrees with that field (`0` only when `success` is `true`; nonzero when it is
+`false`). Missing JSON is a failed/incomplete invocation, never a passing test
+result.
+
 Display the summary to the user.
 
 ## Step 1.5: Handle Authentication Errors
@@ -42,9 +261,21 @@ If `auth_required` is true in the JSON response, complete testing is blocked unt
 
 1. **First, check actual auth status:**
    ```bash
-   $TOOL_NAME auth status 2>/dev/null
+   if output="$($TOOL_NAME auth status 2>&1)"; then
+     printf '%s\n' "$output"
+   else
+     status=$?
+     printf '%s\n' "$output"
+     if [ "$status" -eq 2 ] && printf '%s\n' "$output" | rg -q -e 'authenticated: false' -e '"authenticated"[[:space:]]*:[[:space:]]*false'; then
+       printf 'EXPECTED_STATUS: %s profile is unauthenticated.\n' "$TOOL_NAME"
+     else
+       exit "$status"
+     fi
+   fi
    ```
-   Parse the JSON output to check the `authenticated` field.
+   Parse the JSON output to check the `authenticated` field. The wrapper exits
+   `0` only for authenticated status or the expected unauthenticated-status
+   evidence; other non-zero statuses remain tool failures.
 
 2. **If authenticated (true):** Investigate why the harness still considers auth incomplete. Do not treat the test run as complete until the harness passes.
 
@@ -62,6 +293,26 @@ If `auth_required` is true in the JSON response, complete testing is blocked unt
 5. **If user chooses to skip:**
    - Report that complete testing is blocked by missing authentication
    - Do not present the harness as passing
+
+### Live-auth blockers for new auth CLIs
+
+New auth CLIs can complete static/source compliance without real credentials, but
+they cannot complete live compliance until the required credential exists and
+`auth status` returns an authenticated profile. Do not create fake credentials,
+mark the CLI as no-auth, disable live tests, or edit validator expectations to
+force a pass.
+
+When credentials are unavailable, finish the code/static fixes that do not need
+live auth, then report `LIVE_AUTH_BLOCKED` with:
+
+- `auth_required: true`
+- the `auth_command` from `test-cli-tool.sh`
+- the exact `auth status` output or schema error
+- the exact live execution tests that remain blocked
+
+After credentials are stored through the CLI-tools secret manager or captured by
+the CLI's own login flow, run the auth command and re-run `test-cli-tool.sh`
+until `"success": true`.
 
 ## Step 2: Create Master Todo List (MANDATORY)
 
@@ -94,6 +345,7 @@ Create todos from:
    - "AI Review: Verify auth status makes actual API call (CRITICAL)"
    - "AI Review: Verify auth uses cli_tools_shared (not custom auth module)"
    - "AI Review: Verify --force only clears ephemeral state (tokens/sessions), not static credentials"
+   - "AI Review: Verify dry-run/preview commands that do not call live APIs run auth-free with isolated profile data"
    - "AI Review: Verify reusable credentials are routed through the CLI-tools secret manager, not any `.env` file"
    - "AI Review: Verify activity logging covers important code paths"
    - "AI Review: Verify browser CLI uses base class is_authenticated() (no custom auth-check methods)" *(browser CLIs only)*
@@ -105,7 +357,12 @@ Create todos from:
 
 **SKIP tests do NOT require todos** - they indicate features not applicable to this CLI.
 
-**EXCEPTION: --filter is NEVER skippable.** All list commands must expose --filter regardless of API support. If tests skip filter checks, investigate why and ensure --filter is implemented.
+**EXCEPTION — these structural skips are NEVER acceptable. Treat them as failures and create fix todos:**
+- **commands directory** — every CLI must have a `commands/` directory; skips citing "no commands directory found" mean the CLI is incomplete
+- **list commands** — every CLI must expose at least one `list` command; skips citing "no list commands found" mean the CLI is incomplete
+- **get commands** — every CLI must expose at least one `get` command; skips citing "no get commands found" mean the CLI is incomplete
+- **filters.py** — every CLI must have `filters.py`; skips citing "filters.py not found" mean the CLI is incomplete
+- **--filter on list commands** — every list command must expose `--filter`; skips or absences here mean the CLI is incomplete
 
 ## Step 3: Work Through Every Todo (MANDATORY)
 
@@ -140,7 +397,7 @@ ALL timestamps displayed in table output MUST use the `format_local_time()` or `
 - Use `format_local_time_only(timestamp)` for "14:30:45" format (time only)
 - NEVER display raw ISO timestamps (e.g., "2025-01-13T14:30:45Z") in table output
 - All times MUST be converted to local timezone before display
-- Check all command files in the commands/ directory for timestamp display
+- Check `main.py` plus any existing `commands/*.py` files for timestamp display
 
 **CRITICAL --filter Requirements:**
 ALL CLI tools MUST expose --filter flags on list commands, regardless of whether the underlying API supports filtering. The filter_translator MUST translate the standard CLI tool filtering syntax to whatever method is required:
@@ -160,6 +417,26 @@ The `auth status` command MUST make an actual API call to verify credentials are
 - Reusable human-supplied secrets (API keys, usernames, passwords, client secrets, long-lived bearer tokens) MUST be stored and retrieved through the CLI-tools secret manager
 - Agents and docs MUST NOT instruct users to place those values in any `.env` file
 - `.env` files are limited to non-secret config and CLI-managed runtime auth state
+
+**CRITICAL dry-run/preview auth requirements:**
+Commands whose `--dry-run` or preview mode only prints the intended request and
+does not call a live API MUST be executable without saved credentials. Validate
+the installed launcher with isolated profile data so shared command
+registration cannot require auth before the command inspects `--dry-run`:
+
+```bash
+tmpdir="$(mktemp -d)"
+XDG_DATA_HOME="$tmpdir" <tool> <command> --dry-run
+rc=$?
+rm -rf "$tmpdir"
+exit "$rc"
+```
+
+If that check fails with missing credentials, fix the command credential
+declaration or shared registration path instead of adding credentials to the
+test environment. Use `COMMAND_CREDENTIALS = {"<command>": ["no_auth"]}` only
+when the command code itself enforces auth before live mutations and keeps the
+dry-run path auth-free.
 
 ### Fix Process
 
@@ -218,6 +495,7 @@ Only after ALL todos are complete, present:
 - Error handling: [Verified NO silent error swallowing - all API errors surface to user]
 - auth status: [Verified makes actual API call to validate credentials]
 - --force ephemeral: [Verified --force only clears tokens/sessions, not static credentials]
+- Dry-run preview auth: [Verified dry-run/preview commands that do not call live APIs run with isolated empty profile data]
 - Secret storage: [Verified reusable credentials use secret manager instead of `.env`]
 - Activity logging: [Verified get_activity_logger used in client and command files]
 - Browser auth delegation: [Verified uses base class is_authenticated() — no custom is_logged_in/_ensure_logged_in] *(browser CLIs only)*
@@ -287,6 +565,24 @@ Edit this file to:
 - Configure exclusions
 - Set max nesting depth per CLI
 - Define parameter fixtures for commands that require IDs
+
+### List/Get Pairing Exclusions
+
+`excluded_from_list_required` and `excluded_from_get_required` under
+`[exclusions]` apply to EVERY CLI in the repo. When a group name is only
+legitimately exempt in one tool, declare the same key under
+`[cli_specific.<cli-name>]` instead — it is merged with the global list for that
+CLI only:
+
+```toml
+[cli_specific.ebay]
+# `listings` is marketplace search: eBay exposes no way to enumerate listings
+# without a query, and `listings search` is the documented ID-discovery command.
+excluded_from_list_required = ["listings", "time-away"]
+```
+
+An exclusion is for a group that genuinely has no ID space to enumerate — never
+for a resource group whose `list` command is merely missing.
 </configuration>
 
 <fixtures>
@@ -318,6 +614,9 @@ Add mapping in `tests/cli_test_config.toml`:
 # For flag-based parameters (--database-id VALUE):
 "database page list" = { "--database-id" = "database_id" }
 "pages blocks list" = { "--page-id" = "page_id" }
+
+# For required valueless flags, use the literal boolean true:
+"comments list" = { "--page-id" = "page_id", "--open-only" = true }
 
 # For positional arguments (command VALUE):
 # Use "_pos1", "_pos2", etc. for positional args in order
@@ -354,6 +653,10 @@ Browser CLIs should be nearly identical to the `_repo/skills/cli-tool/templates/
 Testing is complete ONLY when:
 - [ ] pytest shows ZERO FAILED tests
 - [ ] ALL AI Review items verified correct
+- [ ] CLI has a `commands/` directory (mandatory — no exceptions)
+- [ ] CLI has at least one `list` command (mandatory — no exceptions)
+- [ ] CLI has at least one `get` command (mandatory — no exceptions)
+- [ ] CLI has `filters.py` (mandatory — no exceptions)
 - [ ] ALL list commands expose --filter flag (no exceptions)
 - [ ] filter_translator properly implements translation (API or client-side)
 - [ ] ALL timestamps displayed use format_local_time utility (local timezone)

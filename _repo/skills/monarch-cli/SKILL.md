@@ -23,6 +23,9 @@ monarch <command-group> <action> [arguments] [options]
 | Already-reviewed transactions | `monarch transactions list --reviewed --days 30 --table` |
 | View budgets this month | `monarch budgets list --month 2024-01 --table` |
 | View cashflow summary | `monarch cashflow summary --table` |
+| Annual/range income + expense totals | `monarch cashflow summary --start 2025-01-01 --end 2025-12-31 --table` |
+| Per-category-group totals for a range | `monarch cashflow list --start 2025-01-01 --end 2025-12-31 --table` |
+| Income group total only | `monarch cashflow list --start 2025-01-01 --end 2025-12-31 --filter "group:Income"` |
 | List categories | `monarch categories list --table` |
 | Sync accounts | `monarch accounts sync --wait` |
 | List transaction rules | `monarch rules list --table` |
@@ -37,22 +40,49 @@ monarch <command-group> <action> [arguments] [options]
 <principle name="Transaction Review Routing">
 For requests to review, categorize, recategorize, audit, clean up, or start reviewing Monarch transactions, invoke the `monarch-transaction-reviewer` custom agent instead of performing the review inline.
 
+**The reviewer agent is project-scoped to `/Users/adam/Dropbox/GitRepos/Agents/Accountant`.** It is defined at `.claude/agents/monarch-transaction-reviewer.md` and `.codex/agents/monarch-transaction-reviewer.toml` inside that project, and its domain skill is symlinked into that project's skill roots. Start a Monarch review or audit session from the Accountant project. A session started elsewhere cannot spawn the agent, and the Skill tool returns `Unknown skill` for its domain skill.
+
 For these review workflows, do not read `usage.json`, run `monarch` commands, list transactions, load categories, or perform setup in the parent session before spawning the reviewer. The reviewer agent owns those steps.
 
 The subagent prompt must be complete and self-contained, must not use `fork_context`, and must explicitly reference `/Users/adam/Dropbox/.agents/skills/agent-expert/references/global-standards.md`.
 </principle>
 
+<principle name="Renderer Selection">
+Two deterministic renderers live in `scripts/`. Pick one per run. Never hand-write either table in prose, and never write a throwaway script in a scratchpad directory to render a shape a renderer does not support.
+
+| Renderer | Use it when | Columns |
+|----------|-------------|---------|
+| `scripts/build-output.sh` | The run proposes per-row category changes and Adam approves rows for write-back through `apply-approved-updates.sh`. | `# / Vendor / Amount / Description / Current Category / Suggested Category / Needs Input / Recommended Rule` |
+| `scripts/build-audit-output.sh` | The run is a report-only audit. It classifies each transaction into a bucket, states confidence and evidence, and writes nothing back to Monarch. | `# / Date / Account / Merchant / Amount / Current Category / Bucket / Recommended Category / Confidence / Evidence` |
+
+Choose the audit renderer when the request asks for an audit, a classification report, a business-versus-personal split, or a bucket breakdown with evidence. Choose the review renderer when the request asks to review, categorize, recategorize, or clean up transactions for approval.
+
+The two renderers are exclusive. Do not merge their columns, and do not run the audit renderer to collect approvals; it emits no rule commands and drives no write-back path.
+
+If a run needs a column that neither renderer supports, extend the matching script in this repo-owned bundle and add a test under `tests/`. Do not render that run by hand.
+</principle>
+
 <principle name="Review Rules Memory">
 **MANDATORY: Read `rules.md` at the start of EVERY review — before listing categories or transactions.** It is the persistent memory of Adam's preferences (categorization defaults, rule-recommendation policy, evidence thresholds, skip lists). Apply every rule there as the baseline policy for the run.
 
-**WRITE ON FEEDBACK.** Whenever Adam gives feedback that generalizes — phrased as "always", "never", "from now on", "stop doing X", "don't recommend a rule for Y", or a correction with reasoning that applies beyond the single transaction — append or update the relevant section of `rules.md` BEFORE ending the review. Mirror the edit to both `~/.claude/skills/monarch-cli/rules.md` and `~/.agents/skills/monarch-cli/rules.md`. Mention each rule added or changed in the work summary.
+**WRITE ON FEEDBACK.** Whenever Adam gives feedback that generalizes — phrased as "always", "never", "from now on", "stop doing X", "don't recommend a rule for Y", or a correction with reasoning that applies beyond the single transaction — append or update the relevant section of `/Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills/monarch-cli/rules.md` BEFORE ending the review. The repo-owned cli-tools skill bundle is the source of truth for Monarch reviewer scripts and policy. Do not create or edit runtime-projected Monarch skill copies for reviewer policy. Mention each rule added or changed in the work summary.
 
 Do not invent rules from a single category change. Only persist what Adam has explicitly stated or unmistakably framed as a durable preference.
 </principle>
 
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `monarch` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `monarch` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
+</principle>
+
+<principle name="Range / Annual Income & Expense Totals">
+To pull income and expense totals for an arbitrary date range (e.g. a full calendar year), use the cashflow aggregates -- they sum the underlying transactions server-side:
+
+- **PRIMARY -- totals:** `monarch cashflow summary --start <YYYY-MM-DD> --end <YYYY-MM-DD>` returns `sumIncome`, `sumExpense`, `savings`, and `savingsRate` for the range. With no dates it summarizes the current month.
+- **PRIMARY -- per-group breakdown:** `monarch cashflow list --start <d> --end <d>` returns one row per category group with `id`, `group`, and `sum`. Add `--filter "group:Income"` to isolate the Income group total (income groups are positive; expense groups are negative).
+- **FALLBACK / cross-check:** sum `monarch transactions list --category <id> --start <d> --end <d> --limit 5000` across the Income-group categories (Paychecks, Interest, Business Income, Other Income). Use this only to validate the cashflow figure; the cashflow aggregates are the primary source.
+
+**Caveat (self-employed):** the "Business Income" category is gross business deposits, not Schedule C net income. Do not treat the cashflow income total as taxable/net income for a self-employed user -- business expenses are tracked separately and are not netted out here.
 </principle>
 
 <principle name="Command Groups">
@@ -76,6 +106,9 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **`usage.json`** -- Complete command tree with arguments, options, defaults, and usage instructions for every command.
 - **`rules.md`** -- Persistent memory of Adam's review preferences. MANDATORY reading at the start of every transaction review. Update on user feedback.
 - **`workflows/recommend-rule.md`** -- Decision criteria for when the reviewer should propose creating a Monarch rule alongside a single-transaction category change. MANDATORY reading whenever the reviewer is about to surface a category-change recommendation.
+- **`scripts/build-output.sh`** -- Deterministic renderer for the approval-driven review table (8 columns). Consumes the decisions JSON that `apply-approved-updates.sh` also reads. `--validate-only` checks the schema without rendering.
+- **`scripts/build-audit-output.sh`** -- Deterministic renderer for a report-only audit (10 columns: `# / Date / Account / Merchant / Amount / Current Category / Bucket / Recommended Category / Confidence / Evidence`). It also emits a summary totals block per bucket and a count reconciliation block. Buckets are `business cost`, `owner draw`, and `miscategorization`, exact lowercase; any other value fails as an unclassified row. Every `recommended_category` is validated against the live Monarch category map (`monarch categories list --limit 500`), or against a saved map when `--categories PATH` is passed. Malformed, unknown, or unclassified input exits non-zero with field-level errors; there is no fallback and no silent repair. Run `scripts/build-audit-output.sh --help` for the full audit JSON schema. See the **Renderer Selection** principle for when to use this renderer instead of `build-output.sh`.
+- **`data/venmo-classification-rules.json`** -- Explicit deterministic Venmo note/counterparty to Monarch category mappings. Do not infer categories outside these rules.
 </reference_index>
 
 <success_criteria>

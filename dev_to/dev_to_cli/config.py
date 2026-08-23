@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 
 import requests
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
@@ -27,11 +26,6 @@ class Config(BaseConfig):
             tool_dir=resolve_tool_dir(self.DIST_NAME),
             profile=profile,
         )
-
-    @property
-    def storage_dir(self) -> Path:
-        """Directory used by the shared response cache."""
-        return self.get_profile_data_dir()
 
     def test_connection(self):
         """Verify the saved API key against the authenticated-user endpoint."""

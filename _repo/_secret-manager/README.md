@@ -51,7 +51,7 @@ password:
 
 ```bash
 CLI_TOOLS_KEYCHAIN=/path/to/custom.keychain-db \
-  _repo/_secret-manager/secrets.sh --remote-host adam-server --remote-unlock-secret cli-tools-adam-server-sudo set --tool <cli-tool> --type <type>
+  _repo/_secret-manager/secrets.sh --remote-host remote-host --remote-unlock-secret remote-keychain-password set --tool <cli-tool> --type <type>
 ```
 
 The unlock secret is copied to a private remote temp file and used to unlock the
@@ -111,11 +111,3 @@ _repo/_scripts/import_export.py export /path/to/cli-tools-export.tar.gz --plain-
 On import, any plain-text sensitive values found in authentication profile
 `.env` files are stored through `_repo/_secret-manager/secrets.sh` and replaced
 with `secret://...` placeholders.
-
-For n8n Codex nodes on adam-server, set the node's Codex binary path to:
-
-```text
-/Applications/Codex.app/Contents/Resources/codex
-```
-
-That binary is signed by the Team ID declared in `access-policy.conf`. Do not point n8n at the unsigned Homebrew `codex` shim unless the policy intentionally grants the broader `unsigned:` partition ID.

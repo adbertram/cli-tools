@@ -1,0 +1,192 @@
+# Chrome Web Store listing spec — field-by-field source of truth.
+# Sources: https://developer.chrome.com/docs/webstore/best-listing
+#          https://developer.chrome.com/docs/webstore/images
+#          https://developer.chrome.com/docs/webstore/publish
+#          https://developer.chrome.com/docs/webstore/cws-dashboard-privacy
+
+account_limits:
+  max_published_extensions: 20           # themes unlimited
+  max_package_size_bytes: 2147483648     # 2 GB ZIP
+  publish_defer_window_days: 30          # can defer publish after review
+
+dashboard_tabs:
+  - store_listing       # public page content
+  - privacy             # single purpose, permissions, data use, privacy policy
+  - distribution        # paid, countries, visibility
+  - test_instructions   # optional — credentials for reviewers
+
+text_fields:
+  title:
+    tab: store_listing
+    required: true
+    char_limit: null           # Google docs do not specify; dashboard UI typically enforces ~45
+    guidance:
+      - Clear and descriptive
+      - Concise
+      - Unique
+    avoid:
+      - Keyword stuffing
+      - Long names — short, catchy names are more memorable
+
+  summary:
+    tab: store_listing
+    required: true
+    char_limit: 132
+    format: plain_text         # no HTML
+    visibility: homepage, category pages, search results
+    guidance:
+      - Highlight key features for main use cases
+      - Include the most important text — this is the preview snippet
+    avoid:
+      - Generic phrases ("best extension ever")
+      - Superlatives
+      - References to competing extensions
+
+  description:
+    tab: store_listing
+    required: true
+    char_limit: null           # not specified; dashboard allows long form
+    structure: overview_paragraph + feature_list
+    guidance:
+      - Focus on keywords representing important features
+      - Describe what the extension actually does
+    avoid:
+      - Keyword spam — may trigger suspension
+      - Repetitive or irrelevant keywords
+
+  category:
+    tab: store_listing
+    required: true
+    guidance:
+      - Select the single category that best matches the extension's single purpose
+
+  language:
+    tab: store_listing
+    required: true
+    note: Additional locales supported via chrome.i18n (messages.json) — locale-specific screenshots supported
+
+image_assets:
+  store_icon:
+    required: true
+    format: PNG
+    canvas: 128x128
+    artwork: 96x96
+    padding_px: 16             # transparent on all sides
+    frame_note: PNG without alpha channel receives 12-pixel rounded corners automatically
+    guidance:
+      - Simple, recognizable, brand-consistent
+      - Works on both light and dark backgrounds
+      - Front-facing — avoid perspective
+    avoid:
+      - Screenshots or UI elements in the icon
+      - Heavy drop shadows, large bevels
+
+  small_promo_tile:
+    required: true              # required for listing approval
+    dimensions: 440x280
+    locale_specific: false
+    guidance:
+      - Primarily communicate the brand (not a screenshot replica)
+      - Saturated colors, well-defined edges, fill the entire region
+      - Readable when scaled to half size
+    avoid:
+      - Text-heavy designs
+      - Misleading claims or status claims
+
+  marquee_promo_tile:
+    required: false             # optional; required for marquee placement in featured slots
+    dimensions: 1400x560
+    locale_specific: false
+    guidance:
+      - Same principles as small tile
+      - Uncluttered, high-resolution, consistent branding
+    avoid:
+      - Busy designs, excessive text
+
+  screenshots:
+    required: true
+    min_count: 1
+    recommended_max: 5
+    dimensions_preferred: 1280x800
+    dimensions_alternate: 640x400
+    style: full_bleed, square_corners, no_padding
+    locale_specific: true
+    guidance:
+      - Demonstrate actual user experience
+      - Focus on core features
+    avoid:
+      - Blurry, distorted, pixelated images
+      - Incorrect rotation
+      - Overuse of text
+
+privacy_tab:
+  single_purpose:
+    required: true
+    description: Free-text field describing the narrow, single purpose of the extension
+    guidance:
+      - Must be narrow and easy to understand
+      - Reviewers use this to judge whether listing content aligns with declared purpose
+
+  permissions_justification:
+    required: true
+    per_permission: true       # justify every permission declared in manifest.json
+    guidance:
+      - Request the minimum permissions consistent with the purpose
+      - Remove unnecessary permissions before upload
+      - Each declared permission needs a one-line justification
+
+  host_permissions_justification:
+    required: conditional       # required when manifest declares host_permissions
+    per_host: true
+
+  remote_code:
+    required: true
+    options:
+      - "No, I am not using remote code"
+      - "Yes — justify necessity"
+    note: Manifest V3 forbids loading/executing remotely hosted files; select "No" unless justified
+
+  data_usage:
+    required: true
+    declarations:
+      - Types of data collected (checkbox group)
+      - Certification that extension complies with disclosure statements (checkbox group)
+    displayed_to_users: true
+
+  privacy_policy_url:
+    required: true              # required for all extensions that handle user data
+    guidance:
+      - Must describe how data is collected, used, and disclosed
+      - Must align with disclosures on this tab and with developer-account privacy policy
+
+distribution_tab:
+  paid_designation:
+    required: true
+  country_availability:
+    required: true
+  visibility:
+    options:
+      - public
+      - unlisted
+      - private (trusted tester group)
+
+test_instructions_tab:
+  required: false
+  purpose: Provide reviewer credentials or steps needed to exercise the extension
+
+submission_flow:
+  - Upload signed .zip via Chrome Developer Dashboard
+  - Complete Store Listing, Privacy, Distribution tabs (all required)
+  - (Optional) Complete Test Instructions tab
+  - Click "Submit for Review"
+  - Choose publish-immediately or defer (up to 30 days)
+  - Review time varies by item nature — no SLA
+
+ranking_signals:
+  # Named explicitly by Google in best-listing doc
+  - user_ratings
+  - downloads_vs_uninstalls_over_time
+  - design_quality
+  - clear_purpose_fills_real_need
+  - onboarding_intuitiveness
+  - ease_of_use

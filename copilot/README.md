@@ -1,15 +1,17 @@
 # Copilot CLI Guide
 
-Command-line interface for managing Microsoft Copilot Studio agents via the Dataverse API.
+## DESCRIPTION
 
-> **Status: alpha (0.1.0).** APIs and command surface may change before 1.0.
-> Bug reports and feedback welcome at https://github.com/adbertram/cli-tools/issues
+The `copilot` CLI provides a command-line interface for Microsoft Copilot Studio agents via Dataverse API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Overview
 
 The Copilot CLI provides access to:
 - **Auth** - Manage CLI authentication (login, status, logout, profiles)
 - **Agents** - Create, update, delete, publish, and test agents
+- **Channels** - List/inspect agent channels and get Direct Line tokens (Teams enablement and secret retrieval are portal-only — see [Channels](#channels))
 - **Topics** - Manage conversation flows (list, create, update, delete, enable/disable)
 - **Agent Tools** - Connect connectors, prompts, flows, HTTP endpoints, or sub-agents as tools
 - **Knowledge** - Add file-based and Azure AI Search knowledge sources
@@ -135,6 +137,66 @@ copilot tool mcp tools list --url "https://mcp.example.com/sse" --limit 10
 copilot environment list --table
 copilot solution list --table
 ```
+
+### Custom connector write timeout
+
+`custom-connector create` and `custom-connector update` compile the OpenAPI spec
+and any attached C# policy script (`--script`) server-side. Power Platform can take
+well over a minute to apply a connector that has a script, and it keeps applying the
+change even after a client read timeout — so a short timeout makes a
+slow-but-successful write look like a failure (and triggers spurious retries in
+automation such as Ansible).
+
+The read timeout for these two writes defaults to **300 seconds** and is
+configurable. Precedence is `--timeout` flag → `COPILOT_CONNECTOR_WRITE_TIMEOUT`
+environment variable → 300s default. Fast reads (list/get) keep their own short
+timeouts.
+
+```bash
+# Per-invocation override
+copilot custom-connector update <connector-id> --swagger-file ./api.json \
+  --script ./code.csx --script-operations "CreateTask" --timeout 420
+
+# Environment-wide override (e.g. in a CI/Ansible environment)
+export COPILOT_CONNECTOR_WRITE_TIMEOUT=420
+```
+
+### Capacity requirement for publishing
+
+Tools and knowledge can be added while an agent is being authored without Copilot
+Studio capacity. Before publishing, the CLI runs a deterministic, fail-fast capacity
+pre-check on the target Power Platform environment. Publishing is blocked (non-zero
+exit, no publish mutation) when the environment has **no Copilot Studio capacity**:
+
+```bash
+copilot agent publish <agent-id>
+```
+
+An environment is entitled when **either** prepaid Copilot Studio capacity (Copilot
+Credits — `MCSMessages`, `MCSSessions`, or `VAConversations`) is allocated to it,
+**or** it is covered by an Enabled pay-as-you-go billing policy. When not entitled,
+the command exits with an error naming the environment and three fixes: allocate
+prepaid capacity in the [Power Platform admin center](https://admin.powerplatform.microsoft.com)
+(Licensing → Copilot Studio), link a pay-as-you-go billing policy, or use an
+environment that already has capacity. Agent creation, updates, and tool/knowledge
+attachment are authoring operations and are not capacity-gated.
+
+## Channels
+
+The `copilot agent channel` subgroup is **read-only**:
+
+```bash
+copilot agent channel list <agent-id> --table     # list channels for an agent
+copilot agent channel get <agent-id> directline    # inspect one channel
+copilot agent channel get-token <agent-id>          # mint a short-lived Direct Line token
+```
+
+Enabling a channel and retrieving the Web/Direct Line secret have **no supported Microsoft API** — the Power Platform "PVA Bots" REST API covers only quarantine operations, and even Microsoft's Copilot Studio Kit requires the secret to be entered by hand. These stay manual Copilot Studio portal steps:
+
+- **Enable Microsoft Teams:** publish the agent (`copilot agent publish <id>`), then in Copilot Studio go to **Channels → Teams and Microsoft 365 Copilot → Add channel**. Org-wide availability needs admin approval. See the [Microsoft docs](https://learn.microsoft.com/microsoft-copilot-studio/publication-add-bot-to-microsoft-teams).
+- **Get the Direct Line / Web channel secret:** in Copilot Studio go to **Settings → Security → Web channel security** and copy **Secret 1** or **Secret 2**. Teams-only licenses can't generate secrets. See the [Microsoft docs](https://learn.microsoft.com/microsoft-copilot-studio/configure-web-security).
+
+**For web embeds, prefer a token over the secret.** `copilot agent channel get-token <agent-id>` returns a short-lived Direct Line token without exposing the secret. If you must use the secret, exchange it for a token server-side via `POST https://directline.botframework.com/v3/directline/tokens/generate` — never embed the raw secret in browser code.
 
 ## Documentation
 

@@ -1,6 +1,10 @@
 # Cliclick CLI
 
-A Python wrapper for [cliclick](https://github.com/BlueM/cliclick), the macOS command-line tool for emulating mouse and keyboard events.
+## DESCRIPTION
+
+The `cliclick` CLI wraps cliclick with standardized cli-tools behavior.
+
+Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows.
 
 ## Prerequisites
 

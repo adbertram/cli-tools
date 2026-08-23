@@ -4,7 +4,13 @@ import subprocess
 import pytest
 
 import cli_tools_shared.config as config_module
-from cli_tools_shared.config import BaseConfig, config_env_path_for_tool, get_profiles_base_dir
+from cli_tools_shared.config import (
+    BaseConfig,
+    config_env_path_for_tool,
+    get_profiles_base_dir,
+    profile_secret_field_map,
+    secret_manager_set_command,
+)
 from cli_tools_shared.credentials import CredentialType
 from cli_tools_shared.exceptions import ConfigError
 
@@ -45,6 +51,43 @@ def _tool_dir(tmp_path: Path, name: str = "exampletool") -> Path:
 def _write_profile(path: Path, body: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(body)
+
+
+def test_profile_secret_field_map_returns_only_placeholder_fields(tmp_path):
+    profile = tmp_path / ".env"
+    profile.write_text(
+        "ACTIVE=true\n"
+        "API_KEY=secret://tool-api-key\n"
+        "CLIENT_ID=plain-client-id\n"
+        "ACCESS_TOKEN=\n"
+        "REFRESH_TOKEN=secret://tool-refresh-token\n"
+    )
+
+    assert profile_secret_field_map(profile) == {
+        "API_KEY": "tool-api-key",
+        "REFRESH_TOKEN": "tool-refresh-token",
+    }
+
+
+def test_profile_secret_field_map_missing_file_returns_empty(tmp_path):
+    assert profile_secret_field_map(tmp_path / "does-not-exist.env") == {}
+
+
+def test_profile_secret_field_map_rejects_invalid_placeholder(tmp_path):
+    profile = tmp_path / ".env"
+    profile.write_text("ACTIVE=true\nAPI_KEY=secret://\n")
+
+    with pytest.raises(ConfigError) as excinfo:
+        profile_secret_field_map(profile)
+
+    assert "API_KEY" in str(excinfo.value)
+    assert "Invalid secret placeholder" in str(excinfo.value)
+
+
+def test_secret_manager_set_command_includes_secret_name():
+    command = secret_manager_set_command("tool-api-key")
+
+    assert command.endswith("secrets.sh set tool-api-key")
 
 
 def test_load_resolves_secret_placeholder_for_auth_profile_fields(

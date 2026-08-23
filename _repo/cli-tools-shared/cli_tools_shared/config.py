@@ -330,6 +330,40 @@ def auth_profile_secret_placeholders(tool_name: str) -> list[tuple[Path, str, st
     return references
 
 
+def profile_secret_field_map(env_path: Path) -> dict[str, str]:
+    """Return ``{field_name: secret_name}`` for ``secret://`` placeholders in a profile.
+
+    Reads a single profile ``.env`` directly and maps each field whose value is
+    a ``secret://<name>`` placeholder to the referenced CLI-tools secret name.
+    Fields with plain values or empty values are omitted. This is a lightweight
+    read that does NOT resolve secret values, so it is safe to call before full
+    config initialization (which raises when a referenced secret is missing).
+    """
+    field_map: dict[str, str] = {}
+    if not env_path.exists():
+        return field_map
+    for field_name, value in _read_env_values(env_path).items():
+        if not value:
+            continue
+        try:
+            secret_name = _secret_name_from_placeholder(value)
+        except ConfigError as exc:
+            raise ConfigError(
+                f"{env_path} field '{field_name}' has invalid secret placeholder: {exc}"
+            ) from exc
+        if secret_name is None:
+            continue
+        field_map[field_name] = secret_name
+    return field_map
+
+
+def secret_manager_set_command(secret_name: str) -> str:
+    """Return the exact CLI-tools secret-manager command to set/rotate a secret."""
+    from .repo_paths import secret_manager_script
+
+    return f"{secret_manager_script()} set {secret_name}"
+
+
 def _optional_secret_fields_for_tool(tool_name: str) -> set[str]:
     """Return optional secret-managed auth fields declared by the tool config."""
     try:
@@ -796,6 +830,12 @@ class BaseConfig:
     # List of (field_name, prompt_label, hide_input) tuples
     # Prompted AFTER standard credential prompts but BEFORE login_handler or browser login
     AUTH_EXTRA_PROMPTS: list = []
+    # Required non-secret config prompts collected before credential prompts.
+    # Example: [("BASE_URL", "Service base URL", False)]
+    AUTH_CONFIG_PROMPTS: list = []
+    # Preferred setup/help text shown before the first auth/config prompt.
+    # Use this for canonical token/app creation URLs and brief instructions.
+    AUTH_SETUP_INSTRUCTIONS: str = ""
 
     # Custom credential type field definitions (only used when CREDENTIAL_TYPES includes CUSTOM)
     CUSTOM_REQUIRED_FIELDS: list = []
@@ -948,7 +988,8 @@ class BaseConfig:
                 _read_env_values(self.config_env_file_path),
                 self.config_env_file_path,
             ).items():
-                os.environ[key] = value
+                if key not in os.environ:
+                    os.environ[key] = value
 
         if self.env_file_path.exists():
             # Clear standard credential env vars before loading to prevent
@@ -1275,6 +1316,11 @@ class BaseConfig:
         profile_dir = self.get_profiles_dir() / name
         profile_dir.mkdir(parents=True, exist_ok=True)
         return profile_dir
+
+    @property
+    def storage_dir(self) -> Path:
+        """Backward-compatible profile storage directory for cache helpers."""
+        return self.get_profile_data_dir()
 
     def get_browser_data_dir(self) -> Path:
         """Get browser data directory for the active profile."""

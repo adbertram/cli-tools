@@ -1,6 +1,10 @@
 # Asana CLI
 
-Command-line interface for the Asana API - manage projects, tasks, custom fields, and more.
+## DESCRIPTION
+
+The `asana` CLI provides a command-line interface for Asana API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 
@@ -140,6 +144,13 @@ asana custom-fields list --project PROJECT_ID
 # Get custom field details with enum options
 asana custom-fields get FIELD_ID
 asana custom-fields get FIELD_ID
+
+# Create a new custom field in a workspace
+asana custom-fields create --workspace WORKSPACE_ID --name "Field Name" --type text
+asana custom-fields create --workspace WORKSPACE_ID --name "Priority" --type enum --description "Priority level"
+
+# Enable an existing custom field on a project
+asana custom-fields add-to-project --field FIELD_ID --project PROJECT_ID
 ```
 
 ### Users

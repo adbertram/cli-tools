@@ -3,7 +3,8 @@
 Validates:
 1. Config class declares CREDENTIAL_TYPES with approved values
 2. Every command declares its credential type(s) in COMMAND_CREDENTIALS
-3. Command credential types are a subset of the config-level CREDENTIAL_TYPES
+3. Command credential types are declared in config-level CREDENTIAL_TYPES or
+   config-level PROFILE_AUTH_TYPES
 
 This ensures the n8n node generator can determine which credential type each
 command requires, enabling separate nodes per credential type (e.g.,
@@ -16,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from cli_test_utils import discover_nested_commands
+from cli_test_utils import discover_nested_commands, get_config_auth_metadata
 
 
 # Command groups that are infrastructure, not user-facing commands
@@ -197,25 +198,15 @@ def test_command_credentials_subset_of_config(
         pytest.skip(f"{cli_name} uv tool venv not found")
     venv_python = str(uv_venv / "bin" / "python")
 
-    # Get Config.CREDENTIAL_TYPES
-    result = subprocess.run(
-        [
-            venv_python,
-            "-c",
-            f"import json; "
-            f"from {cli_pkg}.config import Config; "
-            f"types = getattr(Config, 'CREDENTIAL_TYPES', None); "
-            f"print('MISSING' if types is None else json.dumps([t.value if hasattr(t, 'value') else str(t) for t in types]))",
-        ],
-        capture_output=True,
-        text=True,
-        cwd=str(cli_dir),
-    )
-
-    if result.returncode != 0 or result.stdout.strip() == "MISSING":
+    config_payload = get_config_auth_metadata(cli_dir, cli_name)
+    if config_payload is None:
         pytest.skip("Config.CREDENTIAL_TYPES not available (test_config_declares_credential_types will catch this)")
 
-    config_types = set(json.loads(result.stdout.strip()))
+    if config_payload["credential_types"] is None:
+        pytest.skip("Config.CREDENTIAL_TYPES not available (test_config_declares_credential_types will catch this)")
+
+    config_types = set(config_payload["credential_types"])
+    profile_auth_types = set(config_payload["profile_auth_types"])
 
     # Scan all command modules for COMMAND_CREDENTIALS
     mismatches = []
@@ -248,16 +239,20 @@ def test_command_credentials_subset_of_config(
             for ct in types:
                 if ct in COMMAND_ONLY_TYPES:
                     continue  # no_auth is valid in commands but not in config
+                if ct in profile_auth_types:
+                    continue
                 if ct not in config_types:
                     mismatches.append(
-                        f"  {module_name} {cmd}: uses '{ct}' but Config.CREDENTIAL_TYPES = {sorted(config_types)}"
+                        f"  {module_name} {cmd}: uses '{ct}' but Config.CREDENTIAL_TYPES = {sorted(config_types)} "
+                        f"and Config.PROFILE_AUTH_TYPES = {sorted(profile_auth_types)}"
                     )
 
     assert not mismatches, (
         "COMMAND_CREDENTIALS references credential types not declared in "
-        "Config.CREDENTIAL_TYPES:\n"
+        "Config.CREDENTIAL_TYPES or Config.PROFILE_AUTH_TYPES:\n"
         + "\n".join(mismatches)
-        + "\n\nFix: Either add the credential type to Config.CREDENTIAL_TYPES "
+        + "\n\nFix: Either add the credential type to Config.CREDENTIAL_TYPES, "
+        "add the profile auth type to Config.PROFILE_AUTH_TYPES, "
         "or change the command's credential type to one the tool supports."
     )
 
@@ -307,6 +302,11 @@ def test_all_commands_have_credential_mapping(
     if uv_venv is None:
         pytest.skip(f"{cli_name} uv tool venv not found")
     venv_python = str(uv_venv / "bin" / "python")
+
+    config_payload = get_config_auth_metadata(cli_dir, cli_name)
+    if config_payload is None:
+        pytest.skip("Config.PROFILE_AUTH_TYPES not available")
+    valid_credential_types = VALID_CREDENTIAL_TYPES | set(config_payload["profile_auth_types"])
 
     missing_commands = []
     invalid_values = []
@@ -378,10 +378,10 @@ def test_all_commands_have_credential_mapping(
                     )
                 else:
                     for ct in cred_types:
-                        if ct not in VALID_CREDENTIAL_TYPES:
+                        if ct not in valid_credential_types:
                             invalid_values.append(
                                 f"  {module_name} {cmd}: invalid credential type '{ct}' "
-                                f"(valid: {', '.join(sorted(VALID_CREDENTIAL_TYPES))})"
+                                f"(valid: {', '.join(sorted(valid_credential_types))})"
                             )
 
     errors = []

@@ -1,153 +1,115 @@
-# CLI Tools Reference
-
-**Location:** `<cli-tools-root>`
+# CLI Tools
 
 | CLI | Description |
-|-----|-------------|
-| `ahrefs` | Site audit and SEO analysis via Ahrefs browser automation |
-| `airtable` | Manage Airtable records (list, filter, create, update, delete) via API |
-| `amazon` | Inspect Amazon order evidence through browser-session automation |
-| `amazon-associates` | Inspect verified metadata and auth scaffolding for the Amazon Associates affiliate program. |
-| `apple` | Inspect Apple purchase evidence through browser-session automation |
-| `appy-pie` | Inspect verified metadata and auth scaffolding for the Appy Pie affiliate program. |
-| `asana` | Manage Asana projects, tasks, and custom fields via API |
-| `ata-blog` | Wrapper combining wordpress and notion CLIs for ATA Blog management |
-| `atlassian` | CLI interface for Atlassian (browser automation) |
-| `awin` | Awin Publisher API CLI -- list publisher accounts and advertiser programmes |
-| `azlogs` | Download, parse, and analyze Azure Web App logs via Kudu API |
-| `bitport` | Browser automation CLI for Bitport affiliate workflows |
-| `brickfreedom` | LEGO marketplace order management via browser automation |
-| `bricklink` | Bricklink LEGO marketplace - orders, inventory, catalog, messaging, refunds, coupons, invoices via API + browser automation |
-| `brickowl` | Brick Owl LEGO marketplace - orders, inventory, catalog, messaging, refunds, coupons, quotes |
-| `buttondown` | Manage Buttondown subscribers, emails, and tags via REST API |
-| `cc-connect-slack-manager` | Manage the always-on Cody Slack cc-connect bridge |
-| `cj` | CJ Affiliate publisher CLI -- discover advertiser programs and bulk-apply to them (REST PAT + browser session for Marketplace joins) |
-| `claude-code-sessions` | Query and analyze Claude Code session data |
-| `clickbank` | ClickBank: orders, products, quickstats (REST API) plus affiliate marketplace search to discover products to promote (browser-driven GraphQL) |
-| `cliclick` | Wrapper CLI for cliclick mouse/keyboard automation |
-| `cloudflare` | Manage Cloudflare zones and cache via API |
-| `codex-sessions` | Query and analyze OpenAI Codex session transcripts |
-| `cody` | Portable installer and manager for the Cody agent |
-| `copilot` | Manage Microsoft Copilot Studio agents via Dataverse API |
-| `coursecraft` | Manage CourseCraft course content (courses, modules, clips, demos, slides) |
-| `cryptocom` | Crypto.com Exchange API - market data, balances, and open orders |
-| `cvs` | CVS Health prescriptions, orders, and refills |
-| `databox` | Databox API scaffold with API-key auth, item commands, cache commands, and per-tool skills |
-| `dell` | Browser CLI for Dell site and affiliate-program page inspection with saved browser-session auth |
-| `descript` | Manage Descript video projects, compositions, and monitor network activity |
-| `dev_to` | Publish and read DEV Community posts through the official Forem article API |
-| `devolutions` | Browser automation CLI for Devolutions affiliate workflows |
-| `digicert` | DigiCert API scaffold using official DigiCert API docs |
-| `digitalocean` | API CLI for DigitalOcean droplet listing, lookup, and search |
-| `doordash` | DoorDash food ordering and delivery management |
-| `dribbble` | CLI interface for Dribbble designs |
-| `dropbox` | Manage Dropbox files, folders, and account information |
-| `dropxl` | Browser automation CLI for DropXL account workflows |
-| `easyship` | Easyship Public API CLI - inspect authenticated account details and active couriers |
-| `ebay` | Manage eBay orders, inventory, and listings via API |
-| `elevenlabs` | ElevenLabs audio AI API - voices, models, subscription quota, and text-to-speech generation |
-| `facebook` | Facebook Marketplace, Messenger, and Groups via browser automation (search listings, conversations, send messages, read group posts) |
-| `fedex` | Schedule FedEx home pickups via Pickup Request API |
-| `fitnesspal` | MyFitnessPal read-only CLI - view diary, exercises, measurements, reports, and food data |
-| `freshbooks` | Manage FreshBooks accounting data |
-| `freshworks` | Freshworks API scaffold using official Freshworks API docs |
-| `gearup` | GearUP browser automation scaffold |
-| `geeklife` | Bulk shipping labels, messaging, refunds, coupons, and order history for LEGO marketplace stores (wrapper CLI) |
-| `gemini` | Video analysis and content generation via Google Gemini API |
-| `g2` | Find G2 products and mine 1-2 star reviews through the official G2 Data API |
-| `globiflow` | Podio workflow automation via Globiflow browser automation |
-| `google` | Google Workspace (Docs, Drive, Sheets, Gmail, Calendar), Search Console, and Analytics (GA4) |
-| `google-lighthouse` | Run Google Lighthouse audits and store JSON/HTML performance reports |
-| `grammarly` | Check documents for plagiarism via Grammarly Plagiarism Detection API |
-| `hide-me` | hide.me affiliate browser automation scaffold |
-| `hp` | Browser automation CLI for HP affiliate workflows |
-| `hyvor` | Manage Hyvor Talk comments and discussions |
-| `imessage` | Read contacts, conversations, messages and send iMessages via AppleScript/SQLite |
-| `impact` | Impact.com Publisher API - account, campaigns, ads, actions, catalogs, reports, clicks, jobs, and websites |
-| `instacart` | Manage Instacart orders (list, create, track) via Developer Platform API |
-| `keap` | Keap REST API scaffold using official Keap API docs |
-| `keywords` | Autocomplete suggestions from Google, YouTube, Bing, Amazon for keyword research |
-| `kick` | Self-driving bookkeeping platform integration |
-| `lastpass` | Wrapper for lpass CLI to manage LastPass entries |
-| `leanpub` | Leanpub author API - revenue, royalties, and copies-sold stats |
-| `lenovo` | Browser automation for Lenovo affiliate resource workflows |
-| `linkedin` | Create and manage LinkedIn posts via the LinkedIn Posts API |
-| `linkedin-learning` | Inspect verified metadata and auth scaffolding for the LinkedIn Learning affiliate program. |
-| `mailchimp` | Manage Mailchimp via Marketing API v3.0 |
-| `makecom` | CLI interface for the Make.com affiliate program |
-| `manageengine` | Browser CLI for ManageEngine affiliate/signup page inspection with saved browser-session auth |
-| `manus` | Interact with Manus AI services |
-| `martinic-audio` | Browser automation CLI for Martinic Audio product workflows |
-| `measureup` | Inspect verified metadata and auth scaffolding for the MeasureUp affiliate program. |
-| `medium` | Create Medium posts with the official API for existing integration tokens |
-| `meta-box` | Browser automation CLI for Meta Box product workflows |
-| `microsoft-365` | Inspect verified metadata and auth scaffolding for the Microsoft 365 affiliate program. |
-| `microsoft-advertising` | Browser CLI for Microsoft Advertising CJ signup page inspection with saved browser-session auth |
-| `mindmeister` | MindMeister mind mapping CLI |
-| `modello-turbo` | Browser CLI for Modello Turbo site page inspection with saved browser-session auth |
-| `monarch` | Personal finance via Monarch Money |
-| `moz` | SEO keyword research and site analysis via Moz API |
-| `msword` | Read Word docs, convert to markdown, and extract comments with context |
-| `n8n` | Manage n8n community node packages - convert CLI tools, generate, deploy, and inspect |
-| `n8n-cli-tool-node-converter` | Convert standardized CLI tool metadata into n8n node package scaffolds |
-| `n8n-node` | Manage n8n community node packages, credentials, logs, deployment, and tests |
-| `namecheap` | CLI interface for Namecheap (browser automation) |
-| `notifier` | Send macOS desktop notifications via terminal-notifier wrapper |
-| `notion` | Query and manage Notion databases and pages |
-| `nvidia` | Browser automation for NVIDIA affiliate program workflows |
-| `onedrive` | OneDrive for Business via Microsoft Graph API (Azure CLI auth, drives, files) |
-| `onspace` | Browser automation CLI for OnSpace AI affiliate workflows |
-| `opera` | Browser automation CLI for Opera affiliate workflows |
-| `partnerstack` | PartnerStack Partner API - list rewards and partner earnings data |
-| `paypal` | Shipping labels and order management |
-| `photos-app` | Query and export photos from macOS Photos library |
-| `pinterest` | Manage Pinterest account, boards, and pins via API v5 |
-| `pipedrive` | CLI interface for Pipedrive (browser automation) |
-| `pixverse` | API CLI for PixVerse video generation jobs and status checks |
-| `pluralsight` | Inspect verified metadata and auth scaffolding for the Pluralsight affiliate program. |
-| `pluralsight-author` | Browser CLI for Pluralsight Author opportunities using saved-session auth and pagination snapshots. |
-| `plusmetrica` | PlusMetrica browser automation scaffold |
-| `podio` | Manage Podio workspaces, apps, and items via API |
-| `popai` | Browser automation CLI for PopAi AI Sheets affiliate workflows |
-| `powerpoint-slide-recorder` | Record narrated PowerPoint slides |
-| `progress-servicenow` | Progress ServiceNow Employee Center - manage tickets, view requests, browse catalog |
-| `quartile` | CLI interface for Quartile (browser automation) |
-| `raptive` | Raptive ad dashboard via browser automation |
-| `reclaim` | Browser CLI for Reclaim.ai site page inspection with saved browser-session auth |
-| `reminders` | Manage macOS Reminders via EventKit framework |
-| `revo-uninstaller` | Browser CLI for Revo Uninstaller partner page inspection with saved browser-session auth |
-| `rewarx` | Inspect verified metadata and auth scaffolding for the Rewarx affiliate program. |
-| `ring` | Ring doorbells, cameras, chimes — devices, events, snapshots, recordings, motion detection, lights, siren |
-| `roboshadow` | Browser automation CLI for RoboShadow account workflows |
-| `roomba` | Control iRobot Roomba vacuums |
-| `sectigo` | Inspect verified metadata and auth scaffolding for the Sectigo affiliate program. |
-| `setme` | SetMe browser automation scaffold |
-| `ship7` | Browser automation for Ship7 site workflows |
-| `shippo` | USPS shipping labels via Shippo API (addresses, shipments, rates, labels, tracking) |
-| `shopgoodwill` | Search ShopGoodwill.com auction listings |
-| `shopify` | Shopify Admin GraphQL API scaffold using official Shopify docs |
-| `shopsalvationarmy` | Search Salvation Army auction listings |
-| `signnow` | Inspect verified metadata and OAuth scaffolding for the signNow developer platform. |
-| `simpletexting` | API CLI for SimpleTexting messaging workflows |
-| `slack` | Manage Slack workspaces, channels, messages via API |
-| `snagit` | Manage Snagit capture files (.snagx format) |
-| `techsmith` | Browser automation CLI for TechSmith affiliate workflows |
-| `tenweb` | 10Web API CLI - list account websites, get website instance info, and check subdomain availability via the documented x-api-key REST API |
-| `things` | Things 3 CLI for macOS task management via direct SQLite access |
-| `thunderbit` | API CLI for Thunderbit distill and extract endpoints |
-| `tiktok` | Download TikTok video transcripts via yt-dlp |
-| `trycrush` | TryCrush browser automation scaffold |
-| `tunnelbear` | Inspect verified metadata and auth scaffolding for the TunnelBear affiliate program. |
-| `tutorials-dojo` | Browser automation CLI for Tutorials Dojo affiliate workflows |
-| `twelvelabs` | Video AI via TwelveLabs API (indexes, video upload, text generation from video) |
-| `twopages` | Browser automation CLI for TWOPAGES affiliate workflows |
-| `ubiquiti` | Browser CLI for Ubiquiti creators page inspection with saved browser-session auth |
-| `udemy` | Udemy Instructor API - list and get instructor courses |
-| `usps` | USPS Tracking API - query package tracking status |
-| `venmo` | List Venmo transaction history via the reverse-engineered private mobile API (read-only) |
-| `wegic` | Browser automation for Wegic site workflows |
-| `whisper` | Speech-to-text transcription via OpenAI Whisper (local CLI wrapper) |
-| `wordpress` | Manage WordPress posts and media via REST API |
-| `x` | Post tweets to X.com (requires paid API credits and OAuth 1.0a user context for posting) |
-| `youtube` | Download YouTube videos/transcripts via yt-dlp + manage your own channel via YouTube Data API v3 (list/get/upload/update/delete) |
-| `yubico` | Browser automation CLI for Yubico affiliate program workflows |
+|---|---|
+| `adobe-podcast` | Adobe Podcast Enhance — upload audio/video, run AI speech enhancement, download result |
+| `ahrefs` | The `ahrefs` CLI provides a command-line interface for Ahrefs (browser automation). Use it when you need repeatable access to ahrefs workflows that are only available through a signed-in website. |
+| `airbnb` | Use this CLI to search public renter stay availability and read Airbnb host listings, reservations, and messages. It does not automate a browser or use Airbnb partner APIs; host reads use `airbnb auth login` to import Adam's current Chrome cookies, while renter search uses public search page JSON state. |
+| `airtable` | The `airtable` CLI provides a command-line interface for Airtable API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `amazon` | The `amazon` CLI provides a command-line interface for Amazon (browser automation). Use it when you need repeatable access to amazon workflows that are only available through a signed-in website. |
+| `amazon-associates` | The `amazon-associates` CLI provides a command-line interface for AmazonAssociates (browser automation). Use it when you need repeatable access to amazon-associates workflows that are only available through a signed-in website. |
+| `americasthriftsupply` | America's Thrift Supply Shopify storefront catalog - browse LEGO mystery boxes and other liquidation products |
+| `apple` | The `apple` CLI provides a command-line interface for Apple purchase and subscription history. Use it when you need scriptable reads, exports, or evidence collection without opening the service UI. |
+| `asana` | The `asana` CLI provides a command-line interface for Asana API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `ata-blog` | The `ata-blog` CLI provides a unified command-line interface for managing the Adam The Automator blog post production pipeline. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows to manage Notion-backed post metadata, WordPress publishing, Raptive ad settings, and Rank Math schema markup. |
+| `atlassian` | The `atlassian` CLI provides a command-line interface for Atlassian (browser automation). Use it when you need repeatable access to atlassian workflows that are only available through a signed-in website. |
+| `auctionzip` | AuctionZip auction search and lot detail via a Cloudflare-cleared browser session (Invaluable-powered) |
+| `awin` | The `awin` CLI provides a command-line interface for Awin API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `brickfreedom` | The `brickfreedom` CLI provides a command-line interface for Brickfreedom (browser automation). Use it when you need repeatable access to brickfreedom workflows that are only available through a signed-in website. |
+| `bricklink` |  |
+| `brickowl` | The `brickowl` CLI provides a command-line interface for Brickowl API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `brickstore` | Read BrickStore price guide and catalog data through its local MCP server |
+| `buttondown` | The `buttondown` CLI provides a command-line interface for Buttondown API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `cj` | The `cj` CLI provides a command-line interface for Cj API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `claude-code-sessions` | The `claude-code-sessions` CLI wraps claude with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
+| `clickbank` | The `clickbank` CLI provides a command-line interface for Clickbank API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `cliclick` | The `cliclick` CLI wraps cliclick with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
+| `cloudflare` | The `cloudflare` CLI provides a command-line interface for Cloudflare API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `codex-helper` | Codex local app-server helper commands |
+| `codex-sessions` | The `codex-sessions` CLI lets you query and analyze OpenAI Codex session transcripts from ~/.codex. Use it when you need scriptable reads, exports, or evidence collection without opening the service UI. |
+| `copilot` | The `copilot` CLI provides a command-line interface for Microsoft Copilot Studio agents via Dataverse API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `coursecraft` | CourseCraft CLI manages CourseCraft Airtable records for courses, modules, clips, demos, slides, slide templates, and voice recordings. Use it when course-building workflows need a scriptable way to read or update CourseCraft content without editing Airtable directly. |
+| `cryptocom` | The `cryptocom` CLI provides command-line access to Crypto.com Exchange API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `cvs` | The `cvs` CLI is a command-line interface for CVS Health pharmacy — prescriptions, orders, and refill eligibility across all linked family members. Use it for scriptable, JSON-first access from agents, automation, or terminal workflows. Authentication is a real browser login that the CLI then reuses for read-only commands. |
+| `deepseek-sessions` | The `deepseek-sessions` CLI queries DeepSeek Harness (`dsh`) session transcripts in `~/.dsh`. Use it to audit what a `dsh` run did — sessions, turns, tool calls, subagents, retries, approvals, goals, and token cost — with the same command shape as `claude-code-sessions` and `codex-sessions`. |
+| `depop` | Depop resale marketplace - search listings via the internal presentation search API (Cloudflare-cleared browser session) |
+| `dev_to` | The `dev_to` CLI provides a command-line interface for the DEV Community API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `doordash` | The `doordash` CLI provides a command-line interface for Doordash (browser automation). Use it when you need repeatable access to doordash workflows that are only available through a signed-in website. |
+| `dropbox` | The `dropbox` CLI provides a command-line interface for Dropbox API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `ebay` | The `ebay` CLI provides a command-line interface for eBay Fulfillment API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `elevenlabs` | The `elevenlabs` CLI provides a command-line interface for Elevenlabs API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `facebook` | The `facebook` CLI wraps playwright with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
+| `fedex` | The `fedex` CLI provides a command-line interface for Fedex API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `fitnesspal` | The `fitnesspal` CLI provides a command-line interface for Fitnesspal API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `freshbooks` | The `freshbooks` CLI provides a command-line interface for FreshBooks accounting API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `g2` | The `g2` CLI provides a command-line interface for G2 API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `gemini` | The `gemini` CLI provides a command-line interface for Gemini API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `globiflow` | The `globiflow` CLI provides a command-line interface for Globiflow (browser automation). Use it when you need repeatable access to globiflow workflows that are only available through a signed-in website. |
+| `google` | The `google` CLI provides a command-line interface for Google Workspace APIs (Docs, Drive, Sheets, Gmail, Calendar). Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `google-lighthouse` | The `google-lighthouse` CLI wraps lighthouse with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
+| `grammarly` | The `grammarly` CLI provides a command-line interface for Grammarly API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `harmony` | The `harmony` CLI lets you manage Logitech Harmony hubs, activities, devices, and commands. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `hyvor` | The `hyvor` CLI provides a command-line interface for Hyvor API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `imessage` | The `imessage` CLI provides command-line access for iMessage on macOS. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `impact` | The `impact` CLI provides command-line access to Impact.com Publisher API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `instacart` | The `instacart` CLI provides a command-line interface for Instacart API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `jira` | The `jira` CLI provides a command-line interface for Jira API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `keywords` | The `keywords` CLI provides a command-line interface for Keywords API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `kick` | The `kick` CLI provides a command-line interface for Kick API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `lastpass` | The `lastpass` CLI wraps lpass with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
+| `leanpub` | The `leanpub` CLI provides a command-line interface for Leanpub API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `legoscout` | Sources and prices used LEGO deals: ledger, scoring, pricing, sources, prospects, display |
+| `linkedin` | The `linkedin` CLI lets you create and manage LinkedIn personal and page posts. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `macspeech` | Transcribe local audio on-device via Apple SFSpeechRecognizer with contextual-string vocabulary biasing |
+| `mailchimp` | The `mailchimp` CLI provides a command-line interface for Mailchimp API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `manus` | The `manus` CLI provides a command-line interface for Manus AI API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `medium` | The `medium` CLI lets you create Medium drafts through Medium's web composer. Use it when you need repeatable access to medium workflows that are only available through a signed-in website. |
+| `mercari` | The `mercari` CLI provides read-only access to Mercari US listings by driving the authenticated web app and capturing its internal GraphQL responses. Use it to search other sellers' public listings (`listings search`), read your own listings (`listings list`), and get full item detail (`listings get`). |
+| `mindmeister` | The `mindmeister` CLI provides a command-line interface for Mindmeister API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `monarch` | The `monarch` CLI provides a command-line interface for Monarch API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `moz` | The `moz` CLI provides a command-line interface for Moz API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `msword` | The `msword` CLI lets you read Word docs, convert to markdown, and extract comments with context. Use it when you need scriptable reads, exports, or evidence collection without opening the service UI. |
+| `mychart` | The `mychart` CLI provides command-line access to Epic MyChart SMART on FHIR patient record. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `n8n` | The `n8n` CLI lets you convert standardized CLI tools into n8n community node packages. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `nextdoor` | The `nextdoor` CLI provides browser-session-authenticated access to Nextdoor's GraphQL API (feed, For Sale & Free classifieds with direct listing URLs, me, notifications, content search). Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `notifier` | The `notifier` CLI wraps terminal-notifier with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
+| `notion` | The `notion` CLI provides a command-line interface for Notion API with database query filtering. Use it when you need scriptable reads, exports, or evidence collection without opening the service UI. |
+| `offerup` | Search and read OfferUp local marketplace listings |
+| `onedrive` | The `onedrive` CLI provides a command-line interface for Onedrive API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `openai-whisper` | The `openai-whisper` CLI wraps OpenAI Whisper with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
+| `partnerstack` | The `partnerstack` CLI provides a command-line interface for Partnerstack API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `paypal` | The `paypal` CLI provides a command-line interface for PayPal API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `photos-app` | The `photos-app` CLI wraps sqlite3 with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
+| `pinterest` | The `pinterest` CLI lets you manage Pinterest account, boards, and pins via API v5. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `pluralsight-author` | The `pluralsight-author` CLI provides browser-session access to Pluralsight Author opportunities and the Author Kit icon library. Use it to list, search, inspect, apply for opportunities, and download authenticated icon assets. |
+| `podio` | The `podio` CLI provides a command-line interface for Podio API using pypodio2. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `poshmark` | Poshmark marketplace browser CLI - search listings |
+| `powerpoint-slide-recorder` | The `powerpoint-slide-recorder` CLI lets you record narrated PowerPoint slides. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `progress-servicenow` | Progress ServiceNow CLI automates common Employee Center workflows from the command line. Use it to check authentication, inspect ticket templates, browse catalog entries, and work with ServiceNow tickets through the existing browser-session automation. |
+| `raptive` | The `raptive` CLI provides a command-line interface for Raptive (browser automation). Use it when you need repeatable access to raptive workflows that are only available through a signed-in website. |
+| `reminders` | The `reminders` CLI provides a command-line interface for macOS Reminders. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `ring` | The `ring` CLI provides a command-line interface for Ring devices via python-ring-doorbell. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `roomba` | The `roomba` CLI provides a command-line interface for Roomba API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `shippo` | The `shippo` CLI provides a command-line interface for Shippo API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `shopgoodwill` | The `shopgoodwill` CLI provides a command-line interface for ShopGoodwill. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `shopsalvationarmy` | The `shopsalvationarmy` CLI provides a command-line interface for Shop The Salvation Army auction site. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `slack` | The `slack` CLI provides a command-line interface for Slack API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `snagit` | The `snagit` CLI provides a command-line interface for Snagit API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `stockx` | Search and read StockX sneaker and streetwear market data |
+| `target` | A command-line interface for [Target](https://www.target.com) using browser automation. Target consumer CLI for searching products, adding to cart, and checking out. Use this CLI when you need repeatable access to Target workflows that are only available through the website. |
+| `techsmith` | The `techsmith` CLI provides a command-line interface for Techsmith (browser automation). Use it when you need repeatable access to techsmith workflows that are only available through a signed-in website. |
+| `things` | The `things` CLI provides a command-line interface for Things API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `tiktok` | The `tiktok` CLI provides tikTok transcript downloader using yt-dlp. Use it when you need scriptable reads, exports, or evidence collection without opening the service UI. |
+| `twelvelabs` | The `twelvelabs` CLI provides a command-line interface for Twelvelabs API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `udemy` | The `udemy` CLI provides a command-line interface for Udemy API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `ups` | UPS Pickup API - schedule package pickups |
+| `upwork` | Upwork CLI: search marketplace job postings via the official GraphQL API (`upwork jobs`, OAuth2) and read/update freelancer profile attributes (browser session). |
+| `usps` | The `usps` CLI provides a command-line interface for Usps API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `venmo` | The `venmo` CLI provides a command-line interface for Venmo API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `vinted` | Search Vinted marketplace listings through the site's internal catalog API |
+| `weather` | The `weather` CLI provides a command-line interface for Weather API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `whisper` | The `whisper` CLI wraps whisper.cpp (`whisper-cli`) for local, offline speech-to-text. Use it for JSON transcripts with timestamped segments; output mirrors `openai-whisper` so the two are swappable. |
+| `wordpress` | The `wordpress` CLI provides a command-line interface for Wordpress API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `wpengine` | Command-line access to the WP Engine Hosting Platform API. Use this CLI when agents or automation need JSON-first access to WP Engine accounts, sites, installs, cache purge operations, SSH keys, and documented SSH/SFTP connection details. |
+| `x` | The `x` CLI provides a command-line interface for X API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `youtube` | The `youtube` CLI provides a command-line interface for Youtube API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |

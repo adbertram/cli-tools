@@ -3,6 +3,7 @@
 Uses the eBay Inventory API to manage inventory items.
 API Docs: https://developer.ebay.com/api-docs/sell/inventory/resources/inventory_item/methods/getInventoryItems
 """
+from cli_tools_shared.output import command
 COMMAND_CREDENTIALS = {
     "list": ["oauth_authorization_code"],
     "get": ["oauth_authorization_code"],
@@ -48,6 +49,7 @@ def _deep_merge(base: dict, updates: dict) -> dict:
 
 
 @app.command("list")
+@command
 def inventory_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of items to return (max 200)"),
@@ -144,6 +146,7 @@ def inventory_list(
 
 
 @app.command("get")
+@command
 def inventory_get(
     sku: str = typer.Argument(..., help="The SKU of the inventory item"),
     table: bool = typer.Option(False, "--table", "-t", help="Display summary as table"),
@@ -201,6 +204,7 @@ def inventory_get(
 
 
 @app.command("create")
+@command
 def inventory_create(
     sku: str = typer.Argument(..., help="The SKU for the inventory item (must be unique)"),
     title: str = typer.Option(..., "--title", help="Product title"),
@@ -285,6 +289,7 @@ def inventory_create(
 
 
 @app.command("update")
+@command
 def inventory_update(
     sku: str = typer.Argument(..., help="The SKU of the inventory item to update"),
     title: Optional[str] = typer.Option(None, "--title", help="New product title"),
@@ -402,6 +407,7 @@ def inventory_update(
 
 
 @app.command("delete")
+@command
 def inventory_delete(
     sku: str = typer.Argument(..., help="The SKU of the inventory item to delete"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),

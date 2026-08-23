@@ -1,4 +1,5 @@
 """Solution commands for Copilot CLI."""
+from cli_tools_shared.output import command
 import typer
 from typing import Optional
 
@@ -84,6 +85,7 @@ def format_solution_for_display(solution: dict, preferred_solution_id: str = Non
 
 
 @app.command("list")
+@command
 def list_solutions(
     filter: Optional[list[str]] = typer.Option(
         None,
@@ -204,6 +206,7 @@ def list_solutions(
 
 
 @app.command("get")
+@command
 def get_solution(
     solution: str = typer.Argument(
         ...,
@@ -243,6 +246,7 @@ def get_solution(
 
 
 @app.command("update")
+@command
 def update_solution(
     solution: str = typer.Argument(
         ...,
@@ -294,6 +298,7 @@ def update_solution(
 
 
 @app.command("create")
+@command
 def create_solution(
     name: str = typer.Option(
         ...,
@@ -360,6 +365,7 @@ def create_solution(
 
 
 @app.command("delete")
+@command
 @app.command("remove")
 def delete_solution(
     solution: str = typer.Argument(
@@ -411,6 +417,7 @@ def delete_solution(
 
 
 @agent_app.command("add")
+@command
 def add_agent_to_solution(
     solution: str = typer.Option(
         ...,
@@ -488,6 +495,7 @@ def add_agent_to_solution(
 
 
 @agent_app.command("remove")
+@command
 def remove_agent_from_solution(
     solution: str = typer.Option(
         ...,
@@ -544,6 +552,7 @@ def remove_agent_from_solution(
 
 
 @connection_reference_app.command("add")
+@command
 def add_connection_reference_to_solution(
     solution: str = typer.Option(
         ...,
@@ -581,6 +590,7 @@ def add_connection_reference_to_solution(
 
 
 @connection_reference_app.command("remove")
+@command
 def remove_connection_reference_from_solution(
     solution: str = typer.Option(
         ...,
@@ -633,6 +643,7 @@ def remove_connection_reference_from_solution(
 
 
 @custom_connector_app.command("add")
+@command
 def add_custom_connector_to_solution(
     solution: Optional[str] = typer.Option(
         None,
@@ -721,6 +732,7 @@ def add_custom_connector_to_solution(
 
 
 @custom_connector_app.command("remove")
+@command
 def remove_custom_connector_from_solution(
     solution: Optional[str] = typer.Option(
         None,
@@ -807,6 +819,7 @@ def format_publisher_for_display(publisher: dict) -> dict:
 
 
 @publisher_app.command("list")
+@command
 def list_publishers(
     table: bool = typer.Option(
         False,
@@ -888,6 +901,7 @@ def list_publishers(
 
 
 @publisher_app.command("get")
+@command
 def get_publisher(
     publisher: str = typer.Argument(
         ...,
@@ -911,6 +925,7 @@ def get_publisher(
 
 
 @publisher_app.command("create")
+@command
 def create_publisher(
     name: str = typer.Option(
         ...,
@@ -976,6 +991,7 @@ def create_publisher(
 
 
 @publisher_app.command("delete")
+@command
 @publisher_app.command("remove")
 def delete_publisher(
     publisher: str = typer.Argument(
@@ -1027,6 +1043,7 @@ connection_reference_app = typer.Typer(help="Manage connection references")
 
 
 @connection_reference_app.command("list")
+@command
 def list_connection_references(
     agent_id: Optional[str] = typer.Option(
         None,
@@ -1127,6 +1144,7 @@ def list_connection_references(
 
 
 @connection_reference_app.command("get")
+@command
 def get_connection_reference(
     connref_id: str = typer.Argument(..., help="Connection reference ID (GUID)"),
     table: bool = typer.Option(
@@ -1175,6 +1193,7 @@ def get_connection_reference(
 # =========================================================================
 
 @app.command("export")
+@command
 def export_solution(
     solution: str = typer.Argument(
         ...,
@@ -1255,6 +1274,7 @@ def export_solution(
 
 
 @app.command("import")
+@command
 def import_solution(
     file: str = typer.Argument(
         ...,
@@ -1447,6 +1467,7 @@ def _build_component_parameters(settings: dict) -> list[dict]:
 
 
 @app.command("create-settings")
+@command
 def create_settings(
     solution_zip: Optional[str] = typer.Option(
         None,
@@ -1553,6 +1574,7 @@ app.add_typer(connection_reference_app, name="connection-reference")
 # =========================================================================
 
 @component_app.command("list")
+@command
 def list_components(
     solution: str = typer.Argument(
         ...,
@@ -1738,6 +1760,7 @@ def list_components(
 
 
 @component_app.command("get")
+@command
 def get_component(
     component_id: str = typer.Argument(..., help="Solution component ID (GUID)"),
     table: bool = typer.Option(
@@ -1775,6 +1798,7 @@ def get_component(
 
 
 @component_app.command("types")
+@command
 def list_component_types(
     environment: Optional[str] = typer.Option(
         None,
@@ -1912,6 +1936,7 @@ def resolve_component_type(client, component_type_input: str) -> int:
 
 
 @component_app.command("add")
+@command
 def add_component_to_solution(
     solution: Optional[str] = typer.Option(
         None,
@@ -2025,6 +2050,7 @@ def add_component_to_solution(
 
 
 @component_app.command("remove")
+@command
 def remove_component_from_solution(
     solution: Optional[str] = typer.Option(
         None,

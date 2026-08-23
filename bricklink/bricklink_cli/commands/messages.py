@@ -27,7 +27,7 @@ import re as _re
 
 from ..display import print_detail, print_list
 from cli_tools_shared.filters import apply_filters, apply_properties_filter, apply_limit
-from cli_tools_shared.output import print_json, print_success, handle_error
+from cli_tools_shared.output import command, print_json, print_success, handle_error
 from . import run_browser
 
 app = typer.Typer(help="Manage messages (browser)", no_args_is_help=True)
@@ -158,11 +158,13 @@ def _build_conversation(browser, subject: str, source_id: str, source_detail: di
 
     seen = set()
     conversation = []
+    source_sent_date = _parse_msg_date((source_detail or {}).get("sent_date", (source_detail or {}).get("date", "")))
     root_date = None
     order_id = _extract_order_id(subject)
     messages_scanned = 0
 
-    # 1. Root date detection: API for order-linked threads, inbox non-"Re:" fallback
+    # 1. Root date detection: API for order-linked threads, source-date fallback,
+    #    then inbox non-"Re:" refinement.
     if order_id:
         api_msgs = _cached_api_messages(order_id)
         if api_msgs:
@@ -170,6 +172,8 @@ def _build_conversation(browser, subject: str, source_id: str, source_detail: di
             if oldest_date_str:
                 dt = datetime.fromisoformat(oldest_date_str.replace("Z", "+00:00"))
                 root_date = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    elif source_sent_date != datetime.min:
+        root_date = source_sent_date
 
     def _scan_folder(folder):
         """Scan a folder for messages matching the conversation subject/order."""
@@ -201,8 +205,10 @@ def _build_conversation(browser, subject: str, source_id: str, source_detail: di
                     entry["source"] = "browser"
                     conversation.append(entry)
                     # Detect root date from first non-reply in inbox
-                    if not root_date and folder == "i" and not raw_subject.strip().lower().startswith("re:"):
-                        root_date = _parse_msg_date(detail.get("sent_date", c.get("date", "")))
+                    if folder == "i" and not raw_subject.strip().lower().startswith("re:"):
+                        detected_root_date = _parse_msg_date(detail.get("sent_date", c.get("date", "")))
+                        if detected_root_date != datetime.min:
+                            root_date = detected_root_date
             if root_date:
                 page_oldest = _parse_msg_date(msgs[-1].get("date", ""))
                 if page_oldest <= root_date - timedelta(days=1):
@@ -230,6 +236,7 @@ def _build_conversation(browser, subject: str, source_id: str, source_detail: di
 
 
 @app.command("list")
+@command
 def messages_list(
     folder: str = typer.Option("inbox", "--folder", help="Message folder: inbox or outbox"),
     order_id: Optional[str] = typer.Option(None, "--order-id", help="Get messages for a specific order (API-based, no browser needed)"),
@@ -316,6 +323,7 @@ def messages_list(
 
 
 @app.command("get")
+@command
 def messages_get(
     message_id: str = typer.Argument(..., help="Message ID"),
     folder: str = typer.Option("i", "--folder", help="i=inbox, o=outbox"),
@@ -355,6 +363,7 @@ def messages_get(
 
 
 @app.command("send")
+@command
 def messages_send(
     arg1: Optional[str] = typer.Argument(None, help="Order ID (when sending to an order) or message body (when using --member)"),
     arg2: Optional[str] = typer.Argument(None, help="Message body (when order ID is provided as first argument)"),
@@ -421,6 +430,7 @@ def messages_send(
 
 
 @app.command("reply")
+@command
 def messages_reply(
     message_id: str = typer.Argument(..., help="Message ID to reply to"),
     body: str = typer.Argument(..., help="Reply body"),
@@ -455,6 +465,7 @@ def messages_reply(
 
 
 @app.command("mark-read")
+@command
 def messages_mark_read(
     message_id: str = typer.Argument(..., help="Message ID"),
 ):
@@ -476,6 +487,7 @@ def messages_mark_read(
 
 
 @app.command("mark-unread")
+@command
 def messages_mark_unread(
     message_id: str = typer.Argument(..., help="Message ID"),
 ):

@@ -1,6 +1,10 @@
 ---
-name: "notifier-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute notifier operations using the `notifier` CLI tool. CLI wrapper for terminal-notifier -- macOS desktop notifications. Triggers: notifier, notifier cli, send notification, desktop notification, notify me, mac notification, alert notification, notification sound"
+name: notifier-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute notifier operations using the `notifier` CLI tool.
+  CLI wrapper for terminal-notifier -- macOS desktop notifications.
+  Triggers: notifier, notifier cli, send notification, desktop notification, notify me, mac notification, alert notification, notification sound
 ---
 
 <objective>
@@ -23,7 +27,7 @@ notifier <command> [options]
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `notifier` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `notifier` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 

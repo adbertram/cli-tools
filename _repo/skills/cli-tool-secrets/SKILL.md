@@ -19,7 +19,7 @@ reusable credentials used by CLI tools and CLI-tool agents.
 The canonical helper is:
 
 ```bash
-/Users/adam/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh
+<cli-tools-root>/_repo/_secret-manager/secrets.sh
 ```
 
 It is backed by the macOS Keychain service namespace `cli-tools`.
@@ -28,18 +28,18 @@ The default Keychain file is
 profile directories.
 
 For full lifecycle policy, read
-`/Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills/cli-tool/references/secrets.md`.
+`<cli-tools-root>/_repo/skills/cli-tool/references/secrets.md`.
 If the task is broader CLI creation, update, testing, or auth implementation,
 also load the repo-owned `cli-tool` skill and follow its agent-routing rules.
 </source_of_truth>
 
 <scope>
 Use this store only for reusable human-supplied credentials that belong to CLI
-tools under `/Users/adam/Dropbox/GitRepos/cli-tools` and must survive sessions:
+tools under `<cli-tools-root>` and must survive sessions:
 API keys, usernames, passwords, client secrets, personal access tokens, and
 other long-lived raw credentials.
 
-Do not use it for Cody, CourseCraft, generic project automation, non-CLI
+Do not use it for CourseCraft, generic project automation, non-CLI
 workflows, or service runtime state owned by a CLI's auth system.
 </scope>
 
@@ -47,8 +47,23 @@ workflows, or service runtime state owned by a CLI's auth system.
 1. Choose the CLI tool name and the secret type. The canonical naming schema is `<cli-tool>-<type>`, where both parts are lowercase hyphenated strings and `<cli-tool>` is the CLI command name.
 2. Check for an existing name before asking Adam for a credential:
    ```bash
-   /Users/adam/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh list
-   /Users/adam/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh has <name>
+   <cli-tools-root>/_repo/_secret-manager/secrets.sh list
+   <cli-tools-root>/_repo/_secret-manager/secrets.sh has <name>
+   ```
+   When a missing secret is an expected diagnostic result, shape `has` so the
+   non-zero status is consumed and reported explicitly:
+   ```bash
+   if output="$(<cli-tools-root>/_repo/_secret-manager/secrets.sh has <name> 2>&1)"; then
+     printf 'SECRET_PRESENT:%s\n' '<name>'
+   else
+     rc=$?
+     if [ "$rc" -eq 1 ]; then
+       printf 'EXPECTED_MISSING_SECRET:%s\n' '<name>'
+       exit 0
+     fi
+     printf '%s\n' "$output" >&2
+     exit "$rc"
+   fi
    ```
 3. If the secret exists, retrieve it with `get <name>` and use it without
    printing the value.
@@ -56,27 +71,27 @@ workflows, or service runtime state owned by a CLI's auth system.
 5. Store new values immediately through stdin or `SECRET_VALUE`, not inline in
    command examples or `.env` files:
    ```bash
-   printf '%s' "$SECRET_VALUE" | /Users/adam/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh set --tool <cli-tool> --type <type>
-   SECRET_VALUE="$SECRET_VALUE" /Users/adam/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh set --tool <cli-tool> --type <type>
+   printf '%s' "$SECRET_VALUE" | <cli-tools-root>/_repo/_secret-manager/secrets.sh set --tool <cli-tool> --type <type>
+   SECRET_VALUE="$SECRET_VALUE" <cli-tools-root>/_repo/_secret-manager/secrets.sh set --tool <cli-tool> --type <type>
    ```
 6. Verify storage with `has <name>`. Do not verify by echoing the secret value.
 </quick_start>
 
 <commands>
 ```bash
-/Users/adam/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh set --tool <cli-tool> --type <type> [value]
-/Users/adam/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh set <name> [value]
-/Users/adam/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh rename <old-name> --tool <cli-tool> --type <type>
-/Users/adam/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh get <name>
-/Users/adam/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh has <name>
-/Users/adam/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh delete <name>
-/Users/adam/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh list
+<cli-tools-root>/_repo/_secret-manager/secrets.sh set --tool <cli-tool> --type <type> [value]
+<cli-tools-root>/_repo/_secret-manager/secrets.sh set <name> [value]
+<cli-tools-root>/_repo/_secret-manager/secrets.sh rename <old-name> --tool <cli-tool> --type <type>
+<cli-tools-root>/_repo/_secret-manager/secrets.sh get <name>
+<cli-tools-root>/_repo/_secret-manager/secrets.sh has <name>
+<cli-tools-root>/_repo/_secret-manager/secrets.sh delete <name>
+<cli-tools-root>/_repo/_secret-manager/secrets.sh list
 ```
 
 Remote host form:
 
 ```bash
-/Users/adam/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh --remote-host <host> <command> [args]
+<cli-tools-root>/_repo/_secret-manager/secrets.sh --remote-host <host> <command> [args]
 ```
 
 For `set`, prefer stdin or `SECRET_VALUE` so the secret does not appear in shell

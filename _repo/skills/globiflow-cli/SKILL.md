@@ -1,6 +1,10 @@
 ---
-name: "globiflow-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute globiflow operations using the `globiflow` CLI tool. CLI interface for Globiflow automation platform (browser automation) -- manage flows, steps, triggers, and search items. Triggers: globiflow, globiflow cli, globiflow flows, globiflow triggers, list globiflow flows, create globiflow flow, globiflow automation, globiflow steps, search globiflow"
+name: globiflow-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute globiflow operations using the `globiflow` CLI tool.
+  CLI interface for Globiflow automation platform (browser automation) -- manage flows, steps, triggers, and search items.
+  Triggers: globiflow, globiflow cli, globiflow flows, globiflow triggers, list globiflow flows, create globiflow flow, globiflow automation, globiflow steps, search globiflow
 ---
 
 <objective>
@@ -27,7 +31,7 @@ globiflow <command-group> <action> [arguments] [options]
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `globiflow` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `globiflow` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 

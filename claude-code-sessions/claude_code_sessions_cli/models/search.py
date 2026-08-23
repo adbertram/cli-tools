@@ -1,5 +1,5 @@
 """Search result models for cross-project session search."""
-from typing import List
+from typing import List, Optional
 from .base import CLIModel
 
 
@@ -19,5 +19,7 @@ class SearchResult(CLIModel):
     project_path: str = ""
     created_at: str = ""
     last_activity: str = ""
+    # Model from the most recent assistant turn in the matched session
+    model: Optional[str] = None
     match_count: int = 0
     matches: List[SearchMatch] = []

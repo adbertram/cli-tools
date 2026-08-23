@@ -144,7 +144,7 @@ class FormsCommandTests(unittest.TestCase):
                     "create",
                     "abc123",
                     "--header-text",
-                    "BrickBuddy beta",
+                    "Example beta",
                     "--signup-message",
                     "Join the beta tester list.",
                     "--thank-you-title",
@@ -157,7 +157,7 @@ class FormsCommandTests(unittest.TestCase):
             fake_client.create_call,
             {
                 "list_id": "abc123",
-                "header_text": "BrickBuddy beta",
+                "header_text": "Example beta",
                 "signup_message": "Join the beta tester list.",
                 "signup_thank_you_title": "You are on the list",
             },
@@ -167,7 +167,7 @@ class FormsCommandTests(unittest.TestCase):
             {
                 "list_id": "abc123",
                 "signup_form_url": "https://example.list-manage.com/subscribe?u=abc&id=def",
-                "header": {"text": "BrickBuddy beta"},
+                "header": {"text": "Example beta"},
                 "contents": [
                     {
                         "section": "signup_message",

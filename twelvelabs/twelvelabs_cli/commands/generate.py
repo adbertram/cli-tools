@@ -17,6 +17,8 @@ def generate_text(
     prompt: Optional[str] = typer.Option(None, "--prompt", "-p", help="The prompt for text generation"),
     prompt_file: Optional[str] = typer.Option(None, "--prompt-file", "-f", help="Path to file containing the prompt"),
     temperature: Optional[float] = typer.Option(None, "--temperature", "-t", help="Controls randomness (0.0=deterministic, 1.0=creative)"),
+    engine: str = typer.Option("pegasus1.5", "--engine", "-e", help="Pegasus engine to use: pegasus1.5 or pegasus1.2"),
+    index_id: Optional[str] = typer.Option(None, "--index-id", help="Index ID required when --engine pegasus1.5"),
 ):
     """
     Generate text from an indexed video using a custom prompt.
@@ -30,6 +32,7 @@ def generate_text(
         twelvelabs generate text VIDEO_ID --prompt "List all issues" > output.txt
         twelvelabs generate text VIDEO_ID -f prompt.txt | jq '.'
         twelvelabs generate text VIDEO_ID -p "Find issues" -t 0.2
+        twelvelabs generate text VIDEO_ID -f prompt.txt --engine pegasus1.5 --index-id INDEX_ID
     """
     try:
         # Validate prompt options
@@ -52,7 +55,13 @@ def generate_text(
         client = get_client()
 
         # Generate text
-        result = client.generate_text(video_id=video_id, prompt=prompt, temperature=temperature)
+        result = client.generate_text(
+            video_id=video_id,
+            prompt=prompt,
+            temperature=temperature,
+            engine=engine,
+            index_id=index_id,
+        )
 
         # Output to stdout (raw text, not JSON wrapped)
         # This allows the output to be piped or redirected easily
@@ -69,6 +78,8 @@ def generate_json(
     prompt_file: Optional[str] = typer.Option(None, "--prompt-file", "-f", help="Path to file containing the prompt"),
     validate: bool = typer.Option(True, "--validate/--no-validate", help="Validate JSON output (default: validate)"),
     temperature: Optional[float] = typer.Option(None, "--temperature", "-t", help="Controls randomness (0.0=deterministic, 1.0=creative)"),
+    engine: str = typer.Option("pegasus1.5", "--engine", "-e", help="Pegasus engine to use: pegasus1.5 or pegasus1.2"),
+    index_id: Optional[str] = typer.Option(None, "--index-id", help="Index ID required when --engine pegasus1.5"),
 ):
     """
     Generate JSON from an indexed video using a custom prompt.
@@ -81,6 +92,7 @@ def generate_json(
         twelvelabs generate json VIDEO_ID --prompt-file review_prompt.md
         twelvelabs generate json VIDEO_ID -f prompt.txt > review.json
         twelvelabs generate json VIDEO_ID -p "Find issues as JSON" -t 0.1
+        twelvelabs generate json VIDEO_ID -f prompt.txt --engine pegasus1.5 --index-id INDEX_ID
     """
     import json
 
@@ -105,7 +117,13 @@ def generate_json(
         client = get_client()
 
         # Generate text
-        result = client.generate_text(video_id=video_id, prompt=prompt, temperature=temperature)
+        result = client.generate_text(
+            video_id=video_id,
+            prompt=prompt,
+            temperature=temperature,
+            engine=engine,
+            index_id=index_id,
+        )
 
         # Validate JSON if requested
         if validate:

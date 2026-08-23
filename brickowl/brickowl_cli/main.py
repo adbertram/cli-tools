@@ -24,7 +24,7 @@ app = create_app(
 )
 
 # Register command modules
-from .commands import order, inventory, catalog, user, messages, refund, coupon, quotes, issue
+from .commands import order, inventory, catalog, user, messages, refund, coupon, quotes, issue, store
 
 app.add_typer(
     create_auth_app(get_config, tool_name="brickowl", test_handler=_test_handler),
@@ -40,6 +40,7 @@ register_commands(app, get_config, refund, name="refund", help="Manage Brick Owl
 register_commands(app, get_config, coupon, name="coupon", help="Manage Brick Owl coupons")
 register_commands(app, get_config, quotes, name="quotes", help="Manage Brick Owl quotes")
 register_commands(app, get_config, issue, name="issue", help="Manage Brick Owl issue reports")
+register_commands(app, get_config, store, name="store", help="Manage Brick Owl store settings")
 
 # Register shared cache app
 app.add_typer(create_cache_app(get_config), name="cache")

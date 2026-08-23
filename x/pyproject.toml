@@ -19,6 +19,11 @@ dependencies = [
 [project.scripts]
 x = "x_cli.main:app"
 
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["x_cli*"]

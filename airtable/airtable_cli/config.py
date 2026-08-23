@@ -1,6 +1,5 @@
 """Configuration management for Airtable CLI."""
 import os
-from pathlib import Path
 from typing import Optional
 
 import requests
@@ -28,11 +27,6 @@ class Config(BaseConfig):
     def default_base_id(self) -> Optional[str]:
         """Get default Airtable base ID."""
         return self._get("BASE_ID")
-
-    @property
-    def storage_dir(self) -> Path:
-        """Get storage directory for the active profile (used by cache commands and the @cached decorator)."""
-        return self.get_profile_data_dir()
 
     def test_connection(self):
         """Test Airtable API connectivity with a lightweight whoami call."""

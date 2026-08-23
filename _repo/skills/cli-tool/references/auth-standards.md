@@ -31,6 +31,46 @@ Authentication commands (`auth login`, `auth status`) are **not required for all
 
 Before asking Adam for CLI credentials, or storing any new reusable CLI credential, follow `references/secrets.md`.
 
+## Browser-Session Auth Login Runtime
+
+For `browser_session` and browser CLI authentication, first check `auth status`
+using the shaped unauthenticated-status wrapper from the router. Local
+interactive login uses Computer Use to open a visible terminal and run the
+CLI's documented Bash login command. When the current task explicitly
+authorizes a non-interactive demo host or automation runner, invoke that same
+command without stdin or `/dev/tty`; `BrowserAutomation` verifies the live
+browser state directly after launch and continues only when it is authenticated.
+
+Use `--credential-type browser_session` for multi-credential CLIs and `--force`
+only when refreshing a stale or expired session. Retrieve credentials and MFA
+through the available service CLIs and the CLI-tools secret manager per
+`references/secrets.md`; ask Adam only when the required credential, code,
+approval, or local-GUI control is genuinely unavailable. Do not substitute raw
+browser scripts, direct session-file edits, or another auth path for
+browser-session login.
+
+## Pre-Auth Setup And Non-Secret Config Prompts
+
+If `auth login` needs non-secret setup such as `BASE_URL`, workspace IDs, tenant URLs, or account IDs, declare `AUTH_CONFIG_PROMPTS` on the `Config` subclass. `create_auth_app()` prompts for these fields before credential prompts and saves them through the shared config router, so root config such as `BASE_URL` lands in `~/.local/share/cli-tools/<tool>/.env`.
+
+If the user must create an API token, app password, or OAuth client before login, declare `AUTH_SETUP_INSTRUCTIONS` with the canonical setup URL and brief steps. `create_auth_app()` prints this before the first prompt.
+
+Do not tell the user to edit `.env` manually for required config or reusable credentials. `LOGIN_INSTRUCTIONS` remains as a compatibility fallback for older CLIs, but new and updated CLIs should use `AUTH_SETUP_INSTRUCTIONS` plus `AUTH_CONFIG_PROMPTS`.
+
+```python
+class Config(BaseConfig):
+    CREDENTIAL_TYPES = [CredentialType.USERNAME_PASSWORD]
+    DEFAULT_BASE_URL = "https://your-domain.example.com"
+    AUTH_CONFIG_PROMPTS = [
+        ("BASE_URL", "Service base URL (for example https://example.atlassian.net)", False),
+    ]
+    AUTH_SETUP_INSTRUCTIONS = (
+        "Before logging in:\n"
+        "  1. Create an API token: https://example.com/account/api-tokens\n"
+        "  2. Enter your account email as USERNAME and the token as PASSWORD."
+    )
+```
+
 ## `auth status` JSON Shape (Canonical)
 
 `create_auth_app` (in `cli_tools_shared.auth_commands`) emits a single canonical shape. Every CLI — including wrappers — returns this shape:
@@ -67,6 +107,7 @@ Before asking Adam for CLI credentials, or storing any new reusable CLI credenti
 - Per-type **conditional** keys:
   - `api_test` — when present, MUST be the literal string `"passed"` or a string starting with `"failed:"` (e.g., `"failed: unauthorized"`). Sourced from `Config.test_connection()`.
   - Extra keys from `Config.test_connection()` land here (e.g., `email`, `bot_id`, `user_id`). For OAuth, `oauth_status` lands under `credential_types.oauth`. For browser, `browser_session` / `browser_available` land under `credential_types.browser_session`.
+  - `browser_error` — present under `credential_types.browser_session` when the live browser probe could not run or complete. In that state `browser_available` is `false`; a completed probe that reaches a genuine logged-out page reports `browser_available: true`, `authenticated: false`, and no `browser_error`.
 - Per-type **optional** keys (reserved; emit when meaningful, no validator enforces them yet):
   - `expires_at` — ISO-8601 timestamp string indicating when the saved token/session expires.
   - `scopes` — list of scope strings granted by the upstream OAuth provider.
@@ -140,8 +181,9 @@ class Config(BaseConfig):
 - Fields shared across types (e.g., `USERNAME`) are prompted once
 
 **When to use multiple types:**
-- Service has an API but some actions require browser automation
-- OAuth API + browser session for scraping (e.g., Descript, PayPal)
+- Service has an API but some actions require browser automation after Adam
+  explicitly approves the browser-driven command boundary
+- OAuth API + browser session for scraping (e.g., PayPal)
 - API key + username/password for different service tiers
 
 ## API Client Credential Gate in Dual-Auth CLIs
@@ -218,6 +260,19 @@ import typer
 - Values are lists of credential type strings (e.g., `["api_key"]`, `["browser_session"]`)
 - Every command in the file should have an entry
 - Single-credential CLIs can omit this dict (all commands use the single type)
+- Command modules that declare `COMMAND_CREDENTIALS` must be mounted with
+  `register_commands(app, get_config, module, name="...", help="...")` from
+  `cli_tools_shared.command_registry`, not bare `app.add_typer(...)`.
+  `register_commands()` injects the shared `--profile` command-group option and
+  checks credentials before command execution. Infrastructure groups without
+  `COMMAND_CREDENTIALS`, such as `auth`, `cache`, and `profiles`, may still use
+  their owning shared app factories and normal `app.add_typer(...)`.
+- A command with a `--dry-run` or preview path that only prints the planned
+  request and does not call a live API must not be blocked by registration-time
+  credential checks. Map it to `["no_auth"]` and make the command enforce the
+  required credentials before any live API mutation. Verify with the installed
+  launcher under isolated profile data (`XDG_DATA_HOME="$(mktemp -d)"`) so an
+  empty user profile cannot satisfy the check accidentally.
 
 ## auth login --force Flag (MANDATORY)
 
@@ -226,18 +281,18 @@ import typer
 | Behavior | Description |
 |----------|-------------|
 | Without `--force` | Idempotent - may skip if already authenticated |
-| With `--force` | Clears existing session/credentials FIRST, then initiates fresh authentication |
+| With `--force` | Clears existing ephemeral runtime state FIRST, preserving static credentials such as API keys, passwords, CLIENT_ID, CLIENT_SECRET, and REDIRECT_URI, then initiates fresh authentication |
 
 Implementation by template type:
 
 | Template | --force Behavior |
 |----------|------------------|
-| API | Call `config.clear_credentials()` before prompting for API key |
+| API | Call `config.clear_ephemeral()` before prompting; do not clear static API keys or other reusable credentials |
 | Browser | Call `config.clear_session()` before opening browser login |
 | Wrapper | Call underlying CLI's logout command before running login |
-| OAuth (built-in) | Clears OAuth app credentials and tokens, prompts for CLIENT_ID/CLIENT_SECRET/REDIRECT_URI, then re-runs the auth flow |
+| OAuth (built-in) | Clears OAuth tokens and other ephemeral runtime state, preserves CLIENT_ID/CLIENT_SECRET/REDIRECT_URI, then re-runs the auth flow |
 
-**OAuth --force note:** For CLIs using the built-in `oauth_login` handler (via `OAUTH_*` class vars), `--force` clears OAuth app credentials and tokens first, then prompts again for CLIENT_ID, CLIENT_SECRET, and REDIRECT_URI before opening the browser authorization flow.
+**OAuth --force note:** For CLIs using the built-in `oauth_login` handler (via `OAUTH_*` class vars), `--force` must preserve OAuth app credentials such as CLIENT_ID, CLIENT_SECRET, and REDIRECT_URI while clearing tokens and other ephemeral state before opening the browser authorization flow. Automation that needs to re-enter static prompt values must still capture them from the CLI-tools secret manager or a pre-force snapshot before invoking the forced login; do not source prompt values from a profile after the forced process has started.
 
 ## auth login --credential-type Flag (Multi-Credential CLIs)
 
@@ -275,10 +330,10 @@ def auth_login(
     """Login to service."""
     config = get_config()
 
-    # Clear existing session if --force is specified
+    # Clear only ephemeral runtime state if --force is specified
     if force:
-        config.clear_session()  # or clear_credentials() for API type
-        print_info("Existing session cleared")
+        config.clear_ephemeral()
+        print_info("Existing ephemeral auth state cleared")
 
     # Continue with normal login flow...
 ```

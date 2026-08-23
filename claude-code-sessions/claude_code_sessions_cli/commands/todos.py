@@ -1,17 +1,25 @@
 """Todo commands for Claude Code Sessions CLI."""
+COMMAND_CREDENTIALS = {
+    "list": ["no_auth"],
+    "get": ["no_auth"],
+}
+
 import typer
 from typing import Optional, List
 from ..client import get_client, ClientError
 from cli_tools_shared.filters import apply_filters
-from cli_tools_shared.output import print_json, print_table, handle_error
+from cli_tools_shared.output import command, print_json, print_table, handle_error
+from .session_arg import resolve_session_arg
 
 app = typer.Typer(help="Query todo items from sessions", no_args_is_help=True)
 
 
 @app.command("list")
+@command
 def list_todos(
     project: str = typer.Option(..., "--project", "-p", help="Project name (required)"),
-    session_id: Optional[str] = typer.Option(None, "--session-id", "-S", help="Filter to specific session"),
+    session_id: Optional[str] = typer.Option(None, "--session-id", "-S", help="Session ID (UUID or name)"),
+    session_name: Optional[str] = typer.Option(None, "--session-name", "-N", help="Session name (exact, case-insensitive)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum results"),
     since: Optional[str] = typer.Option(None, "--since", "-s", help="Time filter: 5h, 1d, 7d"),
@@ -22,13 +30,14 @@ def list_todos(
     List all todos from sessions in a project.
 
     Example:
-        claude-code-sessions todos list --project Agent-ATABlogger
-        claude-code-sessions todos list --project Agent-ATABlogger --filter "status:eq:pending"
-        claude-code-sessions todos list --project Agent-ATABlogger --since 1d
-        claude-code-sessions todos list --project Agent-ATABlogger --session-id abc123
+        claude-code-sessions todos list --project ExampleProject
+        claude-code-sessions todos list --project ExampleProject --filter "status:eq:pending"
+        claude-code-sessions todos list --project ExampleProject --since 1d
+        claude-code-sessions todos list --project ExampleProject --session-id abc123
     """
     try:
         client = get_client()
+        session_id = resolve_session_arg(client, session_id, session_name, project=project)
         todos = client.list_todos(project=project, limit=limit, since=since)
 
         # Convert to dicts for filtering/output
@@ -59,6 +68,7 @@ def list_todos(
 
 
 @app.command("get")
+@command
 def get_todo(
     todo_id: str = typer.Argument(..., help="Todo ID"),
     project: str = typer.Option(..., "--project", "-p", help="Project name (required)"),
@@ -68,7 +78,7 @@ def get_todo(
     Get a specific todo by ID.
 
     Example:
-        claude-code-sessions todos get <todo-id> --project Agent-ATABlogger
+        claude-code-sessions todos get <todo-id> --project ExampleProject
     """
     try:
         client = get_client()

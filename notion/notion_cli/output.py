@@ -20,12 +20,153 @@ from cli_tools_shared.output import (  # noqa: F401
     print_success,
     print_info,
     handle_error,
+    command,
 )
 from typing import Any, Dict, List, Optional
 import re
 
+from .code_languages import markdown_fence_language, normalize_code_language
+
 
 # --- CLI-specific helpers ---
+
+# Markdown table column-alignment round-trip.
+#
+# A Notion ``table`` block stores only table_width/has_column_header/
+# has_row_header -- there is no per-column alignment field, so the ``:`` markers
+# in a markdown separator row (``| :--- | ---: |``) have nowhere to live. Rather
+# than drop the author's alignment, the importer writes it into a marker
+# paragraph placed immediately before the table, and the exporter consumes that
+# paragraph to rebuild the exact separator row. The marker is emitted ONLY when
+# at least one column declares an explicit alignment, so tables written with a
+# plain ``| --- |`` separator produce no extra block and behave exactly as
+# before.
+TABLE_ALIGNMENT_MARKER_PREFIX = "<!-- notion-table-align: "
+TABLE_ALIGNMENT_MARKER_SUFFIX = " -->"
+TABLE_ALIGNMENT_MARKER_SEPARATOR = "|"
+DEFAULT_TABLE_ALIGNMENT = "---"
+VALID_TABLE_ALIGNMENTS = (DEFAULT_TABLE_ALIGNMENT, ":---", "---:", ":---:")
+
+
+def _alignment_token(cell: str) -> str:
+    """Return the canonical separator token for one markdown separator cell."""
+    text = cell.strip()
+    left = text.startswith(":")
+    right = text.endswith(":") and len(text) > 1
+    if left and right:
+        return ":---:"
+    if left:
+        return ":---"
+    if right:
+        return "---:"
+    return DEFAULT_TABLE_ALIGNMENT
+
+
+def build_table_alignment_marker(alignments: List[str]) -> Dict:
+    """Build the paragraph block that carries a table's column alignments."""
+    payload = TABLE_ALIGNMENT_MARKER_SEPARATOR.join(alignments)
+    return {
+        "object": "block",
+        "type": "paragraph",
+        "paragraph": {
+            "rich_text": [
+                {
+                    "type": "text",
+                    "text": {
+                        "content": (
+                            f"{TABLE_ALIGNMENT_MARKER_PREFIX}{payload}"
+                            f"{TABLE_ALIGNMENT_MARKER_SUFFIX}"
+                        )
+                    },
+                }
+            ]
+        },
+    }
+
+
+def parse_table_alignment_marker(block: Dict) -> Optional[List[str]]:
+    """Return column alignments when ``block`` is an alignment marker paragraph.
+
+    Returns None for every other block, so callers can use it as a filter.
+
+    Raises:
+        ValueError: When the marker payload contains a token that is not a
+            markdown separator cell. A corrupt marker is a data error, not
+            something to silently ignore.
+    """
+    if block.get("type") != "paragraph":
+        return None
+
+    text = "".join(
+        segment.get("plain_text", "")
+        for segment in block.get("paragraph", {}).get("rich_text", [])
+    ).strip()
+
+    if not (
+        text.startswith(TABLE_ALIGNMENT_MARKER_PREFIX)
+        and text.endswith(TABLE_ALIGNMENT_MARKER_SUFFIX)
+    ):
+        return None
+
+    payload = text[
+        len(TABLE_ALIGNMENT_MARKER_PREFIX) : -len(TABLE_ALIGNMENT_MARKER_SUFFIX)
+    ]
+    alignments = payload.split(TABLE_ALIGNMENT_MARKER_SEPARATOR)
+    invalid = [token for token in alignments if token not in VALID_TABLE_ALIGNMENTS]
+    if invalid:
+        raise ValueError(
+            f"Table alignment marker carries invalid separator cells {invalid}; "
+            f"expected one of {list(VALID_TABLE_ALIGNMENTS)} in {text!r}"
+        )
+    return alignments
+
+
+def _pair_alignment_markers(blocks: List[Dict]) -> List[tuple]:
+    """Pair each block with its column alignments, dropping marker paragraphs.
+
+    Raises:
+        ValueError: When an alignment marker is not immediately followed by a
+            table block. That means the page was edited so the marker's table no
+            longer exists, and silently discarding it would hide the damage.
+    """
+    paired: List[tuple] = []
+    pending: Optional[List[str]] = None
+
+    for block in blocks:
+        alignments = parse_table_alignment_marker(block)
+        if alignments is not None:
+            if pending is not None:
+                raise ValueError(
+                    "Two consecutive table alignment markers; the first has no "
+                    "table to describe"
+                )
+            pending = alignments
+            continue
+        if pending is not None and block.get("type") != "table":
+            raise ValueError(
+                "Table alignment marker is followed by a "
+                f"{block.get('type')!r} block instead of a table"
+            )
+        paired.append((block, pending))
+        pending = None
+
+    if pending is not None:
+        raise ValueError("Table alignment marker has no table after it")
+
+    return paired
+
+def _visible_url_markdown(label: str, url: str) -> str:
+    """Return a visible Markdown link for Notion URL-only blocks.
+
+    Notion embed and link_preview blocks do not have portable Markdown or HTML
+    equivalents. Exporting them as HTML comments preserves round-trip metadata,
+    but downstream publishers render comments invisibly. Use ordinary Markdown
+    links instead so the URL remains visible in HTML/WordPress output while the
+    importer can still reconstruct the original Notion block type.
+    """
+    if not url:
+        return f"[{label}: ]()"
+    return f"[{label}: {url}]({url})"
 
 
 def extract_property_value(prop: Dict) -> Any:
@@ -161,7 +302,12 @@ def extract_rich_text(rich_text_array: List[Dict]) -> str:
     return "".join(result)
 
 
-def block_to_markdown(block: Dict, indent_level: int = 0, list_number: int = 0) -> str:
+def block_to_markdown(
+    block: Dict,
+    indent_level: int = 0,
+    list_number: int = 0,
+    column_alignments: Optional[List[str]] = None,
+) -> str:
     """
     Convert a Notion block to markdown.
 
@@ -169,6 +315,9 @@ def block_to_markdown(block: Dict, indent_level: int = 0, list_number: int = 0) 
         block: Notion block object
         indent_level: Current indentation level for nested blocks
         list_number: Sequential number for numbered list items (1-based)
+        column_alignments: Separator-row tokens for a ``table`` block, recovered
+            from the alignment marker paragraph that precedes it. When omitted,
+            every column uses the default ``---`` separator.
 
     Returns:
         Markdown string representation of the block
@@ -232,7 +381,7 @@ def block_to_markdown(block: Dict, indent_level: int = 0, list_number: int = 0) 
     elif block_type == "code":
         code = block.get("code", {})
         text = extract_rich_text(code.get("rich_text", []))
-        language = code.get("language", "")
+        language = markdown_fence_language(code.get("language"))
         lines.append(f"{indent}```{language}")
         lines.append(text)
         lines.append(f"{indent}```")
@@ -261,7 +410,7 @@ def block_to_markdown(block: Dict, indent_level: int = 0, list_number: int = 0) 
 
     elif block_type == "link_preview":
         url = block.get("link_preview", {}).get("url", "")
-        lines.append(f"{indent}<!-- notion-link_preview: {url} -->")
+        lines.append(f"{indent}{_visible_url_markdown('Link preview', url)}")
 
     elif block_type == "table":
         # Process table with its row children
@@ -278,7 +427,17 @@ def block_to_markdown(block: Dict, indent_level: int = 0, list_number: int = 0) 
 
                 # Add separator after header row
                 if i == 0 and has_column_header:
-                    separator = " | ".join("---" for _ in cells)
+                    if column_alignments is None:
+                        tokens = [DEFAULT_TABLE_ALIGNMENT for _ in cells]
+                    elif len(column_alignments) != len(cells):
+                        raise ValueError(
+                            "Table alignment marker declares "
+                            f"{len(column_alignments)} columns but the header "
+                            f"row has {len(cells)}"
+                        )
+                    else:
+                        tokens = column_alignments
+                    separator = " | ".join(tokens)
                     lines.append(f"{indent}| {separator} |")
 
         # Return early - we've already processed children
@@ -300,7 +459,7 @@ def block_to_markdown(block: Dict, indent_level: int = 0, list_number: int = 0) 
 
     elif block_type == "embed":
         url = block.get("embed", {}).get("url", "")
-        lines.append(f"{indent}<!-- notion-embed: {url} -->")
+        lines.append(f"{indent}{_visible_url_markdown('Embed', url)}")
 
     elif block_type == "video":
         video = block.get("video", {})
@@ -356,12 +515,17 @@ def block_to_markdown(block: Dict, indent_level: int = 0, list_number: int = 0) 
     children = block.get("children", [])
     if children:
         child_list_counter = 0
-        for child in children:
+        for child, child_alignments in _pair_alignment_markers(children):
             if child.get("type") == "numbered_list_item":
                 child_list_counter += 1
             else:
                 child_list_counter = 0
-            child_md = block_to_markdown(child, indent_level + 1, list_number=child_list_counter)
+            child_md = block_to_markdown(
+                child,
+                indent_level + 1,
+                list_number=child_list_counter,
+                column_alignments=child_alignments,
+            )
             if child_md:
                 lines.append(child_md)
 
@@ -381,12 +545,14 @@ def blocks_to_markdown(blocks: List[Dict]) -> str:
     """
     lines = []
     list_counter = 0
-    for block in blocks:
+    for block, alignments in _pair_alignment_markers(blocks):
         if block.get("type") == "numbered_list_item":
             list_counter += 1
         else:
             list_counter = 0
-        md = block_to_markdown(block, list_number=list_counter)
+        md = block_to_markdown(
+            block, list_number=list_counter, column_alignments=alignments
+        )
         if md:
             lines.append(md)
     return "\n\n".join(lines)
@@ -437,12 +603,21 @@ def text_to_rich_text(text: str, inherited_annotations: Dict = None) -> List[Dic
 
     # Pattern to match markdown inline elements
     # Order matters: longer patterns first
+    #
+    # Underscore emphasis follows the CommonMark "intraword underscore" rule:
+    # an underscore that has an alphanumeric character on its inner-facing side
+    # cannot open or close emphasis. This keeps technical tokens such as
+    # env_prep.ps1, ai_validation_checks, and foo_bar_baz as literal text while
+    # still parsing whitespace/punctuation-flanked _emphasis_ as italic. The
+    # lookbehind/lookahead are non-capturing, so the numbered capture groups
+    # consumed below are unchanged. Asterisk emphasis intentionally allows
+    # intraword spans, matching CommonMark.
     pattern = re.compile(
         r'(\*\*\*(.+?)\*\*\*)'  # Bold italic ***text***
         r'|(\*\*(.+?)\*\*)'     # Bold **text**
         r'|(__(.+?)__)'         # Bold __text__
         r'|(\*(.+?)\*)'         # Italic *text*
-        r'|(_([^_]+)_)'         # Italic _text_
+        r'|((?<![A-Za-z0-9])_([^_]+)_(?![A-Za-z0-9]))'  # Italic _text_ (intraword-safe)
         r'|(`([^`]+)`)'         # Code `text`
         r'|(\[([^\]]+)\]\(([^)]+)\))'  # Link [text](url)
     )
@@ -476,11 +651,16 @@ def text_to_rich_text(text: str, inherited_annotations: Dict = None) -> List[Dic
             inner_items = process_inner(match.group(10), {"italic": True})
             rich_text.extend(inner_items)
         elif match.group(12):  # Code `text`
-            # Code blocks don't recurse - content is literal
+            # Code blocks don't recurse - content is literal. A code run is
+            # emitted code-only and never inherits bold/italic: markdown has no
+            # syntax for a run that is BOTH code and bold/italic, so carrying an
+            # inherited annotation onto a code run round-trips as broken
+            # `**`code`**` -> `****` on export. The surrounding runs are still
+            # bold/italic (handled above), which preserves the author's intent.
             item = {
                 "type": "text",
                 "text": {"content": match.group(12)},
-                "annotations": {**inherited_annotations, "code": True}
+                "annotations": {"code": True},
             }
             rich_text.append(item)
         elif match.group(14):  # Link [text](url)
@@ -513,27 +693,39 @@ def text_to_rich_text(text: str, inherited_annotations: Dict = None) -> List[Dic
     return rich_text
 
 
-def _chunk_code_content(content: str, max_length: int = 2000) -> List[str]:
+def chunk_text_on_boundaries(
+    content: str,
+    max_length: int = 2000,
+    boundary: str = "newline",
+) -> List[str]:
     """
-    Split code block content into chunks of at most max_length characters.
+    Split text into chunks of at most max_length characters on word boundaries.
 
-    Notion concatenates rich_text segments directly (no separator), so
-    the chunks must reconstruct the original content when joined. This
-    function splits at newline boundaries when possible, falling back to
-    hard character splits for lines that exceed max_length on their own.
+    Notion concatenates rich_text segments directly (no separator), so the chunks
+    must reconstruct the original content when joined. The split prefers a
+    boundary character within the allowed window and falls back to a hard
+    character split only when no boundary exists (a single token longer than the
+    limit). The boundary character is kept at the end of its chunk so the
+    concatenation round-trips exactly.
 
     Args:
-        content: The full code block text
+        content: The full text to split
         max_length: Maximum characters per chunk (Notion API limit is 2000)
+        boundary: "newline" to break only on '\\n' (preserves code line
+            structure), or "whitespace" to break on any whitespace char (better
+            word boundaries for prose).
 
     Returns:
         List of text chunks, each <= max_length characters, whose
-        concatenation equals the original content
+        concatenation equals the original content.
     """
     if len(content) <= max_length:
         return [content]
 
-    chunks = []
+    def is_boundary(ch: str) -> bool:
+        return ch == "\n" if boundary == "newline" else ch.isspace()
+
+    chunks: List[str] = []
     pos = 0
     total = len(content)
 
@@ -543,22 +735,33 @@ def _chunk_code_content(content: str, max_length: int = 2000) -> List[str]:
             chunks.append(content[pos:])
             break
 
-        # Find the best split point within [pos, pos + max_length)
+        # Find the last boundary character within [pos, pos + max_length)
         end = pos + max_length
-
-        # Look for the last newline within the allowed window
-        split_at = content.rfind("\n", pos, end)
+        split_at = -1
+        for i in range(end - 1, pos - 1, -1):
+            if is_boundary(content[i]):
+                split_at = i
+                break
 
         if split_at > pos:
-            # Split after the newline (include it in this chunk)
+            # Split after the boundary char (include it in this chunk)
             chunks.append(content[pos:split_at + 1])
             pos = split_at + 1
         else:
-            # No newline found in window -- hard split at max_length
+            # No boundary found in window -- hard split at max_length
             chunks.append(content[pos:end])
             pos = end
 
     return chunks
+
+
+def _chunk_code_content(content: str, max_length: int = 2000) -> List[str]:
+    """Split code/comment text on newline boundaries (Notion 2000-char limit).
+
+    Thin wrapper preserving the historical newline-only contract used by code
+    blocks and comment payloads. See chunk_text_on_boundaries.
+    """
+    return chunk_text_on_boundaries(content, max_length, boundary="newline")
 
 
 def text_to_blocks(
@@ -672,7 +875,7 @@ def text_to_blocks(
                     {"type": "text", "text": {"content": chunk}}
                     for chunk in code_chunks
                 ],
-                "language": language,
+                "language": normalize_code_language(language),
             }
         }
 
@@ -805,6 +1008,7 @@ def text_to_blocks(
         if stripped.startswith("|") and "|" in stripped[1:]:
             table_rows = []
             has_header = False
+            alignments: List[str] = []
 
             # Collect all table rows
             while i < len(lines):
@@ -815,6 +1019,10 @@ def text_to_blocks(
                 # Check if this is a separator row (| --- | --- |)
                 if re.match(r'^\|[\s\-:]+\|', row_line) and '---' in row_line:
                     has_header = True
+                    alignments = [
+                        _alignment_token(cell)
+                        for cell in row_line.strip("|").split("|")
+                    ]
                     i += 1
                     continue
 
@@ -847,6 +1055,16 @@ def text_to_blocks(
                             "cells": [text_to_rich_text(cell) for cell in row]
                         }
                     })
+
+                # Notion tables carry no per-column alignment. When the author
+                # declared one, persist it in a marker paragraph immediately
+                # before the table so the export path can rebuild the exact
+                # separator row instead of flattening every column to "---".
+                while len(alignments) < table_width:
+                    alignments.append(DEFAULT_TABLE_ALIGNMENT)
+                del alignments[table_width:]
+                if any(token != DEFAULT_TABLE_ALIGNMENT for token in alignments):
+                    blocks.append(build_table_alignment_marker(alignments))
 
                 blocks.append({
                     "object": "block",
@@ -934,15 +1152,35 @@ def text_to_blocks(
                     }
                 })
             else:
-                # Local path without upload - treat as paragraph (will show as broken)
-                # The command layer should handle uploads before calling this
+                # The src is neither an http(s) URL nor an uploaded local file
+                # (a pipeline placeholder such as ``IMAGE_PLACEHOLDER: ...``, or
+                # a relative path the command layer chose not to upload). Notion
+                # has no image block that can hold it, so store the ORIGINAL
+                # markdown line verbatim as plain text. Exporting the paragraph
+                # returns the identical ``![alt](src)`` line, so alt text and
+                # image syntax survive the round trip instead of collapsing into
+                # a lossy ``[Image: src]`` string.
                 blocks.append({
                     "object": "block",
                     "type": "paragraph",
                     "paragraph": {
-                        "rich_text": [{"type": "text", "text": {"content": f"[Image: {image_path}]"}}],
+                        "rich_text": [
+                            {"type": "text", "text": {"content": chunk}}
+                            for chunk in chunk_text_on_boundaries(
+                                stripped, boundary="whitespace"
+                            )
+                        ],
                     }
                 })
+            i += 1
+            continue
+
+        # Table alignment marker: regenerated from the separator row of the
+        # table that follows, so a literal marker in the source is dropped
+        # instead of being duplicated as a paragraph.
+        if stripped.startswith(TABLE_ALIGNMENT_MARKER_PREFIX) and stripped.endswith(
+            TABLE_ALIGNMENT_MARKER_SUFFIX
+        ):
             i += 1
             continue
 
@@ -1040,6 +1278,18 @@ def text_to_blocks(
             i += 1
             continue
 
+        # Visible link preview pattern: [Link preview: URL](URL) — reconstruct as link_preview block
+        legacy_link_preview = re.match(r'^\[Link preview:\s*([^\]]*)\]\(([^)]+)\)$', stripped)
+        if legacy_link_preview:
+            preview_url = legacy_link_preview.group(2)
+            blocks.append({
+                "object": "block",
+                "type": "link_preview",
+                "link_preview": {"url": preview_url}
+            })
+            i += 1
+            continue
+
         # Legacy video pattern: [Video](URL) — skip to avoid data loss
         legacy_video = re.match(r'^\[Video\]\(([^)]+)\)$', stripped)
         if legacy_video:
@@ -1105,3 +1355,120 @@ def format_page_for_display(page: Dict, properties_to_show: Optional[List[str]] 
         result[prop_name] = extract_property_value(prop_value)
 
     return result
+
+
+def format_block_for_display(block: Dict) -> Dict:
+    """
+    Format a block for display output.
+
+    Args:
+        block: Raw block from Notion API
+
+    Returns:
+        Simplified block record for display
+    """
+    block_type = block.get("type", "unknown")
+    block_content = block.get(block_type, {})
+
+    # Extract text content if available
+    text_content = ""
+    if isinstance(block_content, dict) and "rich_text" in block_content:
+        text_content = "".join(
+            rt.get("plain_text", "") for rt in block_content.get("rich_text", [])
+        )
+    elif isinstance(block_content, dict) and "text" in block_content:
+        text_content = "".join(
+            rt.get("plain_text", "") for rt in block_content.get("text", [])
+        )
+    elif block_type == "child_page":
+        text_content = block_content.get("title", "")
+    elif block_type == "child_database":
+        text_content = block_content.get("title", "")
+
+    display = {
+        "id": block.get("id", ""),
+        "type": block_type,
+        "text": text_content[:100] + ("..." if len(text_content) > 100 else ""),
+        "has_children": block.get("has_children", False),
+        "created_time": block.get("created_time", ""),
+        "last_edited_time": block.get("last_edited_time", ""),
+    }
+
+    # Surface is_toggleable for any block type that supports it (heading_1/2/3
+    # today; the API may add more). Read it directly off the type-specific
+    # object so we stay forward-compatible without hardcoding a list.
+    if isinstance(block_content, dict) and "is_toggleable" in block_content:
+        display["is_toggleable"] = bool(block_content.get("is_toggleable"))
+
+    return display
+
+
+# Block types whose text is a single rich_text array and can be edited in place
+# by replacing that array via PATCH /v1/blocks/{block_id}. Editing in place keeps
+# the block ID, so comments anchored to the block survive (unlike delete+recreate).
+# Single source of truth shared by `pages blocks update` and
+# `database page content update-block`.
+TEXT_EDITABLE_BLOCK_TYPES = (
+    "paragraph",
+    "heading_1",
+    "heading_2",
+    "heading_3",
+    "bulleted_list_item",
+    "numbered_list_item",
+    "to_do",
+    "toggle",
+    "quote",
+    "callout",
+)
+
+
+def build_text_block_update(
+    block_type: str,
+    text: Optional[str] = None,
+    checked: Optional[bool] = None,
+    markdown: bool = False,
+) -> Dict:
+    """
+    Build the type-specific PATCH body for an in-place block text/checked update.
+
+    Returns a dict shaped as ``{block_type: {...}}`` suitable for
+    ``client.update_block(block_id, ...)``. Caller is responsible for verifying
+    ``block_type`` is editable (see ``TEXT_EDITABLE_BLOCK_TYPES``) and that
+    ``checked`` is only passed for ``to_do`` blocks.
+
+    Args:
+        block_type: The Notion block type key (e.g. "paragraph").
+        text: New content; replaces the block's rich_text when given. Interpreted
+            as plain text by default, or as inline Markdown when ``markdown`` is
+            True.
+        checked: New checked state; only meaningful for ``to_do`` blocks.
+        markdown: When True, parse ``text`` as inline Markdown via
+            ``text_to_rich_text`` so links (``[label](url)``), inline code
+            (`` `code` ``), bold, and italic become real Notion rich_text
+            annotations/links instead of literal characters. When False, ``text``
+            is stored verbatim as a single plain-text run.
+
+    Returns:
+        Update payload dict for the block's type-specific object.
+
+    Raises:
+        ValueError: When ``markdown`` is True but ``text`` parses to an empty
+            rich_text array (fail-fast: never silently degrade to plain text).
+    """
+    update_data: Dict = {block_type: {}}
+    if text is not None:
+        if markdown:
+            rich_text = text_to_rich_text(text)
+            if not rich_text:
+                raise ValueError(
+                    "Markdown content parsed to empty rich_text; refusing to "
+                    "update the block with no content."
+                )
+            update_data[block_type]["rich_text"] = rich_text
+        else:
+            update_data[block_type]["rich_text"] = [
+                {"type": "text", "text": {"content": text}}
+            ]
+    if checked is not None:
+        update_data[block_type]["checked"] = checked
+    return update_data

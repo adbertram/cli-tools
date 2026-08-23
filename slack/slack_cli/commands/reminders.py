@@ -28,7 +28,7 @@ import typer
 from typing import List, Optional
 
 from ..client import get_client, ClientError
-from cli_tools_shared.output import print_json, print_table, handle_error
+from cli_tools_shared.output import print_json, print_table, handle_error, command
 from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError, apply_properties_filter
 
 app = typer.Typer(help="Manage Slack reminders")
@@ -163,6 +163,7 @@ def _query_reminders_for_profile(profile_name: Optional[str], include_content: b
 
 
 @app.command("list")
+@command
 def list_reminders(
     state: str = typer.Option(
         "in_progress",
@@ -319,6 +320,7 @@ def list_reminders(
 
 
 @app.command("get")
+@command
 def get_reminder(
     reminder_id: str = typer.Argument(..., help="Reminder ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -352,6 +354,7 @@ def get_reminder(
 
 
 @app.command("complete")
+@command
 def complete_reminder(
     reminder_id: str = typer.Argument(..., help="The ID of the reminder to complete"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -430,6 +433,7 @@ def _parse_friendly_time(time_str: str) -> Optional[int]:
 
 
 @app.command("new")
+@command
 def new_reminder(
     channel: str = typer.Argument(..., help="The channel ID containing the message"),
     ts: str = typer.Argument(..., help="The message timestamp to save"),
@@ -491,6 +495,7 @@ def new_reminder(
 
 
 @app.command("delete")
+@command
 def delete_reminder(
     reminder_id: str = typer.Argument(..., help="The ID of the reminder to delete"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),

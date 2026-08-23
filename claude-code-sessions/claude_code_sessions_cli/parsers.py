@@ -26,6 +26,37 @@ from .models import (
 )
 
 
+def extract_assistant_model(entry: Dict[str, Any]) -> Optional[str]:
+    """
+    Return the model recorded for an assistant JSONL entry, or None.
+
+    Model is normally nested under entry['message']['model'], but some
+    entries record it at the top level instead; check both. Single source of
+    truth for every raw model-field lookup in this module.
+    """
+    message = entry.get('message', {})
+    return message.get('model') or entry.get('model')
+
+
+# Claude Code writes this sentinel as the model of internal synthetic
+# assistant entries (e.g. "You've hit your weekly limit" rate-limit
+# notices). These are not real model turns and must not be reported as the
+# "last model used".
+SYNTHETIC_MODEL_MARKER = '<synthetic>'
+
+
+def extract_last_used_model(entry: Dict[str, Any]) -> Optional[str]:
+    """
+    Return the model for a "last model used" computation, or None.
+
+    Wraps extract_assistant_model() and excludes SYNTHETIC_MODEL_MARKER.
+    """
+    model = extract_assistant_model(entry)
+    if model == SYNTHETIC_MODEL_MARKER:
+        return None
+    return model
+
+
 def format_tool_call_entry(
     tc: ToolCall,
     session_id: str,
@@ -387,14 +418,31 @@ def extract_project_name(encoded_path: str) -> str:
         encoded_path: Path like "-path-to-project-name"
 
     Returns:
-        Project name like "Agent-ATABlogger"
+        Project name like "ExampleProject"
     """
     # The last segment after the known prefixes is typically the project name
     # Handle cases like "-path-to-project-name"
     parts = encoded_path.split('-')
 
-    # Find common path segments to skip
-    skip_segments = {'Users', 'home', 'adam', 'Dropbox', 'GitRepos', 'Desktop', 'Documents'}
+    # Find common parent path segments to skip. Claude Code encodes project
+    # paths by replacing "/" with "-", so project names containing dashes are
+    # ambiguous without stopping at common repo/workspace container names.
+    skip_segments = {
+        'Users',
+        'home',
+        'Desktop',
+        'Documents',
+        'Downloads',
+        'GitRepos',
+        'projects',
+        'repos',
+        'repo',
+        'repositories',
+        'source',
+        'src',
+        'workspace',
+        'workspaces',
+    }
 
     # Walk from the end to find project name
     result_parts = []
@@ -496,6 +544,11 @@ def parse_session_summary(session_path: Path, project_name: str) -> Optional[Ses
     total_cache_creation_tokens = 0
     # Conversation tracking
     current_conversation_id = 1
+    # Session display name (custom title); last one in file order wins
+    custom_title = None
+    # Model from the most recent main-thread (non-sidechain) assistant turn;
+    # file order is chronological, so the last one found wins.
+    last_model = None
 
     try:
         # Collect all entries for conversation detection
@@ -505,6 +558,14 @@ def parse_session_summary(session_path: Path, project_name: str) -> Optional[Ses
         for entry in all_entries:
             entry_type = entry.get('type', '')
             timestamp = entry.get('timestamp')
+
+            # Capture the session display name. Multiple custom-title entries
+            # may exist (the title gets regenerated); file order is chronological
+            # so the last non-empty one is the current name.
+            if entry_type == 'custom-title':
+                title = entry.get('customTitle')
+                if title:
+                    custom_title = title
 
             # Track timestamps
             if timestamp:
@@ -533,6 +594,12 @@ def parse_session_summary(session_path: Path, project_name: str) -> Optional[Ses
                     total_cache_read_tokens += usage.get('cache_read_input_tokens', 0)
                     total_cache_creation_tokens += usage.get('cache_creation_input_tokens', 0)
 
+                    # Track the model from the last main-thread assistant turn.
+                    if not entry.get('isSidechain'):
+                        entry_model = extract_last_used_model(entry)
+                        if entry_model:
+                            last_model = entry_model
+
                 if isinstance(content, list):
                     for block in content:
                         if isinstance(block, dict):
@@ -556,10 +623,12 @@ def parse_session_summary(session_path: Path, project_name: str) -> Optional[Ses
 
         return SessionSummary(
             id=session_id,
+            custom_title=custom_title,
             project=project_name,
             project_path=project_path,
             created_at=created_at or '',
             last_activity=last_activity or '',
+            model=last_model,
             message_count=message_count,
             tool_call_count=tool_call_count,
             has_errors=has_errors,
@@ -573,6 +642,102 @@ def parse_session_summary(session_path: Path, project_name: str) -> Optional[Ses
         )
     except Exception:
         return None
+
+
+def scan_session_title(session_path: Path) -> Optional[str]:
+    """
+    Read a session file and return its current custom title, or None.
+
+    Lightweight name lookup: substring-prefilters each line on the
+    '"custom-title"' marker and JSON-parses only candidate lines, so untitled
+    sessions cost a cheap string scan instead of a full parse. Multiple
+    custom-title entries may exist (the title gets regenerated); file order is
+    chronological, so the LAST non-empty customTitle wins.
+    """
+    title: Optional[str] = None
+    try:
+        with open(session_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                if '"custom-title"' not in line:
+                    continue
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if entry.get('type') == 'custom-title':
+                    value = entry.get('customTitle')
+                    if value:
+                        title = value
+    except (OSError, UnicodeDecodeError):
+        return None
+    return title
+
+
+def scan_last_model(session_path: Path) -> Optional[str]:
+    """
+    Read a session file and return the model from its most recent main-thread
+    (non-sidechain) assistant turn, or None.
+
+    Lightweight lookup: substring-prefilters each line on the '"model"' marker
+    and JSON-parses only candidate lines, so sessions with few assistant turns
+    cost a cheap string scan instead of a full parse. File order is
+    chronological, so the LAST assistant turn with a recorded model wins (a
+    session can span multiple models after a mid-session model switch).
+    """
+    last_model: Optional[str] = None
+    try:
+        with open(session_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                if '"model"' not in line:
+                    continue
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if entry.get('type') != 'assistant' or entry.get('isSidechain'):
+                    continue
+                value = extract_last_used_model(entry)
+                if value:
+                    last_model = value
+    except (OSError, UnicodeDecodeError):
+        return None
+    return last_model
+
+
+def scan_session_titles(
+    projects_dir: Path,
+    project_dir: Optional[Path] = None,
+) -> Iterator[Tuple[str, str, Optional[str], str]]:
+    """
+    Scan sessions for their custom titles.
+
+    Yields (session_id, project, title, last_activity) for every session file.
+    When project_dir is given, only that project is scanned; otherwise every
+    project under projects_dir is scanned (no row cap). title is None when the
+    session has no custom title. last_activity is an ISO timestamp derived from
+    the file mtime, used only for display/ordering in collision messages.
+    """
+    if project_dir is not None:
+        project_dirs = [project_dir]
+    elif projects_dir.exists():
+        project_dirs = [d for d in projects_dir.iterdir() if d.is_dir()]
+    else:
+        project_dirs = []
+
+    for pdir in project_dirs:
+        project_name = extract_project_name(pdir.name)
+        for session_file in pdir.glob('*.jsonl'):
+            title = scan_session_title(session_file)
+            last_activity = datetime.fromtimestamp(
+                session_file.stat().st_mtime
+            ).isoformat()
+            yield session_file.stem, project_name, title, last_activity
 
 
 def parse_conversation_summaries(
@@ -617,6 +782,7 @@ def parse_conversation_summaries(
                 'session_id': session_path.stem,
                 'project': project_name,
                 'conversation_id': conv_id,
+                'model': None,
                 'message_count': 0,
                 'user_message_count': 0,
                 'assistant_message_count': 0,
@@ -656,6 +822,14 @@ def parse_conversation_summaries(
             conv_data['total_output_tokens'] += usage.get('output_tokens', 0)
             conv_data['total_cache_read_tokens'] += cache_read
             conv_data['total_cache_creation_tokens'] += cache_creation
+
+            # Track the model from the last main-thread assistant turn in
+            # this conversation; file order is chronological so the last
+            # one found wins.
+            if not entry.get('isSidechain'):
+                entry_model = extract_last_used_model(entry)
+                if entry_model:
+                    conv_data['model'] = entry_model
 
             # Count tool calls in assistant messages
             content = message.get('content', '')
@@ -862,6 +1036,12 @@ def parse_full_session(session_path: Path, project_name: str) -> Optional[Sessio
         else:
             messages.append(message)
 
+            # Track the model from the last main-thread assistant turn.
+            if entry_type == 'assistant':
+                entry_model = extract_last_used_model(entry)
+                if entry_model:
+                    model = entry_model
+
         # Track errors from tool calls
         for tc in message.tool_calls:
             if tc.status == ToolCallStatus.ERROR and tc.error:
@@ -1007,14 +1187,15 @@ def extract_subagents_from_session(session_path: Path, project_name: str) -> Lis
     session_id = session_path.stem
     subagents = []
 
-    # Track Task tool calls from main session (these create subagents)
+    # Track Task/Agent tool calls from main session (these create subagents).
+    # "Agent" is the current tool name; "Task" is the legacy name in older sessions.
     task_calls = {}
 
     for entry in iter_session_lines(session_path):
         entry_type = entry.get('type', '')
         timestamp = entry.get('timestamp', '')
 
-        # Find Task tool calls
+        # Find Task/Agent tool calls
         if entry_type == 'assistant':
             message = entry.get('message', {})
             content = message.get('content', '')
@@ -1022,7 +1203,7 @@ def extract_subagents_from_session(session_path: Path, project_name: str) -> Lis
             if isinstance(content, list):
                 for block in content:
                     if isinstance(block, dict) and block.get('type') == 'tool_use':
-                        if block.get('name') == 'Task':
+                        if block.get('name') in ('Task', 'Agent'):
                             tool_id = block.get('id', '')
                             tool_input = block.get('input', {})
                             task_calls[tool_id] = {
@@ -1031,6 +1212,7 @@ def extract_subagents_from_session(session_path: Path, project_name: str) -> Lis
                                 'project': project_name,
                                 'timestamp': timestamp,
                                 'type': tool_input.get('subagent_type', 'unknown'),
+                                'name': tool_input.get('name'),
                                 'prompt': tool_input.get('prompt', ''),
                                 'description': tool_input.get('description', ''),
                                 'model': tool_input.get('model'),
@@ -1175,6 +1357,7 @@ def extract_subagents_from_session(session_path: Path, project_name: str) -> Lis
             'project': project_name,
             'timestamp': data['timestamp'],
             'type': 'unknown',
+            'name': None,
             'prompt': prompt_prefix,
             'description': '',
             'model': None,
@@ -1469,6 +1652,8 @@ def extract_timeline_from_session(
     last_usage_signature: Optional[tuple] = None
     # Track current conversation ID
     current_conversation_id = 1
+    current_turn_id: Optional[str] = None
+    subagent_launch_calls = []
 
     # Process main session entries
     for entry in entries:
@@ -1489,13 +1674,15 @@ def extract_timeline_from_session(
                 command_match = re.search(r'<command-name>/([^<]+)</command-name>', content)
                 if command_match:
                     skill_name = command_match.group(1).strip()
+                    current_turn_id = uuid or f"{session_id}:{timestamp}"
                     user_entry = TimelineEntry(
                         id=uuid,
                         session_id=session_id,
                         timestamp=timestamp,
-                        event_type=TimelineEventType.SKILL,
+                        event_type=TimelineEventType.SKILL_LOAD,
                         name=skill_name,
                         status='invoked',
+                        turn_id=current_turn_id,
                         conversation_id=current_conversation_id,
                     )
                     timeline.append(user_entry)
@@ -1522,6 +1709,7 @@ def extract_timeline_from_session(
                             last_user_entry = user_entry
                             user_got_first_response_cost = False  # Reset for new user turn
                         else:
+                            current_turn_id = uuid or f"{session_id}:{timestamp}"
                             user_entry = TimelineEntry(
                                 id=uuid,
                                 session_id=session_id,
@@ -1530,6 +1718,7 @@ def extract_timeline_from_session(
                                 name='user prompt',
                                 status=None,
                                 input=clean_content,
+                                turn_id=current_turn_id,
                                 conversation_id=current_conversation_id,
                             )
                             timeline.append(user_entry)
@@ -1540,6 +1729,9 @@ def extract_timeline_from_session(
         if entry_type == 'assistant':
             message = entry.get('message', {})
             content = message.get('content', '')
+            response_model = extract_assistant_model(entry)
+            response_turn_id = uuid or f"{session_id}:{timestamp}"
+            row_turn_id = current_turn_id or response_turn_id
 
             # Extract token usage from the message
             usage = message.get('usage', {})
@@ -1582,8 +1774,10 @@ def extract_timeline_from_session(
                         timestamp=timestamp,
                         event_type=TimelineEventType.THINKING,
                         name='thinking',
+                        model=response_model,
                         status=None,
                         output=thinking_content,
+                        turn_id=row_turn_id,
                         conversation_id=current_conversation_id,
                     ))
                 continue
@@ -1597,6 +1791,8 @@ def extract_timeline_from_session(
             # Determine if this is the first assistant response after a user message
             # First response cost goes to user message, subsequent response costs go to tool calls
             is_first_response = not user_got_first_response_cost
+            if is_first_response and last_user_entry is not None and response_model:
+                last_user_entry.model = response_model
 
             # Attribute cost
             if not is_duplicate_usage:
@@ -1606,6 +1802,7 @@ def extract_timeline_from_session(
                     last_user_entry.output_tokens = output_tokens if output_tokens > 0 else None
                     last_user_entry.cache_read_tokens = cache_read_tokens if cache_read_tokens > 0 else None
                     last_user_entry.cache_creation_tokens = cache_creation_tokens if cache_creation_tokens > 0 else None
+                    last_user_entry.turn_id = row_turn_id
                     last_user_entry.turn_cost = turn_cost
                     user_got_first_response_cost = True
 
@@ -1635,8 +1832,10 @@ def extract_timeline_from_session(
                     timestamp=timestamp,
                     event_type=TimelineEventType.ASSISTANT_MESSAGE,
                     name='assistant response',
+                    model=response_model,
                     status=None,
                     output=text_content,
+                    turn_id=row_turn_id,
                     input_tokens=msg_tokens[0],
                     output_tokens=msg_tokens[1],
                     cache_read_tokens=msg_tokens[2],
@@ -1695,21 +1894,73 @@ def extract_timeline_from_session(
                             tool_tokens = (None, None, None, None)
 
                         # Check if this is a subagent launch
-                        if tool_name == 'Task':
+                        if tool_name in ('Task', 'Agent'):
                             subagent_type = tool_input.get('subagent_type', 'unknown')
                             description = tool_input.get('description', '')
                             prompt = tool_input.get('prompt', '')
+                            if prompt:
+                                subagent_launch_calls.append({
+                                    'prompt': prompt,
+                                    'prompt_prefix': prompt[:100],
+                                    'subagent_type': subagent_type,
+                                    'turn_id': row_turn_id,
+                                })
                             timeline.append(TimelineEntry(
                                 id=tool_id,
                                 session_id=session_id,
                                 timestamp=timestamp,
                                 event_type=TimelineEventType.SUBAGENT_START,
                                 name=subagent_type,
+                                model=response_model,
                                 status=status,
+                                agent_name=subagent_type,
                                 details={'description': description},
                                 error_message=error_message,
                                 input=prompt,
                                 output=tool_output,
+                                turn_id=row_turn_id,
+                                input_tokens=tool_tokens[0],
+                                output_tokens=tool_tokens[1],
+                                cache_read_tokens=tool_tokens[2],
+                                cache_creation_tokens=tool_tokens[3],
+                                turn_cost=tool_turn_cost,
+                                conversation_id=current_conversation_id,
+                            ))
+                        elif tool_name == 'Skill':
+                            skill_name = tool_input.get('skill') or tool_name
+                            timeline.append(TimelineEntry(
+                                id=tool_id,
+                                session_id=session_id,
+                                timestamp=timestamp,
+                                event_type=TimelineEventType.SKILL_LOAD,
+                                name=skill_name,
+                                model=response_model,
+                                status=status,
+                                error_message=error_message,
+                                input=tool_input,
+                                output=tool_output,
+                                turn_id=row_turn_id,
+                                input_tokens=tool_tokens[0],
+                                output_tokens=tool_tokens[1],
+                                cache_read_tokens=tool_tokens[2],
+                                cache_creation_tokens=tool_tokens[3],
+                                turn_cost=tool_turn_cost,
+                                conversation_id=current_conversation_id,
+                            ))
+                        elif tool_name.startswith('mcp__'):
+                            _, server_name, function_name = tool_name.split('__', 2)
+                            timeline.append(TimelineEntry(
+                                id=tool_id,
+                                session_id=session_id,
+                                timestamp=timestamp,
+                                event_type=TimelineEventType.MCP_CALL,
+                                name=f"{server_name}.{function_name}",
+                                model=response_model,
+                                status=status,
+                                error_message=error_message,
+                                input=tool_input,
+                                output=tool_output,
+                                turn_id=row_turn_id,
                                 input_tokens=tool_tokens[0],
                                 output_tokens=tool_tokens[1],
                                 cache_read_tokens=tool_tokens[2],
@@ -1724,10 +1975,12 @@ def extract_timeline_from_session(
                                 timestamp=timestamp,
                                 event_type=TimelineEventType.TOOL_CALL,
                                 name=tool_name,
+                                model=response_model,
                                 status=status,
                                 error_message=error_message,
                                 input=tool_input,
                                 output=tool_output,
+                                turn_id=row_turn_id,
                                 input_tokens=tool_tokens[0],
                                 output_tokens=tool_tokens[1],
                                 cache_read_tokens=tool_tokens[2],
@@ -1737,40 +1990,55 @@ def extract_timeline_from_session(
                             ))
 
     # Build a mapping from agent_id to agent_name (subagent_type)
-    # by matching Task calls to subagent files via prompt prefix
+    # by matching subagent launch prompts to subagent files.
     agent_id_to_name = {}
+    agent_id_to_turn_id = {}
+    subagent_file_starts = []
     subagents_dir = session_path.parent / session_id / 'subagents'
 
     if subagents_dir.exists():
-        # First, collect Task calls with their prompts and types
-        task_calls = {}  # Maps prompt_prefix -> subagent_type
-        for entry in entries:
-            if entry.get('type') == 'assistant':
-                message = entry.get('message', {})
-                content = message.get('content', '')
-                if isinstance(content, list):
-                    for block in content:
-                        if isinstance(block, dict) and block.get('type') == 'tool_use':
-                            if block.get('name') == 'Task':
-                                tool_input = block.get('input', {})
-                                prompt = tool_input.get('prompt', '')
-                                subagent_type = tool_input.get('subagent_type', 'unknown')
-                                if prompt:
-                                    task_calls[prompt[:100]] = subagent_type
-
-        # Match subagent files to Task calls by prompt prefix
+        # Match subagent files to launch calls by prompt, preserving parallel launches.
         for subagent_file in subagents_dir.glob('agent-*.jsonl'):
             agent_id = subagent_file.stem.replace('agent-', '')
             subagent_entries = list(iter_session_lines(subagent_file))
             if subagent_entries:
                 first_entry = subagent_entries[0]
-                prompt = first_entry.get('message', {}).get('content', '')
-                prompt_prefix = prompt[:100] if isinstance(prompt, str) else ''
-                if prompt_prefix in task_calls:
-                    agent_id_to_name[agent_id] = task_calls[prompt_prefix]
+                prompt = _extract_text_content(first_entry.get('message', {}).get('content', ''))
+                prompt_prefix = prompt[:100]
+                subagent_file_starts.append({
+                    'agent_id': agent_id,
+                    'timestamp': first_entry.get('timestamp', ''),
+                    'turn_id': first_entry.get('uuid', '') or f"agent-{agent_id}",
+                    'prompt': prompt,
+                })
+                for launch_call in subagent_launch_calls:
+                    if prompt == launch_call['prompt'] or prompt_prefix == launch_call['prompt_prefix']:
+                        agent_id_to_name[agent_id] = launch_call['subagent_type']
+                        agent_id_to_turn_id[agent_id] = launch_call['turn_id']
+                        break
 
     # Process subagent files
     if subagents_dir.exists():
+        for start in subagent_file_starts:
+            agent_id = start['agent_id']
+            if agent_id in agent_id_to_name:
+                continue
+
+            agent_id_to_name[agent_id] = agent_id
+            agent_id_to_turn_id[agent_id] = start['turn_id']
+            timeline.append(TimelineEntry(
+                id=f"agent-{agent_id}",
+                session_id=session_id,
+                timestamp=start['timestamp'],
+                event_type=TimelineEventType.SUBAGENT_START,
+                name=agent_id,
+                status='success',
+                agent_id=agent_id,
+                agent_name=agent_id,
+                input=start['prompt'],
+                turn_id=start['turn_id'],
+            ))
+
         for subagent_file in subagents_dir.glob('agent-*.jsonl'):
             agent_id = subagent_file.stem.replace('agent-', '')
 
@@ -1795,7 +2063,10 @@ def extract_timeline_from_session(
 
                 message = entry.get('message', {})
                 content = message.get('content', '')
+                response_model = extract_assistant_model(entry)
                 timestamp = entry.get('timestamp', '')
+                response_turn_id = entry.get('uuid', '') or f"{agent_id}:{timestamp}"
+                row_turn_id = agent_id_to_turn_id.get(agent_id) or response_turn_id
 
                 # Extract token usage from the message
                 usage = message.get('usage', {})
@@ -1808,6 +2079,7 @@ def extract_timeline_from_session(
                 turn_cost = calculate_turn_cost(
                     input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens
                 )
+                first_subagent_tool_in_response = True
 
                 if isinstance(content, list):
                     for block in content:
@@ -1827,52 +2099,81 @@ def extract_timeline_from_session(
                                     error_message = str(tool_result.get('content', ''))[:200]
                                 tool_output = tool_result.get('content')
 
+                            if tool_name in ('Task', 'Agent'):
+                                tool_event_type = TimelineEventType.SUBAGENT_START
+                                display_name = tool_input.get('subagent_type', 'unknown')
+                            elif tool_name == 'Skill':
+                                tool_event_type = TimelineEventType.SKILL_LOAD
+                                display_name = tool_input.get('skill') or tool_name
+                            elif tool_name.startswith('mcp__'):
+                                _, server_name, function_name = tool_name.split('__', 2)
+                                tool_event_type = TimelineEventType.MCP_CALL
+                                display_name = f"{server_name}.{function_name}"
+                            else:
+                                tool_event_type = TimelineEventType.SUBAGENT_TOOL
+                                display_name = tool_name
+
+                            if first_subagent_tool_in_response:
+                                tool_tokens = (
+                                    total_input_tokens if total_input_tokens > 0 else None,
+                                    output_tokens if output_tokens > 0 else None,
+                                    cache_read_tokens if cache_read_tokens > 0 else None,
+                                    cache_creation_tokens if cache_creation_tokens > 0 else None,
+                                )
+                                tool_turn_cost = turn_cost if turn_cost > 0 else None
+                                first_subagent_tool_in_response = False
+                            else:
+                                tool_tokens = (None, None, None, None)
+                                tool_turn_cost = None
+
                             timeline.append(TimelineEntry(
                                 id=tool_id,
                                 session_id=session_id,
                                 timestamp=timestamp,
-                                event_type=TimelineEventType.SUBAGENT_TOOL,
-                                name=tool_name,
+                                event_type=tool_event_type,
+                                name=display_name,
+                                model=response_model,
                                 status=status,
                                 agent_id=agent_id,
-                                agent_name=agent_id_to_name.get(agent_id),
+                                agent_name=agent_id_to_name.get(agent_id) or agent_id,
+                                details={'description': tool_input.get('description', '')} if tool_name in ('Task', 'Agent') else None,
                                 error_message=error_message,
                                 input=tool_input,
                                 output=tool_output,
-                                input_tokens=total_input_tokens if total_input_tokens > 0 else None,
-                                output_tokens=output_tokens if output_tokens > 0 else None,
-                                cache_read_tokens=cache_read_tokens if cache_read_tokens > 0 else None,
-                                cache_creation_tokens=cache_creation_tokens if cache_creation_tokens > 0 else None,
-                                turn_cost=turn_cost if turn_cost > 0 else None,
+                                turn_id=row_turn_id,
+                                input_tokens=tool_tokens[0],
+                                output_tokens=tool_tokens[1],
+                                cache_read_tokens=tool_tokens[2],
+                                cache_creation_tokens=tool_tokens[3],
+                                turn_cost=tool_turn_cost,
                             ))
 
     # Sort by timestamp
     timeline.sort(key=lambda e: e.timestamp or '')
 
-    # Calculate cumulative session_total and conversation_total
-    # Track seen message IDs to avoid double-counting when multiple tools in same turn
+    turn_numbers: Dict[str, int] = {}
+    next_turn_number = 1
+    for entry in timeline:
+        if not entry.turn_id:
+            continue
+        if entry.turn_id not in turn_numbers:
+            turn_numbers[entry.turn_id] = next_turn_number
+            next_turn_number += 1
+        entry.turn_number = turn_numbers[entry.turn_id]
+
+    # Calculate cumulative session_total and conversation_total.
+    # turn_id groups rows by user request; turn_cost is already placed on one row per API response.
     cumulative_total = 0
     conversation_totals: Dict[int, int] = {}  # conversation_id -> cumulative total
-    seen_turns = set()
 
     for entry in timeline:
         if entry.turn_cost and entry.turn_cost > 0:
-            # Use timestamp + a marker to identify unique API turns
-            # Multiple tool calls in same turn will have same timestamp
-            turn_key = f"{entry.timestamp}:{entry.event_type.value}"
+            cumulative_total += entry.turn_cost
 
-            # Only add to cumulative if we haven't seen this turn
-            # (handles multiple tool calls in same assistant message)
-            if turn_key not in seen_turns:
-                cumulative_total += entry.turn_cost
-
-                # Track conversation total
-                conv_id = entry.conversation_id
-                if conv_id not in conversation_totals:
-                    conversation_totals[conv_id] = 0
-                conversation_totals[conv_id] += entry.turn_cost
-
-                seen_turns.add(turn_key)
+            conv_id = entry.conversation_id
+            if conv_id not in conversation_totals:
+                conversation_totals[conv_id] = 0
+            conversation_totals[conv_id] += entry.turn_cost
 
         entry.session_total = cumulative_total if cumulative_total > 0 else None
         entry.conversation_total = conversation_totals.get(entry.conversation_id, 0) or None
@@ -2013,6 +2314,7 @@ def search_session_file(
         project_path=project_path,
         created_at=created_at,
         last_activity=last_activity,
+        model=scan_last_model(session_path),
         match_count=len(matches),
         matches=matches,
     )

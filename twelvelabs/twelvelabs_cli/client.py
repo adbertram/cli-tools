@@ -14,6 +14,7 @@ from .models import (
 # Default wait configuration
 DEFAULT_POLL_INTERVAL = 5  # seconds
 DEFAULT_TIMEOUT = 600  # 10 minutes
+SUPPORTED_PEGASUS_ENGINES = ("pegasus1.2", "pegasus1.5")
 
 
 class ClientError(Exception):
@@ -103,20 +104,20 @@ class TwelveLabsClient:
 
         Args:
             name: Name for the index
-            engines: List of engine configurations (default: pegasus1.2)
+            engines: List of engine configurations (default: pegasus1.5)
 
         Returns:
             Created Index model
         """
         if engines is None:
-            engines = [{"engine_name": "pegasus1.2", "engine_options": ["visual", "audio"]}]
+            engines = [{"engine_name": "pegasus1.5", "engine_options": ["visual", "audio"]}]
 
         try:
             # SDK expects 'models' parameter with IndexesCreateRequestModelsItem objects
             from twelvelabs.indexes.types.indexes_create_request_models_item import IndexesCreateRequestModelsItem
             models = [
                 IndexesCreateRequestModelsItem(
-                    model_name=e.get("engine_name", "pegasus1.2"),
+                    model_name=e.get("engine_name", "pegasus1.5"),
                     model_options=e.get("engine_options", ["visual", "audio"])
                 )
                 for e in engines
@@ -396,11 +397,42 @@ class TwelveLabsClient:
 
     # ==================== Generate Methods ====================
 
+    def _validate_pegasus_engine(self, engine: str) -> None:
+        if engine not in SUPPORTED_PEGASUS_ENGINES:
+            raise ClientError(
+                f"Unsupported Pegasus engine '{engine}'. "
+                f"Use one of: {', '.join(SUPPORTED_PEGASUS_ENGINES)}."
+            )
+
+    def get_video_asset_id(self, index_id: str, video_id: str) -> str:
+        """Retrieve the source asset ID for an indexed video."""
+        try:
+            video = self.client.indexes.videos.retrieve(index_id=index_id, video_id=video_id)
+            video_data = video.model_dump()
+            if "asset_id" not in video_data:
+                raise ClientError(
+                    f"Indexed video {video_id} does not include asset_id. "
+                    "Pegasus 1.5 analysis requires an asset_id from TwelveLabs."
+                )
+            asset_id = video_data["asset_id"]
+            if not isinstance(asset_id, str) or asset_id.strip() == "":
+                raise ClientError(
+                    f"Indexed video {video_id} returned an invalid asset_id. "
+                    "Pegasus 1.5 analysis requires a non-empty asset_id."
+                )
+            return asset_id
+        except ClientError:
+            raise
+        except Exception as e:
+            raise ClientError(f"Failed to retrieve asset ID for video {video_id}: {e}")
+
     def generate_text(
         self,
         video_id: str,
         prompt: str,
         temperature: Optional[float] = None,
+        engine: str = "pegasus1.5",
+        index_id: Optional[str] = None,
     ) -> str:
         """Generate text from an indexed video with a custom prompt.
 
@@ -408,22 +440,42 @@ class TwelveLabsClient:
             video_id: The video ID to analyze
             prompt: The prompt for text generation
             temperature: Controls randomness (0.0=deterministic, 1.0=creative)
+            engine: Pegasus engine to use for analysis
+            index_id: Index ID required when engine is pegasus1.5
 
         Returns:
             Generated text string
         """
         try:
+            self._validate_pegasus_engine(engine)
+
             # Build kwargs - only include temperature if specified
             kwargs = {
-                "video_id": video_id,
+                "model_name": engine,
                 "prompt": prompt,
             }
             if temperature is not None:
                 kwargs["temperature"] = temperature
 
+            if engine == "pegasus1.2":
+                kwargs["video_id"] = video_id
+            else:
+                if index_id is None or index_id.strip() == "":
+                    raise ClientError(
+                        "Pegasus 1.5 requires index_id so the CLI can resolve "
+                        "the indexed video's asset_id."
+                    )
+                from twelvelabs.types import VideoContext_AssetId
+
+                kwargs["video"] = VideoContext_AssetId(
+                    asset_id=self.get_video_asset_id(index_id=index_id, video_id=video_id)
+                )
+
             # Use analyze method for custom prompts
             response = self.client.analyze(**kwargs)
             return response.data
+        except ClientError:
+            raise
         except Exception as e:
             raise ClientError(f"Failed to generate text: {e}")
 

@@ -3,6 +3,7 @@
 Uses the eBay Fulfillment API to query and manage orders.
 API Docs: https://developer.ebay.com/api-docs/sell/fulfillment/resources/order/methods/getOrders
 """
+from cli_tools_shared.output import command
 COMMAND_CREDENTIALS = {
     "list": ["oauth_authorization_code"],
     "get": ["oauth_authorization_code"],
@@ -16,7 +17,7 @@ from typing import Optional, List, Any, Dict
 
 from ..client import get_client
 from ..config import get_config
-from cli_tools_shared.output import print_json, print_table, handle_error, print_error
+from cli_tools_shared.output import print_json, print_table, handle_error, print_error, prompt_text
 from cli_tools_shared.filters import validate_filters, apply_filters, FilterValidationError
 from ..parsers import format_local_time, format_date
 from ..properties import validate_and_filter_properties, PropertyValidationError
@@ -25,7 +26,28 @@ app = typer.Typer(help="Manage eBay orders")
 shipping_label_app = typer.Typer(help="Manage eBay shipping labels")
 
 
+def _summarize_shipping_label(fulfillments: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Build a friendly shipping_label summary from the most recent fulfillment.
+
+    eBay's Fulfillment API is the only API-accessible source of truth for labels
+    printed outside this CLI (e.g. via the eBay seller hub website) - there is no
+    reconciliation against the Logistics API for those, since they were never
+    created through /sell/logistics/v1_beta/shipment/create_from_shipping_quote.
+    """
+    if not fulfillments:
+        return None
+
+    latest = max(fulfillments, key=lambda f: f.get("shippedDate", ""))
+    return {
+        "carrier": latest.get("shippingCarrierCode", ""),
+        "service": latest.get("shippingServiceCode", ""),
+        "tracking_number": latest.get("shipmentTrackingNumber", ""),
+        "shipped_date": latest.get("shippedDate", ""),
+    }
+
+
 @app.command("list")
+@command
 def orders_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of orders to return (max 200)"),
@@ -50,6 +72,14 @@ def orders_list(
         None,
         "--order-ids",
         help="Comma-separated list of order IDs to retrieve"
+    ),
+    include_shipping_labels: bool = typer.Option(
+        False,
+        "--include-shipping-labels",
+        "--include_shipping_labels",
+        "-i",
+        help="Attach a shipping_label property (carrier/service/tracking) to each order. "
+             "Issues one extra API call per order returned.",
     ),
     filters: Optional[List[str]] = typer.Option(
         None,
@@ -94,7 +124,7 @@ def orders_list(
         ebay orders list --not-shipped
         ebay orders list --filter "total:gt:100"
         ebay orders list --filter "created:gte:2023-01-01"
-        ebay orders list --filter "buyer:ilike:%adam%"
+        ebay orders list --filter "buyer:ilike:%example%"
     """
     try:
         # Check exclusivity
@@ -142,7 +172,7 @@ def orders_list(
             pricing = order.get("pricingSummary", {})
             cancel_status = order.get("cancelStatus", {})
             
-            formatted_orders.append({
+            formatted_order = {
                 "order_id": order.get("orderId", ""),
                 "fulfillment_status": order.get("orderFulfillmentStatus", ""),
                 "status": order.get("orderFulfillmentStatus", ""), # Alias for filtering
@@ -151,12 +181,21 @@ def orders_list(
                 "buyer": buyer.get("username", ""),
                 "total": pricing.get("total", {}).get("value", ""),
                 "created": format_date(order.get("creationDate", "")),
-                # Include full date for better client-side filtering if needed, 
+                # Include full date for better client-side filtering if needed,
                 # but 'created' is what user sees.
-                # Let's add hidden fields if we want precise filtering, 
+                # Let's add hidden fields if we want precise filtering,
                 # but filters usually target visible columns.
-            })
-            
+            }
+
+            if include_shipping_labels:
+                order_id_value = order.get("orderId", "")
+                fulfillments_result = client.get_shipping_fulfillments(order_id_value)
+                formatted_order["shipping_label"] = _summarize_shipping_label(
+                    fulfillments_result.get("fulfillments", [])
+                )
+
+            formatted_orders.append(formatted_order)
+
         # Apply client-side filters (for non-server fields like total, buyer)
         if all_filters:
             formatted_orders = apply_filters(formatted_orders, all_filters)
@@ -172,11 +211,20 @@ def orders_list(
                 raise typer.Exit(1)
 
         if table:
-            print_table(
-                formatted_orders,
-                ["order_id", "fulfillment_status", "payment_status", "cancel_status", "buyer", "total", "created"],
-                ["Order ID", "Fulfillment", "Payment", "Cancel", "Buyer", "Total", "Created"],
-            )
+            columns = ["order_id", "fulfillment_status", "payment_status", "cancel_status", "buyer", "total", "created"]
+            headers = ["Order ID", "Fulfillment", "Payment", "Cancel", "Buyer", "Total", "Created"]
+            table_rows = formatted_orders
+            if include_shipping_labels:
+                columns += ["label_carrier", "label_tracking"]
+                headers += ["Label Carrier", "Label Tracking"]
+                table_rows = []
+                for formatted_order in formatted_orders:
+                    row = dict(formatted_order)
+                    label = row.pop("shipping_label", None) or {}
+                    row["label_carrier"] = label.get("carrier", "")
+                    row["label_tracking"] = label.get("tracking_number", "")
+                    table_rows.append(row)
+            print_table(table_rows, columns, headers)
         else:
             output = {
                 "orders": formatted_orders, 
@@ -190,6 +238,7 @@ def orders_list(
 
 
 @app.command("get")
+@command
 def orders_get(
     order_id: str = typer.Argument(..., help="The eBay order ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display summary as table"),
@@ -221,6 +270,7 @@ def orders_get(
             # For JSON output, merge it into the order object
             if not table:
                 order["fulfillments"] = fulfillments
+                order["shipping_label"] = _summarize_shipping_label(fulfillments)
 
         if table:
             # Show order summary in table format
@@ -276,14 +326,15 @@ def orders_get(
                         fulfillments_data.append({
                             "fulfillment_id": f.get("fulfillmentId", ""),
                             "carrier": f.get("shippingCarrierCode", ""),
-                            "tracking": f.get("trackingNumber", ""),
+                            "service": f.get("shippingServiceCode", ""),
+                            "tracking": f.get("shipmentTrackingNumber", ""),
                             "shipped_date": format_date(f.get("shippedDate", "")),
                         })
 
                     print_table(
                         fulfillments_data,
-                        ["fulfillment_id", "carrier", "tracking", "shipped_date"],
-                        ["Fulfillment ID", "Carrier", "Tracking #", "Shipped"],
+                        ["fulfillment_id", "carrier", "service", "tracking", "shipped_date"],
+                        ["Fulfillment ID", "Carrier", "Service", "Tracking #", "Shipped"],
                     )
 
         else:
@@ -294,6 +345,7 @@ def orders_get(
 
 
 @shipping_label_app.command("create")
+@command
 def shipping_label_create(
     order_id: str = typer.Argument(..., help="The eBay order ID"),
     weight: float = typer.Option(..., help="Package weight value"),
@@ -491,7 +543,10 @@ def shipping_label_create(
 
         selected_rate = None
         if interactive:
-            choice = rate_index
+            choice = int(prompt_text(
+                f"Select a rate to purchase (1-{len(all_rates)})",
+                default=str(rate_index),
+            ))
             if 1 <= choice <= len(all_rates):
                 selected_rate = all_rates[choice - 1]
             else:
@@ -589,6 +644,7 @@ def _void_shipment(shipment_id: str, force: bool):
 
 
 @shipping_label_app.command("void")
+@command
 def shipping_label_void(
     shipment_id: str = typer.Argument(..., help="The shipment ID to void"),
     force: bool = typer.Option(False, "--force", help="Skip confirmation"),
@@ -604,6 +660,7 @@ def shipping_label_void(
 
 
 @shipping_label_app.command("cancel", hidden=True)
+@command
 def shipping_label_cancel(
     shipment_id: str = typer.Argument(..., help="The shipment ID to cancel"),
     force: bool = typer.Option(False, "--force", help="Skip confirmation"),
@@ -613,6 +670,7 @@ def shipping_label_cancel(
 
 
 @shipping_label_app.command("download")
+@command
 def shipping_label_download(
     shipment_id: str = typer.Argument(..., help="The shipment ID"),
     out: str = typer.Option(None, "--out", "-o", help="Output file path (default: label_<shipment_id>.pdf)"),
@@ -641,6 +699,7 @@ def shipping_label_download(
 
 
 @app.command("fulfillments")
+@command
 def orders_fulfillments(
     order_id: str = typer.Argument(..., help="The eBay order ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -669,16 +728,18 @@ def orders_fulfillments(
                 table_data.append({
                     "fulfillment_id": f.get("fulfillmentId", ""),
                     "carrier": f.get("shippingCarrierCode", ""),
-                    "tracking": f.get("trackingNumber", ""),
+                    "service": f.get("shippingServiceCode", ""),
+                    "tracking": f.get("shipmentTrackingNumber", ""),
                     "shipped_date": format_date(f.get("shippedDate", "")),
                 })
 
             print_table(
                 table_data,
-                ["fulfillment_id", "carrier", "tracking", "shipped_date"],
-                ["Fulfillment ID", "Carrier", "Tracking #", "Shipped"],
+                ["fulfillment_id", "carrier", "service", "tracking", "shipped_date"],
+                ["Fulfillment ID", "Carrier", "Service", "Tracking #", "Shipped"],
             )
         else:
+            result["shipping_label"] = _summarize_shipping_label(fulfillments)
             print_json(result)
             
     except Exception as e:

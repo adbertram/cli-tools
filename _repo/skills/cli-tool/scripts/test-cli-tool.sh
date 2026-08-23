@@ -19,11 +19,115 @@ json_error() {
     MESSAGE="$1" python3 -c 'import json, os; print(json.dumps({"error": os.environ["MESSAGE"]}))'
 }
 
+json_test_failure() {
+    local test_name="$1"
+    local file_name="$2"
+    local message="$3"
+    CLI_NAME="$CLI_NAME" COMMAND="$COMMAND" TEST_NAME="$test_name" FILE_NAME="$file_name" MESSAGE="$message" \
+        python3 - <<'PY'
+import json
+import os
+
+message = os.environ["MESSAGE"]
+test_name = os.environ["TEST_NAME"]
+payload = {
+    "success": False,
+    "cli_name": os.environ["CLI_NAME"],
+    "command_filter": os.environ.get("COMMAND") or None,
+    "summary": {"passed": 0, "failed": 1, "skipped": 0, "errors": 0},
+    "auth_required": False,
+    "auth_command": None,
+    "failures": [{
+        "test_name": test_name,
+        "file": os.environ["FILE_NAME"],
+        "message": message[:300],
+        "todo": {
+            "content": f"Fix: {message}"[:150],
+            "activeForm": f"Fixing {test_name}"[:100],
+            "status": "pending",
+        },
+    }],
+    "raw_output": message,
+}
+print(json.dumps(payload, indent=2))
+PY
+}
+
+validate_readme_description_block() {
+    local readme_path="$CLI_DIR/README.md"
+    local readme_file="${readme_path#"$REPO_ROOT"/}"
+    if [[ ! -f "$readme_path" ]]; then
+        json_test_failure \
+            "readme_description_block" \
+            "$readme_file" \
+            "README.md is required for CLI tool: $CLI_NAME"
+        exit 1
+    fi
+
+    if ! README_DESCRIPTION_ERROR="$(
+        README_PATH="$readme_path" \
+        UV_PROJECT_ENVIRONMENT="$SKILL_UV_ENV" \
+        uv run --project "$SKILL_DIR" python3 - <<'PY'
+import os
+import re
+from pathlib import Path
+
+
+def fail(message: str) -> None:
+    print(message)
+    raise SystemExit(1)
+
+
+path = Path(os.environ["README_PATH"])
+lines = path.read_text().splitlines()
+
+try:
+    start = lines.index("## DESCRIPTION")
+except ValueError:
+    fail("README.md must contain a ## DESCRIPTION block")
+
+end = len(lines)
+for index in range(start + 1, len(lines)):
+    if lines[index].startswith("## ") and index != start:
+        end = index
+        break
+
+block = "\n".join(lines[start + 1 : end]).strip()
+sentences = re.findall(r"[^.!?]+[.!?]", block)
+sentence_count = len(sentences)
+if sentence_count < 2 or sentence_count > 3:
+    preview = re.sub(r"\s+", " ", block).strip()
+    if len(preview) > 180:
+        preview = f"{preview[:177]}..."
+    fail(
+        "README.md DESCRIPTION block must contain 2-3 sentences; "
+        f"found {sentence_count}. Current block: {preview!r}"
+    )
+
+if "use" not in block.lower():
+    fail(
+        "README.md DESCRIPTION block must explain why someone would use the CLI; "
+        "include a sentence that contains 'use'."
+    )
+PY
+    )"; then
+        json_test_failure \
+            "readme_description_block" \
+            "$readme_file" \
+            "$README_DESCRIPTION_ERROR"
+        exit 1
+    fi
+
+    echo "[PASS] readme_description_block: README.md contains DESCRIPTION block" >&2
+}
+
 run_auth_status_schema_preflight() {
+    UV_PROJECT_ENVIRONMENT="$SKILL_UV_ENV" \
     PYTHONPATH="$SKILL_DIR/tests${PYTHONPATH:+:$PYTHONPATH}" \
     CLI_NAME="$CLI_NAME" \
     CLI_EXECUTABLE="$CLI_EXECUTABLE" \
-    python3 - <<'PY'
+    COMMAND="$COMMAND" \
+    uv run --project "$SKILL_DIR" python3 - <<'PY'
 import json
 import os
 import subprocess
@@ -48,6 +152,11 @@ def run_command(args: list[str]) -> subprocess.CompletedProcess[str]:
 
 cli_name = os.environ["CLI_NAME"]
 cli_executable = os.environ["CLI_EXECUTABLE"]
+command_filter = os.environ.get("COMMAND")
+
+if command_filter:
+    emit("skipped", "Skipping (command filter active)")
+    raise SystemExit(0)
 
 root_help = run_command([cli_executable, "--help"])
 if root_help.returncode != 0:
@@ -70,14 +179,25 @@ if not has_subcommand(auth_help.stdout, "status"):
     raise SystemExit(0)
 
 status_result = run_command([cli_executable, "auth", "status"])
-if status_result.returncode != 0:
+if status_result.returncode not in (0, 2):
     detail = status_result.stderr.strip() or status_result.stdout.strip()
     emit("failed", f"'{cli_name} auth status' exited {status_result.returncode}: {detail[:300]}")
     raise SystemExit(0)
 
-_, errors = parse_and_validate_stdout(status_result.stdout)
+payload, errors = parse_and_validate_stdout(
+    status_result.stdout,
+    require_authenticated=False,
+)
 if errors:
     emit("failed", "; ".join(errors))
+    raise SystemExit(0)
+
+profiles = payload.get("profiles", []) if isinstance(payload, dict) else []
+if status_result.returncode == 2 or not any(
+    isinstance(profile, dict) and profile.get("authenticated") is True
+    for profile in profiles
+):
+    emit("failed", f"'{cli_name} auth status' is not authenticated. Run '{cli_name} auth login'.")
     raise SystemExit(0)
 
 emit("passed", f"'{cli_name} auth status' matches canonical schema")
@@ -99,7 +219,7 @@ while [[ $# -gt 0 ]]; do
         --command) COMMAND="$2"; shift 2 ;;
         --verbose) VERBOSE=true; shift ;;
         --file) FILE_PATH="$2"; shift 2 ;;
-        *) json_error "Unknown argument: $1" >&2; exit 1 ;;
+        *) json_error "Unknown argument: $1. Use --cli-name <name> or --file <path>." >&2; exit 1 ;;
     esac
 done
 
@@ -136,10 +256,14 @@ if ! command -v uv &>/dev/null; then
     exit 1
 fi
 
+SKILL_UV_ENV="${UV_PROJECT_ENVIRONMENT:-$HOME/.cache/uv/project-envs/cli-tool-skill-tests}"
+
 CLI_DIR="$REPO_ROOT/$CLI_NAME"
 if [[ ! -d "$CLI_DIR" ]]; then
     RESOLVED_CLI_DIR="$(
-        CLI_NAME="$CLI_NAME" python3 - <<'PY'
+        CLI_NAME="$CLI_NAME" \
+        UV_PROJECT_ENVIRONMENT="$SKILL_UV_ENV" \
+        uv run --project "$SKILL_DIR" python3 - <<'PY'
 import os
 import sys
 from pathlib import Path
@@ -182,15 +306,16 @@ PY
 fi
 
 CANONICAL_UV_LAUNCHER="$HOME/.local/bin/$CLI_NAME"
-if [[ -x "$CANONICAL_UV_LAUNCHER" ]]; then
-    CLI_EXECUTABLE="$CANONICAL_UV_LAUNCHER"
-else
-    CLI_EXECUTABLE="$(command -v "$CLI_NAME" 2>/dev/null || true)"
-fi
-if [[ -z "$CLI_EXECUTABLE" ]]; then
-    json_error "CLI executable not found on PATH: $CLI_NAME" >&2
+if [[ ! -f "$CANONICAL_UV_LAUNCHER" || ! -x "$CANONICAL_UV_LAUNCHER" ]]; then
+    json_test_failure \
+        "test_cli_executable_linked" \
+        "test-cli-tool.sh" \
+        "CLI executable link missing, not a regular file, or not executable: $CANONICAL_UV_LAUNCHER"
     exit 1
 fi
+CLI_EXECUTABLE="$CANONICAL_UV_LAUNCHER"
+
+validate_readme_description_block
 
 FORBIDDEN_ROOT_ENV_FILES=()
 for env_file in "$CLI_DIR"/.env "$CLI_DIR"/.env.*; do
@@ -207,7 +332,8 @@ fi
 if ! PLACEHOLDER_VALIDATION_ERROR="$(
     PYTHONPATH="$CLI_DIR:$REPO_ROOT/_repo/cli-tools-shared${PYTHONPATH:+:$PYTHONPATH}" \
     CLI_NAME="$CLI_NAME" \
-    python3 - <<'PY'
+    UV_PROJECT_ENVIRONMENT="$SKILL_UV_ENV" \
+    uv run --project "$SKILL_DIR" python3 - <<'PY'
 import os
 
 from cli_tools_shared.config import validate_auth_profile_secret_placeholders
@@ -229,19 +355,23 @@ cd "$SKILL_DIR" || exit 1
 JUNIT=$(mktemp -t cli-tool-tests-XXXXXX.xml)
 RAW_OUTPUT_FILE=$(mktemp -t cli-tool-tests-raw-XXXXXX.log)
 trap 'rm -f "$JUNIT" "$RAW_OUTPUT_FILE"' EXIT
-export UV_PROJECT_ENVIRONMENT="${UV_PROJECT_ENVIRONMENT:-$HOME/.cache/uv/project-envs/cli-tool-skill-tests}"
+export UV_PROJECT_ENVIRONMENT="$SKILL_UV_ENV"
 
 PRECHECK_JSON="$(
     run_auth_status_schema_preflight 2> >(tee -a "$RAW_OUTPUT_FILE" >&2)
 )"
-PRECHECK_STATUS="$(PRECHECK_JSON="$PRECHECK_JSON" python3 - <<'PY'
+PRECHECK_STATUS="$(PRECHECK_JSON="$PRECHECK_JSON" \
+    UV_PROJECT_ENVIRONMENT="$SKILL_UV_ENV" \
+    uv run --project "$SKILL_DIR" python3 - <<'PY'
 import json
 import os
 
 print(json.loads(os.environ["PRECHECK_JSON"])["status"])
 PY
 )"
-PRECHECK_MESSAGE="$(PRECHECK_JSON="$PRECHECK_JSON" python3 - <<'PY'
+PRECHECK_MESSAGE="$(PRECHECK_JSON="$PRECHECK_JSON" \
+    UV_PROJECT_ENVIRONMENT="$SKILL_UV_ENV" \
+    uv run --project "$SKILL_DIR" python3 - <<'PY'
 import json
 import os
 
@@ -254,10 +384,11 @@ PYTEST_ARGS+=(-k "not test_auth_status_schema")
 [[ -n "$COMMAND" ]] && PYTEST_ARGS+=(--command "$COMMAND")
 $VERBOSE && PYTEST_ARGS+=(-v) || PYTEST_ARGS+=(-q)
 
-uv run pytest "${PYTEST_ARGS[@]}" 2>&1 | tee -a "$RAW_OUTPUT_FILE" >&2
+uv run python -m pytest "${PYTEST_ARGS[@]}" 2>&1 | tee -a "$RAW_OUTPUT_FILE" >&2
 EXIT_CODE=$?
 
 CLI_NAME="$CLI_NAME" COMMAND="$COMMAND" JUNIT="$JUNIT" \
     EXIT_CODE="$EXIT_CODE" RAW_OUTPUT_FILE="$RAW_OUTPUT_FILE" \
     PRECHECK_STATUS="$PRECHECK_STATUS" PRECHECK_MESSAGE="$PRECHECK_MESSAGE" \
-    python3 "$SKILL_DIR/scripts/junit_to_json.py"
+    UV_PROJECT_ENVIRONMENT="$SKILL_UV_ENV" \
+    uv run --project "$SKILL_DIR" python3 "$SKILL_DIR/scripts/junit_to_json.py"

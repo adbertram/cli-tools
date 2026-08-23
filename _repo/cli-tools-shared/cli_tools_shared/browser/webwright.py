@@ -173,7 +173,7 @@ class WebwrightBrowserService:
         self._user_data_dir = profile_dir
 
         width_height = _parse_window_size(window_size)
-        launch_args: list[str] = []
+        launch_args: list[str] = ["--restore-last-session"]
         if user_agent:
             launch_args.append(f"--user-agent={user_agent}")
 
@@ -298,8 +298,8 @@ class WebwrightBrowserService:
     def locator(self, selector: str) -> _ServiceLocator:
         return _ServiceLocator(self, selector)
 
-    def get_by_role(self, role: str, *, name=None) -> _ServiceLocator:
-        return _ServiceLocator.from_role(self, role, name)
+    def get_by_role(self, role: str, *, name=None, exact: bool = False) -> _ServiceLocator:
+        return _ServiceLocator.from_role(self, role, name, exact=exact)
 
     def get_by_placeholder(self, text: str) -> _ServiceLocator:
         return _ServiceLocator(self, f'[placeholder="{text}"]')

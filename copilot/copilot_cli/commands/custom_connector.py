@@ -4,6 +4,7 @@ Custom connectors are user-created connectors in the environment. These can be
 created, modified, and deleted. They wrap custom APIs and enable integration
 with services not covered by managed connectors.
 """
+from cli_tools_shared.output import command
 import sys
 import typer
 import json
@@ -345,6 +346,7 @@ def validate_openapi_definition(openapi_def: dict) -> tuple[bool, str]:
 
 
 @app.command("validate")
+@command
 def custom_connector_validate(
     swagger_file: str = typer.Argument(
         ...,
@@ -493,6 +495,7 @@ def custom_connector_validate(
 
 
 @app.command("list")
+@command
 def custom_connector_list(
     filter: Optional[list[str]] = typer.Option(
         None,
@@ -628,6 +631,7 @@ def custom_connector_list(
 
 
 @app.command("get")
+@command
 def custom_connector_get(
     connector_id: str = typer.Argument(
         ...,
@@ -1052,6 +1056,7 @@ def _generate_expanded_mcp_openapi(
 
 
 @app.command("create")
+@command
 def custom_connector_create(
     name: str = typer.Option(..., "--name", "-n", help="Display name for the connector"),
     swagger_file: Optional[str] = typer.Option(None, "--swagger-file", "-f", help="Path to OpenAPI 2.0 (Swagger) definition file"),
@@ -1066,6 +1071,7 @@ def custom_connector_create(
     oauth_identity_provider: Optional[str] = typer.Option(None, "--oauth-identity-provider", help="OAuth identity provider preset: oauth2|aad|google|github|facebook. Defaults to oauth2."),
     script: Optional[str] = typer.Option(None, "--script", "-x", help="Path to C# script file (.csx) for custom code transformations"),
     script_operations: Optional[str] = typer.Option(None, "--script-operations", help="Comma-separated list of operationIds that use the script (defaults to all operations)"),
+    timeout: Optional[float] = typer.Option(None, "--timeout", help="Read timeout in seconds for the connector-definition write. Defaults to COPILOT_CONNECTOR_WRITE_TIMEOUT or 300."),
     expand_tools: bool = typer.Option(False, "--expand-tools", help="For MCP connectors: expand each MCP tool into an individual connector operation (requires --type mcp --url)"),
     tools_snapshot: Optional[str] = typer.Option(None, "--tools-snapshot", help="Path to a pre-captured MCP tools/list JSON response (for offline/CI use with --expand-tools)"),
 ):
@@ -1248,6 +1254,7 @@ def custom_connector_create(
             oauth_identity_provider=oauth_identity_provider,
             script_file=script_file,
             script_operations=ops_list,
+            timeout=timeout,
         )
 
         connector_id = result["connector_id"]
@@ -1304,6 +1311,7 @@ def custom_connector_create(
 
 
 @app.command("update")
+@command
 def custom_connector_update(
     connector_id: str = typer.Argument(..., help="The connector's unique identifier (e.g., shared_pub-5fasana-...)"),
     swagger_file: Optional[str] = typer.Option(None, "--swagger-file", "-f", help="Path to OpenAPI 2.0 (Swagger) definition file"),
@@ -1316,6 +1324,7 @@ def custom_connector_update(
     oauth_identity_provider: Optional[str] = typer.Option(None, "--oauth-identity-provider", help="OAuth identity provider preset: oauth2|aad|google|github|facebook"),
     script: Optional[str] = typer.Option(None, "--script", "-x", help="Path to C# script file (.csx) for custom code transformations"),
     script_operations: Optional[str] = typer.Option(None, "--script-operations", help="Comma-separated list of operationIds that use the script"),
+    timeout: Optional[float] = typer.Option(None, "--timeout", help="Read timeout in seconds for the connector-definition write. Defaults to COPILOT_CONNECTOR_WRITE_TIMEOUT or 300."),
 ):
     """
     Update an existing custom connector.
@@ -1337,6 +1346,9 @@ def custom_connector_update(
 
       # Update script for specific operations only
       copilot custom-connector update shared_myapi-... --script ./code.csx --script-operations "CreateTask,UpdateTask"
+
+      # Raise the write timeout for a large spec + script that takes a while to apply
+      copilot custom-connector update shared_myapi-... --swagger-file ./api.json --script ./code.csx --timeout 420
 
       # Update description only
       copilot custom-connector update shared_myapi-... --description "Updated API connector"
@@ -1468,6 +1480,7 @@ def custom_connector_update(
             oauth_identity_provider=oauth_identity_provider,
             script_file=script_file,
             script_operations=ops_list,
+            timeout=timeout,
         )
 
         typer.echo(f"Display Name: {result.get('display_name', 'N/A')}")
@@ -1499,6 +1512,7 @@ def custom_connector_update(
 
 
 @app.command("register")
+@command
 def custom_connector_register(
     connector_id: str = typer.Argument(
         ...,
@@ -1627,6 +1641,7 @@ def custom_connector_register(
 
 
 @app.command("delete")
+@command
 @app.command("remove")
 def custom_connector_delete(
     connector_id: str = typer.Argument(

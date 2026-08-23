@@ -2,7 +2,7 @@
 
 import pytest
 
-from cli_test_utils import discover_nested_commands, parse_help_commands
+from cli_test_utils import discover_nested_commands, parse_help_commands, resolve_exclusions
 
 
 def test_nested_groups_list_get_compliance(cli_executable, cli_name, test_config, help_cache, command_filter):
@@ -14,8 +14,8 @@ def test_nested_groups_list_get_compliance(cli_executable, cli_name, test_config
     if cli_name in test_config.get("cli_specific", {}):
         max_depth = test_config["cli_specific"][cli_name].get("max_nested_depth", max_depth)
 
-    excluded_from_get = test_config["exclusions"]["excluded_from_get_required"]
-    excluded_from_list = test_config["exclusions"]["excluded_from_list_required"]
+    excluded_from_get = resolve_exclusions(test_config, cli_name, "excluded_from_get_required")
+    excluded_from_list = resolve_exclusions(test_config, cli_name, "excluded_from_list_required")
 
     # Get main subgroups
     main_help = help_cache("")

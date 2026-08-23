@@ -7,6 +7,33 @@ from pathlib import Path
 from cli_test_utils import run_cli_command
 
 
+_GENERATED_SOURCE_DIRS = {
+    ".claude",
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    "__pycache__",
+    "agent_workspaces",
+    "build",
+    "dist",
+    "node_modules",
+    "venv",
+}
+
+
+def _source_visible_gitignores(cli_tools_root: Path) -> list[str]:
+    return sorted(
+        path.relative_to(cli_tools_root).as_posix()
+        for path in cli_tools_root.rglob(".gitignore")
+        if not any(
+            part in _GENERATED_SOURCE_DIRS
+            for part in path.relative_to(cli_tools_root).parts[:-1]
+        )
+    )
+
+
 def test_tool_directory_exists(cli_dir, command_filter):
     """Assertion 1: Tool directory exists."""
     if command_filter:
@@ -21,8 +48,8 @@ def test_cli_command_available_in_path(cli_name, cli_dir, command_filter):
     """Assertion 2: CLI command is available in PATH.
 
     This test verifies the CLI can be run by name from any shell without
-    activating a virtual environment. This is required for Claude Code and
-    other tools to use the CLI.
+    activating a virtual environment. This is required for agent harnesses and
+    other automation to use the CLI.
 
     The CLI should be accessible via symlink in ~/.local/bin or similar.
     """
@@ -42,7 +69,7 @@ def test_cli_command_available_in_path(cli_name, cli_dir, command_filter):
     )
 
     # Create a clean environment without any venv paths
-    # This simulates what Claude Code or a fresh terminal would see
+    # This simulates what an agent harness or a fresh terminal would see
     clean_env = os.environ.copy()
 
     # Remove any venv-related paths from PATH
@@ -253,32 +280,23 @@ def test_repo_root_is_only_source_visible_gitignore(cli_tools_root, command_filt
     if command_filter:
         pytest.skip("Skipping general setup tests (command filter active)")
 
-    generated_dirs = {
-        ".git",
-        ".mypy_cache",
-        ".pytest_cache",
-        ".ruff_cache",
-        ".venv",
-        "__pycache__",
-        "build",
-        "dist",
-        "node_modules",
-        "venv",
-    }
-    visible_gitignores = sorted(
-        path.relative_to(cli_tools_root).as_posix()
-        for path in cli_tools_root.rglob(".gitignore")
-        if not any(
-            part in generated_dirs
-            for part in path.relative_to(cli_tools_root).parts[:-1]
-        )
-    )
+    visible_gitignores = _source_visible_gitignores(cli_tools_root)
 
     assert visible_gitignores == [".gitignore"], (
         "Only the repo root .gitignore should exist in source directories. "
         f"Found: {visible_gitignores}. "
         "Fix: remove child .gitignore files and put ignore rules in the repo root .gitignore."
     )
+
+
+def test_source_visible_gitignores_excludes_agent_workspaces(tmp_path):
+    """Agent workspaces are runtime output, not source directories."""
+    (tmp_path / ".gitignore").write_text(".venv/\n")
+    workspace = tmp_path / "agent_workspaces" / "worker" / "upstream"
+    workspace.mkdir(parents=True)
+    (workspace / ".gitignore").write_text(".venv/\n")
+
+    assert _source_visible_gitignores(tmp_path) == [".gitignore"]
 
 
 def _is_wrapper_tool(cli_dir, cli_name):

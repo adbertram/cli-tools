@@ -2,12 +2,13 @@
 import typer
 from ..client import get_client
 from ..config import get_config
-from cli_tools_shared.output import print_json, print_table, print_success, print_error, print_info, handle_error
+from cli_tools_shared.output import print_json, print_table, print_success, print_error, print_info, handle_error, command
 
 app = typer.Typer(help="Manage Slack workspace")
 
 
 @app.command("list")
+@command
 def workspace_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
 ):
@@ -60,6 +61,7 @@ def workspace_list(
 
 
 @app.command("switch")
+@command
 def workspace_switch(
     workspace: str = typer.Argument(..., help="Workspace ID or domain to switch to"),
 ):
@@ -117,6 +119,7 @@ def workspace_switch(
 
 
 @app.command("remove")
+@command
 def workspace_remove(
     workspace: str = typer.Argument(..., help="Workspace ID or domain to remove"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
@@ -183,6 +186,7 @@ def workspace_remove(
 
 
 @app.command("info")
+@command
 def workspace_info(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
 ):
@@ -237,6 +241,7 @@ def workspace_info(
 
 
 @app.command("whoami")
+@command
 def whoami(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
 ):

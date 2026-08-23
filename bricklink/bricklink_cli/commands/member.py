@@ -11,12 +11,13 @@ from typing import Optional
 
 from ..client import get_client
 from ..display import print_detail
-from cli_tools_shared.output import print_json, print_success, handle_error
+from cli_tools_shared.output import command, print_json, print_success, handle_error
 
 app = typer.Typer(help="Member information", no_args_is_help=True)
 
 
 @app.command("ratings")
+@command
 def member_ratings(
     username: str = typer.Argument(..., help="Bricklink username"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -38,6 +39,7 @@ def member_ratings(
 
 
 @app.command("note")
+@command
 def member_note(
     username: str = typer.Argument(..., help="Bricklink username"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -59,6 +61,7 @@ def member_note(
 
 
 @app.command("set-note")
+@command
 def member_set_note(
     username: str = typer.Argument(..., help="Bricklink username"),
     text: str = typer.Argument(..., help="Note text"),
@@ -81,6 +84,7 @@ def member_set_note(
 
 
 @app.command("delete-note")
+@command
 def member_delete_note(
     username: str = typer.Argument(..., help="Bricklink username"),
 ):

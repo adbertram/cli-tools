@@ -72,8 +72,30 @@ jobs:
 
       - name: Install CLI
         shell: bash
-        run: ./_repo/skills/cli-tool/scripts/install-cli-tool.sh "${{ matrix.cli }}"
+        run: ./_repo/_scripts/install-cli-tool.sh "${{ matrix.cli }}"
 
-      - name: Run CLI tests
+      - name: Smoke installed CLI
         shell: bash
-        run: ./_repo/skills/cli-tool/scripts/test-cli-tool.sh --cli-name "${{ matrix.cli }}" --verbose
+        run: |
+          command_name="$(python3 - <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          data = tomllib.loads(Path("${{ matrix.cli }}/pyproject.toml").read_text())
+          scripts = data["project"]["scripts"]
+          if len(scripts) != 1:
+              raise SystemExit("expected exactly one project script")
+          print(next(iter(scripts)))
+          PY
+          )"
+          "$HOME/.local/bin/$command_name" --help >/dev/null
+
+      - name: Run tool tests
+        shell: bash
+        run: |
+          if [[ -d "${{ matrix.cli }}/tests" ]]; then
+            cd "${{ matrix.cli }}"
+            uv run pytest -q
+          else
+            echo "No tests directory for ${{ matrix.cli }}; skipping."
+          fi

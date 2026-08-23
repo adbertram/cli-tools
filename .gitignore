@@ -6,11 +6,18 @@ scripts/*.log
 *.bak
 *.bak/
 *~
+*conflicted copy*
 
 .env
 .env.*
 !.env.example
 authentication_profiles/
+.auth-state.json
+auth-state.json
+session.json
+*_session.json
+storage-state.json
+cookies.json
 google/credentials.json
 google/token.json
 
@@ -19,6 +26,9 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .playwright-cli/
+**/.playwright-cli/
+.chromium-profile/
+**/chromium-profile/
 .mypy_cache/
 .ruff_cache/
 
@@ -36,6 +46,16 @@ cache/
 MagicMock/
 agent_workspaces/
 _personal/
+
+# Skills for private CLI tools under _personal/
+_repo/skills/ata-blog*/
+_repo/skills/azlogs*/
+_repo/skills/coursecraft*/
+_repo/skills/legoscout*/
+_repo/skills/n8n-cli-tool-node-converter*/
+_repo/skills/n8n-node*/
+_repo/skills/pluralsight-author*/
+_repo/skills/progress-servicenow*/
 .fallow/
 bricklink/.playwright-recordings/
 
@@ -44,3 +64,9 @@ facebook/data/
 gemini/gemini_cli/.usage.json
 globiflow/.storage/
 n8n/_temp/
+
+# Agent worktrees (transient checkouts, never source)
+**/.claude/worktrees/
+
+# Local planning scratch (never source)
+plans/

@@ -1,6 +1,10 @@
 # Google CLI
 
-Command-line interface for Google Workspace APIs (Docs, Drive, Sheets, Gmail, Calendar, Chat), Google Analytics, Google Search Console, and Google Cloud.
+## DESCRIPTION
+
+The `google` CLI provides a command-line interface for Google Workspace APIs (Docs, Drive, Sheets, Gmail, Calendar).
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Features
 
@@ -9,6 +13,7 @@ Command-line interface for Google Workspace APIs (Docs, Drive, Sheets, Gmail, Ca
 - **Google Sheets**: Create, read, update spreadsheets
 - **Gmail**: List, search, read, send, reply, draft, archive messages; download attachments
 - **Google Calendar**: List, search calendar events (read-only)
+- **Google Contacts**: List and get contacts through the People API (read-only)
 - **Google Analytics**: GA4 reports, top pages, traffic sources, real-time data
 - **Google Search Console**: Request URL indexing, list verified sites
 - **Google Chat**: List spaces, read messages, send messages
@@ -18,14 +23,13 @@ Command-line interface for Google Workspace APIs (Docs, Drive, Sheets, Gmail, Ca
 
 ## Setup
 
-### 1. Install Dependencies
+### 1. Install CLI Launcher
 
 ```bash
-cd <cli-tools-root>/google
-python3 -m venv venv
-source venv/bin/activate
-pip install --upgrade pip
-pip install -e .
+cd <cli-tools-root>
+_repo/skills/cli-tool/scripts/install-cli-tool.sh google
+export PATH="$HOME/.local/bin:$PATH"
+google --version
 ```
 
 ### 2. Get Google OAuth2 Credentials
@@ -38,6 +42,7 @@ pip install -e .
    - Google Sheets API
    - Gmail API
    - Google Calendar API
+   - People API
    - Search Console API
    - Google Analytics Data API
    - Google Analytics Admin API
@@ -47,18 +52,18 @@ pip install -e .
    - Looker Studio API
 4. Go to **Credentials** → **Create Credentials** → **OAuth 2.0 Client ID**
 5. Select **Desktop app** as application type
-6. Download the JSON file and save as `credentials.json` in this directory
+6. Copy the Client ID and Client Secret for `google auth login`
 
-### 3. Add Shell Alias
+### 3. Ensure Launcher Is On PATH
 
 **~/.zshrc or ~/.bashrc:**
 ```bash
-alias google="<cli-tools-root>/google/venv/bin/google"
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
 **~/.config/powershell/Microsoft.PowerShell_profile.ps1:**
 ```powershell
-function google { & "<cli-tools-root>/google/venv/bin/google" @args }
+$env:PATH = "$HOME/.local/bin:$env:PATH"
 ```
 
 ### 4. Install Shell Completion
@@ -82,31 +87,32 @@ exit
 
 ### Authentication
 
-The first time you run any command, you'll be prompted to authenticate via your browser. The token will be saved to `token.json` for subsequent use.
+The first time you run `google auth login`, you'll be prompted for the OAuth Client ID and Client Secret, then authenticated via your browser. The reusable OAuth client values are stored through the CLI-tools secret manager and the active profile keeps only `secret://` references. The token is saved to `token.json` for subsequent use.
 
-**Option 1: Authenticate with OAuth credentials (Recommended)**
-
-If you have OAuth 2.0 Client ID and Client Secret from Google Cloud Console:
-
-```bash
-google auth login --oauth-client-id YOUR_CLIENT_ID --oauth-client-secret YOUR_CLIENT_SECRET
-```
-
-This will automatically create the `credentials.json` file and start the authentication flow.
-
-**Option 2: Manually download credentials.json**
-
-Follow the setup instructions above to download `credentials.json`, then run:
+**Authenticate with OAuth credentials**
 
 ```bash
 google auth login
 ```
+
+This stores the reusable OAuth client values in the CLI-tools secret manager, writes `secret://` references in the active profile, and starts the authentication flow.
 
 **Check authentication status:**
 
 ```bash
 google auth status
 ```
+
+Profile names are CLI-managed identifiers and are not inferred from Google
+account email addresses. List the exact configured names before selecting one:
+
+```bash
+google auth profiles list
+google auth status --profile <profile-name>
+```
+
+Omit `--profile` on normal commands to use the active profile. If a profile is
+needed explicitly, pass an exact name returned by `google auth profiles list`.
 
 **Log out (remove saved token):**
 
@@ -178,10 +184,12 @@ google sheets list --filter "folder:<folder-id>"
 
 # Get spreadsheet metadata
 google sheets get <spreadsheet-id>
+# Inspect tab names before using a sheet-qualified range
+google sheets get <spreadsheet-id> | jq '.sheets[].properties.title'
 
 # Read spreadsheet data
 google sheets read <spreadsheet-id>
-google sheets read <spreadsheet-id> --range "Sheet1!A1:D10"
+google sheets read <spreadsheet-id> --range "A1:D10"
 google sheets read <spreadsheet-id>
 
 # Create a new spreadsheet
@@ -202,10 +210,13 @@ google gmail list --label INBOX
 # Search messages
 google gmail search "from:boss@example.com"
 google gmail search "is:unread"
+google gmail search "is:unread" --properties id,from,subject,labelIds
+# Zero-result searches return [].
 
 # Get message metadata (includes attachment metadata if present)
 google gmail get <message-id>
 google gmail get <message-id> --raw  # Full API response
+# Use gmail draft-get with the r... draft ID for drafts; gmail get is for message IDs.
 
 # Read message content
 google gmail read <message-id>
@@ -237,6 +248,10 @@ google gmail reply-all <message-id> --body "Thanks everyone!"
 # Create a draft
 google gmail draft --to "user@example.com" --subject "Draft email" --body "Message body"
 
+# Inspect a draft using the draft ID returned by gmail draft (for example, r123...)
+google gmail draft-get <draft-id>
+google gmail draft-get <draft-id> --include-body
+
 # Create draft with attachments
 google gmail draft --to "user@example.com" --subject "Files attached" --body "See attached files" \
   --attach /path/to/file1.pdf --attach /path/to/file2.docx
@@ -245,13 +260,35 @@ google gmail draft --to "user@example.com" --subject "Files attached" --body "Se
 google gmail archive <message-id>
 google gmail archive <message-id1> <message-id2>
 
+# Move messages to trash
+google gmail trash <message-id>
+google gmail trash <message-id1> <message-id2>
+
 # Manage labels on messages
 google gmail labels list <message-id>
 google gmail labels add <message-id> --label STARRED
 google gmail labels remove <message-id> --label UNREAD
+
+# Manage Gmail filters (users.settings.filters)
+google gmail filters list
+google gmail filters list --table
+google gmail filters list --filter "from:contains:newsletter" --properties id --properties from
+google gmail filters get <filter-id>
+google gmail filters get <filter-id> --table
+
+# Create a filter: at least one criterion (--from/--to/--subject/--query/
+# --negated-query/--has-attachment/--size) and one action
+# (--add-label/--remove-label/--forward) are required
+google gmail filters create --from "news@example.com" --add-label <label-id>
+google gmail filters create --from "news@example.com" --remove-label INBOX  # auto-archive
+google gmail filters create --query "subject:invoice has:attachment" --add-label <label-id> --remove-label UNREAD
+google gmail filters create --subject "Daily digest" --size 5000000 --size-comparison larger --remove-label INBOX
+
+# Delete a filter (prompts unless --confirm/-y)
+google gmail filters delete <filter-id> --confirm
 ```
 
-**Note:** The `send`, `reply`, and `reply-all` commands show a preview by default. Add `--confirm` to actually send the email.
+**Note:** The `send`, `send-draft`, `reply`, and `reply-all` commands show a preview by default. Passing `--confirm` is the explicit approval boundary and sends the message, including from non-interactive automation.
 
 ### Google Cloud Projects
 
@@ -414,7 +451,7 @@ Or use the `--property` flag to override per-command.
 ```bash
 # List report assets
 google lookerstudio reports list
-google lookerstudio reports list --title "ATA" --limit 25
+google lookerstudio reports list --title "Example" --limit 25
 google lookerstudio reports list --owner owner@example.com --order-by title --table
 
 # Get a report asset by report ID
@@ -422,12 +459,12 @@ google lookerstudio reports get <report-id>
 google lookerstudio reports get <report-id> --properties name,title,owner
 
 # Generate a Linking API URL for creating a report from an existing report
-google lookerstudio reports create-link --report-id <report-id> --report-name "ATA Blog Dashboard"
+google lookerstudio reports create-link --report-id <report-id> --report-name "Example Dashboard"
 
 # Generate a Linking API URL with a Google Analytics data source configuration
 google lookerstudio reports create-link \
   --report-id <report-id> \
-  --report-name "ATA Blog Dashboard" \
+  --report-name "Example Dashboard" \
   --ga-alias ds0 \
   --ga-account-id <ga-account-id> \
   --ga-property-id <ga4-property-id> \
@@ -465,6 +502,21 @@ google calendar search "standup"
 # Get specific event
 google calendar get <event-id>
 ```
+
+### Google Contacts
+
+```bash
+# List contacts
+google contacts list
+google contacts list --limit 1000
+google contacts list --filter "organization:contains:Example"
+google contacts list --properties resourceName,displayName,primaryEmail,organization
+
+# Get a contact by resource name from contacts list
+google contacts get people/<contact-id>
+```
+
+**Note:** Contacts use the People API `contacts.readonly` scope. After adding this scope, re-authenticate with `google auth login --force`.
 
 ### Google Chat
 
@@ -626,15 +678,15 @@ google cache clear
 
 If you encounter authentication issues:
 1. Delete `token.json` to force re-authentication
-2. Verify `credentials.json` is present and valid
+2. Verify the active profile has `secret://` references for `CLIENT_ID` and `CLIENT_SECRET`
 3. Ensure all required APIs are enabled in Google Cloud Console
 
 ### Missing Credentials
 
 If you see "Missing credentials" error:
-1. Download credentials.json from Google Cloud Console
-2. Place it in the `<cli-tools-root>/google/` directory
-3. Or set `GOOGLE_CREDENTIALS_PATH` environment variable
+1. Run `google auth login`
+2. Enter the OAuth Client ID and Client Secret from Google Cloud Console
+3. Confirm the active profile points to `secret://` values for `CLIENT_ID` and `CLIENT_SECRET`
 
 ## API Scopes
 

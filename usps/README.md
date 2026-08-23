@@ -1,6 +1,10 @@
 # USPS CLI
 
-A command-line interface for the [USPS Tracking API](https://developer.usps.com/api/97). Query package tracking status for USPS shipments.
+## DESCRIPTION
+
+The `usps` CLI provides a command-line interface for Usps API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 
@@ -145,7 +149,7 @@ usps tracking get 9400111899223456789012 --table
 
 ## Configuration
 
-Credentials are stored in a `.env` file in the package directory:
+Authentication profile files live under `~/.local/share/cli-tools/usps/authentication_profiles/<profile>/`; non-auth defaults live in `~/.local/share/cli-tools/usps/.env`:
 
 ```bash
 # OAuth credentials (required)

@@ -1,6 +1,10 @@
 # Atlassian CLI
 
-A command-line interface for [Atlassian](https://www.flexoffers.com/affiliate-programs/atlassian-affiliate-program/) using browser automation. CLI interface for Atlassian affiliate-program browser automation
+## DESCRIPTION
+
+The `atlassian` CLI provides a command-line interface for Atlassian (browser automation).
+
+Use it when you need repeatable access to atlassian workflows that are only available through a signed-in website.
 
 ## Installation
 
@@ -72,7 +76,7 @@ atlassian auth logout --profile work
 # Profiles stored as:
 # - profile.json (active profile)
 # - profile-work.json (named profile 'work')
-# - profile-adam.json (named profile 'adam')
+# - profile-team.json (named profile 'team')
 ```
 
 ### Profiles (`atlassian auth profiles`)

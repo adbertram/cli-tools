@@ -1,6 +1,10 @@
 ---
-name: "doordash-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute doordash operations using the `doordash` CLI tool. CLI interface for DoorDash via browser automation -- list orders, get order details, browse stores, and reorder a previous order. Triggers: doordash, doordash cli, doordash orders, food delivery, list restaurants, doordash stores, recent orders, delivery orders, place doordash order, reorder doordash, doordash reorder, re-place doordash order, place a doordash order"
+name: doordash-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute doordash operations using the `doordash` CLI tool.
+  CLI interface for DoorDash via browser automation -- list orders, get order details, browse stores, and reorder a previous order.
+  Triggers: doordash, doordash cli, doordash orders, food delivery, list restaurants, doordash stores, recent orders, delivery orders, place doordash order, reorder doordash, doordash reorder, re-place doordash order, place a doordash order
 ---
 
 <objective>
@@ -27,7 +31,7 @@ doordash <command-group> <action> [arguments] [options]
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `doordash` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `doordash` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 

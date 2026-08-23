@@ -1,18 +1,24 @@
 # Manus CLI Guide
 
-Reference for the `manus` command-line interface for the public Manus API v2.
+## DESCRIPTION
+
+The `manus` CLI provides a command-line interface for Manus AI API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Overview
 
 The Manus CLI provides:
 - `auth` for API-key authentication
 - `task` for Manus task lifecycle operations
+- `usage` for credit-balance checks
 - `cache` for cache management
 
 The CLI now targets the current v2 API surface:
 - Base URL: `https://api.manus.ai`
 - API key header: `x-manus-api-key`
 - Task endpoints: `task.create`, `task.detail`, `task.list`, `task.sendMessage`, `task.listMessages`, `task.update`, `task.stop`, `task.delete`, `task.confirmAction`
+- Usage endpoint: `usage.availableCredits`
 
 ## Authentication
 
@@ -26,7 +32,9 @@ manus auth logout
 
 ### Create
 
-Create a new task. By default the CLI waits for a terminal `task.listMessages` status update and returns the task plus recent messages.
+Create a new task. By default the CLI polls `task.listMessages` until the task stops, errors, or pauses for a confirmable user action, then returns the task plus recent messages. A `waiting` status without a confirmation event (for example a queued task that has not started running) is non-terminal and polling continues until `--timeout` expires.
+
+Before creating a task, the CLI checks `usage.availableCredits` and fails before submission when the authoritative `total_credits` field is present and at or below zero. It does not treat `max_refresh_credits` or `pro_monthly_credits` as spendable balance. When `total_credits` is omitted, the task-creation response decides admission: documented `rate_limited` responses retry, while `resource_exhausted` credit failures return immediately.
 
 ```bash
 manus task create "Write a Python function for Fibonacci sequence"
@@ -69,7 +77,7 @@ manus task get <task-id> --table
 
 ### Wait
 
-Poll `task.listMessages` until the task reaches `stopped`, `waiting`, or `error`.
+Poll `task.listMessages` until the task reaches `stopped`, `error`, or a `waiting` status with a confirmable event (`status_update.status_detail.waiting_for_event_id` / `waiting_for_event_type`, for example `messageAskUser`). A `waiting` status without a confirmation event (for example a queued task that has not started running) is non-terminal and polling continues. On timeout the command exits non-zero.
 
 ```bash
 manus task wait <task-id>
@@ -148,4 +156,10 @@ manus auth profiles delete staging
 
 ```bash
 manus cache --help
+```
+
+## Usage
+
+```bash
+manus usage available-credits
 ```

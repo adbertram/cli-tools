@@ -138,13 +138,16 @@ def test_update():
 def test_delete():
     item_id = 1
 
-    client, http = get_client_and_http()
-    http.request = Mock(return_value=(None, None))
-
+    # Plain delete: a single, well-formed path with no trailing '?'.
+    client, check_assertions = check_client_method()
     result = client.Item.delete(item_id)
+    check_assertions(result, 'DELETE', '/item/%s' % item_id)
 
-    eq_(None, result)
-    http.request.assert_called_once_with("%s/item/%s?" % (URL_BASE, item_id),
-                                         'DELETE',
-                                         body=None,
-                                         headers={})
+    # Flagged delete: silent/hook options must yield exactly one '?' and must
+    # not be corrupted into '.../item/1?silent=true&hook=false?' (which Podio
+    # rejected, so the item was silently never deleted). The response must be
+    # returned (not swallowed into None), so a failed delete cannot masquerade
+    # as a success.
+    client, check_assertions = check_client_method()
+    result = client.Item.delete(item_id, silent=True, hook=False)
+    check_assertions(result, 'DELETE', '/item/%s?silent=true&hook=false' % item_id)

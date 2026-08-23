@@ -92,8 +92,8 @@ def test_create_post_wraps_payload_under_article_key():
                     "title": "Hello DEV",
                     "description": "Short description",
                     "slug": "hello-dev",
-                    "path": "/adam/hello-dev",
-                    "url": "https://dev.to/adam/hello-dev",
+                    "path": "/example-user/hello-dev",
+                    "url": "https://dev.to/example-user/hello-dev",
                     "published_at": "2026-05-18T10:00:00Z",
                     "published_timestamp": "2026-05-18T10:00:00Z",
                     "created_at": "2026-05-18T10:00:00Z",
@@ -102,7 +102,7 @@ def test_create_post_wraps_payload_under_article_key():
                     "cover_image": "https://example.com/image.png",
                     "tag_list": ["python", "cli"],
                     "body_markdown": "**Hi**",
-                    "user": {"name": "Adam", "username": "adam"},
+                    "user": {"name": "Example User", "username": "example-user"},
                 },
                 status_code=201,
             )
@@ -139,8 +139,8 @@ def test_list_posts_uses_authenticated_articles_endpoint():
                         "title": "Draft",
                         "description": "One",
                         "slug": "draft",
-                        "path": "/adam/draft",
-                        "url": "https://dev.to/adam/draft",
+                        "path": "/example-user/draft",
+                        "url": "https://dev.to/example-user/draft",
                         "published_at": None,
                         "published_timestamp": None,
                         "created_at": "2026-05-18T09:00:00Z",
@@ -149,7 +149,7 @@ def test_list_posts_uses_authenticated_articles_endpoint():
                         "cover_image": None,
                         "tag_list": "python, cli",
                         "body_markdown": "Body",
-                        "user": {"name": "Adam", "username": "adam"},
+                        "user": {"name": "Example User", "username": "example-user"},
                     }
                 ]
             )
@@ -177,8 +177,8 @@ def test_get_post_uses_authenticated_all_articles_endpoint():
                         "title": "Draft",
                         "description": "One",
                         "slug": "draft",
-                        "path": "/adam/draft",
-                        "url": "https://dev.to/adam/draft",
+                        "path": "/example-user/draft",
+                        "url": "https://dev.to/example-user/draft",
                         "published": False,
                         "published_at": None,
                         "published_timestamp": None,
@@ -188,7 +188,7 @@ def test_get_post_uses_authenticated_all_articles_endpoint():
                         "cover_image": None,
                         "tag_list": [],
                         "body_markdown": "Body",
-                        "user": {"name": "Adam", "username": "adam"},
+                        "user": {"name": "Example User", "username": "example-user"},
                     }
                 ]
             )
@@ -212,8 +212,8 @@ def test_remove_post_uses_documented_unpublish_endpoint():
         "title": "Published",
         "description": "One",
         "slug": "published",
-        "path": "/adam/published",
-        "url": "https://dev.to/adam/published",
+        "path": "/example-user/published",
+        "url": "https://dev.to/example-user/published",
         "published": True,
         "published_at": "2026-05-18T09:00:00Z",
         "published_timestamp": "2026-05-18T09:00:00Z",
@@ -223,7 +223,7 @@ def test_remove_post_uses_documented_unpublish_endpoint():
         "cover_image": None,
         "tag_list": [],
         "body_markdown": "Body",
-        "user": {"name": "Adam", "username": "adam"},
+        "user": {"name": "Example User", "username": "example-user"},
     }
     unpublished_article = {
         **published_article,
@@ -262,8 +262,8 @@ def test_remove_post_returns_existing_unpublished_article_without_unpublish_requ
         "title": "Draft",
         "description": "One",
         "slug": "draft",
-        "path": "/adam/draft",
-        "url": "https://dev.to/adam/draft",
+        "path": "/example-user/draft",
+        "url": "https://dev.to/example-user/draft",
         "published": False,
         "published_at": None,
         "published_timestamp": None,
@@ -273,7 +273,7 @@ def test_remove_post_returns_existing_unpublished_article_without_unpublish_requ
         "cover_image": None,
         "tag_list": [],
         "body_markdown": "Body",
-        "user": {"name": "Adam", "username": "adam"},
+        "user": {"name": "Example User", "username": "example-user"},
     }
     session = FakeSession([])
     client = DevToClient(config=config(), session=session)

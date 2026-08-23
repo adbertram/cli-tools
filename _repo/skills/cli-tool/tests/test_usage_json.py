@@ -102,6 +102,7 @@ def test_help_parameters_parse_rich_sections():
 ╭─ Options ─────────────────────────────────────────────────────────────────╮
 │ --limit            -l      INTEGER  Maximum rows [default: 10]            │
 │ --profile                  TEXT     Profile name [env var: PROFILE]       │
+│ --credential-type,--credential  -c  TEXT     Credential type              │
 │ --table            -t               Display as table                      │
 │ --help                              Show this message and exit.           │
 ╰───────────────────────────────────────────────────────────────────────────╯
@@ -126,6 +127,13 @@ def test_help_parameters_parse_rich_sections():
                 "required": False,
                 "help": "Profile name",
                 "env_var": "PROFILE",
+            },
+            {
+                "name": "--credential-type",
+                "type": "TEXT",
+                "required": False,
+                "help": "Credential type",
+                "short": "-c",
             },
             {
                 "name": "--table",

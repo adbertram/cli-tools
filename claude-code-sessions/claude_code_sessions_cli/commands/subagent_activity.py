@@ -1,17 +1,25 @@
 """Subagent activity commands for Claude Code Sessions CLI."""
+COMMAND_CREDENTIALS = {
+    "list": ["no_auth"],
+    "get": ["no_auth"],
+}
+
 import typer
 from typing import Optional, List
 from ..client import get_client, ClientError
 from cli_tools_shared.filters import apply_filters
-from cli_tools_shared.output import print_json, print_table, handle_error
+from cli_tools_shared.output import command, print_json, print_table, handle_error
+from .session_arg import resolve_session_arg
 
 app = typer.Typer(help="Query subagent invocations", no_args_is_help=True)
 
 
 @app.command("list")
+@command
 def list_subagent_activity(
     project: str = typer.Option(..., "--project", "-p", help="Project name (required)"),
-    session_id: Optional[str] = typer.Option(None, "--session-id", "-S", help="Filter to specific session"),
+    session_id: Optional[str] = typer.Option(None, "--session-id", "-S", help="Session ID (UUID or name)"),
+    session_name: Optional[str] = typer.Option(None, "--session-name", "-N", help="Session name (exact, case-insensitive)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum results"),
     since: Optional[str] = typer.Option(None, "--since", "-s", help="Time filter: 5h, 1d, 7d"),
@@ -22,13 +30,14 @@ def list_subagent_activity(
     List all subagent invocations for a project.
 
     Example:
-        claude-code-sessions subagent-activity list --project Agent-ATABlogger
-        claude-code-sessions subagent-activity list --project Agent-ATABlogger --since 5h
-        claude-code-sessions subagent-activity list --project Agent-ATABlogger --filter "type:eq:Explore"
-        claude-code-sessions subagent-activity list --project Agent-ATABlogger --session-id abc123
+        claude-code-sessions subagent-activity list --project ExampleProject
+        claude-code-sessions subagent-activity list --project ExampleProject --since 5h
+        claude-code-sessions subagent-activity list --project ExampleProject --filter "type:eq:Explore"
+        claude-code-sessions subagent-activity list --project ExampleProject --session-id abc123
     """
     try:
         client = get_client()
+        session_id = resolve_session_arg(client, session_id, session_name, project=project)
         subagents = client.list_subagent_activity(project=project, limit=limit, since=since)
 
         # Convert to dicts for filtering/output
@@ -74,6 +83,7 @@ def list_subagent_activity(
 
 
 @app.command("get")
+@command
 def get_subagent(
     subagent_id: str = typer.Argument(..., help="Subagent/tool call ID"),
     project: str = typer.Option(..., "--project", "-p", help="Project name (required)"),
@@ -83,7 +93,7 @@ def get_subagent(
     Get full details for a subagent invocation.
 
     Example:
-        claude-code-sessions subagent-activity get tool-123 --project Agent-ATABlogger
+        claude-code-sessions subagent-activity get tool-123 --project ExampleProject
     """
     try:
         client = get_client()

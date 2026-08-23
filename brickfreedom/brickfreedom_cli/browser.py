@@ -1,9 +1,9 @@
 """Browser automation for Brickfreedom dashboard."""
 
-from cli_tools_shared.auth import BrowserAutomation
+from cli_tools_shared.auth import PlaywrightBrowserAutomation
 
 
-class BrickfreedomBrowser(BrowserAutomation):
+class BrickfreedomBrowser(PlaywrightBrowserAutomation):
     """Browser automation for Brickfreedom dashboard."""
 
     SESSION_NAME = "brickfreedom"
@@ -11,3 +11,4 @@ class BrickfreedomBrowser(BrowserAutomation):
     AUTH_CHECK_URL = "https://brickfreedom.com/dashboard"
     AUTH_URL_PATTERN = r"/login|/register"
     AUTH_SUCCESS_SELECTOR = 'h2.text-xl'
+    PLAYWRIGHT_EXECUTABLE_PATH = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"

@@ -17,6 +17,7 @@ from .models import (
     Automation,
     ButtondownModel,
     Email,
+    EmailAnalytics,
     ExternalFeed,
     Newsletter,
     Render,
@@ -26,6 +27,7 @@ from .models import (
     create_account,
     create_automation,
     create_email,
+    create_email_analytics,
     create_external_feed,
     create_newsletter,
     create_render,
@@ -395,6 +397,9 @@ class ButtondownClient:
             data=self._payload({"recipients": recipients, "subscribers": subscribers}),
         )
         return ActionResult(ok=True, action="send_draft", id=email_id)
+
+    def get_email_analytics(self, email_id: str) -> EmailAnalytics:
+        return create_email_analytics(self._make_request("GET", f"/emails/{email_id}/analytics"))
 
     def list_tags(self, limit: int = 100, filters: Optional[List[str]] = None) -> List[Tag]:
         params = self._params_from_filters("tags", TAG_FILTERS, filters)

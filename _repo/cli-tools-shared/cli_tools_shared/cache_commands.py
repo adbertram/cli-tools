@@ -21,14 +21,16 @@ def create_cache_app(get_config_fn):
 
     @app.command("clear")
     @command
-    def cache_clear():
+    def cache_clear(
+        profile: str | None = typer.Option(None, "--profile", help="Profile name"),
+    ):
         """Remove all cached responses.
 
         Deletes every file in the cache directory
         ({storage_dir}/cache/) and reports how many files
         and bytes were freed.
         """
-        config = get_config_fn()
+        config = get_config_fn(profile=profile)
         cache_dir = Path(config.storage_dir) / "cache"
 
         if not cache_dir.exists():

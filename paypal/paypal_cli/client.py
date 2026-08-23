@@ -1,21 +1,26 @@
-"""PayPal API client with OAuth2 authentication.
-
-Provides:
-- OAuth2 API client for REST API authentication
-"""
+"""PayPal API client with OAuth2 authentication."""
 import base64
 import time
-from typing import Dict, List, Optional
+from datetime import date, datetime, time as dt_time, timedelta, timezone
+import re
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 import requests
 
 from cli_tools_shared.exceptions import ClientError
+from cli_tools_shared.filters import apply_filters, validate_filters
 from .config import get_config
 
 
 # Retry configuration
 DEFAULT_MAX_RETRIES = 3
 DEFAULT_BASE_DELAY = 1.0  # seconds
+DEFAULT_TRANSACTION_PAGE_SIZE = 100
+MAX_TRANSACTION_PAGE_SIZE = 500
+MAX_TRANSACTION_WINDOW_DAYS = 31
+_TRANSACTION_WINDOW_SPAN = timedelta(days=MAX_TRANSACTION_WINDOW_DAYS) - timedelta(seconds=1)
+_DATE_ONLY_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_TZ_OFFSET_NO_COLON_PATTERN = re.compile(r"([+-]\d{2})(\d{2})$")
 
 
 def _calculate_retry_delay(attempt: int, base_delay: float = DEFAULT_BASE_DELAY) -> float:
@@ -39,7 +44,7 @@ class PayPalApiClient:
             missing = self.config.get_missing_credentials()
             raise ClientError(
                 f"Missing API credentials: {', '.join(missing)}. "
-                "Add them to your .env file."
+                "Run `paypal auth login -c oauth` to configure PayPal API credentials."
             )
 
         self.base_url = self.config.api_base_url
@@ -104,7 +109,15 @@ class PayPalApiClient:
             self.authenticate()
         return self._access_token
 
-    def _make_request(self, method: str, endpoint: str, data: Dict = None, params: Dict = None, retry: bool = True) -> Dict:
+    def _make_request(
+        self,
+        method: str,
+        endpoint: str,
+        data: Dict = None,
+        params: Dict = None,
+        retry: bool = True,
+        extra_headers: Optional[Dict[str, str]] = None,
+    ) -> Dict:
         """Make authenticated API request with retry logic."""
         token = self.get_access_token()
 
@@ -112,8 +125,10 @@ class PayPalApiClient:
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
-            "Accept": "application/json"
+            "Accept": "application/json",
         }
+        if extra_headers:
+            headers.update(extra_headers)
 
         max_retries = DEFAULT_MAX_RETRIES if retry else 1
         last_error = None
@@ -162,9 +177,53 @@ class PayPalApiClient:
         """GET request to PayPal API."""
         return self._make_request("GET", endpoint, params=params)
 
-    def post(self, endpoint: str, data: Dict = None) -> Dict:
+    def post(
+        self,
+        endpoint: str,
+        data: Dict = None,
+        extra_headers: Optional[Dict[str, str]] = None,
+    ) -> Dict:
         """POST request to PayPal API."""
-        return self._make_request("POST", endpoint, data=data)
+        return self._make_request("POST", endpoint, data=data, extra_headers=extra_headers)
+
+    def refund_capture(
+        self,
+        *,
+        capture_id: str,
+        amount: Optional[str] = None,
+        currency: str = "USD",
+        invoice_id: Optional[str] = None,
+        custom_id: Optional[str] = None,
+        note_to_payer: Optional[str] = None,
+        idempotency_key: str,
+    ) -> Dict[str, Any]:
+        """Refund a captured payment by capture ID."""
+        payload: Dict[str, Any] = {}
+        if amount is not None:
+            payload["amount"] = {"value": amount, "currency_code": currency}
+        if invoice_id:
+            payload["invoice_id"] = invoice_id
+        if custom_id:
+            payload["custom_id"] = custom_id
+        if note_to_payer:
+            payload["note_to_payer"] = note_to_payer
+
+        refund = self.post(
+            f"/v2/payments/captures/{capture_id}/refund",
+            data=payload,
+            extra_headers={"PayPal-Request-Id": idempotency_key},
+        )
+
+        request = {
+            "capture_id": capture_id,
+            "refund_type": "partial" if amount is not None else "full",
+            "amount": payload.get("amount"),
+            "invoice_id": invoice_id,
+            "custom_id": custom_id,
+            "note_to_payer": note_to_payer,
+            "idempotency_key": idempotency_key,
+        }
+        return {"request": request, "refund": refund}
 
     def create_payout(self, items: List[Dict], email_subject: str = None, email_message: str = None) -> Dict:
         """Create a batch payout."""
@@ -194,6 +253,158 @@ class PayPalApiClient:
     def cancel_payout_item(self, payout_item_id: str) -> Dict:
         """Cancel an unclaimed payout item."""
         return self.post(f"/v1/payments/payouts-item/{payout_item_id}/cancel")
+
+    @staticmethod
+    def _normalize_transaction_datetime(value: str, *, is_end: bool) -> datetime:
+        """Normalize user-provided date/datetime input to a UTC datetime."""
+        raw_value = value.strip()
+        if not raw_value:
+            raise ClientError("Date values cannot be empty.")
+
+        if _DATE_ONLY_PATTERN.fullmatch(raw_value):
+            try:
+                parsed_date = date.fromisoformat(raw_value)
+            except ValueError as exc:
+                raise ClientError(
+                    f"Invalid date value '{value}'. Use YYYY-MM-DD or an ISO-8601 datetime."
+                ) from exc
+            if is_end:
+                return datetime.combine(parsed_date, dt_time(23, 59, 59), tzinfo=timezone.utc)
+            return datetime.combine(parsed_date, dt_time(0, 0, 0), tzinfo=timezone.utc)
+
+        normalized = raw_value.replace("Z", "+00:00")
+        normalized = _TZ_OFFSET_NO_COLON_PATTERN.sub(r"\1:\2", normalized)
+        try:
+            parsed = datetime.fromisoformat(normalized)
+        except ValueError as exc:
+            raise ClientError(
+                f"Invalid date value '{value}'. Use YYYY-MM-DD or an ISO-8601 datetime."
+            ) from exc
+
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        else:
+            parsed = parsed.astimezone(timezone.utc)
+        return parsed.replace(microsecond=0)
+
+    @classmethod
+    def normalize_transaction_range(cls, start_date: str, end_date: str) -> Tuple[datetime, datetime]:
+        """Normalize and validate a transaction date range."""
+        normalized_start = cls._normalize_transaction_datetime(start_date, is_end=False)
+        normalized_end = cls._normalize_transaction_datetime(end_date, is_end=True)
+        if normalized_end < normalized_start:
+            raise ClientError("end-date must be greater than or equal to start-date.")
+        return normalized_start, normalized_end
+
+    @staticmethod
+    def format_transaction_datetime(value: datetime) -> str:
+        """Format a UTC datetime for the PayPal reporting API."""
+        return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    @classmethod
+    def iter_transaction_windows(
+        cls, start_date: datetime, end_date: datetime
+    ) -> Iterator[Tuple[datetime, datetime]]:
+        """Yield inclusive transaction-search windows no larger than 31 days."""
+        current_start = start_date
+        while current_start <= end_date:
+            current_end = min(current_start + _TRANSACTION_WINDOW_SPAN, end_date)
+            yield current_start, current_end
+            if current_end == end_date:
+                break
+            current_start = current_end + timedelta(seconds=1)
+
+    def list_transactions(
+        self,
+        *,
+        start_date: str,
+        end_date: str,
+        limit: int = 100,
+        filters: Optional[List[str]] = None,
+        page_size: int = DEFAULT_TRANSACTION_PAGE_SIZE,
+        fields: str = "all",
+        balance_affecting_records_only: str = "Y",
+        transaction_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """List transactions across one or more 31-day windows."""
+        if limit <= 0:
+            return []
+
+        page_size = max(1, min(page_size, MAX_TRANSACTION_PAGE_SIZE))
+        validate_filters(filters or [])
+        normalized_start, normalized_end = self.normalize_transaction_range(start_date, end_date)
+
+        transactions: List[Dict[str, Any]] = []
+        for window_start, window_end in self.iter_transaction_windows(normalized_start, normalized_end):
+            page = 1
+            while True:
+                remaining = limit - len(transactions)
+                if remaining <= 0:
+                    return transactions[:limit]
+
+                request_page_size = page_size if filters else min(page_size, remaining)
+                params = {
+                    "start_date": self.format_transaction_datetime(window_start),
+                    "end_date": self.format_transaction_datetime(window_end),
+                    "fields": fields,
+                    "page_size": request_page_size,
+                    "page": page,
+                    "balance_affecting_records_only": balance_affecting_records_only,
+                }
+                if transaction_id:
+                    params["transaction_id"] = transaction_id
+
+                response = self._make_request(
+                    "GET",
+                    "/v1/reporting/transactions",
+                    params=params,
+                    extra_headers={"PayPal-Enforce-ISO8601-Format": "true"},
+                )
+
+                page_transactions = response.get("transaction_details", [])
+                if not page_transactions:
+                    break
+
+                if filters:
+                    page_transactions = apply_filters(page_transactions, filters)
+
+                transactions.extend(page_transactions)
+                if len(transactions) >= limit:
+                    return transactions[:limit]
+
+                current_page = int(response.get("page", page))
+                total_pages = int(response.get("total_pages", current_page))
+                if current_page >= total_pages:
+                    break
+                page += 1
+
+        return transactions[:limit]
+
+    def get_transaction(
+        self,
+        *,
+        transaction_id: str,
+        start_date: str,
+        end_date: str,
+        page_size: int = DEFAULT_TRANSACTION_PAGE_SIZE,
+        fields: str = "all",
+        balance_affecting_records_only: str = "Y",
+    ) -> Dict[str, Any]:
+        """Get transaction-search matches for a PayPal transaction ID."""
+        matches = self.list_transactions(
+            start_date=start_date,
+            end_date=end_date,
+            limit=MAX_TRANSACTION_PAGE_SIZE,
+            page_size=page_size,
+            fields=fields,
+            balance_affecting_records_only=balance_affecting_records_only,
+            transaction_id=transaction_id,
+        )
+        return {
+            "transaction_id": transaction_id,
+            "transaction_details": matches,
+            "matching_transaction_count": len(matches),
+        }
 
 
 # ==================== Client Factory ====================

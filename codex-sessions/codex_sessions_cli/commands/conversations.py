@@ -8,8 +8,8 @@ from .common import emit_list, emit_one
 app = typer.Typer(help="List and query Codex conversation turns", no_args_is_help=True)
 COMMAND_CREDENTIALS = {"list": ["custom"], "get": ["custom"]}
 
-CONVERSATION_COLUMNS = ["id", "project", "conversation_id", "last_activity", "message_count", "tool_call_count"]
-CONVERSATION_HEADERS = ["ID", "Project", "Conversation", "Last Activity", "Messages", "Tools"]
+CONVERSATION_COLUMNS = ["id", "project", "conversation_id", "last_activity", "model", "message_count", "tool_call_count"]
+CONVERSATION_HEADERS = ["ID", "Project", "Conversation", "Last Activity", "Model", "Messages", "Tools"]
 
 
 @app.command("list")

@@ -2,12 +2,17 @@
 
 import shutil
 from pathlib import Path
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 
 from .config import (
     _DEFAULT_ROOT_CONFIG_FIELDS,
+    _delete_secret_value,
     _merge_config_values,
     _read_env_values,
+    _secret_exists,
+    _secret_name_from_placeholder,
+    _secret_placeholder,
+    _set_secret_value,
     _split_env_values,
     _write_env_values,
     config_env_path_for_tool,
@@ -17,6 +22,7 @@ from .config import (
     implicit_profile_auth_type,
     list_env_files,
     profile_name_from_path,
+    read_cli_tool_secret,
     read_profile_active,
 )
 from .exceptions import ConfigError
@@ -260,3 +266,175 @@ def delete_profile(config_or_dir, name: str):
         shutil.rmtree(profile_data_dir)
     elif target.exists():
         target.unlink()
+
+
+def _profile_secret_placeholders(env_path: Path) -> list[tuple[str, str]]:
+    """Return ``(field_name, secret_name)`` for every ``secret://`` field."""
+    placeholders: list[tuple[str, str]] = []
+    for field_name, value in _read_env_values(env_path).items():
+        if not value:
+            continue
+        try:
+            secret_name = _secret_name_from_placeholder(value)
+        except ConfigError as exc:
+            raise ConfigError(
+                f"{env_path} field '{field_name}' has invalid secret placeholder: {exc}"
+            ) from exc
+        if secret_name is None:
+            continue
+        placeholders.append((field_name, secret_name))
+    return placeholders
+
+
+def rename_profile(
+    config_or_dir,
+    old_name: str,
+    new_name: str,
+    *,
+    secret_name_for_field: Optional[Callable[[str, Path], str]] = None,
+    keep_old: bool = False,
+):
+    """Rename ``old_name`` to ``new_name``, re-keying its secrets.
+
+    The new profile is built non-destructively first: the profile directory is
+    copied (including any ``cache/`` data), every ``secret://`` placeholder is
+    repointed at a profile-scoped secret name computed for ``new_name``, and the
+    secret VALUES are copied (not moved) into those new names. Only after the new
+    profile is fully built and every sensitive placeholder resolves from the
+    secret manager are the old profile directory and old secret-manager keys
+    removed.
+
+    Args:
+        config_or_dir: A ``BaseConfig``/``ProfileStore``/tool dir/tool name that
+            exposes the canonical profile-discovery hooks.
+        old_name: Existing profile name.
+        new_name: New profile name (must not already exist).
+        secret_name_for_field: Callable ``(field_name, new_env_path) -> str`` that
+            returns the profile-scoped secret name for ``new_name``. Required when
+            the old profile stores any ``secret://`` placeholder. This is the
+            existing profile-scoped secret-name builder
+            (``BaseConfig._secret_name_for_field_in_profile``) — reuse it so the
+            naming schema stays correct for every tool.
+        keep_old: When True, build and activate the new profile but leave the old
+            profile directory and old secrets fully intact. Safety valve for
+            renaming a live working profile.
+
+    Raises:
+        ConfigError: If ``old_name`` is missing, ``new_name`` already exists, a
+            secret placeholder is present without ``secret_name_for_field``, or
+            any secret copy / file operation fails.
+    """
+    subject = _adapt(config_or_dir)
+
+    if old_name == new_name:
+        raise ConfigError(
+            f"Cannot rename profile '{old_name}' to itself."
+        )
+
+    old_env_path = subject.profile_path_for(old_name)
+    if not old_env_path.exists():
+        raise ConfigError(f"Profile '{old_name}' not found at {old_env_path}")
+
+    new_env_path = subject.profile_path_for(new_name)
+    if new_env_path.exists():
+        raise ConfigError(
+            f"Profile '{new_name}' already exists at {new_env_path}"
+        )
+
+    old_active = read_profile_active(old_env_path) is True
+    placeholders = _profile_secret_placeholders(old_env_path)
+    if placeholders and secret_name_for_field is None:
+        fields = ", ".join(field_name for field_name, _ in placeholders)
+        raise ConfigError(
+            f"Profile '{old_name}' stores secret placeholders ({fields}) but no "
+            "secret-name builder was provided to re-key them."
+        )
+
+    old_profile_dir = old_env_path.parent
+    new_profile_dir = new_env_path.parent
+
+    # 1. Build the new profile NON-DESTRUCTIVELY: copy the whole profile dir
+    #    (includes .env and any cache/ data).
+    new_profile_dir.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(old_profile_dir, new_profile_dir)
+
+    # Track which new secret names we created so we can roll back on failure
+    # without ever touching the old profile or its secrets.
+    created_secret_names: list[str] = []
+
+    def _abort(message: str, *, cause: Optional[BaseException] = None):
+        for secret_name in created_secret_names:
+            if _secret_exists(secret_name):
+                _delete_secret_value(secret_name, new_env_path)
+        if new_profile_dir.exists():
+            shutil.rmtree(new_profile_dir)
+        error = ConfigError(message)
+        if cause is not None:
+            raise error from cause
+        raise error
+
+    # 2. Re-key each secret:// placeholder for the new profile.
+    rewritten_values = _read_env_values(new_env_path)
+    for field_name, old_secret_name in placeholders:
+        new_secret_name = secret_name_for_field(field_name, new_env_path)
+        try:
+            secret_value = read_cli_tool_secret(old_secret_name)
+        except ConfigError as exc:
+            _abort(
+                f"Failed to read secret '{old_secret_name}' while renaming "
+                f"profile '{old_name}' to '{new_name}'.",
+                cause=exc,
+            )
+        if secret_value is None:
+            _abort(
+                f"Missing secret '{old_secret_name}' referenced by "
+                f"{old_env_path}; cannot rename profile '{old_name}'."
+            )
+        if new_secret_name != old_secret_name:
+            try:
+                _set_secret_value(new_secret_name, secret_value, new_env_path)
+            except ConfigError as exc:
+                _abort(
+                    f"Failed to store secret '{new_secret_name}' while renaming "
+                    f"profile '{old_name}' to '{new_name}'.",
+                    cause=exc,
+                )
+            created_secret_names.append(new_secret_name)
+        rewritten_values[field_name] = _secret_placeholder(new_secret_name)
+
+    if placeholders:
+        _write_env_values(new_env_path, rewritten_values)
+
+    # 3. Verify every sensitive placeholder on the new profile resolves before
+    #    we touch the old profile.
+    for field_name, new_secret_name in _profile_secret_placeholders(new_env_path):
+        if read_cli_tool_secret(new_secret_name) is None:
+            _abort(
+                f"New profile '{new_name}' field '{field_name}' references secret "
+                f"'{new_secret_name}', which does not resolve after rename."
+            )
+
+    # 4. ACTIVE marker: activate the new profile, then deactivate the old so the
+    #    auth type never has two active profiles at once (and never zero).
+    if old_active:
+        _set_profile_active_in_file(new_env_path, True)
+        _set_profile_active_in_file(old_env_path, False)
+
+    if keep_old:
+        # Safety valve: new profile built + activated; leave old dir and old
+        # secrets fully intact for the caller to verify and remove later.
+        return
+
+    # 5. Default: remove the old profile directory and its old secret-manager
+    #    keys, but only the secrets that are no longer referenced by the new
+    #    placeholders (a no-op rename would otherwise delete the shared key).
+    new_secret_names = {
+        secret_name for _field, secret_name in _profile_secret_placeholders(new_env_path)
+    }
+    for _field_name, old_secret_name in placeholders:
+        if old_secret_name in new_secret_names:
+            continue
+        if _secret_exists(old_secret_name):
+            _delete_secret_value(old_secret_name, old_env_path)
+
+    shutil.rmtree(old_profile_dir)

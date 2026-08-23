@@ -1,11 +1,15 @@
 # Airtable CLI
 
-A command-line interface for the [Airtable API](https://airtable.com/developers/web/api/introduction). Manage Airtable records and fields from the command line.
+## DESCRIPTION
+
+The `airtable` CLI provides a command-line interface for Airtable API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Features
 
 - **Full CRUD Operations**: List, get, create, update, and delete records
-- **Field Schema Operations**: Create fields and update field names, descriptions, and options
+- **Field Schema Operations**: List, get, create, and update fields. Airtable's public Web/Meta API does not support field deletion.
 - **Default Base ID**: Configure a default base to avoid repetition
 - **Advanced Filtering**: Use Airtable formulas to filter records
 - **Pagination Support**: Handle large datasets with pagination
@@ -65,7 +69,7 @@ airtable records update "Tasks" recXXX "Status=Complete"
 airtable records create "Tasks" "Name=New Task" "Status=Todo"
 
 # Create a new field
-airtable fields create tblXXXXXXXXXXXXXX "Status" singleLineText
+airtable fields create "Tasks" "Status" singleLineText
 
 # Use a different base with --base
 airtable records list "Tasks" --base appOTHERBASE
@@ -144,6 +148,24 @@ airtable records list "Tasks" --properties "Name,Status,Priority"
 
 # Sort records
 airtable records list "Tasks" --sort-field "Created" --sort-direction desc
+```
+
+**`--properties` projection contract** (applies to both `records list` and `records get`):
+
+- Output keys are **bare** (e.g. `Name`, not `fields.Name`).
+- Every requested key is **always present**. An absent or empty requested field
+  projects an explicit `null` — it is never dropped.
+- `id` and `createdTime` are the only top-level record keys; everything else is
+  an Airtable field.
+- A bare field name and its dotted form are **equivalent**: `--properties "Name"`
+  and `--properties "fields.Name"` both project `{"Name": ...}`.
+- `--properties "fields"` returns the whole `fields` object under a `fields` key.
+- **Gotcha:** `--properties` only projects top-level record keys and first-level
+  field names. To pull a deep sub-field out of a nested field value
+  (`fields.X.Y`), don't use `--properties` — fetch the full record and extract
+  with `jq`, e.g. `airtable records get "Tasks" recXXX | jq '.fields.X.Y'`.
+
+```bash
 
 # Display as table
 airtable records list "Tasks" --table
@@ -163,6 +185,10 @@ airtable records get "Tasks" recXXXXXXXXXXXXXX
 
 # Display as table
 airtable records get "Tasks" recXXX
+
+# Select specific properties (absent/empty fields project explicit null;
+# ignored when combined with --table)
+airtable records get "Tasks" recXXX --properties "id,Name,Status"
 ```
 
 #### Update a Record
@@ -206,36 +232,61 @@ airtable records delete "Tasks" recXXX --yes
 
 ### Fields
 
-Field schema commands use Airtable table IDs beginning with `tbl`. Table names are not accepted by Airtable's schema endpoints.
+Field schema write endpoints require Airtable table IDs beginning with `tbl`, and the CLI resolves table names to IDs before calling those endpoints.
 
 #### Create a Field
 
 ```bash
 # Create a single line text field
+airtable fields create "Tasks" "Status" singleLineText
+
+# Create a single line text field by table ID
 airtable fields create tblXXXXXXXXXXXXXX "Status" singleLineText
 
 # Create a checkbox field with options
-airtable fields create tblXXXXXXXXXXXXXX "Done" checkbox \
+airtable fields create "Tasks" "Done" checkbox \
   --options '{"icon":"check","color":"greenBright"}'
 
 # Create with a description
-airtable fields create tblXXXXXXXXXXXXXX "Notes" multilineText \
+airtable fields create "Tasks" "Notes" multilineText \
   --description "Internal notes for this record"
+
 ```
+
+Do not create lookup fields through `fields create`. Airtable has rejected both
+the `multipleLookupValues` type returned by `fields list` and the documented
+create-field type `lookup`; the live CourseCraft base returned
+`Creating lookup fields is not supported at this time`. Create lookup fields in
+the Airtable web UI, then verify them with `fields list` or `fields get`.
+
+Do not treat rollup field creation as a reliable production schema path through
+`fields create`. Airtable's public create-field API has returned
+`UNSUPPORTED_FIELD_TYPE_FOR_CREATE` for a live rollup create request even when
+the request included `recordLinkFieldId`, `fieldIdInLinkedTable`, and `formula`
+options. Create rollup fields in the Airtable web UI, then verify them with
+`fields list` or `fields get`.
 
 #### Update a Field
 
 ```bash
 # Rename a field
-airtable fields update tblXXXXXXXXXXXXXX fldXXXXXXXXXXXXXX --name "Current Status"
+airtable fields update "Tasks" fldXXXXXXXXXXXXXX --name "Current Status"
 
 # Update a field description
-airtable fields update tblXXXXXXXXXXXXXX fldXXXXXXXXXXXXXX \
+airtable fields update "Tasks" fldXXXXXXXXXXXXXX \
   --description "The current workflow status"
 
 # Update field options
-airtable fields update tblXXXXXXXXXXXXXX fldXXXXXXXXXXXXXX \
+airtable fields update "Tasks" fldXXXXXXXXXXXXXX \
   --options '{"formula":"{Hours} * {Rate}"}'
+```
+
+#### Delete a Field
+
+```bash
+# Field deletion is not supported by Airtable's public Web/Meta API.
+# Delete the field in Airtable's web UI, then verify removal with fields get/list.
+airtable fields delete tblXXXXXXXXXXXXXX fldXXXXXXXXXXXXXX
 ```
 
 ## Output Formats
@@ -275,7 +326,7 @@ airtable records list "Tasks" --max-records 5
 
 ## Configuration
 
-Credentials are stored in a `.env` file in the package directory:
+Authentication profile files live under `~/.local/share/cli-tools/airtable/authentication_profiles/<profile>/`; non-auth defaults live in `~/.local/share/cli-tools/airtable/.env`:
 
 ```bash
 # Personal Access Token
@@ -300,7 +351,7 @@ You can use either:
 - **Table Name**: The human-readable name (e.g., "Tasks", "Contacts")
 - **Table ID**: The ID starting with `tbl` (found in the table URL)
 
-Field schema commands require the table ID.
+Field schema commands can accept the table ID or table name; schema writes resolve names to IDs before calling Airtable.
 
 ### Record ID
 Record IDs start with `rec` and can be found:

@@ -1,6 +1,10 @@
 ---
-name: "onedrive-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute onedrive operations using the `onedrive` CLI tool. OneDrive for Business CLI via Microsoft Graph API. Triggers: onedrive, onedrive cli, onedrive files, onedrive folders, onedrive drives, list files in onedrive, upload to onedrive, download from onedrive, share onedrive file, onedrive sharing link, my onedrive"
+name: onedrive-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute onedrive operations using the `onedrive` CLI tool.
+  OneDrive for Business CLI via Microsoft Graph API.
+  Triggers: onedrive, onedrive cli, onedrive files, onedrive folders, onedrive drives, list files in onedrive, upload to onedrive, download from onedrive, share onedrive file, onedrive sharing link, my onedrive
 ---
 
 <objective>
@@ -21,13 +25,14 @@ onedrive <command-group> <action> [arguments] [options]
 | Get file details | `onedrive items get DRIVE_ID /path/to/file` |
 | Upload a file | `onedrive items upload DRIVE_ID ./local.pdf /Remote/path.pdf` |
 | Download a file | `onedrive items download DRIVE_ID /Remote/file.pdf ./local.pdf` |
+| Download a sharing URL | `onedrive shares download SHARE_URL ./local.docx --profile PROFILE` |
 | Create a folder | `onedrive folders create DRIVE_ID "Folder Name"` |
 | Share a file | `onedrive link create DRIVE_ID ITEM_ID --scope anonymous` |
 </quick_start>
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `onedrive` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `onedrive` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 
@@ -37,6 +42,7 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **folders** -- Manage folders (create, get, create-link, invite)
 - **items** -- Manage files and folders (list, get, upload, download, delete)
 - **link** -- Manage sharing links (create, list, update, get, delete)
+- **shares** -- Resolve and download OneDrive or SharePoint sharing URLs through Microsoft Graph
 </principle>
 </essential_principles>
 

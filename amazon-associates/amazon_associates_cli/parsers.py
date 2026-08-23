@@ -9,7 +9,7 @@ Common YAML patterns to match:
         /url: https://example.com/item/123
     - generic [ref=e2]: Some value
 
-See facebook_marketplace/parsers.py for a complete example implementation.
+See facebook/facebook_cli/messenger_parsers.py for a complete example implementation.
 """
 import re
 from typing import Dict, List, Optional

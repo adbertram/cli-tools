@@ -25,9 +25,14 @@ def test_auth_status_schema(cli_executable, cli_name, help_cache, command_filter
 
     result = run_cli_command(cli_executable, ["auth", "status"])
 
-    assert result.returncode == 0, f"'{cli_name} auth status' exited {result.returncode}: {result.stderr[:300]}"
+    assert result.returncode in (0, 2), (
+        f"'{cli_name} auth status' exited {result.returncode}: {result.stderr[:300]}"
+    )
 
-    _, errors = parse_and_validate_stdout(result.stdout)
+    payload, errors = parse_and_validate_stdout(
+        result.stdout,
+        require_authenticated=False,
+    )
     if errors and errors[0].startswith("stdout is not a single valid JSON document:"):
         pytest.fail(
             f"'{cli_name} auth status' {errors[0]} "
@@ -35,3 +40,10 @@ def test_auth_status_schema(cli_executable, cli_name, help_cache, command_filter
         )
 
     assert not errors, "auth status schema violations:\n  - " + "\n  - ".join(errors)
+
+    profiles = payload.get("profiles", []) if isinstance(payload, dict) else []
+    if result.returncode == 2 or not any(
+        isinstance(profile, dict) and profile.get("authenticated") is True
+        for profile in profiles
+    ):
+        pytest.fail(f"'{cli_name} auth status' is not authenticated. Run '{cli_name} auth login'.")

@@ -1,6 +1,10 @@
 # Brick Owl CLI
 
-A command-line interface for the [Brick Owl API](https://api.brickowl.com/v1). Manage orders, inventory, catalog data, messages, refunds, coupons, and quotes for your Brick Owl LEGO marketplace store.
+## DESCRIPTION
+
+The `brickowl` CLI provides a command-line interface for Brickowl API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 
@@ -365,6 +369,39 @@ brickowl user details --table
 |------------|-------------|
 | `details` | Get your Brick Owl user/store details |
 
+### store
+
+Manage Brick Owl store settings.
+
+```bash
+# Preview vacation notice changes
+brickowl store vacation enable 7/21/26 --dry-run
+brickowl store vacation disable --dry-run
+
+# Save vacation notice changes
+brickowl store vacation enable 7/21/26 --yes
+brickowl store vacation disable --yes
+```
+
+`store vacation enable` appends or replaces this notice in the store Slogan / Tag Line field:
+
+```text
+ | ATTENTION: All orders will ship M/D/YY!
+```
+
+| Subcommand | Description |
+|------------|-------------|
+| `vacation enable SHIP_OUT_DATE` | Add or replace the vacation shipping notice |
+| `vacation disable` | Remove the vacation shipping notice |
+
+**vacation options:**
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--dry-run` | | Preview changes without saving |
+| `--yes` | `-y` | Save changes to Brick Owl |
+| `--table` | `-t` | Display as table |
+
 ### messages (browser automation -- not yet implemented)
 
 Manage Brick Owl messages. These commands require browser automation and are currently placeholders.
@@ -658,7 +695,7 @@ Common options available across commands:
 
 ## Configuration
 
-The CLI reads configuration from `.env` profile files in the package directory.
+Authentication profile files live under `~/.local/share/cli-tools/brickowl/authentication_profiles/<profile>/`; non-auth defaults live in `~/.local/share/cli-tools/brickowl/.env`.
 
 ### Required
 

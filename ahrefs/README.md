@@ -1,6 +1,10 @@
 # Ahrefs CLI
 
-A command-line interface for [Ahrefs](https://app.ahrefs.com) Site Audit using browser automation and internal APIs.
+## DESCRIPTION
+
+The `ahrefs` CLI provides a command-line interface for Ahrefs (browser automation).
+
+Use it when you need repeatable access to ahrefs workflows that are only available through a signed-in website.
 
 ## Installation
 
@@ -79,6 +83,32 @@ ahrefs site-audit get 2185593 --properties "overview,issues"
 ahrefs site-audit cache list              # List cached projects
 ahrefs site-audit cache clear             # Clear all cached reports
 ahrefs site-audit cache clear -p 2185593  # Clear specific project cache
+```
+
+### Site Explorer (`ahrefs site-explorer`)
+
+Fetch Site Explorer / domain-overview metrics for any domain.
+
+```bash
+# Domain overview: DR, organic traffic, organic keywords, referring domains, backlinks
+ahrefs site-explorer overview adamtheautomator.com
+
+# Show overview as a table
+ahrefs site-explorer overview adamtheautomator.com --table
+
+# Force a fresh fetch (bypass cache)
+ahrefs site-explorer overview adamtheautomator.com --refresh
+
+# Select specific overview properties
+ahrefs site-explorer overview adamtheautomator.com --properties "domain_rating,organic_traffic"
+
+# Top pages by organic traffic (URL + traffic per page)
+ahrefs site-explorer top-pages adamtheautomator.com
+ahrefs site-explorer top-pages adamtheautomator.com --limit 10
+ahrefs site-explorer top-pages adamtheautomator.com --table
+
+# Filter top pages
+ahrefs site-explorer top-pages adamtheautomator.com --filter "url:contains:blog"
 ```
 
 ### Cache (`ahrefs cache`)

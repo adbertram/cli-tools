@@ -6,16 +6,19 @@ consistent interface for managing listings.
 Commands:
 - list: List all listings (active + drafts)
 - get: Get single listing by SKU
-- create: Create draft listing (with optional --publish)
+- create: Create and publish an Inventory API listing
+- drafts create: Create a Seller Hub draft through FX_LISTING
 - update: Update existing listing
 - delete: Withdraw and delete listing
 - publish: Publish draft to make it live
 - unpublish: Withdraw active listing back to draft
 - preview: Preview draft before publishing
 """
+from cli_tools_shared.output import command
 COMMAND_CREDENTIALS = {
     "create": ["oauth_authorization_code"],
     "delete": ["oauth_authorization_code"],
+    "drafts": ["oauth_authorization_code"],
     "get": ["oauth_authorization_code"],
     "list": ["oauth_authorization_code"],
     "preview": ["oauth_authorization_code"],
@@ -32,6 +35,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import webbrowser
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -42,15 +46,21 @@ import typer
 from ..client import get_client, ClientError
 from ..models import (
     Listing,
+    ListingFormat,
     ListingStatus,
     Image,
     is_valid_sku,
     listing_from_offer,
     listing_from_trading_api,
     merge_listing_data,
-    PSEUDO_DRAFT_PRICE,
     CONDITION_ID_TO_ENUM,
     CONDITION_ENUM_TO_ID,
+)
+from ..draft_feed import (
+    DraftListingFormat,
+    build_draft_feed_csv,
+    decode_feed_result,
+    extract_feed_result,
 )
 from cli_tools_shared.output import (
     print_json,
@@ -67,6 +77,22 @@ from ..storage import TemplateStorage, DraftStorage
 from ..template_validation import validate_template_data
 
 app = typer.Typer(help="Manage eBay listings (drafts and active)")
+drafts_app = typer.Typer(help="Manage Seller Hub drafts", no_args_is_help=True)
+app.add_typer(drafts_app, name="drafts", help="Manage Seller Hub drafts")
+
+FEED_TERMINAL_STATUSES = {
+    "COMPLETED",
+    "COMPLETED_WITH_ERROR",
+    "FAILED",
+    "PARTIALLY_PROCESSED",
+}
+FEED_RESULT_STATUSES = {"COMPLETED", "COMPLETED_WITH_ERROR"}
+FEED_POLL_INTERVAL_SECONDS = 2.0
+TRADING_LISTING_FORMATS = {
+    "Chinese": ListingFormat.AUCTION,
+    "FixedPriceItem": ListingFormat.FIXED_PRICE,
+}
+FEED_WAIT_TIMEOUT_SECONDS = 300.0
 
 # Maximum images per listing (eBay limit)
 MAX_IMAGES = 12
@@ -376,6 +402,7 @@ def _upload_images_for_listing(
 def _template_to_offer_payload(template_data: dict) -> dict:
     """Transform template structure to eBay Offer API format."""
     payload = {}
+    listing_policies = {}
 
     if "marketplaceId" in template_data:
         payload["marketplaceId"] = template_data["marketplaceId"]
@@ -405,8 +432,11 @@ def _template_to_offer_payload(template_data: dict) -> dict:
             payload["pricingSummary"]["price"] = pricing["buyItNowPrice"]
         if "quantity" in pricing:
             payload["availableQuantity"] = pricing["quantity"]
+        if pricing.get("allowOffers") is True:
+            listing_policies["bestOfferTerms"] = {
+                "bestOfferEnabled": True,
+            }
 
-    listing_policies = {}
     if "shipping" in template_data:
         ship = template_data["shipping"]
         if "fulfillmentPolicyId" in ship:
@@ -529,37 +559,142 @@ def _fetch_all_active_listings(client, limit: int = 200) -> list[dict]:
     return all_items[:limit]
 
 
-def _fetch_my_ebay_selling_list(client, list_type: str, status_label: str, limit: int = 200) -> list[dict]:
-    """Fetch listings from Trading API via GetMyeBaySelling.
+def _parse_my_ebay_selling_xml(
+    xml_response: str,
+    list_type: str,
+) -> tuple[list[dict], int]:
+    """Parse one GetMyeBaySelling page into item records."""
+    try:
+        root = ET.fromstring(xml_response)
+    except ET.ParseError as error:
+        raise ClientError(f"Invalid GetMyeBaySelling XML: {error}") from error
 
-    Args:
-        client: Authenticated EbayClient instance
-        list_type: XML element name - 'SoldList' or 'UnsoldList'
-        status_label: Status string to assign - 'sold' or 'unsold'
-        limit: Maximum items to fetch
-    """
-    import requests
-    import re
+    ack = _get_text(root, "Ack")
+    if ack not in {"Success", "Warning"}:
+        messages = []
+        for error_element in root.findall("ebay:Errors", NS):
+            message = (
+                _get_text(error_element, "LongMessage")
+                or _get_text(error_element, "ShortMessage")
+            ).strip()
+            if message:
+                messages.append(message)
+        detail = "; ".join(messages) or f"Ack={ack or 'missing'}"
+        raise ClientError(f"GetMyeBaySelling failed: {detail}")
 
+    list_element = _find_element(root, list_type)
+    if list_element is None:
+        raise ClientError(f"GetMyeBaySelling response is missing {list_type}")
+
+    if list_type == "SoldList":
+        item_elements = list_element.findall(
+            ".//ebay:Transaction/ebay:Item",
+            NS,
+        )
+        item_elements.extend(
+            list_element.findall("./ebay:ItemArray/ebay:Item", NS)
+        )
+    else:
+        item_elements = list_element.findall("./ebay:ItemArray/ebay:Item", NS)
+
+    items = []
+    for item_element in item_elements:
+        item_id = _get_text(item_element, "ItemID").strip()
+        sku = _get_text(item_element, "SKU").strip()
+        title = _get_text(item_element, "Title").strip()
+        listing_type = _get_text(item_element, "ListingType").strip()
+        selling_status = _find_element(item_element, "SellingStatus")
+        current_price_element = _find_element(selling_status, "CurrentPrice")
+        price = (
+            (current_price_element.text or "").strip()
+            if current_price_element is not None
+            else ""
+        )
+        currency = (
+            current_price_element.get("currencyID", "").strip()
+            if current_price_element is not None
+            else ""
+        )
+        quantity_sold_text = _get_text(selling_status, "QuantitySold").strip()
+
+        if list_type == "SoldList":
+            listing_identity = item_id or "<unknown>"
+            required_fields = (
+                ("ItemID", item_id),
+                ("Title", title),
+                ("ListingType", listing_type),
+                ("SellingStatus.CurrentPrice", price),
+                ("SellingStatus.CurrentPrice.currencyID", currency),
+                ("SellingStatus.QuantitySold", quantity_sold_text),
+            )
+            for field_name, value in required_fields:
+                if not value:
+                    raise ClientError(
+                        f"Sold listing {listing_identity} is missing {field_name}"
+                    )
+            if listing_type not in TRADING_LISTING_FORMATS:
+                raise ClientError(
+                    f"Sold listing {listing_identity} has unsupported "
+                    f"ListingType: {listing_type}"
+                )
+
+        try:
+            quantity_sold = int(quantity_sold_text or 0)
+        except ValueError as error:
+            raise ClientError(
+                f"Listing {item_id or '<unknown>'} has invalid "
+                f"SellingStatus.QuantitySold: {quantity_sold_text}"
+            ) from error
+
+        items.append(
+            {
+                "item_id": item_id,
+                "sku": sku,
+                "title": title,
+                "listing_type": listing_type,
+                "price": price,
+                "currency": currency,
+                "quantity_sold": quantity_sold,
+            }
+        )
+
+    pagination_result = _find_element(list_element, "PaginationResult")
+    total_pages_text = _get_text(pagination_result, "TotalNumberOfPages", "1")
+    try:
+        total_pages = int(total_pages_text)
+    except (TypeError, ValueError) as error:
+        raise ClientError(
+            "GetMyeBaySelling response has invalid PaginationResult.TotalNumberOfPages: "
+            f"{total_pages_text}"
+        ) from error
+
+    return items, total_pages
+
+
+def _fetch_my_ebay_selling_list(
+    client,
+    list_type: str,
+    limit: int = 200,
+) -> list[dict]:
+    """Fetch listings from Trading API via GetMyeBaySelling."""
     all_items = []
     page = 1
 
     while len(all_items) < limit:
+        entries_per_page = min(limit - len(all_items), 200)
         xml_request = f'''<?xml version="1.0" encoding="utf-8"?>
 <GetMyeBaySellingRequest xmlns="urn:ebay:apis:eBLBaseComponents">
-  <RequesterCredentials>
-    <eBayAuthToken>{client.config.access_token}</eBayAuthToken>
-  </RequesterCredentials>
   <{list_type}>
     <Include>true</Include>
     <Pagination>
-      <EntriesPerPage>200</EntriesPerPage>
+      <EntriesPerPage>{entries_per_page}</EntriesPerPage>
       <PageNumber>{page}</PageNumber>
     </Pagination>
   </{list_type}>
   <OutputSelector>ItemID</OutputSelector>
   <OutputSelector>SKU</OutputSelector>
   <OutputSelector>Title</OutputSelector>
+  <OutputSelector>ListingType</OutputSelector>
   <OutputSelector>SellingStatus</OutputSelector>
   <OutputSelector>PictureDetails</OutputSelector>
   <OutputSelector>Quantity</OutputSelector>
@@ -567,45 +702,17 @@ def _fetch_my_ebay_selling_list(client, list_type: str, status_label: str, limit
   <OutputSelector>PaginationResult</OutputSelector>
 </GetMyeBaySellingRequest>'''
 
-        headers = {
-            'X-EBAY-API-COMPATIBILITY-LEVEL': '967',
-            'X-EBAY-API-CALL-NAME': 'GetMyeBaySelling',
-            'X-EBAY-API-SITEID': '0',
-            'Content-Type': 'text/xml',
-        }
+        xml_response = client._make_trading_api_request(
+            "GetMyeBaySelling",
+            xml_request,
+        )
+        page_items, total_pages = _parse_my_ebay_selling_xml(
+            xml_response,
+            list_type,
+        )
+        all_items.extend(page_items)
 
-        try:
-            response = requests.post(
-                'https://api.ebay.com/ws/api.dll',
-                headers=headers,
-                data=xml_request,
-                timeout=30,
-            )
-        except Exception:
-            break
-
-        # Parse response with regex for simplicity
-        item_ids = re.findall(r'<ItemID>(\d+)</ItemID>', response.text)
-        skus = re.findall(r'<SKU>([^<]+)</SKU>', response.text)
-        titles = re.findall(r'<Title>([^<]+)</Title>', response.text)
-        quantities_sold = re.findall(r'<QuantitySold>(\d+)</QuantitySold>', response.text)
-
-        # Get pagination info
-        total_pages_match = re.search(r'<TotalNumberOfPages>(\d+)</TotalNumberOfPages>', response.text)
-        total_pages = int(total_pages_match.group(1)) if total_pages_match else 1
-
-        # Build items list (SKU and title lists may be shorter if some items lack them)
-        for i, item_id in enumerate(item_ids):
-            item = {
-                'item_id': item_id,
-                'sku': skus[i] if i < len(skus) else '',
-                'title': titles[i] if i < len(titles) else '',
-                'status': status_label,
-                'quantity_sold': int(quantities_sold[i]) if i < len(quantities_sold) else 0,
-            }
-            all_items.append(item)
-
-        if not item_ids or page >= total_pages:
+        if not page_items or page >= total_pages:
             break
         page += 1
 
@@ -614,12 +721,12 @@ def _fetch_my_ebay_selling_list(client, list_type: str, status_label: str, limit
 
 def _fetch_unsold_listings(client, limit: int = 200) -> list[dict]:
     """Fetch unsold listings from Trading API via GetMyeBaySelling."""
-    return _fetch_my_ebay_selling_list(client, 'UnsoldList', 'unsold', limit)
+    return _fetch_my_ebay_selling_list(client, "UnsoldList", limit)
 
 
 def _fetch_sold_listings(client, limit: int = 200) -> list[dict]:
     """Fetch sold listings from Trading API via GetMyeBaySelling."""
-    return _fetch_my_ebay_selling_list(client, 'SoldList', 'sold', limit)
+    return _fetch_my_ebay_selling_list(client, "SoldList", limit)
 
 
 def _get_merged_listings(client, limit: int = 100, status_filter: Optional[str] = None) -> list[Listing]:
@@ -635,12 +742,12 @@ def _get_merged_listings(client, limit: int = 100, status_filter: Optional[str] 
     # Fetch active listings first (needed for all filters to avoid duplicates)
     active_items = [] if skip_active else _fetch_all_active_listings(client, limit * 2)
 
-    # Build lookup by SKU for active items (only valid SKUs)
-    active_by_sku: dict[str, dict] = {}
+    # Build lookup by listing ID. A SKU can identify more than one listing.
+    active_by_item_id: dict[str, dict] = {}
     for item in active_items:
-        sku = item.get("sku")
-        if sku and is_valid_sku(sku):
-            active_by_sku[sku] = item
+        item_id = item.get("item_id")
+        if item_id:
+            active_by_item_id[item_id] = item
 
     # Fetch offers - use fast local tracking for drafts
     if skip_active:
@@ -661,14 +768,15 @@ def _get_merged_listings(client, limit: int = 100, status_filter: Optional[str] 
     if status_filter is None or status_filter == "sold":
         sold_items = _fetch_sold_listings(client, limit * 2)
 
-    # Track which SKUs we've processed
-    processed_skus: set[str] = set()
+    processed_item_ids: set[str] = set()
+    processed_offer_ids: set[str] = set()
     listings: list[Listing] = []
 
     # Process offers first (has more metadata)
     for offer in offers:
         sku = offer.get("sku", "")
-        if not sku or sku in processed_skus:
+        offer_id = offer.get("offerId")
+        if not sku or (offer_id and offer_id in processed_offer_ids):
             continue
 
         # Skip offers with invalid SKUs (can't query inventory API for them)
@@ -687,9 +795,14 @@ def _get_merged_listings(client, limit: int = 100, status_filter: Optional[str] 
         if offer_listing is None:
             continue
 
-        # Check if there's matching active listing
-        if sku in active_by_sku:
-            trading_listing = listing_from_trading_api(active_by_sku[sku])
+        # Merge only the Trading record for this exact listing instance.
+        active_item = (
+            active_by_item_id.get(offer_listing.item_id)
+            if offer_listing.item_id
+            else None
+        )
+        if active_item:
+            trading_listing = listing_from_trading_api(active_item)
             if trading_listing:
                 merged = merge_listing_data(offer_listing, trading_listing)
                 listings.append(merged)
@@ -698,23 +811,28 @@ def _get_merged_listings(client, limit: int = 100, status_filter: Optional[str] 
         else:
             listings.append(offer_listing)
 
-        processed_skus.add(sku)
+        if offer_id:
+            processed_offer_ids.add(offer_id)
+        if offer_listing.item_id:
+            processed_item_ids.add(offer_listing.item_id)
 
     # Add active listings without offers (legacy listings)
-    for sku, item in active_by_sku.items():
-        if sku and sku not in processed_skus and is_valid_sku(sku):
-            listing = listing_from_trading_api(item)
-            if listing:
-                listings.append(listing)
-                processed_skus.add(sku)
+    for item in active_items:
+        item_id = item.get("item_id", "")
+        if item_id and item_id in processed_item_ids:
+            continue
+        listing = listing_from_trading_api(item)
+        if listing:
+            listings.append(listing)
+            if item_id:
+                processed_item_ids.add(item_id)
 
     # Add unsold listings
     for item in unsold_items:
         sku = item.get("sku", "")
         item_id = item.get("item_id", "")
 
-        # Skip if already processed (by valid SKU)
-        if sku and is_valid_sku(sku) and sku in processed_skus:
+        if item_id and item_id in processed_item_ids:
             continue
 
         # Use item_id as fallback SKU for items with invalid/missing SKUs
@@ -729,15 +847,15 @@ def _get_merged_listings(client, limit: int = 100, status_filter: Optional[str] 
             url=f"https://www.ebay.com/itm/{item_id}" if item_id else None,
         )
         listings.append(listing)
-        if sku and is_valid_sku(sku):
-            processed_skus.add(sku)
+        if item_id:
+            processed_item_ids.add(item_id)
 
     # Add sold listings
     for item in sold_items:
         sku = item.get("sku", "")
         item_id = item.get("item_id", "")
 
-        if sku and is_valid_sku(sku) and sku in processed_skus:
+        if item_id and item_id in processed_item_ids:
             continue
 
         effective_sku = sku if sku and is_valid_sku(sku) else f"sold{item_id}"
@@ -746,22 +864,23 @@ def _get_merged_listings(client, limit: int = 100, status_filter: Optional[str] 
             sku=effective_sku,
             item_id=item_id,
             title=item.get("title", ""),
+            price=item["price"],
+            currency=item["currency"],
             status=ListingStatus.SOLD,
+            format=TRADING_LISTING_FORMATS[item["listing_type"]],
             quantity_sold=item.get("quantity_sold", 0),
             url=f"https://www.ebay.com/itm/{item_id}" if item_id else None,
         )
         listings.append(listing)
-        if sku and is_valid_sku(sku):
-            processed_skus.add(sku)
+        if item_id:
+            processed_item_ids.add(item_id)
 
     # Apply status filter
     if status_filter:
         if status_filter == "active":
-            # Exclude pseudo-drafts from active listings (they're really drafts)
-            listings = [l for l in listings if l.is_active and not l.is_pseudo_draft]
+            listings = [l for l in listings if l.is_active]
         elif status_filter == "draft":
-            # Include both real drafts AND pseudo-drafts (active at $99,999)
-            listings = [l for l in listings if l.is_draft or l.is_pseudo_draft]
+            listings = [l for l in listings if l.is_draft]
         elif status_filter == "unsold":
             listings = [l for l in listings if l.is_unsold]
         elif status_filter == "sold":
@@ -772,17 +891,26 @@ def _get_merged_listings(client, limit: int = 100, status_filter: Optional[str] 
 
 def _get_listing_by_sku(client, sku: str) -> Optional[Listing]:
     """Get a single listing by SKU, merging data from all APIs."""
-    # Try to get offer for this SKU
-    offer = None
     inventory_item = None
 
-    try:
-        result = client.get_offers(sku=sku, limit=1, offset=0)
-        offers = result.get("offers", [])
-        if offers:
-            offer = offers[0]
-    except Exception:
-        pass
+    result = client.get_offers(sku=sku, limit=200, offset=0)
+    offers = result.get("offers", [])
+    if len(offers) > 1:
+        offer_details = sorted(
+            (
+                str(current_offer.get("offerId") or "<missing offerId>"),
+                str(current_offer.get("format") or "<missing format>"),
+            )
+            for current_offer in offers
+        )
+        formatted_offers = ", ".join(
+            f"{offer_id} ({format_type})"
+            for offer_id, format_type in offer_details
+        )
+        raise ClientError(
+            f"SKU {sku} has multiple current offers: {formatted_offers}"
+        )
+    offer = offers[0] if offers else None
 
     try:
         inventory_item = client.get_inventory_item(sku)
@@ -792,29 +920,31 @@ def _get_listing_by_sku(client, sku: str) -> Optional[Listing]:
     # If we have an offer, build listing from it
     if offer:
         listing = listing_from_offer(offer, inventory_item)
+        if listing is None:
+            return None
 
-        # If published, try to get additional data from Trading API
+        # If published, get additional data for this exact listing instance.
         if listing.is_active and listing.item_id:
-            try:
-                active_items = _fetch_all_active_listings(client, 500)
-                for item in active_items:
-                    if item.get("sku") == sku:
-                        trading_listing = listing_from_trading_api(item)
+            active_items = _fetch_all_active_listings(client, 500)
+            for item in active_items:
+                if item.get("item_id") == listing.item_id:
+                    trading_listing = listing_from_trading_api(item)
+                    if trading_listing:
                         listing = merge_listing_data(listing, trading_listing)
-                        break
-            except Exception:
-                pass
+                    break
 
         return listing
 
     # No offer - try to find in active listings (legacy)
-    try:
-        active_items = _fetch_all_active_listings(client, 500)
-        for item in active_items:
-            if item.get("sku") == sku:
-                return listing_from_trading_api(item)
-    except Exception:
-        pass
+    active_items = _fetch_all_active_listings(client, 500)
+    matching_active_items = [item for item in active_items if item.get("sku") == sku]
+    if len(matching_active_items) > 1:
+        item_ids = ", ".join(
+            sorted(str(item.get("item_id") or "<missing item_id>") for item in matching_active_items)
+        )
+        raise ClientError(f"SKU {sku} has multiple active listings: {item_ids}")
+    if matching_active_items:
+        return listing_from_trading_api(matching_active_items[0])
 
     # Check if inventory item exists but no offer
     if inventory_item:
@@ -980,6 +1110,7 @@ def _generate_preview_html(listing: Listing) -> str:
 
 
 @app.command("list")
+@command
 def listings_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Maximum number of listings (default: all)"),
@@ -1082,12 +1213,16 @@ def listings_list(
 
 
 @app.command("get")
+@command
 def listings_get(
     sku: str = typer.Argument(..., help="The SKU of the listing"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
 ):
     """
     Get details for a specific listing by SKU.
+
+    The SKU must select one current Inventory offer. Sold history stays separate.
+    The command fails when multiple current offers use the same SKU.
 
     Examples:
         ebay listings get MY-SKU-123
@@ -1130,7 +1265,122 @@ def listings_get(
         raise typer.Exit(handle_error(e))
 
 
+@drafts_app.command("create")
+@command
+def drafts_create(
+    category_id: str = typer.Option(..., "--category", "-c", help="eBay category ID"),
+    sku: Optional[str] = typer.Option(None, "--sku", "-s", help="Custom label or SKU"),
+    title: Optional[str] = typer.Option(None, "--title", help="Draft title"),
+    upc: Optional[str] = typer.Option(None, "--upc", help="Product UPC"),
+    price: Optional[str] = typer.Option(None, "--price", "-p", help="Draft price text"),
+    quantity: Optional[int] = typer.Option(None, "--quantity", "-q", help="Draft quantity"),
+    image_url: Optional[str] = typer.Option(None, "--image-url", help="Item photo URL"),
+    condition_id: Optional[str] = typer.Option(None, "--condition-id", help="eBay condition ID"),
+    description: Optional[str] = typer.Option(None, "--description", "-d", help="Draft description"),
+    description_file: Optional[str] = typer.Option(None, "--description-file", help="Read the description from a file or stdin with '-'"),
+    format_type: Optional[DraftListingFormat] = typer.Option(None, "--format", "-f", help="Draft format"),
+):
+    """Create a true Seller Hub draft through the FX_LISTING feed."""
+    if not category_id.strip():
+        print_error("The category ID cannot be empty.")
+        raise typer.Exit(1)
+
+    if price == "99999.00":
+        print_error("Draft price 99999.00 is not allowed.")
+        raise typer.Exit(1)
+
+    resolved_description = description
+    if description_file == "-":
+        resolved_description = sys.stdin.read()
+    elif description_file:
+        description_path = Path(description_file)
+        if not description_path.is_file():
+            print_error(f"Description file not found: {description_file}")
+            raise typer.Exit(1)
+        resolved_description = description_path.read_text()
+
+    try:
+        feed_content = build_draft_feed_csv(
+            category_id=category_id,
+            sku=sku,
+            title=title,
+            upc=upc,
+            price=price,
+            quantity=quantity,
+            image_url=image_url,
+            condition_id=condition_id,
+            description=resolved_description,
+            format_type=format_type,
+        )
+        client = get_client()
+        task_id = client.create_feed_task(
+            feed_type="FX_LISTING",
+            schema_version="1.0",
+            marketplace_id="EBAY_US",
+        )
+        client.upload_feed_file(
+            task_id,
+            filename="ebay-draft.csv",
+            content=feed_content,
+        )
+
+        deadline = time.monotonic() + FEED_WAIT_TIMEOUT_SECONDS
+        while True:
+            task = client.get_feed_task(task_id)
+            task_status = task.get("status")
+            if task_status in FEED_TERMINAL_STATUSES:
+                break
+            if time.monotonic() >= deadline:
+                raise ClientError(
+                    f"Feed task {task_id} did not finish within "
+                    f"{int(FEED_WAIT_TIMEOUT_SECONDS)} seconds"
+                )
+            time.sleep(FEED_POLL_INTERVAL_SECONDS)
+
+        result_file = None
+        draft_identifiers = [{"custom_label": sku}] if sku else []
+        errors: list[dict[str, str]] = []
+
+        if task_status in FEED_RESULT_STATUSES:
+            downloaded = client.download_feed_result(task_id)
+            result_content = decode_feed_result(downloaded["content"])
+            draft_identifiers, errors = extract_feed_result(
+                result_content,
+                custom_label=sku,
+            )
+            result_file = {
+                "content_type": downloaded.get("content_type"),
+                "content_disposition": downloaded.get("content_disposition"),
+                "content": result_content,
+            }
+        else:
+            errors.append(
+                {
+                    "status": str(task_status),
+                    "message": "The eBay feed task did not complete.",
+                }
+            )
+
+        print_json(
+            {
+                "task_id": task_id,
+                "task_status": task_status,
+                "task": task,
+                "result_file": result_file,
+                "draft_identifiers": draft_identifiers,
+                "errors": errors,
+            }
+        )
+        if task_status != "COMPLETED" or errors:
+            raise typer.Exit(1)
+    except typer.Exit:
+        raise
+    except Exception as error:
+        raise typer.Exit(handle_error(error))
+
+
 @app.command("create")
+@command
 def listings_create(
     sku: str = typer.Option(..., "--sku", "-s", help="SKU for the listing (required)"),
     template: Optional[str] = typer.Option(None, "--template", help="Template name for default values"),
@@ -1152,31 +1402,30 @@ def listings_create(
     image_url: Optional[str] = typer.Option(None, "--image-url", help="Remote image URL(s), comma-separated"),
     photos_album: Optional[str] = typer.Option(None, "--photos-album", help="macOS Photos app album name"),
     aspects: Optional[str] = typer.Option(None, "--aspects", help="Item specifics as JSON (e.g., '{\"Sport\": [\"Football\"]}'"),
-    fulfillment_policy_id: str = typer.Option(..., "--fulfillment-policy", help="Fulfillment policy ID (required)"),
+    fulfillment_policy_id: Optional[str] = typer.Option(None, "--fulfillment-policy", help="Fulfillment policy ID"),
     payment_policy_id: Optional[str] = typer.Option(None, "--payment-policy", help="Payment policy ID"),
     return_policy_id: Optional[str] = typer.Option(None, "--return-policy", help="Return policy ID"),
     location_key: Optional[str] = typer.Option(None, "--location", help="Merchant location key"),
     store_category_id: Optional[str] = typer.Option(None, "--store-category-id", help="eBay store category ID (use 'ebay store categories list' to find IDs)"),
     from_json: Optional[str] = typer.Option(None, "--from-json", help="Full payload from JSON file"),
-    publish: bool = typer.Option(False, "--publish", help="Publish immediately after creation"),
+    publish: bool = typer.Option(False, "--publish", help="Publish the item; required for this command"),
     table: bool = typer.Option(False, "--table", "-t", help="Display result as table"),
 ):
     """
-    Create a new listing.
+    Create and publish an active Inventory API listing.
 
-    Without --publish: Creates a pseudo-draft using a template. The listing is published
-    briefly at $99,999 then immediately ended, making it visible in eBay Seller Hub for
-    editing. Only --template is required.
-
-    With --publish: Creates an active listing that stays live. Requires all API parameters
-    (price, category, etc.) either from CLI options or template.
+    Draft creation uses `ebay seller listings drafts create`.
 
     Examples:
-        ebay listings create --sku SKU123 --template lego-bulk
-        ebay listings create --sku SKU123 --template vintage-camera --publish --price 149.99
-        ebay listings create --sku SKU123 --title "Item" --price 99 --category 175673 --publish
+        ebay seller listings create --sku SKU123 --template vintage-camera --publish --price 149.99
+        ebay seller listings create --sku SKU123 --title "Item" --price 99 --category 175673 --publish
     """
     photos_temp_dir = None
+
+    if not publish:
+        print_error("This command no longer creates drafts without --publish.")
+        print_info("Use: ebay seller listings drafts create --category CATEGORY_ID [options]")
+        raise typer.Exit(1)
 
     try:
         client = get_client()
@@ -1240,7 +1489,13 @@ def listings_create(
         if not has_field(category_id, "categoryId", "category.categoryId"):
             missing_params.append("--category")
 
-        # 3. Fulfillment policy - always provided (required CLI arg)
+        # 3. Fulfillment policy - required for Inventory API publication
+        if not has_field(
+            fulfillment_policy_id,
+            "listingPolicies.fulfillmentPolicyId",
+            "policies.fulfillmentPolicyId",
+        ):
+            missing_params.append("--fulfillment-policy")
 
         # 4. Payment policy - required
         has_payment = has_field(
@@ -1295,7 +1550,7 @@ def listings_create(
         if not has_description:
             missing_params.append("--description or --description-file")
 
-        # 9. Price - required for --publish mode (pseudo-drafts use $99,999 placeholder)
+        # 9. Price - required for publication
         has_price = bool(price)
         if not has_price and template_data:
             pricing_summary = template_data.get("pricingSummary", {})
@@ -1305,7 +1560,7 @@ def listings_create(
                 template_price = pricing_summary.get("price", {})
             has_price = bool(template_price.get("value"))
 
-        if publish and not has_price:
+        if not has_price:
             if effective_format == "AUCTION":
                 missing_params.append("--price (auction starting price)")
             else:
@@ -1338,15 +1593,6 @@ def listings_create(
                 print_info("Either add them to the template or provide them via CLI options.")
             else:
                 print_info("Provide a template with --template or specify all required options.")
-            raise typer.Exit(1)
-
-        # Without --publish: require template for pseudo-draft workflow
-        if not publish and not template:
-            print_error("Template required for pseudo-draft creation.")
-            print_info("")
-            print_info("Without --publish, a template is required to create a pseudo-draft.")
-            print_info("The listing will be published at $99,999 then immediately ended,")
-            print_info("making it visible in eBay Seller Hub for editing.")
             raise typer.Exit(1)
 
         # Collect all image paths
@@ -1647,20 +1893,6 @@ def listings_create(
                     "currency": currency or "USD",
                 }
 
-        # Pseudo-draft mode: no --publish flag means create at $99,999 and auto-end
-        is_pseudo_draft = not publish
-
-        if is_pseudo_draft:
-            # Set pseudo-draft price ($99,999) - will be ended immediately after publish
-            if "pricingSummary" not in offer_payload:
-                offer_payload["pricingSummary"] = {}
-            price_key = "auctionStartPrice" if offer_payload.get("format") == "AUCTION" else "price"
-            offer_payload["pricingSummary"][price_key] = {
-                "value": PSEUDO_DRAFT_PRICE,
-                "currency": currency or "USD",
-            }
-            print_info(f"Creating pseudo-draft at ${PSEUDO_DRAFT_PRICE}")
-
         if quantity is not None and offer_payload.get("format") != "AUCTION":
             offer_payload["availableQuantity"] = quantity
 
@@ -1714,11 +1946,6 @@ def listings_create(
 
         print_success(f"Listing created: SKU={sku}, Offer ID={offer_id}")
 
-        # Track draft locally for fast retrieval
-        draft_storage = DraftStorage()
-        draft_storage.add_draft(sku, offer_id)
-
-        # Always publish to get an item ID (required for Seller Hub visibility)
         # Pre-validation for auction listings
         if effective_format == "AUCTION":
             try:
@@ -1740,18 +1967,8 @@ def listings_create(
         url = f"https://www.ebay.com/itm/{item_id}"
         print_success(f"Published! Listing ID: {item_id}")
 
-        # For pseudo-drafts, immediately end the listing so it appears in Seller Hub as ended
-        if is_pseudo_draft:
-            print_info("Ending pseudo-draft listing...")
-            client.withdraw_offer(offer_id)
-            final_status = "ended"
-            print_success("Listing ended. Edit in eBay Seller Hub to set price and relist.")
-            print_info(f"Edit listing: {url}")
-        else:
-            final_status = "active"
-            print_info(f"View listing: {url}")
-            # Remove from draft tracking since it's now active
-            draft_storage.remove_draft(sku)
+        final_status = "active"
+        print_info(f"View listing: {url}")
 
         if table:
             summary = [{
@@ -1787,6 +2004,7 @@ def listings_create(
 
 
 @app.command("update")
+@command
 def listings_update(
     sku: str = typer.Argument(..., help="SKU of the listing to update"),
     title: Optional[str] = typer.Option(None, "--title", help="Update title"),
@@ -1945,6 +2163,7 @@ def listings_update(
 
 
 @app.command("delete")
+@command
 def listings_delete(
     sku: str = typer.Argument(..., help="SKU of the listing to delete"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
@@ -2012,20 +2231,16 @@ def listings_delete(
 
 
 @app.command("publish")
+@command
 def listings_publish(
     sku: str = typer.Argument(..., help="SKU of the listing to publish"),
-    price: Optional[str] = typer.Option(None, "--price", "-p", help="Set final price (required for pseudo-drafts)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display result as table"),
 ):
     """
-    Publish a draft listing or set final price on a pseudo-draft.
-
-    For real drafts: Publishes the listing to make it live on eBay.
-    For pseudo-drafts: Use --price to set the final price (required).
+    Publish an Inventory API draft offer.
 
     Examples:
-        ebay listings publish SKU123                  # Publish real draft
-        ebay listings publish SKU123 --price 29.99   # Set price on pseudo-draft
+        ebay listings publish SKU123
     """
     try:
         client = get_client()
@@ -2040,55 +2255,10 @@ def listings_publish(
             raise typer.Exit(1)
 
         if listing.is_active:
-            # Check if it's a pseudo-draft that needs a real price
-            if listing.is_pseudo_draft:
-                if not price:
-                    print_error(f"Listing is a pseudo-draft at ${listing.price}.")
-                    print_info("Specify the final price with --price to publish at the real price.")
-                    print_info("Example: ebay listings publish " + sku + " --price 29.99")
-                    raise typer.Exit(1)
-                # Update the price to the real price
-                print_info(f"Setting price from ${listing.price} to ${price}")
-                offer_payload = {"pricingSummary": {}}
-                price_key = "auctionStartPrice" if listing.format.value == "auction" else "price"
-                offer_payload["pricingSummary"][price_key] = {
-                    "value": price,
-                    "currency": listing.currency,
-                }
-                client.update_offer(listing.offer_id, offer_payload)
-                print_success(f"Published! Price set to ${price}")
-                if listing.url:
-                    print_info(f"View listing: {listing.url}")
-                # Output
-                if table:
-                    summary = [{
-                        "sku": sku,
-                        "item_id": listing.item_id,
-                        "price": price,
-                        "status": "active",
-                        "url": listing.url or "-",
-                    }]
-                    print_table(
-                        summary,
-                        ["sku", "item_id", "price", "status", "url"],
-                        ["SKU", "Item ID", "Price", "Status", "URL"],
-                    )
-                else:
-                    print_json({
-                        "sku": sku,
-                        "offer_id": listing.offer_id,
-                        "item_id": listing.item_id,
-                        "price": price,
-                        "status": "active",
-                        "url": listing.url,
-                    })
-                return
-            else:
-                # Regular active listing - already published
-                print_warning(f"Listing is already active: {sku}")
-                if listing.url:
-                    print_info(f"View listing: {listing.url}")
-                raise typer.Exit(0)
+            print_warning(f"Listing is already active: {sku}")
+            if listing.url:
+                print_info(f"View listing: {listing.url}")
+            raise typer.Exit(0)
 
         print_info(f"Publishing listing: {sku}")
         result = client.publish_offer(listing.offer_id)
@@ -2128,6 +2298,7 @@ def listings_publish(
 
 
 @app.command("unpublish")
+@command
 def listings_unpublish(
     sku: str = typer.Argument(..., help="SKU of the listing to unpublish"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
@@ -2192,6 +2363,7 @@ def listings_unpublish(
 
 
 @app.command("preview")
+@command
 def listings_preview(
     sku: str = typer.Argument(..., help="SKU of the listing to preview"),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Save HTML to file instead of opening browser"),

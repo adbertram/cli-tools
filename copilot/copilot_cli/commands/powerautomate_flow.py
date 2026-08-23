@@ -1,4 +1,5 @@
 """Power Automate flow commands for listing available cloud flows."""
+from cli_tools_shared.output import command
 import typer
 from typing import Optional
 
@@ -57,6 +58,7 @@ def format_flow_for_display(flow: dict, truncate: bool = False) -> dict:
 
 
 @app.command("list")
+@command
 def flow_list(
     category: Optional[int] = typer.Option(
         None,
@@ -172,6 +174,7 @@ def flow_list(
 
 
 @app.command("get")
+@command
 def flow_get(
     workflow_id: str = typer.Argument(
         ...,

@@ -67,26 +67,33 @@ If no public API exists, spawn the `ui-web-test-engineer` agent to explore the a
 Explore <service-url> to discover internal/hidden REST APIs.
 
 1. Follow `references/secrets.md` before asking Adam for CLI credentials.
-2. Ask Adam only for credentials that are not already stored. Store newly provided reusable CLI credentials using `references/secrets.md`.
-3. Navigate to <service-url> and authenticate using those credentials
-4. Systematically explore the authenticated interface:
+2. If credentials are not in the secret manager, use the `lastpass` CLI tool to look them up. 
+3. If not found in LastPass, use browser automation to inspect the service's login page for third-party authentication providers (e.g., Google, Microsoft). If supported, ask Adam if he would like to use one.
+4. Ask Adam for manual credentials only if they cannot be found in the secret manager, LastPass, and third-party auth is unavailable or declined. Store newly provided reusable CLI credentials using `references/secrets.md`.
+5. Navigate to <service-url> and authenticate using those credentials
+6. Systematically explore the authenticated interface:
    - Visit every major section/page
    - Interact with data-heavy views (lists, dashboards, detail pages)
    - Perform CRUD-like actions (create, edit, delete) where safe to do so
    - Use search, filtering, sorting, and pagination features
-5. Monitor ALL network requests (XHR/Fetch) for JSON API endpoints. For each discovered endpoint, document:
+7. Monitor ALL network requests (XHR/Fetch) for JSON API endpoints. For each discovered endpoint, document:
    - URL pattern (e.g., /api/v1/items?page=1&limit=50)
    - HTTP method (GET, POST, PUT, DELETE, PATCH)
    - Request headers (especially Authorization, X-API-Key, cookies, CSRF tokens)
    - Request body (for POST/PUT/PATCH)
    - Response body structure (field names, types, nesting)
    - Authentication mechanism (Bearer token, session cookie, API key header, etc.)
-6. Identify patterns across endpoints:
+8. **BACKUP PLAN FOR BOT PROTECTION:** If the site blocks your automation with an interstitial bot-check (e.g. Datadome, PerimeterX "Almost there..."), do NOT give up. Instead, use the `run_command` tool to launch the user's REAL system Chrome binary in the background without stealing focus using `open -n -g`:
+   ```bash
+   open -n -g -a "Google Chrome" --args --remote-debugging-port=9222 --no-first-run --no-default-browser-check --user-data-dir=$(mktemp -d)
+   ```
+   Wait a few seconds for it to start listening, then write a temporary Python script that uses `playwright` to connect to `p.chromium.connect_over_cdp("http://127.0.0.1:9222")`. Because this uses the legitimate system Chrome executable instead of Playwright's Chromium, it reliably bypasses bot detection. Execute the script to perform the login, capture the required endpoint traces, and finally terminate the background Chrome process using `lsof -i :9222 -t | xargs kill -9`.
+9. Identify patterns across endpoints:
    - Base URL prefix (e.g., /api/v2/)
    - Pagination style (offset, cursor, page number)
    - Error response format
    - Rate limiting headers
-7. Produce your findings as a structured JSON report with an "endpoints" array, each entry containing: url, method, headers, requestBody, responseBody, authMechanism, notes
+8. Produce your findings as a structured JSON report with an "endpoints" array, each entry containing: url, method, headers, requestBody, responseBody, authMechanism, notes
 ```
 
 **Using the agent results:**
@@ -107,7 +114,13 @@ Browser automation is appropriate when:
 - Authentication requires complex browser interactions (CAPTCHAs, MFA)
 ```
 
-Use **`browser` type** only as the last resort.
+Do not auto-select **`browser` type**. Stop and ask Adam:
+
+```
+No usable public or internal API path is available for this action. Should I make this command browser-driven?
+```
+
+Use **`browser` type** only after explicit approval.
 
 ### 2.4 Decision Tree
 
@@ -119,13 +132,33 @@ Is there an existing CLI tool for this service?
     ├── LEGACY/CLOSED AUTH ONLY → Ask whether Adam has the required credential; otherwise ask whether to use "browser" type
     └── NO → Did you discover internal APIs? (Step 2.2)
         ├── YES → Use "api" type (with discovered endpoints)
-        └── NO → Use "browser" type (last resort)
+        └── NO → STOP: ask whether Adam wants a browser-driven command
 ```
 
 **Report your findings to the user** before proceeding:
 - What investigation you performed
 - What APIs (if any) you discovered
 - Your recommended CLI type with justification
+- If no usable API exists, the explicit browser-driven approval question above
+
+### 2.4.5 Safe Repo Example Inspection
+
+When comparing nearby CLIs or tests during discovery or planning, do not guess
+optional paths such as `<other-cli>/tests/test_cli.py` or
+`<cli-tools-root>/_repo/skills/<example>-cli`. First discover existing service
+skill directories from the verified `<cli-tools-root>/_repo/skills` root, then
+inspect only discovered paths. Do not run `find`, `rg`, `sed`, `cat`, `nl`,
+`wc`, `head`, `tail`, `grep`, or similar with a guessed service-skill example
+path. If a preferred example skill is absent, report that absence and choose
+another discovered example or continue without one.
+This is the cli-tools-specific application of the file-operand rule in
+`/Users/adam/Dropbox/.agents/skills/agent-expert/references/global-standards.md`.
+
+Keep repository inspection searches line-local and literal unless multiline
+matching is deliberately required. Do not compose one complex `rg` regex with
+alternation and `\n` escapes for mixed code-shape checks; use separate `rg -F`
+probes with shaped no-match handling instead. Use `rg -U` only when the search
+must match across real line breaks, and state that intent before running it.
 
 ## Step 2.5: Implementation Planning
 
@@ -240,7 +273,24 @@ Execute the appropriate command:
 - `--auth-type` - Authentication type (repeatable for multiple types, AND semantics): `none`, `api_key` (default), `personal_access_token`, `oauth`, `oauth_authorization_code`, `username_password`, `browser_session`. Use `none` to skip auth scaffolding entirely. Example: `--auth-type api_key --auth-type browser_session`
 - `--no-venv` - Skip virtual environment creation
 - `--no-aliases` - Skip symlink/PowerShell setup
-- `--no-install` - Skip underlying CLI installation (wrapper only)
+- `--no-install` - Skip installation only when you are deliberately leaving the CLI uninstalled for a scaffold-only artifact; do not use it for a completed wrapper CLI.
+
+## Step 3.4: Wrapper Upstream CLI Provisioning Gate
+
+For wrapper CLIs, the official upstream binary named by `CLI_COMMAND` is part of
+the wrapper's implementation contract. The wrapper is not usable until that
+binary is installed or bootstrapped by the wrapper creation/install path and
+`<cli-command> --help` exits `0`.
+
+If `new-cli-tool` cannot install the upstream binary because the official
+distribution is not Homebrew (for example npm, pipx, uv, or a vendor installer),
+add the official install/bootstrap path to the wrapper source or repo-owned
+install workflow before reporting the wrapper complete. Do not tell Adam to
+install the wrapped CLI manually as the normal completion state.
+
+Missing `CLI_COMMAND` is an implementation blocker, not a live API smoke-test or
+API-key-auth blocker. API-key auth may remain user-configured only after the
+official upstream binary is present and executable.
 
 ## Step 3.5: Post-Creation Validation
 
@@ -300,11 +350,19 @@ def list_items(self, limit: int = 100) -> list[dict]:
    - Verify environment variable names
    - Add any additional config options
 
-3. `<name>_cli/commands/`:
-   - Add command modules for each resource
+3. `<name>_cli/main.py` by default:
+   - Keep the initial resource group in `main.py`
    - Implement `--table`/`-t` option on all list commands
    - Implement `--filter`/`-f` option on all list commands
    - Implement `--limit`/`-l` option on list commands
+   - Split into `commands/<group>.py` only when multiple groups justify it
+
+**For API type with `browser_session` auth:**
+If you scaffolded an `api` type but used `--auth-type browser_session` (e.g., internal APIs requiring browser cookies), the API template does NOT provide `BrowserAutomation` by default. You MUST manually:
+1. `<name>_cli/browser.py`: Create this file and define a `BrowserAutomation` subclass.
+2. `<name>_cli/config.py`: Import your `BrowserAutomation` subclass and implement `def get_browser(self):`.
+3. `<name>_cli/client.py`: Ensure client uses the browser automation session for auth/requests.
+Failure to do this will cause `test-cli-tool.sh` browser automation checks to fail.
 
 **For Wrapper type:**
 1. `<name>_cli/client.py`:
@@ -367,19 +425,33 @@ Invoke the `debloat` skill on the CLI directory.
 
 ## Step 7: Test the CLI
 
-Run basic tests manually:
+### 7.1 Verify installation
 
 ```bash
-cd <cli-tools-root>/<name>
-
-# Verify installation
 <name> --version
 <name> --help
+```
 
-# Test auth commands
+### 7.2 Verify authentication (BLOCKING GATE)
+
+**Browser-session CLIs (`--auth-type browser_session` / `MANUAL_LOGIN=True`):**
+The agent CANNOT run `auth login` automatically — it opens a GUI browser window. Do NOT attempt to run it. Instead:
+1. Tell the user: "Please run `<name> auth login` in your terminal and complete the sign-in. Let me know when done."
+2. Wait for explicit confirmation before continuing.
+3. Run `<name> auth status` and check that `authenticated: true` before proceeding.
+4. If not authenticated, repeat — do not proceed to Step 7.3 or Step 8 until confirmed.
+
+**All other CLIs:**
+```bash
 <name> auth status
-<name> auth login
+```
+If not authenticated, ask the user to provide credentials or run the relevant auth command, then verify `auth status` passes.
 
+**Re-auth check:** If Step 8 testing takes longer than ~30 minutes, re-run `<name> auth status` before continuing — browser sessions expire and a mid-test 403 is not a pipeline bug.
+
+### 7.3 Smoke test a live command
+
+```bash
 # Test a list command
 <name> <resource> list --table
 <name> <resource> list | jq '.'
@@ -402,6 +474,9 @@ The script returns JSON with `success`, `summary`, `auth_required`, `failures[]`
 - **Re-run until all pass** - Execute the script repeatedly until `"success": true`
 - **Warnings are acceptable** - Only failures must be fixed; warnings may be addressed later
 - **No exceptions for "wrapper CLIs" or "passthrough patterns"** - If the test expects an option, implement it
+- **No skipping structural tests** - ALL command structure tests are required to run and PASS for all CLIs, including browser CLIs. The only exception is `test_install.py` which may be skipped for non-wrapper CLIs. If tests are being skipped because you have not implemented full commands (e.g., missing `main.py`, `commands/`, `list` operations, or `get` operations), you must fully implement the CLI's command structure until those tests execute and PASS. A skipped test due to missing command structure is equivalent to a failure.
+- **Wrapper upstream binary failures are implementation failures** - Install or bootstrap the official `CLI_COMMAND` dependency before reporting completion
+- **Auth-required CLIs without credentials** - Follow `workflows/test-cli.md` live-auth blocker handling. Static/source work can be complete, but live compliance remains `LIVE_AUTH_BLOCKED` until real credentials authenticate.
 
 **Common failures and fixes:**
 | Failure | Fix |
@@ -418,7 +493,7 @@ The script returns JSON with `success`, `summary`, `auth_required`, `failures[]`
 
 ## Step 9: AI Review (MANDATORY for API CLIs)
 
-**After test-cli-tool passes, you MUST perform the AI review.** Read `<name>_cli/client.py` and `<name>_cli/commands/*.py`, then verify:
+**After test-cli-tool passes, you MUST perform the AI review.** Read `<name>_cli/client.py`, `<name>_cli/main.py`, and any existing `<name>_cli/commands/*.py`, then verify:
 
 ### 9.1 --limit Implementation
 
@@ -511,6 +586,201 @@ Invoke the `debloat` skill on the CLI directory.
 2. Re-run `test-cli-tool.sh` to confirm zero failures
 3. Only proceed when both `/debloat` is clean and tests pass
 
+## Step 9.7: LastPass Credential Discovery And Live Auth Smoke
+
+After the CLI implementation is created, installed, and testable, complete this
+step before `cli_tools.md`, CLI skill generation, commits, or final completion.
+For new CLI creation, an unauthenticated profile is a required user checkpoint,
+not a completion blocker to report and move past. Prompt Adam to authenticate
+once, save the auth profile through the CLI, and continue only after the saved
+profile is authenticated and live CLI tests pass.
+
+### 9.7.1 Classify The Auth Boundary
+
+- API and browser service CLIs with any auth type other than `none`: this step
+  is mandatory.
+- Wrapper CLIs: skip this step when the underlying CLI owns service auth. Record
+  `SKIPPED_WRAPPER_AUTH: underlying CLI owns auth`. If the wrapper itself
+  persists a separate CLI-tools auth profile, this step is mandatory for that
+  wrapper profile.
+- CLIs with `--auth-type none`: record `SKIPPED_NO_AUTH`.
+
+### 9.7.2 Search LastPass With The `lastpass` CLI
+
+Use the repo-owned `lastpass` CLI syntax from
+`<cli-tools-root>/_repo/skills/lastpass-cli/usage.json`. Do not call `lpass`,
+parse LastPass exports, use the browser vault UI, or use any ad hoc LastPass
+helper.
+
+Verify LastPass auth first:
+
+```bash
+lastpass auth status
+```
+
+Search for the service credential entry without printing secret values:
+
+```bash
+lastpass items list --filter "name:like:%<service-name>%" --properties id,name,username,url --table
+```
+
+If no unambiguous LastPass entry contains the credential values required by the
+new CLI, stop with `LIVE_AUTH_BLOCKED: LastPass has no usable <service-name>
+credentials for <needed credential types>` and do not mark CLI creation
+complete.
+
+### 9.7.3 Store Reusable Credentials In The CLI-Tools Secret Manager
+
+Retrieve only the exact values needed by the new CLI's auth flow. Do not print
+secrets, do not use `lastpass items get --show-password`, and do not write raw
+reusable credentials to `.env`, `.env.example`, or
+`authentication_profiles/<profile>/.env`.
+
+Use the value-specific LastPass commands and immediately store each reusable
+credential through `references/secrets.md`:
+
+```bash
+SECRET_VALUE="$(lastpass items username "$entry_id")"
+printf '%s' "$SECRET_VALUE" | <cli-tools-root>/_repo/_secret-manager/secrets.sh set --tool <name> --type username
+unset SECRET_VALUE
+
+SECRET_VALUE="$(lastpass items password "$entry_id")"
+printf '%s' "$SECRET_VALUE" | <cli-tools-root>/_repo/_secret-manager/secrets.sh set --tool <name> --type <credential-type>
+unset SECRET_VALUE
+```
+
+Choose the secret-manager `<credential-type>` from the CLI's auth contract, for
+example `password`, `api-key`, `personal-access-token`, `client-id`, or
+`client-secret`. For token-style LastPass entries, treat the LastPass password
+field as the token value unless the service's documented credential shape
+requires a separate exact field.
+
+Reusable raw credentials belong in the CLI-tools secret manager. CLI-managed
+runtime auth state belongs in `~/.local/share/cli-tools/<name>/authentication_profiles/<profile>/`.
+`.env.example` remains shape-only.
+
+### 9.7.4 Create Or Verify The CLI Auth Profile
+
+Use the new CLI's own auth/profile commands. Do not create profile files by hand.
+
+```bash
+<name> auth profiles list --properties name,active,auth_type
+<name> auth profiles create <profile-name>
+<name> auth login --profile <profile-name>
+<name> auth status --profile <profile-name>
+```
+
+Create the profile only when the CLI's own profile list proves it is absent. For
+multi-credential CLIs, authenticate the required credential type explicitly when
+needed:
+
+```bash
+<name> auth login --profile <profile-name> --credential-type <credential-type>
+```
+
+Feed values retrieved from the CLI-tools secret manager into the CLI's normal
+non-echoing auth flow or first-class auth options without printing them. If the
+CLI auth flow requires browser login, MFA, consent, or other one-time user
+action, prompt Adam to complete that authentication once in the opened browser
+or terminal. You are not done until the CLI has saved that authenticated profile
+and `<name> auth status --profile <profile-name>` confirms the shared
+authenticated profile JSON. Stop with `LIVE_AUTH_BLOCKED: <name> auth
+login/status failed for <profile-name>` only when the auth path cannot create a
+saved profile after Adam has had the opportunity to authenticate, and preserve
+the non-secret failure output.
+
+### 9.7.5 Run Live Read-Only Smoke Commands
+
+After `<name> auth status --profile <profile-name>` reports the shared
+`profiles[].authenticated` JSON shape as authenticated, run at least one live
+read-only command against the service. Use a command from the approved command
+tree, such as a `list`, `get`, `search`, or `status` command. Do not count
+`--help`, unit tests, compliance tests, cache-only output, or local parser checks
+as the live smoke.
+
+```bash
+<name> <resource> list --limit 1
+```
+
+The read-only smoke command must complete successfully against the live service.
+If live auth or the smoke command cannot be completed, report the exact
+`LIVE_AUTH_BLOCKED` reason and do not mark CLI creation complete.
+Then run the repo CLI testing tool against the live authenticated profile:
+
+```bash
+<cli-tools-root>/_repo/skills/cli-tool/scripts/test-cli-tool.sh --cli-name <name>
+```
+
+The live test run must pass with zero failures before CLI creation is complete.
+
+## Step 9.8: Chaos Engineering Stress Test (MANDATORY)
+
+After the CLI is fully built, tested, and authenticated (Step 9.7 complete), spawn the `chaos-engineer` agent to find and prove failure modes, then fix every issue it finds.
+
+**Invoke the agent with this prompt** (fill in `<name>` and `<cli-tools-root>`):
+
+```
+Use the chaos-engineer agent on the newly created CLI tool at <cli-tools-root>/<name>/.
+
+Read <name>_cli/client.py, <name>_cli/main.py, <name>_cli/config.py, and any
+commands/*.py or parsers.py files. Trace every command's argument handling,
+auth flow, and API/browser/subprocess interaction end to end.
+
+MANDATORY EXECUTION COVERAGE — this is a live smoke test, not a code review:
+1. Run `<name> --help` and every `<name> <group> --help` to enumerate the full
+   command tree. Every listed command and subcommand MUST be executed live at
+   least once before this step ends.
+2. Execute every command with valid arguments first to establish a working
+   baseline (list, get, create, update, delete, auth, and any special
+   commands). Capture real stdout, stderr, and exit code for each run.
+3. Execute every `list`/`get` command again with each documented option
+   combination: `--table`, `--filter`, `--limit`, `--properties`, and any
+   command-specific flags, alone and combined.
+4. Execute every command again against the Input/State/Environment/Logic
+   Chaos taxonomy below — do not stop at one input per command; vary the
+   argument for each command until each taxonomy category has been tried
+   against it or is proven not applicable.
+5. Do not report a finding, and do not report a command as "working," unless
+   you executed it yourself in this session and captured its actual output.
+   Theorized or skipped commands are gaps, not clean results — list any
+   command you could not execute (and why) separately in the report.
+
+Generate and validate as many chaos scenarios as possible against the Input
+Chaos, State Chaos, Environment Chaos, and Logic Chaos taxonomy. Run the
+`<name>` CLI directly via shell to PROVE each failure — do not theorize.
+
+Focus areas for this CLI:
+- Malformed/boundary CLI arguments (empty strings, huge --limit values,
+  invalid --filter syntax, unicode/control characters in resource IDs,
+  missing required arguments)
+- Auth failures (expired token, revoked credentials, missing/corrupted
+  profile, concurrent `auth login` calls, wrong --profile name)
+- Upstream failures — for `api`/`browser` types: timeouts, 429/500
+  responses, malformed JSON responses, connection reset, pagination edge
+  cases
+- Underlying command failures — for `wrapper` types: missing binary,
+  non-zero exit, malformed or truncated stdout, unexpected stderr content
+- Empty/missing local state (first run, no `.env`, deleted profile,
+  corrupted cache, read-only filesystem)
+
+Report findings using the standard chaos-engineer per-finding format and
+summary table.
+```
+
+**After the agent reports findings:**
+
+1. Review every finding.
+2. Fix every CRITICAL and HIGH finding. Fix MEDIUM/LOW findings too unless
+   there is a clear reason not to — state that reason if one is skipped.
+3. Re-run `<cli-tools-root>/_repo/skills/cli-tool/scripts/test-cli-tool.sh
+   --cli-name <name>` after fixes to confirm no regressions.
+4. Re-invoke the `chaos-engineer` agent against the fixed code to confirm
+   each fixed finding no longer reproduces.
+5. Repeat steps 1-4 until `chaos-engineer` returns zero CRITICAL/HIGH
+   findings.
+
+**DO NOT proceed to Step 10 until all CRITICAL and HIGH chaos findings are fixed and verified.**
+
 ## Step 10: Update cli_tools.md
 
 Add the new CLI to `<cli-tools-root>/_repo/docs/cli_tools.md`:
@@ -554,6 +824,7 @@ CLI creation is complete when:
 - [ ] Output shape defined and covered by command contract tests
 - [ ] Internal representation is minimal: no unused helpers, models, or dependencies
 - [ ] Browser parsers validated against real DOM captures via BrowserAutomation (browser CLIs only)
+- [ ] ALL command structure tests pass (none skipped due to missing `main.py`, `commands/`, or missing `list`/`get` commands). `test_install.py` is the only permitted structural skip for non-wrapper CLIs.
 - [ ] **⛔ test-cli-tool.sh passes with ZERO FAILURES** (warnings acceptable)
 - [ ] `/debloat` post-implementation pass completed (Step 6.5)
 - [ ] AI Review completed (for API CLIs):
@@ -563,6 +834,16 @@ CLI creation is complete when:
   - [ ] Exponential retry correctly implemented
   - [ ] Internal representation is minimal and tied to the command contract
 - [ ] `/debloat` final pass completed (Step 9.5) — tests still pass after fixes
+- [ ] Step 9.7 LastPass/profile/live-smoke completed for non-wrapper API/browser service CLIs:
+  - [ ] `lastpass auth status` passed and `lastpass items list` searched the service credential entry without printing secrets
+  - [ ] Needed reusable credential values were transferred to `<cli-tools-root>/_repo/_secret-manager/secrets.sh`
+  - [ ] CLI auth profile was created or verified through the CLI's own `auth` commands
+  - [ ] Adam completed any required one-time browser/MFA/consent authentication
+  - [ ] `<name> auth status --profile <profile-name>` confirmed authenticated profile JSON
+  - [ ] At least one live read-only service smoke command succeeded
+  - [ ] `test-cli-tool.sh --cli-name <name>` passed with the saved authenticated profile
+- [ ] Wrapper CLIs explicitly skipped Step 9.7 unless the wrapper owns a separate CLI-tools auth profile
+- [ ] Step 9.8 chaos-engineer stress test completed: every command/subcommand executed live at least once (baseline + option combinations + chaos inputs), all CRITICAL/HIGH findings fixed and re-verified with zero reproductions, `test-cli-tool.sh` re-passed after fixes
 - [ ] cli_tools.md has been updated with the new CLI
 - [ ] `/create-cli-tool-skill` invoked to generate the CLI's repo-owned skill
 - [ ] Git repo initialized and committed

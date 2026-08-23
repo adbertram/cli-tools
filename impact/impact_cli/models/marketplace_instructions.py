@@ -52,7 +52,7 @@ AUTH_NOTE = (
     "--headed <url>`. Only fall back to the login form if the session is not "
     "authenticated. When typing credentials into shell, use a unique variable "
     "name (e.g. `IMPACT_USER`, `IMPACT_PW`) — `$USERNAME` is shadowed by a "
-    "system env var and silently truncates to `adam`."
+                "system env var and silently truncates account names."
 )
 
 

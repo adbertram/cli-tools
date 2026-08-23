@@ -225,7 +225,7 @@ def rules_add(
     Add a new rule to a rule group.
 
     Examples:
-        kick rule-groups rules add -g 43b5276c-... -c "Verizon" -e "ATA Learning" --category "Utilities"
+        kick rule-groups rules add -g 43b5276c-... -c "Verizon" -e "Example LLC" --category "Utilities"
         kick rule-groups rules add -g 43b5276c-... -c "Amazon" -e "My Business" --category "Shopping" --apply-existing
     """
     try:

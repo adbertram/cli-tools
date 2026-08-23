@@ -484,7 +484,6 @@ _BUNDLE_IGNORE = shutil.ignore_patterns(
     ".pytest_cache",
     "authentication_profiles",
     "node_modules",
-    "CLAUDE.md",
     "README.md",
 )
 

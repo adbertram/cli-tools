@@ -17,7 +17,7 @@ COMMAND_CREDENTIALS = {
 import typer
 from typing import Optional, List
 
-from cli_tools_shared.output import print_json, print_table, handle_error
+from cli_tools_shared.output import print_json, print_table, command
 
 from .._helpers import client_session, output_list
 
@@ -31,6 +31,7 @@ MESSAGE_HEADERS = ["Text"]
 
 
 @app.command("list")
+@command
 def messenger_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(20, "--limit", "-l", help="Maximum number of conversations"),
@@ -45,20 +46,18 @@ def messenger_list(
         facebook messenger list --filter "name:contains:John"
         facebook messenger list --properties id,name
     """
-    try:
-        with client_session() as client:
-            conversations = client.list_conversations(limit=limit)
+    with client_session() as client:
+        conversations = client.list_conversations(limit=limit)
 
-            output_list(
-                conversations, table=table, filter=filter, properties=properties,
-                limit=limit, default_columns=DEFAULT_COLUMNS,
-                default_headers=DEFAULT_HEADERS, noun="conversation",
-            )
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+        output_list(
+            conversations, table=table, filter=filter, properties=properties,
+            limit=limit, default_columns=DEFAULT_COLUMNS,
+            default_headers=DEFAULT_HEADERS, noun="conversation",
+        )
 
 
 @app.command("get")
+@command
 def messenger_get(
     conversation_id: str = typer.Argument(..., help="Conversation/thread ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -71,23 +70,21 @@ def messenger_get(
         facebook messenger get 123456789 --table
         facebook messenger get 123456789 --limit 20
     """
-    try:
-        with client_session() as client:
-            result = client.get_conversation(conversation_id, message_limit=limit)
+    with client_session() as client:
+        result = client.get_conversation(conversation_id, message_limit=limit)
 
-            if table:
-                messages = result.get("messages", [])
-                if not messages:
-                    print("No messages found.")
-                    return
-                print_table(messages, MESSAGE_COLUMNS, MESSAGE_HEADERS)
-            else:
-                print_json(result)
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+        if table:
+            messages = result.get("messages", [])
+            if not messages:
+                print("No messages found.")
+                return
+            print_table(messages, MESSAGE_COLUMNS, MESSAGE_HEADERS)
+        else:
+            print_json(result)
 
 
 @app.command("send")
+@command
 def messenger_send(
     conversation_id: str = typer.Argument(..., help="Conversation/thread ID"),
     text: str = typer.Option(..., "--text", "-m", help="Message text to send"),
@@ -98,15 +95,13 @@ def messenger_send(
         facebook messenger send 123456789 --text "Hello!"
         facebook messenger send 123456789 -m "Thanks for your message"
     """
-    try:
-        with client_session() as client:
-            result = client.send_message(conversation_id, text)
-            print_json(result)
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    with client_session() as client:
+        result = client.send_message(conversation_id, text)
+        print_json(result)
 
 
 @app.command("requests")
+@command
 def messenger_requests(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(20, "--limit", "-l", help="Maximum number of requests"),
@@ -120,14 +115,11 @@ def messenger_requests(
         facebook messenger requests --table
         facebook messenger requests --limit 10
     """
-    try:
-        with client_session() as client:
-            requests_list = client.list_requests(limit=limit)
+    with client_session() as client:
+        requests_list = client.list_requests(limit=limit)
 
-            output_list(
-                requests_list, table=table, filter=filter, properties=properties,
-                limit=limit, default_columns=DEFAULT_COLUMNS,
-                default_headers=DEFAULT_HEADERS, noun="message request",
-            )
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+        output_list(
+            requests_list, table=table, filter=filter, properties=properties,
+            limit=limit, default_columns=DEFAULT_COLUMNS,
+            default_headers=DEFAULT_HEADERS, noun="message request",
+        )

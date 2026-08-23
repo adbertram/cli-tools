@@ -14,7 +14,7 @@ from typing import Optional, List
 from googleapiclient.errors import HttpError
 from ..client import get_client
 from ..config import get_config
-from cli_tools_shared.output import print_json, print_table, handle_error, print_error
+from cli_tools_shared.output import command, print_json, print_table, handle_error, print_error
 
 app = typer.Typer(help="Access Google Analytics data")
 
@@ -125,6 +125,7 @@ def _format_account_properties(account_summaries: list[dict], properties: Option
 
 
 @app.command("accounts")
+@command
 def analytics_accounts(
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of accounts to list"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -167,6 +168,7 @@ def analytics_accounts(
 
 
 @app.command("properties")
+@command
 def analytics_properties(
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of properties to list"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -206,6 +208,7 @@ def analytics_properties(
 
 
 @app.command("report")
+@command
 def analytics_report(
     metrics: str = typer.Option(..., "--metrics", "-m", help="Comma-separated metrics (e.g., sessions,activeUsers)"),
     dimensions: Optional[str] = typer.Option(None, "--dimensions", "-d", help="Comma-separated dimensions (e.g., date,pagePath)"),
@@ -277,6 +280,7 @@ def analytics_report(
 
 
 @app.command("top-pages")
+@command
 def analytics_top_pages(
     days: int = typer.Option(7, "--days", "-d", help="Number of days to look back"),
     limit: int = typer.Option(10, "--limit", "-l", help="Maximum number of pages"),
@@ -323,6 +327,7 @@ def analytics_top_pages(
 
 
 @app.command("traffic")
+@command
 def analytics_traffic(
     days: int = typer.Option(7, "--days", "-d", help="Number of days to look back"),
     limit: int = typer.Option(10, "--limit", "-l", help="Maximum number of sources"),
@@ -373,6 +378,7 @@ def analytics_traffic(
 
 
 @app.command("realtime")
+@command
 def analytics_realtime(
     property: Optional[str] = typer.Option(None, "--property", help="GA4 property ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),

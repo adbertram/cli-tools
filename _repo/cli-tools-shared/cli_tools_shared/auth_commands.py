@@ -19,6 +19,28 @@ from .output import print_json, print_table, print_output, print_success, print_
 logger = get_debug_logger("cli_tools.auth_commands")
 
 
+_CREDENTIAL_TYPE_ALIASES = {
+    "browser": CredentialType.BROWSER_SESSION.value,
+}
+
+
+def _login_setup_instructions(config) -> Optional[str]:
+    """Return the preferred auth setup message for a config."""
+    for attr_name in ("AUTH_SETUP_INSTRUCTIONS", "LOGIN_INSTRUCTIONS"):
+        value = getattr(config, attr_name, None)
+        if value:
+            return str(value).strip()
+    return None
+
+
+def _has_prompt_placeholder_value(config, field_name: str, current_value: Optional[str]) -> bool:
+    """Return True when a stored prompt value still matches the config default."""
+    if not current_value:
+        return False
+    default_value = getattr(config, f"DEFAULT_{field_name}", None)
+    return bool(default_value) and current_value == default_value
+
+
 def _prompt_and_save(config, prompts, skip_if_set: bool = True) -> bool:
     """Prompt for credential fields and save values to config.
 
@@ -31,16 +53,15 @@ def _prompt_and_save(config, prompts, skip_if_set: bool = True) -> bool:
         True if any field was prompted.
     """
     instructions_shown = False
+    setup_instructions = _login_setup_instructions(config)
     prompted = False
     for field_name, prompt_text, hide in prompts:
         current = config._get(field_name)
-        if current and skip_if_set:
+        if current and skip_if_set and not _has_prompt_placeholder_value(config, field_name, current):
             continue
-        # Show LOGIN_INSTRUCTIONS once before the first prompt
         if not instructions_shown:
-            instructions = getattr(config, "LOGIN_INSTRUCTIONS", None)
-            if instructions:
-                print_info(instructions)
+            if setup_instructions:
+                print_info(setup_instructions)
             instructions_shown = True
         prompted = True
         value = typer.prompt(f"Enter {prompt_text}", hide_input=hide)
@@ -52,20 +73,106 @@ def _prompt_and_save(config, prompts, skip_if_set: bool = True) -> bool:
 
 
 def _clear_login_state(config, credential_types: list[CredentialType]) -> None:
-    """Clear fields collected by auth login plus transient auth state."""
-    prompt_fields = [
-        field_name
-        for field_name, _prompt_text, _hide in combined_login_prompts(
-            credential_types,
-            config=config,
-        )
-    ]
-    fields = prompt_fields + combined_ephemeral_fields(credential_types, config=config)
+    """Clear transient login state without removing reusable credentials."""
+    fields = combined_ephemeral_fields(credential_types, config=config)
+    if (
+        CredentialType.OAUTH in credential_types
+        and not getattr(config, "OAUTH_TOKEN_EXPIRES", True)
+    ):
+        static_fields = set(getattr(config, "OAUTH_STATIC_REQUIRED_FIELDS", ()))
+        fields = [field for field in fields if field not in static_fields]
     for field_name in dict.fromkeys(fields):
         config._clear(field_name)
 
     if CredentialType.BROWSER_SESSION in credential_types:
-        config.clear_session()
+        browser = config.get_browser() if hasattr(config, "get_browser") else None
+        if browser is not None:
+            browser.clear_session()
+        else:
+            config.clear_session()
+
+
+def _missing_credential_types(config) -> list[CredentialType]:
+    """Return credential types that have no configured login state."""
+    missing = []
+    for credential_type in config.CREDENTIAL_TYPES:
+        if credential_type == CredentialType.BROWSER_SESSION:
+            configured = config.has_saved_session()
+        else:
+            if hasattr(config, "_required_fields_for"):
+                required_fields = config._required_fields_for([credential_type])
+            else:
+                from .credentials import combined_required_fields
+                required_fields = combined_required_fields([credential_type], config=config)
+            configured = all(config._get(field) for field in required_fields)
+        if not configured:
+            missing.append(credential_type)
+    return missing
+
+
+def _load_config_for_login(get_config_fn, effective_profile, tool_name: str):
+    """Create the login config, converting missing-secret errors into guidance.
+
+    When a profile field is sourced from a ``secret://`` placeholder and the
+    referenced CLI-tools secret is missing, ``BaseConfig`` raises a generic
+    ``Missing secret '<name>' referenced by <path>`` error during init. Interactive
+    ``auth login`` cannot re-prompt a secret-managed field, so a bare re-prompt is
+    the wrong remediation. Re-raise with the exact secret-manager command so the
+    user knows how to set or rotate the secret.
+    """
+    from .config import secret_manager_set_command
+
+    try:
+        return get_config_fn(profile=effective_profile)
+    except ConfigError as exc:
+        message = str(exc)
+        marker = "Missing secret '"
+        if not message.startswith(marker):
+            raise
+        secret_name = message[len(marker):].split("'", 1)[0]
+        raise ConfigError(
+            f"{message}\n"
+            f"This value is sourced from CLI-tools secret '{secret_name}'. "
+            "It cannot be entered interactively.\n"
+            f"Set or rotate it with: {secret_manager_set_command(secret_name)}"
+        ) from exc
+
+
+def _secret_managed_field_names(config, active_types) -> dict:
+    """Return ``{field_name: secret_name}`` for required fields backed by secrets.
+
+    Only required credential fields for the active credential types that are
+    stored as ``secret://`` placeholders in the active profile ``.env`` are
+    returned. These fields live in the CLI-tools secret manager and cannot be
+    re-prompted interactively during ``auth login``.
+    """
+    from .config import profile_secret_field_map
+
+    env_path = getattr(config, "env_file_path", None)
+    if env_path is None:
+        return {}
+    placeholders = profile_secret_field_map(env_path)
+    if not placeholders:
+        return {}
+    required = set(config._required_fields_for(active_types))
+    return {
+        field: secret_name
+        for field, secret_name in placeholders.items()
+        if field in required
+    }
+
+
+def _notify_secret_managed_fields(config, active_types, tool_name: str) -> None:
+    """Print actionable guidance for required fields sourced from secrets."""
+    from .config import secret_manager_set_command
+
+    secret_fields = _secret_managed_field_names(config, active_types)
+    for field, secret_name in secret_fields.items():
+        print_info(
+            f"{field} is sourced from CLI-tools secret '{secret_name}' and cannot "
+            f"be entered interactively.\n"
+            f"To change or rotate it, run: {secret_manager_set_command(secret_name)}"
+        )
 
 
 def _handle_browser_login(config, tool_name: str, force: bool):
@@ -95,12 +202,8 @@ def _handle_browser_login(config, tool_name: str, force: bool):
             logger.debug("_handle_browser_login: has_saved_session=%s", has_session)
             if has_session:
                 # Live-verify before declaring "already authenticated".
-                try:
-                    live = browser.is_authenticated()
-                    live_ok = bool(live)
-                except Exception as e:
-                    logger.debug("_handle_browser_login: live check raised: %s", e)
-                    live_ok = False
+                live = browser.is_authenticated()
+                live_ok = bool(live)
                 logger.debug("_handle_browser_login: live check=%s", live_ok)
                 if live_ok:
                     print_success(f"Already authenticated ({tool_name} browser session)")
@@ -160,6 +263,10 @@ def _resolve_profile_names(get_config_fn, requested_profile: Optional[str], tool
     from .profiles import list_profiles
 
     config_cls = _get_config_class(get_config_fn)
+    configured_credential_types = list(
+        getattr(config_cls, "CREDENTIAL_TYPES", None)
+        or []
+    )
     profile_store = _get_profile_store_for_auth(get_config_fn, config_cls, tool_name)
     profile_entries = [entry for entry in list_profiles(profile_store) if entry.get("active") is True]
     if not profile_entries:
@@ -168,6 +275,7 @@ def _resolve_profile_names(get_config_fn, requested_profile: Optional[str], tool
 
 
 def _get_config_class(get_config_fn):
+    get_config_fn = getattr(get_config_fn, "__wrapped__", get_config_fn)
     annotations = getattr(get_config_fn, "__annotations__", {}) or {}
     config_cls = annotations.get("return")
     if config_cls is not None:
@@ -250,18 +358,59 @@ def _collect_profile_statuses(
         entry["name"]: entry
         for entry in list_profiles(profile_store)
     }
+    configured_credential_types = list(
+        getattr(config_cls, "CREDENTIAL_TYPES", []) if config_cls is not None else []
+    )
 
     profile_entries = []
     for prof_name in profile_names:
-        config = get_config_fn(profile=prof_name)
+        try:
+            config = get_config_fn(profile=prof_name)
+        except ConfigError as exc:
+            message = str(exc)
+            if (
+                config_cls is None
+                or not message.startswith("Missing secret '")
+                or " referenced by " not in message
+            ):
+                raise
+            active_name = prof_name or "default"
+            profile_meta = profile_map.get(active_name, {})
+            credential_types = {
+                ct.value: {
+                    "credentials_saved": False,
+                    "authenticated": False,
+                    "api_test": f"failed: {message}",
+                    "message": message,
+                }
+                for ct in configured_credential_types
+            }
+            profile_entries.append(
+                {
+                    "name": active_name,
+                    "auth_type": profile_meta.get("auth_type") or "default",
+                    "active": bool(profile_meta.get("active", False)),
+                    "authenticated": False,
+                    "credential_types": credential_types,
+                    "missing": [message],
+                }
+            )
+            continue
         verifier = AuthVerifier(config, api_test_handler=api_test_handler)
         result = verifier.verify()
 
         active_name = config.get_active_profile_name()
+        profile_meta = profile_map.get(active_name)
+        if profile_meta is None:
+            profile_map = {
+                entry["name"]: entry
+                for entry in list_profiles(profile_store)
+            }
+            profile_meta = profile_map.get(active_name, {})
         entry = {
             "name": active_name,
-            "auth_type": profile_map.get(active_name, {}).get("auth_type"),
-            "active": bool(profile_map.get(active_name, {}).get("active", False)),
+            "auth_type": profile_meta.get("auth_type"),
+            "active": bool(profile_meta.get("active", False)),
             "authenticated": result["authenticated"],
             "credential_types": result["credential_types"],
         }
@@ -292,6 +441,11 @@ def _collect_profile_statuses(
         profile_entries.append(entry)
 
     return {"profiles": profile_entries}
+
+
+def _exit_if_no_authenticated_profile(data: dict) -> None:
+    if not any(profile["authenticated"] for profile in data["profiles"]):
+        raise typer.Exit(2)
 
 
 def _bootstrap_profile_if_missing(get_config_fn, requested_profile: Optional[str], tool_name: str) -> Optional[str]:
@@ -366,8 +520,9 @@ def _resolve_credential_type(config, credential_type_str: str):
     if len(cred_types) < 2:
         print_error("--credential-type is only valid for CLIs with multiple credential types")
         raise typer.Exit(1)
+    normalized = _CREDENTIAL_TYPE_ALIASES.get(credential_type_str, credential_type_str)
     for ct in cred_types:
-        if ct.value == credential_type_str:
+        if ct.value == normalized:
             return ct
     valid = ", ".join(ct.value for ct in cred_types)
     print_error(f"Unknown credential type '{credential_type_str}'. Valid types: {valid}")
@@ -488,7 +643,7 @@ def create_auth_app(
         # registered profile that ``auth profiles list`` / ``auth status``
         # can discover.
         effective_profile = _bootstrap_profile_if_missing(get_config_fn, profile, tool_name)
-        config = get_config_fn(profile=effective_profile)
+        config = _load_config_for_login(get_config_fn, effective_profile, tool_name)
 
         # Resolve scoped credential type if specified
         resolved_type = None
@@ -496,7 +651,17 @@ def create_auth_app(
             resolved_type = _resolve_credential_type(config, credential_type)
 
         # Determine which credential types to process
-        active_types = [resolved_type] if resolved_type else config.CREDENTIAL_TYPES
+        if resolved_type:
+            active_types = [resolved_type]
+        else:
+            missing_types = _missing_credential_types(config)
+            active_types = missing_types or config.CREDENTIAL_TYPES
+
+        # Required credential fields sourced from ``secret://`` placeholders live
+        # in the CLI-tools secret manager and cannot be entered interactively.
+        # Tell the user how to set/rotate them so ``auth login`` is actionable
+        # instead of a silent no-op.
+        _notify_secret_managed_fields(config, active_types, tool_name)
 
         # Resolve effective handler (3-way)
         effective_handler = login_handler
@@ -504,11 +669,17 @@ def create_auth_app(
             from .oauth import oauth_login
             effective_handler = oauth_login
 
-        # Force clears the active credential fields so login prompts collect
-        # fresh values before any OAuth/browser handler runs.
+        # Force clears only transient auth state. Static credentials such as
+        # client IDs, client secrets, API keys, and redirect URIs remain usable.
         if force:
             _clear_login_state(config, active_types)
-            print_info("Existing sessions cleared")
+            print_info("Existing ephemeral auth state cleared")
+
+        _prompt_and_save(
+            config,
+            getattr(config, "AUTH_CONFIG_PROMPTS", []),
+            skip_if_set=True,
+        )
 
         # Browser session only — skip all prompts, go directly to browser login
         if resolved_type == CredentialType.BROWSER_SESSION:
@@ -521,9 +692,9 @@ def create_auth_app(
             _prompt_and_save(
                 config,
                 combined_login_prompts(active_types, config=config),
-                skip_if_set=not force,
+                skip_if_set=True,
             )
-            _prompt_and_save(config, config.AUTH_EXTRA_PROMPTS, skip_if_set=not force)
+            _prompt_and_save(config, config.AUTH_EXTRA_PROMPTS, skip_if_set=True)
 
             # Delegate to handler for token acquisition
             effective_handler(config, force)
@@ -531,7 +702,7 @@ def create_auth_app(
             # Default prompt-based login — skip fields that already have values
             # (force only clears ephemeral fields, so static creds remain)
             prompted = _prompt_and_save(config, combined_login_prompts(active_types, config=config))
-            _prompt_and_save(config, config.AUTH_EXTRA_PROMPTS, skip_if_set=not force)
+            _prompt_and_save(config, config.AUTH_EXTRA_PROMPTS, skip_if_set=True)
 
             if prompted:
                 print_success("Credentials saved successfully")
@@ -551,10 +722,10 @@ def create_auth_app(
                 None, "--profile", "-p", help="Profile name to save credentials to"
             ),
             force: bool = typer.Option(
-                False, "--force", "-F", help="Clear existing credentials and re-authenticate"
+                False, "--force", "-F", help="Clear existing ephemeral auth state and re-authenticate"
             ),
             credential_type: Optional[str] = typer.Option(
-                None, "--credential-type", "-c", help=credential_type_help
+                None, "--credential-type", "--credential", "-c", help=credential_type_help
             ),
         ):
             _run_auth_login(profile, force, credential_type)
@@ -568,7 +739,7 @@ def create_auth_app(
                 None, "--profile", "-p", help="Profile name to save credentials to"
             ),
             force: bool = typer.Option(
-                False, "--force", "-F", help="Clear existing credentials and re-authenticate"
+                False, "--force", "-F", help="Clear existing ephemeral auth state and re-authenticate"
             ),
         ):
             _run_auth_login(profile, force)
@@ -609,6 +780,7 @@ def create_auth_app(
             api_test_handler=effective_test_handler,
         )
         print_output(data, table)
+        _exit_if_no_authenticated_profile(data)
 
     # Add refresh command only if config has OAuth token URL
     # We check lazily via a probe config to avoid requiring profile at import time
@@ -650,6 +822,7 @@ def create_auth_app(
                 verbose=verbose,
             )
             print_output(data, table)
+            _exit_if_no_authenticated_profile(data)
 
     if include_profiles:
         if profiles_app is None:

@@ -1,6 +1,10 @@
 # Keywords CLI
 
-Query autocomplete suggestions from Google, YouTube, Bing, Amazon, and DuckDuckGo for keyword research and SEO analysis.
+## DESCRIPTION
+
+The `keywords` CLI provides a command-line interface for Keywords API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

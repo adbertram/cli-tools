@@ -41,9 +41,9 @@ which -a <tool>     # should list ONLY ~/.local/bin/<tool>
 ```
 
 If the stale launcher is root-owned (`ls -la` shows `root wheel`),
-`rm` fails with "Permission denied". Claude Code cannot use sudo from
-its Bash tool — ask the user to run `sudo rm /usr/local/bin/<tool>`
-manually.
+`rm` fails with "Permission denied". Agent shell sessions usually should not
+run privileged delete commands. Ask the user to run
+`sudo rm /usr/local/bin/<tool>` manually.
 
 ### Recurrence Prevention
 Always run `which -a <tool>` (not just `which`) as the first diagnostic
@@ -66,6 +66,13 @@ $ myservice --version
 zsh: command not found: myservice
 ```
 
+Or a source checkout reinstall with system Python fails:
+
+```bash
+$ python3 -m pip install -e .
+error: externally-managed-environment
+```
+
 ### Diagnosis
 ```bash
 # Check if symlink exists
@@ -85,10 +92,78 @@ uv tool install -e <cli-tools-root>/myservice --force --refresh
 uv tool install -e <cli-tools-root>/myservice --force --refresh
 ```
 
+For the current checkout:
+
+```bash
+uv tool install --editable . --force
+```
+
+Do not use Homebrew/system `pip install -e .` or
+`--break-system-packages`. CLI tools are installed as uv tools, and
+`~/.local/bin/<tool>` should point into `~/.local/share/uv/tools/`.
+
 **Or use the install script:**
 ```bash
 <cli-tools-root>/_repo/skills/cli-tool/scripts/install-cli-tool.sh myservice
 ```
+
+### Reinstall picks a Python that fails `test_cli_uses_system_python`
+
+A bare `uv tool install -e <dir> --force --refresh` lets uv choose its own
+Python (e.g. 3.12). The compliance check `test_cli_uses_system_python` requires
+the CLI venv interpreter to match the harness `python3`, so when they differ
+`test-cli-tool.sh` fails that gate even though the CLI runs fine.
+
+Pin the interpreter to the one `python3` resolves to so the venv matches:
+
+```bash
+uv tool install -e <cli-tools-root>/myservice --force --refresh \
+  --python "$(command -v python3)"
+```
+
+(On this machine that is `/opt/homebrew/bin/python3.14`.) The launcher shebang
+must still point into `~/.local/share/uv/tools/`.
+
+`new-cli-tool`, `_repo/skills/cli-tool/scripts/install-cli-tool.sh`, and
+`_repo/_scripts/install-cli-tool.sh` apply this pin themselves through
+`scripts/resolve_uv_python.py`, so a fresh scaffold or a reinstall through those
+scripts already matches the system `python3`. Run the manual command only when a
+venv was created by a bare `uv tool install`.
+
+---
+
+## Metadata Probe Fails: No module named pip
+
+### Symptom
+```bash
+$ "$(head -1 "$(command -v myservice)" | sed 's/^#!//')" -m pip show myservice-cli
+/Users/adam/.local/share/uv/tools/myservice-cli/bin/python3: No module named pip
+```
+
+### Diagnosis
+CLI tools are installed with `uv tool`, and the isolated uv tool interpreter
+does not need to include `pip`. Do not use `pip show`, `pip install`, or
+`python -m pip` inside a uv-managed CLI tool environment for diagnostics.
+
+Inspect the live launcher and use the interpreter from its shebang:
+
+```bash
+launcher="$(command -v myservice)"
+interpreter="$(head -1 "$launcher" | sed 's/^#!//')"
+"$interpreter" - <<'PY'
+from importlib import metadata
+
+dist = metadata.distribution("myservice-cli")
+print(dist.version)
+PY
+```
+
+### Fix
+If package metadata or editable-source details are needed, use
+`importlib.metadata` from the launcher shebang interpreter. If install state
+needs repair, use `uv tool install -e <cli-tools-root>/myservice --force
+--refresh` or the repo-owned install script. Do not switch to system,
+Homebrew, or uv-tool-environment `pip`.
 
 ---
 
@@ -110,10 +185,16 @@ cat ~/.local/share/cli-tools/myservice/authentication_profiles/default/.env
 
 # Check reusable CLI secrets before asking Adam for the value; see references/secrets.md
 
-# Verify config.py path
-cd <cli-tools-root>/myservice
-python3 -c "from myservice_cli.config import get_config; print(get_config().env_path)"
+# Verify the installed CLI resolves the intended profile
+launcher="$(command -v myservice)"
+interpreter="$(head -1 "$launcher" | sed 's/^#!//')"
+"$interpreter" -c "from myservice_cli.config import get_config; print(get_config(profile='default').env_file_path)"
 ```
+
+If the tool has multiple active profiles, direct Python probes must pass
+`profile='<name>'` or instantiate `Config(profile='<name>')`. Do not rely on
+ambient shell variables such as `MYSERVICE_PROFILE`, `JIRA_PROFILE`, or
+`CLI_TOOLS_PROFILE`; `BaseConfig` does not use them for ad-hoc Python imports.
 
 ### Fixes
 
@@ -149,31 +230,24 @@ Error: No such command 'items'.
 # Check available commands
 myservice --help
 
-# Check command registration
-grep -r "@app.command" <cli-tools-root>/myservice/myservice_cli/commands/
-grep "add_typer" <cli-tools-root>/myservice/myservice_cli/main.py
+# Check command registration in the actual layout
+rg -n '@.*command|add_typer' <cli-tools-root>/myservice/myservice_cli
 ```
 
 ### Fixes
 
 **Add missing command decorator:**
 ```python
-# In commands/items.py
-@app.command("list")  # Make sure this exists
+# In main.py (default scaffold) or commands/items.py (split layout)
+@items_app.command("list")  # Or @app.command("list") in a split command module
 def list_items(...):
     ...
 ```
 
-**Import command module:**
+**Register the subcommand app in main.py:**
 ```python
-# In commands/__init__.py
-from . import auth, items  # Add items here
-```
-
-**Register in main.py:**
-```python
-from .commands import items
-app.add_typer(items.app, name="items")  # Add this
+items_app = typer.Typer(help="Manage items", no_args_is_help=True)
+app.add_typer(items_app, name="items")
 ```
 
 **Reinstall after changes:**
@@ -327,15 +401,68 @@ lpass --version
 
 ---
 
+## False "not installed" From a `--version` Availability Probe
+
+### Symptom
+A CLI that shells out to another binary intermittently fails with
+`<dep> CLI is not installed or not in PATH`, but `which <dep>` exits 0 and an
+immediate re-run of the identical command succeeds. Most reproducible under
+load (batched or concurrent runs): one call fails while the rest pass.
+
+### Cause
+The CLI gated availability on a `<dep> --version` subprocess with a short
+timeout and treated `subprocess.TimeoutExpired` as "binary missing". uv-tool
+CLIs cold-start a fresh Python interpreter (~0.2s warm, more under cold-cache or
+CPU contention), so a short `--version` timeout can expire and be misreported as
+"not installed". It is a timeout false negative, not a PATH problem.
+
+### Fix
+Detect presence with `shutil.which` (a pure PATH lookup — it never spawns a
+process and never times out). Detect a genuinely missing or broken binary by
+catching `FileNotFoundError` on the *real* command and surfacing its real
+stderr.
+
+```python
+import shutil
+
+# WRONG — a slow uv-tool cold start under load reads as "not installed"
+def _dep_available() -> bool:
+    try:
+        return subprocess.run([dep, "--version"], capture_output=True,
+                              timeout=5).returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False
+
+# CORRECT — presence is a PATH lookup; liveness/errors come from the real call
+def _resolve_dep() -> str | None:
+    # If the runtime env may omit it, force ~/.local/bin onto the search path.
+    return shutil.which(dep)
+```
+
+### Recurrence Prevention
+Never gate availability on a `<dep> --version` subprocess with a short timeout.
+Use `shutil.which` for "is it on PATH"; let the real command's
+`FileNotFoundError` / stderr report a genuinely missing or broken binary. If a
+"not installed" error appears while `which <dep>` exits 0, it is a transient
+false positive — surface the real downstream stderr instead of the install hint.
+
+---
+
 ## Manual Import Tests Fail With ModuleNotFoundError (Wrong Interpreter)
 
 ### Symptom
-You manually import a CLI's modules with plain `python3` and get errors like:
+You manually import a CLI's modules with plain `python3`, including heredoc
+probes, and get errors like:
 ```bash
 $ python3 - <<'PY'
 import copilot_cli.main
 PY
 # ModuleNotFoundError: No module named 'httpx'
+
+$ python3 - <<'PY'
+import jira_cli.config
+PY
+# ModuleNotFoundError: No module named 'cli_tools_shared'
 ```
 
 ### Root Cause
@@ -356,17 +483,32 @@ nothing to do with the CLI itself — it's a wrong-interpreter diagnosis.
 
 ### Fix — Always Use the CLI's Own Interpreter for Ad-Hoc Imports
 
-**Never** import CLI modules with bare `python3`. Use the uv tool venv's
-interpreter directly:
+**Never** import CLI modules with bare `python3`, including
+`python3 - <<'PY'` heredoc probes. Inspect the installed launcher and use the
+interpreter named in its shebang:
 
 ```bash
 # Correct — apples-to-apples manual import test
-~/.local/share/uv/tools/copilot-cli/bin/python3 \
-    -c "import copilot_cli.main; print(copilot_cli.main.__file__)"
+launcher="$(command -v jira)"
+interpreter="$(head -1 "$launcher" | sed 's/^#!//')"
+"$interpreter" -c "import jira_cli.config; print(jira_cli.config.__file__)"
 ```
 
-Replace `copilot-cli` with the target CLI's package name (as declared in
-`pyproject.toml` `[project].name`).
+Replace `jira` and `jira_cli.config` with the target CLI command and module.
+Do not derive the uv tool path from the command name; the launcher shebang is
+the source of truth.
+
+For multi-line probes, keep the same interpreter and only move the Python code
+into the heredoc:
+
+```bash
+launcher="$(command -v jira)"
+interpreter="$(head -1 "$launcher" | sed 's/^#!//')"
+"$interpreter" - <<'PY'
+import jira_cli.config
+print(jira_cli.config.__file__)
+PY
+```
 
 ### Second Wrinkle: sys.path Depends on CWD
 The uv tool venv's interpreter picks up the local editable source when run
@@ -376,12 +518,102 @@ installed copy specifically, `cd /` (or anywhere outside the repo) first.
 
 ### Validation
 Running the CLI itself (`copilot --help`, `copilot auth status`) is the
-real auth/functionality signal — not bare-python import tests. If
-`test-cli-tool.sh` or `validate-cli-tool.sh` report a shebang mismatch,
+real auth/functionality signal — not bare-python import tests. The installed
+CLI interpreter is also not the pytest runner. Its uv tool venv is runtime-only
+and does not include test-only packages such as `pytest`. For focused per-tool
+pytest runs, use the tool's uv project and inject pytest into that run:
+
+```bash
+uv run --project <cli-tools-root>/<name> --with pytest python -m pytest <cli-tools-root>/<name>/tests
+```
+
+If `test-cli-tool.sh` or `validate-cli-tool.sh` report a shebang mismatch,
 reinstall:
 ```bash
 uv tool install -e <cli-tools-root>/<name> --force --refresh
 ```
+
+---
+
+## The CLI's Own Launcher Fails: ModuleNotFoundError for Its OWN Package (Deleted/Moved Editable Source)
+
+### Symptom
+The installed launcher itself — not an ad-hoc probe — fails on every invocation
+because Python cannot find the CLI's own top-level package:
+```bash
+$ myservice --help
+Traceback (most recent call last):
+  File "/Users/<user>/.local/bin/myservice", line 4, in <module>
+    from myservice_cli.main import app
+ModuleNotFoundError: No module named 'myservice_cli'
+```
+The launcher shebang is correct and the uv tool venv exists; only the CLI's own
+package is unresolvable. This is NOT the wrong-interpreter case above (its deps
+like `cli_tools_shared` import fine — it's the tool's *own* module that's gone).
+
+### Root Cause
+CLI tools are installed with `uv tool install -e` (editable). An editable
+install does NOT copy the package into the venv — it writes a `.pth` finder that
+points `sys.path` back at the on-disk source directory. If that source directory
+is later deleted, moved, or renamed (e.g. a folder removed from a Dropbox/iCloud
+synced repo, a `git clean`, a manual `mv`), the finder's mapping dangles and the
+tool's own package no longer resolves. The receipt still lists the old editable
+path, so reinstalling from it would also fail until the source is back.
+
+### Diagnosis
+Prove the source dir is gone and find the path the install expects:
+```bash
+# 1) The uv-receipt records the editable source path the tool was installed from
+cat ~/.local/share/uv/tools/<pkg-name>/uv-receipt.toml
+#   requirements = [{ name = "<pkg>", editable = "<cli-tools-root>/<tool>" }]
+
+# 2) The editable .pth finder records the exact module->source MAPPING
+finder=$(ls ~/.local/share/uv/tools/<pkg-name>/lib/python*/site-packages/__editable___*<pkg>*_finder.py)
+grep -nE 'MAPPING|NAMESPACES' "$finder"
+#   MAPPING: {'<pkg>': '<cli-tools-root>/<tool>/<pkg>'}
+
+# 3) Confirm the source dir is actually missing
+ls -la <cli-tools-root>/<tool> 2>&1 || echo "MISSING_SOURCE_DIR"
+```
+
+### Fix — Recover the Source, Then Reinstall
+Restore the source tree, then run the standard installer (which rebuilds the
+editable install against it). Recovery sources, in priority order:
+
+1. **VCS** — if the tool is committed, `git checkout`/`git restore` it. Check
+   `git log --all -- '<tool>/*'` and `git stash list` first.
+2. **uv git checkout cache** — if the tool was ever installed from a git URL, uv
+   keeps full clones under `~/.cache/uv/git-v0/checkouts/<repo-hash>/<commit>/`.
+   These are complete, real source trees (not metadata). Find them with a bounded
+   search and pick the newest by mtime; diff the candidates to confirm they agree:
+   ```bash
+   find ~/.cache/uv/git-v0/checkouts -type d -name '<pkg>' 2>/dev/null
+   ```
+3. **Dropbox/cloud file revisions** — for a synced repo, use the `dropbox` CLI
+   (`dropbox files history <path>` then `dropbox files restore`). CAVEAT: a
+   deleted folder's *content blobs* can be purged server-side even while tombstone
+   metadata (and thus `files history` revs) survive — restore then fails with
+   `invalid_revision` and download with `not_found`. Verify a candidate rev is
+   actually downloadable before trusting it; prefer sources 1–2 when available.
+
+Cross-validate whichever copy you use (e.g. compare restored file sizes/hashes
+against another surviving source) before reinstalling. Then:
+```bash
+<cli-tools-root>/_repo/skills/cli-tool/scripts/install-cli-tool.sh <tool>
+myservice --help   # must exit 0
+```
+A recovered `pyproject.toml`/`uv.lock` may carry a stale dependency source (e.g.
+`cli-tools-shared @ git+...#subdirectory=cli-tools-shared`). Align it to the
+current repo-local convention — `"cli-tools-shared"` in `dependencies` plus
+`[tool.uv.sources]` `cli-tools-shared = { path = "../_repo/cli-tools-shared", editable = true }` — delete the stale `uv.lock`, and reinstall.
+
+### Recurrence Prevention
+An editable uv-tool install is only as alive as its source directory — deleting
+or moving the source silently breaks the installed command. When a uv-installed
+CLI fails with `ModuleNotFoundError` for its **own** package, read the editable
+`.pth` finder MAPPING and `uv-receipt.toml` to find the expected source path and
+confirm whether it still exists, before assuming a code bug. `validate-cli-tool.sh`
+asserts the editable install and launcher shebang; run it after any recovery.
 
 ---
 
@@ -461,6 +693,68 @@ place and both the tests and CLIs follow automatically.
 
 ---
 
+## macOS Permission (TCC) Error — Grant the Launching App, Not the Binary
+
+### Symptom
+A CLI that reads protected data fails with a macOS privacy error even though it is
+installed correctly and otherwise healthy, and an `auth status` capability flag is
+`false`:
+
+```bash
+$ imessage messages list
+Error: Cannot open iMessage database: unable to open database file. Grant Full Disk Access...
+
+$ imessage auth status
+# ... "messages_db_accessible": false ...
+```
+
+This applies to ANY CLI that touches a TCC-gated resource: Full Disk Access
+(`~/Library/Messages/chat.db`, Mail, Safari data), Contacts, Calendars,
+Automation / Apple Events, etc.
+
+### Cause
+macOS TCC grants the permission to the **responsible process** — the application
+that LAUNCHES the CLI — not to the Python interpreter or the `~/.local/bin/<tool>`
+launcher. Adding the interpreter binary to the permission list usually does nothing
+for a CLI started from an app, because TCC attributes the access to the parent app.
+
+### Fix
+Identify the launching app, grant IT the permission, then restart that app.
+
+```bash
+# Who launched this shell? Walk the parent chain and read the bundle id:
+ps -o pid=,ppid=,comm= -p "$PPID"
+echo "$__CFBundleIdentifier"        # e.g. com.anthropic.claudefordesktop
+```
+
+- **Run by hand from a terminal** -> grant the terminal app (Terminal / iTerm2 /
+  Ghostty / Warp).
+- **Run by Claude Code (inside the Claude desktop app)** -> grant **Claude**
+  (`/Applications/Claude.app`, bundle `com.anthropic.claudefordesktop`).
+- **Headless (launchd / ssh / daemon — no GUI app)** -> there is no app to grant;
+  add the CLI's REAL interpreter binary (resolve the uv-tool venv `python3` — do not
+  guess the path):
+
+```bash
+launcher="$(command -v <tool>)"
+interp="$(head -1 "$launcher" | sed 's/^#!//')"
+python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "$interp"
+# e.g. /opt/homebrew/Cellar/python@3.14/<ver>/Frameworks/Python.framework/Versions/3.14/bin/python3.14
+```
+
+Then: System Settings -> Privacy & Security -> the relevant permission (e.g. Full
+Disk Access) -> enable the app -> **fully quit and reopen it** (TCC changes take
+effect only on restart) -> re-check `<tool> auth status`.
+
+### Recurrence Prevention
+When a CLI hits a macOS privacy/permission wall, grant Full Disk Access (or the
+specific TCC permission) to the **launching app**, not the interpreter — and restart
+that app afterward. The interpreter binary is the correct target ONLY for headless
+launchers with no responsible app. A `*_accessible: false` field in `auth status` is
+a TCC grant gap, not a CLI bug — do not "fix" it in code.
+
+---
+
 ## Quick Reference: Test After Fixes
 
 Always verify fixes work:
@@ -479,5 +773,5 @@ myservice items list --limit 5
 myservice items list --filter "status:active"
 
 # Full test suite
-<cli-tools-root>/_repo/skills/cli-tool/scripts/test-cli-tool.sh myservice
+<cli-tools-root>/_repo/skills/cli-tool/scripts/test-cli-tool.sh --cli-name myservice
 ```

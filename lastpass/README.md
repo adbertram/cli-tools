@@ -1,6 +1,10 @@
 # LastPass CLI
 
-A standardized command-line wrapper for [lpass](https://github.com/lastpass/lastpass-cli) (LastPass CLI).
+## DESCRIPTION
+
+The `lastpass` CLI wraps lpass with standardized cli-tools behavior.
+
+Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows.
 
 ## Prerequisites
 
@@ -31,6 +35,9 @@ lastpass items list
 
 # Get a specific entry
 lastpass items get github.com
+
+# Inspect field names without printing field values
+lastpass items fields github.com
 
 # Copy password to clipboard
 lastpass items password github.com --clip
@@ -71,16 +78,32 @@ lastpass items list "Work/Servers"
 # Filter entries
 lastpass items list --filter "name:like:%github%"
 
-# Filter by LastPass category/note type
-lastpass items list --category "Payment Cards" --table
-lastpass items list --category "Credit Card" --table
+# Filter narrowed entries by LastPass category/note type
+lastpass items list --filter "name:like:%hsa%" --category "Payment Cards" --table
+lastpass items list Work --category "Credit Card" --table
+
+# List only selected fields (dot notation supported)
+lastpass items list --properties "id,name"
 
 # Get entry details (password masked by default)
 lastpass items get github.com
-lastpass items get github.com
+lastpass items get github.com --table
 
-# Get entry with password visible
+# Get only selected non-secret fields (dot notation supported).
+# Absent fields project an explicit null.
+lastpass items get github.com --properties "id,name,URL,Username"
+lastpass items get github.com -p "id,name"
+
+# Secret fields are refused through --properties — this errors and never
+# prints the password. Use `items password` or `--show-password` instead.
+# lastpass items get github.com --properties "password"   # Error, exit 1
+
+# Get entry with secret fields visible (cannot be combined with --properties)
 lastpass items get github.com --show-password
+
+# List field names and sensitivity metadata only. Values are never printed.
+lastpass items fields github.com
+lastpass items fields github.com --table
 
 # Get just the password
 lastpass items password github.com
@@ -90,6 +113,9 @@ lastpass items password github.com --clip
 
 # Get just the username
 lastpass items username github.com
+
+# Update a password without placing it in process arguments
+lastpass items update github.com --password-stdin <<<"$NEW_PASSWORD"
 ```
 
 ## Output Formats
@@ -122,8 +148,9 @@ lastpass items list > vault_backup.json
 # Find entries with "github" in name
 lastpass items list --filter "name:ilike:%github%"
 
-# Find saved payment cards without printing card numbers
-lastpass items list --category "Payment Cards" --table
+# Find saved payment cards without printing card numbers.
+# Narrow first; category filtering refuses broad vault scans.
+lastpass items list --filter "name:ilike:%hsa%" --category "Payment Cards" --table
 ```
 
 ### Profiles
@@ -148,6 +175,8 @@ This CLI wraps the `lpass` CLI:
 
 - **`auth` commands** delegate to `lpass login`, `lpass logout`, `lpass status`
 - **`items` commands** call `lpass ls` and `lpass show`, parse output to JSON/table
+- **`items fields`** projects names from the existing masked detail path; raw
+  field values are never logged or included in command errors
 - **Credentials** are handled entirely by lpass (stored in system keychain)
 
 ## Exit Codes
@@ -157,7 +186,32 @@ This CLI wraps the `lpass` CLI:
 | 0 | Success |
 | 1 | General error |
 | 2 | Not authenticated / CLI not available |
+| 3 | Ambiguous lookup — multiple entries matched (see below) |
 | 130 | User interrupted (Ctrl+C) |
+
+## Ambiguous Lookups (Multiple Matches)
+
+`items get`, `items fields`, `items username`, and `items password` take an
+entry name or ID. When a name matches more than one vault entry, the command
+exits `3` and prints a parseable JSON object on stdout (not freeform text) so
+automation can pick an entry by ID and re-run the lookup:
+
+```bash
+lastpass items username google.com
+# exit 3
+# {
+#   "error": "multiple_matches",
+#   "query": "google.com",
+#   "matches": [
+#     {"id": "8969039733861907751", "name": "google.com", "group": "Email", "full_path": "Email/google.com"},
+#     {"id": "7600439653866760487", "name": "google.com", "group": "", "full_path": "google.com"}
+#   ]
+# }
+
+# Disambiguate by ID — single matches return the raw value as before:
+FIRST_ID=$(lastpass items username google.com | jq -r '.matches[0].id')
+lastpass items username "$FIRST_ID"
+```
 
 ## Requirements
 

@@ -9,7 +9,7 @@ class Config(BaseConfig):
 
     DIST_NAME = "wordpress-cli"
     CREDENTIAL_TYPES = [CredentialType.USERNAME_PASSWORD]
-    DEFAULT_BASE_URL = "https://adamtheautomator.com/wp-json/wp/v2"
+    DEFAULT_BASE_URL = "https://example.com/wp-json/wp/v2"
     ROOT_CONFIG_FIELDS = ("URL",)
     ADDITIONAL_AUTH_FIELDS = (
         "APP_PASSWORD",

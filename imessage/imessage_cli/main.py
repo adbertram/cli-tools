@@ -11,7 +11,8 @@ app = create_app(
 )
 
 # Register command modules
-from .commands import contacts, conversations, messages
+from .commands import auth, contacts, conversations, messages
+app.add_typer(auth.app, name="auth", help="Manage system permissions")
 app.add_typer(contacts.app, name="contacts", help="Manage contacts")
 app.add_typer(conversations.app, name="conversations", help="Manage conversations")
 app.add_typer(messages.app, name="messages", help="Manage messages")

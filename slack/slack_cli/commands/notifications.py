@@ -19,7 +19,7 @@ import typer
 from typing import Optional, List, Dict
 from datetime import datetime
 from ..client import get_client, ClientError
-from cli_tools_shared.output import print_json, print_table, print_success, print_warning, handle_error
+from cli_tools_shared.output import print_json, print_table, print_success, print_warning, handle_error, command
 from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError, apply_properties_filter
 
 app = typer.Typer(help="Manage Slack notifications")
@@ -253,6 +253,7 @@ def _collect_mentions(client, count: int = 20) -> List[Dict]:
 
 
 @app.command("get")
+@command
 def notification_get(
     channel_id: str = typer.Argument(..., help="Channel ID to get notification info for"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -287,6 +288,7 @@ def notification_get(
 
 
 @app.command("counts")
+@command
 def notification_counts(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
 ):
@@ -368,6 +370,7 @@ def notification_counts(
 
 
 @app.command("list")
+@command
 def list_notifications(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     include_dms: bool = typer.Option(True, "--dms/--no-dms", help="Include unread DMs"),
@@ -500,6 +503,7 @@ def list_notifications(
 
 
 @app.command("summary")
+@command
 def notification_summary():
     """
     Show a quick summary of notification counts.

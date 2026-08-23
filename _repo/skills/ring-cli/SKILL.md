@@ -1,6 +1,10 @@
 ---
-name: "ring-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute ring operations using the `ring` CLI tool. CLI for Ring doorbells, cameras, chimes, and intercoms — devices, events, snapshots, recording downloads, motion detection, lights, siren, chime test, volume. Triggers: ring, ring cli, ring doorbell, ring camera, ring chime, ring devices, ring events, ring motion, ring snapshot, ring history, ring recording, ring download, my ring, my doorbell, motion detection ring, ring floodlight, ring siren, ring intercom, list ring devices, last ring event, doorbell battery, doorbell wifi, ring 2fa."
+name: ring-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  MANDATORY: Execute ring operations using the `ring` CLI tool.
+  CLI for Ring doorbells, cameras, chimes, and intercoms — devices, events, snapshots, recording downloads, motion detection, lights, siren, chime test, volume.
+  Triggers: ring, ring cli, ring doorbell, ring camera, ring chime, ring devices, ring events, ring motion, ring snapshot, ring history, ring recording, ring download, my ring, my doorbell, my doorbell camera, motion detection ring, ring floodlight, ring siren, ring intercom, ring doorbells list, ring devices list, list ring devices, last ring event, latest ring motion, latest doorbell ring, doorbell battery, doorbell wifi, ring battery, ring 2fa, ring 2fa code.
 ---
 
 <objective>
@@ -30,12 +34,12 @@ ring <command-group> <action> [arguments] [options]
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `ring` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `ring` command.**
 That file contains the full command tree (every argument, every option, every leaf usage_instruction). Do not guess flag names — read usage.json.
 </principle>
 
 <principle name="2FA on first login">
-Ring requires a 6-digit 2FA code on the first login from this CLI client (delivered via SMS/email at the moment `ring auth login` runs). The CLI prompts for it through the standard cli_tools_shared prompting pipeline. After a successful exchange the OAuth token (with refresh) is cached in the profile data directory and reused on subsequent runs — no further prompts. Use `ring auth login --force` to clear the cached token and re-run the 2FA challenge.
+Ring requires a 6-digit 2FA code on the first login from this CLI client (delivered via SMS/email at the moment `ring auth login` runs). The CLI prompts for it through the standard cli_tools_common prompting pipeline. After a successful exchange the OAuth token (with refresh) is cached in the profile data directory and reused on subsequent runs — no further prompts. Use `ring auth login --force` to clear the cached token and re-run the 2FA challenge.
 </principle>
 
 <principle name="Device identifiers">

@@ -14,6 +14,9 @@ COMMAND_CREDENTIALS = {
     ],
     "update": [
         "personal_access_token"
+    ],
+    "upload-attachment": [
+        "personal_access_token"
     ]
 }
 
@@ -23,11 +26,64 @@ from typing import Optional, List
 
 from ..client import get_client
 from ..config import get_config
-from cli_tools_shared.output import print_json, print_table, handle_error, print_success, print_info, print_error
+from cli_tools_shared.output import print_json, print_table, print_success, print_info, print_error, confirm_destructive_action, command
 from cli_tools_shared.filters import FilterValidationError, apply_filters, validate_filters
 from ..parsers import format_local_time
 
 app = typer.Typer(help="Manage Airtable records")
+
+
+# --- Airtable record-aware --properties projection ---
+#
+# Airtable records are always shaped ``{"id", "createdTime", "fields": {...}}``.
+# Unlike the generic shared ``apply_properties_filter`` (which is shape-agnostic
+# and stays untouched), this projector understands that record contract and,
+# unlike CourseCraft's projector, keeps BARE output keys instead of dotted
+# ``fields.<name>`` keys.
+#
+# Each ``--properties`` token resolves deterministically (one path per input
+# form, never a fallback):
+#   - ``id`` / ``createdTime`` -> same key, value ``record.get(token)`` (the
+#     only top-level record keys).
+#   - ``fields`` -> key ``fields``, value = the whole ``record["fields"]`` object.
+#   - ``fields.<name>`` (dotted) OR bare ``<name>`` -> key = bare ``<name>``
+#     (a leading ``fields.`` prefix is stripped), value =
+#     ``record["fields"].get("<name>")``.
+#
+# Explicit-null rule: every requested key is ALWAYS present in the output; an
+# absent or empty requested field projects an explicit ``None`` (it is never
+# dropped). Bare and ``fields.``-dotted forms are equivalent.
+_RECORD_TOP_LEVEL_KEYS = frozenset({"id", "createdTime"})
+_FIELDS_PREFIX = "fields."
+
+
+def _project_one(record: dict, prop_list: List[str]) -> dict:
+    record_fields = record.get("fields", {})
+    projected: dict = {}
+    for prop in prop_list:
+        if prop in _RECORD_TOP_LEVEL_KEYS:
+            projected[prop] = record.get(prop)
+        elif prop == "fields":
+            projected["fields"] = record.get("fields")
+        else:
+            field_name = prop[len(_FIELDS_PREFIX):] if prop.startswith(_FIELDS_PREFIX) else prop
+            projected[field_name] = record_fields.get(field_name)
+    return projected
+
+
+def project_records(records: List[dict], properties: Optional[str]) -> List[dict]:
+    if not properties or not records:
+        return records
+    prop_list = [p.strip() for p in properties.split(",") if p.strip()]
+    if not prop_list:
+        return records
+    return [_project_one(rec, prop_list) for rec in records]
+
+
+def project_record(record: dict, properties: Optional[str]) -> dict:
+    if not properties:
+        return record
+    return project_records([record], properties)[0]
 
 
 def resolve_base_id(base_id: Optional[str]) -> str:
@@ -42,6 +98,7 @@ def resolve_base_id(base_id: Optional[str]) -> str:
 
 
 @app.command("list")
+@command
 def records_list(
     table_id: str = typer.Argument(..., help="The table ID or name"),
     base_id: Optional[str] = typer.Option(None, "--base", "-b", help="The base ID (defaults to BASE_ID in .env)"),
@@ -83,95 +140,85 @@ def records_list(
         # Display as table
         airtable records list "Tasks" --table
     """
-    try:
-        resolved_base_id = resolve_base_id(base_id)
-        client = get_client()
+    resolved_base_id = resolve_base_id(base_id)
+    client = get_client()
 
-        # Build sort parameter
-        sort_param = None
-        if sort_field:
-            sort_param = [{"field": sort_field, "direction": sort_direction}]
+    # Build sort parameter
+    sort_param = None
+    if sort_field:
+        sort_param = [{"field": sort_field, "direction": sort_direction}]
 
-        result = client.list_records(
-            base_id=resolved_base_id,
-            table_id=table_id,
-            limit=limit,
-            offset=offset,
-            view=view,
-            sort=sort_param,
-            filter_by_formula=formula,
-            fields=None,
-            filters=filter,
-        )
+    result = client.list_records(
+        base_id=resolved_base_id,
+        table_id=table_id,
+        limit=limit,
+        offset=offset,
+        view=view,
+        sort=sort_param,
+        filter_by_formula=formula,
+        fields=None,
+        filters=filter,
+    )
 
-        records = result.get("records", [])
+    records = result.get("records", [])
 
-        # Apply properties selection to output
+    # Apply properties selection to output (Airtable record-aware projection).
+    if properties:
+        filtered_records = project_records(records, properties)
+    else:
+        filtered_records = records
+
+    if table:
+        # For table display, flatten the fields
+        table_data = []
+        for record in filtered_records:
+            if "fields" in record:
+                row = {
+                    "id": record.get("id", ""),
+                    "created": format_local_time(record.get("createdTime", "")),
+                }
+                for field_name, field_value in record.get("fields", {}).items():
+                    if isinstance(field_value, (list, dict)):
+                        row[field_name] = json.dumps(field_value)
+                    else:
+                        row[field_name] = field_value
+            else:
+                row = {}
+                for k, v in record.items():
+                    if isinstance(v, (list, dict)):
+                        row[k] = json.dumps(v)
+                    else:
+                        row[k] = v
+            table_data.append(row)
+
+        if table_data:
+            all_field_names = set()
+            for row in table_data:
+                all_field_names.update(row.keys())
+            columns = ["id"] + sorted([f for f in all_field_names if f != "id"])
+            headers = [c.replace("_", " ").title() for c in columns]
+            print_table(table_data, columns, headers)
+        else:
+            print_info("No records found")
+    else:
         if properties:
-            prop_list = [f.strip() for f in properties.split(",")]
-            filtered_records = []
-            for record in records:
-                filtered = {"id": record.get("id", "")}
-                record_fields = record.get("fields", {})
-                for prop in prop_list:
-                    if prop in record_fields:
-                        filtered[prop] = record_fields[prop]
-                filtered_records.append(filtered)
+            print_json(filtered_records)
         else:
-            filtered_records = records
+            print_json(result)
 
-        if table:
-            # For table display, flatten the fields
-            table_data = []
-            for record in filtered_records:
-                if "fields" in record:
-                    row = {
-                        "id": record.get("id", ""),
-                        "created": format_local_time(record.get("createdTime", "")),
-                    }
-                    for field_name, field_value in record.get("fields", {}).items():
-                        if isinstance(field_value, (list, dict)):
-                            row[field_name] = json.dumps(field_value)
-                        else:
-                            row[field_name] = field_value
-                else:
-                    row = {}
-                    for k, v in record.items():
-                        if isinstance(v, (list, dict)):
-                            row[k] = json.dumps(v)
-                        else:
-                            row[k] = v
-                table_data.append(row)
-
-            if table_data:
-                all_field_names = set()
-                for row in table_data:
-                    all_field_names.update(row.keys())
-                columns = ["id"] + sorted([f for f in all_field_names if f != "id"])
-                headers = [c.replace("_", " ").title() for c in columns]
-                print_table(table_data, columns, headers)
-            else:
-                print_info("No records found")
-        else:
-            if properties:
-                print_json(filtered_records)
-            else:
-                print_json(result)
-
-        # Show pagination info if there's an offset
-        if result.get("offset"):
-            print_info(f"More records available. Use --offset {result['offset']} to fetch next page")
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    # Show pagination info if there's an offset
+    if result.get("offset"):
+        print_info(f"More records available. Use --offset {result['offset']} to fetch next page")
 
 
 @app.command("get")
+@command
 def records_get(
     table_id: str = typer.Argument(..., help="The table ID or name"),
     record_id: str = typer.Argument(..., help="The record ID"),
     base_id: Optional[str] = typer.Option(None, "--base", "-b", help="The base ID (defaults to AIRTABLE_BASE_ID)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated list of fields to include in output"),
 ):
     """
     Get a specific record by ID.
@@ -179,35 +226,38 @@ def records_get(
     Examples:
         airtable records get "Tasks" recXXXXXXXXXXXXXX
         airtable records get "Tasks" recXXX --table
+
+        # Select specific properties (absent/empty fields project explicit null)
+        airtable records get "Tasks" recXXX --properties "id,Name,Status"
     """
-    try:
-        resolved_base_id = resolve_base_id(base_id)
-        client = get_client()
-        record = client.get_record(resolved_base_id, table_id, record_id)
+    resolved_base_id = resolve_base_id(base_id)
+    client = get_client()
+    record = client.get_record(resolved_base_id, table_id, record_id)
 
-        if table:
-            # Flatten for table display
-            row = {
-                "id": record.get("id", ""),
-                "created": format_local_time(record.get("createdTime", "")),
-            }
-            for field_name, field_value in record.get("fields", {}).items():
-                if isinstance(field_value, (list, dict)):
-                    row[field_name] = json.dumps(field_value)
-                else:
-                    row[field_name] = field_value
+    if properties and not table:
+        record = project_record(record, properties)
 
-            columns = list(row.keys())
-            headers = [c.replace("_", " ").title() for c in columns]
-            print_table([row], columns, headers)
-        else:
-            print_json(record)
+    if table:
+        # Flatten for table display
+        row = {
+            "id": record.get("id", ""),
+            "created": format_local_time(record.get("createdTime", "")),
+        }
+        for field_name, field_value in record.get("fields", {}).items():
+            if isinstance(field_value, (list, dict)):
+                row[field_name] = json.dumps(field_value)
+            else:
+                row[field_name] = field_value
 
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+        columns = list(row.keys())
+        headers = [c.replace("_", " ").title() for c in columns]
+        print_table([row], columns, headers)
+    else:
+        print_json(record)
 
 
 @app.command("update")
+@command
 def records_update(
     table_id: str = typer.Argument(..., help="The table ID or name"),
     record_id: str = typer.Argument(..., help="The record ID"),
@@ -231,46 +281,43 @@ def records_update(
         # With typecast for automatic data conversion
         airtable records update "Tasks" recXXX "Completed=true" --typecast
     """
-    try:
-        resolved_base_id = resolve_base_id(base_id)
-        client = get_client()
+    resolved_base_id = resolve_base_id(base_id)
+    client = get_client()
 
-        # Parse field_values into a dictionary
-        fields = {}
-        for item in field_values:
-            if "=" not in item:
-                print_info(f"Skipping invalid field format: {item} (expected FieldName=value)")
-                continue
+    # Parse field_values into a dictionary
+    fields = {}
+    for item in field_values:
+        if "=" not in item:
+            print_info(f"Skipping invalid field format: {item} (expected FieldName=value)")
+            continue
 
-            field_name, field_value = item.split("=", 1)
-            field_name = field_name.strip()
-            field_value = field_value.strip()
+        field_name, field_value = item.split("=", 1)
+        field_name = field_name.strip()
+        field_value = field_value.strip()
 
-            # Try to parse as JSON for complex values
-            try:
-                fields[field_name] = json.loads(field_value)
-            except json.JSONDecodeError:
-                # Use as string if not valid JSON
-                fields[field_name] = field_value
+        # Try to parse as JSON for complex values
+        try:
+            fields[field_name] = json.loads(field_value)
+        except json.JSONDecodeError:
+            # Use as string if not valid JSON
+            fields[field_name] = field_value
 
-        if not fields:
-            print_info("No valid field updates provided")
-            raise typer.Exit(1)
+    if not fields:
+        print_info("No valid field updates provided")
+        raise typer.Exit(1)
 
-        if replace:
-            result = client.replace_record(resolved_base_id, table_id, record_id, fields, typecast)
-            print_success(f"Record {record_id} replaced successfully")
-        else:
-            result = client.update_record(resolved_base_id, table_id, record_id, fields, typecast)
-            print_success(f"Record {record_id} updated successfully")
+    if replace:
+        result = client.replace_record(resolved_base_id, table_id, record_id, fields, typecast)
+        print_success(f"Record {record_id} replaced successfully")
+    else:
+        result = client.update_record(resolved_base_id, table_id, record_id, fields, typecast)
+        print_success(f"Record {record_id} updated successfully")
 
-        print_json(result)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    print_json(result)
 
 
 @app.command("create")
+@command
 def records_create(
     table_id: str = typer.Argument(..., help="The table ID or name"),
     field_values: List[str] = typer.Argument(..., help="Field values as 'FieldName=value' pairs"),
@@ -290,41 +337,38 @@ def records_create(
         # Create with JSON values
         airtable records create "Tasks" 'Tags=["urgent","work"]'
     """
-    try:
-        resolved_base_id = resolve_base_id(base_id)
-        client = get_client()
+    resolved_base_id = resolve_base_id(base_id)
+    client = get_client()
 
-        # Parse field_values into a dictionary
-        fields = {}
-        for item in field_values:
-            if "=" not in item:
-                print_info(f"Skipping invalid field format: {item} (expected FieldName=value)")
-                continue
+    # Parse field_values into a dictionary
+    fields = {}
+    for item in field_values:
+        if "=" not in item:
+            print_info(f"Skipping invalid field format: {item} (expected FieldName=value)")
+            continue
 
-            field_name, field_value = item.split("=", 1)
-            field_name = field_name.strip()
-            field_value = field_value.strip()
+        field_name, field_value = item.split("=", 1)
+        field_name = field_name.strip()
+        field_value = field_value.strip()
 
-            # Try to parse as JSON for complex values
-            try:
-                fields[field_name] = json.loads(field_value)
-            except json.JSONDecodeError:
-                # Use as string if not valid JSON
-                fields[field_name] = field_value
+        # Try to parse as JSON for complex values
+        try:
+            fields[field_name] = json.loads(field_value)
+        except json.JSONDecodeError:
+            # Use as string if not valid JSON
+            fields[field_name] = field_value
 
-        if not fields:
-            print_info("No valid field values provided")
-            raise typer.Exit(1)
+    if not fields:
+        print_info("No valid field values provided")
+        raise typer.Exit(1)
 
-        result = client.create_record(resolved_base_id, table_id, fields, typecast)
-        print_success(f"Record created with ID: {result.get('id')}")
-        print_json(result)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    result = client.create_record(resolved_base_id, table_id, fields, typecast)
+    print_success(f"Record created with ID: {result.get('id')}")
+    print_json(result)
 
 
 @app.command("delete")
+@command
 def records_delete(
     table_id: str = typer.Argument(..., help="The table ID or name"),
     record_id: str = typer.Argument(..., help="The record ID"),
@@ -338,19 +382,51 @@ def records_delete(
         airtable records delete "Tasks" recXXX
         airtable records delete "Tasks" recXXX --yes
     """
-    try:
-        resolved_base_id = resolve_base_id(base_id)
+    resolved_base_id = resolve_base_id(base_id)
 
-        if not confirm:
-            confirmed = typer.confirm(f"Are you sure you want to delete record {record_id}?")
-            if not confirmed:
-                print_info("Deletion cancelled")
-                raise typer.Exit(0)
+    confirm_destructive_action(
+        f"Are you sure you want to delete record {record_id}?",
+        assume_yes=confirm,
+        action_description=f"delete record {record_id}",
+    )
 
-        client = get_client()
-        result = client.delete_record(resolved_base_id, table_id, record_id)
-        print_success(f"Record {record_id} deleted successfully")
-        print_json(result)
+    client = get_client()
+    result = client.delete_record(resolved_base_id, table_id, record_id)
+    print_success(f"Record {record_id} deleted successfully")
+    print_json(result)
 
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+
+@app.command("upload-attachment")
+@command
+def records_upload_attachment(
+    record_id: str = typer.Argument(..., help="The record ID to attach the file to"),
+    field_name: str = typer.Argument(..., help="Attachment field ID or name"),
+    file_path: str = typer.Argument(..., help="Path to the local file to upload"),
+    base_id: Optional[str] = typer.Option(None, "--base", "-b", help="The base ID (defaults to AIRTABLE_BASE_ID)"),
+    content_type: Optional[str] = typer.Option(None, "--content-type", help="MIME type override (auto-detected from filename when omitted)"),
+):
+    """
+    Upload a local file to a record's attachment field.
+
+    Uses Airtable's content-upload endpoint, which requires an existing record
+    and caps the base64 payload at 5 MB. For larger files, host the file and
+    attach it by URL via `records update <table> <record> 'Field=[{"url":"..."}]'`.
+
+    Examples:
+        # Upload a local image to the Image field of an existing record
+        airtable records upload-attachment recXXX "Image" ./diagram.png --base appXXX
+
+        # Force a specific MIME type
+        airtable records upload-attachment recXXX "Image" ./file.bin --content-type image/png --base appXXX
+    """
+    resolved_base_id = resolve_base_id(base_id)
+    client = get_client()
+    result = client.upload_attachment(
+        base_id=resolved_base_id,
+        record_id=record_id,
+        field_name=field_name,
+        file_path=file_path,
+        content_type=content_type,
+    )
+    print_success(f"Uploaded attachment to record {record_id} field '{field_name}'")
+    print_json(result)

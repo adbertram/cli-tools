@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [
-    {name = "Adam Bertram", email = "adbertram@gmail.com"}
+    {name = "CLI Tools contributors"}
 ]
 keywords = ["podio", "cli", "api", "automation"]
 classifiers = [
@@ -46,8 +46,8 @@ dev = [
 podio = "podio_cli.main:main"
 
 [project.urls]
-"Homepage" = "https://github.com/adbertram/cli-tools"
-"Bug Tracker" = "https://github.com/adbertram/cli-tools/issues"
+"Homepage" = "https://github.com/your-org/cli-tools"
+"Bug Tracker" = "https://github.com/your-org/cli-tools/issues"
 
 [tool.uv.sources]
 cli-tools-shared = { path = "../_repo/cli-tools-shared", editable = true }
@@ -72,4 +72,4 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --cov=podio_cli --cov-report=term-missing"
+addopts = "-v"

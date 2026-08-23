@@ -47,13 +47,13 @@ def test_third_party_package_defaults_to_community():
     assert classify_package_metadata(package_json, has_bundled_cli=False) == "community"
 
 
-def test_adam_package_without_repository_classifies_existing_generated_package():
+def test_package_without_marker_or_repository_defaults_to_community():
     package_json = {
-        "author": {"name": "Adam Bertram"},
+        "author": {"name": "Example User"},
         "description": "n8n language model sub-node for Claude Code CLI",
         "repository": None,
     }
-    assert classify_package_metadata(package_json, has_bundled_cli=False) == "custom"
+    assert classify_package_metadata(package_json, has_bundled_cli=False) == "community"
 
 
 def test_node_type_matches_scoped_package_by_base_name():

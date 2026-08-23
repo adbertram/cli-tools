@@ -2,7 +2,7 @@
 import typer
 from cli_tools_shared.activity_log import get_activity_logger
 from cli_tools_shared.auth_commands import create_auth_app
-from cli_tools_shared.output import print_success, print_info
+from cli_tools_shared.output import command, print_success, print_info
 
 from ..config import get_config
 
@@ -27,6 +27,7 @@ app = create_auth_app(get_config, tool_name="bricklink", test_handler=_test_hand
 
 
 @app.command("confirm")
+@command
 def auth_confirm():
     """Clear the legacy pending-confirmation flag from older Bricklink builds.
 

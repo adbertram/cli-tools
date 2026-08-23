@@ -1048,7 +1048,6 @@ class FacebookClient:
         post_id: str,
         text: str,
         timeout_ms: int,
-        composer_cleared: bool = False,
     ) -> Dict:
         """Verify the submitted text exists on the exact requested post ID.
 
@@ -1102,22 +1101,6 @@ class FacebookClient:
                     }
 
             time.sleep(1)
-
-        # The composer cleared but the comment is absent from the extracted
-        # window. Composer-cleared is strong evidence the submit fired — the
-        # comment may simply sit outside the Relay window (the known extractor
-        # blind spot). Retrying here created real duplicates on 2026-08-22;
-        # treat this as likely-success per the documented contract instead.
-        if composer_cleared:
-            return {
-                "verification": "render-timeout-likely-success",
-                "signal": "composer-cleared-but-no-other-evidence",
-                "groupId": group_id,
-                "postId": post_id,
-                "diagnostic": {
-                    "comments_checked": last_comment_count,
-                },
-            }
 
         raise ClientError(
             "Submitted comment was not found on the exact target post after submit: "
@@ -3381,56 +3364,13 @@ class FacebookClient:
             url,
             stop_markers=GROUP_POST_THREAD_STOP_MARKERS,
         )
-        post = self._full_group_post_from_html(
+        return self._full_group_post_from_html(
             group_id,
             post_id,
             url,
             body,
             allow_truncated_tail=True,
         )
-
-        # The Relay payload only carries Facebook's initially-loaded comment
-        # window; comments outside it (older pages, newer arrivals, expanded
-        # reply threads) are silently missing. That blind spot made
-        # hasCommented-style safety checks report false negatives. Merge in
-        # the rendered-DOM comment tree, which expands "View more" controls,
-        # so callers always see the complete visible thread. Relay entries win
-        # on metadata (created_time); rendered entries win on coverage.
-        try:
-            rendered = self._extract_rendered_thread_details(url, post_id)
-        except ClientError as exc:
-            # Designed fallback, not silent failure: Relay data is still
-            # returned, but the gap is surfaced loudly in logs.
-            logger.warning(
-                "get_group_post[%s]: rendered comment extraction failed (%s); "
-                "returning Relay-window comments only",
-                post_id,
-                exc,
-            )
-            return post
-
-        relay_dicts = [c.model_dump() for c in (post.comments or [])]
-        seen_ids = {d["comment_id"] for d in relay_dicts if d.get("comment_id")}
-        rendered_comments = rendered.get("comments") or []
-        if not isinstance(rendered_comments, list):
-            rendered_comments = []
-        for entry in rendered_comments:
-            if not isinstance(entry, dict):
-                continue
-            cid = entry.get("comment_id")
-            if not cid or cid in seen_ids:
-                continue
-            seen_ids.add(cid)
-            relay_dicts.append({
-                "comment_id": cid,
-                "author": entry.get("author", ""),
-                "text": entry.get("text", ""),
-                "created_time": None,
-                "replies": entry.get("replies", []),
-            })
-        post.comments = [Comment(**d) for d in relay_dicts]
-        post.comment_count = self._count_comments(relay_dicts)
-        return post
 
     def create_group_post(self, group_id: str, text: str) -> Dict:
         """Create a new post in a Facebook Group.
@@ -3657,7 +3597,6 @@ class FacebookClient:
             post_id,
             text,
             timeout_ms=20000,
-            composer_cleared=bool(composer_state.get("cleared")),
         )
         verification["composer"] = composer_state
         verification["commentCountBefore"] = comment_count_before

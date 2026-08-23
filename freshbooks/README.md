@@ -1,6 +1,10 @@
 # FreshBooks CLI Guide
 
-Complete reference for the `freshbooks` command-line interface for managing FreshBooks accounting data.
+## DESCRIPTION
+
+The `freshbooks` CLI provides a command-line interface for FreshBooks accounting API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Overview
 
@@ -10,11 +14,11 @@ The FreshBooks CLI provides access to:
 
 ## Authentication
 
-Authentication is handled via OAuth2 credentials in the `.env` file.
+Authentication is handled via OAuth2 credentials in a runtime profile.
 
 ### Prerequisites
 
-Create a `.env` file with your FreshBooks OAuth2 credentials:
+Create or update a FreshBooks authentication profile with these OAuth2 fields:
 - `FRESHBOOKS_ACCOUNT_ID`
 - `FRESHBOOKS_CLIENT_ID`
 - `FRESHBOOKS_CLIENT_SECRET`
@@ -31,21 +35,52 @@ Manage FreshBooks invoices.
 
 ```bash
 freshbooks invoice list                         # List all invoices
-freshbooks invoice list                 # List as formatted table
+freshbooks invoice list --table                 # List as formatted table
 freshbooks invoice list --status sent           # Filter by status
-freshbooks invoice list --unpaid        # List unpaid invoices
+freshbooks invoice list --unpaid                # List unpaid invoices
 freshbooks invoice list --limit 10              # Limit results
+freshbooks invoice list --filter "client:contains:Acme"    # Filter by client
 freshbooks invoice list --from 2024-01-01 --to 2024-12-31  # Filter by date range
 ```
 
 **Options:**
 | Option | Description |
 |--------|-------------|
+| `-f, --filter` | Filter results (`field:op:value`) — see [Filtering](#filtering) |
 | `-s, --status` | Filter by status (draft, sent, viewed, paid, overdue) |
 | `-u, --unpaid` | Filter to show only unpaid invoices (sent, viewed, overdue) |
 | `-l, --limit` | Maximum number of invoices to return (default: 100) |
+| `-p, --properties` | Comma-separated list of properties to display |
+| `-t, --table` | Display output as a formatted table instead of JSON |
 | `--from` | Filter invoices created on or after this date (YYYY-MM-DD) |
 | `--to` | Filter invoices created on or before this date (YYYY-MM-DD) |
+
+Filterable fields: `id`, `number`, `client`, `status`, `amount`, `outstanding`,
+`created`, `due_date`. A filter on any other field is rejected rather than
+reported as no matches.
+
+## Filtering
+
+`--filter` takes `field:op:value`. Repeat `--filter` for OR; separate conditions
+with commas inside one flag for AND.
+
+| Operator | Meaning | Example |
+|----------|---------|---------|
+| `eq` | Equals (default) | `organization:eq:n8n GmbH` |
+| `ne` | Not equals | `status:ne:paid` |
+| `contains` | Substring, case-insensitive | `organization:contains:n8n` |
+| `like` / `ilike` | SQL LIKE, `%` wildcard, case-insensitive | `organization:like:%n8n%` |
+| `startswith` / `endswith` | Prefix / suffix, case-insensitive | `organization:startswith:n8n` |
+| `in` / `nin` | In / not in list | `status:in:sent\|viewed` |
+| `gt` / `gte` / `lt` / `lte` | Numeric comparison | `outstanding:gt:0` |
+| `null` / `notnull` | Is / is not null | `email:notnull` |
+
+**`like` is SQL LIKE, not a substring search.** `organization:like:n8n` is an
+anchored, case-insensitive exact match and does not match `n8n GmbH`. For a
+substring search use `organization:contains:n8n` or `organization:like:%n8n%`.
+
+`--limit` caps the number of results returned, not the number of records
+searched. Filtering considers every page of the collection.
 
 ### Get Invoice Details
 
@@ -151,8 +186,10 @@ Manage customers/clients.
 
 ```bash
 freshbooks customer list
-freshbooks customer list
-freshbooks customer list --filter "Acme"
+freshbooks customer list --table
+freshbooks customer list --filter "organization:contains:Acme"
+freshbooks customer list --filter "organization:like:%Acme%"
+freshbooks customer list --filter "email:eq:john@acme.com"
 freshbooks customer list --limit 10
 freshbooks customer list --properties id,organization,email
 ```
@@ -160,9 +197,13 @@ freshbooks customer list --properties id,organization,email
 **Options:**
 | Option | Description |
 |--------|-------------|
-| `-f, --filter` | Filter by name, organization, or email (case-insensitive) |
+| `-f, --filter` | Filter results (`field:op:value`) — see [Filtering](#filtering) |
 | `-l, --limit` | Maximum number of customers to return (default: 100) |
 | `-p, --properties` | Comma-separated list of properties to display |
+| `-t, --table` | Display output as a formatted table instead of JSON |
+
+Filterable fields: `id`, `organization`, `name`, `email`. A filter on any other
+field is rejected rather than reported as no matches.
 
 ### Get Customer Details
 

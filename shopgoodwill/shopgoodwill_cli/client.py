@@ -1,5 +1,6 @@
 """ShopGoodwill service client."""
 import base64
+import re
 import urllib.parse
 from typing import Dict, List, Optional
 
@@ -26,6 +27,8 @@ class ShopGoodwillClient:
         "block_size": 16,
     }
     INVALID_AUTH_MESSAGE = "The username or password are incorrect"
+    SHIPPING_DESTINATION_ZIP = "47725"
+    SHIPPING_DESTINATION_COUNTRY = "US"
     USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
     def __init__(self, require_auth: bool = True, config=None):
@@ -130,8 +133,8 @@ class ShopGoodwillClient:
         category_level: int = 0,
         low_price: Optional[float] = None,
         high_price: Optional[float] = None,
-        sort_by: str = "EndingSoonest",
-        sort_order: str = "a",
+        sort_column: int = 1,
+        sort_descending: bool = False,
         closed_auctions: bool = False,
         buy_now_only: bool = False,
         pickup_only: bool = False,
@@ -143,13 +146,19 @@ class ShopGoodwillClient:
         Args:
             query: Search text
             page: Page number (starts at 1)
-            page_size: Number of results per page (max 40)
+            page_size: Number of results per page (max 40; the API caps here)
             category_id: Category ID to filter by (0 = all)
             category_level: Category level for filtering
             low_price: Minimum price filter
             high_price: Maximum price filter
-            sort_by: Sort field (EndingSoonest, BidCount, Price, etc.)
-            sort_order: Sort order ('a' = ascending, 'd' = descending)
+            sort_column: Integer sort column the API honors, verified from the live
+                site's sort dropdown: 1 = EndingDate, 3 = NumberofBids, 4 = BidPrice.
+                (The legacy string column names were silently ignored by the API.)
+            sort_descending: Sort direction. The site's "Newly Listed" option is
+                sortColumn 1 + sort_descending True (latest-ending first); "Ending
+                Soonest" is sortColumn 1 + False. ShopGoodwill exposes no true
+                listing-date column, so recency is refined client-side (see
+                search_recency_window).
             closed_auctions: Include closed auctions
             buy_now_only: Only show buy-now items
             pickup_only: Only show pickup items
@@ -162,8 +171,8 @@ class ShopGoodwillClient:
             "searchText": query,
             "page": page,
             "pageSize": min(page_size, 40),
-            "sortColumn": sort_by,
-            "sortOrder": sort_order,
+            "sortColumn": sort_column,
+            "sortDescending": sort_descending,
             "categoryId": category_id,
             "categoryLevel": category_level,
             "lowPrice": low_price if low_price is not None else 0,
@@ -196,6 +205,68 @@ class ShopGoodwillClient:
 
         return result
 
+    # ShopGoodwill has no true listing-date sort column; its "Newly Listed"
+    # option is EndingDate-descending, which only approximates recency (auction
+    # durations vary). For --sort newest we fetch that ordering across pages to
+    # build a window, then sort by startTime (the real listing date). ~100 items
+    # is enough for an incremental newest-first crawl (Sort Standard Rule 5).
+    RECENCY_WINDOW = 100
+    # Hard bound on how many items search_recency_window will ever fetch across
+    # underlying API calls (page_size 40 each). This is the real ceiling for
+    # --sort newest results, regardless of the requested --limit/--page: once
+    # offset + limit exceeds this, the window is truncated to whatever was
+    # fetched. Verified live 2026-07-26: --limit 250/300/500 all returned
+    # exactly 200 unique items against a query with total_count > 200.
+    _RECENCY_MAX_ITEMS = 200
+    _RECENCY_PAGE_SIZE = 40
+
+    def search_recency_window(
+        self,
+        query: str,
+        limit: int,
+        offset: int = 0,
+        sort_descending: bool = True,
+        **search_kwargs,
+    ) -> tuple:
+        """Build a listing-date-ordered result window for --sort newest.
+
+        Fetches ShopGoodwill's "Newly Listed" ordering (sortColumn 1) across pages
+        until the window holds at least max(offset + limit, RECENCY_WINDOW) items,
+        capped at _RECENCY_MAX_ITEMS (or the result set is exhausted), then sorts
+        by startTime. reverse=sort_descending yields newest-first for natural
+        newest and oldest-first for --desc. `offset` is the caller's requested
+        page offset ((page - 1) * limit); the caller slices the returned window
+        at [offset:offset + limit] to honor --page.
+
+        Returns:
+            (items_sorted_by_start_time, total_count)
+        """
+        target = min(max(offset + limit, self.RECENCY_WINDOW), self._RECENCY_MAX_ITEMS)
+        max_pages = -(-self._RECENCY_MAX_ITEMS // self._RECENCY_PAGE_SIZE)  # ceil div
+        collected: List[Dict] = []
+        total_count = 0
+
+        for page in range(1, max_pages + 1):
+            result = self.search(
+                query=query,
+                page=page,
+                page_size=self._RECENCY_PAGE_SIZE,
+                sort_column=1,
+                sort_descending=sort_descending,
+                **search_kwargs,
+            )
+            search_results = result.get("searchResults", {})
+            items = search_results.get("items", [])
+            total_count = search_results.get("itemCount", total_count)
+            if not items:
+                break
+            collected.extend(items)
+            if len(collected) >= target or len(collected) >= total_count:
+                break
+
+        collected.sort(key=lambda it: it.get("startTime") or "", reverse=sort_descending)
+        return collected, total_count
+
     def get_item(self, item_id: int) -> Dict:
         """
         Get detailed information for a specific item.
@@ -214,6 +285,52 @@ class ShopGoodwillClient:
             raise ClientError(f"Failed to get item {item_id}: status {response.status_code}")
 
         return response.json()
+
+    def calculate_shipping(self, item: Dict) -> Dict:
+        """
+        Calculate destination-specific shipping for an item.
+
+        ShopGoodwill returns this estimate as an HTML fragment.
+        """
+        shipping_params = {
+            "itemId": item.get("itemId"),
+            "sellerId": item.get("sellerId"),
+            "zipCode": self.SHIPPING_DESTINATION_ZIP,
+            "country": self.SHIPPING_DESTINATION_COUNTRY,
+            "packageWeight": item.get("displayWeight"),
+            "quantity": 1,
+        }
+
+        response = self.session.post(
+            f"{self.API_ROOT}/ItemDetail/CalculateShipping",
+            json=shipping_params,
+        )
+
+        if response.status_code != 200:
+            raise ClientError(
+                f"Failed to calculate shipping for item {item.get('itemId')}: "
+                f"status {response.status_code}"
+            )
+
+        return self._parse_shipping_estimate(response.text)
+
+    def _parse_shipping_estimate(self, html: str) -> Dict:
+        shipping_match = re.search(r"Shipping:.*?\$([0-9]+(?:\.[0-9]{2})?)", html, re.DOTALL)
+        service_match = re.search(r"Shipping:.*?\$[0-9]+(?:\.[0-9]{2})? \(([^)]+)\)", html, re.DOTALL)
+        handling_match = re.search(r"Handling:\s*\$([0-9]+(?:\.[0-9]{2})?)", html)
+        total_match = re.search(r"Total Shipping and Handling:\s*\$([0-9]+(?:\.[0-9]{2})?)", html)
+
+        if not shipping_match or not handling_match or not total_match:
+            raise ClientError(f"Shipping calculation failed: {html}")
+
+        return {
+            "destinationZip": self.SHIPPING_DESTINATION_ZIP,
+            "country": self.SHIPPING_DESTINATION_COUNTRY,
+            "shippingPrice": float(shipping_match.group(1)),
+            "handlingPrice": float(handling_match.group(1)),
+            "total": float(total_match.group(1)),
+            "serviceDescription": service_match.group(1) if service_match else "",
+        }
 
 
 _client: Optional[ShopGoodwillClient] = None

@@ -1,7 +1,12 @@
 # {{Name}} CLI
 
-A command-line interface for [{{Name}}]({{docs_url}}). {{description}}
+## DESCRIPTION
 
+A command-line interface for {{Name}}. {{description}}.
+
+Use this CLI when you need scriptable, JSON-first access to {{Name}} from agents, automation, or terminal workflows.
+
+{{DOCS_SECTION}}
 ## Installation
 
 ```bash

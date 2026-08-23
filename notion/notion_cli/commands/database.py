@@ -1,16 +1,21 @@
 """Database commands for Notion CLI."""
 import json
 import typer
+from datetime import datetime
 from typing import Optional, List, Dict
 
 from ..client import get_client
+from ..markdown_images import process_markdown_images
 from cli_tools_shared.filters import validate_filters, FilterValidationError, apply_filters
 from cli_tools_shared import FilterMap
 from ..output import (
     print_json,
     print_table,
-    handle_error,
+    command,
     format_page_for_display,
+    format_block_for_display,
+    build_text_block_update,
+    TEXT_EDITABLE_BLOCK_TYPES,
     print_success,
     print_warning,
     blocks_to_markdown,
@@ -30,31 +35,250 @@ page_app.add_typer(content_app, name="content")
 _database_filter_map = FilterMap()
 
 
+# Notion "date" filter condition keys, grouped by the value shape each one takes.
+DATE_VALUE_OPERATORS = ("equals", "before", "after", "on_or_before", "on_or_after")
+DATE_RELATIVE_OPERATORS = (
+    "this_week",
+    "past_week",
+    "past_month",
+    "past_year",
+    "next_week",
+    "next_month",
+    "next_year",
+)
+DATE_PRESENCE_OPERATORS = ("is_empty", "is_not_empty")
+DATE_OPERATORS = DATE_VALUE_OPERATORS + DATE_RELATIVE_OPERATORS + DATE_PRESENCE_OPERATORS
+
+# Keywords Notion accepts in place of an ISO 8601 date string.
+DATE_KEYWORD_VALUES = (
+    "today",
+    "tomorrow",
+    "yesterday",
+    "one_week_ago",
+    "one_week_from_now",
+    "one_month_ago",
+    "one_month_from_now",
+)
+
+# Generic operators this builder translates for non-date properties.
+GENERIC_OPERATORS = (
+    "eq", "ne", "in", "nin", "like", "ilike", "contains",
+    "gt", "gte", "lt", "lte", "null", "notnull",
+)
+
+# Notion property types whose filter condition accepts "is_empty" and
+# "is_not_empty". For each of these the Notion filter key is the property type
+# name itself, so the condition nests as {"property": X, "<type>": {...}}.
+# "date" is absent on purpose: build_date_filter owns every date property.
+EMPTINESS_PROPERTY_TYPES = (
+    "title",
+    "rich_text",
+    "number",
+    "select",
+    "status",
+    "multi_select",
+    "people",
+    "files",
+    "relation",
+    "url",
+    "email",
+    "phone_number",
+    "created_by",
+    "created_time",
+    "last_edited_by",
+    "last_edited_time",
+)
+
+# Property types whose Notion filter condition has no "is_empty" key, mapped to
+# the operators this builder does support for that type.
+NON_EMPTINESS_OPERATORS = {
+    "checkbox": ("eq", "ne"),
+}
+
+# Generic operator to Notion emptiness condition key.
+EMPTINESS_OPERATOR_KEYS = {
+    "null": "is_empty",
+    "notnull": "is_not_empty",
+}
+
+# Generic filter operators accepted as shorthand for a Notion date operator.
+DATE_OPERATOR_ALIASES = {
+    "eq": "equals",
+    "gt": "after",
+    "gte": "on_or_after",
+    "lt": "before",
+    "lte": "on_or_before",
+    "null": "is_empty",
+    "notnull": "is_not_empty",
+}
+
+
+def _describe_date_operators() -> str:
+    """Build the operator help text used in date filter error messages."""
+    aliases = ", ".join(f"{alias}={target}" for alias, target in DATE_OPERATOR_ALIASES.items())
+    return f"Supported date operators: {', '.join(DATE_OPERATORS)}. Aliases: {aliases}."
+
+
+def _validate_date_value(field: str, notion_op: str, value: str) -> str:
+    """Reject a date value the Notion API cannot accept.
+
+    Catches the case where an unrecognized operator token was folded into the
+    value by the implicit-``eq`` parse (e.g. ``Publish Date:sometime:2026-07-20``
+    becomes the value ``sometime:2026-07-20``), so the CLI fails locally instead
+    of posting a body the API rejects.
+    """
+    if value in DATE_KEYWORD_VALUES:
+        return value
+
+    # datetime.fromisoformat does not accept the trailing military "Z"; Notion
+    # does. Normalize it to the equivalent UTC offset before parsing.
+    candidate = value[:-1] + "+00:00" if value.endswith("Z") else value
+    try:
+        datetime.fromisoformat(candidate)
+    except ValueError:
+        raise FilterValidationError(
+            f"Value '{value}' for date operator '{notion_op}' on property "
+            f"'{field}' is not an ISO 8601 date (e.g. 2026-07-20) or one of: "
+            f"{', '.join(DATE_KEYWORD_VALUES)}. " + _describe_date_operators()
+        )
+    return value
+
+
+def build_date_filter(field: str, op: str, value: Optional[str]) -> dict:
+    """Build a Notion date filter condition for one field:op:value triple.
+
+    Args:
+        field: Notion property name (already known to be a ``date`` property)
+        op: Notion date operator or one of the ``DATE_OPERATOR_ALIASES`` keys
+        value: Raw filter value, or None for value-less operators
+
+    Raises:
+        FilterValidationError: When the operator is not a Notion date operator,
+            or when the supplied value cannot satisfy that operator.
+    """
+    if op in DATE_OPERATOR_ALIASES:
+        notion_op = DATE_OPERATOR_ALIASES[op]
+    else:
+        notion_op = op
+
+    if notion_op not in DATE_OPERATORS:
+        raise FilterValidationError(
+            f"Operator '{op}' is not valid for date property '{field}' (type: date). "
+            + _describe_date_operators()
+        )
+
+    if notion_op in DATE_VALUE_OPERATORS:
+        if not value:
+            raise FilterValidationError(
+                f"Date operator '{notion_op}' on property '{field}' requires an "
+                "ISO 8601 date value (e.g. 2026-07-20)."
+            )
+        return {
+            "property": field,
+            "date": {notion_op: _validate_date_value(field, notion_op, value)},
+        }
+
+    # Relative and presence operators carry no user value. Notion expects an
+    # empty object for relative ranges and literal true for presence checks.
+    if value is not None and value.strip().lower() not in ("", "true"):
+        raise FilterValidationError(
+            f"Date operator '{notion_op}' on property '{field}' takes no value "
+            f"(got '{value}'). Use '{field}:{notion_op}' or '{field}:{notion_op}:true'."
+        )
+
+    if notion_op in DATE_PRESENCE_OPERATORS:
+        return {"property": field, "date": {notion_op: True}}
+    return {"property": field, "date": {notion_op: {}}}
+
+
+def build_emptiness_filter(field: str, op: str, prop_type: str) -> dict:
+    """Build a Notion is_empty / is_not_empty filter condition for one property.
+
+    Notion nests the emptiness condition under the property's type key, so a
+    text property becomes {"property": field, "rich_text": {"is_empty": true}}.
+    A body without that type key fails API validation with HTTP 400.
+
+    Args:
+        field: Notion property name
+        op: Generic filter operator, either ``null`` or ``notnull``
+        prop_type: Notion property type resolved from the database schema
+
+    Raises:
+        FilterValidationError: When the property type has no Notion
+            is_empty / is_not_empty condition.
+    """
+    if prop_type in NON_EMPTINESS_OPERATORS:
+        raise FilterValidationError(
+            f"Operator '{op}' is not valid for property '{field}' "
+            f"(type: {prop_type}). Notion has no is_empty/is_not_empty "
+            f"condition for a {prop_type} property. Supported operators: "
+            f"{', '.join(NON_EMPTINESS_OPERATORS[prop_type])}."
+        )
+
+    if prop_type not in EMPTINESS_PROPERTY_TYPES:
+        raise FilterValidationError(
+            f"Operator '{op}' is not valid for property '{field}' "
+            f"(type: {prop_type}). Notion has no is_empty/is_not_empty "
+            f"condition for a {prop_type} property. Operators 'null' and "
+            f"'notnull' require one of these property types: "
+            f"{', '.join(EMPTINESS_PROPERTY_TYPES)}, date."
+        )
+
+    return {"property": field, prop_type: {EMPTINESS_OPERATOR_KEYS[op]: True}}
+
+
+def parse_notion_filter_conditions(filter_string: str) -> List[tuple]:
+    """Parse a filter string into (field, op, value) triples.
+
+    ``cli_tools_shared.filters.parse_filter_string`` only recognizes the generic
+    operator set, so a Notion-native operator such as ``on_or_after`` would be
+    collapsed into an ``eq`` condition whose value still contains the operator
+    token. Recognize the Notion-native operators here, and delegate every other
+    part to the shared parser so generic operator behavior stays in one place.
+    """
+    from cli_tools_shared.filters import parse_filter_string
+
+    conditions: List[tuple] = []
+    for part in filter_string.split(','):
+        part = part.strip()
+        if not part:
+            continue
+
+        tokens = part.split(':')
+        if len(tokens) >= 2 and tokens[1] in DATE_OPERATORS:
+            conditions.append((tokens[0], tokens[1], ":".join(tokens[2:])))
+        else:
+            conditions.extend(parse_filter_string(part))
+    return conditions
+
+
 def build_filter_from_standard(
-    filter_strings: Optional[List[str]] = None,
-    schema: Optional[Dict[str, str]] = None,
+    filter_strings: Optional[List[str]],
+    schema: Dict[str, str],
 ) -> Optional[dict]:
     """
     Build Notion API filter object from standard field:op:value filter strings.
 
     Args:
         filter_strings: List of standard filter strings (e.g., ["Status:eq:Done", "Priority:eq:High"])
-        schema: Optional dict mapping property names to their types (e.g., {"Phase": "status", "Priority": "select"})
+        schema: Dict mapping property names to their Notion types (e.g., {"Phase": "status", "Priority": "select"})
 
     Returns:
         Notion API filter object or None
+
+    Raises:
+        FilterValidationError: When a filtered property is absent from the
+            schema, or an operator is not supported for that property type.
     """
     if not filter_strings:
         return None
 
-    # Validate filters first
-    validate_filters(filter_strings)
+    # Validate filters first. Declare the Notion-native date operators so the
+    # shared validator recognizes them instead of rejecting them as unknown
+    # operators; this builder owns their translation below.
+    validate_filters(filter_strings, extra_operators=DATE_OPERATORS)
 
-    from cli_tools_shared.filters import parse_filter_string
-
-    schema = schema or {}
-
-    def get_property_type(field_name: str) -> Optional[str]:
+    def get_property_type(field_name: str) -> str:
         """Get property type from schema, trying case-insensitive match."""
         # Try exact match first
         if field_name in schema:
@@ -64,7 +288,14 @@ def build_filter_from_standard(
         for prop_name, prop_type in schema.items():
             if prop_name.lower() == field_lower:
                 return prop_type
-        return None
+        if not schema:
+            raise FilterValidationError(
+                f"Cannot filter on property '{field_name}': the database schema is empty."
+            )
+        raise FilterValidationError(
+            f"Property '{field_name}' does not exist in the database schema. "
+            f"Available properties: {', '.join(sorted(schema))}."
+        )
 
     def build_equals_filter(field: str, value: str, prop_type: Optional[str]) -> dict:
         """Build an equals filter based on property type."""
@@ -81,8 +312,6 @@ def build_filter_from_standard(
                 return {"property": field, "number": {"equals": float(value)}}
             except (ValueError, TypeError):
                 return {"property": field, "rich_text": {"equals": value}}
-        elif prop_type == "date":
-            return {"property": field, "date": {"equals": value}}
         elif prop_type in ("url", "email", "phone_number"):
             return {"property": field, prop_type: {"equals": value}}
         else:
@@ -104,8 +333,6 @@ def build_filter_from_standard(
                 return {"property": field, "number": {"does_not_equal": float(value)}}
             except (ValueError, TypeError):
                 return {"property": field, "rich_text": {"does_not_equal": value}}
-        elif prop_type == "date":
-            return {"property": field, "date": {"does_not_equal": value}}
         elif prop_type in ("url", "email", "phone_number"):
             return {"property": field, prop_type: {"does_not_equal": value}}
         else:
@@ -116,43 +343,44 @@ def build_filter_from_standard(
     all_conditions = []
 
     for filter_str in filter_strings:
-        conditions = parse_filter_string(filter_str)
+        conditions = parse_notion_filter_conditions(filter_str)
         for field, op, value in conditions:
             # Get property type from schema
             prop_type = get_property_type(field)
 
+            if prop_type == "date":
+                # Date properties have their own operator vocabulary in Notion.
+                all_conditions.append(build_date_filter(field, op, value))
+                continue
+
             if op in ('null', 'notnull'):
-                filter_obj = {
-                    "property": field,
-                    "is_empty": True if op == 'null' else False,
-                }
+                filter_obj = build_emptiness_filter(field, op, prop_type)
             elif op in ('gt', 'gte', 'lt', 'lte'):
-                # Comparison operators - number or date
+                # Comparison operators - number properties only. Date properties
+                # take Notion's own date operators and are handled above.
+                if prop_type != "number":
+                    raise FilterValidationError(
+                        f"Operator '{op}' is not valid for property '{field}' "
+                        f"(type: {prop_type}). Comparison operators require a "
+                        "number or date property."
+                    )
                 notion_op_map = {
                     'gt': 'greater_than',
                     'gte': 'greater_than_or_equal_to',
                     'lt': 'less_than',
                     'lte': 'less_than_or_equal_to',
                 }
-                if prop_type == "date":
-                    filter_obj = {
-                        "property": field,
-                        "date": {notion_op_map[op]: value},
-                    }
-                else:
-                    # Default to number
-                    try:
-                        num_val = float(value)
-                        filter_obj = {
-                            "property": field,
-                            "number": {notion_op_map[op]: num_val},
-                        }
-                    except (ValueError, TypeError):
-                        # Fall back to text contains
-                        filter_obj = {
-                            "property": field,
-                            "rich_text": {"contains": value},
-                        }
+                try:
+                    num_val = float(value)
+                except (ValueError, TypeError):
+                    raise FilterValidationError(
+                        f"Operator '{op}' on number property '{field}' requires a "
+                        f"numeric value (got '{value}')."
+                    )
+                filter_obj = {
+                    "property": field,
+                    "number": {notion_op_map[op]: num_val},
+                }
             elif op == 'like' or op == 'ilike':
                 # Text contains (Notion doesn't distinguish case sensitivity in contains)
                 filter_obj = {
@@ -188,8 +416,11 @@ def build_filter_from_standard(
                 else:
                     filter_obj = {"property": field, "rich_text": {"contains": value}}
             else:
-                # Unsupported operator - skip
-                continue
+                raise FilterValidationError(
+                    f"Operator '{op}' is not valid for property '{field}' "
+                    f"(type: {prop_type}). Supported operators: "
+                    f"{', '.join(GENERIC_OPERATORS)}."
+                )
 
             all_conditions.append(filter_obj)
 
@@ -204,6 +435,7 @@ def build_filter_from_standard(
 
 
 @app.command("get")
+@command
 def database_get(
     database_id: str = typer.Argument(
         ...,
@@ -229,41 +461,37 @@ def database_get(
         notion database get abc123 --table
         notion database get abc123 --data-source ds_xyz
     """
-    try:
-        client = get_client()
-        db = client.get_database(database_id, data_source_id=data_source)
+    client = get_client()
+    db = client.get_database(database_id, data_source_id=data_source)
 
-        # Format for display
-        formatted = {
-            "id": db.get("id", ""),
-            "title": "".join(t.get("plain_text", "") for t in db.get("title", [])),
-            "created_time": db.get("created_time", ""),
-            "last_edited_time": db.get("last_edited_time", ""),
-            "url": db.get("url", ""),
-            "archived": db.get("archived", False),
-            "is_inline": db.get("is_inline", False),
-            "parent_type": db.get("parent", {}).get("type", ""),
-            "property_count": len(db.get("properties", {})),
-        }
-        # Surface data_sources for the container case (helps users discover
-        # the data_source IDs they may need to pass via --data-source).
-        if "data_sources" in db:
-            formatted["data_sources"] = db["data_sources"]
-        if "resolved_data_source_id" in db:
-            formatted["resolved_data_source_id"] = db["resolved_data_source_id"]
+    # Format for display
+    formatted = {
+        "id": db.get("id", ""),
+        "title": "".join(t.get("plain_text", "") for t in db.get("title", [])),
+        "created_time": db.get("created_time", ""),
+        "last_edited_time": db.get("last_edited_time", ""),
+        "url": db.get("url", ""),
+        "archived": db.get("archived", False),
+        "is_inline": db.get("is_inline", False),
+        "parent_type": db.get("parent", {}).get("type", ""),
+        "property_count": len(db.get("properties", {})),
+    }
+    # Surface data_sources for the container case (helps users discover
+    # the data_source IDs they may need to pass via --data-source).
+    if "data_sources" in db:
+        formatted["data_sources"] = db["data_sources"]
+    if "resolved_data_source_id" in db:
+        formatted["resolved_data_source_id"] = db["resolved_data_source_id"]
 
-        if table:
-            rows = [{"field": k, "value": str(v)} for k, v in formatted.items()]
-            print_table(rows, ["field", "value"], ["Field", "Value"])
-        else:
-            print_json(formatted)
-
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+    if table:
+        rows = [{"field": k, "value": str(v)} for k, v in formatted.items()]
+        print_table(rows, ["field", "value"], ["Field", "Value"])
+    else:
+        print_json(formatted)
 
 
 @app.command("schema")
+@command
 def database_schema(
     database_id: str = typer.Argument(
         ...,
@@ -289,50 +517,390 @@ def database_schema(
         notion database schema abc123 --table
         notion database schema abc123 --data-source ds_xyz
     """
-    try:
-        client = get_client()
-        db = client.get_database(database_id, data_source_id=data_source)
+    client = get_client()
+    db = client.get_database(database_id, data_source_id=data_source)
 
-        schema = {
-            "id": db.get("id", ""),
-            "title": "".join(t.get("plain_text", "") for t in db.get("title", [])),
-            "properties": {}
+    schema = {
+        "id": db.get("id", ""),
+        "title": "".join(t.get("plain_text", "") for t in db.get("title", [])),
+        "properties": {}
+    }
+
+    for prop_name, prop_def in db.get("properties", {}).items():
+        schema["properties"][prop_name] = {
+            "type": prop_def.get("type", ""),
+            "id": prop_def.get("id", ""),
         }
 
-        for prop_name, prop_def in db.get("properties", {}).items():
-            schema["properties"][prop_name] = {
-                "type": prop_def.get("type", ""),
-                "id": prop_def.get("id", ""),
+        # Include options for select/multi_select/status
+        prop_type = prop_def.get("type", "")
+        if prop_type == "select":
+            options = prop_def.get("select", {}).get("options", [])
+            schema["properties"][prop_name]["options"] = [o.get("name") for o in options]
+        elif prop_type == "multi_select":
+            options = prop_def.get("multi_select", {}).get("options", [])
+            schema["properties"][prop_name]["options"] = [o.get("name") for o in options]
+        elif prop_type == "status":
+            options = prop_def.get("status", {}).get("options", [])
+            schema["properties"][prop_name]["options"] = [o.get("name") for o in options]
+
+    if table:
+        rows = []
+        for prop_name, prop_info in schema["properties"].items():
+            row = {
+                "property": prop_name,
+                "type": prop_info["type"],
+                "options": ", ".join(prop_info.get("options", [])) if prop_info.get("options") else "",
             }
+            rows.append(row)
+        print_table(rows, ["property", "type", "options"], ["Property", "Type", "Options"])
+    else:
+        print_json(schema)
 
-            # Include options for select/multi_select/status
-            prop_type = prop_def.get("type", "")
-            if prop_type == "select":
-                options = prop_def.get("select", {}).get("options", [])
-                schema["properties"][prop_name]["options"] = [o.get("name") for o in options]
-            elif prop_type == "multi_select":
-                options = prop_def.get("multi_select", {}).get("options", [])
-                schema["properties"][prop_name]["options"] = [o.get("name") for o in options]
-            elif prop_type == "status":
-                options = prop_def.get("status", {}).get("options", [])
-                schema["properties"][prop_name]["options"] = [o.get("name") for o in options]
 
-        if table:
-            rows = []
-            for prop_name, prop_info in schema["properties"].items():
-                row = {
-                    "property": prop_name,
-                    "type": prop_info["type"],
-                    "options": ", ".join(prop_info.get("options", [])) if prop_info.get("options") else "",
-                }
-                rows.append(row)
-            print_table(rows, ["property", "type", "options"], ["Property", "Type", "Options"])
-        else:
-            print_json(schema)
+# Property types supported by the `database create` convenience flags.
+# Each maps a flag-supplied property to its Notion schema object under
+# initial_data_source.properties.
+CREATE_SIMPLE_TYPES = [
+    "rich_text",
+    "number",
+    "select",
+    "multi_select",
+    "status",
+    "date",
+    "people",
+    "files",
+    "checkbox",
+    "url",
+    "email",
+    "phone_number",
+]
 
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+
+def build_create_property_schema(
+    prop_type: str,
+    options: Optional[List[str]] = None,
+) -> dict:
+    """
+    Build a single Notion property schema object for `database create`.
+
+    Used for the simple convenience flags (everything except title and
+    relation, which the command builds directly because they need extra
+    inputs). Mirrors the schema shapes accepted under
+    initial_data_source.properties.
+
+    Args:
+        prop_type: One of CREATE_SIMPLE_TYPES.
+        options: Option names for select/multi_select/status types.
+
+    Returns:
+        Property schema object (e.g. {"select": {"options": [...]}}).
+    """
+    if prop_type not in CREATE_SIMPLE_TYPES:
+        raise ValueError(f"Unsupported property type: {prop_type}")
+
+    if prop_type in ("select", "multi_select", "status"):
+        config: dict = {}
+        if options:
+            config["options"] = [{"name": opt} for opt in options]
+        return {prop_type: config}
+
+    # All remaining simple types take an empty config object.
+    return {prop_type: {}}
+
+
+def _parse_name_value(raw: str, flag: str) -> tuple:
+    """Split a 'Name:value' flag argument into (name, value)."""
+    parts = raw.split(":", 1)
+    if len(parts) != 2 or not parts[0].strip():
+        raise ValueError(f"{flag} requires 'Name:value' format")
+    return parts[0].strip(), parts[1].strip()
+
+
+@app.command("create")
+@command
+def database_create(
+    parent_page_id: str = typer.Argument(
+        ...,
+        help=(
+            "The parent page ID the new database is created under. "
+            "Database and data_source IDs are not valid parents."
+        ),
+    ),
+    title: str = typer.Option(
+        ...,
+        "--title",
+        "-t",
+        help="The database title",
+    ),
+    title_property: str = typer.Option(
+        "Name",
+        "--title-property",
+        help="Name of the title property to create (Notion requires exactly one)",
+    ),
+    inline: bool = typer.Option(
+        False,
+        "--inline/--no-inline",
+        help="Create the database inline in the parent page",
+    ),
+    properties_json: Optional[str] = typer.Option(
+        None,
+        "--properties",
+        "-p",
+        help="Raw JSON for initial_data_source.properties (Notion API format). "
+        "Merged with convenience flags; a title property is added if none is present.",
+    ),
+    text_props: Optional[List[str]] = typer.Option(
+        None,
+        "--text",
+        help="Add a rich_text property (format: 'Name'). Repeatable.",
+    ),
+    number_props: Optional[List[str]] = typer.Option(
+        None,
+        "--number",
+        help="Add a number property (format: 'Name'). Repeatable.",
+    ),
+    select_props: Optional[List[str]] = typer.Option(
+        None,
+        "--select",
+        help="Add a select property (format: 'Name' or 'Name:Opt1|Opt2'). Repeatable.",
+    ),
+    multi_select_props: Optional[List[str]] = typer.Option(
+        None,
+        "--multi-select",
+        help="Add a multi_select property (format: 'Name' or 'Name:Opt1|Opt2'). Repeatable.",
+    ),
+    status_props: Optional[List[str]] = typer.Option(
+        None,
+        "--status",
+        help="Add a status property (format: 'Name' or 'Name:Opt1|Opt2'). Repeatable.",
+    ),
+    date_props: Optional[List[str]] = typer.Option(
+        None,
+        "--date",
+        help="Add a date property (format: 'Name'). Repeatable.",
+    ),
+    checkbox_props: Optional[List[str]] = typer.Option(
+        None,
+        "--checkbox",
+        help="Add a checkbox property (format: 'Name'). Repeatable.",
+    ),
+    url_props: Optional[List[str]] = typer.Option(
+        None,
+        "--url",
+        help="Add a url property (format: 'Name'). Repeatable.",
+    ),
+    email_props: Optional[List[str]] = typer.Option(
+        None,
+        "--email",
+        help="Add an email property (format: 'Name'). Repeatable.",
+    ),
+    phone_props: Optional[List[str]] = typer.Option(
+        None,
+        "--phone",
+        help="Add a phone_number property (format: 'Name'). Repeatable.",
+    ),
+    people_props: Optional[List[str]] = typer.Option(
+        None,
+        "--people",
+        help="Add a people property (format: 'Name'). Repeatable.",
+    ),
+    files_props: Optional[List[str]] = typer.Option(
+        None,
+        "--files",
+        help="Add a files property (format: 'Name'). Repeatable.",
+    ),
+    relation_props: Optional[List[str]] = typer.Option(
+        None,
+        "--relation",
+        help="Add a relation property (format: 'Name:target_data_source_id'). "
+        "Uses the TARGET's data_source_id. Repeatable.",
+    ),
+    relation_type: str = typer.Option(
+        "dual_property",
+        "--relation-type",
+        help="Relation type for --relation properties (dual_property or single_property)",
+    ),
+):
+    """
+    Create a new database under a parent page.
+
+    PARENT_PAGE_ID must be a page ID. Notion does not allow creating a
+    database with a database or data_source parent.
+
+    The schema is supplied via raw JSON (--properties, the Notion
+    initial_data_source.properties object) and/or convenience flags. A title
+    property is always present: if --properties does not define one, a title
+    property named by --title-property (default "Name") is added.
+
+    Relation properties use the TARGET's data_source ID (not a database
+    container ID), per Notion API 2025-09-03.
+
+    Examples:
+        notion database create PARENT_PAGE_ID --title "Tasks"
+        notion database create PARENT_PAGE_ID --title "Tasks" \\
+            --status "Phase:Todo|Doing|Done" --select "Priority:High|Low" --date "Due"
+        notion database create PARENT_PAGE_ID --title "Tasks" --inline \\
+            --relation "Project:TARGET_DATA_SOURCE_ID"
+        notion database create PARENT_PAGE_ID --title "Tasks" \\
+            --properties '{"Name": {"title": {}}, "Notes": {"rich_text": {}}}'
+    """
+    client = get_client()
+
+    properties: Dict[str, dict] = {}
+
+    # Raw JSON properties (Notion initial_data_source.properties format)
+    if properties_json:
+        try:
+            parsed = json.loads(properties_json)
+        except json.JSONDecodeError as e:
+            print_warning(f"Invalid JSON in --properties: {e}")
+            raise typer.Exit(1)
+        if not isinstance(parsed, dict):
+            print_warning("--properties must be a JSON object of property definitions")
+            raise typer.Exit(1)
+        properties.update(parsed)
+
+    # Map each repeatable simple flag to its property type.
+    simple_flag_specs = [
+        (text_props, "rich_text", "--text"),
+        (number_props, "number", "--number"),
+        (select_props, "select", "--select"),
+        (multi_select_props, "multi_select", "--multi-select"),
+        (status_props, "status", "--status"),
+        (date_props, "date", "--date"),
+        (checkbox_props, "checkbox", "--checkbox"),
+        (url_props, "url", "--url"),
+        (email_props, "email", "--email"),
+        (phone_props, "phone_number", "--phone"),
+        (people_props, "people", "--people"),
+        (files_props, "files", "--files"),
+    ]
+
+    try:
+        for values, prop_type, flag in simple_flag_specs:
+            for raw in values or []:
+                # Optional 'Name:Opt1|Opt2' for choice types; plain 'Name' otherwise.
+                if ":" in raw and prop_type in ("select", "multi_select", "status"):
+                    name, options_str = raw.split(":", 1)
+                    name = name.strip()
+                    options = [o.strip() for o in options_str.split("|") if o.strip()]
+                else:
+                    name = raw.strip()
+                    options = None
+                if not name:
+                    raise ValueError(f"{flag} requires a property name")
+                properties[name] = build_create_property_schema(prop_type, options)
+
+        # Relation properties: 'Name:target_data_source_id'
+        if relation_type not in ("dual_property", "single_property"):
+            print_warning("--relation-type must be 'dual_property' or 'single_property'")
+            raise typer.Exit(1)
+        for raw in relation_props or []:
+            name, target_ds_id = _parse_name_value(raw, "--relation")
+            relation_config = {
+                "data_source_id": target_ds_id,
+                "type": relation_type,
+                relation_type: {},
+            }
+            properties[name] = {"relation": relation_config}
+    except ValueError as e:
+        print_warning(str(e))
+        raise typer.Exit(1)
+
+    # Ensure exactly one title property exists. If --properties already
+    # defined one, keep it; otherwise add the --title-property column.
+    has_title = any(
+        isinstance(schema, dict) and "title" in schema
+        for schema in properties.values()
+    )
+    if not has_title:
+        properties[title_property] = {"title": {}}
+
+    db = client.create_database(
+        parent_page_id=parent_page_id,
+        title=title,
+        properties=properties,
+        inline=inline,
+    )
+
+    data_sources = db.get("data_sources", [])
+    result = {
+        "id": db.get("id", ""),
+        "title": title,
+        "url": db.get("url", ""),
+        "is_inline": db.get("is_inline", inline),
+        "parent_page_id": parent_page_id,
+        "data_sources": data_sources,
+        "data_source_ids": [ds.get("id", "") for ds in data_sources],
+    }
+
+    print_json(result)
+    print_success(f"Database '{title}' created: {result['id']}")
+
+
+@app.command("delete")
+@command
+def database_delete(
+    database_id: str = typer.Argument(
+        ...,
+        help="The database ID to delete (move to trash)",
+    ),
+    restore: bool = typer.Option(
+        False,
+        "--restore",
+        help="Restore the database from the trash instead of trashing it",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        "-F",
+        help="Skip confirmation prompt",
+    ),
+):
+    """
+    Delete (trash) a whole database container, or restore it with --restore.
+
+    Notion does not hard-delete a database. This moves the container to the
+    trash through PATCH /databases/{id} with in_trash. To archive one row
+    instead, use 'notion database page delete PAGE_ID'.
+
+    Accepts a database container ID or a data_source ID (the IDs that
+    'notion database list' prints); a data_source ID resolves to its parent
+    container.
+
+    Examples:
+        notion database delete abc123
+        notion database delete abc123 --force
+        notion database delete abc123 --restore --force
+    """
+    client = get_client()
+
+    if not force:
+        question = (
+            f"Restore database {database_id} from trash?"
+            if restore
+            else f"Move database {database_id} to trash?"
+        )
+        if not typer.confirm(question):
+            typer.echo("Cancelled.")
+            raise typer.Exit(0)
+
+    db = client.set_database_trash(database_id, in_trash=not restore)
+
+    result = {
+        "id": db["id"],
+        "title": "".join(t.get("plain_text", "") for t in db["title"]),
+        "in_trash": db["in_trash"],
+        "archived": db["archived"],
+        "url": db["url"],
+    }
+
+    print_json(result)
+    if restore:
+        print_success(f"Database {database_id} restored from trash.")
+    else:
+        print_success(f"Database {database_id} moved to trash.")
 
 
 def format_database_for_list(db: dict) -> dict:
@@ -370,6 +938,7 @@ def format_database_for_list(db: dict) -> dict:
 
 
 @app.command("list")
+@command
 def database_list(
     table: bool = typer.Option(
         False,
@@ -415,77 +984,65 @@ def database_list(
     """
     from cli_tools_shared.filters import apply_filters
 
-    try:
-        client = get_client()
+    client = get_client()
 
-        # Validate filters
-        if filter:
-            try:
-                validate_filters(filter)
-            except FilterValidationError as e:
-                print_warning(str(e))
-                raise typer.Exit(1)
+    # Validate filters
+    if filter:
+        try:
+            validate_filters(filter)
+        except FilterValidationError as e:
+            print_warning(str(e))
+            raise typer.Exit(1)
 
-        # Parse sort direction
-        sort_direction = None
-        if sort:
-            if sort.lower() in ("desc", "descending"):
-                sort_direction = "descending"
-            elif sort.lower() in ("asc", "ascending"):
-                sort_direction = "ascending"
-            else:
-                print_warning(f"Invalid sort value: {sort}. Use 'asc' or 'desc'.")
-                raise typer.Exit(1)
-
-        # List all databases (search with filter_type=data_source)
-        results = client.search_all(
-            query=None,
-            filter_type="data_source",
-            sort_direction=sort_direction,
-            limit=limit,
-        )
-
-        if not results:
-            typer.echo("No databases found.")
-            raise typer.Exit(0)
-
-        # Format results
-        formatted = [format_database_for_list(db) for db in results]
-
-        # Apply client-side filter if provided
-        if filter:
-            formatted = apply_filters(formatted, filter)
-
-        if not formatted:
-            typer.echo("No databases found matching filter.")
-            raise typer.Exit(0)
-
-        # Parse properties option
-        display_columns = None
-        display_headers = None
-        if properties:
-            prop_list = [p.strip() for p in properties.split(",")]
-            display_columns = prop_list
-            display_headers = [p.replace("_", " ").title() for p in prop_list]
-
-        if table:
-            cols = display_columns or ["id", "title", "parent_type", "last_edited"]
-            hdrs = display_headers or ["ID", "Title", "Parent Type", "Last Edited"]
-            print_table(formatted, columns=cols, headers=hdrs)
+    # Parse sort direction
+    sort_direction = None
+    if sort:
+        if sort.lower() in ("desc", "descending"):
+            sort_direction = "descending"
+        elif sort.lower() in ("asc", "ascending"):
+            sort_direction = "ascending"
         else:
-            # Filter properties for JSON output
-            if display_columns:
-                formatted = [{k: v for k, v in r.items() if k in display_columns} for r in formatted]
-            print_json(formatted)
+            print_warning(f"Invalid sort value: {sort}. Use 'asc' or 'desc'.")
+            raise typer.Exit(1)
 
-        typer.echo(f"\n{len(formatted)} database(s) found.", err=True)
+    # List all databases (search with filter_type=data_source)
+    results = client.search_all(
+        query=None,
+        filter_type="data_source",
+        sort_direction=sort_direction,
+        limit=limit,
+    )
 
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+    # Format results
+    formatted = [format_database_for_list(db) for db in results]
+
+    # Apply client-side filter if provided
+    if filter:
+        formatted = apply_filters(formatted, filter)
+
+    # Parse properties option
+    display_columns = None
+    display_headers = None
+    if properties:
+        prop_list = [p.strip() for p in properties.split(",")]
+        display_columns = prop_list
+        display_headers = [p.replace("_", " ").title() for p in prop_list]
+
+    if table:
+        cols = display_columns or ["id", "title", "parent_type", "last_edited"]
+        hdrs = display_headers or ["ID", "Title", "Parent Type", "Last Edited"]
+        print_table(formatted, columns=cols, headers=hdrs)
+    else:
+        # Filter properties for JSON output
+        if display_columns:
+            formatted = [{k: v for k, v in r.items() if k in display_columns} for r in formatted]
+        print_json(formatted)
+
+    typer.echo(f"\n{len(formatted)} database(s) found.", err=True)
 
 
 @page_app.command("list")
+@command
 def page_list(
     database_id: str = typer.Option(
         ...,
@@ -509,7 +1066,7 @@ def page_list(
         None,
         "--properties",
         "-p",
-        help="Comma-separated list of properties to include in output",
+        help="Quoted comma-separated list of properties to include in output",
     ),
     limit: int = typer.Option(
         100,
@@ -538,95 +1095,96 @@ def page_list(
         notion database page list DB_ID --filter "Complete:true"
         notion database page list DB_ID --filter "Name:like:%project%"
 
+    Date Filter Examples (date properties use Notion's date operators):
+        notion database page list DB_ID --filter "Publish Date:on_or_after:2026-07-20"
+        notion database page list DB_ID --filter "Publish Date:gte:2026-07-20"  # alias of on_or_after
+        notion database page list DB_ID --filter "Publish Date:before:2026-08-01"
+        notion database page list DB_ID --filter "Publish Date:past_week"
+        notion database page list DB_ID --filter "Publish Date:is_not_empty:true"
+
     Output Examples:
         notion database page list DB_ID --table
-        notion database page list DB_ID --properties "Title,Status,Due Date"
+        notion database page list DB_ID --properties "id,Name,Website,Contact Email"
         notion database page list DB_ID --limit 10
     """
-    try:
-        client = get_client()
+    client = get_client()
 
-        # Fetch database schema to get property types for filter building
-        schema: Dict[str, str] = {}
-        if filter:
-            db = client.get_database(database_id, data_source_id=data_source)
-            for prop_name, prop_def in db.get("properties", {}).items():
-                schema[prop_name] = prop_def.get("type", "")
+    # Fetch database schema to get property types for filter building
+    schema: Dict[str, str] = {}
+    if filter:
+        db = client.get_database(database_id, data_source_id=data_source)
+        for prop_name, prop_def in db["properties"].items():
+            schema[prop_name] = prop_def["type"]
 
-        # Build filter
-        filter_obj = None
+    # Build filter. FilterValidationError propagates to the @command decorator,
+    # which reports it as a local error and exits 1 before any API call.
+    filter_obj = build_filter_from_standard(filter, schema=schema)
 
-        try:
-            if filter:
-                filter_obj = build_filter_from_standard(filter, schema=schema)
-        except (FilterValidationError, ValueError) as e:
-            print_warning(str(e))
-            raise typer.Exit(1)
-
-        # Build sorts
-        sorts = None
-        if sort_by:
-            parts = sort_by.split(":", 1)
-            prop_name = parts[0]
-            direction = parts[1] if len(parts) > 1 else "ascending"
-            if direction.lower() in ("desc", "descending"):
-                direction = "descending"
-            else:
-                direction = "ascending"
-            sorts = [{"property": prop_name, "direction": direction}]
-
-        # Query database with limit passed to API
-        pages = client.query_database_all(
-            database_id=database_id,
-            filter_obj=filter_obj,
-            sorts=sorts,
-            limit=limit,
-            data_source_id=data_source,
-        )
-
-        if not pages:
-            typer.echo("No pages found.")
-            raise typer.Exit(0)
-
-        # Parse properties list
-        props_list = None
-        if properties:
-            props_list = [p.strip() for p in properties.split(",")]
-
-        # Format pages
-        formatted = [format_page_for_display(p, props_list) for p in pages]
-
-        if table:
-            # Determine columns from first page
-            if formatted:
-                # Default columns: id, Title (or Name), Excerpt, Status
-                all_cols = list(formatted[0].keys())
-                # Find title column (could be "Title" or "Name")
-                title_col = next((c for c in all_cols if c.lower() in ("title", "name")), None)
-                # Build default columns in priority order
-                default_cols = ["id"]
-                if title_col:
-                    default_cols.append(title_col)
-                if "Excerpt" in all_cols:
-                    default_cols.append("Excerpt")
-                if "Status" in all_cols:
-                    default_cols.append("Status")
-                # Use default columns, or fall back to first few if none found
-                display_cols = [c for c in default_cols if c in all_cols]
-                if not display_cols:
-                    display_cols = all_cols[:4]
-                print_table(formatted, display_cols, display_cols)
+    # Build sorts
+    sorts = None
+    if sort_by:
+        parts = sort_by.split(":", 1)
+        prop_name = parts[0]
+        direction = parts[1] if len(parts) > 1 else "ascending"
+        if direction.lower() in ("desc", "descending"):
+            direction = "descending"
         else:
-            print_json(formatted)
+            direction = "ascending"
+        sorts = [{"property": prop_name, "direction": direction}]
 
-        typer.echo(f"\n{len(formatted)} page(s) found.", err=True)
+    # Query database with limit passed to API
+    pages = client.query_database_all(
+        database_id=database_id,
+        filter_obj=filter_obj,
+        sorts=sorts,
+        limit=limit,
+        data_source_id=data_source,
+    )
 
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+    if not pages:
+        if table:
+            print_table([], columns=["id"], headers=["ID"])
+        else:
+            print_json([])
+        typer.echo("\n0 page(s) found.", err=True)
+        return
+
+    # Parse properties list
+    props_list = None
+    if properties:
+        props_list = [p.strip() for p in properties.split(",")]
+
+    # Format pages
+    formatted = [format_page_for_display(p, props_list) for p in pages]
+
+    if table:
+        # Determine columns from first page
+        if formatted:
+            # Default columns: id, Title (or Name), Excerpt, Status
+            all_cols = list(formatted[0].keys())
+            # Find title column (could be "Title" or "Name")
+            title_col = next((c for c in all_cols if c.lower() in ("title", "name")), None)
+            # Build default columns in priority order
+            default_cols = ["id"]
+            if title_col:
+                default_cols.append(title_col)
+            if "Excerpt" in all_cols:
+                default_cols.append("Excerpt")
+            if "Status" in all_cols:
+                default_cols.append("Status")
+            # Use default columns, or fall back to first few if none found
+            display_cols = [c for c in default_cols if c in all_cols]
+            if not display_cols:
+                display_cols = all_cols[:4]
+            print_table(formatted, display_cols, display_cols)
+    else:
+        print_json(formatted)
+
+    typer.echo(f"\n{len(formatted)} page(s) found.", err=True)
 
 
 @page_app.command("get")
+@command
 def page_get(
     page_id: str = typer.Argument(
         ...,
@@ -660,33 +1218,31 @@ def page_get(
         notion database page get abc123-def456 --include-blocks --markdown
         notion database page get abc123-def456 --include-blocks --markdown --out-file content.md
     """
-    try:
-        client = get_client()
-        page = client.get_page(page_id)
+    if out_file and not (include_blocks and markdown):
+        raise ValueError("--out-file requires --include-blocks and --markdown")
 
-        formatted = format_page_for_display(page)
+    client = get_client()
+    page = client.get_page(page_id)
 
-        # Fetch and include blocks if requested
-        if include_blocks:
-            blocks = client.get_block_children_all(page_id, recursive=True)
-            if markdown:
-                markdown_content = blocks_to_markdown(blocks)
-                formatted["content"] = markdown_content
+    formatted = format_page_for_display(page)
 
-                # Write to file if requested
-                if out_file:
-                    with open(out_file, 'w', encoding='utf-8') as f:
-                        f.write(markdown_content)
-                    print_success(f"Markdown content written to {out_file}")
-                    return
-            else:
-                formatted["blocks"] = blocks
+    # Fetch and include blocks if requested
+    if include_blocks:
+        blocks = client.get_block_children_all(page_id, recursive=True)
+        if markdown:
+            markdown_content = blocks_to_markdown(blocks)
+            formatted["content"] = markdown_content
 
-        print_json(formatted)
+            # Write to file if requested
+            if out_file:
+                with open(out_file, 'w', encoding='utf-8') as f:
+                    f.write(markdown_content)
+                print_success(f"Markdown content written to {out_file}")
+                return
+        else:
+            formatted["blocks"] = blocks
 
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+    print_json(formatted)
 
 
 def build_property_value(prop_type: str, value: str) -> dict:
@@ -718,6 +1274,7 @@ def build_property_value(prop_type: str, value: str) -> dict:
 
 
 @page_app.command("update")
+@command
 def page_update(
     page_id: str = typer.Argument(
         ...,
@@ -785,90 +1342,86 @@ def page_update(
     Raw JSON (for complex updates):
         notion database page update PAGE_ID --properties '{"Status": {"status": {"name": "Done"}}}'
     """
-    try:
-        client = get_client()
+    client = get_client()
 
-        properties = {}
+    properties = {}
 
-        # Parse raw JSON properties if provided
-        if properties_json:
-            try:
-                properties = json.loads(properties_json)
-            except json.JSONDecodeError as e:
-                print_warning(f"Invalid JSON in --properties: {e}")
-                raise typer.Exit(1)
-
-        # Build properties from individual options (each flag is repeatable)
-        for status_val in set_status or []:
-            parts = status_val.split(":", 1)
-            if len(parts) == 2:
-                prop_name, value = parts
-            else:
-                prop_name, value = "Status", status_val
-            properties[prop_name] = build_property_value("status", value)
-
-        for select_val in set_select or []:
-            parts = select_val.split(":", 1)
-            if len(parts) != 2:
-                print_warning("--select requires 'property:value' format")
-                raise typer.Exit(1)
-            prop_name, value = parts
-            properties[prop_name] = build_property_value("select", value)
-
-        for text_val in set_text or []:
-            parts = text_val.split(":", 1)
-            if len(parts) != 2:
-                print_warning("--text requires 'property:value' format")
-                raise typer.Exit(1)
-            prop_name, value = parts
-            properties[prop_name] = build_property_value("rich_text", value)
-
-        for checkbox_val in set_checkbox or []:
-            parts = checkbox_val.split(":", 1)
-            if len(parts) != 2:
-                print_warning("--checkbox requires 'property:true/false' format")
-                raise typer.Exit(1)
-            prop_name, value = parts
-            properties[prop_name] = build_property_value("checkbox", value)
-
-        for number_val in set_number or []:
-            parts = number_val.split(":", 1)
-            if len(parts) != 2:
-                print_warning("--number requires 'property:value' format")
-                raise typer.Exit(1)
-            prop_name, value = parts
-            properties[prop_name] = build_property_value("number", value)
-
-        for url_val in set_url or []:
-            parts = url_val.split(":", 1)
-            if len(parts) != 2:
-                print_warning("--url requires 'property:value' format")
-                raise typer.Exit(1)
-            prop_name, value = parts
-            properties[prop_name] = build_property_value("url", value)
-
-        # Validate we have something to update
-        if not properties and archive is None:
-            print_warning("No updates specified. Use --status, --select, --text, --properties, or --archive/--restore")
+    # Parse raw JSON properties if provided
+    if properties_json:
+        try:
+            properties = json.loads(properties_json)
+        except json.JSONDecodeError as e:
+            print_warning(f"Invalid JSON in --properties: {e}")
             raise typer.Exit(1)
 
-        # Perform update
-        updated_page = client.update_page(
-            page_id=page_id,
-            properties=properties if properties else None,
-            archived=archive,
-        )
+    # Build properties from individual options (each flag is repeatable)
+    for status_val in set_status or []:
+        parts = status_val.split(":", 1)
+        if len(parts) == 2:
+            prop_name, value = parts
+        else:
+            prop_name, value = "Status", status_val
+        properties[prop_name] = build_property_value("status", value)
 
-        formatted = format_page_for_display(updated_page)
-        print_json(formatted)
-        print_success(f"Page {page_id} updated successfully.")
+    for select_val in set_select or []:
+        parts = select_val.split(":", 1)
+        if len(parts) != 2:
+            print_warning("--select requires 'property:value' format")
+            raise typer.Exit(1)
+        prop_name, value = parts
+        properties[prop_name] = build_property_value("select", value)
 
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+    for text_val in set_text or []:
+        parts = text_val.split(":", 1)
+        if len(parts) != 2:
+            print_warning("--text requires 'property:value' format")
+            raise typer.Exit(1)
+        prop_name, value = parts
+        properties[prop_name] = build_property_value("rich_text", value)
+
+    for checkbox_val in set_checkbox or []:
+        parts = checkbox_val.split(":", 1)
+        if len(parts) != 2:
+            print_warning("--checkbox requires 'property:true/false' format")
+            raise typer.Exit(1)
+        prop_name, value = parts
+        properties[prop_name] = build_property_value("checkbox", value)
+
+    for number_val in set_number or []:
+        parts = number_val.split(":", 1)
+        if len(parts) != 2:
+            print_warning("--number requires 'property:value' format")
+            raise typer.Exit(1)
+        prop_name, value = parts
+        properties[prop_name] = build_property_value("number", value)
+
+    for url_val in set_url or []:
+        parts = url_val.split(":", 1)
+        if len(parts) != 2:
+            print_warning("--url requires 'property:value' format")
+            raise typer.Exit(1)
+        prop_name, value = parts
+        properties[prop_name] = build_property_value("url", value)
+
+    # Validate we have something to update
+    if not properties and archive is None:
+        print_warning("No updates specified. Use --status, --select, --text, --properties, or --archive/--restore")
+        raise typer.Exit(1)
+
+    # Perform update
+    updated_page = client.update_page(
+        page_id=page_id,
+        properties=properties if properties else None,
+        archived=archive,
+    )
+
+    formatted = format_page_for_display(updated_page)
+    print_json(formatted)
+    print_success(f"Page {page_id} updated successfully.")
 
 
 @page_app.command("create")
+@command
 def page_create(
     database_id: str = typer.Argument(
         ...,
@@ -1007,14 +1560,23 @@ def page_create(
             template_msg = "default template" if use_default else f"template {template_id}"
             print_success(f"Page created from {template_msg} (content applied asynchronously)")
 
-        elif blocks_file:
-            # Create with Notion JSON blocks
-            with open(blocks_file, 'r', encoding='utf-8') as f:
-                blocks = json.load(f)
+        elif blocks_file or content_file:
+            if blocks_file:
+                # Create with Notion JSON blocks
+                with open(blocks_file, 'r', encoding='utf-8') as f:
+                    blocks = json.load(f)
 
-            if not isinstance(blocks, list):
-                print_warning("Blocks file must contain a JSON array of block objects")
-                raise typer.Exit(1)
+                if not isinstance(blocks, list):
+                    print_warning("Blocks file must contain a JSON array of block objects")
+                    raise typer.Exit(1)
+            else:
+                # Markdown uses the same nesting-aware, chunked upload path.
+                with open(content_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                # Upload local images BEFORE the page is created so a missing
+                # file fails without leaving a half-populated page behind.
+                image_uploads = process_markdown_images(content, content_file, client)
+                blocks = text_to_blocks(content, image_uploads=image_uploads)
 
             # Create page without children first (to handle nesting limits)
             created_page = client.create_page(
@@ -1033,22 +1595,18 @@ def page_create(
                 created_count, _ = client._upload_blocks_with_nesting(
                     page_id, blocks, progress_callback=progress_cb
                 )
-                print_success(f"Page created with {created_count} blocks: {created_page.get('url', created_page.get('id'))}")
+                if blocks_file:
+                    print_success(f"Page created with {created_count} blocks: {created_page.get('url', created_page.get('id'))}")
+                else:
+                    print_success(f"Page created successfully: {created_page.get('url', created_page.get('id'))}")
             else:
                 print_success(f"Page created successfully: {created_page.get('url', created_page.get('id'))}")
 
         else:
-            # Create without template — optional markdown content
-            children = None
-            if content_file:
-                with open(content_file, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                children = text_to_blocks(content)
-
+            # Create without template or content
             created_page = client.create_page(
                 database_id=database_id,
                 properties=properties,
-                children=children,
             )
             print_success(f"Page created successfully: {created_page.get('url', created_page.get('id'))}")
 
@@ -1061,12 +1619,10 @@ def page_create(
     except json.JSONDecodeError as e:
         print_warning(f"Invalid JSON in blocks file: {e}")
         raise typer.Exit(1)
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
 
 
 @page_app.command("delete")
+@command
 def page_delete(
     page_id: str = typer.Argument(
         ...,
@@ -1089,108 +1645,28 @@ def page_delete(
         notion database page delete abc123-def456
         notion database page delete abc123-def456 --force
     """
-    try:
-        client = get_client()
+    client = get_client()
 
-        # Confirm unless force flag is set
-        if not force:
-            confirm = typer.confirm(f"Archive page {page_id}?")
-            if not confirm:
-                typer.echo("Cancelled.")
-                raise typer.Exit(0)
+    # Confirm unless force flag is set
+    if not force:
+        confirm = typer.confirm(f"Archive page {page_id}?")
+        if not confirm:
+            typer.echo("Cancelled.")
+            raise typer.Exit(0)
 
-        # Archive the page
-        updated_page = client.update_page(
-            page_id=page_id,
-            archived=True,
-        )
+    # Archive the page
+    updated_page = client.update_page(
+        page_id=page_id,
+        archived=True,
+    )
 
-        formatted = format_page_for_display(updated_page)
-        print_json(formatted)
-        print_success(f"Page {page_id} archived successfully.")
-
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
-
-
-# Supported image file extensions for Notion uploads
-SUPPORTED_IMAGE_EXTENSIONS = {
-    '.gif', '.heic', '.jpeg', '.jpg', '.png', '.svg', '.tif', '.tiff', '.webp', '.ico'
-}
-
-
-def _process_markdown_images(
-    content: str,
-    source_file: Optional[str],
-    client,
-) -> dict:
-    """
-    Scan markdown content for local image references and upload them to Notion.
-
-    Args:
-        content: Markdown content to scan
-        source_file: Path to the source file (for resolving relative paths).
-                    If None, relative paths cannot be resolved.
-        client: Notion client instance
-
-    Returns:
-        Dictionary mapping original image paths to Notion file_upload IDs
-    """
-    import re
-    from pathlib import Path
-
-    image_uploads = {}
-
-    # Find all image references: ![alt](path)
-    image_pattern = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
-
-    for match in image_pattern.finditer(content):
-        image_path = match.group(2)
-
-        # Skip URLs - they use external type
-        if image_path.startswith(('http://', 'https://')):
-            continue
-
-        # Skip if already processed
-        if image_path in image_uploads:
-            continue
-
-        # Resolve path relative to source file
-        if source_file:
-            source_dir = Path(source_file).parent
-            resolved_path = source_dir / image_path
-        else:
-            resolved_path = Path(image_path)
-
-        # Validate file exists
-        if not resolved_path.exists():
-            typer.echo(f"Warning: Image file not found: {resolved_path}", err=True)
-            continue
-
-        # Validate file extension
-        ext = resolved_path.suffix.lower()
-        if ext not in SUPPORTED_IMAGE_EXTENSIONS:
-            typer.echo(
-                f"Warning: Unsupported image type '{ext}' for: {resolved_path}. "
-                f"Supported: {', '.join(sorted(SUPPORTED_IMAGE_EXTENSIONS))}",
-                err=True
-            )
-            continue
-
-        # Upload the file
-        try:
-            typer.echo(f"Uploading image: {resolved_path.name}...", err=True)
-            file_upload_id = client.upload_file(str(resolved_path))
-            image_uploads[image_path] = file_upload_id
-        except Exception as e:
-            typer.echo(f"Warning: Failed to upload {resolved_path}: {e}", err=True)
-            continue
-
-    return image_uploads
+    formatted = format_page_for_display(updated_page)
+    print_json(formatted)
+    print_success(f"Page {page_id} archived successfully.")
 
 
 @content_app.command("append")
+@command
 def content_append(
     page_id: str = typer.Argument(
         ...,
@@ -1256,7 +1732,7 @@ def content_append(
             raise typer.Exit(1)
 
         # Process and upload any local images in the content
-        image_uploads = _process_markdown_images(content, file, client)
+        image_uploads = process_markdown_images(content, file, client)
 
         # Convert to blocks (with image upload mappings)
         blocks = text_to_blocks(content, image_uploads=image_uploads)
@@ -1284,12 +1760,10 @@ def content_append(
     except FileNotFoundError:
         print_warning(f"File not found: {file}")
         raise typer.Exit(1)
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
 
 
 @content_app.command("set")
+@command
 def content_set(
     page_id: str = typer.Argument(
         ...,
@@ -1367,7 +1841,7 @@ def content_set(
                     content = f.read()
 
             # Process and upload any local images in the content
-            image_uploads = _process_markdown_images(content, file, client)
+            image_uploads = process_markdown_images(content, file, client)
 
             # Convert to blocks (with image upload mappings)
             blocks = text_to_blocks(content, image_uploads=image_uploads)
@@ -1402,12 +1876,10 @@ def content_set(
     except json.JSONDecodeError as e:
         print_warning(f"Invalid JSON: {e}")
         raise typer.Exit(1)
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
 
 
 @content_app.command("clear")
+@command
 def content_clear(
     page_id: str = typer.Argument(
         ...,
@@ -1427,25 +1899,199 @@ def content_clear(
         notion database page content clear PAGE_ID
         notion database page content clear PAGE_ID --force
     """
-    try:
-        client = get_client()
+    client = get_client()
 
-        # Confirm unless force flag is set
-        if not force:
-            confirm = typer.confirm(f"Clear all content from page {page_id}?")
-            if not confirm:
-                typer.echo("Cancelled.")
-                raise typer.Exit(0)
+    # Confirm unless force flag is set
+    if not force:
+        confirm = typer.confirm(f"Clear all content from page {page_id}?")
+        if not confirm:
+            typer.echo("Cancelled.")
+            raise typer.Exit(0)
 
-        # Clear content (single API call using erase_content flag)
-        client.clear_page_content(page_id)
+    # Clear content (single API call using erase_content flag)
+    client.clear_page_content(page_id)
 
-        print_success(f"Cleared all content from page {page_id}")
-        print_json({"page_id": page_id, "cleared": True})
+    print_success(f"Cleared all content from page {page_id}")
+    print_json({"page_id": page_id, "cleared": True})
 
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+
+@content_app.command("list-blocks")
+@command
+def content_list_blocks(
+    page_id: str = typer.Argument(
+        ...,
+        help="The page ID to list content blocks for",
+    ),
+    recursive: bool = typer.Option(
+        False,
+        "--recursive",
+        "-r",
+        help="Recursively include nested child blocks",
+    ),
+    table: bool = typer.Option(
+        False,
+        "--table",
+        "-t",
+        help="Display as formatted table",
+    ),
+    limit: Optional[int] = typer.Option(
+        None,
+        "--limit",
+        "-l",
+        help="Maximum number of top-level blocks to return (default: all blocks)",
+    ),
+    filter: Optional[List[str]] = typer.Option(
+        None,
+        "--filter",
+        "-f",
+        help="Filter: field:op:value (e.g., type:eq:paragraph, has_children:eq:true)",
+    ),
+    properties: Optional[str] = typer.Option(
+        None,
+        "--properties",
+        "-p",
+        help="Comma-separated fields to include (id,type,text,has_children,is_toggleable,created_time,last_edited_time)",
+    ),
+):
+    """
+    List a page's content blocks with their block IDs, types, and text.
+
+    Use this to map paragraphs/headings to their block IDs so a targeted,
+    non-destructive edit can be made with 'content update-block --block-id'.
+    Editing a block in place preserves the block ID, so any inline comments
+    anchored to OTHER blocks are not affected.
+
+    Examples:
+        notion database page content list-blocks PAGE_ID
+        notion database page content list-blocks PAGE_ID --table
+        notion database page content list-blocks PAGE_ID --recursive
+        notion database page content list-blocks PAGE_ID --filter "type:eq:paragraph"
+        notion database page content list-blocks PAGE_ID --properties "id,type,text" --table
+    """
+    client = get_client()
+
+    if filter:
+        try:
+            validate_filters(filter)
+        except FilterValidationError as e:
+            print_warning(str(e))
+            raise typer.Exit(1)
+
+    # Default (limit=None) fetches the COMPLETE child list via full
+    # has_more/next_cursor pagination. Recursive runs always fetch every
+    # top-level block before descending.
+    fetch_limit = None if recursive else limit
+    blocks = client.get_block_children_all(page_id, recursive=recursive, limit=fetch_limit)
+
+    formatted = [format_block_for_display(b) for b in blocks]
+
+    if filter:
+        formatted = apply_filters(formatted, filter)
+
+    if limit is not None:
+        formatted = formatted[:limit]
+
+    prop_list = None
+    if properties:
+        prop_list = [p.strip() for p in properties.split(",")]
+        formatted = [
+            {prop: block.get(prop) for prop in prop_list if prop in block}
+            for block in formatted
+        ]
+
+    if table:
+        columns = prop_list or ["id", "type", "text", "has_children", "is_toggleable"]
+        print_table(formatted, columns=columns)
+    else:
+        print_json(formatted)
+
+    typer.echo(f"\n{len(formatted)} block(s) found.", err=True)
+
+
+@content_app.command("update-block")
+@command
+def content_update_block(
+    block_id: str = typer.Option(
+        ...,
+        "--block-id",
+        "-b",
+        help="The block ID to update in place",
+    ),
+    text: Optional[str] = typer.Option(
+        None,
+        "--text",
+        "-t",
+        help="New plain-text content for the block (replaces existing text)",
+    ),
+    checked: Optional[bool] = typer.Option(
+        None,
+        "--checked/--unchecked",
+        help="Set the checked state for a to_do block",
+    ),
+    table: bool = typer.Option(
+        False,
+        "--table",
+        help="Display the updated block as a formatted table",
+    ),
+):
+    """
+    Edit a single existing block's text IN PLACE without deleting it.
+
+    PATCHes the block's rich_text via the Notion API (PATCH /v1/blocks/{id}),
+    which preserves the block and its ID. Because the block ID is unchanged,
+    any inline/block-anchored comments on this page (including on OTHER blocks)
+    SURVIVE the edit. This is the non-destructive alternative to
+    'content set', which deletes and recreates every block and so destroys all
+    inline comments.
+
+    Supported block types: paragraph, heading_1/2/3, bulleted_list_item,
+    numbered_list_item, quote, callout, to_do, toggle.
+
+    Find block IDs with 'content list-blocks PAGE_ID'.
+
+    Examples:
+        notion database page content update-block --block-id BLOCK_ID --text "Revised sentence."
+        notion database page content update-block -b BLOCK_ID -t "New heading text"
+        notion database page content update-block -b TODO_BLOCK_ID --checked
+    """
+    if text is None and checked is None:
+        print_warning("Nothing to update. Use --text and/or --checked/--unchecked.")
+        raise typer.Exit(1)
+
+    client = get_client()
+
+    # Read the current block to learn its type. The type-specific key names
+    # the rich_text container (e.g. block["paragraph"]["rich_text"]).
+    current_block = client.get_block(block_id)
+    block_type = current_block.get("type")
+
+    if block_type not in TEXT_EDITABLE_BLOCK_TYPES:
+        print_warning(
+            f"Block type '{block_type}' cannot be edited in place with this command. "
+            f"Editable types: {', '.join(TEXT_EDITABLE_BLOCK_TYPES)}. "
+            "For other block types, use 'notion pages blocks update --json'."
+        )
+        raise typer.Exit(1)
+
+    if checked is not None and block_type != "to_do":
+        print_warning(
+            f"--checked/--unchecked only applies to to_do blocks (got '{block_type}')."
+        )
+        raise typer.Exit(1)
+
+    update_data = build_text_block_update(block_type, text=text, checked=checked)
+
+    updated_block = client.update_block(block_id, update_data)
+
+    formatted = format_block_for_display(updated_block)
+    if table:
+        print_table([formatted])
+    else:
+        print_json(formatted)
+    print_success(
+        f"Block {block_id} updated in place (type {block_type}); "
+        "comments on this page were preserved."
+    )
 
 
 # =============================================================================
@@ -1454,6 +2100,7 @@ def content_clear(
 
 
 @template_app.command("list")
+@command
 def template_list(
     database_id: str = typer.Option(
         ...,
@@ -1500,48 +2147,40 @@ def template_list(
         notion database template list --database-id DB_ID --table
         notion database template list --database-id DB_ID --name "Bug"
     """
-    try:
-        client = get_client()
-        templates = client.list_templates_all(
-            database_id=database_id,
-            name=name,
-            limit=limit,
+    client = get_client()
+    templates = client.list_templates_all(
+        database_id=database_id,
+        name=name,
+        limit=limit,
+    )
+
+    # Apply client-side filtering
+    if filter:
+        templates = apply_filters(templates, filter)
+
+    # Filter to requested properties if specified
+    if properties:
+        props_list = [p.strip() for p in properties.split(",")]
+        filtered_templates = []
+        for t in templates:
+            filtered = {prop: t.get(prop) for prop in props_list if prop in t}
+            filtered_templates.append(filtered)
+        templates = filtered_templates
+
+    if table:
+        columns = ["name", "id", "is_default"] if not properties else props_list
+        print_table(
+            templates,
+            columns=columns,
         )
+    else:
+        print_json(templates)
 
-        # Apply client-side filtering
-        if filter:
-            templates = apply_filters(templates, filter)
-
-        # Filter to requested properties if specified
-        if properties:
-            props_list = [p.strip() for p in properties.split(",")]
-            filtered_templates = []
-            for t in templates:
-                filtered = {prop: t.get(prop) for prop in props_list if prop in t}
-                filtered_templates.append(filtered)
-            templates = filtered_templates
-
-        if not templates:
-            typer.echo("No templates found.")
-            raise typer.Exit(0)
-
-        if table:
-            columns = ["name", "id", "is_default"] if not properties else props_list
-            print_table(
-                templates,
-                columns=columns,
-            )
-        else:
-            print_json(templates)
-
-        typer.echo(f"\n{len(templates)} template(s) found.", err=True)
-
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+    typer.echo(f"\n{len(templates)} template(s) found.", err=True)
 
 
 @template_app.command("get")
+@command
 def template_get(
     database_id: str = typer.Argument(
         ...,
@@ -1558,29 +2197,30 @@ def template_get(
     Examples:
         notion database template get DB_ID TEMPLATE_ID
     """
-    try:
-        client = get_client()
-        # List all templates and find the matching one
-        templates = client.list_templates_all(database_id=database_id)
+    client = get_client()
+    # List all templates and find the matching one
+    templates = client.list_templates_all(database_id=database_id)
 
-        template = None
-        for t in templates:
-            if t.get("id") == template_id:
-                template = t
-                break
+    template = None
+    for t in templates:
+        if t.get("id") == template_id:
+            template = t
+            break
 
-        if not template:
-            print_warning(f"Template {template_id} not found in database {database_id}")
-            raise typer.Exit(1)
+    if not template:
+        print_warning(f"Template {template_id} not found in database {database_id}")
+        raise typer.Exit(1)
 
-        print_json(template)
-
-    except Exception as e:
-        exit_code = handle_error(e)
-        raise typer.Exit(exit_code)
+    print_json(template)
 
 
 COMMAND_CREDENTIALS = {
+    "create": [
+        "custom"
+    ],
+    "delete": [
+        "custom"
+    ],
     "get": [
         "custom"
     ],

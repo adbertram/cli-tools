@@ -3,6 +3,7 @@
 Uses the eBay Logistics API to get shipping rate quotes.
 API Docs: https://developer.ebay.com/api-docs/sell/logistics/resources/shipping_quote/methods/createShippingQuote
 """
+from cli_tools_shared.output import command
 COMMAND_CREDENTIALS = {
     "create": ["oauth_authorization_code"],
 }
@@ -19,6 +20,7 @@ app = typer.Typer(help="Manage eBay shipping quotes")
 
 
 @app.command("create")
+@command
 def shipping_quote_create(
     to_name: str = typer.Option(..., help="Recipient full name"),
     to_street: str = typer.Option(..., help="Recipient street address"),

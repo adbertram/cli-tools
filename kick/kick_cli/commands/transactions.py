@@ -82,7 +82,7 @@ def transactions_list(
         kick transactions list --sort-field date --sort-order ASC
         kick transactions list --from 2025-12-01 --to 2025-12-31 --table
         kick transactions list --from 2025-01-01 --table
-        kick transactions list --account "ATA Biz Checking" --table
+        kick transactions list --account "Business Checking" --table
         kick transactions list --account-id 17334 --table
     """
     try:
@@ -246,7 +246,7 @@ def transactions_search(
         kick transactions search "stripe" --limit 50
         kick transactions search "payment" --filter "direction:out"
         kick transactions search "AWS" --case-sensitive
-        kick transactions search "cursor" --account "ATA Biz Checking"
+        kick transactions search "cursor" --account "Business Checking"
         kick transactions search "cursor" --account-id 17334
     """
     try:

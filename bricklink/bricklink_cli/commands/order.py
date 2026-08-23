@@ -1,7 +1,7 @@
 """Order commands for Bricklink CLI."""
 COMMAND_CREDENTIALS = {
     "file": ["oauth"],
-    "get": ["oauth"],
+    "get": ["oauth", "browser_session"],
     "items": ["oauth"],
     "list": ["oauth"],
     "search": ["browser_session"],
@@ -17,7 +17,7 @@ from ..display import print_detail, print_list
 from ..models import is_shipped_status, is_not_picked_status
 from .messages import _normalize_api_message
 from cli_tools_shared.filters import apply_filters, apply_properties_filter, apply_limit, get_nested_value
-from cli_tools_shared.output import print_json, print_table, print_error, print_success, handle_error
+from cli_tools_shared.output import command, print_json, print_table, print_error, print_success, handle_error
 from . import run_browser
 
 app = typer.Typer(help="Manage orders", no_args_is_help=True)
@@ -68,6 +68,7 @@ def _flatten_nested_keys(items: list, columns: list) -> list:
 
 
 @app.command("list")
+@command
 def order_list(
     status: Optional[str] = typer.Option(None, "--status", "-s", help="Filter by status (e.g., PAID,PACKED)"),
     direction: Optional[str] = typer.Option(None, "--direction", "-d", help="'in' (received) or 'out' (placed)"),
@@ -140,6 +141,7 @@ def order_list(
 
 
 @app.command("get")
+@command
 def order_get(
     order_id: str = typer.Argument(..., help="Order ID"),
     include_messages: bool = typer.Option(False, "--include-messages", help="Include order messages (API-based)"),
@@ -160,10 +162,16 @@ def order_get(
         if include_messages:
             raw_msgs = client.get_order_messages(order_id)
             messages = [_normalize_api_message(m, order_id) for m in raw_msgs]
+        
+        nss_alert = None
+        if raw_order.get("status", "") == "NSS":
+            nss_alert = run_browser(lambda browser: browser.get_nss_alert(order_id))
+
         order = {
             **raw_order,
             "shipped": is_shipped_status(raw_order.get("status", "")),
             "messages": messages,
+            "nss_alert": nss_alert,
         }
 
         print_detail(order, table)
@@ -173,6 +181,7 @@ def order_get(
 
 
 @app.command("items")
+@command
 def order_items(
     order_id: str = typer.Argument(..., help="Order ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -223,6 +232,7 @@ def order_items(
 
 
 @app.command("update-status")
+@command
 def order_update_status(
     order_id: str = typer.Argument(..., help="Order ID"),
     status: str = typer.Argument(..., help="New status (PENDING,UPDATED,PROCESSING,READY,PAID,PACKED,SHIPPED,RECEIVED,COMPLETED)"),
@@ -248,6 +258,7 @@ def order_update_status(
 
 
 @app.command("ship")
+@command
 def order_ship(
     order_id: str = typer.Argument(..., help="Order ID"),
     tracking: Optional[str] = typer.Option(None, "--tracking", help="Tracking number"),
@@ -277,6 +288,7 @@ def order_ship(
 
 
 @app.command("file")
+@command
 def order_file(
     order_id: str = typer.Argument(..., help="Order ID"),
 ):
@@ -297,6 +309,7 @@ def order_file(
 
 
 @app.command("search")
+@command
 def order_search(
     item_no: str = typer.Argument(..., help="Item number to search for"),
     type: Optional[str] = typer.Option(None, "--type", help="Item type (PART, SET, MINIFIG, etc.)"),

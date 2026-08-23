@@ -5,7 +5,15 @@ from typing import Dict, List, Optional, Any
 
 from .config import get_config
 from .db import MessageDB, DatabaseError
-from .applescript import run_applescript, escape_applescript_string, AppleScriptError
+from .applescript import (
+    run_applescript,
+    escape_applescript_string,
+    ensure_app_running,
+    launch_app,
+    probe_automation,
+    AppleScriptError,
+    AutomationPermissionError,
+)
 from .models import (
     Contact,
     Conversation,
@@ -27,6 +35,16 @@ from .models import (
 class ClientError(Exception):
     """Custom exception for iMessage client errors."""
     pass
+
+
+_MESSAGES_AUTOMATION_HELP = (
+    "Messages automation is not permitted. Grant it in System Settings → "
+    "Privacy & Security → Automation (enable Messages for the app running this "
+    "command, e.g. Terminal/iTerm), or run `imessage auth login`. iMessage "
+    "sending cannot work in headless/launchd/cron contexts (no "
+    "automation-consent UI) — use the `google gmail` CLI to send notifications "
+    "there."
+)
 
 
 class ImessageClient:
@@ -81,11 +99,14 @@ class ImessageClient:
         except Exception:
             pass
 
-        # Check Messages app availability
+        # Check Messages send-capability: Messages must be scriptable via Apple
+        # Events (Automation consent granted), not merely running. Launch first
+        # so a cold start isn't misread as a permission block, then probe.
         try:
-            result = run_applescript('tell application "System Events" to return (name of processes) contains "Messages"')
-            messages_available = True  # If osascript works, Messages scripting is available
-        except AppleScriptError:
+            launch_app("Messages")
+            probe_automation("Messages")
+            messages_available = True
+        except (AutomationPermissionError, AppleScriptError):
             pass
 
         # Check database access
@@ -96,6 +117,7 @@ class ImessageClient:
 
         # Check contacts access via AppleScript
         try:
+            ensure_app_running("Contacts")
             run_applescript('tell application "Contacts" to return count of people')
             contacts_accessible = True
         except AppleScriptError:
@@ -139,6 +161,7 @@ class ImessageClient:
     def list_contacts(self, limit: int = 100) -> List[Contact]:
         """List contacts from macOS Contacts app via AppleScript."""
         try:
+            ensure_app_running("Contacts")
             script = f'''
                 tell application "Contacts"
                     set output to ""
@@ -208,6 +231,7 @@ class ImessageClient:
     def get_contact(self, contact_id: str) -> Contact:
         """Get a specific contact by ID."""
         try:
+            ensure_app_running("Contacts")
             escaped_id = escape_applescript_string(contact_id)
             script = f'''
                 tell application "Contacts"
@@ -293,6 +317,14 @@ class ImessageClient:
             normalized = self._normalize_phone(recipient)
         else:
             normalized = recipient.strip()
+
+        try:
+            launch_app("Messages")
+            probe_automation("Messages")
+        except AutomationPermissionError as exc:
+            raise ClientError(_MESSAGES_AUTOMATION_HELP) from exc
+        except AppleScriptError as exc:
+            raise ClientError(f"Failed to send message to {recipient}: {exc}") from exc
 
         escaped_text = escape_applescript_string(text)
         escaped_recipient = escape_applescript_string(normalized)

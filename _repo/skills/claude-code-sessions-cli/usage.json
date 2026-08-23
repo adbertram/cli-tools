@@ -1,8 +1,8 @@
 {
   "tool": "claude-code-sessions",
   "description": "Query and analyze Claude Code session data from ~/.claude",
-  "discovered_at": "2026-05-20T15:31:17.911427+00:00",
-  "total_commands": 19,
+  "discovered_at": "2026-07-28T16:26:59Z",
+  "total_commands": 30,
   "global_options": [
     {
       "name": "--version",
@@ -13,11 +13,419 @@
     }
   ],
   "commands": {
+    "auth": {
+      "help": "Check local Claude access",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing ephemeral auth state and re-authenticate",
+              "short": "-F"
+            }
+          ]
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show their auth types and active state.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "conversations": {
+      "help": "List conversations within sessions",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get a specific conversation by ID, including user and assistant messages. Two ways to identify the conversation: - Positional: session:conversation_number (e.g., abc123:1), where session is a UUID or a session name. The number is split off the right, so names containing colons (e.g. \"Course: ...\") are accepted. - Flags: --session-name NAME --conversation-id N (useful when you prefer not to embed the number in a colon-containing name). --project is optional; omit it to auto-derive from the session. Example: claude-code-sessions conversations get abc123:1 claude-code-sessions conversations get \"Course: OpenAI Codex Advanced Features Module 2:1\" claude-code-sessions conversations get --session-name \"Course: OpenAI Codex Advanced Features Module 2\" -C 1 claude-code-sessions conversations get abc123:1 --project MyProject",
+          "arguments": [
+            {
+              "name": "conversation_id",
+              "type": "CONVERSATION_ID",
+              "required": false,
+              "help": "Conversation ID (session_or_name:conv_number, e.g. abc123:1); omit when using --session-name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project name (auto-derived from session when omitted)",
+              "short": "-p"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session name (exact, case-insensitive); requires --conversation-id",
+              "short": "-N"
+            },
+            {
+              "name": "--conversation-id",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Conversation number (used with --session-name)",
+              "short": "-C"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List conversations within sessions. A conversation is a chain of messages within a session, separated by /clear commands. Example: claude-code-sessions conversations list --project MyProject claude-code-sessions conversations list -p MyProject --session-id abc123 claude-code-sessions conversations list -p MyProject --since 1d --table claude-code-sessions conversations list -p MyProject --filter \"message_count:gt:10\"",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project name (required)",
+              "short": "-p"
+            },
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session ID (UUID or name)",
+              "short": "-s"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session name (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time filter: 5h, 1d, 7d"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
     "projects": {
       "help": "List and query projects",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "get": {
+          "help": "Get details for a specific project. Example: claude-code-sessions projects get ExampleProject",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
           "help": "List all projects with Claude Code sessions. Example: claude-code-sessions projects list claude-code-sessions projects list --table claude-code-sessions projects list --limit 10",
+          "arguments": [],
           "options": [
             {
               "name": "--table",
@@ -47,26 +455,94 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
-        },
-        "get": {
-          "help": "Get details for a specific project. Example: claude-code-sessions projects get Agent-ATABlogger",
+        }
+      }
+    },
+    "search": {
+      "help": "Search keywords across all session transcripts",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "run": {
+          "help": "Search keywords across all session transcripts. Searches all projects by default. Use --project to restrict to one. Example: claude-code-sessions search run \"onedrive provisioned\" claude-code-sessions search run \"onedrive\" --since 30d --table claude-code-sessions search run \"connection error\" --project ProgressAutomationProject claude-code-sessions search run \"deploy\" --snippets --table",
           "arguments": [
             {
-              "name": "name",
+              "name": "query",
               "type": "TEXT",
               "required": true,
-              "help": "Project name"
+              "help": "Keyword(s) to search for (case-insensitive)"
             }
           ],
           "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Restrict to a specific project",
+              "short": "-p"
+            },
+            {
+              "name": "--project-path",
+              "type": "TEXT",
+              "required": false,
+              "help": "Restrict to a specific project by folder path"
+            },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum sessions to return",
+              "short": "-l",
+              "default": "20"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time filter: 5h, 1d, 7d, 30d",
+              "short": "-s"
+            },
+            {
+              "name": "--max-matches",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Max snippet matches per session",
+              "short": "-m",
+              "default": "5"
+            },
+            {
+              "name": "--snippets",
+              "type": "bool",
+              "required": false,
+              "help": "Show matching text snippets (table mode)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         }
@@ -74,9 +550,52 @@
     },
     "sessions": {
       "help": "List and query sessions",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "get": {
+          "help": "Get full session details including messages and tool calls. Provide the session as the positional argument (UUID or name) OR via --session-name, but not both. Example: claude-code-sessions sessions get abc123-def456-789 claude-code-sessions sessions get \"Course: OpenAI Codex Advanced Features Module 2\" claude-code-sessions sessions get --session-name \"Course: OpenAI Codex Advanced Features Module 2\"",
+          "arguments": [
+            {
+              "name": "session_id",
+              "type": "SESSION_ID",
+              "required": false,
+              "help": "Session ID (UUID or name); omit when using --session-name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session name (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "list": {
-          "help": "List sessions. With no --project / --project-path, returns sessions across all projects. Example: claude-code-sessions sessions list --project Agent-ATABlogger claude-code-sessions sessions list --date-alias yesterday --limit 5 claude-code-sessions sessions list --date 2026-05-15 --min-tool-calls 1 claude-code-sessions sessions list --date-alias yesterday --include-prompts first:3,last:3 --prompts-clean",
+          "help": "List sessions. With no --project / --project-path, returns sessions across all projects. Example: claude-code-sessions sessions list --project ExampleProject claude-code-sessions sessions list --date-alias yesterday --limit 5 claude-code-sessions sessions list --date 2026-05-15 --min-tool-calls 1 claude-code-sessions sessions list --date-alias yesterday --include-prompts first:3,last:3 --prompts-clean",
+          "arguments": [],
           "options": [
             {
               "name": "--project",
@@ -168,31 +687,17 @@
               "type": "TEXT",
               "required": false,
               "help": "Comma-separated fields to include"
-            }
-          ]
-        },
-        "get": {
-          "help": "Get full session details including messages and tool calls. Example: claude-code-sessions sessions get abc123-def456-789",
-          "arguments": [
+            },
             {
-              "name": "session_id",
+              "name": "--profile",
               "type": "TEXT",
-              "required": true,
-              "help": "Session UUID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
               "required": false,
-              "help": "Display as table",
-              "short": "-t"
+              "help": "Auth profile name"
             }
           ]
         },
         "search": {
-          "help": "Search for sessions containing a query string. Example: claude-code-sessions sessions search \"authentication\" --project Agent-ATABlogger claude-code-sessions sessions search \"error\" --project-path /path/to/project --since 1d",
+          "help": "Search for sessions containing a query string. With no --project / --project-path, searches sessions across all projects. Example: claude-code-sessions sessions search \"authentication\" claude-code-sessions sessions search \"authentication\" --project ExampleProject claude-code-sessions sessions search \"error\" --project-path /path/to/project --since 1d",
           "arguments": [
             {
               "name": "query",
@@ -249,75 +754,37 @@
               "type": "TEXT",
               "required": false,
               "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         }
       }
     },
-    "conversations": {
-      "help": "List conversations within sessions",
+    "skills": {
+      "help": "Query skill/command invocations",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
-        "list": {
-          "help": "List conversations within sessions. A conversation is a chain of messages within a session, separated by /clear commands. Example: claude-code-sessions conversations list --project MyProject claude-code-sessions conversations list -p MyProject --session-id abc123 claude-code-sessions conversations list -p MyProject --since 1d --table claude-code-sessions conversations list -p MyProject --filter \"message_count:gt:10\"",
-          "options": [
-            {
-              "name": "--project",
-              "type": "TEXT",
-              "required": true,
-              "help": "Project name (required)",
-              "short": "-p"
-            },
-            {
-              "name": "--session-id",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter to specific session",
-              "short": "-s"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum results",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--since",
-              "type": "TEXT",
-              "required": false,
-              "help": "Time filter: 5h, 1d, 7d"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include"
-            }
-          ]
-        },
         "get": {
-          "help": "Get a specific conversation by ID. The conversation ID format is session_id:conversation_number (e.g., abc123:1). Example: claude-code-sessions conversations get abc123:1 --project MyProject",
+          "help": "Get details for a specific skill/command invocation. Example: claude-code-sessions skills get <skill-id> --project ExampleProject",
           "arguments": [
             {
-              "name": "conversation_id",
+              "name": "skill_id",
               "type": "TEXT",
               "required": true,
-              "help": "Conversation ID (session_id:conv_number, e.g. abc123:1)"
+              "help": "Skill invocation ID"
             }
           ],
           "options": [
@@ -334,16 +801,18 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
-        }
-      }
-    },
-    "subagent-activity": {
-      "help": "Query subagent invocations",
-      "commands": {
+        },
         "list": {
-          "help": "List all subagent invocations for a project. Example: claude-code-sessions subagent-activity list --project Agent-ATABlogger claude-code-sessions subagent-activity list --project Agent-ATABlogger --since 5h claude-code-sessions subagent-activity list --project Agent-ATABlogger --filter \"type:eq:Explore\" claude-code-sessions subagent-activity list --project Agent-ATABlogger --session-id abc123",
+          "help": "List all skill/command invocations for a project. Example: claude-code-sessions skills list --project ExampleProject claude-code-sessions skills list --project ExampleProject --since 1h claude-code-sessions skills list --project ExampleProject --filter \"name:eq:start-post-pipeline\" claude-code-sessions skills list --project ExampleProject --session-id abc123",
+          "arguments": [],
           "options": [
             {
               "name": "--project",
@@ -356,8 +825,15 @@
               "name": "--session-id",
               "type": "TEXT",
               "required": false,
-              "help": "Filter to specific session",
+              "help": "Session ID (UUID or name)",
               "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session name (exact, case-insensitive)",
+              "short": "-N"
             },
             {
               "name": "--table",
@@ -393,11 +869,31 @@
               "type": "TEXT",
               "required": false,
               "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
-        },
+        }
+      }
+    },
+    "subagent-activity": {
+      "help": "Query subagent invocations",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
         "get": {
-          "help": "Get full details for a subagent invocation. Example: claude-code-sessions subagent-activity get tool-123 --project Agent-ATABlogger",
+          "help": "Get full details for a subagent invocation. Example: claude-code-sessions subagent-activity get tool-123 --project ExampleProject",
           "arguments": [
             {
               "name": "subagent_id",
@@ -420,16 +916,18 @@
               "required": false,
               "help": "Display as table",
               "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
-        }
-      }
-    },
-    "tool-calls": {
-      "help": "Query tool call history",
-      "commands": {
+        },
         "list": {
-          "help": "List all tool calls for a project. Example: claude-code-sessions tool-calls list --project Agent-ATABlogger claude-code-sessions tool-calls list --project Agent-ATABlogger --since 1d claude-code-sessions tool-calls list --project Agent-ATABlogger --filter \"status:eq:error\" claude-code-sessions tool-calls list --project Agent-ATABlogger --filter \"tool:eq:Bash\" claude-code-sessions tool-calls list --project Agent-ATABlogger --include-subagents claude-code-sessions tool-calls list --project Agent-ATABlogger --subagent-id toolu_01ABC...",
+          "help": "List all subagent invocations for a project. Example: claude-code-sessions subagent-activity list --project ExampleProject claude-code-sessions subagent-activity list --project ExampleProject --since 5h claude-code-sessions subagent-activity list --project ExampleProject --filter \"type:eq:Explore\" claude-code-sessions subagent-activity list --project ExampleProject --session-id abc123",
+          "arguments": [],
           "options": [
             {
               "name": "--project",
@@ -442,14 +940,478 @@
               "name": "--session-id",
               "type": "TEXT",
               "required": false,
-              "help": "Filter to specific session",
+              "help": "Session ID (UUID or name)",
               "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session name (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time filter: 5h, 1d, 7d",
+              "short": "-s"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "timeline": {
+      "help": "View unified activity timeline",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "consolidated": {
+          "help": "Show ALL activity for a session in a single consolidated view. Combines user prompts, main agent tool calls, subagent launches, and subagent tool calls into one chronological timeline. Example: claude-code-sessions timeline consolidated --session-id abc123 claude-code-sessions timeline consolidated --session-name \"My Session\" --table claude-code-sessions timeline consolidated -S abc123 -p ExampleProject --table claude-code-sessions timeline consolidated -S abc123 -p ExampleProject --hide-agent-tools claude-code-sessions timeline consolidated -S abc123 -p ExampleProject --show-thinking claude-code-sessions timeline consolidated -S abc123 -p ExampleProject --filter \"status:eq:error\" --wide",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session ID (UUID or name)",
+              "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session name (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project name (auto-derived from session when omitted)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show full input/output (no truncation)",
+              "short": "-w"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum entries",
+              "short": "-l",
+              "default": "500"
+            },
+            {
+              "name": "--show-agent-tools",
+              "type": "bool",
+              "required": false,
+              "help": "Include subagent tool calls",
+              "default": "show-agent-tools"
+            },
+            {
+              "name": "--show-thinking",
+              "type": "bool",
+              "required": false,
+              "help": "Include Claude's thinking/reasoning blocks"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get timeline for a specific session. Provide the session as the positional argument (UUID or name) OR via --session-name, but not both. --project is optional; omit it to auto-derive from the session. Example: claude-code-sessions timeline get abc123 claude-code-sessions timeline get \"Course: OpenAI Codex Advanced Features Module 2\" claude-code-sessions timeline get --session-name \"Course: OpenAI Codex Advanced Features Module 2\" claude-code-sessions timeline get abc123 --project CourseCraft",
+          "arguments": [
+            {
+              "name": "session_id",
+              "type": "SESSION_ID",
+              "required": false,
+              "help": "Session ID (UUID or name); omit when using --session-name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project name (auto-derived from session when omitted)",
+              "short": "-p"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session name (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show full input/output (no truncation)",
+              "short": "-w"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum entries",
+              "short": "-l",
+              "default": "200"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "Show unified timeline of all activities. Combines skills, tool calls, subagent launches, and errors into one chronological view. Example: claude-code-sessions timeline list --project ExampleProject --since 1h claude-code-sessions timeline list --project ExampleProject --session-id abc123 claude-code-sessions timeline list --project ExampleProject --errors-only claude-code-sessions timeline list --project ExampleProject --filter \"event_type:eq:skill\"",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project name (required)",
+              "short": "-p"
+            },
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session ID (UUID or name)",
+              "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session name (exact, case-insensitive)",
+              "short": "-N"
             },
             {
               "name": "--conversation-id",
               "type": "INTEGER",
               "required": false,
-              "help": "Filter to specific conversation (requires --session-id)",
+              "help": "Filter by conversation ID (requires --session-id/--session-name)",
+              "short": "-C"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show full input/output (no truncation)",
+              "short": "-w"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum entries",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time filter: 5h, 1d, 7d",
+              "short": "-s"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--errors-only",
+              "type": "bool",
+              "required": false,
+              "help": "Show only errors",
+              "short": "-e"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "todos": {
+      "help": "Query todo items from sessions",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get a specific todo by ID. Example: claude-code-sessions todos get <todo-id> --project ExampleProject",
+          "arguments": [
+            {
+              "name": "todo_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Todo ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project name (required)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List all todos from sessions in a project. Example: claude-code-sessions todos list --project ExampleProject claude-code-sessions todos list --project ExampleProject --filter \"status:eq:pending\" claude-code-sessions todos list --project ExampleProject --since 1d claude-code-sessions todos list --project ExampleProject --session-id abc123",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project name (required)",
+              "short": "-p"
+            },
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session ID (UUID or name)",
+              "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session name (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time filter: 5h, 1d, 7d",
+              "short": "-s"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "tool-calls": {
+      "help": "Query tool call history",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get details for a specific tool call. Example: claude-code-sessions tool-calls get toolu_123 --project ExampleProject",
+          "arguments": [
+            {
+              "name": "tool_call_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Tool call ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project name (required)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List all tool calls for a project. Example: claude-code-sessions tool-calls list --project ExampleProject claude-code-sessions tool-calls list --project ExampleProject --since 1d claude-code-sessions tool-calls list --project ExampleProject --filter \"status:eq:error\" claude-code-sessions tool-calls list --project ExampleProject --filter \"tool:eq:Bash\" claude-code-sessions tool-calls list --project ExampleProject --include-subagents claude-code-sessions tool-calls list --project ExampleProject --subagent-id toolu_01ABC...",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project name (required)",
+              "short": "-p"
+            },
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session ID (UUID or name)",
+              "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session name (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--conversation-id",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Filter to specific conversation (requires --session-id/--session-name)",
               "short": "-C"
             },
             {
@@ -499,449 +1461,12 @@
               "type": "TEXT",
               "required": false,
               "help": "Filter to tool calls from a specific subagent (Task tool call ID)"
-            }
-          ]
-        },
-        "get": {
-          "help": "Get details for a specific tool call. Example: claude-code-sessions tool-calls get toolu_123 --project Agent-ATABlogger",
-          "arguments": [
-            {
-              "name": "tool_call_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Tool call ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--project",
-              "type": "TEXT",
-              "required": true,
-              "help": "Project name (required)",
-              "short": "-p"
             },
             {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ]
-        }
-      }
-    },
-    "todos": {
-      "help": "Query todo items from sessions",
-      "commands": {
-        "list": {
-          "help": "List all todos from sessions in a project. Example: claude-code-sessions todos list --project Agent-ATABlogger claude-code-sessions todos list --project Agent-ATABlogger --filter \"status:eq:pending\" claude-code-sessions todos list --project Agent-ATABlogger --since 1d claude-code-sessions todos list --project Agent-ATABlogger --session-id abc123",
-          "options": [
-            {
-              "name": "--project",
-              "type": "TEXT",
-              "required": true,
-              "help": "Project name (required)",
-              "short": "-p"
-            },
-            {
-              "name": "--session-id",
+              "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Filter to specific session",
-              "short": "-S"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum results",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--since",
-              "type": "TEXT",
-              "required": false,
-              "help": "Time filter: 5h, 1d, 7d",
-              "short": "-s"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include"
-            }
-          ]
-        },
-        "get": {
-          "help": "Get a specific todo by ID. Example: claude-code-sessions todos get <todo-id> --project Agent-ATABlogger",
-          "arguments": [
-            {
-              "name": "todo_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Todo ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--project",
-              "type": "TEXT",
-              "required": true,
-              "help": "Project name (required)",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ]
-        }
-      }
-    },
-    "skills": {
-      "help": "Query skill/command invocations",
-      "commands": {
-        "list": {
-          "help": "List all skill/command invocations for a project. Example: claude-code-sessions skills list --project Agent-ATABlogger claude-code-sessions skills list --project Agent-ATABlogger --since 1h claude-code-sessions skills list --project Agent-ATABlogger --filter \"name:eq:start-post-pipeline\" claude-code-sessions skills list --project Agent-ATABlogger --session-id abc123",
-          "options": [
-            {
-              "name": "--project",
-              "type": "TEXT",
-              "required": true,
-              "help": "Project name (required)",
-              "short": "-p"
-            },
-            {
-              "name": "--session-id",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter to specific session",
-              "short": "-S"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum results",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--since",
-              "type": "TEXT",
-              "required": false,
-              "help": "Time filter: 5h, 1d, 7d",
-              "short": "-s"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated fields to include"
-            }
-          ]
-        },
-        "get": {
-          "help": "Get details for a specific skill/command invocation. Example: claude-code-sessions skills get <skill-id> --project Agent-ATABlogger",
-          "arguments": [
-            {
-              "name": "skill_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Skill invocation ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--project",
-              "type": "TEXT",
-              "required": true,
-              "help": "Project name (required)",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ]
-        }
-      }
-    },
-    "timeline": {
-      "help": "View unified activity timeline",
-      "commands": {
-        "list": {
-          "help": "Show unified timeline of all activities. Combines skills, tool calls, subagent launches, and errors into one chronological view. Example: claude-code-sessions timeline list --project Agent-ATABlogger --since 1h claude-code-sessions timeline list --project Agent-ATABlogger --session-id abc123 claude-code-sessions timeline list --project Agent-ATABlogger --errors-only claude-code-sessions timeline list --project Agent-ATABlogger --filter \"event_type:eq:skill\"",
-          "options": [
-            {
-              "name": "--project",
-              "type": "TEXT",
-              "required": true,
-              "help": "Project name (required)",
-              "short": "-p"
-            },
-            {
-              "name": "--session-id",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter by session ID",
-              "short": "-S"
-            },
-            {
-              "name": "--conversation-id",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Filter by conversation ID (requires --session-id)",
-              "short": "-C"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--wide",
-              "type": "bool",
-              "required": false,
-              "help": "Show full input/output (no truncation)",
-              "short": "-w"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum entries",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--since",
-              "type": "TEXT",
-              "required": false,
-              "help": "Time filter: 5h, 1d, 7d",
-              "short": "-s"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            },
-            {
-              "name": "--errors-only",
-              "type": "bool",
-              "required": false,
-              "help": "Show only errors",
-              "short": "-e"
-            }
-          ]
-        },
-        "consolidated": {
-          "help": "Show ALL activity for a session in a single consolidated view. Combines user prompts, main agent tool calls, subagent launches, and subagent tool calls into one chronological timeline. Example: claude-code-sessions timeline consolidated --session-id abc123 --project Agent-ATABlogger claude-code-sessions timeline consolidated -S abc123 -p Agent-ATABlogger --table claude-code-sessions timeline consolidated -S abc123 -p Agent-ATABlogger --hide-agent-tools claude-code-sessions timeline consolidated -S abc123 -p Agent-ATABlogger --show-thinking claude-code-sessions timeline consolidated -S abc123 -p Agent-ATABlogger --filter \"status:eq:error\" --wide",
-          "options": [
-            {
-              "name": "--session-id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Session UUID (required)",
-              "short": "-S"
-            },
-            {
-              "name": "--project",
-              "type": "TEXT",
-              "required": true,
-              "help": "Project name (required)",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--wide",
-              "type": "bool",
-              "required": false,
-              "help": "Show full input/output (no truncation)",
-              "short": "-w"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum entries",
-              "short": "-l",
-              "default": "500"
-            },
-            {
-              "name": "--show-agent-tools",
-              "type": "bool",
-              "required": false,
-              "help": "--hide-agent-tools             Include subagent tool calls",
-              "default": "show-agent-tools"
-            },
-            {
-              "name": "--show-thinking",
-              "type": "bool",
-              "required": false,
-              "help": "Include Claude's thinking/reasoning blocks"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
-              "short": "-f"
-            }
-          ]
-        },
-        "get": {
-          "help": "Get timeline for a specific session. Example: claude-code-sessions timeline get abc123 --project Agent-ATABlogger",
-          "arguments": [
-            {
-              "name": "session_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Session UUID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--project",
-              "type": "TEXT",
-              "required": true,
-              "help": "Project name (required)",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--wide",
-              "type": "bool",
-              "required": false,
-              "help": "Show full input/output (no truncation)",
-              "short": "-w"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum entries",
-              "short": "-l",
-              "default": "200"
-            }
-          ]
-        }
-      }
-    },
-    "search": {
-      "help": "Search keywords across all session transcripts",
-      "commands": {
-        "run": {
-          "help": "Search keywords across all session transcripts. Searches all projects by default. Use --project to restrict to one. Example: claude-code-sessions search run \"onedrive provisioned\" claude-code-sessions search run \"onedrive\" --since 30d --table claude-code-sessions search run \"connection error\" --project ProgressAutomationProject claude-code-sessions search run \"deploy\" --snippets --table",
-          "arguments": [
-            {
-              "name": "query",
-              "type": "TEXT",
-              "required": true,
-              "help": "Keyword(s) to search for (case-insensitive)"
-            }
-          ],
-          "options": [
-            {
-              "name": "--project",
-              "type": "TEXT",
-              "required": false,
-              "help": "Restrict to a specific project",
-              "short": "-p"
-            },
-            {
-              "name": "--project-path",
-              "type": "TEXT",
-              "required": false,
-              "help": "Restrict to a specific project by folder path"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Maximum sessions to return",
-              "short": "-l",
-              "default": "20"
-            },
-            {
-              "name": "--since",
-              "type": "TEXT",
-              "required": false,
-              "help": "Time filter: 5h, 1d, 7d, 30d",
-              "short": "-s"
-            },
-            {
-              "name": "--max-matches",
-              "type": "INTEGER",
-              "required": false,
-              "help": "Max snippet matches per session",
-              "short": "-m",
-              "default": "5"
-            },
-            {
-              "name": "--snippets",
-              "type": "bool",
-              "required": false,
-              "help": "Show matching text snippets (table mode)"
+              "help": "Auth profile name"
             }
           ]
         }

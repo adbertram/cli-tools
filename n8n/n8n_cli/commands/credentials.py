@@ -202,7 +202,7 @@ def credentials_rename(
     Rename a credential on the n8n server.
 
     Example:
-        n8n credentials rename tTBhVO3JjWS6PhOH "Susan Slack Bot"
+        n8n credentials rename tTBhVO3JjWS6PhOH "Example Slack Bot"
     """
     try:
         api = get_n8n_api_client()

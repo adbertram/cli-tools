@@ -151,10 +151,13 @@ class Item(Area):
                                                                                 hook=hook)))
 
     def delete(self, item_id, silent=False, hook=True):
+        # No custom handler: use the default _handle_response so a non-2xx
+        # response raises instead of being silently swallowed. A swallowed
+        # error here previously let the CLI report a false "deleted" success
+        # even though the item was never removed.
         return self.transport.DELETE(url='/item/%d%s' % (item_id,
                                                          self.get_options(silent=silent,
-                                                                          hook=hook)),
-                                     handler=lambda x, y: None)
+                                                                          hook=hook)))
 
     def export(self, app_id, exporter='xlsx', attributes=None):
         """

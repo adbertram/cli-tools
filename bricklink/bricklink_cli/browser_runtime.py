@@ -9,7 +9,7 @@ Handles operations not available via API:
 Uses BrowserAutomation base class with playwright CLI for session management.
 """
 import re
-import sys
+import time
 from typing import Optional
 
 from cli_tools_shared.activity_log import get_activity_logger
@@ -23,12 +23,15 @@ from .confirmation import (
     is_confirmation_code_page_url,
 )
 from .models import RefundReason
+from .managed_auth import get_bricklink_confirmation_code
 
 activity = get_activity_logger("bricklink")
 
 
 class BricklinkRuntimeBrowser(BricklinkBrowser):
     """Bricklink browser automation using shared BrowserAutomation base."""
+
+    NAVIGATION_READY_STATE = "domcontentloaded"
 
     def __init__(self, config=None):
         config = config or get_config()
@@ -50,17 +53,21 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
             return False
         return super()._check_auth(page)
 
+    def _goto_page(self, page, url: str) -> None:
+        # BrickLink can keep background requests open; selectors prove readiness.
+        try:
+            page.goto(url, wait_until=self.NAVIGATION_READY_STATE)
+        except Exception as exc:
+            if "net::ERR_ABORTED" not in str(exc):
+                raise
+            activity.warning(
+                "Bricklink navigation aborted for %s; checking whether page rendered",
+                url,
+            )
+        page.wait_for_selector("body", state="visible", timeout=15000)
+
     def _read_confirmation_code(self) -> str:
-        prompt = (
-            "The BrickLink confirmation code page has come up. "
-            "Please check your email for the confirmation code and provide it: "
-        )
-        sys.stderr.write(prompt)
-        sys.stderr.flush()
-        code = sys.stdin.readline().strip()
-        if not code:
-            raise ConfirmationRequiredError("this operation")
-        return code
+        return get_bricklink_confirmation_code(requested_after=int(time.time()) - 120)
 
     def _submit_confirmation_code(self, page, requested_url: str) -> None:
         code_input = page.query_selector("#confirmation-code")
@@ -85,8 +92,7 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
                 f"URL: {page.url}"
             )
         page.wait_for_timeout(2000)
-        page.goto(requested_url, wait_until="networkidle")
-        page.wait_for_selector("body", state="visible", timeout=15000)
+        self._goto_page(page, requested_url)
         if self._is_confirmation_code_page(page):
             raise ConfirmationRequiredError("this operation")
 
@@ -117,7 +123,8 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
             finally:
                 raise RuntimeError(
                     "Bricklink session expired. "
-                    "Run 'bricklink auth login --force' to re-authenticate."
+                    "Run 'bricklink auth login --credential-type browser_session' "
+                    "to re-authenticate."
                 )
 
     # Bricklink server-error landing pages.
@@ -219,9 +226,8 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
         out on a missing form element.
         """
         activity.info("Navigating to %s", url)
-        page = self.get_page(url)
-        page.goto(url, wait_until="networkidle")
-        page.wait_for_selector("body", state="visible", timeout=15000)
+        page = self.get_page()
+        self._goto_page(page, url)
         self._handle_confirmation_code_page(page, url)
         self._check_session_expired(page)
 
@@ -243,8 +249,7 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
                 waf_attempts, max_waf_retries, url,
             )
             page.wait_for_timeout(2000 * waf_attempts)
-            page.goto(url, wait_until="networkidle")
-            page.wait_for_selector("body", state="visible", timeout=15000)
+            self._goto_page(page, url)
             self._handle_confirmation_code_page(page, url)
             self._check_session_expired(page)
 
@@ -555,12 +560,314 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
         return {"success": True, "message_id": message_id, "action": "mark_as_unread",
                 "message": "Message marked as unread"}
 
+    # ==================== Store Settings ====================
+
+    STORE_ANNOUNCEMENT_FIELD = "strAnnouncement"
+    STORE_BANNER_FIELD = "strBanner"
+
+    def get_store_display_settings(self) -> dict:
+        """Read the store announcement and banner text from Store Settings."""
+        page = self._get_page_for(self.STORE_SETTINGS_URL)
+        settings = page.evaluate(
+            """(fieldNames) => {
+            const announcement = document.querySelector(`input[name="${fieldNames.announcement}"]`);
+            const banner = document.querySelector(`input[name="${fieldNames.banner}"]`);
+            return {
+                announcement_found: !!announcement,
+                banner_found: !!banner,
+                announcement: announcement ? announcement.value : null,
+                banner: banner ? banner.value : null,
+            };
+        }""",
+            {
+                "announcement": self.STORE_ANNOUNCEMENT_FIELD,
+                "banner": self.STORE_BANNER_FIELD,
+            },
+        )
+        if (
+            not settings
+            or not settings.get("announcement_found")
+            or not settings.get("banner_found")
+        ):
+            raise RuntimeError(
+                "BrickLink store settings page did not contain both "
+                f"input[name='{self.STORE_ANNOUNCEMENT_FIELD}'] and "
+                f"input[name='{self.STORE_BANNER_FIELD}']."
+            )
+        return {
+            "announcement": settings.get("announcement") or "",
+            "banner": settings.get("banner") or "",
+            "store_settings_url": page.url,
+        }
+
+    def save_store_display_settings(self, announcement: str, banner: str) -> dict:
+        """Save the store announcement and banner through BrickLink's settings AJAX endpoint."""
+        page = self._get_page_for(self.STORE_SETTINGS_URL)
+        result = page.evaluate(
+            """async (payload) => {
+                const body = new URLSearchParams();
+                body.set(payload.fields.announcement, payload.announcement);
+                body.set(payload.fields.banner, payload.banner);
+
+                const response = await fetch('/ajax/renovate/mystore/display.ajax?action=update', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {
+                        'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                        'x-requested-with': 'XMLHttpRequest',
+                    },
+                    body: body.toString(),
+                });
+
+                const text = await response.text();
+                let data = null;
+                try {
+                    data = JSON.parse(text);
+                } catch (error) {
+                    data = { parse_error: String(error), raw_length: text.length };
+                }
+
+                return {
+                    ok: response.ok,
+                    status: response.status,
+                    data,
+                };
+            }""",
+            {
+                "announcement": announcement,
+                "banner": banner,
+                "fields": {
+                    "announcement": self.STORE_ANNOUNCEMENT_FIELD,
+                    "banner": self.STORE_BANNER_FIELD,
+                },
+            },
+        )
+        data = (result or {}).get("data") or {}
+        if not result or not result.get("ok") or data.get("returnCode") != 0:
+            raise RuntimeError(
+                "BrickLink store settings update failed: "
+                f"status={result.get('status') if result else None}, "
+                f"returnCode={data.get('returnCode')}, "
+                f"returnMessage={data.get('returnMessage')!r}"
+            )
+        return {
+            "success": True,
+            "status": result.get("status"),
+            "returnCode": data.get("returnCode"),
+            "returnMessage": data.get("returnMessage"),
+        }
+
+    def get_enabled_shipping_methods(self) -> list[dict]:
+        """Read enabled shipping methods and their buyer-facing descriptions."""
+        page = self._get_page_for(self.SHIPPING_SETTINGS_URL)
+        page.wait_for_timeout(2500)
+        return page.evaluate(
+            r"""() => Array.from(document.querySelectorAll('.shipping-method__row')).map((row) => {
+                const link = row.querySelector('.shipping-method__method--title a');
+                const desc = row.querySelector('.shipping-method__method--description');
+                const checkbox = row.querySelector('.shipping-method__enabled input[type="checkbox"]');
+                const href = link ? link.getAttribute('href') : '';
+                const match = href.match(/id=(\d+)/);
+                return {
+                    id: match ? match[1] : null,
+                    name: link ? link.innerText.trim() : '',
+                    description: desc ? desc.innerText.trim() : '',
+                    enabled: checkbox ? checkbox.checked : false,
+                    href,
+                };
+            }).filter((item) => item.id && item.enabled)"""
+        )
+
+    def save_shipping_method_note(self, method_id: str, note: str) -> dict:
+        """Save a shipping method's buyer note through the BrickLink edit page."""
+        page = self._get_page_for(f"{self.SHIPPING_METHOD_EDIT_URL}?id={method_id}")
+        page.wait_for_selector("textarea.bl-form-text", timeout=15000)
+        save_enabled = page.evaluate(
+            """(note) => {
+                const textarea = document.querySelector('textarea.bl-form-text');
+                if (!textarea) {
+                    throw new Error('Note textarea not found');
+                }
+                const setter = Object.getOwnPropertyDescriptor(
+                    HTMLTextAreaElement.prototype,
+                    'value'
+                ).set;
+                setter.call(textarea, note);
+                textarea.dispatchEvent(new InputEvent('input', {
+                    bubbles: true,
+                    inputType: 'insertText',
+                    data: note,
+                }));
+                textarea.dispatchEvent(new Event('change', {bubbles: true}));
+                return Array.from(document.querySelectorAll('button.js-button-save')).some(
+                    (button) => !button.disabled
+                        && !!(button.offsetWidth || button.offsetHeight || button.getClientRects().length)
+                );
+            }""",
+            note,
+        )
+        if not save_enabled:
+            raise RuntimeError(
+                f"BrickLink shipping method {method_id} Save changes button did not enable."
+            )
+        clicked = page.evaluate(
+            """() => {
+                const buttons = Array.from(document.querySelectorAll('button.js-button-save'));
+                const button = buttons.find((candidate) => !candidate.disabled
+                    && !!(candidate.offsetWidth || candidate.offsetHeight || candidate.getClientRects().length));
+                if (!button) {
+                    return false;
+                }
+                button.click();
+                return true;
+            }"""
+        )
+        if not clicked:
+            raise RuntimeError(
+                f"BrickLink shipping method {method_id} enabled Save changes button was not found."
+            )
+        page.wait_for_timeout(4000)
+        return {
+            "success": True,
+            "shipping_method_id": method_id,
+        }
+
     # ==================== Refunds ====================
+
+    # Poll budget for the refund page's async React render (transaction ID,
+    # prior refunds, etc. are populated after an XHR completes post-mount).
+    # `_get_page_for`'s flat 500ms wait only guarantees `domcontentloaded` +
+    # a fixed pause — it does NOT guarantee the refund data has rendered.
+    # Verified live 2026-08-11: `refund info` and `refund issue`'s pre-submit
+    # gate both call this same method, yet `refund issue` intermittently read
+    # no 'Prior refund(s)' value moments after `refund info` succeeded on the
+    # identical order/URL — proving a render race, not a selector divergence.
+    REFUND_RENDER_POLL_ATTEMPTS = 50
+    REFUND_RENDER_POLL_INTERVAL_MS = 200
+
+    # `_wait_for_refund_page_rendered` only proves the "Prior refund(s)" /
+    # "Original payment" region has painted — a different DOM region than the
+    # reason control, which can still be entirely absent at that point. See
+    # `_reveal_refund_reason_dropdown` for why.
+    REASON_CONTROL_POLL_ATTEMPTS = 25
+    REASON_CONTROL_POLL_INTERVAL_MS = 200
+
+    def _reveal_refund_reason_dropdown(self, page, order_id: str) -> None:
+        """Ensure the refund-reason ``<select>``/combobox is present before
+        callers query for it.
+
+        BrickLink's refund page renders the reason control in one of two
+        states, and `_submit_refund` previously assumed only the first:
+
+        - No reason details saved yet for this order: the editable
+          ``<select>`` is present directly, once the SPA finishes rendering.
+        - Reason details already saved (e.g. this order already has an
+          earlier partial refund): BrickLink instead shows a read-only
+          "Reason for refund" summary with an "Edit reason details" button.
+          The ``<select>`` does not enter the DOM at all until that button is
+          clicked.
+
+        Verified live on order 32187623 (2026-08-11, read-only): the summary
+        panel and "Edit reason details" button render immediately and
+        `_wait_for_refund_page_rendered` returns, yet
+        `document.querySelectorAll('select')` stays at 0 indefinitely.
+        Clicking "Edit reason details" makes the `<select>` appear with the
+        full BrickLink reason option list. A same-session comparison against
+        two orders with no prior refund (32283570, 32296775) showed the
+        `<select>` present with no edit button at all — confirming this is a
+        page-state branch, not a selector regression.
+
+        This only reveals the dropdown; it never selects a value or clicks
+        Review/Confirm.
+        """
+        def _dropdown_present() -> bool:
+            return page.evaluate(
+                "() => document.querySelectorAll('select, [role=\"combobox\"]').length > 0"
+            )
+
+        for _ in range(self.REASON_CONTROL_POLL_ATTEMPTS):
+            if _dropdown_present():
+                return
+            page.wait_for_timeout(self.REASON_CONTROL_POLL_INTERVAL_MS)
+
+        edit_btn = page.get_by_role("button", name="Edit reason details")
+        if edit_btn.count() == 0:
+            # Nothing more we can do here; the caller raises its own
+            # descriptive error when the dropdown still can't be found.
+            return
+
+        activity.info(
+            "Refund page for order %s shows saved reason details with no "
+            "live dropdown — clicking 'Edit reason details' to reveal it.",
+            order_id,
+        )
+        edit_btn.first.click()
+
+        for _ in range(self.REASON_CONTROL_POLL_ATTEMPTS):
+            if _dropdown_present():
+                return
+            page.wait_for_timeout(self.REASON_CONTROL_POLL_INTERVAL_MS)
+
+        activity.warning(
+            "Refund reason dropdown for order %s still not present after "
+            "clicking 'Edit reason details'.",
+            order_id,
+        )
+
+    def _wait_for_refund_page_rendered(self, page, order_id: str) -> None:
+        """Block until the refund page shows either its data or an empty state.
+
+        Does not raise on timeout — callers already treat an unreadable page
+        as a hard-stop (see ``_read_prior_refunds_total`` / ``_submit_refund``).
+        This only removes the race where extraction runs before the SPA has
+        finished populating the DOM.
+        """
+        is_ready_js = """() => {
+            if (document.querySelector('.empty-state__title')) return true;
+            const divs = Array.from(document.querySelectorAll('div'));
+            const hasPrior = divs.some(el => {
+                const t = el.textContent.trim();
+                return t === 'Prior refund(s)' || t === 'Prior refunds';
+            });
+            const hasOriginalPayment = divs.some(
+                el => el.textContent.trim() === 'Original payment'
+            );
+            return hasPrior || hasOriginalPayment;
+        }"""
+        for _ in range(self.REFUND_RENDER_POLL_ATTEMPTS):
+            if page.evaluate(is_ready_js):
+                return
+            page.wait_for_timeout(self.REFUND_RENDER_POLL_INTERVAL_MS)
+        activity.warning(
+            "Refund page for order %s did not render prior-refund or "
+            "original-payment data within %.0fs",
+            order_id,
+            self.REFUND_RENDER_POLL_ATTEMPTS * self.REFUND_RENDER_POLL_INTERVAL_MS / 1000,
+        )
 
     def get_refund_info(self, order_id: str) -> dict:
         """Get refund page info for an order."""
         url = f"{self.REFUND_URL}?id={order_id}"
         page = self._get_page_for(url)
+        self._wait_for_refund_page_rendered(page, order_id)
+
+        # Check for explicit empty state / error message on the page
+        error_msg = page.evaluate(
+            """() => {
+                const emptyTitleEl = document.querySelector('.empty-state__title');
+                if (emptyTitleEl) {
+                    const descEl = emptyTitleEl.nextElementSibling;
+                    const titleText = emptyTitleEl.innerText.trim();
+                    const descText = descEl ? descEl.innerText.trim() : '';
+                    return `${titleText}${descText ? ': ' + descText : ''}`;
+                }
+                return null;
+            }"""
+        )
+        if error_msg:
+            raise RuntimeError(
+                f"Refund page for order {order_id} displays: {error_msg!r}"
+            )
 
         info = page.evaluate("""() => {
             const getFieldValue = (labelText) => {
@@ -663,19 +970,24 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
 
         return {"order_id": order_id, **info, "refund_page_url": page.url}
 
-    def _parse_prior_refunds_amount(self, value) -> float:
+    def _parse_prior_refunds_amount(self, value) -> float | None:
         """Parse a prior_refunds string like 'US $3.50' into a float.
 
-        Returns 0.0 if None/empty/unparseable — an UNPARSEABLE value is treated
-        the same as "no prior refunds" for the before-snapshot; the delta check
-        after submission is what actually proves success.
+        Returns ``None`` when the value is missing or unparseable. ``None``
+        means "the page did not tell us", which is NOT the same as $0.00.
+        BrickLink renders a literal ``"US $0.00"`` for an order that has never
+        been refunded (verified live against order 30891363 on 2026-07-30), so
+        a missing value can only mean the page failed to render or the parser
+        lost its anchor. Substituting 0.0 there previously let an unreadable
+        page masquerade as a proven-zero page, which is how a posted refund got
+        reported as "did NOT post".
         """
         if not value:
-            return 0.0
+            return None
         import re as _re
         m = _re.search(r"([0-9]+(?:\.[0-9]+)?)", str(value))
         if not m:
-            return 0.0
+            return None
         return float(m.group(1))
 
     @staticmethod
@@ -727,10 +1039,108 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
                 return lbl
         return None
 
-    def _read_prior_refunds_total(self, order_id: str) -> float:
-        """Fetch the refund page fresh and return prior refunds as a float ($)."""
+    def _read_prior_refunds_total(self, order_id: str) -> float | None:
+        """Fetch the refund page fresh and return prior refunds as a float ($).
+
+        Returns ``None`` when the page did not yield a readable value. The raw
+        string is logged on every read so a future incident can distinguish
+        "page said $0.00" from "page said nothing" — the activity log used to
+        record only the collapsed float, which made those two cases
+        indistinguishable after the fact.
+        """
         info = self.get_refund_info(order_id)
-        return self._parse_prior_refunds_amount(info.get("prior_refunds"))
+        raw = info.get("prior_refunds")
+        amount = self._parse_prior_refunds_amount(raw)
+        activity.info(
+            "refund page read for order %s: prior_refunds_raw=%r parsed=%s refund_status=%r",
+            order_id, raw,
+            "unreadable" if amount is None else f"${amount:.2f}",
+            info.get("refund_status"),
+        )
+        return amount
+
+    # BrickLink's refund page is EVENTUALLY CONSISTENT. The submitted refund
+    # does not land in "Prior refund(s)" the moment the confirm button is
+    # clicked. Measured on order 32175236 (2026-07-30, activity log): the page
+    # still read $0.00 eleven seconds after submit and read $1.00 five minutes
+    # later. The previous 3-attempt / ~6-second budget expired while the refund
+    # was still in flight, then asserted "The refund did NOT post" — which
+    # invites the operator to re-issue and double-refund a real buyer.
+    # Cumulative budget below: 120 seconds.
+    REFUND_VERIFY_BACKOFF_SECONDS = (2, 3, 5, 8, 12, 15, 20, 25, 30)
+
+    def _verify_refund_posted(self, page, order_id: str, prior_before: float,
+                              expected_delta: float | None) -> tuple[float, float]:
+        """Poll the refund page until the submitted refund becomes visible.
+
+        Returns ``(prior_after, actual_delta)`` once the increase is confirmed.
+
+        Raises ``RuntimeError`` describing the outcome as UNCONFIRMED when the
+        budget is exhausted. It must NEVER claim the refund did not post: by the
+        time this runs the confirm button has already been clicked and the money
+        may have moved. A positive reading proves the refund posted; the absence
+        of a reading proves nothing at all.
+        """
+        target = prior_before + expected_delta if expected_delta is not None else None
+        observations: list[str] = []
+        last_amount: float | None = None
+        elapsed = 0.0
+
+        for wait_seconds in self.REFUND_VERIFY_BACKOFF_SECONDS:
+            page.wait_for_timeout(int(wait_seconds * 1000))
+            elapsed += wait_seconds
+            try:
+                amount = self._read_prior_refunds_total(order_id)
+            except Exception as exc:
+                observations.append(
+                    f"+{elapsed:.0f}s read error: {type(exc).__name__}: {exc}"
+                )
+                continue
+            if amount is None:
+                observations.append(
+                    f"+{elapsed:.0f}s page returned no readable prior-refund amount"
+                )
+                continue
+
+            last_amount = amount
+            observations.append(f"+{elapsed:.0f}s prior_refunds=${amount:.2f}")
+            confirmed = (
+                amount > prior_before + 0.005 if target is None
+                else amount + 0.005 >= target
+            )
+            if confirmed:
+                actual_delta = round(amount - prior_before, 2)
+                activity.info(
+                    "refund CONFIRMED for order %s after %.0fs: prior_refunds "
+                    "$%.2f -> $%.2f (delta $%.2f)",
+                    order_id, elapsed, prior_before, amount, actual_delta,
+                )
+                return amount, actual_delta
+
+        trail = "; ".join(observations) or "no reads completed"
+        expected_str = (
+            f"reach ${target:.2f} (an increase of ${expected_delta:.2f})"
+            if target is not None
+            else f"rise above ${prior_before:.2f} (full refund)"
+        )
+        last_str = (
+            "never read successfully" if last_amount is None else f"${last_amount:.2f}"
+        )
+        activity.error(
+            "refund UNCONFIRMED for order %s after %.0fs; observations: %s",
+            order_id, elapsed, trail,
+        )
+        raise RuntimeError(
+            f"Refund state UNCONFIRMED for order {order_id}. The refund WAS submitted "
+            f"to Bricklink — the confirm button was clicked — but the refund page did "
+            f"not show the expected change within {elapsed:.0f}s. Expected prior_refunds "
+            f"to {expected_str}. Before=${prior_before:.2f}, last observed={last_str}. "
+            f"DO NOT re-issue this refund: Bricklink's refund page is eventually "
+            f"consistent and the refund may already have posted. Check "
+            f"`bricklink refund info {order_id}` or {self.REFUND_URL}?id={order_id} "
+            f"and only re-issue if prior refunds are genuinely unchanged. "
+            f"Read trail: {trail}"
+        )
 
     def _submit_refund(self, order_id: str, reason: str, details: str = None,
                        amount: float = None, full: bool = False, dry_run: bool = False) -> dict:
@@ -738,16 +1148,34 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
 
         Verifies success by re-reading the refund page after submission and
         confirming that prior_refunds increased by at least the submitted
-        amount. Raises RuntimeError on any verification failure — never
-        silently reports success.
+        amount. Never silently reports success.
+
+        Failure semantics differ either side of the confirm click:
+        - BEFORE the click, an unreadable page raises and states plainly that
+          no refund was submitted.
+        - AFTER the click, a missing confirmation raises as UNCONFIRMED. The
+          money may already have moved, so the error tells the operator to
+          check the refund page rather than re-issue. See
+          ``_verify_refund_posted``.
         """
         try:
             # --- SNAPSHOT: capture prior refunds BEFORE submission ---
+            # An unreadable snapshot is a hard stop, not a zero. Nothing has
+            # been submitted yet, so failing here is safe and costs the buyer
+            # nothing; guessing $0.00 here would poison the delta check later.
             prior_before = self._read_prior_refunds_total(order_id)
+            if prior_before is None:
+                raise RuntimeError(
+                    f"Could not read prior refunds from the Bricklink refund page for "
+                    f"order {order_id} before submitting. NO refund was submitted. "
+                    "The page did not render a 'Prior refund(s)' amount — check that "
+                    f"{self.REFUND_URL}?id={order_id} loads and shows the refund form."
+                )
             activity.info(f"refund pre-submit prior_refunds=${prior_before:.2f} for order {order_id}")
 
             url = f"{self.REFUND_URL}?id={order_id}"
             page = self._get_page_for(url)
+            self._reveal_refund_reason_dropdown(page, order_id)
 
             # Select reason
             dropdown = page.query_selector('select, [role="combobox"]')
@@ -1006,43 +1434,9 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
             # --- VERIFY: re-read refund page and confirm prior_refunds delta ---
             # Small tolerance for float/rounding (BL displays to 2 decimals).
             expected_delta = float(amount) if (amount is not None and not full) else None
-            # Retry read a couple of times — BL can take a moment to persist.
-            prior_after = prior_before
-            for attempt in range(3):
-                page.wait_for_timeout(1500)
-                try:
-                    prior_after = self._read_prior_refunds_total(order_id)
-                except Exception:
-                    continue
-                if expected_delta is None:
-                    # Full refund — any increase is enough
-                    if prior_after > prior_before + 0.005:
-                        break
-                else:
-                    if prior_after + 0.005 >= prior_before + expected_delta:
-                        break
-
-            actual_delta = round(prior_after - prior_before, 2)
-            activity.info(
-                f"refund post-submit prior_refunds=${prior_after:.2f} "
-                f"(delta=${actual_delta:.2f}) for order {order_id}"
+            prior_after, actual_delta = self._verify_refund_posted(
+                page, order_id, prior_before, expected_delta
             )
-
-            if full:
-                verified = prior_after > prior_before + 0.005
-            else:
-                verified = (prior_after + 0.005) >= (prior_before + expected_delta)
-
-            if not verified:
-                expected_str = (
-                    f"${expected_delta:.2f}" if expected_delta is not None else "(any amount, full refund)"
-                )
-                raise RuntimeError(
-                    f"Refund verification FAILED for order {order_id}. "
-                    f"Expected prior_refunds to increase by {expected_str}. "
-                    f"Before=${prior_before:.2f}, After=${prior_after:.2f}, "
-                    f"Delta=${actual_delta:.2f}. The refund did NOT post to Bricklink."
-                )
 
             result = {
                 "success": True,
@@ -1320,3 +1714,132 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
 
         return {"success": success,
                 "message": "Wanted list notification sent" if success else "Notification may have failed. Verify on Bricklink."}
+
+    # ==================== NSS Alerts ====================
+
+    def list_nss_alerts(self) -> list:
+        """List active Non-Shipping Seller (NSS) alerts against the seller."""
+        url = "https://www.bricklink.com/orderReceived.asp?st=s"
+        page = self._get_page_for(url)
+
+        # Check if there's any orders on the page
+        try:
+            page.wait_for_selector('a[href*="orderDetail.asp?ID="], a[href*="orderDetail.asp?id="]', timeout=5000)
+        except Exception:
+            return []
+
+        orders = page.evaluate("""() => {
+            const results = [];
+            const links = Array.from(document.querySelectorAll('a[href*="orderDetail.asp?ID="], a[href*="orderDetail.asp?id="]'));
+            const seen = new Set();
+            for (const link of links) {
+                const href = link.getAttribute('href');
+                const match = href.match(/ID=(\\d+)/i);
+                if (!match) continue;
+                const orderId = match[1];
+                if (seen.has(orderId)) continue;
+                seen.add(orderId);
+                
+                const tr = link.closest('tr');
+                if (!tr) continue;
+                const cells = Array.from(tr.querySelectorAll('td')).map(td => (td.textContent || '').trim());
+                if (cells.length < 13) continue;
+                
+                let buyer = cells[6] || '';
+                buyer = buyer.replace(/\\u00a0/g, ' ').split('(')[0].trim();
+                
+                results.push({
+                    order_id: orderId,
+                    date: cells[2] || '',
+                    buyer: buyer,
+                    items_cost: cells[9] || '',
+                    grand_total: cells[10] || '',
+                    final_total: cells[11] || '',
+                    status: cells[12] || 'NSS',
+                    url: 'https://www.bricklink.com/' + href
+                });
+            }
+            return results;
+        }""")
+        return orders
+
+    def get_nss_alert(self, order_id: str) -> dict:
+        """Get details for a specific Non-Shipping Seller (NSS) alert by order ID."""
+        url = f"https://www.bricklink.com/retractOrder.asp?ID={order_id}"
+        page = self._get_page_for(url)
+
+        info = page.evaluate("""() => {
+            const bodyText = document.body.innerText;
+            
+            // Status and Cancel
+            let status = '';
+            const statusMatch = bodyText.match(/Current Problem Status:\\s*([\\s\\S]*?)(?=\\n\\n|\\nMy Next|\\nComments|\\nProblem Comments)/i);
+            if (statusMatch) status = statusMatch[1].trim();
+            
+            let cancellation_info = '';
+            const cancelMatch = bodyText.match(/This order can be cancelled after\\s*([^\\n]*)/i);
+            if (cancelMatch) cancellation_info = cancelMatch[0].trim();
+            
+            let reason = '';
+            const reasonMatch = bodyText.match(/Reason:\\s*([^\\n]*)/i);
+            if (reasonMatch) reason = reasonMatch[1].trim();
+            
+            let details = '';
+            const detailsMatch = bodyText.match(/Details:\\s*([\\s\\S]*?)(?=\\n\\n|\\nFrom:|\\nBrickLink)/i);
+            if (detailsMatch) details = detailsMatch[1].trim();
+            
+            // Let's extract comments/history
+            const comments = [];
+            const commentsIndex = bodyText.indexOf('Problem Comments:');
+            if (commentsIndex !== -1) {
+                const commentsSection = bodyText.substring(commentsIndex).trim();
+                const parts = commentsSection.split(/\\nFrom:\\s*/);
+                for (let i = 1; i < parts.length; i++) {
+                    const part = parts[i].trim();
+                    const lines = part.split('\\n');
+                    const header = lines[0] || '';
+                    const headerMatch = header.match(/^([^\\t(]+)(?:\\(([^)]+)\\))?\\s*\\t*Posted on:\\s*([^\\t\\n]+)/);
+                    
+                    let user = '';
+                    let date = '';
+                    if (headerMatch) {
+                        user = headerMatch[1].trim();
+                        date = headerMatch[3].trim();
+                    } else {
+                        const postedOnIndex = header.indexOf('Posted on:');
+                        if (postedOnIndex !== -1) {
+                            user = header.substring(0, postedOnIndex).trim();
+                            date = header.substring(postedOnIndex + 10).trim();
+                        } else {
+                            user = header;
+                        }
+                    }
+                    user = user.replace(/\\u00a0/g, ' ').trim();
+                    date = date.replace(/\\u00a0/g, ' ').trim();
+                    
+                    let commentBody = lines.slice(1).join('\\n').trim();
+                    const footerIdx = commentBody.indexOf('\\nBrickLink');
+                    if (footerIdx !== -1) {
+                        commentBody = commentBody.substring(0, footerIdx).trim();
+                    } else if (commentBody.includes('BrickLink\\nAbout Us')) {
+                        const footerIdx2 = commentBody.indexOf('BrickLink\\nAbout Us');
+                        commentBody = commentBody.substring(0, footerIdx2).trim();
+                    }
+                    
+                    comments.push({
+                        user,
+                        date,
+                        message: commentBody
+                    });
+                }
+            }
+            
+            return {
+                status: status.replace(/\\u00a0/g, ' '),
+                cancellation_info: cancellation_info.replace(/\\u00a0/g, ' '),
+                reason: reason.replace(/\\u00a0/g, ' '),
+                details: details.replace(/\\u00a0/g, ' '),
+                comments
+            };
+        }""")
+        return {"order_id": order_id, **info, "url": page.url}

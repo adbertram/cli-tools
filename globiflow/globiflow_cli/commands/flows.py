@@ -25,9 +25,9 @@ import typer
 from typing import Optional, List
 from pathlib import Path
 
-from ..client import get_client, ClientError
+from ..client import get_client
 from cli_tools_shared.filters import apply_filters
-from cli_tools_shared.output import print_json, print_table, handle_error, print_info, print_error
+from cli_tools_shared.output import print_json, print_table, command, print_info, print_error
 from cli_tools_shared import FilterMap
 
 app = typer.Typer(help="Manage Globiflow flows")
@@ -97,6 +97,7 @@ def _select_properties(items: List[dict], properties: Optional[str]) -> List[dic
 
 
 @app.command("list")
+@command
 def list_flows(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of results (client-side)"),
@@ -115,8 +116,8 @@ def list_flows(
         globiflow flows list --filter "enabled:eq:true" --limit 10
         globiflow flows list --properties "id,name,enabled"
     """
+    client = get_client()
     try:
-        client = get_client()
         flows = client.list_flows()
 
         # Convert to dicts for filtering
@@ -154,15 +155,12 @@ def list_flows(
                 print_info("No flows found.")
         else:
             print_json(flow_dicts)
-
+    finally:
         client.close()
-    except ClientError as e:
-        raise typer.Exit(handle_error(e))
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
 
 
 @app.command("create")
+@command
 def create_flow(
     app_id: str = typer.Option(..., "--app-id", "-a", help="Podio app ID for the flow"),
     trigger: str = typer.Option(..., "--trigger", "-T", help="Trigger code (C, U, M, etc. - use 'triggers list')"),
@@ -184,32 +182,32 @@ def create_flow(
         globiflow flows create --app-id 30560419 --trigger C --name "With Steps" --steps '[{"action_type": "Custom Variable", "variable_name": "test", "code": "1+1"}]'
         globiflow flows create --app-id 30560419 --trigger M --name "Manual Flow" --steps @steps.json
     """
-    try:
-        # Parse steps if provided
-        parsed_steps = None
-        if steps:
-            if steps.startswith("@"):
-                # Read from file
-                file_path = Path(steps[1:])
-                if not file_path.exists():
-                    print_info(f"Error: Steps file not found: {file_path}")
-                    raise typer.Exit(1)
-                with open(file_path) as f:
-                    parsed_steps = json.load(f)
-            else:
-                # Parse JSON directly
-                try:
-                    parsed_steps = json.loads(steps)
-                except json.JSONDecodeError as e:
-                    print_info(f"Error: Invalid JSON in --steps: {e}")
-                    raise typer.Exit(1)
-
-            # Validate steps is a list
-            if not isinstance(parsed_steps, list):
-                print_info("Error: --steps must be a JSON array of step objects")
+    # Parse steps if provided
+    parsed_steps = None
+    if steps:
+        if steps.startswith("@"):
+            # Read from file
+            file_path = Path(steps[1:])
+            if not file_path.exists():
+                print_info(f"Error: Steps file not found: {file_path}")
+                raise typer.Exit(1)
+            with open(file_path) as f:
+                parsed_steps = json.load(f)
+        else:
+            # Parse JSON directly
+            try:
+                parsed_steps = json.loads(steps)
+            except json.JSONDecodeError as e:
+                print_info(f"Error: Invalid JSON in --steps: {e}")
                 raise typer.Exit(1)
 
-        client = get_client()
+        # Validate steps is a list
+        if not isinstance(parsed_steps, list):
+            print_info("Error: --steps must be a JSON array of step objects")
+            raise typer.Exit(1)
+
+    client = get_client()
+    try:
         flow = client.create_flow(
             app_id=app_id,
             trigger_code=trigger,
@@ -231,15 +229,12 @@ def create_flow(
             print_info(f"Flow created successfully with ID: {flow.id}")
         else:
             print_json(flow)
-
+    finally:
         client.close()
-    except ClientError as e:
-        raise typer.Exit(handle_error(e))
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
 
 
 @app.command("get")
+@command
 def get_flow(
     flow_id: str = typer.Argument(..., help="Flow ID to retrieve"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -255,8 +250,8 @@ def get_flow(
         globiflow flows get 4299675 --table
         globiflow flows get 4299675 --include-steps
     """
+    client = get_client()
     try:
-        client = get_client()
         flow = client.get_flow(flow_id, include_steps=include_steps)
 
         if table:
@@ -281,15 +276,12 @@ def get_flow(
                     print_info(f"  {step.step_number}. [{category}] {step.action_type}")
         else:
             print_json(flow)
-
+    finally:
         client.close()
-    except ClientError as e:
-        raise typer.Exit(handle_error(e))
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
 
 
 @app.command("logs")
+@command
 def list_logs(
     flow_id: str = typer.Argument(..., help="Flow ID to get logs for"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -304,8 +296,8 @@ def list_logs(
         globiflow flows logs 4299675 --table
         globiflow flows logs 4299675
     """
+    client = get_client()
     try:
-        client = get_client()
         logs = client.list_flow_logs(flow_id)
 
         if table:
@@ -317,15 +309,12 @@ def list_logs(
                 print_info("No logs found for this flow.")
         else:
             print_json([log.to_dict() for log in logs])
-
+    finally:
         client.close()
-    except ClientError as e:
-        raise typer.Exit(handle_error(e))
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
 
 
 @app.command("delete")
+@command
 def delete_flow(
     flow_id: str = typer.Argument(..., help="Flow ID to delete"),
     force: bool = typer.Option(False, "--force", "-F", help="Skip confirmation prompt"),
@@ -339,9 +328,8 @@ def delete_flow(
         globiflow flows delete 4299675
         globiflow flows delete 4299675 --force
     """
+    client = get_client()
     try:
-        client = get_client()
-
         # Get flow info first for confirmation
         if not force:
             try:
@@ -354,24 +342,20 @@ def delete_flow(
                 f"Are you sure you want to delete flow '{flow_name}' (ID: {flow_id})?"
             ):
                 print_info("Deletion cancelled.")
-                client.close()
                 return
 
         # Perform deletion
         client.delete_flow(flow_id)
         print_info(f"Flow {flow_id} deleted successfully.")
-
+    finally:
         client.close()
-    except ClientError as e:
-        raise typer.Exit(handle_error(e))
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
 
 
 # ==================== Steps Subcommands ====================
 
 
 @steps_app.command("list")
+@command
 def list_steps(
     flow_id: str = typer.Option(None, "--flow-id", help="Flow ID to list steps for (optional, lists steps from all flows if omitted)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -389,17 +373,17 @@ def list_steps(
         globiflow flows steps list --flow-id 4299675 --table
         globiflow flows steps list --table
     """
-    try:
-        if not flow_id:
-            # Listing every step across every flow is intentionally unsupported.
-            # Still honor the caller's requested output format.
-            if table:
-                print_table([], ["step_number", "action_type", "category"], ["Step Number", "Action Type", "Category"])
-            else:
-                print_json([])
-            return
+    if not flow_id:
+        # Listing every step across every flow is intentionally unsupported.
+        # Still honor the caller's requested output format.
+        if table:
+            print_table([], ["step_number", "action_type", "category"], ["Step Number", "Action Type", "Category"])
+        else:
+            print_json([])
+        return
 
-        client = get_client()
+    client = get_client()
+    try:
         # List steps for specific flow
         steps = client.list_flow_steps(flow_id)
 
@@ -427,15 +411,12 @@ def list_steps(
                 print_info("No steps found.")
         else:
             print_json(step_dicts)
-
+    finally:
         client.close()
-    except ClientError as e:
-        raise typer.Exit(handle_error(e))
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
 
 
 @steps_app.command("get")
+@command
 def get_step(
     flow_id: str = typer.Argument(..., help="Flow ID"),
     step_number: int = typer.Argument(..., help="Step number (1-based)"),
@@ -450,8 +431,8 @@ def get_step(
         globiflow flows steps get 4299675 1 --table
         globiflow flows steps get 4299675 2
     """
+    client = get_client()
     try:
-        client = get_client()
         step = client.get_flow_step(flow_id, step_number)
 
         if table:
@@ -482,15 +463,12 @@ def get_step(
                 print_table(param_rows, ["param", "value"], ["Parameter", "Value"])
         else:
             print_json(step)
-
+    finally:
         client.close()
-    except ClientError as e:
-        raise typer.Exit(handle_error(e))
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
 
 
 @steps_app.command("add")
+@command
 def add_step(
     flow_id: str = typer.Argument(..., help="Flow ID to add step to"),
     action_type: str = typer.Option(..., "--action", "-a", help="Action type (e.g., 'Add Comment', 'Custom Variable', 'Remote HTTP Call')"),
@@ -562,22 +540,22 @@ def add_step(
         globiflow flows steps add 4314927 --action "Custom Variable" --variable-name "myvar" --code "'value'"
         globiflow flows steps add 4314927 --action "Remote HTTP Call" --url "https://api.example.com" --method POST
     """
-    try:
-        # Build step config from action_type and non-None options
-        step_config = {"action_type": action_type}
-        local_vars = locals()
-        field_names = [
-            'variable_name', 'code', 'url', 'method', 'headers', 'get_params',
-            'post_params', 'follow_redirect', 'to', 'subject', 'body', 'from_name',
-            'reply_to', 'cc', 'bcc', 'comment_body', 'silent', 'message',
-            'assignee', 'task_text', 'due_date'
-        ]
-        for field in field_names:
-            value = local_vars.get(field)
-            if value is not None:
-                step_config[field] = value
+    # Build step config from action_type and non-None options
+    step_config = {"action_type": action_type}
+    local_vars = locals()
+    field_names = [
+        'variable_name', 'code', 'url', 'method', 'headers', 'get_params',
+        'post_params', 'follow_redirect', 'to', 'subject', 'body', 'from_name',
+        'reply_to', 'cc', 'bcc', 'comment_body', 'silent', 'message',
+        'assignee', 'task_text', 'due_date'
+    ]
+    for field in field_names:
+        value = local_vars.get(field)
+        if value is not None:
+            step_config[field] = value
 
-        client = get_client()
+    client = get_client()
+    try:
         new_step = client.add_flow_step(flow_id, step_config)
 
         if table:
@@ -595,15 +573,12 @@ def add_step(
             print_info(f"Step added successfully as step {new_step.step_number}.")
         else:
             print_json(new_step)
-
+    finally:
         client.close()
-    except ClientError as e:
-        raise typer.Exit(handle_error(e))
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
 
 
 @steps_app.command("update")
+@command
 def update_step(
     flow_id: str = typer.Argument(..., help="Flow ID"),
     step_number: int = typer.Argument(..., help="Step number (1-based)"),
@@ -676,27 +651,27 @@ def update_step(
         globiflow flows steps update 4314927 3 --url "https://api.example.com" --method POST
         globiflow flows steps update 4314927 5 --to "email@example.com" --subject "Subject"
     """
+    # Build updates dict from non-None options
+    updates = {}
+    local_vars = locals()
+    field_names = [
+        'variable_name', 'code', 'url', 'method', 'headers', 'get_params',
+        'post_params', 'follow_redirect', 'to', 'subject', 'body', 'from_name',
+        'reply_to', 'cc', 'bcc', 'comment_body', 'silent', 'message',
+        'assignee', 'task_text', 'due_date'
+    ]
+    for field in field_names:
+        value = local_vars.get(field)
+        if value is not None:
+            updates[field] = value
+
+    # Validate at least one field provided
+    if not updates:
+        print_info("No fields provided to update. Use --help to see available options.")
+        raise typer.Exit(1)
+
+    client = get_client()
     try:
-        # Build updates dict from non-None options
-        updates = {}
-        local_vars = locals()
-        field_names = [
-            'variable_name', 'code', 'url', 'method', 'headers', 'get_params',
-            'post_params', 'follow_redirect', 'to', 'subject', 'body', 'from_name',
-            'reply_to', 'cc', 'bcc', 'comment_body', 'silent', 'message',
-            'assignee', 'task_text', 'due_date'
-        ]
-        for field in field_names:
-            value = local_vars.get(field)
-            if value is not None:
-                updates[field] = value
-
-        # Validate at least one field provided
-        if not updates:
-            print_info("No fields provided to update. Use --help to see available options.")
-            raise typer.Exit(1)
-
-        client = get_client()
         updated_step = client.update_flow_step(flow_id, step_number, updates)
 
         if table:
@@ -713,9 +688,81 @@ def update_step(
             print_info(f"Step {step_number} updated successfully.")
         else:
             print_json(updated_step)
-
+    finally:
         client.close()
-    except ClientError as e:
-        raise typer.Exit(handle_error(e))
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+
+
+@steps_app.command("move")
+@command
+def move_step(
+    flow_id: str = typer.Argument(..., help="Flow ID"),
+    step_number: int = typer.Argument(..., help="Current step number to move (1-based)"),
+    to: int = typer.Option(..., "--to", help="Target step number (1-based execution position)"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+):
+    """
+    Move a step to a new execution position within a flow.
+
+    Reorders the step earlier or later in the flow's execution order and
+    saves the flow. Use 'flows steps list' first to see current step
+    numbers.
+
+    Example:
+        globiflow flows steps move 4314927 3 --to 1
+        globiflow flows steps move 4314927 1 --to 4 --table
+    """
+    client = get_client()
+    try:
+        moved_step = client.move_flow_step(flow_id, step_number, to)
+
+        if table:
+            rows = [
+                {"field": "Flow ID", "value": moved_step.flow_id},
+                {"field": "Step Number", "value": str(moved_step.step_number)},
+                {"field": "Action Type", "value": moved_step.action_type},
+            ]
+            print_table(rows, ["field", "value"], ["Field", "Value"])
+            print_info(f"Step moved from position {step_number} to position {to}.")
+        else:
+            print_json(moved_step)
+    finally:
+        client.close()
+
+
+@steps_app.command("delete")
+@command
+def delete_step(
+    flow_id: str = typer.Argument(..., help="Flow ID"),
+    step_number: int = typer.Argument(..., help="Step number to delete (1-based)"),
+    force: bool = typer.Option(False, "--force", "-F", help="Skip confirmation prompt"),
+):
+    """
+    Delete a step from a flow.
+
+    This action cannot be undone. Use --force to skip confirmation.
+    Remaining steps are renumbered after deletion; use 'flows steps list'
+    to see the updated order.
+
+    Example:
+        globiflow flows steps delete 4314927 2
+        globiflow flows steps delete 4314927 2 --force
+    """
+    client = get_client()
+    try:
+        if not force:
+            try:
+                step = client.get_flow_step(flow_id, step_number)
+                step_description = step.action_type
+            except Exception:
+                step_description = "Unknown"
+
+            if not typer.confirm(
+                f"Are you sure you want to delete step {step_number} ('{step_description}') from flow {flow_id}?"
+            ):
+                print_info("Deletion cancelled.")
+                return
+
+        client.delete_flow_step(flow_id, step_number)
+        print_info(f"Step {step_number} deleted successfully from flow {flow_id}.")
+    finally:
+        client.close()

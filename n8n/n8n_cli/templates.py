@@ -11,7 +11,7 @@ PACKAGE_JSON = """{
   "license": "MIT",
   "homepage": "",
   "author": {
-    "name": "Adam"
+    "name": "CLI Tools contributors"
   },
   "main": "index.js",
   "scripts": {

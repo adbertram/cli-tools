@@ -13,10 +13,11 @@ app = create_app(
 from .config import get_config
 
 # Register command modules
-from .commands import auth, site_audit
+from .commands import auth, site_audit, site_explorer
 app.add_typer(auth.app, name="auth", help="Manage Ahrefs authentication")
 app.add_typer(create_cache_app(get_config), name="cache")
 register_commands(app, get_config, site_audit, name="site-audit", help="Site audit operations")
+register_commands(app, get_config, site_explorer, name="site-explorer", help="Site Explorer operations")
 
 
 def main():

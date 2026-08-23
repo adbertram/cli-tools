@@ -3,6 +3,7 @@
 Manage local listing templates that can be used to create draft offers.
 Templates are stored in ~/.ebay/templates.json
 """
+from cli_tools_shared.output import command
 COMMAND_CREDENTIALS = {
     "list": ["oauth_authorization_code"],
     "get": ["oauth_authorization_code"],
@@ -41,6 +42,7 @@ def _template_record(template: dict) -> dict:
 
 
 @app.command("list")
+@command
 def templates_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of templates to return"),
@@ -128,6 +130,7 @@ def templates_list(
 
 
 @app.command("get")
+@command
 def templates_get(
     name: str = typer.Argument(..., help="Template name"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -177,6 +180,7 @@ def templates_get(
 
 
 @app.command("create")
+@command
 def templates_create(
     name: str = typer.Argument(..., help="Template name (e.g., 'vintage-camera', 'standard-book')"),
     description: Optional[str] = typer.Option(None, "--description", "-d", help="Template description"),
@@ -302,6 +306,7 @@ def templates_create(
 
 
 @app.command("update")
+@command
 def templates_update(
     name: str = typer.Argument(..., help="Template name to update"),
     description: Optional[str] = typer.Option(None, "--description", "-d", help="Update description"),
@@ -390,6 +395,7 @@ def templates_update(
 
 
 @app.command("delete")
+@command
 def templates_delete(
     name: str = typer.Argument(..., help="Template name to delete"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
@@ -421,6 +427,7 @@ def templates_delete(
 
 
 @app.command("validate")
+@command
 def templates_validate(
     file_path: str = typer.Argument(..., help="Path to JSON template file to validate"),
 ):

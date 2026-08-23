@@ -8,6 +8,9 @@ from typing import Optional
 import typer
 
 
+HELP_OUTPUT_MIN_WIDTH = 200
+
+
 def _reconfigure_stream(stream, stream_name: str):
     """Reconfigure a single stream to UTF-8, replacing it if reconfigure fails.
 
@@ -58,6 +61,85 @@ def _ensure_utf8_streams() -> None:
     _reconfigure_stream(sys.stderr, "stderr")
 
 
+def _hoist_no_cache_flag() -> None:
+    """Make the global ``--no-cache`` flag position-independent.
+
+    ``--no-cache`` is defined as an app-level callback option (see
+    :func:`create_app`), so Click only honours it when it appears *before* the
+    subcommand. Agents naturally append it
+    (``coursecraft demos get <id> --no-cache``), which Click then rejects with
+    exit code 2 and empty stdout — making the documented uncached-readback
+    verification path look broken. Move a standalone ``--no-cache`` token to the
+    front of ``sys.argv`` so the existing callback handles it regardless of
+    position.
+
+    A ``--no-cache`` token is moved only when it is NOT immediately preceded by
+    another option token (one starting with ``-``). In that ambiguous case it
+    may be the *value* of a value-taking option (e.g. ``--name --no-cache``), so
+    it is left untouched and parsed natively. This keeps the rewrite from ever
+    stealing another option's value.
+    """
+    args = sys.argv[1:]
+    if "--no-cache" not in args:
+        return
+
+    moved = False
+    rebuilt = []
+    for index, token in enumerate(args):
+        if (
+            token == "--no-cache"
+            and not moved
+            and (index == 0 or not args[index - 1].startswith("-"))
+        ):
+            moved = True  # drop here; re-inserted at the front below
+            continue
+        rebuilt.append(token)
+
+    if moved:
+        sys.argv = [sys.argv[0], "--no-cache", *rebuilt]
+
+
+def _normalize_help_alias() -> None:
+    """Support ``<tool> help`` as an alias for root ``<tool> --help``."""
+    if sys.argv[1:] == ["help"]:
+        sys.argv = [sys.argv[0], "--help"]
+
+
+def _argv_requests_help() -> bool:
+    """Return True when the current invocation is asking Click/Typer for help."""
+    return "--help" in sys.argv[1:]
+
+
+def _stdout_is_interactive() -> bool:
+    isatty = getattr(sys.stdout, "isatty", None)
+    return bool(isatty and isatty())
+
+
+def _ensure_piped_help_width() -> None:
+    """Keep piped Rich help wide enough for long option names.
+
+    Rich/Typer truncates option columns at the detected console width. When help
+    is captured by a pipe or file, the default width can be 80 columns, which
+    turns long flags into ellipsized labels and breaks exact help/usage probes.
+    """
+    if not _argv_requests_help() or _stdout_is_interactive():
+        return
+
+    current_columns = os.environ.get("COLUMNS")
+    try:
+        columns = int(current_columns) if current_columns else 0
+    except ValueError:
+        columns = 0
+    if columns < HELP_OUTPUT_MIN_WIDTH:
+        os.environ["COLUMNS"] = str(HELP_OUTPUT_MIN_WIDTH)
+
+    import typer.rich_utils as typer_rich_utils
+
+    max_width = getattr(typer_rich_utils, "MAX_WIDTH", None)
+    if max_width is None or max_width < HELP_OUTPUT_MIN_WIDTH:
+        typer_rich_utils.MAX_WIDTH = HELP_OUTPUT_MIN_WIDTH
+
+
 def create_app(
     name: str,
     help: str,
@@ -98,6 +180,15 @@ def create_app(
             typer.echo(ctx.get_help())
             raise typer.Exit()
 
+    # Normalise argv here, not only in run_app: most CLIs use a
+    # ``main:app`` console-script entry point that calls ``app()`` directly and
+    # never reaches run_app. create_app runs at import time - before ``app()``
+    # parses sys.argv — so this is the one chokepoint shared by every entry
+    # style. Idempotent: run_app calls these again for the ``main:main`` path.
+    _normalize_help_alias()
+    _ensure_piped_help_width()
+    _hoist_no_cache_flag()
+
     return app
 
 
@@ -111,6 +202,9 @@ def run_app(app: typer.Typer, *, error_types=None) -> None:
             :class:`cli_tools_shared.exceptions.ClientError`.
     """
     _ensure_utf8_streams()
+    _normalize_help_alias()
+    _ensure_piped_help_width()
+    _hoist_no_cache_flag()
 
     if error_types is None:
         from .exceptions import ClientError, ConfigError
@@ -122,7 +216,7 @@ def run_app(app: typer.Typer, *, error_types=None) -> None:
         app()
     except error_types as e:
         typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(2)
+        sys.exit(2)
     except KeyboardInterrupt:
         typer.echo("\nAborted!", err=True)
-        raise typer.Exit(130)
+        sys.exit(130)

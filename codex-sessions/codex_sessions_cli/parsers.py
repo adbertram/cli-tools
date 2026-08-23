@@ -310,6 +310,40 @@ def max_timestamp(records: List[RolloutRecord]) -> str:
     return max((record.timestamp for record in records), key=iso_to_epoch)
 
 
+def extract_turn_model(record: RolloutRecord) -> Optional[str]:
+    """
+    Return the model recorded on a turn_context record's payload, or None.
+
+    Codex writes the active model to `payload.model` on every turn_context
+    record (also duplicated under `payload.collaboration_mode.settings.model`,
+    same value). Non-turn_context records have no model. Single source of
+    truth for every raw model-field lookup in this module.
+    """
+    if record.record_type != "turn_context":
+        return None
+    value = record.payload.get("model")
+    return value if isinstance(value, str) and value else None
+
+
+def last_turn_model(records: List[RolloutRecord]) -> Optional[str]:
+    """
+    Return the model from the most recent turn_context record in `records`,
+    or None if no turn_context record carries a model.
+
+    Codex writes one turn_context record per turn, including on mid-session
+    model switches, in chronological file order. The last turn_context's
+    model is the "last model used" for the given record set. Rollouts
+    without any turn_context record (e.g. sessions that ended before the
+    first turn started) have no recorded model.
+    """
+    model: Optional[str] = None
+    for record in records:
+        value = extract_turn_model(record)
+        if value:
+            model = value
+    return model
+
+
 def conversation_id_for_record(records: List[RolloutRecord], target: RolloutRecord) -> int:
     current = 1
     for record in records:
@@ -686,3 +720,26 @@ def parse_include_prompts(value: str) -> Tuple[int, int]:
                 f"invalid --include-prompts key: {key!r}. Accepted keys: first, last."
             )
     return first_n, last_n
+
+
+def load_session_names(codex_home: Path) -> Dict[str, str]:
+    """Load session ID to thread_name mapping from session_index.jsonl."""
+    index_path = codex_home / "session_index.jsonl"
+    if not index_path.exists():
+        return {}
+
+    mapping = {}
+    try:
+        # File can be large/appended to; let's parse line-by-line
+        for line in index_path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                data = json.loads(line)
+                if isinstance(data, dict) and "id" in data and "thread_name" in data:
+                    mapping[str(data["id"])] = str(data["thread_name"])
+            except json.JSONDecodeError:
+                continue
+    except Exception:
+        pass
+    return mapping

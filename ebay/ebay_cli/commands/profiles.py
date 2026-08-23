@@ -1,4 +1,5 @@
 """Profiles commands for eBay CLI with standard list flags."""
+from cli_tools_shared.output import command
 import typer
 from typing import Optional, List
 
@@ -12,6 +13,7 @@ app = typer.Typer(help="Manage profiles", no_args_is_help=True)
 
 
 @app.command("list")
+@command
 def profiles_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(50, "--limit", "-l", help="Maximum number of profiles to return"),
@@ -64,6 +66,7 @@ def profiles_list(
 
 
 @app.command("get")
+@command
 def profiles_get(
     name: str = typer.Argument(..., help="Profile name to retrieve"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -93,6 +96,7 @@ def profiles_get(
 
 
 @app.command("create")
+@command
 def profiles_create(
     name: str = typer.Argument(..., help="Profile name (e.g., staging, production)"),
 ):
@@ -110,6 +114,7 @@ def profiles_create(
 
 
 @app.command("select")
+@command
 def profiles_select(
     name: str = typer.Argument(..., help="Profile name to activate within its auth type"),
 ):
@@ -126,6 +131,7 @@ def profiles_select(
 
 
 @app.command("delete")
+@command
 def profiles_delete(
     name: str = typer.Argument(..., help="Profile name to delete"),
     force: bool = typer.Option(False, "--force", "-F", help="Skip confirmation"),

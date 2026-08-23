@@ -17,13 +17,16 @@ from typing import Optional, Any
 from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 from ..client import get_client
 from ..config import get_config
+from cli_tools_shared.output import command
 from ..output import print_json, print_output, print_error, print_warning, handle_api_error, format_response
+from pypodio2.transport import TransportException
 from ..filter_map import FilterMap, apply_properties
 
 app = typer.Typer(help="Manage Podio spaces")
 
 
 @app.command("get")
+@command
 def get_space(
     space_id: Optional[int] = typer.Argument(None, help="Space ID to retrieve"),
     url: Optional[str] = typer.Option(None, "--url", "-u", help="Find space by Podio URL"),
@@ -60,12 +63,13 @@ def get_space(
 
         formatted = format_response(result)
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("list")
+@command
 def list_spaces(
     org_id: Optional[int] = typer.Option(None, "--org-id", "-o", help="Organization ID to list spaces from (defaults to PODIO_ORGANIZATION_ID)"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum spaces to return"),
@@ -113,12 +117,13 @@ def list_spaces(
             formatted = apply_properties(formatted, properties)
 
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("find-by-url", hidden=True)
+@command
 def find_space_by_url_deprecated(
     url: str = typer.Argument(..., help="Podio space URL"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),

@@ -6,8 +6,11 @@ via fetch_json() for authenticated requests.
 """
 import os
 import random
+import re
 import time
-from typing import Any, Callable, Dict, List, Optional
+from contextlib import contextmanager
+from typing import Any, Callable, Dict, Iterator, List, Optional
+from urllib.parse import quote
 
 from cli_tools_shared.exceptions import ClientError
 from cli_tools_shared.data_cache import cached
@@ -18,6 +21,7 @@ from .cache import cache_exists, get_cached_report, save_cached_report
 from .models import (
     Crawl,
     CrawlStatus,
+    DomainOverview,
     DuplicateContent,
     Issue,
     IssueCategory,
@@ -28,6 +32,7 @@ from .models import (
     Project,
     RedirectChain,
     SiteAuditReport,
+    TopPage,
     create_crawl,
     create_issue,
 )
@@ -47,6 +52,175 @@ V4_API_ENDPOINTS = {
     "saGetCountsByIssues": "/v4/saGetCountsByIssues",
     "saListSegmentFilters": "/v4/saListSegmentFilters",
 }
+
+
+# ==================== Site Explorer configuration ====================
+#
+# Site Explorer data is read from the authenticated Site Explorer SPA the same
+# way site-audit reads the authenticated audit UI: navigate with the shared
+# browser session, then extract from the rendered page. Ahrefs' Site Explorer
+# has no public API on this account tier, so this mirrors the site-audit engine
+# (browser/session handling, retry, @cached, output) rather than adding a new
+# auth path.
+#
+# Live-validated against an authenticated session: the overview and top-pages
+# page paths below, JS_EXTRACT_OVERVIEW, and the header-index-aware
+# JS_EXTRACT_TOP_PAGES all return correct data headless once the browser
+# presents the matched real-Chrome UA (see config.browser_user_agent). Ahrefs
+# auto-appends the projectId to these target paths after navigation.
+
+# Visible metric labels Ahrefs renders on the Site Explorer overview. Extraction
+# anchors on this label text (case-insensitive) rather than obfuscated CSS
+# classes, so it survives class-name churn.
+SE_OVERVIEW_LABELS = {
+    "domain_rating": ["Domain Rating", "DR"],
+    "organic_traffic": ["Organic traffic", "Traffic"],
+    "organic_keywords": ["Organic keywords", "Keywords"],
+    "referring_domains": ["Referring domains", "Ref. domains", "Ref domains"],
+    "backlinks": ["Backlinks"],
+}
+
+SE_OVERVIEW_PATH = "/site-explorer/overview?target={target}"
+SE_TOP_PAGES_PATH = "/site-explorer/top-pages?target={target}"
+
+# Extract label -> raw value text from the overview metric cards. Returns a flat
+# object of {metric_key: raw_text | null}. Raises nothing; missing metrics are
+# reported as null so the caller can decide whether the whole extraction failed.
+JS_EXTRACT_OVERVIEW = r"""
+(labelMap) => {
+    const norm = (s) => (s || "").replace(/\s+/g, " ").trim();
+    const isNumeric = (s) => /^[<>]?\s*\d[\d.,]*\s*[KMB%]?$/i.test(norm(s));
+    const nodes = Array.from(document.querySelectorAll("body *"))
+        .filter((el) => el.children.length === 0 && norm(el.textContent));
+
+    const findValueFor = (labels) => {
+        for (const el of nodes) {
+            const text = norm(el.textContent);
+            const matched = labels.some((label) => text.toLowerCase() === label.toLowerCase());
+            if (!matched) continue;
+            // Walk up a few ancestors and look for the first numeric-looking leaf.
+            let scope = el;
+            for (let depth = 0; depth < 4 && scope; depth++) {
+                const leaves = Array.from(scope.querySelectorAll("*"))
+                    .filter((n) => n.children.length === 0 && norm(n.textContent));
+                for (const leaf of leaves) {
+                    const val = norm(leaf.textContent);
+                    if (leaf !== el && isNumeric(val)) return val;
+                }
+                scope = scope.parentElement;
+            }
+        }
+        return null;
+    };
+
+    const out = {};
+    for (const key of Object.keys(labelMap)) {
+        out[key] = findValueFor(labelMap[key]);
+    }
+    return out;
+}
+"""
+
+# Extract the top-pages table as [{url, traffic}]. Header-index-aware: the live
+# table header order is URL, Page type, UR, Traffic, Value, Ref. domains,
+# Keywords, ... so the first numeric cell in a row is UR, not Traffic. Read the
+# header row, locate the column whose header text is "Traffic" (case-insensitive,
+# trimmed), then read each data row's cell at that same column index.
+JS_EXTRACT_TOP_PAGES = r"""
+(limit) => {
+    const norm = (s) => (s || "").replace(/\s+/g, " ").trim();
+    const cellsOf = (row) =>
+        Array.from(row.querySelectorAll(":scope > th, :scope > td, :scope > [role='columnheader'], :scope > [role='cell'], :scope > [role='gridcell']"));
+
+    const rows = Array.from(document.querySelectorAll("tr, [role='row']"));
+
+    // Find the Traffic column index from the header row.
+    let trafficIndex = -1;
+    for (const row of rows) {
+        const cells = cellsOf(row);
+        if (!cells.length) continue;
+        const idx = cells.findIndex((c) => norm(c.textContent).toLowerCase() === "traffic");
+        if (idx !== -1) { trafficIndex = idx; break; }
+    }
+
+    const out = [];
+    for (const row of rows) {
+        const link = row.querySelector("a[href^='http']");
+        if (!link) continue;
+        const url = norm(link.getAttribute("href"));
+        if (!url) continue;
+        const cells = cellsOf(row);
+        let traffic = null;
+        if (trafficIndex !== -1 && cells[trafficIndex]) {
+            const val = norm(cells[trafficIndex].textContent);
+            if (val) traffic = val;
+        }
+        out.push({ url, traffic });
+        if (out.length >= limit) break;
+    }
+    return out;
+}
+"""
+
+
+_METRIC_SUFFIXES = {"k": 1_000, "m": 1_000_000, "b": 1_000_000_000}
+
+
+@contextmanager
+def cache_disabled(active: bool) -> Iterator[None]:
+    """Temporarily disable @cached reads/writes when ``active`` is True.
+
+    Mirrors the CACHE_ENABLED toggle used by ``get_site_audit`` so a ``--refresh``
+    flag forces a fresh fetch without permanently changing cache config.
+    """
+    if not active:
+        yield
+        return
+    previous = os.environ.get("CACHE_ENABLED")
+    os.environ["CACHE_ENABLED"] = "false"
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop("CACHE_ENABLED", None)
+        else:
+            os.environ["CACHE_ENABLED"] = previous
+
+
+def _clean_metric_text(value: Optional[str]) -> Optional[str]:
+    """Strip whitespace and comparison prefixes from a raw metric string."""
+    if value is None:
+        return None
+    text = str(value).strip().lstrip("<>").strip()
+    return text or None
+
+
+def _parse_metric_float(value: Optional[str]) -> Optional[float]:
+    """Parse a plain numeric metric (e.g. Domain Rating '72') to float."""
+    text = _clean_metric_text(value)
+    if text is None:
+        return None
+    text = text.rstrip("%").replace(",", "").strip()
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def _parse_metric_int(value: Optional[str]) -> Optional[int]:
+    """Parse an abbreviated count metric ('1.2K', '3.4M', '45,678') to int."""
+    text = _clean_metric_text(value)
+    if text is None:
+        return None
+    text = text.replace(",", "").strip()
+    match = re.fullmatch(r"(\d+(?:\.\d+)?)\s*([KMB]?)", text, flags=re.IGNORECASE)
+    if not match:
+        return None
+    number = float(match.group(1))
+    suffix = match.group(2).lower()
+    if suffix:
+        number *= _METRIC_SUFFIXES[suffix]
+    return int(round(number))
 
 
 class AhrefsClient:
@@ -630,11 +804,7 @@ class AhrefsClient:
             if cached and not cached.errors:
                 return cached
 
-        previous_cache_enabled = os.environ.get("CACHE_ENABLED")
-        if refresh:
-            os.environ["CACHE_ENABLED"] = "false"
-
-        try:
+        with cache_disabled(refresh):
             errors = []
             crawl_date = ""
             crawl_id = ""
@@ -680,12 +850,6 @@ class AhrefsClient:
             except ClientError as e:
                 errors.append(f"get_project_issues: {e}")
                 issues = IssuesByCategory()
-        finally:
-            if refresh:
-                if previous_cache_enabled is None:
-                    os.environ.pop("CACHE_ENABLED", None)
-                else:
-                    os.environ["CACHE_ENABLED"] = previous_cache_enabled
 
         # Build the report
         report = SiteAuditReport(
@@ -706,6 +870,109 @@ class AhrefsClient:
             save_cached_report(project_id, report)
 
         return report
+
+    # ==================== Site Explorer Methods ====================
+
+    def _extract_from_page(self, path: str, js: str, js_arg: Any) -> Any:
+        """Navigate to a Site Explorer page and run a DOM extraction script.
+
+        Shared engine for the Site Explorer extractors: authenticate, navigate
+        with the persistent session, wait for the SPA to settle, then evaluate
+        ``js`` with ``js_arg`` and return the raw result.
+        """
+        self.ensure_authenticated()
+        self.navigate(path)
+        page = self.browser.get_page()
+        # Best-effort settle: BrowserHarnessService exposes wait_for_network_idle
+        # (returns False on timeout for SPAs that keep long-poll connections
+        # open); a short fixed wait then lets late-rendered metric cards paint.
+        page.wait_for_network_idle(timeout=20.0)
+        page.wait_for_timeout(2000)
+        return page.evaluate(js, js_arg)
+
+    def _extract_overview(self, domain: str) -> Dict[str, Optional[str]]:
+        """Navigate to the Site Explorer overview and extract raw metric text."""
+        path = SE_OVERVIEW_PATH.format(target=quote(domain, safe=""))
+        raw = self._extract_from_page(path, JS_EXTRACT_OVERVIEW, SE_OVERVIEW_LABELS)
+        if not isinstance(raw, dict):
+            raise ClientError(f"Unexpected overview extraction result: {raw!r}")
+        return raw
+
+    def _extract_top_pages(self, domain: str, limit: int) -> List[Dict[str, Optional[str]]]:
+        """Navigate to the Site Explorer top-pages report and extract rows."""
+        path = SE_TOP_PAGES_PATH.format(target=quote(domain, safe=""))
+        rows = self._extract_from_page(path, JS_EXTRACT_TOP_PAGES, limit)
+        if not isinstance(rows, list):
+            raise ClientError(f"Unexpected top-pages extraction result: {rows!r}")
+        return rows
+
+    @cached
+    def get_domain_overview(self, domain: str) -> DomainOverview:
+        """Get Site Explorer overview metrics for a domain.
+
+        Returns Domain Rating, estimated monthly organic traffic, ranking
+        organic keywords, referring domains, and backlinks.
+
+        Args:
+            domain: Target domain (e.g. "example.com").
+
+        Returns:
+            DomainOverview model.
+        """
+
+        def fetch():
+            return self._extract_overview(domain)
+
+        raw = self._retry_fetch(fetch, operation_name="get_domain_overview")
+
+        overview = DomainOverview(
+            domain=domain,
+            domain_rating=_parse_metric_float(raw.get("domain_rating")),
+            organic_traffic=_parse_metric_int(raw.get("organic_traffic")),
+            organic_keywords=_parse_metric_int(raw.get("organic_keywords")),
+            referring_domains=_parse_metric_int(raw.get("referring_domains")),
+            backlinks=_parse_metric_int(raw.get("backlinks")),
+        )
+
+        # Fail loudly if the extraction found none of the expected metrics — that
+        # means the page structure changed, the session is not authenticated, or
+        # the domain is invalid, not that every metric is genuinely zero.
+        if all(
+            getattr(overview, field) is None
+            for field in ("domain_rating", "organic_traffic", "organic_keywords", "referring_domains", "backlinks")
+        ):
+            raise ClientError(
+                "Could not extract any Site Explorer overview metrics for "
+                f"'{domain}'. Verify the session is authenticated (ahrefs auth login) "
+                "and the domain is valid."
+            )
+
+        return overview
+
+    @cached
+    def get_top_pages(self, domain: str, limit: int = 100) -> List[TopPage]:
+        """Get top pages by organic traffic for a domain.
+
+        Args:
+            domain: Target domain (e.g. "example.com").
+            limit: Maximum number of pages to read from the report.
+
+        Returns:
+            List of TopPage models (URL + estimated organic traffic per page).
+        """
+
+        def fetch():
+            return self._extract_top_pages(domain, limit)
+
+        rows = self._retry_fetch(fetch, operation_name="get_top_pages")
+
+        pages = []
+        for row in rows:
+            url = (row.get("url") or "").strip()
+            if not url:
+                continue
+            pages.append(TopPage(url=url, traffic=_parse_metric_int(row.get("traffic"))))
+        return pages
 
 
 # ==================== Module-level Singleton ====================

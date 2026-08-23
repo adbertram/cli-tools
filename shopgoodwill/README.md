@@ -1,6 +1,10 @@
 # ShopGoodwill CLI
 
-A command-line interface for [ShopGoodwill.com](https://shopgoodwill.com), the online auction marketplace operated by Goodwill Industries. Search listings, view item details, and manage authentication directly from your terminal.
+## DESCRIPTION
+
+The `shopgoodwill` CLI provides a command-line interface for ShopGoodwill.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 
@@ -62,7 +66,7 @@ shopgoodwill search query "vintage watch"
 # Filter by price
 shopgoodwill search query "laptop" --min-price 50 --max-price 200
 
-# Sort options: ending, bids, price, newest
+# Sort field (default: newest = newest-listed first); --desc reverses it
 shopgoodwill search query "furniture" --sort price --desc
 
 # Pagination
@@ -86,6 +90,13 @@ shopgoodwill search get 123456789
 # Table format
 shopgoodwill search get 123456789
 ```
+
+When ShopGoodwill enables shipping calculation for a listing, item detail output
+includes a `shippingEstimate` object calculated to ZIP `47725`. If ShopGoodwill
+returns listing details but rejects the shipping estimate (for example,
+`PACKAGE.WEIGHT.INVALID`), the command still returns the listing with
+`shippingEstimate: null`, `shippingEstimateUnavailable: true`, and
+`shippingEstimateError`.
 
 ## Output Formats
 
@@ -137,19 +148,49 @@ ID          Title                                     Price    Bids  Ends       
 | Option | Short | Description |
 |--------|-------|-------------|
 | `--page` | `-p` | Page number (default: 1) |
-| `--limit` | `-l` | Results per page, max 40 (default: 40) |
+| `--limit` | `-l` | Results per page (default: 40). `--sort newest`: up to 200. `--sort price/ending/bids`: max 40 |
 | `--min-price` | | Minimum price filter |
 | `--max-price` | | Maximum price filter |
-| `--sort` | `-s` | Sort by: `ending`, `bids`, `price`, `newest` |
-| `--desc` | `-d` | Sort in descending order |
+| `--sort` | `-s` | Sort field (default: `newest`). Valid: `newest`, `price`, `ending`, `bids` |
+| `--desc` | `-d` | Reverse the sort field's natural direction |
 | `--buy-now` | | Only show buy-now items |
 | `--shipping` | | Only show items that ship |
 | `--pickup` | | Only show pickup-only items |
 | `--closed` | | Include closed auctions |
 
+### Sort Fields
+
+Sorting follows the Source-CLI Sort Standard. `--sort` selects a field; each field
+has a natural direction, and `--desc` reverses it. The default is `newest`, which
+returns the most recently listed items first (what incremental crawlers rely on).
+An unknown `--sort` value is rejected with an error listing the valid values and a
+non-zero exit — there is no silent fallback.
+
+| Field | Natural (no `--desc`) | With `--desc` |
+|-------|-----------------------|---------------|
+| `newest` (default) | most recently listed first | oldest listed first |
+| `price` | low → high | high → low |
+| `ending` | soonest ending first | latest ending first |
+| `bids` | fewest bids first | most bids first |
+
+`ending`, `bids`, and `price` map to ShopGoodwill's real integer sort columns
+(`EndingDate=1`, `NumberofBids=3`, `BidPrice=4`) plus a descending flag, matching
+the site's own sort dropdown.
+
+**`newest` is a best-effort client-side refine (Sort Standard Rule 5).**
+ShopGoodwill exposes no true listing-date sort column — its "Newly Listed" option
+is really *ending-date descending*, which only approximates recency because auction
+durations vary. So `--sort newest` fetches the "Newly Listed" window (at least
+`--page * --limit` items, minimum 100) and then sorts that window client-side by
+each item's real `startTime` (listing date) so results are genuinely
+newest-listed-first, then slices out the requested `--page`. The window is capped
+at 200 fetched items total (5 underlying API pages), so `(--page - 1) * --limit`
+offsets beyond 200 return no results — this is the real ceiling for `--sort newest`,
+regardless of `--limit`.
+
 ## Configuration
 
-Credentials are stored in a `.env` file in the package directory:
+Authentication profile files live under `~/.local/share/cli-tools/shopgoodwill/authentication_profiles/<profile>/`; non-auth defaults live in `~/.local/share/cli-tools/shopgoodwill/.env`:
 
 ```
 SHOPGOODWILL_USERNAME=your@email.com

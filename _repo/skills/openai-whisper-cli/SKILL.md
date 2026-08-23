@@ -1,0 +1,50 @@
+---
+name: openai-whisper-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute OpenAI Whisper operations using the `openai-whisper` CLI tool.
+  CLI wrapper for OpenAI Whisper speech-to-text transcription.
+  Triggers: openai-whisper, openai whisper cli, whisper, transcribe, transcription, speech to text, audio transcription, video transcription, transcribe audio, transcribe video
+---
+
+<objective>
+Execute OpenAI Whisper operations using the `openai-whisper` CLI. All OpenAI Whisper transcription interactions should use this CLI.
+</objective>
+
+<quick_start>
+The `openai-whisper` CLI follows this pattern:
+```bash
+openai-whisper <command-group> <action> [arguments] [options]
+```
+
+| Task | Command |
+|------|---------|
+| Transcribe a file | `openai-whisper transcripts create video.mp4` |
+| Transcribe with specific model | `openai-whisper transcripts create video.mp4 --model base` |
+| Transcribe with word timestamps | `openai-whisper transcripts create video.mp4 -w` |
+| List available models | `openai-whisper transcripts models` |
+| List existing transcripts | `openai-whisper transcripts list ./dir/` |
+| Read a transcript | `openai-whisper transcripts get video.json` |
+</quick_start>
+
+<essential_principles>
+<principle name="Usage Reference">
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `openai-whisper` command.**
+This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
+</principle>
+
+<principle name="Command Groups">
+- **auth** -- Check Whisper availability (no-op -- runs locally)
+- **transcripts** -- Transcription operations (create, list, get, models)
+</principle>
+</essential_principles>
+
+<reference_index>
+**`usage.json`** -- Complete command tree with arguments, options, defaults, and usage instructions for every command.
+</reference_index>
+
+<success_criteria>
+- Command executes without error
+- Output is displayed in requested format
+- Correct command and flags used (verified against usage.json)
+</success_criteria>

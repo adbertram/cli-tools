@@ -1,16 +1,26 @@
 #!/usr/bin/env bash
 # install-cli-tool.sh - Install a CLI tool via uv tool install
-# Usage: install-cli-tool.sh <name>
+# Usage: install-cli-tool.sh [--force-refresh] <name>
 # Returns JSON with install results
 
 set -o pipefail
 
-CLI_NAME="$1"
+FORCE_REFRESH="false"
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+    printf '%s\n' 'Usage: install-cli-tool.sh [--force-refresh] <name>'
+    exit 0
+fi
+if [ "${1:-}" = "--force-refresh" ]; then
+    FORCE_REFRESH="true"
+    shift
+fi
+
+CLI_NAME="${1:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLI_TOOLS_DIR="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 
-if [ -z "$CLI_NAME" ]; then
-    echo '{"error": "CLI name required. Usage: install-cli-tool.sh <name>"}' >&2
+if [ -z "$CLI_NAME" ] || [ $# -ne 1 ]; then
+    echo '{"error": "CLI name required. Usage: install-cli-tool.sh [--force-refresh] <name>"}' >&2
     exit 1
 fi
 
@@ -25,34 +35,135 @@ if [ ! -d "$TOOL_DIR" ]; then
     exit 1
 fi
 
-# ============================================================================
-# Install via uv tool install (editable mode, force reinstall)
-# ============================================================================
-# When pyproject.toml's requires-python has an upper bound (e.g. ">=3.13,<3.14"),
-# uv tool install would otherwise pick the system python and ignore that bound,
-# leading to source-build failures. Honor the bound by passing --python.
-PY_FLAG=()
-OVERRIDE_FLAG=()
+PYPROJECT_NAME=""
 if [ -f "$TOOL_DIR/pyproject.toml" ]; then
-    UPPER_PY=$(python3 - <<PYEOF 2>/dev/null
-import re
-with open("$TOOL_DIR/pyproject.toml") as f:
-    for line in f:
-        m = re.match(r'\s*requires-python\s*=\s*"([^"]+)"', line)
-        if not m:
-            continue
-        spec = m.group(1)
-        upper = re.search(r'<\s*3\.(\d+)', spec)
-        if upper:
-            print(f"3.{int(upper.group(1)) - 1}")
-        break
-PYEOF
-)
-    if [ -n "$UPPER_PY" ]; then
-        PY_FLAG=(--python "$UPPER_PY")
+    PYPROJECT_NAME=$(awk -F'"' '/^name[[:space:]]*=/ { print $2; exit }' "$TOOL_DIR/pyproject.toml")
+fi
+TOOL_PACKAGE_NAME="${PYPROJECT_NAME:-${CLI_NAME}-cli}"
+UV_TOOL_DIR_NAME=$(printf '%s' "$TOOL_PACKAGE_NAME" | python3 -c 'import re,sys; print(re.sub(r"[-_.]+", "-", sys.stdin.read().strip()).lower())')
+CANONICAL_UV_TOOL_DIR="$HOME/.local/share/uv/tools"
+CANONICAL_UV_BIN_DIR="$HOME/.local/bin"
+export UV_TOOL_DIR="$CANONICAL_UV_TOOL_DIR"
+export UV_TOOL_BIN_DIR="$CANONICAL_UV_BIN_DIR"
+UV_VENV="$UV_TOOL_DIR/$UV_TOOL_DIR_NAME"
+LAUNCHER="$UV_TOOL_BIN_DIR/$CLI_NAME"
+USES_CLI_TOOLS_SHARED="false"
+if [ -f "$TOOL_DIR/pyproject.toml" ] && grep -q "cli-tools-shared" "$TOOL_DIR/pyproject.toml"; then
+    USES_CLI_TOOLS_SHARED="true"
+fi
+
+# uv builds/resolves the tool against the interpreter it is given. Without
+# --python, uv's default python-preference = "managed" picks a uv-managed
+# interpreter (observed: CPython 3.12.10) and the CLI fails
+# tests/test_python_version.py::test_cli_uses_system_python.
+# resolve_uv_python.py returns the absolute system python3 when it satisfies
+# the tool's requires-python, otherwise a compatible "3.X" version request for
+# uv to find or download. Compute this before the fast-path health check so an
+# editable install with a stale uv-managed interpreter is refreshed.
+PYTHON_REQUEST="$(python3 "$SCRIPT_DIR/resolve_uv_python.py" "$TOOL_DIR/pyproject.toml")"
+RESOLVE_EXIT=$?
+if [ $RESOLVE_EXIT -ne 0 ] || [ -z "$PYTHON_REQUEST" ]; then
+    echo '{"error": "resolve_uv_python.py could not resolve an interpreter for '"$TOOL_DIR"' (exit '"$RESOLVE_EXIT"'). Refusing to run uv tool install unpinned; uv would install against its own managed interpreter."}' >&2
+    exit 1
+fi
+
+existing_editable_install="false"
+existing_editable_location=""
+existing_shared_editable_install="skipped"
+existing_shared_editable_location=""
+existing_help_works="false"
+existing_python_matches_request="false"
+metadata_refresh_needed="false"
+if [ "$FORCE_REFRESH" = "false" ] && [ -L "$LAUNCHER" ] && [ -x "$LAUNCHER" ] && [ -d "$UV_VENV" ]; then
+    for metadata_file in "$TOOL_DIR/pyproject.toml" "$TOOL_DIR/uv.lock"; do
+        if [ -f "$metadata_file" ] && [ "$metadata_file" -nt "$LAUNCHER" ]; then
+            metadata_refresh_needed="true"
+        fi
+    done
+    if [ "$USES_CLI_TOOLS_SHARED" = "true" ] && [ -d "$LOCAL_SHARED_DIR" ]; then
+        for metadata_file in "$LOCAL_SHARED_DIR/pyproject.toml" "$LOCAL_SHARED_DIR/uv.lock"; do
+            if [ -f "$metadata_file" ] && [ "$metadata_file" -nt "$LAUNCHER" ]; then
+                metadata_refresh_needed="true"
+            fi
+        done
+    fi
+
+    for pkg_try in "$PYPROJECT_NAME" "${CLI_NAME}_cli" "${CLI_NAME}-cli" "$CLI_NAME"; do
+        [ -z "$pkg_try" ] && continue
+        PIP_SHOW=$(VIRTUAL_ENV="$UV_VENV" uv pip show "$pkg_try" 2>/dev/null)
+        if [ -n "$PIP_SHOW" ]; then
+            existing_editable_location=$(echo "$PIP_SHOW" | awk -F': ' '/^Editable project location:/ { print $2; exit }')
+            if [ "$existing_editable_location" = "$TOOL_DIR" ]; then
+                existing_editable_install="true"
+            fi
+            break
+        fi
+    done
+
+    if [ "$USES_CLI_TOOLS_SHARED" = "true" ] && [ -d "$LOCAL_SHARED_DIR" ]; then
+        SHARED_PIP_SHOW=$(VIRTUAL_ENV="$UV_VENV" uv pip show cli-tools-shared 2>/dev/null)
+        existing_shared_editable_location=$(echo "$SHARED_PIP_SHOW" | awk -F': ' '/^Editable project location:/ { print $2; exit }')
+        if [ "$existing_shared_editable_location" = "$LOCAL_SHARED_DIR" ]; then
+            existing_shared_editable_install="true"
+        else
+            existing_shared_editable_install="false"
+        fi
+    fi
+
+    "$LAUNCHER" --help >/dev/null 2>&1 && existing_help_works="true"
+
+    existing_python_exe=""
+    if [ -x "$UV_VENV/bin/python3" ]; then
+        existing_python_exe="$UV_VENV/bin/python3"
+    elif [ -x "$UV_VENV/bin/python" ]; then
+        existing_python_exe="$UV_VENV/bin/python"
+    fi
+    if [ -n "$existing_python_exe" ]; then
+        existing_python_version=""
+        if existing_python_version=$("$existing_python_exe" --version 2>&1); then
+            if [[ "$PYTHON_REQUEST" = /* ]]; then
+                requested_python_version=""
+                if [ -x "$PYTHON_REQUEST" ] && requested_python_version=$("$PYTHON_REQUEST" --version 2>&1); then
+                    existing_python_major_minor=$(printf '%s\n' "$existing_python_version" | awk '{ print $2 }' | awk -F. '{ print $1 "." $2 }')
+                    requested_python_major_minor=$(printf '%s\n' "$requested_python_version" | awk '{ print $2 }' | awk -F. '{ print $1 "." $2 }')
+                    [ -n "$existing_python_major_minor" ] && [ "$existing_python_major_minor" = "$requested_python_major_minor" ] && existing_python_matches_request="true"
+                fi
+            else
+                existing_python_major_minor=$(printf '%s\n' "$existing_python_version" | awk '{ print $2 }' | awk -F. '{ print $1 "." $2 }')
+                [ "$existing_python_major_minor" = "$PYTHON_REQUEST" ] && existing_python_matches_request="true"
+            fi
+        fi
+    fi
+
+    if [ "$metadata_refresh_needed" = "false" ] && [ "$existing_editable_install" = "true" ] && [ "$existing_help_works" = "true" ] && [ "$existing_python_matches_request" = "true" ] && { [ "$existing_shared_editable_install" = "true" ] || [ "$existing_shared_editable_install" = "skipped" ]; }; then
+        existing_shared_editable_location_json="null"
+        [ -n "$existing_shared_editable_location" ] && existing_shared_editable_location_json="\"$existing_shared_editable_location\""
+        cat <<EOF
+{
+  "success": true,
+  "cli_name": "$CLI_NAME",
+  "install_exit_code": 0,
+  "install_output": "Existing editable install is healthy; skipped uv tool force refresh.",
+  "editable_install": true,
+  "editable_location": "$existing_editable_location",
+  "shared_editable_install": "$existing_shared_editable_install",
+  "shared_editable_location": $existing_shared_editable_location_json,
+  "symlink_exists": true,
+  "help_works": true
+}
+EOF
+        exit 0
     fi
 fi
 
+# ============================================================================
+# Install via uv tool install (editable mode, force reinstall)
+# ============================================================================
+# PYTHON_REQUEST was resolved and validated above, so the pin is unconditional.
+# An unpinned `uv tool install` silently selects a uv-managed interpreter.
+PY_FLAG=(--python "$PYTHON_REQUEST")
+
+OVERRIDE_FLAG=()
 if [ -f "$TOOL_DIR/uv-overrides.txt" ]; then
     OVERRIDE_FLAG=(--overrides "$TOOL_DIR/uv-overrides.txt")
 fi
@@ -64,8 +175,8 @@ INSTALL_EXIT=$?
 # Windows: Remove stale extension-less binary that shadows .exe
 # ============================================================================
 if [ $INSTALL_EXIT -eq 0 ] && [[ "$(uname -s)" == MINGW* || "$(uname -s)" == MSYS* || "$(uname -s)" == CYGWIN* ]]; then
-    NOEXT="$HOME/.local/bin/$CLI_NAME"
-    WITHEXT="$HOME/.local/bin/$CLI_NAME.exe"
+    NOEXT="$UV_TOOL_BIN_DIR/$CLI_NAME"
+    WITHEXT="$UV_TOOL_BIN_DIR/$CLI_NAME.exe"
     if [ -f "$NOEXT" ] && [ -f "$WITHEXT" ]; then
         # Skip if they are hardlinks to the same file (same inode)
         NOEXT_INODE=$(stat -c '%i' "$NOEXT" 2>/dev/null)
@@ -106,14 +217,6 @@ EDITABLE_LOCATION=""
 SHARED_EDITABLE_INSTALL="skipped"
 SHARED_EDITABLE_LOCATION=""
 if [ $INSTALL_EXIT -eq 0 ]; then
-    PYPROJECT_NAME=""
-    if [ -f "$TOOL_DIR/pyproject.toml" ]; then
-        PYPROJECT_NAME=$(awk -F'"' '/^name[[:space:]]*=/ { print $2; exit }' "$TOOL_DIR/pyproject.toml")
-    fi
-    TOOL_PACKAGE_NAME="${PYPROJECT_NAME:-${CLI_NAME}-cli}"
-    UV_TOOL_DIR_NAME=$(printf '%s' "$TOOL_PACKAGE_NAME" | python3 -c 'import re,sys; print(re.sub(r"[-_.]+", "-", sys.stdin.read().strip()).lower())')
-    UV_VENV="$HOME/.local/share/uv/tools/$UV_TOOL_DIR_NAME"
-
     if [ -d "$UV_VENV" ]; then
         for pkg_try in "$PYPROJECT_NAME" "${CLI_NAME}_cli" "${CLI_NAME}-cli" "$CLI_NAME"; do
             [ -z "$pkg_try" ] && continue
@@ -146,11 +249,6 @@ fi
 # editable inside the target uv tool venv whenever the local shared repo exists
 # and the CLI declares that dependency, so source edits are reflected
 # immediately.
-USES_CLI_TOOLS_SHARED="false"
-if [ -f "$TOOL_DIR/pyproject.toml" ] && grep -q "cli-tools-shared" "$TOOL_DIR/pyproject.toml"; then
-    USES_CLI_TOOLS_SHARED="true"
-fi
-
 if [ $INSTALL_EXIT -eq 0 ] && [ "$USES_CLI_TOOLS_SHARED" = "true" ] && [ -d "$LOCAL_SHARED_DIR" ]; then
     SHARED_INSTALL_OUTPUT=$(uv pip install --python "$UV_VENV/bin/python3" --editable "$LOCAL_SHARED_DIR" --reinstall 2>&1)
     SHARED_INSTALL_EXIT=$?
@@ -180,16 +278,21 @@ fi
 # Smoke test: --help
 # ============================================================================
 HELP_WORKS="false"
+SYMLINK_EXISTS="false"
 if [ $INSTALL_EXIT -eq 0 ]; then
     # Prefer the uv-managed launcher we just installed; PATH may resolve to an
     # unrelated system binary with the same command name.
     SMOKE_BIN=""
-    if [ -f "$HOME/.local/bin/$CLI_NAME" ]; then
-        SMOKE_BIN="$HOME/.local/bin/$CLI_NAME"
-    elif [ -f "$HOME/.local/bin/$CLI_NAME.exe" ]; then
-        SMOKE_BIN="$HOME/.local/bin/$CLI_NAME.exe"
+    if [ -L "$LAUNCHER" ]; then
+        SYMLINK_EXISTS="true"
+        SMOKE_BIN="$LAUNCHER"
+    elif [ -f "$LAUNCHER.exe" ]; then
+        SYMLINK_EXISTS="true"
+        SMOKE_BIN="$LAUNCHER.exe"
     else
-        SMOKE_BIN=$(command -v "$CLI_NAME" 2>/dev/null)
+        INSTALL_EXIT=1
+        INSTALL_OUTPUT="${INSTALL_OUTPUT}
+ERROR: uv tool install completed but did not create expected launcher: $LAUNCHER"
     fi
     if [ -n "$SMOKE_BIN" ]; then
         "$SMOKE_BIN" --help >/dev/null 2>&1 && HELP_WORKS="true"
@@ -200,7 +303,7 @@ fi
 # Determine success
 # ============================================================================
 SUCCESS="false"
-[ $INSTALL_EXIT -eq 0 ] && [ "$HELP_WORKS" = "true" ] && SUCCESS="true"
+[ $INSTALL_EXIT -eq 0 ] && [ "$SYMLINK_EXISTS" = "true" ] && [ "$HELP_WORKS" = "true" ] && SUCCESS="true"
 
 # ============================================================================
 # Escape install output for JSON
@@ -225,6 +328,7 @@ cat <<EOF
   "editable_location": $EDITABLE_LOCATION_JSON,
   "shared_editable_install": "$SHARED_EDITABLE_INSTALL",
   "shared_editable_location": $SHARED_EDITABLE_LOCATION_JSON,
+  "symlink_exists": $SYMLINK_EXISTS,
   "help_works": $HELP_WORKS
 }
 EOF

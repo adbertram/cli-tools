@@ -1,4 +1,5 @@
 """REST API commands for listing custom connectors available as agent tools."""
+from cli_tools_shared.output import command
 import typer
 from typing import Optional
 
@@ -56,6 +57,7 @@ def format_restapi_for_display(connector: dict, truncate: bool = False) -> dict:
 
 
 @app.command("list")
+@command
 def restapi_list(
     filter: Optional[list[str]] = typer.Option(
         None,
@@ -163,6 +165,7 @@ def restapi_list(
 
 
 @app.command("get")
+@command
 def restapi_get(
     connector_id: str = typer.Argument(
         ...,

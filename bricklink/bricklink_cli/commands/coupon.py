@@ -12,7 +12,7 @@ from typing import Optional, List
 from ..client import get_client
 from ..display import print_detail, print_list
 from cli_tools_shared.filters import apply_filters, apply_properties_filter, apply_limit
-from cli_tools_shared.output import print_json, print_success, handle_error
+from cli_tools_shared.output import command, print_json, print_success, handle_error
 
 app = typer.Typer(help="Manage coupons", no_args_is_help=True)
 
@@ -27,6 +27,7 @@ COUPON_LIST_HEADERS = ["ID", "Buyer", "Disc Type", "Disc Rate", "Status", "Expir
 
 
 @app.command("list")
+@command
 def coupon_list(
     direction: Optional[str] = typer.Option(None, "--direction", "-d", help="'out' (issued) or 'in' (received)"),
     status: Optional[str] = typer.Option(None, "--status", "-s", help="O=open, S=redeemed, D=denied, E=expired"),
@@ -62,6 +63,7 @@ def coupon_list(
 
 
 @app.command("get")
+@command
 def coupon_get(
     coupon_id: str = typer.Argument(..., help="Coupon ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -83,6 +85,7 @@ def coupon_get(
 
 
 @app.command("create")
+@command
 def coupon_create(
     buyer: str = typer.Argument(..., help="Buyer username"),
     discount_type: str = typer.Option("F", "--type", help="F=fixed amount, S=percentage"),
@@ -123,6 +126,7 @@ def coupon_create(
 
 
 @app.command("delete")
+@command
 def coupon_delete(
     coupon_id: str = typer.Argument(..., help="Coupon ID"),
 ):

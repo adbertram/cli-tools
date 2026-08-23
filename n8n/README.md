@@ -1,6 +1,10 @@
 # n8n CLI
 
-Manage n8n server - nodes, executions, credentials, data tables, and logs.
+## DESCRIPTION
+
+The `n8n` CLI lets you convert standardized CLI tools into n8n community node packages.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 
@@ -165,7 +169,7 @@ n8n workflows node add WORKFLOW_ID slack -r message -o post --after "Manual Trig
 n8n workflows node add WORKFLOW_ID airtable --name "Read Records" --params '{"baseId":"app123"}'
 
 # Add a node with a specific credential (by name or ID)
-n8n workflows node add WORKFLOW_ID emailReadImap --credential "Susan IMAP - DreamHost"
+n8n workflows node add WORKFLOW_ID emailReadImap --credential "Example IMAP"
 n8n workflows node add WORKFLOW_ID slack --credential 0PN4yGZVOouxl6qa --after "Trigger"
 
 # Insert a node between two existing nodes
@@ -316,10 +320,10 @@ Settings are stored in `.env` (managed by `n8n auth login`):
 ```bash
 ACTIVE=true
 API_KEY=           # n8n API key (X-N8N-API-KEY header)
-BASE_URL=          # API base URL (e.g., http://100.117.198.37:5678/api/v1)
+BASE_URL=          # API base URL (e.g., http://localhost:5678/api/v1)
 EMAIL=             # UI login email (for internal REST API)
 PASSWORD=          # UI login password
-SSH_HOST=          # SSH host for server commands (e.g., adam-server)
+SSH_HOST=          # SSH host for server commands (e.g., localhost)
                    # Set to "localhost" when running on the n8n server itself (skips SSH)
 ```
 

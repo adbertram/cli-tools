@@ -1,10 +1,12 @@
 """Comments commands for Notion CLI - manage page and block comments."""
 import json
+from pathlib import Path
 import typer
 from typing import Optional, List
 
 from ..client import DEFAULT_MAX_WORKERS, get_client
-from ..output import _chunk_code_content, print_json, print_table, handle_error
+from ..mentions import build_user_mention, resolve_mention_user_ids
+from ..output import _chunk_code_content, print_json, print_table, handle_error, command
 from cli_tools_shared.filters import apply_filters
 
 app = typer.Typer(help="Manage comments on pages and blocks")
@@ -14,6 +16,19 @@ def extract_comment_text(comment: dict) -> str:
     """Extract plain text from a comment's rich_text array."""
     rich_text = comment.get("rich_text", [])
     return "".join(rt.get("plain_text", "") for rt in rich_text)
+
+
+def extract_comment_mentions(comment: dict) -> List[str]:
+    """Extract the user IDs of every user mention in a comment's rich_text."""
+    mentions = []
+    for rt in comment.get("rich_text", []):
+        if rt.get("type") != "mention":
+            continue
+        mention = rt.get("mention") or {}
+        if mention.get("type") != "user":
+            continue
+        mentions.append((mention.get("user") or {}).get("id", ""))
+    return mentions
 
 
 def format_comment_for_display(comment: dict) -> dict:
@@ -37,6 +52,7 @@ def format_comment_for_display(comment: dict) -> dict:
         "id": comment.get("id", ""),
         "comment_type": comment_type,
         "text": extract_comment_text(comment),
+        "mentions": extract_comment_mentions(comment),
         "context": comment.get("context", ""),  # Added by list_comments_with_context
         "context_before": comment.get("context_before", ""),
         "context_after": comment.get("context_after", ""),
@@ -51,15 +67,33 @@ def format_comment_for_display(comment: dict) -> dict:
     }
 
 
-def build_comment_rich_text(text: str) -> List[dict]:
-    """Build a Notion rich_text payload for comment text."""
-    return [
+def build_comment_rich_text(
+    text: str,
+    mention_user_ids: Optional[List[str]] = None,
+) -> List[dict]:
+    """
+    Build a Notion rich_text payload for comment text.
+
+    Mention objects lead the array in the order given, each followed by a single
+    space, then the text body. A mention is a distinct rich_text object type; a
+    literal "@Name" string in the body is plain text and notifies nobody.
+    """
+    rich_text: List[dict] = []
+
+    for user_id in mention_user_ids or []:
+        rich_text.append(build_user_mention(user_id))
+        rich_text.append({"type": "text", "text": {"content": " "}})
+
+    rich_text.extend(
         {"type": "text", "text": {"content": chunk}}
         for chunk in _chunk_code_content(text)
-    ]
+    )
+
+    return rich_text
 
 
 @app.command("list")
+@command
 def comments_list(
     page_id: Optional[str] = typer.Option(
         None,
@@ -84,6 +118,14 @@ def comments_list(
         "--with-context",
         "-c",
         help="Include parent block text as context (only with --page-id)",
+    ),
+    open_only: bool = typer.Option(
+        False,
+        "--open-only",
+        help=(
+            "Acknowledge that Notion's public API can list only open/unresolved "
+            "comments; resolved comments cannot be enumerated"
+        ),
     ),
     table: bool = typer.Option(
         False,
@@ -126,69 +168,77 @@ def comments_list(
         # List comments in a discussion thread
         notion comments list --discussion-id ghi789
     """
-    try:
-        # Validate input
-        provided = sum([bool(page_id), bool(block_id), bool(discussion_id)])
-        if provided == 0:
-            handle_error("One of --page-id, --block-id, or --discussion-id is required")
-            raise typer.Exit(1)
-        if provided > 1:
-            handle_error("Only one of --page-id, --block-id, or --discussion-id should be provided")
-            raise typer.Exit(1)
+    # The public list endpoint explicitly excludes resolved comments. A plain
+    # successful array therefore cannot satisfy an all-comments contract.
+    # Require callers to opt into the narrower, honest contract.
+    if not open_only:
+        handle_error(
+            "Notion's public API cannot enumerate resolved comments, so a complete "
+            "comment listing is unavailable. Pass --open-only to explicitly list "
+            "all open/unresolved comments; otherwise this command fails rather than "
+            "returning a silently incomplete array."
+        )
+        raise typer.Exit(1)
 
-        if with_context and not page_id:
-            handle_error("--with-context can only be used with --page-id")
-            raise typer.Exit(1)
+    # Validate input
+    provided = sum([bool(page_id), bool(block_id), bool(discussion_id)])
+    if provided == 0:
+        handle_error("One of --page-id, --block-id, or --discussion-id is required")
+        raise typer.Exit(1)
+    if provided > 1:
+        handle_error("Only one of --page-id, --block-id, or --discussion-id should be provided")
+        raise typer.Exit(1)
 
-        client = get_client()
+    if with_context and not page_id:
+        handle_error("--with-context can only be used with --page-id")
+        raise typer.Exit(1)
 
-        api_limit = None if filter else limit
+    client = get_client()
 
-        if page_id:
-            if with_context:
-                comments = client.list_comments_with_context(
-                    page_id,
-                    max_workers=max_workers,
-                    limit=api_limit,
-                )
-            else:
-                comments = client.list_comments_all(block_id=page_id, limit=api_limit)
-                for c in comments:
-                    c["context"] = ""
-        else:
-            target_id = block_id
-            comments = client.list_comments_all(
-                block_id=target_id,
-                discussion_id=discussion_id,
+    api_limit = None if filter else limit
+
+    if page_id:
+        if with_context:
+            comments = client.list_comments_with_context(
+                page_id,
+                max_workers=max_workers,
                 limit=api_limit,
             )
-
-        # Format for display
-        formatted = [format_comment_for_display(c) for c in comments]
-
-        # Apply client-side filtering
-        if filter:
-            formatted = apply_filters(formatted, filter)
-
-        # Apply client-side limit
-        formatted = formatted[:limit]
-
-        if table:
-            # Select columns based on whether context is included
-            if with_context:
-                columns = ["id", "comment_type", "context", "context_around", "text", "created_time"]
-            else:
-                columns = ["id", "comment_type", "text", "parent_type", "parent_id", "created_time"]
-            print_table(formatted, columns=columns)
         else:
-            print_json(formatted)
+            comments = client.list_comments_all(block_id=page_id, limit=api_limit)
+            for c in comments:
+                c["context"] = ""
+    else:
+        target_id = block_id
+        comments = client.list_comments_all(
+            block_id=target_id,
+            discussion_id=discussion_id,
+            limit=api_limit,
+        )
 
-    except Exception as e:
-        handle_error(str(e))
-        raise typer.Exit(1)
+    # Format for display
+    formatted = [format_comment_for_display(c) for c in comments]
+
+    # Apply client-side filtering
+    if filter:
+        formatted = apply_filters(formatted, filter)
+
+    # Apply client-side limit
+    formatted = formatted[:limit]
+
+    if table:
+        # Select columns based on whether context is included
+        if with_context:
+            columns = ["id", "comment_type", "context", "context_around", "text", "created_time"]
+        else:
+            columns = ["id", "comment_type", "text", "parent_type", "parent_id", "created_time"]
+        print_table(formatted, columns=columns)
+    else:
+        print_json(formatted)
 
 
 @app.command("get")
+@command
 def comment_get(
     comment_id: str = typer.Argument(
         ...,
@@ -208,27 +258,29 @@ def comment_get(
 
         notion comments get abc123-def456
     """
-    try:
-        client = get_client()
-        comment = client.get_comment(comment_id)
+    client = get_client()
+    comment = client.get_comment(comment_id)
 
-        formatted = format_comment_for_display(comment)
+    formatted = format_comment_for_display(comment)
 
-        if table:
-            print_table([formatted])
-        else:
-            print_json(formatted)
-
-    except Exception as e:
-        handle_error(str(e))
-        raise typer.Exit(1)
+    if table:
+        print_table([formatted])
+    else:
+        print_json(formatted)
 
 
 @app.command("create")
+@command
 def comment_create(
-    text: str = typer.Argument(
-        ...,
+    text: Optional[str] = typer.Argument(
+        None,
         help="Comment text content",
+    ),
+    text_file: Optional[Path] = typer.Option(
+        None,
+        "--text-file",
+        "-f",
+        help="File containing comment text content",
     ),
     page_id: Optional[str] = typer.Option(
         None,
@@ -247,6 +299,16 @@ def comment_create(
         "--discussion-id",
         "-d",
         help="Discussion thread ID to reply to",
+    ),
+    mention: Optional[List[str]] = typer.Option(
+        None,
+        "--mention",
+        "-m",
+        help=(
+            "Mention a workspace user by email or user UUID (repeatable). "
+            "Creates a real Notion mention that notifies the user; a literal "
+            "'@Name' in the text does not."
+        ),
     ),
     table: bool = typer.Option(
         False,
@@ -268,37 +330,107 @@ def comment_create(
 
         # Reply to an existing discussion thread
         notion comments create "My reply" --discussion-id ghi789
+
+        # Reply with shell-sensitive text from a file
+        notion comments create --text-file reply.md --discussion-id ghi789
+
+        # Notify a user with a real mention (by email or user UUID)
+        notion comments create "please review" --page-id abc123 \\
+            --mention someone@example.com
+
+        # Mention several users; mentions lead the comment in the order given
+        notion comments create "handoff" --discussion-id ghi789 \\
+            -m someone@example.com -m fe60dca0-d16a-42d0-a41d-c3491dc972e6
     """
-    try:
-        # Validate exactly one target is provided
-        provided = sum([bool(page_id), bool(block_id), bool(discussion_id)])
-        if provided == 0:
-            handle_error("One of --page-id, --block-id, or --discussion-id is required")
-            raise typer.Exit(1)
-        if provided > 1:
-            handle_error("Only one of --page-id, --block-id, or --discussion-id can be provided")
-            raise typer.Exit(1)
+    # Validate exactly one content source is provided
+    content_sources = sum([text is not None, text_file is not None])
+    if content_sources == 0:
+        handle_error("Either TEXT or --text-file is required")
+        raise typer.Exit(1)
+    if content_sources > 1:
+        handle_error("Only one of TEXT or --text-file can be provided")
+        raise typer.Exit(1)
 
-        rich_text = build_comment_rich_text(text)
+    # Validate exactly one target is provided
+    provided = sum([bool(page_id), bool(block_id), bool(discussion_id)])
+    if provided == 0:
+        handle_error("One of --page-id, --block-id, or --discussion-id is required")
+        raise typer.Exit(1)
+    if provided > 1:
+        handle_error("Only one of --page-id, --block-id, or --discussion-id can be provided")
+        raise typer.Exit(1)
 
-        client = get_client()
-        comment = client.create_comment(
-            rich_text=rich_text,
-            page_id=page_id,
-            block_id=block_id,
-            discussion_id=discussion_id,
+    if block_id:
+        handle_error(
+            "Notion's public API cannot start an inline discussion on a block. "
+            "The API may return a comment object for parent.block_id that is not "
+            "enumerable by List comments. Use --page-id for a page comment or "
+            "--discussion-id to reply to an existing inline discussion."
+        )
+        raise typer.Exit(1)
+
+    if text_file is not None:
+        comment_text = text_file.read_text(encoding="utf-8")
+    else:
+        assert text is not None
+        comment_text = text
+
+    client = get_client()
+
+    # Resolve every mention BEFORE the write. An unknown, ambiguous, or bot
+    # target aborts here so no comment is posted with a mention that would not
+    # notify the intended person.
+    mention_user_ids = resolve_mention_user_ids(client, mention)
+
+    rich_text = build_comment_rich_text(comment_text, mention_user_ids)
+
+    comment = client.create_comment(
+        rich_text=rich_text,
+        page_id=page_id,
+        block_id=block_id,
+        discussion_id=discussion_id,
+    )
+
+    formatted = format_comment_for_display(comment)
+
+    # Notion accepts replies to discussions whose parent block is in trash, but
+    # can create an empty comment while returning HTTP 200. Treat the response
+    # body as a write postcondition: a successful command must echo the exact
+    # non-empty text that was submitted. This check also catches partial loss on
+    # any other comment target without printing a false-success JSON object.
+    # A mention that came back as anything other than the resolved user IDs
+    # would notify the wrong person, or nobody. Treat it as a failed write.
+    if formatted["mentions"] != mention_user_ids:
+        comment_id = formatted["id"] or "unknown"
+        raise RuntimeError(
+            f"Notion created comment {comment_id} but its rich_text user "
+            f"mentions are {formatted['mentions']}, not the requested "
+            f"{mention_user_ids}. The mention would not notify the intended "
+            "user, so the command is failing instead of reporting success."
         )
 
-        formatted = format_comment_for_display(comment)
+    # Mentions occupy the front of rich_text, so the submitted body is the
+    # trailing text rather than the whole string.
+    text_preserved = (
+        formatted["text"].endswith(comment_text)
+        if mention_user_ids
+        else formatted["text"] == comment_text
+    )
+    if comment_text and not text_preserved:
+        comment_id = formatted["id"] or "unknown"
+        raise RuntimeError(
+            "Notion created comment "
+            f"{comment_id} but did not preserve the submitted text "
+            f"(submitted {len(comment_text)} characters, returned "
+            f"{len(formatted['text'])}). This occurs when replying to an inline "
+            "discussion whose parent block is in trash. The command is failing "
+            "instead of reporting success with lost text."
+        )
 
-        if table:
-            print_table([formatted])
-        else:
-            print_json(formatted)
-
-    except Exception as e:
-        handle_error(str(e))
-        raise typer.Exit(1)
+    if table:
+        print_table([formatted])
+    else:
+        print_json(formatted)
 
 
 COMMAND_CREDENTIALS = {

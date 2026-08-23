@@ -29,6 +29,14 @@ from urllib.parse import parse_qsl, urlsplit, urlunsplit
 from .._debug_logging import get_debug_logger
 from . import BrowserHarnessError
 from ._elements import _ServiceLocator
+from .processes import (
+    ProcessCommand,
+    ProcessTableUnavailableError,
+    command_user_data_dir,
+    list_process_commands,
+    pid_is_running,
+    profile_process_pids,
+)
 
 logger = get_debug_logger("cli_tools.browser_service")
 
@@ -81,21 +89,35 @@ def _chrome_launch_command(chrome: str, args: list[str]) -> list[str]:
     return args
 
 
-def _wait_for_cdp(port: int, timeout: float = 30.0) -> None:
-    """Block until Chrome's /json/version endpoint is alive."""
+def _wait_for_cdp(port: int, timeout: float = 30.0) -> str:
+    """Block until Chrome's /json/version endpoint serves a browser WS URL.
+
+    Returns the ``webSocketDebuggerUrl`` so the caller can hand the daemon an
+    already-resolved endpoint. A 200 that has not yet published that field
+    means Chrome is still bringing the DevTools target up, so it is not
+    success -- keep polling.
+
+    The final poll runs after the deadline check rather than before it, so a
+    sleep that overshoots the deadline (a loaded host descheduling us) still
+    gets one last look at a Chrome that came up during that sleep.
+    """
     deadline = time.time() + timeout
-    while time.time() < deadline:
+    while True:
         try:
             with urllib.request.urlopen(
                 f"http://127.0.0.1:{port}/json/version", timeout=1.0
             ) as r:
                 if r.status == 200:
-                    return
-        except (urllib.error.URLError, OSError):
-            time.sleep(0.25)
-    raise BrowserHarnessError(
-        f"Chrome did not expose CDP on port {port} within {timeout}s"
-    )
+                    ws_url = json.loads(r.read()).get("webSocketDebuggerUrl")
+                    if ws_url:
+                        return ws_url
+        except (urllib.error.URLError, OSError, ValueError):
+            pass
+        if time.time() >= deadline:
+            raise BrowserHarnessError(
+                f"Chrome did not expose CDP on port {port} within {timeout}s"
+            )
+        time.sleep(0.25)
 
 
 class _BrowserHarness:
@@ -108,14 +130,21 @@ class _BrowserHarness:
     daemons.
     """
 
-    def __init__(self, session: str, runtime_dir: Path):
+    def __init__(self, session: str, runtime_dir: Path, timeout: float):
         self.session = session
         self.runtime_dir = runtime_dir
+        # browser_harness caps every CDP round-trip at its own IPC read
+        # timeout. Without threading this service's budget through, one slow
+        # Runtime.evaluate (busy page main thread, or several browsers
+        # competing for CPU) aborted work this service had granted
+        # default_timeout seconds to finish. One clock, not two racing ones.
+        self.timeout = timeout
 
     @property
     def h(self):
         os.environ["BH_RUNTIME_DIR"] = str(self.runtime_dir)
         os.environ["BH_TMP_DIR"] = str(self.runtime_dir)
+        os.environ["BH_IPC_TIMEOUT"] = str(float(self.timeout))
         from browser_harness import _ipc, helpers
         _ipc._TMP = Path(os.environ["BH_TMP_DIR"])
         _ipc._RUNTIME = Path(os.environ["BH_RUNTIME_DIR"])
@@ -138,6 +167,10 @@ class BrowserHarnessService:
         self.default_timeout = timeout
         self._chrome_proc: Optional[subprocess.Popen] = None
         self._cdp_port: Optional[int] = None
+        # Browser WS URL resolved from Chrome's /json/version by browser_open.
+        # Handed to the daemon so it never repeats HTTP discovery against a
+        # Chrome that is already serving this process.
+        self._cdp_ws: Optional[str] = None
         self._opened = False
         # Persistent Chromium user-data-dir. Set by ``browser_open`` from the
         # caller-supplied ``persistent_profile_dir``. Attribute (not method)
@@ -154,7 +187,7 @@ class BrowserHarnessService:
         # on where the socket / pid / log files live.
         os.environ["BH_RUNTIME_DIR"] = str(self._runtime_dir)
         os.environ["BH_TMP_DIR"] = str(self._runtime_dir)
-        self._bh = _BrowserHarness(session, self._runtime_dir)
+        self._bh = _BrowserHarness(session, self._runtime_dir, timeout)
 
     # --- Context Manager ---
 
@@ -194,15 +227,28 @@ class BrowserHarnessService:
     def _start_daemon(self):
         """Start (or reuse) the browser-harness daemon for this session."""
         from browser_harness.admin import ensure_daemon
+        if not self._cdp_ws:
+            raise BrowserHarnessError(
+                f"No resolved CDP WebSocket URL for session '{self.session}'."
+            )
+        # Pass the WS URL this process already resolved and proved live via
+        # BU_CDP_WS, which every browser-harness daemon reads directly. Using
+        # BU_CDP_RESOLVED_WS here was not version-safe: it only exists in the
+        # vendored daemon, so an older browser-harness release still installed
+        # in a CLI tool venv ignores it and falls through to the
+        # DevToolsActivePort profile scan, failing with "DevToolsActivePort
+        # not found" (and emitting a bogus chrome://inspect prompt). BU_CDP_WS
+        # also avoids the second HTTP discovery that re-races a busy Chrome,
+        # which caused the earlier "BU_CDP_URL=... unreachable" failures.
         env = {
             "BU_NAME": self.session,
-            "BU_CDP_URL": f"http://127.0.0.1:{self._cdp_port}",
+            "BU_CDP_WS": self._cdp_ws,
             "BH_RUNTIME_DIR": str(self._runtime_dir),
             "BH_TMP_DIR": str(self._runtime_dir),
         }
         # ensure_daemon spawns a fresh daemon process with the supplied env merged
         # over os.environ, then verifies it's reachable.  Restarts stale daemons.
-        ensure_daemon(name=self.session, env=env)
+        ensure_daemon(name=self.session, env=env, wait=self.default_timeout)
         logger.debug(
             "_start_daemon: daemon up session=%s cdp_port=%s",
             self.session, self._cdp_port,
@@ -272,71 +318,33 @@ class BrowserHarnessService:
         except subprocess.TimeoutExpired:
             logger.debug("_request_browser_close: timed out waiting for Chrome to exit")
 
-    def _list_process_commands(self) -> List[tuple[int, str, str]]:
-        """Return `(pid, stat, command)` rows for the local process table."""
+    def _list_process_table(self) -> List[ProcessCommand]:
+        """Return process-table rows for the local process table."""
         try:
-            result = subprocess.run(
-                ["ps", "ax", "-o", "pid=,stat=,command="],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-        except (OSError, subprocess.CalledProcessError) as e:
+            return list_process_commands()
+        except ProcessTableUnavailableError:
+            raise
+        except RuntimeError as e:
             raise BrowserHarnessError(f"Failed to inspect process table: {e}") from e
 
-        rows: List[tuple[int, str, str]] = []
-        for raw_line in result.stdout.splitlines():
-            line = raw_line.strip()
-            if not line:
-                continue
-            parts = line.split(None, 2)
-            try:
-                pid = int(parts[0])
-            except (IndexError, ValueError) as e:
-                raise BrowserHarnessError(
-                    f"Failed to parse process-table row: {raw_line!r}"
-                ) from e
-            stat = parts[1] if len(parts) >= 2 else ""
-            command = parts[2] if len(parts) == 3 else ""
-            rows.append((pid, stat, command))
-        return rows
+    def _list_process_commands(self) -> List[tuple[int, str, str]]:
+        """Return legacy `(pid, stat, command)` process rows."""
+        return [(proc.pid, proc.stat, proc.command) for proc in self._list_process_table()]
 
     def _session_process_pids(self) -> List[int]:
         """Return PIDs for Chrome/browser-harness children using this session's profile."""
         if self._user_data_dir is None:
             return []
-        user_data_dir = str(self._user_data_dir)
-        pids: List[int] = []
-        for pid, stat, command in self._list_process_commands():
-            if pid == os.getpid():
-                continue
-            if stat.startswith("Z"):
-                continue
-            command_user_data_dir = self._command_user_data_dir(command)
-            if command_user_data_dir != user_data_dir:
-                continue
-            pids.append(pid)
-        return pids
+        return profile_process_pids(self._user_data_dir, processes=self._list_process_table())
 
     @staticmethod
     def _command_user_data_dir(command: str) -> Optional[str]:
-        for pattern in (
-            r"(?:^|\s)--user-data-dir=(?P<value>\"[^\"]+\"|'[^']+'|\S+)(?:\s|$)",
-            r"(?:^|\s)--user-data-dir\s+(?P<value>\"[^\"]+\"|'[^']+'|\S+)(?:\s|$)",
-        ):
-            match = re.search(pattern, command)
-            if not match:
-                continue
-            value = match.group("value")
-            if value.startswith(("'", '"')) and value.endswith(("'", '"')):
-                return value[1:-1]
-            return value
-        return None
+        return command_user_data_dir(command)
 
     def _pid_running(self, pid: int) -> bool:
-        for current_pid, stat, _command in self._list_process_commands():
-            if current_pid == pid:
-                return not stat.startswith("Z")
+        for proc in self._list_process_table():
+            if proc.pid == pid:
+                return not proc.stat.startswith("Z")
         return False
 
     def _terminate_session_pid(self, pid: int) -> None:
@@ -406,7 +414,7 @@ class BrowserHarnessService:
                     pid = int(tail)
                 except ValueError:
                     pid = None
-            if pid is not None and self._pid_running(pid):
+            if pid is not None and pid_is_running(pid):
                 raise BrowserHarnessError(
                     f"Browser session '{self.session}' is held by PID {pid}. "
                     "Finish or kill it before retrying."
@@ -437,10 +445,17 @@ class BrowserHarnessService:
 
         logger.debug("_cleanup_stale_session: session=%s", self.session)
         restart_daemon(name=self.session)
-        for pid in self._session_process_pids():
+        for pid in self._stale_session_process_pids():
             logger.debug("_cleanup_stale_session: stopping stale pid=%s", pid)
             self._terminate_session_pid(pid)
         self._cleanup_session_lock_files()
+
+    def _stale_session_process_pids(self) -> List[int]:
+        try:
+            return self._session_process_pids()
+        except ProcessTableUnavailableError as exc:
+            logger.debug("process-table cleanup unavailable for session %s: %s", self.session, exc)
+            return []
 
     def _acquire_lifecycle_lock(self) -> None:
         """Acquire the per-session lifecycle lock until close/delete."""
@@ -472,10 +487,11 @@ class BrowserHarnessService:
         self._request_browser_close()
         self._stop_daemon()
         self._terminate_chrome()
-        for pid in self._session_process_pids():
+        for pid in self._stale_session_process_pids():
             self._terminate_session_pid(pid)
         self._opened = False
         self._cdp_port = None
+        self._cdp_ws = None
 
     # ---------------- Browser lifecycle ----------------
 
@@ -529,6 +545,7 @@ class BrowserHarnessService:
                 f"--user-data-dir={user_data_dir}",
                 "--no-first-run",
                 "--no-default-browser-check",
+                "--restore-last-session",
                 "--disable-blink-features=AutomationControlled",
                 "--disable-features=AutomationControlled,Translate",
                 "--remote-allow-origins=*",
@@ -539,9 +556,6 @@ class BrowserHarnessService:
                 args.append(f"--window-size={window_size}")
             if not headed:
                 args.append("--headless=new")
-            if url:
-                args.append(url)
-
             logger.debug("browser_open: spawning chrome args=%s", args)
             launch_args = _chrome_launch_command(chrome, args)
             try:
@@ -555,7 +569,9 @@ class BrowserHarnessService:
                 raise BrowserHarnessError(f"Failed to spawn Chrome: {e}")
 
             try:
-                _wait_for_cdp(self._cdp_port, timeout=self.default_timeout)
+                self._cdp_ws = _wait_for_cdp(
+                    self._cdp_port, timeout=self.default_timeout
+                )
             except BrowserHarnessError:
                 self._terminate_chrome()
                 raise
@@ -696,6 +712,144 @@ class BrowserHarnessService:
                 return frame_id
         return None
 
+    @staticmethod
+    def _ax_value(payload: Any) -> Any:
+        if isinstance(payload, dict):
+            return payload.get("value")
+        return None
+
+    @classmethod
+    def _ax_role(cls, node: Dict[str, Any]) -> str:
+        role = str(cls._ax_value(node.get("role")) or "").strip()
+        role = role.replace(" ", "").lower()
+        role_map = {
+            "rootwebarea": "root",
+            "statictext": "text",
+            "inlinetextbox": "text",
+            "labeltext": "text",
+            "genericcontainer": "generic",
+            "section": "generic",
+        }
+        return role_map.get(role, role)
+
+    @classmethod
+    def _ax_name(cls, node: Dict[str, Any]) -> str:
+        value = cls._ax_value(node.get("name"))
+        if value is None:
+            value = cls._ax_value(node.get("value"))
+        return str(value or "").strip()
+
+    @staticmethod
+    def _aria_quote(value: str) -> str:
+        return value.replace("\\", "\\\\").replace('"', '\\"')
+
+    def _backend_node_js_value(
+        self,
+        backend_node_id: Any,
+        function_declaration: str,
+    ) -> Any:
+        if backend_node_id is None:
+            return None
+        resolved = self._bh.h.cdp("DOM.resolveNode", backendNodeId=backend_node_id)
+        object_id = None
+        if isinstance(resolved, dict):
+            object_id = (resolved.get("object") or {}).get("objectId")
+        if not object_id:
+            return None
+        try:
+            payload = self._bh.h.cdp(
+                "Runtime.callFunctionOn",
+                objectId=object_id,
+                functionDeclaration=function_declaration,
+                returnByValue=True,
+            )
+            return self._decode_cdp_runtime_value(payload, function_declaration)
+        finally:
+            try:
+                self._bh.h.cdp("Runtime.releaseObject", objectId=object_id)
+            except Exception:
+                pass
+
+    def _ax_link_url(self, node: Dict[str, Any]) -> str:
+        value = self._backend_node_js_value(
+            node.get("backendDOMNodeId"),
+            "function() { return this.getAttribute('href') || this.href || ''; }",
+        )
+        return value if isinstance(value, str) else ""
+
+    def _ax_snapshot_lines(self, payload: Dict[str, Any]) -> List[str]:
+        nodes = payload.get("nodes") if isinstance(payload, dict) else None
+        if not isinstance(nodes, list):
+            raise BrowserHarnessError(
+                f"Accessibility.getFullAXTree returned unexpected payload: {payload!r}"
+            )
+        by_id = {
+            str(node.get("nodeId")): node
+            for node in nodes
+            if isinstance(node, dict) and node.get("nodeId") is not None
+        }
+        child_ids = {
+            str(child)
+            for node in by_id.values()
+            for child in (node.get("childIds") or [])
+        }
+        roots = [
+            node for node_id, node in by_id.items()
+            if node_id not in child_ids
+        ]
+        if not roots and nodes:
+            roots = [nodes[0]]
+
+        lines: List[str] = []
+
+        def render(node: Dict[str, Any], indent: int = 0) -> None:
+            children = [
+                by_id[str(child_id)]
+                for child_id in (node.get("childIds") or [])
+                if str(child_id) in by_id
+            ]
+            if node.get("ignored"):
+                for child in children:
+                    render(child, indent)
+                return
+
+            role = self._ax_role(node)
+            name = self._ax_name(node)
+            if role in ("", "none", "root"):
+                for child in children:
+                    render(child, indent)
+                return
+
+            prefix = " " * indent + "- "
+            rendered_children_start = len(lines)
+            if role == "text":
+                if name:
+                    lines.append(f"{prefix}text: {name}")
+            elif role in ("generic", "paragraph") and name and not children:
+                lines.append(f"{prefix}{role}: {name}")
+            else:
+                quoted = f' "{self._aria_quote(name)}"' if name else ""
+                suffix = ":" if children or role == "link" else ""
+                lines.append(f"{prefix}{role}{quoted}{suffix}")
+
+            if role == "link":
+                url = self._ax_link_url(node)
+                if url:
+                    lines.append(
+                        f'{prefix}  - /url: "{self._aria_quote(url)}"'
+                    )
+
+            for child in children:
+                render(child, indent + 2)
+
+            if len(lines) == rendered_children_start:
+                for child in children:
+                    render(child, indent)
+
+        for root in roots:
+            render(root, 0)
+        return lines
+
     def evaluate(self, js: str, arg: Any = None) -> Any:
         self._require_open()
         try:
@@ -770,6 +924,119 @@ class BrowserHarnessService:
     def page_eval(self, js: str, arg: Any = None) -> Dict[str, Any]:
         """Backward-compatible wrapper for legacy page-eval callers."""
         return {"result": self.evaluate(js, arg)}
+
+    def content(self) -> str:
+        """Return the full serialized HTML of the current page.
+
+        Playwright-compatible shim: callers written against the Playwright
+        ``page.content()`` API expect a method that returns the page's outer
+        HTML. The harness has no native equivalent, so we serialize the live
+        DOM via ``evaluate``.
+        """
+        self._require_open()
+        html = self.evaluate("document.documentElement.outerHTML")
+        return html if isinstance(html, str) else ""
+
+    def _get_page(self) -> "BrowserHarnessService":
+        """Return this page-shaped service for legacy Playwright callers."""
+        self._require_open()
+        return self
+
+    def select_option(self, selector: str, value: str = None, *, label: str = None) -> None:
+        """Select an ``<option>`` within the first element matching ``selector``.
+
+        Playwright-compatible page-level shim: callers written against the
+        Playwright ``page.select_option(selector, value=..., label=...)`` API
+        expect this method on the page object. The harness resolves ``selector``
+        against the live DOM and selects the option by value or visible label,
+        reusing the same ``_select_option`` helper the element/locator wrappers
+        use so behavior is identical across call sites.
+        """
+        self._require_open()
+        from ._elements import _select_option
+        element_js = f"document.querySelector({json.dumps(selector)})"
+        _select_option(self, element_js, value=value, label=label)
+
+    def fill(self, selector: str, text: str) -> None:
+        """Fill the first element matching ``selector`` with ``text``.
+
+        Playwright-compatible page-level shim: callers written against the
+        Playwright ``page.fill(selector, text)`` API expect this method on the
+        page object. Resolves ``selector`` against the live DOM and reuses the
+        same fill behavior as the element/locator wrappers.
+        """
+        self._require_open()
+        from ._elements import _ServiceElement
+        _ServiceElement(self, css=selector).fill(text)
+
+    def title(self) -> str:
+        """Return the current page title.
+
+        Playwright-compatible shim for ``page.title()``; reads ``document.title``
+        from the live DOM via ``evaluate``.
+        """
+        self._require_open()
+        value = self.evaluate("document.title")
+        return value if isinstance(value, str) else ""
+
+    # ---------------- Authenticated requests (page.context.request) ----------------
+
+    @property
+    def context(self) -> "_ServiceBrowserContext":
+        """Playwright-compatible ``page.context`` accessor.
+
+        Callers written against Playwright reach the authenticated request
+        API via ``page.context.request.get(url)``. The harness has no
+        ``BrowserContext`` object, so this returns a thin shim whose
+        ``request.get(...)`` performs the GET *inside the live page* via
+        ``fetch``. Running the request in-page means it inherits the
+        browser's cookies and session — required for logged-in-only URLs
+        (e.g. Brick Owl message attachments). See
+        :class:`_ServiceRequestContext` for the response object contract.
+        """
+        self._require_open()
+        from ._elements import _ServiceBrowserContext
+        return _ServiceBrowserContext(self)
+
+    # ---------------- Dialog handling (page.once) ----------------
+
+    def once(self, event: str, handler: Any) -> None:
+        """Playwright-compatible one-time event registration.
+
+        Only ``event == "dialog"`` is supported. The harness drives Chrome
+        over CDP and does not surface Playwright's event/Dialog objects, so a
+        true one-shot listener with a real ``Dialog`` argument is not
+        available. Instead this installs a page-side auto-accept by overriding
+        ``window.confirm``/``window.alert``/``window.prompt`` so the *next*
+        native dialog the page raises (during the immediately following
+        interaction) is accepted automatically.
+
+        Behavior / limitations:
+          - The supplied ``handler`` is NOT invoked with a Dialog object. The
+            only real caller accepts the dialog (``dialog.accept()``); the JS
+            override unconditionally accepts, which matches that intent.
+          - The override persists on the current document until the next
+            navigation (a confirm() during a same-page form submit, then a
+            redirect, is the exact Brick Owl refund flow this covers). It is
+            therefore effectively one-shot for that interaction because the
+            post-submit redirect re-parses the document and drops the override.
+          - Any event name other than ``"dialog"`` raises
+            :class:`BrowserHarnessError` — no silent generic no-op.
+        """
+        self._require_open()
+        if event != "dialog":
+            raise BrowserHarnessError(
+                f"once: unsupported event {event!r}. Only 'dialog' is supported "
+                "by BrowserHarnessService (page-side auto-accept of "
+                "confirm/alert/prompt)."
+            )
+        # Accept confirm()/beforeunload-style prompts, no-op alert(). prompt()
+        # returns an empty string so a defaulted prompt resolves truthily.
+        self.evaluate(
+            "() => { window.confirm = () => true; "
+            "window.alert = () => {}; "
+            "window.prompt = () => ''; }"
+        )
 
     # ---------------- Keyboard ----------------
 
@@ -860,8 +1127,8 @@ class BrowserHarnessService:
     def locator(self, selector: str) -> _ServiceLocator:
         return _ServiceLocator(self, selector)
 
-    def get_by_role(self, role: str, *, name=None) -> _ServiceLocator:
-        return _ServiceLocator.from_role(self, role, name)
+    def get_by_role(self, role: str, *, name=None, exact: bool = False) -> _ServiceLocator:
+        return _ServiceLocator.from_role(self, role, name, exact=exact)
 
     def get_by_placeholder(self, text: str) -> _ServiceLocator:
         return _ServiceLocator(self, f'[placeholder="{text}"]')
@@ -984,47 +1251,11 @@ class BrowserHarnessService:
         return _ServiceElement(self, css=selector)
 
     def aria_snapshot(self, selector: str = "body", *, timeout: int = 5000) -> str:
-        """Capture a Playwright-style accessibility snapshot from the live page.
-
-        browser-harness owns the running Chrome instance. To preserve the
-        exact loaded page state, attach to that same browser over CDP and
-        call Playwright's ``aria_snapshot()`` against the matching live page.
-        """
+        """Capture a Playwright-style accessibility snapshot from CDP."""
         self._require_open()
-        if self._cdp_port is None:
-            raise BrowserHarnessError(
-                f"No CDP port available for session '{self.session}'."
-            )
-
-        current_url = self.url
         try:
-            from playwright.sync_api import sync_playwright
-
-            with sync_playwright() as playwright:
-                browser = playwright.chromium.connect_over_cdp(
-                    f"http://127.0.0.1:{self._cdp_port}"
-                )
-                try:
-                    if not browser.contexts:
-                        raise BrowserHarnessError(
-                            "CDP browser connection returned no contexts."
-                        )
-                    live_pages = browser.contexts[0].pages
-                    if not live_pages:
-                        raise BrowserHarnessError(
-                            "CDP browser connection returned no pages."
-                        )
-                    raw_page = next(
-                        (
-                            candidate
-                            for candidate in live_pages
-                            if candidate.url == current_url
-                        ),
-                        live_pages[0],
-                    )
-                    return raw_page.locator(selector).aria_snapshot(timeout=timeout)
-                finally:
-                    browser.close()
+            payload = self._bh.h.cdp("Accessibility.getFullAXTree")
+            return "\n".join(self._ax_snapshot_lines(payload))
         except BrowserHarnessError:
             raise
         except Exception as e:

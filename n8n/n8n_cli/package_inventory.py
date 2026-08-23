@@ -9,7 +9,6 @@ from .server import run_on_server_raw
 
 N8N_NODES_DIR = str(Path.home() / ".n8n" / "nodes")
 CUSTOM_PACKAGE_MARKER = "n8nCliPackage"
-_GENERATED_AUTHORS = {"Adam", "Adam Bertram", "Adam Marczak"}
 
 
 def package_base_name(package_name: str) -> str:
@@ -32,18 +31,11 @@ def follows_n8n_package_convention(package_name: str) -> bool:
 
 
 def classify_package_metadata(package_json: Dict[str, Any], has_bundled_cli: bool) -> str:
-    """Classify a package as Adam-generated custom code or third-party community."""
+    """Classify a package as generated custom code or third-party community."""
     marker = package_json.get(CUSTOM_PACKAGE_MARKER) or {}
     if marker.get("packageType") == "custom":
         return "custom"
     if has_bundled_cli:
-        return "custom"
-
-    author = package_json.get("author")
-    author_name = author.get("name") if isinstance(author, dict) else author
-    repository = package_json.get("repository") or {}
-    repository_url = repository.get("url") if isinstance(repository, dict) else repository
-    if author_name in _GENERATED_AUTHORS and not repository_url:
         return "custom"
 
     return "community"

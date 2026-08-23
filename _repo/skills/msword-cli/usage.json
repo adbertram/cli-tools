@@ -1,9 +1,8 @@
 {
   "tool": "msword",
   "description": "Read Word docs, convert to markdown, and extract comments with context",
-  "discovered_at": "2026-05-25T17:14:13.991412+00:00",
+  "discovered_at": "2026-06-16T01:02:04Z",
   "total_commands": 5,
-  "usage_instructions": "Use the `msword` CLI for local Word-document work: read document text, convert `.docx` files to Markdown, and inspect or add comments. Commands follow `msword docs ...`; there is no auth flow because the tool only works with local files.",
   "global_options": [
     {
       "name": "--version",
@@ -16,65 +15,80 @@
   "commands": {
     "docs": {
       "help": "Read, convert, and extract comments from Word documents",
-      "usage_instructions": "Use `msword docs ...` for document-level operations on a local `.docx` file. `read` returns extracted text, `convert` produces Markdown, and `comments ...` inspects or edits Word comments.",
+      "arguments": [],
+      "options": [],
       "commands": {
-        "read": {
-          "help": "Read text content from a Word document.",
-          "usage_instructions": "Use `msword docs read FILE` when you need the plain text from a `.docx` file. Add `--table/-t` for a compact field/value view instead of the default JSON object.",
-          "arguments": [
-            {
-              "name": "file",
-              "type": "TEXT",
-              "required": true,
-              "help": "Path to the .docx file"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "examples": [
-            "msword docs read document.docx",
-            "msword docs read document.docx --table"
-          ]
-        },
-        "convert": {
-          "help": "Convert a Word document to Markdown.",
-          "usage_instructions": "Use `msword docs convert FILE` when you want Markdown output from a Word document. Add `--output/-o PATH` to write the Markdown to a file; otherwise the command returns JSON with the Markdown in stdout.",
-          "arguments": [
-            {
-              "name": "file",
-              "type": "TEXT",
-              "required": true,
-              "help": "Path to the .docx file"
-            }
-          ],
-          "options": [
-            {
-              "name": "--output",
-              "type": "TEXT",
-              "required": false,
-              "help": "Output file path (default: stdout)",
-              "short": "-o"
-            }
-          ],
-          "examples": [
-            "msword docs convert document.docx",
-            "msword docs convert document.docx --output document.md"
-          ]
-        },
         "comments": {
           "help": "Manage document comments",
-          "usage_instructions": "Use `msword docs comments ...` to inspect or edit inline comments stored in a `.docx` file. `list` supports filtering and field selection, `get` returns one comment by ID, and `add` writes a new inline comment anchored to matching text.",
+          "arguments": [],
+          "options": [],
           "commands": {
+            "add": {
+              "help": "Add an inline comment to a Word document.",
+              "arguments": [
+                {
+                  "name": "file",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Path to the .docx file"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--text",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Comment text"
+                },
+                {
+                  "name": "--author",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Comment author name"
+                },
+                {
+                  "name": "--reference-text",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Text in the document to attach the comment to"
+                },
+                {
+                  "name": "--occurrence",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Which occurrence of reference-text to target",
+                  "default": "1"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get a single comment from a Word document.",
+              "arguments": [
+                {
+                  "name": "file",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Path to the .docx file"
+                },
+                {
+                  "name": "comment_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Comment ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
             "list": {
               "help": "List comments from a Word document.",
-              "usage_instructions": "Use `msword docs comments list FILE` to enumerate comments in a document. Add `--limit/-l` to cap results, `--filter/-f field:op:value` to filter client-side, `--properties/-p` to return selected fields, and `--table/-t` for a readable table.",
               "arguments": [
                 {
                   "name": "file",
@@ -113,87 +127,49 @@
                   "help": "Comma-separated fields to include",
                   "short": "-p"
                 }
-              ],
-              "examples": [
-                "msword docs comments list document.docx",
-                "msword docs comments list document.docx --filter author:eq:Jane --properties author,text"
-              ]
-            },
-            "get": {
-              "help": "Get a single comment from a Word document.",
-              "usage_instructions": "Use `msword docs comments get FILE COMMENT_ID` when you already know the comment ID and need the full record. Add `--table/-t` to display the fields as rows instead of JSON.",
-              "arguments": [
-                {
-                  "name": "file",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Path to the .docx file"
-                },
-                {
-                  "name": "comment_id",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Comment ID"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "examples": [
-                "msword docs comments get document.docx 1",
-                "msword docs comments get document.docx 1 --table"
-              ]
-            },
-            "add": {
-              "help": "Add an inline comment to a Word document.",
-              "usage_instructions": "Use `msword docs comments add FILE` to insert a new inline comment on matching document text. You must supply `--text`, `--author`, and `--reference-text`; use `--occurrence` when the reference text appears multiple times and you need a later match.",
-              "arguments": [
-                {
-                  "name": "file",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Path to the .docx file"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--text",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Comment text"
-                },
-                {
-                  "name": "--author",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Comment author name"
-                },
-                {
-                  "name": "--reference-text",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Text in the document to attach the comment to"
-                },
-                {
-                  "name": "--occurrence",
-                  "type": "INTEGER",
-                  "required": false,
-                  "help": "Which occurrence of reference-text to target",
-                  "default": "1"
-                }
-              ],
-              "examples": [
-                "msword docs comments add document.docx --text \"Fix this\" --author \"Editor\" --reference-text \"reference text\"",
-                "msword docs comments add document.docx --text \"Clarify\" --author \"Editor\" --reference-text \"reference text\" --occurrence 2"
               ]
             }
           }
+        },
+        "convert": {
+          "help": "Convert a Word document to Markdown.",
+          "arguments": [
+            {
+              "name": "file",
+              "type": "TEXT",
+              "required": true,
+              "help": "Path to the .docx file"
+            }
+          ],
+          "options": [
+            {
+              "name": "--output",
+              "type": "TEXT",
+              "required": false,
+              "help": "Output file path (default: stdout)",
+              "short": "-o"
+            }
+          ]
+        },
+        "read": {
+          "help": "Read text content from a Word document.",
+          "arguments": [
+            {
+              "name": "file",
+              "type": "TEXT",
+              "required": true,
+              "help": "Path to the .docx file"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
         }
       }
     }

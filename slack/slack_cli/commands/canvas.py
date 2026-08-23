@@ -12,13 +12,14 @@ COMMAND_CREDENTIALS = {
 import typer
 from typing import Optional, List
 from ..client import get_client, ClientError
-from cli_tools_shared.output import print_json, print_table, handle_error
+from cli_tools_shared.output import print_json, print_table, handle_error, command
 from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError, apply_properties_filter
 
 app = typer.Typer(help="Manage Slack canvases")
 
 
 @app.command("list")
+@command
 def list_canvases(
     channel_id: Optional[str] = typer.Argument(
         None, help="Channel ID to list canvases for (optional, lists all if not specified)"
@@ -80,6 +81,7 @@ def list_canvases(
 
 
 @app.command("get")
+@command
 def get_canvas(
     canvas_id: str = typer.Argument(..., help="Canvas ID (e.g., F1234567890)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),

@@ -28,21 +28,24 @@ Three template types are available. Each creates a complete CLI structure with d
 <name>/
 ├── <name>_cli/
 │   ├── __init__.py
-│   ├── main.py           # Typer app setup
+│   ├── main.py           # Typer app setup and default items command group
 │   ├── client.py         # HTTP requests, auth, retry, normalization
 │   ├── config.py         # Configuration & .env
 │   ├── models.py         # Optional: only when local models earn their cost
-│   └── commands/
-│       ├── __init__.py
-│       ├── auth.py       # login, status, logout
-│       └── items.py      # Resource commands
 ├── .env.example
 ├── .gitignore
 ├── pyproject.toml
 └── README.md
 ```
 
+The generated API scaffold keeps the initial `items` command group in `main.py`.
+Create `commands/<group>.py` modules only after multiple command groups or file
+size justify the split. Do not leave a single-module `commands/` directory in
+place; `test_flat_module_layout.py` fails that layout.
+
 Reusable human-supplied secrets do not belong in any `.env` file shown here. Store and retrieve them through `<cli-tools-root>/_repo/_secret-manager/secrets.sh`. The source tree carries `.env.example` only as a shape template.
+
+When login needs required non-secret setup such as `BASE_URL`, declare `AUTH_CONFIG_PROMPTS` on `Config` instead of telling the user to edit `.env` manually. When the user must create a token or app first, declare `AUTH_SETUP_INSTRUCTIONS` with the canonical setup URL and brief steps.
 
 ### Key Components
 
@@ -136,7 +139,8 @@ requests>=2.31.0
 - Form submission and browser-based automation
 - Hybrid CLIs with both API and browser session auth
 
-**IMPORTANT:** Only use after confirming no API exists.
+**IMPORTANT:** Only use after confirming no public or internal API exists and
+Adam explicitly approves making the command browser-driven.
 
 **Requires:** Nothing in PATH. `browser-harness` is a transitive dependency
 of `cli-tools-shared`; it drives Chrome via CDP and manages its own browser
@@ -172,9 +176,6 @@ type to `--auth-type browser_session`).
 │   ├── parsers.py        # Normalizers for DOM data returned by page.evaluate(...)
 │   ├── config.py         # BaseConfig subclass with get_browser()
 │   ├── models.py         # Optional: only when validation/serialization needs it
-│   └── commands/
-│       ├── __init__.py
-│       └── search.py     # Search/scrape commands
 ├── .env.example
 ├── .gitignore
 ├── pyproject.toml
@@ -193,13 +194,16 @@ type to `--auth-type browser_session`).
 **Note:** No `commands/auth.py` — auth is handled by `create_auth_app()`
 from `cli-tools-shared`.
 
+The generated browser scaffold keeps its default search commands in `main.py`.
+Split into `commands/<group>.py` only when the CLI grows beyond a single
+resource group.
+
 Reusable human-supplied secrets do not belong in any `.env` file shown here. Store and retrieve them through `<cli-tools-root>/_repo/_secret-manager/secrets.sh`. The user-data `.env` files are limited to non-secret config and CLI-managed runtime auth state.
 
 ### Key Components
 
 **config.py — BaseConfig subclass:**
 ```python
-from pathlib import Path
 from typing import Optional
 
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
@@ -210,16 +214,18 @@ class Config(BaseConfig):
     DIST_NAME = "mysite-cli"
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://example.com"
+    AUTH_CONFIG_PROMPTS = [("BASE_URL", "Site base URL", False)]
+    AUTH_SETUP_INSTRUCTIONS = (
+        "Before logging in:\n"
+        "  1. Create the required token/app at https://example.com/settings/api\n"
+        "  2. Follow the site's instructions, then continue here."
+    )
 
     def __init__(self, profile: Optional[str] = None):
         super().__init__(
             tool_dir=resolve_tool_dir(self.DIST_NAME),
             profile=profile,
         )
-
-    @property
-    def storage_dir(self) -> Path:
-        return self.get_profile_data_dir()
 
     def get_browser(self):
         """Return the BrowserAutomation subclass for this CLI."""
@@ -335,7 +341,9 @@ def normalize_items(raw_items):
     → create_auth_app() detects BROWSER_SESSION credential type
     → calls config.get_browser() → BrowserAutomation subclass instance
     → BrowserAutomation.authenticate() opens persistent browser to LOGIN_URL
-    → User logs in manually in visible browser
+    → interactive terminal: user confirms after login
+      non-interactive authorized runner: live authenticated browser state is
+      the completion signal; no stdin or /dev/tty confirmation is required
     → persistent Chromium profile is written under
       get_profile_data_dir()/browser-data/chromium-profile/  → has_session() returns True
 
@@ -397,15 +405,15 @@ example built on `BrowserAutomation` from `cli_tools_shared`.
 │   ├── parsers.py        # Output parsing (CRITICAL)
 │   ├── config.py         # Configuration
 │   ├── models.py         # Optional: only when local models earn their cost
-│   └── commands/
-│       ├── __init__.py
-│       ├── auth.py       # OPTIONAL: Delegates to underlying CLI (see below)
-│       └── items.py      # Parses underlying CLI output
 ├── .env.example
 ├── .gitignore
 ├── pyproject.toml
 └── README.md
 ```
+
+The generated wrapper scaffold also starts flat: default commands live in
+`main.py`, and `commands/<group>.py` is optional when multiple groups justify
+it.
 
 Reusable human-supplied secrets do not belong in any `.env` file shown here. Store and retrieve them through `<cli-tools-root>/_repo/_secret-manager/secrets.sh`. The source tree carries `.env.example` only as a shape template.
 
@@ -437,11 +445,11 @@ def parse_list_output(output: str) -> List[Dict]:
     return items
 ```
 
-**auth.py (REQUIRED - `create_auth_app` mount):**
+**auth.py (optional split-out `create_auth_app` mount):**
 
 **Hard rule:** wrapper CLIs MUST mount `create_auth_app` just like API CLIs — no hand-rolled `@app.command("status")` / `@app.command("login")` / `@app.command("logout")` functions. The upstream-CLI delegation happens inside `Config.test_connection()` (for status) and a `login_handler` passed to `create_auth_app` (for login). If the underlying CLI has no auth, skip auth entirely with `--auth-type none` when scaffolding.
 
-The entire `commands/auth.py` is ~4 lines:
+If you split auth out of `main.py`, the entire `commands/auth.py` is ~4 lines:
 
 ```python
 """Authentication commands for MyWrapper CLI."""
@@ -487,10 +495,14 @@ python-dotenv>=1.0.0
 ```
 
 ### Automatic CLI Installation
-The new-cli-tool script automatically:
-1. Checks if underlying CLI is in PATH
-2. If not found, installs via Homebrew
-3. Uses package mapping for non-standard names
+Wrapper CLIs must provision the official upstream binary named by
+`CLI_COMMAND`. A completed wrapper cannot leave the wrapped binary as a manual
+user prerequisite or report it as a live API smoke-test/auth blocker.
+
+The `new-cli-tool` script automatically:
+1. Checks if the underlying CLI is in PATH
+2. If not found, installs known Homebrew-distributed CLIs
+3. Uses package mapping for non-standard Homebrew names
 
 | CLI Command | Brew Package |
 |-------------|--------------|
@@ -500,6 +512,12 @@ The new-cli-tool script automatically:
 | `az` | `azure-cli` |
 | `kubectl` | `kubernetes-cli` |
 | `rg` | `ripgrep` |
+
+If the official upstream CLI is distributed through npm, pipx, uv, or a vendor
+installer instead of Homebrew, add that official bootstrap to the wrapper source
+or repo-owned install workflow before marking the wrapper complete. API-key auth
+may remain user-configured only after the upstream binary is present and
+`<cli-command> --help` exits `0`.
 
 ---
 
@@ -551,7 +569,9 @@ Main Typer application that registers command groups:
 """Main entry point for MyTool CLI."""
 import typer
 from typing import Optional
+from cli_tools_shared.command_registry import register_commands
 from .client import ClientError
+from .config import get_config
 
 app = typer.Typer(
     name="mytool",
@@ -561,8 +581,8 @@ app = typer.Typer(
 
 # Register command modules
 from .commands import resource1, resource2
-app.add_typer(resource1.app, name="resource1", help="Manage resource1")
-app.add_typer(resource2.app, name="resource2", help="Manage resource2")
+register_commands(app, get_config, resource1, name="resource1", help="Manage resource1")
+register_commands(app, get_config, resource2, name="resource2", help="Manage resource2")
 
 @app.callback(invoke_without_command=True)
 def callback(
@@ -790,15 +810,17 @@ from cli_tools_shared.output import print_json, print_table, print_error, print_
 
 No local `output.py` file is needed in CLIs.
 
-### `commands/<resource>.py`
-Individual command modules:
+### Optional `commands/<resource>.py`
+Use a command module only when the CLI already has multiple command groups or
+`main.py` has grown large enough that the split earns its complexity. Fresh
+scaffolds keep the first resource group in `main.py`.
 
 ```python
 """Item commands for MyTool CLI."""
 import typer
 from typing import List, Optional
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_table, handle_error, print_success
+from cli_tools_shared.output import print_json, print_table, command, print_success
 
 app = typer.Typer(help="Manage items")
 
@@ -828,52 +850,48 @@ def extract_fields(items: list, fields: list) -> list:
 
 
 @app.command("list")
+@command
 def item_list(
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of results"),
     filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter results (field:op:value)"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to display (supports dot-notation)"),
 ):
     """List all items."""
-    try:
-        client = get_client()
-        items = client.list_items(limit=limit, filters=filter)
+    client = get_client()
+    items = client.list_items(limit=limit, filters=filter)
 
-        # Apply output field selection with dot-notation support
-        if properties:
-            fields = [f.strip() for f in properties.split(",")]
-            items = extract_fields(items, fields)
+    # Apply output field selection with dot-notation support
+    if properties:
+        fields = [f.strip() for f in properties.split(",")]
+        items = extract_fields(items, fields)
 
-        if table:
-            columns = fields if properties else ["id", "name"]
-            print_table(items, columns, columns)
-        else:
-            print_json(items)
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    if table:
+        columns = fields if properties else ["id", "name"]
+        print_table(items, columns, columns)
+    else:
+        print_json(items)
 
 
 @app.command("get")
+@command
 def item_get(
     item_id: str = typer.Argument(..., help="Item ID"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to display (supports dot-notation)"),
 ):
     """Get a specific item."""
-    try:
-        client = get_client()
-        item = client.get_item(item_id)
+    client = get_client()
+    item = client.get_item(item_id)
 
-        # Apply output field selection with dot-notation support
-        if properties:
-            fields = [f.strip() for f in properties.split(",")]
-            item = extract_fields([item], fields)[0]
+    # Apply output field selection with dot-notation support
+    if properties:
+        fields = [f.strip() for f in properties.split(",")]
+        item = extract_fields([item], fields)[0]
 
-        if table:
-            columns = list(item.keys())
-            print_table([item], columns, columns)
-        else:
-            print_json(item)
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    if table:
+        columns = list(item.keys())
+        print_table([item], columns, columns)
+    else:
+        print_json(item)
 ```
 
 ---
@@ -919,9 +937,10 @@ def callback(ctx: typer.Context, version: ...):
         raise typer.Exit()
 ```
 
-### Subcommand Apps (commands/*.py)
+### Subcommand Apps
 
-All subcommand apps MUST include `no_args_is_help=True`:
+Whether a subcommand app lives in `main.py` or `commands/*.py`, it MUST include
+`no_args_is_help=True`:
 
 ```python
 # REQUIRED - ensures help shown when no command specified
@@ -939,7 +958,7 @@ After scaffolding, customize:
   - Exact JSON fields and table columns
   - Required derived fields such as stable IDs
   - Local models only when validation, polymorphism, or serialization earns the code
-- Add resource commands in `commands/`
+- Start with resource commands in `main.py`; split into `commands/` only when multiple groups justify it
 - Update `.env.example` with required variables
 - Implement auth methods
 
@@ -950,6 +969,14 @@ After scaffolding, customize:
 
 **Browser type:**
 - **Capture real DOM data FIRST** via `config.get_browser().get_page(url).evaluate(...)` before writing any parsers
+- For login/status proof scripts on pages that redirect during authentication,
+  do not poll visibility with repeated `page.evaluate(...)` calls. Use
+  Playwright locator waits such as `page.locator(selector).first.wait_for(...)`
+  or `is_visible(timeout=...)` so navigation is handled by the browser driver.
+  If raw evaluation is unavoidable for a DOM-capture probe, treat
+  "Execution context was destroyed" as a navigation-in-progress signal only:
+  wait for the page to settle, then retry the bounded probe instead of
+  classifying it as login failure or credential failure.
 - Implement `parsers.py` based on REAL DOM patterns (never guess)
 - Add domain methods to `client.py` using the `BrowserAutomation` subclass via `self.config.get_browser()`
 - Validate every parser against actual captured data before marking complete

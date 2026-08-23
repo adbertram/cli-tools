@@ -65,6 +65,16 @@ def _get_cache_dir(instance: Any) -> Path:
     return cache_dir
 
 
+def cache_dir_for(instance: Any) -> Path:
+    """Return the on-disk cache directory `@cached` uses for `instance`.
+
+    Public accessor so a CLI can tell the user where completed work was
+    persisted (e.g. a resumable multi-page crawl) without duplicating the
+    storage layout.
+    """
+    return _get_cache_dir(instance)
+
+
 def _cache_allowed_for_instance(instance: Any) -> bool:
     """Return whether cached data may be served for this instance."""
     config = getattr(instance, "config", None)
@@ -114,6 +124,29 @@ def _json_default(obj: Any) -> Any:
     if hasattr(obj, "value"):  # enums
         return obj.value
     raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
+
+def invalidate(instance: Any, method_name: str, *args, **kwargs) -> None:
+    """Delete cached entry/entries for a `@cached` method on `instance`.
+
+    Call this from a mutating method (create/update/delete) that changes the
+    data a `@cached` read method (e.g. `list_tasks`) returns, so the very next
+    read reflects the mutation instead of serving a stale on-disk snapshot
+    for up to CACHE_TTL seconds.
+
+    - With no args/kwargs: deletes every cache file for `method_name`
+      (covers methods whose cache key doesn't vary, e.g. `list_tasks()`,
+      as well as clearing all variants of a parameterized method).
+    - With args/kwargs: deletes only the single matching cache file.
+    """
+    cache_dir = _get_cache_dir(instance)
+    if args or kwargs:
+        key_hash = _make_cache_key(method_name, args, kwargs)
+        cache_file = cache_dir / f"{method_name}_{key_hash}.json"
+        cache_file.unlink(missing_ok=True)
+    else:
+        for cache_file in cache_dir.glob(f"{method_name}_*.json"):
+            cache_file.unlink(missing_ok=True)
 
 
 def cached(fn):

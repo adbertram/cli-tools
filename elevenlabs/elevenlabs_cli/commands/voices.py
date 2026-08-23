@@ -8,7 +8,7 @@ COMMAND_CREDENTIALS = {
 from typing import List, Optional
 
 import typer
-from cli_tools_shared.output import handle_error, print_json, print_table
+from cli_tools_shared.output import command, handle_error, print_json, print_table
 
 from ..client import get_client
 from .common import apply_properties, key_value_rows, properties_columns
@@ -18,6 +18,7 @@ app = typer.Typer(help="Manage ElevenLabs voices", no_args_is_help=True)
 
 
 @app.command("list")
+@command
 def voices_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(10, "--limit", "-l", min=1, max=1000, help="Maximum voices to return"),
@@ -56,6 +57,7 @@ def voices_list(
 
 
 @app.command("get")
+@command
 def voices_get(
     voice_id: str = typer.Argument(..., help="Voice ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -74,6 +76,7 @@ def voices_get(
 
 
 @app.command("settings")
+@command
 def voices_settings(
     voice_id: str = typer.Argument(..., help="Voice ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),

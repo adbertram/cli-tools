@@ -1,4 +1,5 @@
 """Main entry point for eBay CLI."""
+from cli_tools_shared.output import command
 from types import SimpleNamespace
 from typing import List, Optional
 
@@ -50,8 +51,37 @@ seller_app = typer.Typer(
     help="Seller tools — listings, orders, inventory, policies, and more",
 )
 
+SELLER_GROUPS = (
+    ("orders", "Manage eBay seller orders", orders),
+    (
+        "shipping-labels",
+        "Manage eBay shipping labels",
+        SimpleNamespace(app=orders.shipping_label_app, COMMAND_CREDENTIALS=shipping_labels.COMMAND_CREDENTIALS),
+    ),
+    ("shipping-quote", "Manage eBay shipping quotes", shipping),
+    ("inventory", "Manage eBay inventory items", inventory),
+    ("listings", "Manage eBay listings (drafts and active)", listings),
+    ("templates", "Manage listing templates", templates),
+    ("policies", "Manage eBay fulfillment policies", policies),
+    (
+        "payment-policies",
+        "Manage eBay payment policies",
+        SimpleNamespace(app=policies.payment_app, COMMAND_CREDENTIALS=payment_policies.COMMAND_CREDENTIALS),
+    ),
+    (
+        "return-policies",
+        "Manage eBay return policies",
+        SimpleNamespace(app=policies.return_app, COMMAND_CREDENTIALS=return_policies.COMMAND_CREDENTIALS),
+    ),
+    ("images", "Manage eBay images", images),
+    ("locations", "Manage eBay merchant locations", locations),
+    ("messages", "Manage eBay seller messages", messages),
+    ("store", "Manage eBay store", store),
+)
+
 
 @seller_app.command("list")
+@command
 def seller_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of groups to return"),
@@ -63,19 +93,8 @@ def seller_list(
     from cli_tools_shared.filters import apply_filters, apply_limit, apply_properties_filter
 
     groups = [
-        {"name": "orders", "description": "Manage eBay seller orders"},
-        {"name": "shipping-labels", "description": "Manage eBay shipping labels"},
-        {"name": "shipping-quote", "description": "Manage eBay shipping quotes"},
-        {"name": "inventory", "description": "Manage eBay inventory items"},
-        {"name": "listings", "description": "Manage eBay listings"},
-        {"name": "templates", "description": "Manage listing templates"},
-        {"name": "policies", "description": "Manage fulfillment policies"},
-        {"name": "payment-policies", "description": "Manage payment policies"},
-        {"name": "return-policies", "description": "Manage return policies"},
-        {"name": "images", "description": "Manage eBay images"},
-        {"name": "locations", "description": "Manage merchant locations"},
-        {"name": "messages", "description": "Manage seller messages"},
-        {"name": "store", "description": "Manage eBay store"},
+        {"name": name, "description": description}
+        for name, description, _module in SELLER_GROUPS
     ]
     groups = apply_filters(groups, filters)
     groups = apply_limit(groups, limit)
@@ -87,6 +106,7 @@ def seller_list(
 
 
 @seller_app.command("get")
+@command
 def seller_get(
     name: str = typer.Argument(..., help="Seller command group name"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -94,21 +114,7 @@ def seller_get(
     """Get details for a seller command group."""
     from cli_tools_shared.output import print_error, print_json, print_table
 
-    groups = {
-        "orders": "Manage eBay seller orders",
-        "shipping-labels": "Manage eBay shipping labels",
-        "shipping-quote": "Manage eBay shipping quotes",
-        "inventory": "Manage eBay inventory items",
-        "listings": "Manage eBay listings",
-        "templates": "Manage listing templates",
-        "policies": "Manage fulfillment policies",
-        "payment-policies": "Manage payment policies",
-        "return-policies": "Manage return policies",
-        "images": "Manage eBay images",
-        "locations": "Manage merchant locations",
-        "messages": "Manage seller messages",
-        "store": "Manage eBay store",
-    }
+    groups = {group_name: description for group_name, description, _module in SELLER_GROUPS}
     if name not in groups:
         print_error(f"Unknown seller command group: {name}")
         raise typer.Exit(1)
@@ -119,43 +125,8 @@ def seller_get(
         print_json(data)
 
 
-register_commands(seller_app, get_config, orders, name="orders", help="Manage eBay seller orders")
-register_commands(
-    seller_app,
-    get_config,
-    SimpleNamespace(app=orders.shipping_label_app, COMMAND_CREDENTIALS=shipping_labels.COMMAND_CREDENTIALS),
-    name="shipping-labels",
-    help="Manage eBay shipping labels",
-)
-register_commands(
-    seller_app,
-    get_config,
-    shipping,
-    name="shipping-quote",
-    help="Manage eBay shipping quotes",
-)
-register_commands(seller_app, get_config, inventory, name="inventory", help="Manage eBay inventory items")
-register_commands(seller_app, get_config, listings, name="listings", help="Manage eBay listings (drafts and active)")
-register_commands(seller_app, get_config, templates, name="templates", help="Manage listing templates")
-register_commands(seller_app, get_config, policies, name="policies", help="Manage eBay fulfillment policies")
-register_commands(
-    seller_app,
-    get_config,
-    SimpleNamespace(app=policies.payment_app, COMMAND_CREDENTIALS=payment_policies.COMMAND_CREDENTIALS),
-    name="payment-policies",
-    help="Manage eBay payment policies",
-)
-register_commands(
-    seller_app,
-    get_config,
-    SimpleNamespace(app=policies.return_app, COMMAND_CREDENTIALS=return_policies.COMMAND_CREDENTIALS),
-    name="return-policies",
-    help="Manage eBay return policies",
-)
-register_commands(seller_app, get_config, images, name="images", help="Manage eBay images")
-register_commands(seller_app, get_config, locations, name="locations", help="Manage eBay merchant locations")
-register_commands(seller_app, get_config, messages, name="messages", help="Manage eBay seller messages")
-register_commands(seller_app, get_config, store, name="store", help="Manage eBay store")
+for group_name, description, module in SELLER_GROUPS:
+    register_commands(seller_app, get_config, module, name=group_name, help=description)
 register_commands(
     app,
     get_config,
@@ -168,6 +139,7 @@ app.add_typer(create_cache_app(get_config), name="cache")
 
 
 @app.command()
+@command
 def whoami(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Profile name"),

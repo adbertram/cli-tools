@@ -216,6 +216,29 @@ class TagAnalytics(ButtondownModel):
     open_rate: float
 
 
+class EmailAnalytics(ButtondownModel):
+    recipients: int
+    deliveries: int
+    opens: int
+    clicks: int
+    temporary_failures: int
+    permanent_failures: int
+    unsubscriptions: int
+    complaints: int
+    survey_responses: int
+    webmentions: int
+    page_views_lifetime: int
+    page_views_30: int
+    page_views_7: int
+    subscriptions: int
+    paid_subscriptions: int
+    replies: int
+    comments: int
+    social_mentions: int
+    temporary_failure_breakdown: List[Dict[str, Any]] = Field(default_factory=list)
+    permanent_failure_breakdown: List[Dict[str, Any]] = Field(default_factory=list)
+
+
 class ActionResult(ButtondownModel):
     ok: bool
     action: str
@@ -308,6 +331,10 @@ def create_tag(data: dict) -> Tag:
 
 def create_tag_analytics(data: dict) -> TagAnalytics:
     return TagAnalytics(**data)
+
+
+def create_email_analytics(data: dict) -> EmailAnalytics:
+    return EmailAnalytics(**data)
 
 
 def create_external_feed(data: dict) -> ExternalFeed:

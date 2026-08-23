@@ -1,6 +1,10 @@
 # Google Lighthouse CLI
 
-A standardized wrapper around Google's `lighthouse` CLI for running page audits and storing normalized audit summaries.
+## DESCRIPTION
+
+The `google-lighthouse` CLI wraps lighthouse with standardized cli-tools behavior.
+
+Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows.
 
 ## Prerequisites
 

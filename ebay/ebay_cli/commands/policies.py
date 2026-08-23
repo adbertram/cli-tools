@@ -3,10 +3,11 @@
 Uses the eBay Account API to manage fulfillment policies (shipping/handling settings).
 API Docs: https://developer.ebay.com/api-docs/sell/account/resources/fulfillment_policy/methods/getFulfillmentPolicies
 """
+from cli_tools_shared.output import command
 COMMAND_CREDENTIALS = {
     "list": ["oauth_authorization_code"],
     "get": ["oauth_authorization_code"],
-    "create": ["oauth_authorization_code"],
+    "create": ["no_auth"],
     "update": ["oauth_authorization_code"],
     "delete": ["oauth_authorization_code"],
 }
@@ -21,8 +22,15 @@ from ..properties import validate_and_filter_properties, PropertyValidationError
 
 app = typer.Typer(help="Manage eBay fulfillment policies")
 
+US_SPECIAL_EXCLUDED_LOCATIONS = (
+    "Alaska/Hawaii",
+    "US Protectorates",
+    "APO/FPO",
+)
+
 
 @app.command("list")
+@command
 def policies_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of policies to return"),
@@ -117,6 +125,7 @@ def policies_list(
 
 
 @app.command("get")
+@command
 def policies_get(
     policy_id: str = typer.Argument(..., help="The fulfillment policy ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display summary as table"),
@@ -177,6 +186,7 @@ def policies_get(
 
 
 @app.command("create")
+@command
 def policies_create(
     name: str = typer.Option(..., "--name", "-n", help="Policy name (must be unique)"),
     handling_days: int = typer.Option(..., "--handling-days", "-d", help="Handling time in business days (0 = same day)"),
@@ -212,6 +222,13 @@ def policies_create(
     description: Optional[str] = typer.Option(None, "--description", help="Policy description"),
     local_pickup: bool = typer.Option(False, "--local-pickup", help="Enable local pickup"),
     global_shipping: bool = typer.Option(False, "--global-shipping", help="Enable Global Shipping Program (UK only)"),
+    exclude_us_special_locations: bool = typer.Option(
+        False,
+        "--exclude-us-special-locations",
+        help="Exclude Alaska, Hawaii, US territories, and military addresses",
+    ),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview the request without creation"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Create the policy"),
     table: bool = typer.Option(False, "--table", "-t", help="Display result as table"),
 ):
     """
@@ -239,7 +256,15 @@ def policies_create(
             print_error("--shipping-cost is required when cost-type is FLAT_RATE (unless --free-shipping is set).")
             raise typer.Exit(1)
 
-        client = get_client()
+        if exclude_us_special_locations and marketplace != "EBAY_US":
+            print_error("--exclude-us-special-locations requires marketplace EBAY_US.")
+            raise typer.Exit(1)
+        if exclude_us_special_locations and category == "MOTORS_VEHICLES":
+            print_error("--exclude-us-special-locations does not support the MOTORS_VEHICLES category.")
+            raise typer.Exit(1)
+        if not dry_run and not yes:
+            print_error("Refusing to create an eBay fulfillment policy without --yes or --dry-run.")
+            raise typer.Exit(1)
 
         # Build shipping service entry
         shipping_service = {
@@ -247,7 +272,7 @@ def policies_create(
             "shippingCarrierCode": carrier,
             "shippingServiceCode": service,
             "freeShipping": free_shipping,
-            "buyerResponsibleForShipping": False,
+            "buyerResponsibleForShipping": not free_shipping,
             "buyerResponsibleForPickup": False,
         }
 
@@ -295,7 +320,19 @@ def policies_create(
         if description:
             policy_data["description"] = description
 
-        result = client.create_fulfillment_policy(policy_data)
+        if exclude_us_special_locations:
+            policy_data["shipToLocations"] = {
+                "regionExcluded": [
+                    {"regionName": region_name}
+                    for region_name in US_SPECIAL_EXCLUDED_LOCATIONS
+                ]
+            }
+
+        if dry_run:
+            print_json({"dry_run": True, "request": policy_data})
+            return
+
+        result = get_client().create_fulfillment_policy(policy_data)
 
         print_success(f"Fulfillment policy created: {result.get('fulfillmentPolicyId')}")
 
@@ -320,6 +357,7 @@ def policies_create(
 
 
 @app.command("update")
+@command
 def policies_update(
     policy_id: str = typer.Argument(..., help="The fulfillment policy ID to update"),
     name: Optional[str] = typer.Option(None, "--name", "-n", help="New policy name"),
@@ -407,6 +445,7 @@ def policies_update(
 
 
 @app.command("delete")
+@command
 def policies_delete(
     policy_id: str = typer.Argument(..., help="The fulfillment policy ID to delete"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
@@ -448,6 +487,7 @@ payment_app = typer.Typer(help="Manage eBay payment policies")
 
 
 @payment_app.command("list")
+@command
 def payment_policies_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of policies to return"),
@@ -537,6 +577,7 @@ def payment_policies_list(
 
 
 @payment_app.command("get")
+@command
 def payment_policies_get(
     policy_id: str = typer.Argument(..., help="The payment policy ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display summary as table"),
@@ -584,6 +625,7 @@ return_app = typer.Typer(help="Manage eBay return policies")
 
 
 @return_app.command("list")
+@command
 def return_policies_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of policies to return"),
@@ -675,6 +717,7 @@ def return_policies_list(
 
 
 @return_app.command("get")
+@command
 def return_policies_get(
     policy_id: str = typer.Argument(..., help="The return policy ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display summary as table"),

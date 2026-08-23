@@ -25,6 +25,8 @@ elevenlabs <command-group> <action> [arguments] [options]
 | Get voice settings | `elevenlabs voices settings <voice-id>` |
 | List TTS models | `elevenlabs models list --filter "can_do_text_to_speech:eq:true" --table` |
 | Generate speech | `elevenlabs speech create <voice-id> "Text" --output output.mp3` |
+| Get generated history item | `elevenlabs history get <history-item-id>` |
+| Download generated history audio | `elevenlabs history download <history-item-id> --output recovered.mp3` |
 | List pronunciation dictionaries | `elevenlabs pronunciation-dictionaries list --table` |
 | Create pronunciation dictionary rules | `elevenlabs pronunciation-dictionaries create-from-rules --name "Course Terms" --alias-rule "Sysadmins=sys admins"` |
 | Generate speech with dictionary | `elevenlabs speech create <voice-id> "Text" --output output.mp3 --pronunciation-dictionary DICT_ID:VERSION_ID` |
@@ -41,6 +43,7 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
 - **voices** -- List voices, get voice metadata, and inspect voice settings.
 - **models** -- List and inspect ElevenLabs models.
 - **speech** -- Generate text-to-speech audio files, including pronunciation dictionary locators with `--pronunciation-dictionary DICT_ID:VERSION_ID`.
+- **history** -- List/filter generated items, get one exact history item, and atomically download validated audio by history item ID. Download success includes SHA-256 and bounded probe/full-decode evidence; validation failure preserves the prior destination. It does not support request-ID lookup or no-charge inference.
 - **pronunciation-dictionaries** -- List, inspect, create from rules or PLS files, update metadata, set/add/remove rules, and download versioned PLS files.
 - **user** -- Inspect subscription and quota state.
 - **auth** -- Manage API-key authentication and profiles.

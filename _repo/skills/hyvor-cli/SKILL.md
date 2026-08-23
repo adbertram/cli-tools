@@ -1,6 +1,10 @@
 ---
-name: "hyvor-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute hyvor operations using the `hyvor` CLI tool. CLI interface for Hyvor Talk API -- manage blog comments, moderate spam, reply to comments, and handle profiles. Triggers: hyvor, hyvor cli, hyvor comments, hyvor talk, list hyvor comments, reply to comment, moderate comments, hyvor spam, pending comments, publish comment"
+name: hyvor-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute hyvor operations using the `hyvor` CLI tool.
+  CLI interface for Hyvor Talk API -- manage blog comments, moderate spam, reply to comments, and handle profiles.
+  Triggers: hyvor, hyvor cli, hyvor comments, hyvor talk, list hyvor comments, reply to comment, moderate comments, hyvor spam, pending comments, publish comment
 ---
 
 <objective>
@@ -27,7 +31,7 @@ hyvor <command-group> <action> [arguments] [options]
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `hyvor` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `hyvor` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 

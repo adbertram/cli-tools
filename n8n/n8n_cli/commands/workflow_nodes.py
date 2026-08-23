@@ -31,6 +31,12 @@ def _writable_payload(workflow: dict) -> dict:
     return payload
 
 
+def _ensure_workflow_mutable(workflow: dict, workflow_id: str):
+    if workflow.get("isArchived"):
+        print_error(f"Workflow '{workflow_id}' is archived; node changes cannot be saved.")
+        raise typer.Exit(1)
+
+
 def _find_node_by_name(nodes: list, name: str) -> Optional[dict]:
     """Find a node in a workflow's node list by display name."""
     for node in nodes:
@@ -126,7 +132,7 @@ def node_add(
         n8n workflows node add WF_ID slack -r message -o post --after "Manual Trigger"
         n8n workflows node add WF_ID slack --between "HTTP Request,Set Fields"
         n8n workflows node add WF_ID airtable --name "Read Records" --params '{"baseId":"app123"}'
-        n8n workflows node add WF_ID emailReadImap --credential "Susan IMAP - DreamHost"
+        n8n workflows node add WF_ID emailReadImap --credential "Example IMAP"
     """
     try:
         api = get_n8n_api_client()
@@ -136,6 +142,7 @@ def node_add(
         if not workflow:
             print_error(f"Workflow '{workflow_id}' not found")
             raise typer.Exit(1)
+        _ensure_workflow_mutable(workflow, workflow_id)
 
         nodes = workflow.get("nodes", [])
         connections = workflow.get("connections", {})
@@ -377,7 +384,7 @@ def node_update(
     Merges provided parameters into the node's existing parameters (deep merge).
 
     Examples:
-        n8n workflows node update WF_ID "Susan" --params '{"options": {"systemMessage": "new prompt"}}'
+        n8n workflows node update WF_ID "Assistant" --params '{"options": {"systemMessage": "new prompt"}}'
         n8n workflows node update WF_ID "My Node" --name "Renamed Node"
         n8n workflows node update WF_ID "My Node" --credential "New API Key"
     """
@@ -389,6 +396,7 @@ def node_update(
         if not workflow:
             print_error(f"Workflow '{workflow_id}' not found")
             raise typer.Exit(1)
+        _ensure_workflow_mutable(workflow, workflow_id)
 
         nodes = workflow.get("nodes", [])
 
@@ -519,6 +527,7 @@ def node_connect(
         if not workflow:
             print_error(f"Workflow '{workflow_id}' not found")
             raise typer.Exit(1)
+        _ensure_workflow_mutable(workflow, workflow_id)
 
         nodes = workflow.get("nodes", [])
         connections = workflow.get("connections", {})

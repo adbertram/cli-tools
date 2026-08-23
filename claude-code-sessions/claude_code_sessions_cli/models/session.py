@@ -11,10 +11,14 @@ class SessionSummary(CLIModel):
     """Summary view of a session for list commands."""
 
     id: str
+    custom_title: Optional[str] = None
     project: str
     project_path: str = ""
     created_at: str
     last_activity: str
+    # Model from the most recent assistant turn in the session (None if the
+    # session has no assistant turns with a recorded model).
+    model: Optional[str] = None
     message_count: int
     tool_call_count: int
     has_errors: bool = False
@@ -56,6 +60,9 @@ class Session(CLIModel):
     created_at: str
     last_activity: str
     claude_code_version: Optional[str] = None
+    # Model from the most recent assistant turn in the session's main thread
+    # (excludes subagent/sidechain turns, which track their own model on
+    # Subagent.model).
     model: Optional[str] = None
     git_branch: Optional[str] = None
     cwd: Optional[str] = None

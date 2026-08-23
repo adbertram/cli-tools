@@ -11,13 +11,14 @@ from datetime import datetime, timedelta
 from typing import Optional, List
 from googleapiclient.errors import HttpError
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_table, handle_error, print_success, print_error
+from cli_tools_shared.output import command, print_json, print_table, handle_error, print_success, print_error
 from cli_tools_shared.filters import apply_filters as _client_side_filter_reference
 from ..filter_translator import translate_calendar_filters
 
 app = typer.Typer(help="Access Google Calendar events")
 
 @app.command("list")
+@command
 def calendar_list(
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of events to list"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -98,6 +99,7 @@ def calendar_list(
         raise typer.Exit(handle_error(e))
 
 @app.command("get")
+@command
 def calendar_get(
     event_id: str = typer.Argument(..., help="Event ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -132,6 +134,7 @@ def calendar_get(
         raise typer.Exit(handle_error(e))
 
 @app.command("search")
+@command
 def calendar_search(
     query: str = typer.Argument(..., help="Search query"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of results"),
@@ -199,6 +202,7 @@ def calendar_search(
         raise typer.Exit(handle_error(e))
 
 @app.command("today")
+@command
 def calendar_today(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),

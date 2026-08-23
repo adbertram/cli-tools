@@ -13,9 +13,6 @@ from pydantic import Field, field_validator, model_validator
 from .base import EbayBaseModel
 from .image import Image
 
-# Sentinel price for pseudo-draft listings (appear in eBay UI as editable published listings)
-PSEUDO_DRAFT_PRICE = "99999.00"
-
 
 class ListingStatus(str, Enum):
     """Listing status values."""
@@ -179,11 +176,6 @@ class Listing(EbayBaseModel):
     def is_sold(self) -> bool:
         """Check if listing is sold."""
         return self.status == ListingStatus.SOLD
-
-    @property
-    def is_pseudo_draft(self) -> bool:
-        """Check if listing is a pseudo-draft (active but at sentinel price $99,999)."""
-        return self.is_active and self.price == PSEUDO_DRAFT_PRICE
 
     def to_dict(self) -> dict:
         """Convert model to dictionary for JSON output.

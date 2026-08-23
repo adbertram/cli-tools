@@ -116,7 +116,7 @@ def forms_create(
     Create or update the default signup form for an audience/list.
 
     Examples:
-        mailchimp forms create LIST_ID --header-text "BrickBuddy beta" \\
+        mailchimp forms create LIST_ID --header-text "Example beta" \\
             --signup-message "Join the beta tester list." \\
             --thank-you-title "You are on the list"
     """

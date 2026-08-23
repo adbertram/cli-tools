@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [
-    {name = "Adam Bertram", email = "adbertram@gmail.com"}
+    {name = "CLI Tools contributors"}
 ]
 keywords = ["notion", "database", "api", "cli", "automation"]
 classifiers = [
@@ -45,8 +45,8 @@ dev = [
 notion = "notion_cli.main:app"
 
 [project.urls]
-"Homepage" = "https://github.com/adbertram/cli-tools"
-"Bug Tracker" = "https://github.com/adbertram/cli-tools/issues"
+"Homepage" = "https://github.com/your-org/cli-tools"
+"Bug Tracker" = "https://github.com/your-org/cli-tools/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -64,10 +64,11 @@ disallow_untyped_defs = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --cov=notion_cli --cov-report=term-missing"
+addopts = "-v"
 
 [tool.uv.sources]
 cli-tools-shared = { path = "../_repo/cli-tools-shared", editable = true }

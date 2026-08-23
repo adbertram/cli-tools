@@ -6,6 +6,7 @@ API Docs: https://developer.ebay.com/api-docs/commerce/taxonomy/resources/method
 The Taxonomy API uses authorization code grant (user-level access).
 The default category tree ID for EBAY_US is 0.
 """
+from cli_tools_shared.output import command
 COMMAND_CREDENTIALS = {
     "conditions": ["oauth_authorization_code"],
     "get": ["oauth_authorization_code"],
@@ -186,6 +187,7 @@ def _flatten_subtree(node: dict, parent_path: str = "") -> list:
 
 
 @app.command("list")
+@command
 def categories_list(
     query: str = typer.Argument(..., help="Search query (e.g., 'trading card storage', 'lego parts')"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -230,6 +232,7 @@ def categories_list(
 
 
 @app.command("search", hidden=True)
+@command
 def categories_search(
     query: str = typer.Argument(..., help="Search query (e.g., 'trading card storage', 'lego parts')"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -346,6 +349,7 @@ def categories_search(
 
 
 @app.command("get")
+@command
 def categories_get(
     category_id: str = typer.Argument(..., help="Category ID to get details for"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -492,6 +496,7 @@ def categories_get(
 
 
 @app.command("tree")
+@command
 def categories_tree(
     category_id: str = typer.Argument(
         None,
@@ -617,6 +622,7 @@ def categories_tree(
 
 
 @app.command("conditions")
+@command
 def categories_conditions(
     category_id: str = typer.Argument(..., help="Category ID to get valid conditions for"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),

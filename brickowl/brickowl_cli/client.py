@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
-from cli_tools_shared.data_cache import cached
+from cli_tools_shared.data_cache import cached, invalidate
 
 from .config import get_config
 from .models import (
@@ -390,17 +390,33 @@ class BrickowlClient:
 
     def set_order_status(self, order_id: str, status_id: int) -> Dict:
         """Set order status (1-7)."""
-        return self._post("/order/set_status", {"order_id": order_id, "status_id": status_id})
+        result = self._post("/order/set_status", {"order_id": order_id, "status_id": status_id})
+        # Invalidate cached reads so the next `get_order`/`list_orders` reflects
+        # this mutation instead of serving a stale on-disk snapshot for up to
+        # CACHE_TTL seconds (see cli_tools_shared.data_cache.invalidate).
+        invalidate(self, "get_order", order_id)
+        invalidate(self, "list_orders")
+        return result
 
     def mark_shipped(self, order_id: str, tracking_id: Optional[str] = None) -> Dict:
         """Mark order as shipped with optional tracking."""
         if tracking_id:
             self._post("/order/tracking", {"order_id": order_id, "tracking_id": tracking_id})
-        return self._post("/order/set_status", {"order_id": order_id, "status_id": 5})
+        result = self._post("/order/set_status", {"order_id": order_id, "status_id": 5})
+        # Same staleness hazard as set_order_status — invalidate the cached
+        # get_order/list_orders snapshots for this order.
+        invalidate(self, "get_order", order_id)
+        invalidate(self, "list_orders")
+        return result
 
     def add_tracking(self, order_id: str, tracking_id: str) -> Dict:
         """Add tracking info to an order."""
-        return self._post("/order/tracking", {"order_id": order_id, "tracking_id": tracking_id})
+        result = self._post("/order/tracking", {"order_id": order_id, "tracking_id": tracking_id})
+        # Same staleness hazard as set_order_status — invalidate the cached
+        # get_order/list_orders snapshots for this order.
+        invalidate(self, "get_order", order_id)
+        invalidate(self, "list_orders")
+        return result
 
     def update_note(self, order_id: str, note: str) -> Dict:
         """Set seller note on an order."""

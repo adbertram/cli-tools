@@ -30,12 +30,15 @@ import typer
 from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 from ..client import get_client
 from ..output import print_json, print_output, print_error, print_success, handle_api_error, format_response
+from cli_tools_shared.output import command
+from pypodio2.transport import TransportException
 from ..filter_map import FilterMap, apply_properties
 
 app = typer.Typer(help="Manage Podio files")
 
 
 @app.command("upload")
+@command
 def upload_file(
     file_path: Path = typer.Argument(..., help="Path to file to upload"),
     filename: Optional[str] = typer.Option(
@@ -72,12 +75,13 @@ def upload_file(
             result = client.Files.create(filename=upload_filename, filedata=f)
         formatted = format_response(result)
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("attach")
+@command
 def attach_file(
     file_id: int = typer.Argument(..., help="File ID to attach"),
     ref_type: str = typer.Argument(..., help="Reference type: item, task, comment, status, or space"),
@@ -105,12 +109,13 @@ def attach_file(
         result = client.Files.attach(file_id=file_id, ref_type=ref_type, ref_id=ref_id)
         formatted = format_response(result) if result else {"attached": True}
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("list")
+@command
 def list_files(
     ref_type: str = typer.Argument(..., help="Reference type: item, task, comment, status, or space"),
     ref_id: int = typer.Argument(..., help="Reference ID to list files from"),
@@ -155,12 +160,13 @@ def list_files(
             formatted = apply_properties(formatted, properties)
 
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("get")
+@command
 def get_file(
     file_id: int = typer.Argument(..., help="File ID to retrieve"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
@@ -177,12 +183,13 @@ def get_file(
         result = client.Files.find(file_id=file_id)
         formatted = format_response(result)
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("download")
+@command
 def download_file(
     file_id: int = typer.Argument(..., help="File ID to download"),
     output: Optional[Path] = typer.Option(
@@ -222,12 +229,13 @@ def download_file(
 
         print_success(f"File downloaded to: {output_path}")
         print_output({"file_id": file_id, "filename": str(output_path), "size": output_path.stat().st_size}, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("copy")
+@command
 def copy_file(
     file_id: int = typer.Argument(..., help="File ID to copy"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
@@ -247,6 +255,6 @@ def copy_file(
         formatted = format_response(result)
         print_success(f"File {file_id} copied successfully")
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)

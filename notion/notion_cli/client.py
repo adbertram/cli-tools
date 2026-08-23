@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 from requests.exceptions import ConnectionError, Timeout, RequestException
 
+from .block_limits import enforce_block_limits
 from .config import get_config
 
 # Retry configuration
@@ -33,6 +34,26 @@ class NotFoundError(ClientError):
     and a data source ID under API 2025-09-03).
     """
     pass
+
+
+class BlockAlreadyArchivedError(ClientError):
+    """Raised when a block edit/delete is rejected because the block is already
+    archived (HTTP 400, "Can't edit block that is archived.").
+
+    Distinct from ClientError so a caller deleting a SET of blocks can treat an
+    already-archived block as already-gone (success for that id) while still
+    failing fast on every other error. This is the cascade case: archiving a
+    parent block auto-archives its descendants, so a parallel batch that targets
+    both a parent and one of its (now trashed) descendants gets this 400 for the
+    descendant even though the delete is effectively complete.
+    """
+    pass
+
+
+# Substring Notion returns in the 400 validation_error message when a block is
+# already archived/in trash. Matched (not the volatile error `code`) so the
+# detection survives Notion API wording-adjacent changes to the code field.
+_ALREADY_ARCHIVED_MESSAGE = "block that is archived"
 
 
 class NotionClient:
@@ -170,6 +191,17 @@ class NotionClient:
                 if not response.ok:
                     error_data = response.json() if response.text else {}
                     error_msg = error_data.get("message", response.text)
+                    # Surface the already-archived 400 as a distinct error so a
+                    # delete-set caller can treat an already-trashed block as
+                    # already-gone instead of aborting the whole operation.
+                    if (
+                        response.status_code == 400
+                        and isinstance(error_msg, str)
+                        and _ALREADY_ARCHIVED_MESSAGE in error_msg.lower()
+                    ):
+                        raise BlockAlreadyArchivedError(
+                            f"API request failed: {response.status_code} - {error_msg}"
+                        )
                     raise ClientError(f"API request failed: {response.status_code} - {error_msg}")
 
                 return response.json()
@@ -196,6 +228,72 @@ class NotionClient:
             Bot user information
         """
         return self._make_request("GET", "/users/me")
+
+    def list_users_all(self, limit: Optional[int] = None) -> List[Dict]:
+        """
+        List workspace users, paginating GET /v1/users completely.
+
+        Notion's users endpoint has no server-side name/email filter and caps
+        page_size at 100, so every caller needs the full cursor walk. Returning
+        only the first page would silently hide users, which is exactly the
+        failure mode mention resolution must never have.
+
+        Args:
+            limit: Optional cap on the number of users returned. ``None``
+                returns EVERY user in the workspace.
+
+        Returns:
+            List of raw Notion user objects
+
+        Raises:
+            ClientError: If the API response is missing results or reports
+                has_more without a next_cursor
+        """
+        if limit is not None and limit <= 0:
+            return []
+
+        users: List[Dict] = []
+        start_cursor: Optional[str] = None
+
+        while True:
+            page_size = 100
+            if limit is not None:
+                page_size = min(limit - len(users), 100)
+
+            params: Dict[str, Any] = {"page_size": page_size}
+            if start_cursor:
+                params["start_cursor"] = start_cursor
+
+            response = self._make_request("GET", "/users", params=params)
+            results = response.get("results")
+            if not isinstance(results, list):
+                raise ClientError("Notion users response is missing a results list")
+
+            users.extend(results)
+
+            if limit is not None and len(users) >= limit:
+                return users[:limit]
+
+            if not response.get("has_more"):
+                return users
+
+            start_cursor = response.get("next_cursor")
+            if not start_cursor:
+                raise ClientError(
+                    "Notion users response reported has_more without a next_cursor"
+                )
+
+    def get_user(self, user_id: str) -> Dict:
+        """
+        Get a single workspace user by ID.
+
+        Args:
+            user_id: The Notion user ID
+
+        Returns:
+            Raw Notion user object
+        """
+        return self._make_request("GET", f"/users/{user_id}")
 
     def _resolve_id(self, database_id: str) -> Dict[str, Any]:
         """
@@ -413,6 +511,104 @@ class NotionClient:
 
         ds_id = self.get_data_source_id(database_id, data_source_id)
         return self._make_request("PATCH", f"/data_sources/{ds_id}", data=data)
+
+    def get_database_container_id(self, database_id: str) -> str:
+        """
+        Resolve a database ID (or data_source ID) to its database container ID.
+
+        Container-level operations (trash, restore) address
+        ``/v1/databases/{id}`` and reject a data_source ID. ``database list``
+        emits data_source IDs, so resolve the parent container here.
+
+        Args:
+            database_id: A database container ID or a data_source ID
+
+        Returns:
+            The database container ID.
+
+        Raises:
+            ClientError: If the data source's parent is not a database.
+            NotFoundError: If the input ID resolves to neither resource.
+        """
+        resolution = self._resolve_id(database_id)
+
+        if resolution["kind"] == "database":
+            return resolution["container"]["id"]
+
+        parent = resolution["data_source"]["parent"]
+        if parent["type"] != "database_id":
+            raise ClientError(
+                f"Data source {database_id} has parent type '{parent['type']}', "
+                "so it has no database container to trash or restore."
+            )
+        return parent["database_id"]
+
+    def set_database_trash(self, database_id: str, in_trash: bool = True) -> Dict:
+        """
+        Move a database container to the trash, or restore it from the trash.
+
+        This targets the database container endpoint
+        (``PATCH /v1/databases/{id}``) with an ``in_trash`` body. It is a
+        different resource from ``update_database``, which edits the schema on
+        ``/v1/data_sources/{id}``. The page endpoints cannot do this either:
+        ``GET /v1/pages/{id}`` rejects a database ID, so ``pages delete``
+        reports "Could not find page with ID".
+
+        Args:
+            database_id: Database container ID or data_source ID
+            in_trash: True to trash the database, False to restore it
+
+        Returns:
+            The updated database container object.
+        """
+        container_id = self.get_database_container_id(database_id)
+        return self._make_request(
+            "PATCH",
+            f"/databases/{container_id}",
+            data={"in_trash": in_trash},
+        )
+
+    def create_database(
+        self,
+        parent_page_id: str,
+        title: str,
+        properties: Dict,
+        inline: bool = False,
+    ) -> Dict:
+        """
+        Create a new database under a parent page (API 2025-09-03+).
+
+        Under API 2025-09-03 a database is created as a container that holds
+        one initial data source. The property schema is supplied via
+        ``initial_data_source.properties`` (NOT at the top level), and the
+        returned container exposes its data source(s) in a ``data_sources``
+        array of ``{"id","name"}`` objects.
+
+        The supplied ``properties`` object must contain exactly one property of
+        type ``title`` (Notion requires it); the caller is responsible for
+        including it.
+
+        Args:
+            parent_page_id: The parent page ID the database is created under.
+            title: The database title (plain text).
+            properties: The data source property schema, in Notion
+              ``initial_data_source.properties`` format (e.g.
+              ``{"Name": {"title": {}}, "Priority": {"select": {...}}}``).
+            inline: When True, create the database inline in the parent page.
+
+        Returns:
+            The created database container object, including the top-level
+            ``id`` (database container ID), a ``data_sources`` array, and
+            ``url``.
+        """
+        data: Dict[str, Any] = {
+            "parent": {"type": "page_id", "page_id": parent_page_id},
+            "title": [{"type": "text", "text": {"content": title}}],
+            "initial_data_source": {"properties": properties},
+            "is_inline": inline,
+        }
+
+        return self._make_request("POST", "/databases", data=data)
 
     def query_database(
         self,
@@ -634,15 +830,13 @@ class NotionClient:
                 for block in blocks_with_children
             }
 
-            # Collect results as they complete
+            # Collect results as they complete. A recursive read is all-or-nothing:
+            # silently replacing a failed subtree with [] makes export/duplicate
+            # report success while omitting content (especially child pages).
             for future in as_completed(future_to_block):
                 block = future_to_block[future]
-                try:
-                    children = future.result()
-                    block_to_children[block["id"]] = children
-                except Exception:
-                    # On error, set empty children (fail gracefully)
-                    block_to_children[block["id"]] = []
+                children = future.result()
+                block_to_children[block["id"]] = children
 
         # Assign children to blocks
         for block in blocks_with_children:
@@ -798,6 +992,35 @@ class NotionClient:
         """
         return self._make_request("DELETE", f"/blocks/{block_id}")
 
+    def delete_block_if_present(self, block_id: str) -> bool:
+        """
+        Delete a block, treating an already-archived block as already-gone.
+
+        Identical to ``delete_block`` except that a Notion 400
+        "Can't edit block that is archived" response is interpreted as success:
+        the block is already in the trash, which is the desired end state. This
+        is the idempotent delete used when removing a SET of blocks whose
+        archiving can cascade (archiving a parent auto-archives its descendants),
+        so a parallel batch that also targets a descendant must not abort on the
+        descendant's already-archived 400.
+
+        Every other error (auth, not-found, transport, any non-archived 400)
+        still raises, preserving fail-fast behavior. Only the specific
+        already-archived case is benign.
+
+        Args:
+            block_id: The block ID to delete.
+
+        Returns:
+            True if this call archived the block; False if it was already
+            archived (already gone).
+        """
+        try:
+            self.delete_block(block_id)
+            return True
+        except BlockAlreadyArchivedError:
+            return False
+
     def update_block(
         self,
         block_id: str,
@@ -816,21 +1039,35 @@ class NotionClient:
         return self._make_request("PATCH", f"/blocks/{block_id}", data=block_data)
 
     def clear_page_content(self, page_id: str) -> Dict:
-        """
-        Delete all block children from a page using the erase_content API flag.
+        """Archive every current top-level child block of a page.
 
-        This is much more efficient than deleting blocks one-by-one as it uses
-        a single API call regardless of the number of blocks.
-
-        Note: This is a destructive action that cannot be reversed via the API.
+        Notion's ``erase_content`` page update can fail when a page contains
+        nested blocks: archiving a parent cascades to its descendants while the
+        server-side erase continues trying to edit those now-archived children.
+        Fetching only top-level children and archiving them sequentially avoids
+        that parent/descendant race. ``delete_block_if_present`` keeps retries
+        idempotent if a prior attempt already archived a returned block.
 
         Args:
-            page_id: The page ID to clear
+            page_id: The page ID to clear.
 
         Returns:
-            Updated page object
+            A summary containing the page ID and top-level block counts.
         """
-        return self.update_page(page_id, erase_content=True)
+        blocks = self.get_block_children_all(page_id, recursive=False)
+        archived = 0
+        already_archived = 0
+        for block in blocks:
+            if self.delete_block_if_present(block["id"]):
+                archived += 1
+            else:
+                already_archived += 1
+
+        return {
+            "page_id": page_id,
+            "blocks_archived": archived,
+            "blocks_already_archived": already_archived,
+        }
 
     def create_page(
         self,
@@ -867,7 +1104,9 @@ class NotionClient:
         }
 
         if children is not None:
-            data["children"] = children
+            # Enforce Notion's per-block size limits so an oversize inline block
+            # cannot fail the create request (same protection as the append path).
+            data["children"] = enforce_block_limits(children)
         if icon is not None:
             data["icon"] = icon
         if cover is not None:
@@ -1146,7 +1385,9 @@ class NotionClient:
         }
 
         if children is not None:
-            data["children"] = children
+            # Enforce Notion's per-block size limits so an oversize inline block
+            # cannot fail the create request (same protection as the append path).
+            data["children"] = enforce_block_limits(children)
         if icon is not None:
             data["icon"] = icon
         if cover is not None:
@@ -1230,11 +1471,19 @@ class NotionClient:
                 page_size=page_size,
                 start_cursor=start_cursor,
             )
-            all_comments.extend(result.get("results", []))
+            results = result.get("results")
+            if not isinstance(results, list):
+                raise ClientError("Notion comments response is missing a results list")
+            all_comments.extend(results)
             if limit is not None and len(all_comments) >= limit:
                 return all_comments[:limit]
             has_more = result.get("has_more", False)
             start_cursor = result.get("next_cursor")
+            if has_more and not start_cursor:
+                raise ClientError(
+                    "Notion comments response has_more=true without next_cursor; "
+                    "refusing to return an incomplete list"
+                )
 
         return all_comments
 
@@ -1319,17 +1568,12 @@ class NotionClient:
         block_texts: Dict[str, str] = {}
         block_contexts: Dict[str, Dict[str, str]] = {}
 
-        # First, fetch page-level comments (comments attached to the page itself)
-        page_size = min(limit, 100) if limit is not None else 100
-        page_result = self.list_comments(block_id=page_id, page_size=page_size)
-        page_comments = page_result.get("results", [])
+        # Fetch every open page-level comment. Do not apply the caller's global
+        # limit to this source: doing so can fill the limit before block traversal
+        # and silently omit inline comments. The global limit is applied only
+        # after all page/block sources have been paginated and merged.
+        page_comments = self.list_comments_all(block_id=page_id)
         all_comments.extend(page_comments)
-
-        if limit is not None and len(all_comments) >= limit:
-            limited_comments = all_comments[:limit]
-            for comment in limited_comments:
-                comment["context"] = ""
-            return limited_comments
 
         # Get all blocks on the page (recursive to find inline comments on nested blocks)
         blocks_tree = self.get_block_children_all(
@@ -1374,13 +1618,14 @@ class NotionClient:
         # Fetch comments for all blocks in parallel
 
         def fetch_block_comments(block: Dict) -> Tuple[List[Dict], str]:
-            """Fetch comments for a single block."""
+            """Fetch every open comment for a single block."""
             block_id = block.get("id", "")
-
-            # Get comments for this block
-            result = self.list_comments(block_id=block_id)
-            comments = result.get("results", [])
-
+            if not block_id:
+                raise ClientError(
+                    "Notion block response is missing an id; refusing to return "
+                    "an incomplete comment list"
+                )
+            comments = self.list_comments_all(block_id=block_id)
             return (comments, block_id)
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -1390,14 +1635,26 @@ class NotionClient:
                 comments, block_id = future.result()
                 all_comments.extend(comments)
 
-        # Deduplicate comments by ID
+        # Deduplicate comments by ID. Missing IDs make completeness impossible to
+        # prove, so fail instead of collapsing malformed records together.
         seen_ids: set = set()
         unique_comments: List[Dict] = []
         for comment in all_comments:
             cid = comment.get("id", "")
+            if not cid:
+                raise ClientError(
+                    "Notion comment response is missing an id; refusing to return "
+                    "an incomplete list"
+                )
             if cid not in seen_ids:
                 seen_ids.add(cid)
                 unique_comments.append(comment)
+
+        # Parallel block lookups complete in arbitrary order. Sort before applying
+        # the global limit so bounded output is deterministic.
+        unique_comments.sort(
+            key=lambda comment: (comment.get("created_time", ""), comment.get("id", ""))
+        )
 
         # Add context to each comment
         for comment in unique_comments:
@@ -1705,60 +1962,11 @@ class NotionClient:
         Filters out blocks that cannot be created (child_page, etc.)."""
         return [b for b in (self._clean_block_for_creation(b) for b in blocks) if b is not None]
 
-    def _prepare_blocks_for_upload(
-        self,
-        blocks: List[Dict],
-        max_depth: int = 2,
-        _current_depth: int = 1,
-    ) -> Tuple[List[Dict], List[Tuple[int, List[Dict]]]]:
-        """
-        Split blocks into uploadable chunks respecting Notion's nesting limit.
-
-        Notion only allows 2 levels of nesting per append_block_children call.
-        This strips children beyond max_depth and returns them separately.
-
-        Args:
-            blocks: List of cleaned blocks to prepare
-            max_depth: Maximum nesting depth allowed (default 2)
-            _current_depth: Internal tracker for recursion depth
-
-        Returns:
-            Tuple of (blocks_for_upload, deferred_children)
-            where deferred_children is list of (block_index, children) pairs
-        """
-        deferred: List[Tuple[int, List[Dict]]] = []
-
-        for i, block in enumerate(blocks):
-            if "children" not in block:
-                continue
-
-            if _current_depth >= max_depth:
-                # Strip children at this level — they need a separate upload
-                deferred.append((i, block.pop("children")))
-            else:
-                # Recurse into children to check deeper levels
-                child_deferred = []
-                for ci, child in enumerate(block["children"]):
-                    if "children" in child:
-                        if _current_depth + 1 >= max_depth:
-                            child_deferred.append((ci, child.pop("children")))
-                        else:
-                            sub_blocks = [child]
-                            _, sub_deferred = self._prepare_blocks_for_upload(
-                                sub_blocks, max_depth, _current_depth + 1
-                            )
-                            # sub_deferred indices are relative to sub_blocks
-                            for si, sc in sub_deferred:
-                                child_deferred.append((ci, sc))
-                # Store child deferred items tagged with parent index
-                for ci, children in child_deferred:
-                    deferred.append((i, [(ci, children)]))
-
-        return (blocks, deferred)
-
     # Block types that REQUIRE direct children at creation time per the Notion API.
-    # column_list needs >=2 columns; column needs >=1 child block; table needs table_row children.
-    _CHILD_REQUIRED_TYPES = frozenset(["column_list", "column", "table"])
+    # column_list needs >=2 columns; column needs >=1 child block; table needs
+    # table_row children. Original synced_block content is not updatable later,
+    # so its direct children must be sent with the synced_block creation payload.
+    _CHILD_REQUIRED_TYPES = frozenset(["column_list", "column", "table", "synced_block"])
 
     def _upload_blocks_with_nesting(
         self,
@@ -1777,9 +1985,12 @@ class NotionClient:
         prior 2-level approach lost the grandchild→parent linkage when stripping
         deeper subtrees, re-attaching grandchildren to the wrong block).
 
-        Block types that require direct children at creation (column_list, column,
-        table) keep their direct children inline; only their grandchildren are
-        recursed (we look up the created child IDs via a follow-up children fetch).
+        Block types that require direct children at creation (column_list,
+        column, table, synced_block) keep their required descendant chain
+        inline — a column inside a column_list must itself carry its children,
+        since Notion rejects childless columns. Only children of descendants
+        that can be created childless are recursed (we look up the created
+        block IDs via follow-up children fetches along the index path).
 
         Args:
             parent_id: Page or block ID to append children under
@@ -1796,28 +2007,35 @@ class NotionClient:
         if not blocks:
             return (0, [])
 
-        blocks = copy.deepcopy(blocks)
+        # Enforce Notion's per-block size limits once, at the top of the upload
+        # tree. enforce_block_limits returns a new structure (no input mutation)
+        # whose nested children are already normalized, so deeper recursion does
+        # not need to re-run it. This guarantees no rich_text text.content > 2000
+        # chars and no rich_text array > 100 elements ever reaches the network,
+        # which is what makes the clear-then-set flow non-destructive: an oversize
+        # block is reshaped here, before any page clear, instead of failing the
+        # PATCH after the page has been emptied.
+        if _depth == 1:
+            blocks = enforce_block_limits(blocks)
+        else:
+            blocks = copy.deepcopy(blocks)
 
         # For each block, decide what to send up now and what to recurse later.
         # mode is one of:
         #   ("simple", saved_children_list)            -- normal block, children stripped before send
-        #   ("inline", [(child_index, grandchildren)]) -- child-required type, direct children
-        #                                                 sent inline, grandchildren recursed
+        #   ("inline", [(index_path, descendants)])    -- child-required type, required
+        #                                                 descendants sent inline, deeper
+        #                                                 children recursed
         upload_payloads: List[Dict] = []
         deferred: List[Tuple[str, object]] = []
 
         for block in blocks:
             block_type = block.get("type", "")
             if block_type in self._CHILD_REQUIRED_TYPES:
-                # Keep direct children in the payload but pop their grandchildren
-                # so we can attach them after the API call returns.
-                grandchildren_by_child_idx: List[Tuple[int, List[Dict]]] = []
-                for ci, child in enumerate(self._get_children(block)):
-                    grandkids = self._pop_children(child)
-                    if grandkids:
-                        grandchildren_by_child_idx.append((ci, grandkids))
+                # Keep the required descendant chain in the payload but pop the
+                # deeper children so we can attach them after the API call returns.
                 upload_payloads.append(block)
-                deferred.append(("inline", grandchildren_by_child_idx))
+                deferred.append(("inline", self._pop_optional_descendants(block)))
             else:
                 kids = self._pop_children(block)
                 upload_payloads.append(block)
@@ -1847,16 +2065,27 @@ class NotionClient:
                     _depth=_depth + 1,
                 )
                 total_created += sub_count
-            else:  # inline (column_list / column / table)
-                # Direct children went up with the parent; we need their server IDs
-                # to attach grandchildren. Fetch them and index by position.
-                immediate = self._fetch_block_children_flat(created_id)
-                for child_index, grandkids in payload:
-                    if child_index >= len(immediate):
-                        continue
+            else:  # inline (column_list / column / table / synced_block)
+                # The required descendant chain went up with the parent; resolve
+                # each index path to its server-side block ID by fetching created
+                # children level by level (cached per parent within this block).
+                children_cache: Dict[str, List[Dict]] = {}
+                for index_path, descendants in payload:
+                    target_id = created_id
+                    for idx in index_path:
+                        if target_id not in children_cache:
+                            children_cache[target_id] = self._fetch_block_children_flat(target_id)
+                        siblings = children_cache[target_id]
+                        if idx >= len(siblings):
+                            raise ClientError(
+                                f"Created block {created_id} returned {len(siblings)} children "
+                                f"at path {index_path}; expected index {idx}. "
+                                "Nested content could not be re-attached."
+                            )
+                        target_id = siblings[idx]["id"]
                     sub_count, _sub_ids = self._upload_blocks_with_nesting(
-                        immediate[child_index]["id"],
-                        grandkids,
+                        target_id,
+                        descendants,
                         progress_callback=progress_callback,
                         _depth=_depth + 1,
                     )
@@ -1864,28 +2093,36 @@ class NotionClient:
 
         return (total_created, all_ids)
 
-    @staticmethod
-    def _get_block_children_key(block: Dict) -> Optional[str]:
+    def _pop_optional_descendants(self, block: Dict) -> List[Tuple[List[int], List[Dict]]]:
         """
-        Find where children are stored in a block.
+        Pop children from a child-required block's optional descendants.
 
-        In API 2025-09-03+, children are inside the type-specific object
-        (e.g., block["heading_2"]["children"]). In older formats, they may
-        be at the block level (block["children"]).
+        Child-required blocks (column_list, column, table, synced_block) must be
+        created with their direct children inline. When a direct child is itself
+        child-required — a column inside a column_list — its own children must
+        also stay inline: popping them would send `column: {}` and Notion rejects
+        the payload with "column.children should be defined". This walks the
+        required chain, keeps required children in place, and pops children only
+        from descendants that can be created childless.
 
-        Returns the key path as a string: "children" or the block type name
-        if children are inside the type object. Returns None if no children.
+        Args:
+            block: A child-required block (modified in place)
+
+        Returns:
+            List of (index_path, popped_children) pairs, where index_path holds
+            child indexes from `block` down to the block whose children were
+            popped (e.g., [2, 0] = third child's first child).
         """
-        block_type = block.get("type", "")
-        # Check inside type-specific object first (API 2025-09-03+)
-        if block_type and block_type in block:
-            type_data = block[block_type]
-            if isinstance(type_data, dict) and "children" in type_data:
-                return block_type
-        # Fall back to block-level children
-        if "children" in block:
-            return "children"
-        return None
+        deferred: List[Tuple[List[int], List[Dict]]] = []
+        for ci, child in enumerate(self._get_children(block)):
+            if child.get("type", "") in self._CHILD_REQUIRED_TYPES:
+                for sub_path, sub_blocks in self._pop_optional_descendants(child):
+                    deferred.append(([ci, *sub_path], sub_blocks))
+            else:
+                grandkids = self._pop_children(child)
+                if grandkids:
+                    deferred.append(([ci], grandkids))
+        return deferred
 
     @staticmethod
     def _get_children(block: Dict) -> List[Dict]:
@@ -1980,10 +2217,19 @@ class NotionClient:
                             import os as _os
                             _os.unlink(temp_path)
 
-                    except Exception:
-                        # If re-upload fails, leave as-is (will be converted to
-                        # external in _clean_block_for_creation as fallback)
-                        pass
+                    except Exception as exc:
+                        # Fail loud instead of degrading to an expiring external
+                        # URL. The only blocks reaching here are Notion-hosted
+                        # files whose signed S3 URL was just fetched; if we cannot
+                        # re-upload one, falling back to image.external would hand
+                        # Notion an expiring prod-files-secure URL that it rejects
+                        # (400 image.file_upload should be defined) or silently
+                        # empties to ![](), destroying the image. One path, no
+                        # fallback.
+                        raise ClientError(
+                            f"Failed to re-upload Notion-hosted {block_type} block "
+                            f"via the File Upload API: {exc}"
+                        ) from exc
 
             # Recurse into children
             children = block.get("children", [])
@@ -2041,9 +2287,10 @@ class NotionClient:
                             if "plain_text" in rt:
                                 rt["plain_text"] = rt["plain_text"].replace(old, new)
 
-            # Recurse into children
-            if "children" in block and isinstance(block["children"], list):
-                self._apply_text_replacements(block["children"], replacements)
+            # Recurse into children (block-level or type-nested per API 2025-09-03+)
+            children = self._get_children(block)
+            if children:
+                self._apply_text_replacements(children, replacements)
 
     def get_blocks_as_notion_json(self, page_id: str) -> List[Dict]:
         """
@@ -2059,6 +2306,97 @@ class NotionClient:
         """
         blocks = self.get_block_children_all(page_id, recursive=True)
         return self._clean_blocks_recursive(blocks)
+
+    def _validate_duplicate_source_blocks(
+        self,
+        blocks: List[Dict],
+        *,
+        page_level: bool = True,
+    ) -> None:
+        """Fail before mutation when a source tree cannot be duplicated completely."""
+        for block in blocks:
+            block_type = block.get("type", "")
+            if block_type == "child_page":
+                if not page_level:
+                    raise ClientError(
+                        "Cannot completely duplicate a child_page nested below a regular block. "
+                        "No destination page was created."
+                    )
+                if not block.get("id"):
+                    raise ClientError(
+                        "Cannot completely duplicate a child_page without a source page ID. "
+                        "No destination page was created."
+                    )
+                self._validate_duplicate_source_blocks(
+                    self._get_children(block), page_level=True
+                )
+                continue
+            if block_type in self._UNCREATABLE_BLOCK_TYPES:
+                raise ClientError(
+                    f"Cannot completely duplicate block type '{block_type}'. "
+                    "No destination page was created."
+                )
+            children = self._get_children(block)
+            if children:
+                self._validate_duplicate_source_blocks(children, page_level=False)
+
+    def _upload_duplicate_page_children(
+        self,
+        parent_page_id: str,
+        raw_blocks: List[Dict],
+        progress_callback=None,
+    ) -> Tuple[int, int]:
+        """Upload blocks and recursively recreate child pages in source order.
+
+        Notion rejects ``child_page`` in ``PATCH /blocks/{id}/children``. Child
+        pages must instead be created with ``POST /pages`` using the duplicated
+        page as their parent. Uploading contiguous regular-block runs around each
+        child page preserves source order while allowing arbitrary subpage depth.
+
+        Returns:
+            ``(blocks_created, child_pages_created)`` for the complete subtree.
+        """
+        blocks_created = 0
+        child_pages_created = 0
+        pending_blocks: List[Dict] = []
+
+        def flush_pending() -> None:
+            nonlocal blocks_created, pending_blocks
+            if not pending_blocks:
+                return
+            cleaned = self._clean_blocks_recursive(pending_blocks)
+            count, _created_ids = self._upload_blocks_with_nesting(
+                parent_page_id,
+                cleaned,
+                progress_callback=progress_callback,
+            )
+            blocks_created += count
+            pending_blocks = []
+
+        for block in raw_blocks:
+            if block.get("type") != "child_page":
+                pending_blocks.append(block)
+                continue
+
+            flush_pending()
+            child_title = block.get("child_page", {}).get("title") or "Untitled"
+            if progress_callback:
+                progress_callback(5, f"Creating child page '{child_title}'...")
+            child_page = self.create_standalone_page(
+                parent_page_id=parent_page_id,
+                title=child_title,
+            )
+            child_pages_created += 1
+            nested_blocks, nested_pages = self._upload_duplicate_page_children(
+                child_page["id"],
+                self._get_children(block),
+                progress_callback=progress_callback,
+            )
+            blocks_created += nested_blocks
+            child_pages_created += nested_pages
+
+        flush_pending()
+        return blocks_created, child_pages_created
 
     def duplicate_page(
         self,
@@ -2093,19 +2431,21 @@ class NotionClient:
             progress_callback(2, "Fetching page blocks...")
         raw_blocks = self.get_block_children_all(page_id, recursive=True)
 
+        # A complete recursive read is required before any destination mutation.
+        # Reject block types Notion cannot recreate instead of filtering them and
+        # later claiming a complete duplicate.
+        self._validate_duplicate_source_blocks(raw_blocks)
+
         # Step 2b: Re-upload file-type images/files via Notion File Upload API
         image_count = self._reupload_file_blocks(raw_blocks, progress_callback)
         if image_count > 0 and progress_callback:
             progress_callback(2, f"Re-uploaded {image_count} file(s)")
 
-        # Step 2c: Clean blocks for creation
-        blocks = self._clean_blocks_recursive(raw_blocks)
-
         # Step 3: Apply text replacements if any
         if replacements:
             if progress_callback:
                 progress_callback(3, f"Applying {len(replacements)} text replacement(s)...")
-            self._apply_text_replacements(blocks, replacements)
+            self._apply_text_replacements(raw_blocks, replacements)
 
         # Step 4: Determine parent type and target
         parent = source_page.get("parent", {})
@@ -2142,9 +2482,28 @@ class NotionClient:
         if progress_callback:
             progress_callback(4, "Creating new page...")
 
-        # Copy icon and cover if present
+        # Copy reusable icon/cover metadata. Page reads can return signed
+        # `file` covers, but page creation accepts only `external` and
+        # `file_upload` covers. Omit null, unsupported, or incomplete cover
+        # objects instead of forwarding a payload that fails API validation.
         icon = source_page.get("icon")
         cover = source_page.get("cover")
+        required_cover_field: Optional[str] = None
+        cover_data = None
+        if isinstance(cover, dict):
+            if cover.get("type") == "external":
+                required_cover_field = "url"
+                cover_data = cover.get("external")
+            elif cover.get("type") == "file_upload":
+                required_cover_field = "id"
+                cover_data = cover.get("file_upload")
+        if not (
+            required_cover_field is not None
+            and isinstance(cover_data, dict)
+            and isinstance(cover_data.get(required_cover_field), str)
+            and cover_data[required_cover_field]
+        ):
+            cover = None
 
         if is_page_parent:
             # Page parent: use create_standalone_page
@@ -2187,16 +2546,22 @@ class NotionClient:
 
         new_page_id = new_page["id"]
 
-        # Step 7: Upload blocks with nesting handling
-        if blocks:
+        # Step 7: Upload blocks and recursively create child pages/subpages.
+        if raw_blocks:
             if progress_callback:
-                progress_callback(5, f"Uploading {len(blocks)} blocks...")
+                progress_callback(5, f"Uploading {len(raw_blocks)} top-level items...")
 
-            self._upload_blocks_with_nesting(
+            blocks_created, child_pages_created = self._upload_duplicate_page_children(
                 new_page_id,
-                blocks,
+                raw_blocks,
                 progress_callback=progress_callback,
             )
+            if progress_callback:
+                progress_callback(
+                    5,
+                    f"Duplicated {blocks_created} block(s) and "
+                    f"{child_pages_created} child page(s)",
+                )
 
         return new_page
 

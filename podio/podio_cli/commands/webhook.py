@@ -42,7 +42,9 @@ from typing import Optional, Any
 
 from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 from ..client import get_client
+from cli_tools_shared.output import command
 from ..output import print_json, print_output, print_success, print_warning, handle_api_error, format_response
+from pypodio2.transport import TransportException
 from ..filter_map import FilterMap, apply_properties
 
 app = typer.Typer(help="Manage Podio webhooks")
@@ -53,6 +55,7 @@ app.add_typer(field_app, name="field")
 
 
 @field_app.command("get")
+@command
 def field_get(
     hook_id: int = typer.Argument(..., help="Webhook ID to retrieve"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
@@ -69,12 +72,13 @@ def field_get(
         result = client.Hook.find(hook_id=hook_id)
         formatted = format_response(result)
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @field_app.command("create")
+@command
 def field_create(
     field_id: int = typer.Argument(..., help="Field ID to create webhook for"),
     url: str = typer.Option(..., "--url", "-u", help="Webhook URL to receive POST requests"),
@@ -100,12 +104,13 @@ def field_create(
         print_success(f"Field webhook created (ID: {result.get('hook_id')})")
         print(f"Note: Verify with 'podio webhook verify {result.get('hook_id')}'", file=sys.stderr)
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @field_app.command("list")
+@command
 def field_list(
     field_id: int = typer.Argument(..., help="Field ID to list webhooks for"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum webhooks to return"),
@@ -140,12 +145,13 @@ def field_list(
             formatted = apply_properties(formatted, properties)
 
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @field_app.command("update")
+@command
 def field_update(
     hook_id: int = typer.Argument(..., help="Webhook ID to update"),
     url: str = typer.Option(..., "--url", "-u", help="New webhook URL"),
@@ -164,12 +170,13 @@ def field_update(
         formatted = format_response(result)
         print_success(f"Webhook {hook_id} updated")
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("get")
+@command
 def get_webhook(
     hook_id: int = typer.Argument(..., help="Webhook ID to retrieve"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
@@ -193,12 +200,13 @@ def get_webhook(
         result = client.transport.GET(url=f"/hook/{hook_id}")
         formatted = format_response(result)
         print_output(formatted, table=table)
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("create")
+@command
 def create_webhook(
     hookable_type: str = typer.Argument(..., help="Type of object to hook (e.g., 'app', 'space')"),
     hookable_id: int = typer.Argument(..., help="ID of the object to hook"),
@@ -244,12 +252,13 @@ def create_webhook(
         print(f"Note: You may need to verify the webhook. Use 'podio webhook verify {result.get('hook_id')}' to request verification.", file=sys.stderr)
         print_output(formatted, table=table)
 
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("create-field", hidden=True)
+@command
 def create_field_webhook_deprecated(
     field_id: int = typer.Argument(..., help="Field ID to create webhook for"),
     url: str = typer.Option(..., "--url", "-u", help="Webhook URL to receive POST requests"),
@@ -262,6 +271,7 @@ def create_field_webhook_deprecated(
 
 
 @app.command("list")
+@command
 def list_webhooks(
     hookable_type: str = typer.Argument(..., help="Type of object (e.g., 'app', 'space')"),
     hookable_id: int = typer.Argument(..., help="ID of the object"),
@@ -336,22 +346,24 @@ def list_webhooks(
 
         print_output(formatted, table=table)
 
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("list-field", hidden=True)
+@command
 def list_field_webhooks_deprecated(
     field_id: int = typer.Argument(..., help="Field ID to list webhooks for"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
     """[DEPRECATED] Use 'podio webhook field list' instead."""
     print_warning("'podio webhook list-field' is deprecated. Use 'podio webhook field list' instead.")
-    return field_list(field_id=field_id, table=table)
+    return field_list(field_id=field_id, limit=100, filter=None, properties=None, table=table)
 
 
 @app.command("verify")
+@command
 def verify_webhook(
     hook_id: int = typer.Argument(..., help="Webhook ID to verify"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
@@ -389,12 +401,13 @@ def verify_webhook(
         print(f"podio webhook validate {hook_id} <code>", file=sys.stderr)
         print_output(formatted, table=table)
 
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("validate")
+@command
 def validate_webhook(
     hook_id: int = typer.Argument(..., help="Webhook ID to validate"),
     code: str = typer.Argument(..., help="Verification code from webhook endpoint"),
@@ -438,12 +451,13 @@ def validate_webhook(
         print(f"✓ Webhook validated successfully", file=sys.stderr)
         print_output(formatted, table=table)
 
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("update")
+@command
 def update_webhook(
     hook_id: int = typer.Argument(..., help="Webhook ID to update"),
     url: str = typer.Option(..., "--url", "-u", help="New webhook URL"),
@@ -484,12 +498,13 @@ def update_webhook(
 
         raise typer.Exit(1)
 
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("update-field", hidden=True)
+@command
 def update_field_webhook_deprecated(
     hook_id: int = typer.Argument(..., help="Field webhook ID to update"),
     field_id: int = typer.Argument(..., help="Field ID the webhook is attached to"),
@@ -559,12 +574,13 @@ def update_field_webhook_deprecated(
         print(f"Note: You may need to verify the webhook. Use 'podio webhook verify {new_hook_id}' to request verification.", file=sys.stderr)
         print_output(formatted, table=table)
 
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("delete")
+@command
 def delete_webhook(
     hook_id: int = typer.Argument(..., help="Webhook ID to delete"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
@@ -584,6 +600,6 @@ def delete_webhook(
         print(f"✓ Webhook deleted successfully", file=sys.stderr)
         print_output(formatted, table=table)
 
-    except Exception as e:
+    except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)

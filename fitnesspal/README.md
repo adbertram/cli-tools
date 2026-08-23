@@ -1,8 +1,10 @@
 # Fitnesspal CLI
 
-A read-only command-line interface for [MyFitnessPal](https://www.myfitnesspal.com/). View your diary, exercises, measurements, reports, food database, recipes, and saved meals.
+## DESCRIPTION
 
-Built on the [python-myfitnesspal](https://python-myfitnesspal.readthedocs.io/) library.
+The `fitnesspal` CLI provides a command-line interface for Fitnesspal API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

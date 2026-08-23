@@ -13,6 +13,7 @@ from codex_sessions_cli.parsers import load_rollout_index
 
 
 SESSION_ID = "019db111-1111-7111-8111-111111111111"
+SKILL_SESSION_ID = "019db222-2222-7222-8222-222222222222"
 
 
 def write_rollout(codex_home: Path, cwd: str, source="cli") -> Path:
@@ -182,6 +183,36 @@ def write_malformed_rollout(codex_home: Path) -> Path:
     return rollout_path
 
 
+def write_partially_malformed_rollout(codex_home: Path, cwd: str) -> Path:
+    session_dir = codex_home / "sessions" / "2026" / "04" / "22"
+    session_dir.mkdir(parents=True)
+    rollout_path = session_dir / "rollout-2026-04-22T11-00-00-partial-session.jsonl"
+    records = [
+        {
+            "timestamp": "2026-04-22T16:00:00.000Z",
+            "type": "session_meta",
+            "payload": {
+                "id": "partial-session",
+                "timestamp": "2026-04-22T16:00:00.000Z",
+                "cwd": cwd,
+            },
+        },
+        '{"timestamp": "2026-04-22T16:00:01.000Z", "type": "response_item", "payload": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "unterminated}',
+        {
+            "timestamp": "2026-04-22T16:00:02.000Z",
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "valid tail"}],
+            },
+        },
+    ]
+    lines = [json.dumps(records[0]), records[1], json.dumps(records[2])]
+    rollout_path.write_text("\n".join(lines) + "\n")
+    return rollout_path
+
+
 def write_minimal_current_rollout(codex_home: Path, cwd: str) -> Path:
     session_dir = codex_home / "sessions" / "2026" / "04" / "23"
     session_dir.mkdir(parents=True)
@@ -203,6 +234,36 @@ def write_minimal_current_rollout(codex_home: Path, cwd: str) -> Path:
                 "type": "message",
                 "role": "user",
                 "content": [{"type": "input_text", "text": "minimal"}],
+            },
+        },
+    ]
+    rollout_path.write_text("\n".join(json.dumps(record) for record in records) + "\n")
+    return rollout_path
+
+
+def write_skill_rollout(codex_home: Path, cwd: str) -> Path:
+    session_dir = codex_home / "sessions" / "2026" / "04" / "24"
+    session_dir.mkdir(parents=True)
+    rollout_path = session_dir / f"rollout-2026-04-24T10-00-00-{SKILL_SESSION_ID}.jsonl"
+    records = [
+        {
+            "timestamp": "2026-04-24T15:00:00.000Z",
+            "type": "session_meta",
+            "payload": {
+                "id": SKILL_SESSION_ID,
+                "timestamp": "2026-04-24T15:00:00.000Z",
+                "cwd": cwd,
+            },
+        },
+        {
+            "timestamp": "2026-04-24T15:00:01.000Z",
+            "type": "event_msg",
+            "payload": {
+                "type": "user_message",
+                "message": "$project-manager review this",
+                "images": [],
+                "local_images": [],
+                "text_elements": [],
             },
         },
     ]
@@ -260,6 +321,40 @@ class CodexSessionsClientTests(unittest.TestCase):
             self.assertIn("tool_call", [event.event_type for event in timeline])
             self.assertEqual(timeline[-1].event_type, "message")
 
+    def test_todo_get_uses_encoded_session_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            project_path = str(Path(tmp) / "Project One")
+            write_rollout(codex_home, project_path)
+            write_minimal_current_rollout(codex_home, project_path)
+            client = CodexSessionsClient(codex_home=codex_home)
+
+            with patch.object(
+                client,
+                "_load_rollouts",
+                side_effect=AssertionError("todo get must load the encoded session directly"),
+            ):
+                todo = client.get_todo(f"{SESSION_ID}:call-plan:1")
+
+            self.assertEqual(todo.content, "Write parser tests")
+
+    def test_skill_get_uses_encoded_session_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            project_path = str(Path(tmp) / "Project One")
+            write_rollout(codex_home, project_path)
+            write_skill_rollout(codex_home, project_path)
+            client = CodexSessionsClient(codex_home=codex_home)
+
+            with patch.object(
+                client,
+                "_load_rollouts",
+                side_effect=AssertionError("skill get must load the encoded session directly"),
+            ):
+                skill = client.get_skill(f"{SKILL_SESSION_ID}:2:project-manager")
+
+            self.assertEqual(skill.name, "project-manager")
+
     def test_subagent_activity_scan_does_not_materialize_all_tool_calls(self):
         with tempfile.TemporaryDirectory() as tmp:
             codex_home = Path(tmp) / ".codex"
@@ -279,6 +374,31 @@ class CodexSessionsClientTests(unittest.TestCase):
             self.assertEqual(subagents[0].id, "call-subagent")
             self.assertEqual(subagent.id, "call-subagent")
 
+    def test_subagent_activity_get_loads_only_rollout_containing_call_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            project_path = str(Path(tmp) / "Project One")
+            matching_path = write_rollout(codex_home, project_path)
+            write_minimal_current_rollout(codex_home, project_path)
+            client = CodexSessionsClient(codex_home=codex_home)
+            loaded_paths = []
+
+            from codex_sessions_cli.client import load_rollout as real_load_rollout
+
+            def record_load(path):
+                loaded_paths.append(path)
+                return real_load_rollout(path)
+
+            with patch.object(
+                client,
+                "_load_rollout_indexes",
+                side_effect=AssertionError("subagent get must not build the full rollout index"),
+            ), patch("codex_sessions_cli.client.load_rollout", side_effect=record_load):
+                subagent = client.get_subagent_activity("call-subagent")
+
+            self.assertEqual(subagent.id, "call-subagent")
+            self.assertEqual(loaded_paths, [matching_path])
+
     def test_tool_call_scan_stops_without_full_materialization(self):
         with tempfile.TemporaryDirectory() as tmp:
             codex_home = Path(tmp) / ".codex"
@@ -297,6 +417,27 @@ class CodexSessionsClientTests(unittest.TestCase):
             self.assertEqual(len(tool_calls), 1)
             self.assertEqual(tool_calls[0].id, "call-subagent")
             self.assertEqual(tool_call.id, "call-subagent")
+
+    def test_tool_call_get_loads_only_rollout_containing_call_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            project_path = str(Path(tmp) / "Project One")
+            matching_path = write_rollout(codex_home, project_path)
+            write_minimal_current_rollout(codex_home, project_path)
+            client = CodexSessionsClient(codex_home=codex_home)
+            loaded_paths = []
+
+            from codex_sessions_cli.client import load_rollout as real_load_rollout
+
+            def record_load(path):
+                loaded_paths.append(path)
+                return real_load_rollout(path)
+
+            with patch("codex_sessions_cli.client.load_rollout", side_effect=record_load):
+                tool_call = client.get_tool_call("call-subagent")
+
+            self.assertEqual(tool_call.id, "call-subagent")
+            self.assertEqual(loaded_paths, [matching_path])
 
     def test_parses_legacy_top_level_rollout_records(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -391,6 +532,24 @@ class CodexSessionsClientTests(unittest.TestCase):
                 [f"{malformed_path}:1 invalid JSON: Expecting value"],
             )
 
+    def test_indexed_scans_skip_rollouts_with_invalid_middle_records(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            project_path = str(Path(tmp) / "Project One")
+            write_rollout(codex_home, project_path)
+            malformed_path = write_partially_malformed_rollout(codex_home, project_path)
+            client = CodexSessionsClient(codex_home=codex_home)
+
+            sessions = client.list_sessions(project_path=project_path)
+
+            self.assertEqual(len(sessions), 1)
+            self.assertEqual(sessions[0].id, SESSION_ID)
+            self.assertEqual(len(client.load_errors), 1)
+            self.assertIn(
+                f"{malformed_path}:2 invalid JSON: Unterminated string starting at",
+                client.load_errors[0],
+            )
+
     def test_broad_scans_skip_missing_rollout_paths_and_record_load_errors(self):
         with tempfile.TemporaryDirectory() as tmp:
             codex_home = Path(tmp) / ".codex"
@@ -441,6 +600,14 @@ class CodexSessionsClientTests(unittest.TestCase):
             self.assertEqual(timeline[-1].event_type, "session")
 
 class CodexSessionsCliTests(unittest.TestCase):
+    def test_console_script_uses_error_handling_entrypoint(self):
+        pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+
+        self.assertIn(
+            'codex-sessions = "codex_sessions_cli.main:main"',
+            pyproject.read_text(),
+        )
+
     def test_auth_status_uses_shared_profiles_shape(self):
         with tempfile.TemporaryDirectory() as tmp:
             codex_home = Path(tmp) / ".codex"
@@ -540,6 +707,29 @@ class CodexSessionsCliTests(unittest.TestCase):
 
             self.assertEqual(get_result.exit_code, 0, get_result.output)
             self.assertEqual(json.loads(get_result.output)["id"], event_id)
+
+    def test_session_name_resolution_and_matching(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            project_path = str(Path(tmp) / "Project One")
+            write_rollout(codex_home, project_path)
+
+            # Write session_index.jsonl
+            codex_home.mkdir(parents=True, exist_ok=True)
+            index_path = codex_home / "session_index.jsonl"
+            index_path.write_text(json.dumps({"id": SESSION_ID, "thread_name": "Test Handoff Task"}) + "\n")
+
+            client = CodexSessionsClient(codex_home=codex_home)
+            self.assertEqual(client._resolve_session_id("Test Handoff Task"), SESSION_ID)
+            self.assertEqual(client._resolve_session_id("test handoff task"), SESSION_ID)
+
+            sessions = client.list_sessions()
+            self.assertEqual(sessions[0].name, "Test Handoff Task")
+
+            # Search by session name
+            found = client.search_sessions("Handoff")
+            self.assertEqual(len(found), 1)
+            self.assertEqual(found[0].id, SESSION_ID)
 
 
 if __name__ == "__main__":

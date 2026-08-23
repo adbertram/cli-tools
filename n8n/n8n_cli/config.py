@@ -11,7 +11,7 @@ class Config(BaseConfig):
 
     DIST_NAME = "n8n-cli"
     CREDENTIAL_TYPES = [CredentialType.API_KEY]
-    DEFAULT_BASE_URL = "http://100.117.198.37:5678/api/v1"
+    DEFAULT_BASE_URL = "http://localhost:5678/api/v1"
     ADDITIONAL_AUTH_FIELDS = ("PASSWORD",)
     ADDITIONAL_SENSITIVE_AUTH_FIELDS = ("PASSWORD",)
 

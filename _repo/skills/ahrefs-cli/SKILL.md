@@ -1,6 +1,10 @@
 ---
-name: "ahrefs-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute ahrefs operations using the `ahrefs` CLI tool. CLI interface for Ahrefs SEO platform (browser automation) -- site audits, authentication, profiles, and caching. Triggers: ahrefs, ahrefs cli, site audit, ahrefs site audit, ahrefs SEO, ahrefs crawl, ahrefs login, ahrefs auth profiles, check ahrefs auth, run site audit"
+name: ahrefs-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  MANDATORY: Execute ahrefs operations using the `ahrefs` CLI tool.
+  CLI interface for Ahrefs SEO platform (browser automation) -- site audits, Site Explorer domain metrics, authentication, profiles, and caching.
+  Triggers: ahrefs, ahrefs cli, site audit, ahrefs site audit, site explorer, ahrefs site explorer, domain rating, domain overview, organic traffic, top pages, referring domains, backlinks, ahrefs SEO, ahrefs crawl, ahrefs login, ahrefs auth profiles, check ahrefs auth, run site audit
 ---
 
 <objective>
@@ -19,21 +23,23 @@ ahrefs <command-group> <action> [arguments] [options]
 | Login to Ahrefs | `ahrefs auth login` |
 | List site audit crawls | `ahrefs site-audit list <project_id>` |
 | Get full site audit report | `ahrefs site-audit get <project_id>` |
+| Domain overview metrics | `ahrefs site-explorer overview <domain>` |
+| Top pages by organic traffic | `ahrefs site-explorer top-pages <domain>` |
 | List profiles | `ahrefs auth profiles list` |
 | Clear response cache | `ahrefs cache clear` |
 </quick_start>
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `ahrefs` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `ahrefs` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 
 <principle name="Command Groups">
-- **auth** -- Authentication commands and nested `auth profiles` management
-- **auth** -- Authentication management (login, status, test, logout)
+- **auth** -- Authentication management (login, status, test, logout) and nested `auth profiles`
 - **cache** -- Manage response cache (clear)
 - **site-audit** -- Site audit operations (list crawls, get reports, manage audit cache)
+- **site-explorer** -- Site Explorer / domain-overview metrics: `overview <domain>` (Domain Rating, estimated organic traffic, ranking organic keywords, referring domains, backlinks) and `top-pages <domain>` (top pages by organic traffic; supports `--limit`, `--filter`, `--properties`)
 </principle>
 </essential_principles>
 

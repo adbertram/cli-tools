@@ -37,6 +37,7 @@ class PowerPointSlideRecorderClient:
         output_height: int,
         force_resolution: bool,
         force_aspect_ratio: Optional[Tuple[int, int]],
+        coursecraft_repo_root: Optional[Path],
     ) -> RecordingResult:
         """Record a narrated slide recording."""
         args = SimpleNamespace(
@@ -54,6 +55,7 @@ class PowerPointSlideRecorderClient:
             output_height=output_height,
             force_resolution=force_resolution,
             force_aspect_ratio=force_aspect_ratio,
+            coursecraft_repo_root=coursecraft_repo_root,
         )
         config = recorder.build_config(args)
         result = recorder.record(config)

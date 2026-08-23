@@ -50,8 +50,8 @@ class XClient:
         """
         self.config = config or get_config()
 
-        if not self.config.has_credentials():
-            missing = self.config.get_missing_credentials()
+        if not self.config.has_api_credentials():
+            missing = self.config.get_missing_api_credentials()
             raise ClientError(
                 f"Missing credentials: {', '.join(missing)}. "
                 "Run `x auth login` to configure them."

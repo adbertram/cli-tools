@@ -1,6 +1,4 @@
 """Configuration management for PayPal CLI."""
-from pathlib import Path
-from typing import Optional
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
 from cli_tools_shared.credentials import CredentialType
 
@@ -8,7 +6,7 @@ from cli_tools_shared.credentials import CredentialType
 class Config(BaseConfig):
 
     DIST_NAME = "paypal-cli"
-    CREDENTIAL_TYPES = [CredentialType.OAUTH]
+    CREDENTIAL_TYPES = [CredentialType.OAUTH, CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://api-m.paypal.com"
     OAUTH_TOKEN_EXPIRES = False
     OAUTH_STATIC_REQUIRED_FIELDS = ("CLIENT_ID", "CLIENT_SECRET")
@@ -61,6 +59,12 @@ class Config(BaseConfig):
                 "scope": data.get("scope", "")[:100],
             }
         return {"api_test": f"failed: HTTP {response.status_code}"}
+
+    def get_browser(self):
+        """Return browser service for PayPal browser-based auth."""
+        from .browser import PayPalBrowser
+
+        return PayPalBrowser(self)
 
 
 _configs = {}

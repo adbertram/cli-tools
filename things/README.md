@@ -1,6 +1,10 @@
 # Things CLI
 
-A command-line interface for Things 3 on macOS. Uses SQLite for fast reads and AppleScript for reliable writes.
+## DESCRIPTION
+
+The `things` CLI provides a command-line interface for Things API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

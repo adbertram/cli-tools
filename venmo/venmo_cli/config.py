@@ -1,5 +1,4 @@
 """Configuration management for Venmo CLI."""
-from pathlib import Path
 from typing import Optional
 
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
@@ -38,11 +37,6 @@ class Config(BaseConfig):
     @property
     def device_id(self) -> Optional[str]:
         return self._get("DEVICE_ID")
-
-    @property
-    def storage_dir(self) -> Path:
-        """Directory used by the shared @cached decorator for response cache files."""
-        return self.get_profile_data_dir()
 
 
 _configs = {}

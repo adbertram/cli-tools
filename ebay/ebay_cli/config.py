@@ -1,8 +1,8 @@
 """Configuration management for eBay CLI."""
 import shutil
-from pathlib import Path
 from typing import Optional
 
+from cli_tools_shared.browser.user_agent import derive_real_chrome_user_agent
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
 from cli_tools_shared.credentials import CredentialType
 
@@ -13,7 +13,10 @@ class Config(BaseConfig):
     DIST_NAME = "ebay-cli"
 
     CREDENTIAL_TYPE = CredentialType.OAUTH_AUTHORIZATION_CODE
-    CREDENTIAL_TYPES = [CredentialType.OAUTH_AUTHORIZATION_CODE]
+    CREDENTIAL_TYPES = [
+        CredentialType.OAUTH_AUTHORIZATION_CODE,
+        CredentialType.BROWSER_SESSION,
+    ]
     DEFAULT_BASE_URL = "https://api.ebay.com"
 
     # OAuth 2.0 configuration
@@ -137,6 +140,14 @@ class Config(BaseConfig):
         return (self._get("HEADLESS") or "true").lower() == "true"
 
     @property
+    def browser_user_agent(self) -> str:
+        """Use the installed real Chrome user agent for every browser mode."""
+        override = self._get("BROWSER_USER_AGENT")
+        if override:
+            return override
+        return derive_real_chrome_user_agent()
+
+    @property
     def auth_indicator_selector(self) -> Optional[str]:
         """CSS selector that should exist when logged in."""
         return self._get("AUTH_INDICATOR_SELECTOR")
@@ -145,11 +156,6 @@ class Config(BaseConfig):
     def login_redirect_pattern(self) -> Optional[str]:
         """URL pattern that indicates redirect to login page."""
         return self._get("LOGIN_REDIRECT_PATTERN")
-
-    @property
-    def storage_dir(self) -> Path:
-        """Get storage directory for the active profile."""
-        return self.get_profile_data_dir()
 
     def get_browser(self):
         """Return BrowserService for browser-based authentication."""

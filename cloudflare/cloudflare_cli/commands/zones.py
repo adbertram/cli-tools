@@ -6,7 +6,7 @@ from enum import Enum
 from pydantic import BaseModel
 
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_table, handle_error, print_success
+from cli_tools_shared.output import print_json, print_table, command, print_success
 from cli_tools_shared import FilterMap
 
 
@@ -61,6 +61,7 @@ def extract_fields(items: list, fields: list) -> list:
 
 
 @app.command("list")
+@command
 def zones_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(50, "--limit", "-l", help="Maximum number of zones to return (max 50)"),
@@ -77,35 +78,32 @@ def zones_list(
         cloudflare zones list --filter "status:active"
         cloudflare zones list --properties "id,name,status"
     """
-    try:
-        client = get_client()
-        # Returns List[Zone] models
-        zones = client.list_zones(limit=limit, filters=filter)
+    client = get_client()
+    # Returns List[Zone] models
+    zones = client.list_zones(limit=limit, filters=filter)
 
-        # Apply property field selection with dot-notation support
+    # Apply property field selection with dot-notation support
+    if properties:
+        fields = [f.strip() for f in properties.split(",")]
+        zones = extract_fields(zones, fields)
+
+    if table:
         if properties:
             fields = [f.strip() for f in properties.split(",")]
-            zones = extract_fields(zones, fields)
-
-        if table:
-            if properties:
-                fields = [f.strip() for f in properties.split(",")]
-                print_table(zones, fields, fields)
-            else:
-                # Default table columns
-                print_table(
-                    zones,
-                    ["id", "name", "status"],
-                    ["ID", "Name", "Status"],
-                )
+            print_table(zones, fields, fields)
         else:
-            print_json(zones)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+            # Default table columns
+            print_table(
+                zones,
+                ["id", "name", "status"],
+                ["ID", "Name", "Status"],
+            )
+    else:
+        print_json(zones)
 
 
 @app.command("get")
+@command
 def zones_get(
     zone_id: str = typer.Argument(..., help="The zone ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display summary as table"),
@@ -119,33 +117,30 @@ def zones_get(
         cloudflare zones get ZONE_ID --table
         cloudflare zones get ZONE_ID --properties "id,name,status"
     """
-    try:
-        client = get_client()
-        # Returns ZoneDetail model
-        zone = client.get_zone(zone_id)
+    client = get_client()
+    # Returns ZoneDetail model
+    zone = client.get_zone(zone_id)
 
-        # Apply property field selection with dot-notation support
+    # Apply property field selection with dot-notation support
+    if properties:
+        fields = [f.strip() for f in properties.split(",")]
+        zone = extract_fields([zone], fields)[0]
+
+    if table:
         if properties:
             fields = [f.strip() for f in properties.split(",")]
-            zone = extract_fields([zone], fields)[0]
-
-        if table:
-            if properties:
-                fields = [f.strip() for f in properties.split(",")]
-                print_table([zone], fields, fields)
-            else:
-                # Convert model to key-value table
-                zone_dict = model_to_dict(zone)
-                rows = [{"field": k, "value": str(v)} for k, v in zone_dict.items() if v is not None]
-                print_table(rows, ["field", "value"], ["Field", "Value"])
+            print_table([zone], fields, fields)
         else:
-            print_json(zone)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+            # Convert model to key-value table
+            zone_dict = model_to_dict(zone)
+            rows = [{"field": k, "value": str(v)} for k, v in zone_dict.items() if v is not None]
+            print_table(rows, ["field", "value"], ["Field", "Value"])
+    else:
+        print_json(zone)
 
 
 @app.command("update")
+@command
 def zones_update(
     zone_id: str = typer.Argument(..., help="The zone ID"),
     security_level: Optional[SecurityLevel] = typer.Option(
@@ -164,18 +159,14 @@ def zones_update(
         typer.echo("Error: At least one setting must be specified", err=True)
         raise typer.Exit(1)
 
-    try:
-        client = get_client()
-        updated = []
+    client = get_client()
+    updated = []
 
-        if security_level is not None:
-            result = client.set_security_level(zone_id, security_level.value)
-            updated.append(f"security_level: {result.get('value', security_level.value)}")
+    if security_level is not None:
+        result = client.set_security_level(zone_id, security_level.value)
+        updated.append(f"security_level: {result.get('value', security_level.value)}")
 
-        print_success(f"Zone {zone_id} updated: {', '.join(updated)}")
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    print_success(f"Zone {zone_id} updated: {', '.join(updated)}")
 
 
 COMMAND_CREDENTIALS = {

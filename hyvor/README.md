@@ -1,6 +1,10 @@
 # Hyvor CLI
 
-A command-line interface for the [Hyvor Talk API](https://talk.hyvor.com/docs/api-console). Manage Hyvor Talk comments and discussions on your website.
+## DESCRIPTION
+
+The `hyvor` CLI provides a command-line interface for Hyvor API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 
@@ -189,7 +193,7 @@ hyvor comments list --limit 5 --table
 
 ## Configuration
 
-Credentials are stored in a `.env` file in the package directory:
+Authentication profile files live under `~/.local/share/cli-tools/hyvor/authentication_profiles/<profile>/`; non-auth defaults live in `~/.local/share/cli-tools/hyvor/.env`:
 
 ```bash
 # Required: API Key (create at Console → Settings → API)

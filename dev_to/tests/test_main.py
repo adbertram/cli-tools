@@ -16,7 +16,7 @@ class FakeClient:
             "title": kwargs["title"],
             "published": kwargs["published"],
             "tag_list": ["python"],
-            "url": "https://dev.to/adam/post",
+            "url": "https://dev.to/example-user/post",
             "published_at": None,
         }
 
@@ -26,7 +26,7 @@ class FakeClient:
             "id": post_id,
             "title": "Draft",
             "published": False,
-            "url": "https://dev.to/adam/draft",
+            "url": "https://dev.to/example-user/draft",
         }
 
 

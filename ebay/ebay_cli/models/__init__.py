@@ -21,7 +21,6 @@ from .listing import (
     listing_from_offer,
     listing_from_trading_api,
     merge_listing_data,
-    PSEUDO_DRAFT_PRICE,
 )
 
 # Inventory
@@ -84,6 +83,9 @@ from .location import (
 # Search
 from .search_result import SearchResult
 
+# Item detail (active listing /itm/<id>)
+from .item_detail import ItemDetail
+
 # Template
 from .template import (
     Template,
@@ -108,7 +110,6 @@ __all__ = [
     "listing_from_offer",
     "listing_from_trading_api",
     "merge_listing_data",
-    "PSEUDO_DRAFT_PRICE",
     # Inventory
     "InventoryItem",
     "InventoryItemResponse",
@@ -153,6 +154,8 @@ __all__ = [
     "LocationStatus",
     # Search
     "SearchResult",
+    # Item detail
+    "ItemDetail",
     # Template
     "Template",
     "TemplateContent",

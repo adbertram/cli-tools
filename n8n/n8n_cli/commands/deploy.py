@@ -139,7 +139,7 @@ def deploy_node(
     skip_auth_check: bool = typer.Option(False, "--skip-auth-check", help="Skip browser session auth check"),
 ):
     """
-    Deploy an n8n node package to the n8n server (adam-server).
+    Deploy an n8n node package to the configured n8n server.
 
     Performs the full pipeline: build TypeScript, rsync to server, npm install
     into community nodes dir (~/.n8n/nodes/), install bundled CLI venv, create
@@ -389,7 +389,7 @@ def deploy_node(
             api.wait_for_ready(timeout=60)
         except N8nApiError as e:
             print_error(f"n8n failed to start: {e}")
-            print_info("Check logs: ssh adam-server 'sudo tail -50 /var/log/n8n.log'")
+            print_info("Check logs on the configured n8n server.")
             raise typer.Exit(1)
 
         print_success("n8n restarted and ready")
@@ -503,7 +503,7 @@ def deploy_node(
                 print_json({"deployed": package_name, "nodes": found})
             else:
                 print_error(f"Node {package_name} not found after deploy")
-                print_info("Check n8n logs: ssh adam-server 'sudo tail -50 /var/log/n8n.log'")
+                print_info("Check n8n logs on the configured n8n server.")
                 raise typer.Exit(1)
         except N8nApiError as e:
             print_error(f"Verification failed: {e}")

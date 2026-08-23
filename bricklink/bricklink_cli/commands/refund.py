@@ -15,13 +15,14 @@ import typer
 from typing import Optional
 
 from ..display import print_detail
-from cli_tools_shared.output import print_json, print_success, handle_error
+from cli_tools_shared.output import command, print_json, print_success, handle_error
 from . import run_browser
 
 app = typer.Typer(help="Manage refunds (browser)", no_args_is_help=True)
 
 
 @app.command("info")
+@command
 def refund_info(
     order_id: str = typer.Argument(..., help="Order ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -45,6 +46,7 @@ def refund_info(
 
 
 @app.command("issue")
+@command
 def refund_issue(
     order_id: str = typer.Argument(..., help="Order ID"),
     amount: float = typer.Argument(..., help="Refund amount in dollars"),
@@ -73,7 +75,12 @@ def refund_issue(
             )
         )
 
-        if result.get("success"):
+        # A dry run fills the form and stops; it issues nothing. Reporting it as
+        # "issued" gives the operator a false picture of the refund state, which
+        # is the same failure class as a false verification result.
+        if result.get("dry_run"):
+            print_success(f"Dry run only — NO refund was issued for order {order_id}")
+        elif result.get("success"):
             print_success(f"Refund of ${amount:.2f} issued for order {order_id}")
         print_json(result)
 
@@ -82,6 +89,7 @@ def refund_issue(
 
 
 @app.command("full")
+@command
 def refund_full(
     order_id: str = typer.Argument(..., help="Order ID"),
     reason: Optional[str] = typer.Option(None, "--reason", "-r", help="Refund reason"),

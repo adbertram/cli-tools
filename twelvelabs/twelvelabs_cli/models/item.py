@@ -75,7 +75,7 @@ class IndexCreate(CLIModel):
     """Model for creating a new index."""
     index_name: str
     engines: List[dict] = Field(default_factory=lambda: [
-        {"engine_name": "pegasus1.2", "engine_options": ["visual", "audio"]}
+        {"engine_name": "pegasus1.5", "engine_options": ["visual", "audio"]}
     ])
 
 

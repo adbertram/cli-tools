@@ -14,6 +14,6 @@ COMMAND_CREDENTIALS = {
     "return-policies": ["oauth_authorization_code"],
     "shipping-labels": ["oauth_authorization_code"],
     "shipping-quote": ["oauth_authorization_code"],
-    "store": ["oauth_authorization_code"],
+    "store": ["oauth_authorization_code", "browser_session"],
     "templates": ["oauth_authorization_code"],
 }

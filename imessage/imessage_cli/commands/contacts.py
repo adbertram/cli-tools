@@ -7,10 +7,10 @@ from cli_tools_shared.filters import (
     validate_filters,
 )
 from cli_tools_shared.output import (
+    command,
     print_error,
     print_json,
     print_table,
-    handle_error,
 )
 from pydantic import BaseModel
 
@@ -52,6 +52,7 @@ def extract_fields(items: list, fields: list) -> list:
 
 
 @app.command("list")
+@command
 def contacts_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of contacts to return"),
@@ -68,50 +69,47 @@ def contacts_list(
         imessage contacts list --filter "name:like:%john%"
         imessage contacts list --properties "name,phones"
     """
-    try:
-        # Validate filters if provided
-        if filter:
-            try:
-                validate_filters(filter)
-            except FilterValidationError as e:
-                print_error(str(e))
-                raise typer.Exit(1)
+    # Validate filters if provided
+    if filter:
+        try:
+            validate_filters(filter)
+        except FilterValidationError as e:
+            print_error(str(e))
+            raise typer.Exit(1)
 
-        client = get_client()
-        contacts = client.list_contacts(limit=limit)
+    client = get_client()
+    contacts = client.list_contacts(limit=limit)
 
-        # Apply client-side filters
-        if filter and isinstance(contacts, list):
-            contacts_dict = [model_to_dict(contact) for contact in contacts]
-            contacts_dict = apply_filters(contacts_dict, filter)
-            contacts = contacts_dict
+    # Apply client-side filters
+    if filter and isinstance(contacts, list):
+        contacts_dict = [model_to_dict(contact) for contact in contacts]
+        contacts_dict = apply_filters(contacts_dict, filter)
+        contacts = contacts_dict
 
-        # Apply properties field selection
+    # Apply properties field selection
+    if properties:
+        fields = [f.strip() for f in properties.split(",")]
+        contacts = extract_fields(contacts, fields)
+
+    if table:
+        if not contacts:
+            print("No contacts found.")
+            return
+
         if properties:
-            fields = [f.strip() for f in properties.split(",")]
-            contacts = extract_fields(contacts, fields)
-
-        if table:
-            if not contacts:
-                print("No contacts found.")
-                return
-
-            if properties:
-                columns = [f.strip() for f in properties.split(",")]
-                print_table(contacts, columns, columns)
-            else:
-                # Default columns for Contact model
-                columns = ["id", "name", "phones", "emails"]
-                headers = ["ID", "Name", "Phones", "Emails"]
-                print_table(contacts, columns, headers)
+            columns = [f.strip() for f in properties.split(",")]
+            print_table(contacts, columns, columns)
         else:
-            print_json(contacts)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+            # Default columns for Contact model
+            columns = ["id", "name", "phones", "emails"]
+            headers = ["ID", "Name", "Phones", "Emails"]
+            print_table(contacts, columns, headers)
+    else:
+        print_json(contacts)
 
 
 @app.command("get")
+@command
 def contacts_get(
     contact_id: str = typer.Argument(..., help="The contact ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -125,26 +123,22 @@ def contacts_get(
         imessage contacts get CONTACT_ID --table
         imessage contacts get CONTACT_ID --properties "name,phones"
     """
-    try:
-        client = get_client()
-        contact = client.get_contact(contact_id)
+    client = get_client()
+    contact = client.get_contact(contact_id)
 
-        # Apply properties field selection
+    # Apply properties field selection
+    if properties:
+        fields = [f.strip() for f in properties.split(",")]
+        contact = extract_fields([contact], fields)[0]
+
+    if table:
         if properties:
-            fields = [f.strip() for f in properties.split(",")]
-            contact = extract_fields([contact], fields)[0]
-
-        if table:
-            if properties:
-                columns = [f.strip() for f in properties.split(",")]
-                print_table([contact], columns, columns)
-            else:
-                # Convert model to key-value table
-                contact_dict = model_to_dict(contact)
-                rows = [{"field": k, "value": str(v)[:60]} for k, v in contact_dict.items() if v is not None]
-                print_table(rows, ["field", "value"], ["Field", "Value"])
+            columns = [f.strip() for f in properties.split(",")]
+            print_table([contact], columns, columns)
         else:
-            print_json(contact)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+            # Convert model to key-value table
+            contact_dict = model_to_dict(contact)
+            rows = [{"field": k, "value": str(v)[:60]} for k, v in contact_dict.items() if v is not None]
+            print_table(rows, ["field", "value"], ["Field", "Value"])
+    else:
+        print_json(contact)

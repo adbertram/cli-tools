@@ -1,6 +1,10 @@
 ---
-name: "imessage-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute imessage operations using the `imessage` CLI tool. CLI for iMessage on macOS -- read messages, send texts, view conversations, and access contacts. Triggers: imessage, imessage cli, send text, send imessage, text message, read messages, my messages, recent texts, imessage conversations, imessage contacts"
+name: imessage-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute imessage operations using the `imessage` CLI tool.
+  CLI for iMessage on macOS -- read messages, send texts, view conversations, and access contacts.
+  Triggers: imessage, imessage cli, send text, send imessage, text message, read messages, my messages, recent texts, imessage conversations, imessage contacts
 ---
 
 <objective>
@@ -26,7 +30,7 @@ imessage <command-group> <action> [arguments] [options]
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `imessage` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `imessage` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 
@@ -35,6 +39,14 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **contacts** -- macOS Contacts access (list, get)
 - **conversations** -- Conversation threads (list, get)
 - **messages** -- Read and send messages (list, get, send)
+</principle>
+
+<principle name="Sending Requires Interactive Automation Consent">
+`imessage messages send` requires macOS Messages **Automation** consent (the
+Apple Events / TCC gate, distinct from Full Disk Access). Without it the CLI
+fails fast with an actionable error instead of hanging. Sending cannot run under
+launchd/cron/headless because there is no automation-consent UI in those
+contexts -- use the `google gmail` CLI for unattended notifications.
 </principle>
 </essential_principles>
 

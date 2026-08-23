@@ -1,8 +1,10 @@
 # powerpoint-slide-recorder
 
-Record narrated PowerPoint slides.
+## DESCRIPTION
 
-The recorder builds a narration timeline from slide audio, reads each slide transcript, counts click-triggered slide animations from the PowerPoint deck, validates that each transcript has the same number of cue markers, estimates cue timing from transcript word ratios, validates the capture source size and aspect ratio, records the screen, sends Space at cue boundaries, sends Space between consecutive slides, and muxes the recorded video with the generated narration into one MP4 at the requested resolution.
+The `powerpoint-slide-recorder` CLI lets you record narrated PowerPoint slides.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Requirements
 
@@ -45,9 +47,16 @@ Optional options:
 - `--force-resolution`; temporarily switches the main display to `--resolution` before recording and restores the previous display mode afterward
 - `--force-aspect-ratio WIDTHxHEIGHT`; temporarily switches the main display to the highest available mode with that aspect ratio before recording and restores the previous display mode afterward; mutually exclusive with `--force-resolution`
 - `--recording-lead-seconds 1.0`
-- `--slide-pause-seconds 0.75`
+- `--slide-pause-seconds 0.25`
 - `--slideshow-start-seconds 2.0`
+- `--coursecraft-repo-root PATH`; see Demo Environment Prep
 - `--table`
+
+## Demo Environment Prep
+
+Before capture the recorder imports the CourseCraft `DemoEnvironmentAutomation` PowerShell module to enable Do Not Disturb and clear notifications. It finds that module by locating the CourseCraft repo root — the nearest directory containing `course-pipeline.json`.
+
+Pass `--coursecraft-repo-root /path/to/CourseCraft` to name that root explicitly. When the option is omitted the recorder searches upward from the current working directory, so the command only works from inside the CourseCraft repo tree; otherwise it fails before recording with `CourseCraft repo root not found from: <cwd>`.
 
 ## Resolution Guard
 
@@ -57,13 +66,21 @@ The default `--resolution` is `1920x1080`. A high-resolution non-16:9 source suc
 
 If the current capture source is smaller than the requested output, add `--force-resolution` to have the recorder temporarily switch the main display to `--resolution`, re-probe the AVFoundation source, perform the recording, and restore the original display mode during cleanup. This uses an embedded macOS CoreGraphics helper through `/usr/bin/python3`; there is no external display resolution tool to install.
 
-For standard 1080p course output, use `--force-aspect-ratio 16x9` without also passing `--resolution 1920x1080`. The recorder chooses the highest available 16:9 main-display mode, captures at that source size, and scales the final MP4 to the default output resolution, 1920x1080. If the main display does not advertise a 16:9 mode, the command fails before PowerPoint launches; use a display or AVFoundation input that exposes a 16:9 mode.
+For standard 1080p course output, use `--force-aspect-ratio 16x9` without also passing `--resolution 1920x1080`. The recorder chooses the highest-usable-area main-display mode for 16:9 — an exact 16:9 mode when one exists (captured uncropped), otherwise the best near-ratio mode whose centered 16:9 crop still covers 1920x1080 — captures at that source size, and scales the final MP4 to the default output resolution, 1920x1080.
+
+A 16:10-only display, such as the built-in MacBook Pro Liquid Retina XDR panel, advertises no true 16:9 mode but still works: PowerPoint presents the 16:9 slide centered and letterboxed inside the 16:10 screen, so the recorder switches to the best 16:10 mode, crops the centered 16:9 slide region from the captured frame, and scales it to 1920x1080 — no external 16:9 monitor required. The command fails before PowerPoint launches only when no available mode's centered 16:9 crop reaches 1920x1080 (every mode is too small); use a higher-resolution display or AVFoundation input. Do not add crop or pad filters to hide a real too-small-source failure.
 
 ## Item Manifest
 
 Every item requires `slide`, `transcript_path`, and `audio_path`. Slide numbers must be positive integers and items must be consecutive.
 
-Each transcript is required. Each cue marker sends Space at the estimated cue boundary. The recorder reads each slide's click-triggered animation count from the deck and fails before recording when the transcript cue marker count does not match the slide animation count.
+Each transcript is required. Each cue marker sends Space at the estimated cue boundary.
+
+Before any capture starts, the recorder measures each slide's click steps from the **live** slide show: it opens the deck, plays the requested slide range with manual advance, presses Space through the whole range, and reads the running show's slide index after every press. A press that leaves the index unchanged consumed a click step; a press that moves it to the next slide consumed the advance. The recording then fails before capture when a transcript's cue-marker count does not match the click steps that slide actually consumes.
+
+The count is measured rather than read from the deck's OOXML because they are not the same number. On layout-inherited paragraph builds — the Pluralsight template — PowerPoint expands the layout's build template against each slide's own content at show time, so a slide that authors 4 `clickEffect` nodes can consume 8 presses in the running show (and vice versa). Only the live measurement can agree with the recording drive.
+
+During the recording, every press is preceded by an equality check between the running show's slide index and the slide the timing plan is driving, and every slide advance is confirmed before the next slide's cues are driven. A deck that consumes presses differently than measured aborts the recording instead of producing a desynchronized MP4.
 
 ```json
 {
@@ -105,5 +122,5 @@ Successful commands emit JSON on stdout:
 ## Tests
 
 ```bash
-python3 -m unittest discover -s tests -v
+uv run --project . --with pytest python -m pytest tests
 ```

@@ -35,20 +35,33 @@ class ManusClient:
         }
 
     def _request(self, method: str, path: str, **kwargs) -> requests.Response:
-        """Make an HTTP request with exponential backoff retry on 429 rate limits."""
+        """Retry only the API's documented rate_limited response."""
         url = path if path.startswith("http") else f"{self.base_url}{path}"
         kwargs.setdefault("timeout", 60)
+
+        response = requests.request(method, url, **kwargs)
         for attempt, delay in enumerate(_RATE_LIMIT_DELAYS):
-            response = requests.request(method, url, **kwargs)
-            if response.status_code != 429:
+            if not self._is_rate_limited(response):
                 return response
             print(
                 f"Rate limit hit, retrying in {delay}s... (attempt {attempt + 1}/{len(_RATE_LIMIT_DELAYS)})",
                 file=sys.stderr,
             )
             time.sleep(delay)
+            response = requests.request(method, url, **kwargs)
 
-        return requests.request(method, url, **kwargs)
+        return response
+
+    @staticmethod
+    def _is_rate_limited(response: requests.Response) -> bool:
+        """Return whether a 429 is the documented transient rate limit."""
+        if response.status_code != 429:
+            return False
+        try:
+            error = response.json().get("error")
+        except (AttributeError, ValueError):
+            return False
+        return isinstance(error, dict) and error.get("code") == "rate_limited"
 
     def _error_text(self, response: requests.Response) -> str:
         """Extract the most useful error text from a failed response."""
@@ -56,6 +69,13 @@ class ManusClient:
             payload = response.json()
         except ValueError:
             return response.text.strip() or response.reason or "Unknown API error"
+
+        error = payload.get("error")
+        if isinstance(error, dict):
+            code = error.get("code")
+            message = error.get("message")
+            if isinstance(code, str) and code and isinstance(message, str) and message:
+                return f"{code}: {message}"
 
         for key in ("message", "error", "detail"):
             value = payload.get(key)
@@ -88,6 +108,7 @@ class ManusClient:
         structured_output_schema: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
         """Create a new Manus AI task."""
+        self.assert_credits_available()
         payload: dict[str, Any] = {
             "message": message,
             "agent_profile": agent_profile,
@@ -136,6 +157,29 @@ class ManusClient:
 
         return self._request_json("Task list", "GET", "/v2/task.list", params=params)
 
+    def available_credits(self) -> dict[str, Any]:
+        """Return current credit fields without inventing a spendable balance."""
+        payload = self._request_json("Available credits", "GET", "/v2/usage.availableCredits")
+        data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+        if not isinstance(data, dict):
+            raise ClientError("Available credits failed: API response did not include a credit balance object")
+        total_credits = data.get("total_credits")
+        if total_credits is not None and not isinstance(total_credits, int):
+            raise ClientError("Available credits failed: API response did not include integer total_credits")
+        return data
+
+    def assert_credits_available(self) -> dict[str, Any]:
+        """Fail when the API provides an authoritative exhausted balance."""
+        data = self.available_credits()
+        total_credits = data.get("total_credits")
+        if total_credits is not None and total_credits <= 0:
+            raise ClientError(
+                "Manus account has 0 available credits. "
+                "Upgrade or add credits before creating a task: "
+                "https://manus.go.link/iW6sB?action=open-subscription"
+            )
+        return data
+
     def send_message(
         self,
         task_id: str,
@@ -170,7 +214,7 @@ class ManusClient:
         if cursor:
             params["cursor"] = cursor
         if verbose:
-            params["verbose"] = True
+            params["verbose"] = "true"
         if slides_format:
             params["slides_format"] = slides_format
 
@@ -243,6 +287,24 @@ class ManusClient:
     def _is_not_found_error(error: ClientError) -> bool:
         return "(404)" in str(error) or " 404" in str(error)
 
+    @staticmethod
+    def _waiting_event_detail(latest_status: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+        """Return the confirmable-event detail when the agent is paused for user action.
+
+        A genuine pause is a status_update with agent_status "waiting" whose
+        status_detail identifies the event to respond to (waiting_for_event_id /
+        waiting_for_event_type). A task that reports "waiting" without such an
+        event (for example while queued before the agent starts running) is not
+        actionable and must keep polling.
+        """
+        status_update = (latest_status or {}).get("status_update") or {}
+        if status_update.get("agent_status") != "waiting":
+            return None
+        status_detail = status_update.get("status_detail") or {}
+        if status_detail.get("waiting_for_event_id") or status_detail.get("waiting_for_event_type"):
+            return status_detail
+        return None
+
     def wait_for_task(
         self,
         task_id: str,
@@ -251,7 +313,7 @@ class ManusClient:
         status_callback: Optional[Callable[[str, float, Optional[dict[str, Any]]], None]] = None,
         verbose_messages: bool = False,
     ) -> dict[str, Any]:
-        """Wait until a task stops, waits for input, or errors."""
+        """Wait until a task stops, errors, or pauses for a confirmable user action."""
         start_time = time.time()
 
         while True:
@@ -290,16 +352,13 @@ class ManusClient:
             if status_callback:
                 status_callback(status, elapsed, latest_status)
 
-            if status == "stopped":
-                if task is None:
-                    task = self.get_task(task_id)
-                return {
-                    "task": task,
-                    "messages": messages,
-                    "latest_status": latest_status,
-                }
+            # "waiting" is non-terminal unless the agent emitted a confirmable
+            # event (interactive question or action confirmation). Newly created
+            # tasks can report "waiting" before the agent starts running; that
+            # state resolves on its own and must not end the wait.
+            paused_for_user = status == "waiting" and self._waiting_event_detail(latest_status) is not None
 
-            if status == "waiting":
+            if status == "stopped" or paused_for_user:
                 if task is None:
                     task = self.get_task(task_id)
                 return {

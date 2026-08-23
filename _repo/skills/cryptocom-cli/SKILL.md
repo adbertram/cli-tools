@@ -1,6 +1,10 @@
 ---
-name: "cryptocom-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Use this skill to execute Crypto.com Exchange operations using the `cryptocom` CLI tool. Crypto.com Exchange API CLI. Triggers: cryptocom, cryptocom cli, Crypto.com Exchange, crypto.com exchange api, crypto.com market data, crypto.com balances, crypto.com open orders, BTCUSD-PERP ticker, Exchange API profiles"
+name: cryptocom-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  MANDATORY: Use this skill to execute Crypto.com Exchange operations using the `cryptocom` CLI tool.
+  Crypto.com Exchange API CLI.
+  Triggers: cryptocom, cryptocom cli, Crypto.com Exchange, crypto.com exchange api, crypto.com market data, crypto.com balances, crypto.com open orders, BTCUSD-PERP ticker, Exchange API profiles
 ---
 
 <objective>
@@ -27,7 +31,7 @@ cryptocom <command-group> <action> [arguments] [options]
 
 <principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `cryptocom` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `cryptocom` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 

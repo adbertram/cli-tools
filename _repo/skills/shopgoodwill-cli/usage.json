@@ -1,8 +1,8 @@
 {
   "tool": "shopgoodwill",
   "description": "CLI interface for ShopGoodwill",
-  "discovered_at": "2026-05-20T16:14:15.567466+00:00",
-  "total_commands": 13,
+  "discovered_at": "2026-07-26T19:22:28Z",
+  "total_commands": 14,
   "global_options": [
     {
       "name": "--version",
@@ -21,9 +21,14 @@
   "commands": {
     "auth": {
       "help": "Manage authentication",
+      "usage_instructions": "Authentication -- login via browser session, logout, check status.",
+      "arguments": [],
+      "options": [],
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Use to authenticate with ShopGoodwill via browser session.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -36,14 +41,15 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
+              "help": "Clear existing ephemeral auth state and re-authenticate",
               "short": "-F"
             }
-          ],
-          "usage_instructions": "Use to authenticate with ShopGoodwill via browser session."
+          ]
         },
         "logout": {
           "help": "Clear stored credentials.",
+          "usage_instructions": "Use to clear stored credentials.",
+          "arguments": [],
           "options": [
             {
               "name": "--profile",
@@ -52,61 +58,73 @@
               "help": "Profile name to clear credentials from",
               "short": "-p"
             }
-          ],
-          "usage_instructions": "Use to clear stored credentials."
-        },
-        "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name to check (defaults to all profiles)",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            }
-          ],
-          "usage_instructions": "Use to check authentication status."
-        },
-        "test": {
-          "help": "Test authentication by verifying credentials work across profiles.",
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--verbose",
-              "type": "bool",
-              "required": false,
-              "help": "Show detailed checks",
-              "short": "-v"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name (defaults to all profiles)",
-              "short": "-p"
-            }
-          ],
-          "usage_instructions": "Run `shopgoodwill auth test --help` for exact arguments and options."
+          ]
         },
         "profiles": {
           "help": "Manage authentication profiles",
+          "usage_instructions": "Run `shopgoodwill auth profiles --help` for exact arguments and options.",
+          "arguments": [],
+          "options": [],
           "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Run `shopgoodwill auth profiles create --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Run `shopgoodwill auth profiles delete --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Run `shopgoodwill auth profiles get --help` for exact arguments and options.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t"
+                }
+              ]
+            },
             "list": {
               "help": "List all profiles and show their auth types and active state.",
+              "usage_instructions": "Run `shopgoodwill auth profiles list --help` for exact arguments and options.",
+              "arguments": [],
               "options": [
                 {
                   "name": "--table",
@@ -136,74 +154,7 @@
                   "help": "Comma-separated list of fields to include",
                   "short": "-p"
                 }
-              ],
-              "usage_instructions": "Run `shopgoodwill auth profiles list --help` for exact arguments and options."
-            },
-            "get": {
-              "help": "Get details for a specific profile.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to get details for"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t"
-                }
-              ],
-              "usage_instructions": "Run `shopgoodwill auth profiles get --help` for exact arguments and options."
-            },
-            "create": {
-              "help": "Create a new profile from .env.example template.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name (e.g., staging, production)"
-                }
-              ],
-              "usage_instructions": "Run `shopgoodwill auth profiles create --help` for exact arguments and options."
-            },
-            "select": {
-              "help": "Activate a profile within its auth type.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to activate within its auth type"
-                }
-              ],
-              "usage_instructions": "Use `auth profiles select NAME` to activate NAME within its auth type. Other auth types keep their active profiles unchanged."
-            },
-            "delete": {
-              "help": "Delete a profile and its data.",
-              "arguments": [
-                {
-                  "name": "name",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Profile name to delete"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--force",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Skip confirmation",
-                  "short": "-F"
-                }
-              ],
-              "usage_instructions": "Run `shopgoodwill auth profiles delete --help` for exact arguments and options."
+              ]
             },
             "remove": {
               "help": "Delete a profile and its data.",
@@ -223,20 +174,169 @@
                   "help": "Skip confirmation",
                   "short": "-F"
                 }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
               ],
-              "usage_instructions": "Run `shopgoodwill auth profiles remove --help` for exact arguments and options."
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F"
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
             }
-          },
-          "usage_instructions": "Run `shopgoodwill auth profiles --help` for exact arguments and options."
+          }
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "usage_instructions": "Use to check authentication status.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Run `shopgoodwill auth test --help` for exact arguments and options.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
         }
-      },
-      "usage_instructions": "Authentication -- login via browser session, logout, check status."
+      }
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "usage_instructions": "Run `shopgoodwill cache --help` for exact arguments and options.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Run `shopgoodwill cache clear --help` for exact arguments and options.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
+        }
+      }
     },
     "search": {
       "help": "Search listings",
+      "usage_instructions": "Search ShopGoodwill listings -- query for items and get listing details.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "get": {
+          "help": "Get details for a specific item.",
+          "usage_instructions": "Use to get details of a specific listing by ID. JSON output includes `available` (bool: true if the item is still purchasable — computed from auction state and BIN price), `buy_it_now_price` (float or null), and `current_price`. When destination shipping cannot be calculated but item details are available, output includes `shippingEstimate: null`, `shippingEstimateUnavailable: true`, and `shippingEstimateError` instead of failing the command. Always check `available` before recording a listing; skip if false.",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Item ID to retrieve"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "query": {
           "help": "Search for items on ShopGoodwill.",
+          "usage_instructions": "Use to search ShopGoodwill listings by keyword. Supports filtering by category, price range, etc.",
           "arguments": [
             {
               "name": "query",
@@ -265,7 +365,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "Results per page (max 40)",
+              "help": "Results per page. Default --sort newest: up to 200 (recency-window fetch is capped at 200 items). --sort price/ending/bids: max 40 (single API page)",
               "short": "-l",
               "default": "40"
             },
@@ -285,15 +385,15 @@
               "name": "--sort",
               "type": "TEXT",
               "required": false,
-              "help": "Sort by: ending, bids, price, newest",
+              "help": "Sort field: newest (default), price, ending, bids. --desc reverses each field's natural order",
               "short": "-s",
-              "default": "ending"
+              "default": "newest"
             },
             {
               "name": "--desc",
               "type": "bool",
               "required": false,
-              "help": "Sort descending",
+              "help": "Reverse the sort field's natural direction",
               "short": "-d"
             },
             {
@@ -326,48 +426,9 @@
               "required": false,
               "help": "Auth profile name"
             }
-          ],
-          "usage_instructions": "Use to search ShopGoodwill listings by keyword. Supports filtering by category, price range, etc."
-        },
-        "get": {
-          "help": "Get details for a specific item.",
-          "arguments": [
-            {
-              "name": "item_id",
-              "type": "INTEGER",
-              "required": true,
-              "help": "Item ID to retrieve"
-            }
-          ],
-          "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ],
-          "usage_instructions": "Use to get details of a specific listing by ID."
+          ]
         }
-      },
-      "usage_instructions": "Search ShopGoodwill listings -- query for items and get listing details."
-    },
-    "cache": {
-      "help": "Manage response cache",
-      "commands": {
-        "clear": {
-          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Run `shopgoodwill cache clear --help` for exact arguments and options."
-        }
-      },
-      "usage_instructions": "Run `shopgoodwill cache --help` for exact arguments and options."
+      }
     }
   },
   "usage_instructions": "Use for searching ShopGoodwill auction listings. Commands follow `shopgoodwill <group> <action>` pattern. Use `search query` to find items and `search get` for listing details. Requires browser authentication via `shopgoodwill auth login`."

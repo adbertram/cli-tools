@@ -7,10 +7,10 @@ from cli_tools_shared.filters import (
     validate_filters,
 )
 from cli_tools_shared.output import (
+    command,
     print_error,
     print_json,
     print_table,
-    handle_error,
 )
 from pydantic import BaseModel
 
@@ -52,6 +52,7 @@ def extract_fields(items: list, fields: list) -> list:
 
 
 @app.command("list")
+@command
 def conversations_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(50, "--limit", "-l", help="Maximum number of conversations to return"),
@@ -68,50 +69,47 @@ def conversations_list(
         imessage conversations list --filter "service:iMessage"
         imessage conversations list --properties "id,display_name,last_message_text"
     """
-    try:
-        # Validate filters if provided
-        if filter:
-            try:
-                validate_filters(filter)
-            except FilterValidationError as e:
-                print_error(str(e))
-                raise typer.Exit(1)
+    # Validate filters if provided
+    if filter:
+        try:
+            validate_filters(filter)
+        except FilterValidationError as e:
+            print_error(str(e))
+            raise typer.Exit(1)
 
-        client = get_client()
-        conversations = client.list_conversations(limit=limit)
+    client = get_client()
+    conversations = client.list_conversations(limit=limit)
 
-        # Apply client-side filters
-        if filter and isinstance(conversations, list):
-            conversations_dict = [model_to_dict(conv) for conv in conversations]
-            conversations_dict = apply_filters(conversations_dict, filter)
-            conversations = conversations_dict
+    # Apply client-side filters
+    if filter and isinstance(conversations, list):
+        conversations_dict = [model_to_dict(conv) for conv in conversations]
+        conversations_dict = apply_filters(conversations_dict, filter)
+        conversations = conversations_dict
 
-        # Apply properties field selection
+    # Apply properties field selection
+    if properties:
+        fields = [f.strip() for f in properties.split(",")]
+        conversations = extract_fields(conversations, fields)
+
+    if table:
+        if not conversations:
+            print("No conversations found.")
+            return
+
         if properties:
-            fields = [f.strip() for f in properties.split(",")]
-            conversations = extract_fields(conversations, fields)
-
-        if table:
-            if not conversations:
-                print("No conversations found.")
-                return
-
-            if properties:
-                columns = [f.strip() for f in properties.split(",")]
-                print_table(conversations, columns, columns)
-            else:
-                # Default columns for Conversation model
-                columns = ["id", "display_name", "last_message_text", "service"]
-                headers = ["ID", "Name", "Last Message", "Service"]
-                print_table(conversations, columns, headers)
+            columns = [f.strip() for f in properties.split(",")]
+            print_table(conversations, columns, columns)
         else:
-            print_json(conversations)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+            # Default columns for Conversation model
+            columns = ["id", "display_name", "last_message_text", "service"]
+            headers = ["ID", "Name", "Last Message", "Service"]
+            print_table(conversations, columns, headers)
+    else:
+        print_json(conversations)
 
 
 @app.command("get")
+@command
 def conversations_get(
     conversation_id: str = typer.Argument(..., help="The conversation ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -125,26 +123,22 @@ def conversations_get(
         imessage conversations get CONVERSATION_ID --table
         imessage conversations get CONVERSATION_ID --properties "id,display_name,message_count"
     """
-    try:
-        client = get_client()
-        conversation = client.get_conversation(conversation_id)
+    client = get_client()
+    conversation = client.get_conversation(conversation_id)
 
-        # Apply properties field selection
+    # Apply properties field selection
+    if properties:
+        fields = [f.strip() for f in properties.split(",")]
+        conversation = extract_fields([conversation], fields)[0]
+
+    if table:
         if properties:
-            fields = [f.strip() for f in properties.split(",")]
-            conversation = extract_fields([conversation], fields)[0]
-
-        if table:
-            if properties:
-                columns = [f.strip() for f in properties.split(",")]
-                print_table([conversation], columns, columns)
-            else:
-                # Convert model to key-value table
-                conversation_dict = model_to_dict(conversation)
-                rows = [{"field": k, "value": str(v)[:60]} for k, v in conversation_dict.items() if v is not None and k != "messages"]
-                print_table(rows, ["field", "value"], ["Field", "Value"])
+            columns = [f.strip() for f in properties.split(",")]
+            print_table([conversation], columns, columns)
         else:
-            print_json(conversation)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+            # Convert model to key-value table
+            conversation_dict = model_to_dict(conversation)
+            rows = [{"field": k, "value": str(v)[:60]} for k, v in conversation_dict.items() if v is not None and k != "messages"]
+            print_table(rows, ["field", "value"], ["Field", "Value"])
+    else:
+        print_json(conversation)

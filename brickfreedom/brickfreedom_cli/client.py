@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 from cli_tools_shared.activity_log import get_activity_logger
 from cli_tools_shared.auth import BrowserAutomationError
 from cli_tools_shared.http_session import BrowserAuthState, BrowserAuthenticatedHttpClient
-from cli_tools_shared.data_cache import cached
+from cli_tools_shared.data_cache import cached, invalidate
 from cli_tools_shared.exceptions import ClientError
 from cli_tools_shared.output import print_warning
 
@@ -267,7 +267,14 @@ class BrickfreedomClient:
         return TaskList(tasks=tasks)
 
     def create_task(self, text: str) -> TaskResult:
-        """Create a new task in My Tasks."""
+        """Create a new task in My Tasks.
+
+        Success is gated on verifying the new row actually appears in the
+        dashboard DOM after submission -- it is not reported unconditionally.
+        The `list_tasks` cache is also busted so a subsequent `task list`
+        reflects this creation immediately instead of serving a stale
+        snapshot for up to CACHE_TTL seconds.
+        """
         activity_logger.info("Creating task")
         self._ensure_dashboard()
         page = self.get_page()
@@ -278,7 +285,28 @@ class BrickfreedomClient:
 
         task_input.fill(text)
         task_input.press("Enter")
-        page.wait_for_timeout(1000)
+
+        created = False
+        for _ in range(6):
+            page.wait_for_timeout(500)
+            texts = page.evaluate("""() => {
+                const items = document.querySelectorAll('li[wire\\\\:sortable\\\\.item]');
+                return Array.from(items).map(item => {
+                    const textEl = item.querySelector('div[wire\\\\:click^="editTask"]');
+                    return textEl?.textContent?.trim() || '';
+                });
+            }""")
+            if text in texts:
+                created = True
+                break
+
+        if not created:
+            raise ClientError(
+                f"Task creation could not be verified: '{text}' did not appear "
+                f"in My Tasks after submission."
+            )
+
+        invalidate(self, "list_tasks")
 
         return TaskResult(success=True, task=text, message="Task created successfully")
 
@@ -302,6 +330,8 @@ class BrickfreedomClient:
         checkbox.click()
         page.wait_for_timeout(500)
 
+        invalidate(self, "list_tasks")
+
         return TaskResult(success=True, message=f"Task {task_index} marked as complete")
 
     def delete_task(self, task_index: int) -> TaskResult:
@@ -324,6 +354,8 @@ class BrickfreedomClient:
         delete_btn.click()
         page.wait_for_timeout(500)
 
+        invalidate(self, "list_tasks")
+
         return TaskResult(success=True, message=f"Task {task_index} deleted")
 
     def mark_all_completed(self) -> TaskResult:
@@ -339,6 +371,8 @@ class BrickfreedomClient:
         button.click()
         page.wait_for_timeout(1000)
 
+        invalidate(self, "list_tasks")
+
         return TaskResult(success=True, message="All tasks marked as completed")
 
     def delete_all_completed(self) -> TaskResult:
@@ -353,6 +387,8 @@ class BrickfreedomClient:
 
         button.click()
         page.wait_for_timeout(1000)
+
+        invalidate(self, "list_tasks")
 
         return TaskResult(success=True, message="All completed tasks deleted")
 
@@ -801,9 +837,7 @@ class BrickfreedomClient:
 
         parts = []
         for task in task_list.tasks:
-            parsed = MissingPart.from_task_text(task.index, task.text, task.completed)
-            if parsed:
-                parts.append(parsed)
+            parts.extend(MissingPart.from_task_texts(task.index, task.text, task.completed))
 
         if not include_completed:
             parts = [p for p in parts if not p.completed]
@@ -817,13 +851,14 @@ class BrickfreedomClient:
 
         matching_tasks = []
         for task in task_list.tasks:
-            parsed = MissingPart.from_task_text(task.index, task.text, task.completed)
-            if parsed and parsed.order_id == order_id:
+            parsed_parts = MissingPart.from_task_texts(task.index, task.text, task.completed)
+            matching_part = next((part for part in parsed_parts if part.order_id == order_id), None)
+            if matching_part:
                 matching_tasks.append({
                     "index": task.index,
-                    "orderId": parsed.order_id,
-                    "itemNumber": parsed.item_number,
-                    "colorName": parsed.color_name,
+                    "orderId": matching_part.order_id,
+                    "itemNumber": matching_part.item_number,
+                    "colorName": matching_part.color_name,
                     "completed": task.completed
                 })
 

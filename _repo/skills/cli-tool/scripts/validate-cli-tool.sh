@@ -6,7 +6,6 @@
 set -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TEST_CONFIG_PATH="$SCRIPT_DIR/../tests/cli_test_config.toml"
 CLI_TOOLS_DIR="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 
 CLI_NAME="$1"
@@ -19,18 +18,29 @@ TOOL_DIR="$CLI_TOOLS_DIR/$CLI_NAME"
 if [ ! -d "$TOOL_DIR" ] && [ -d "$CLI_TOOLS_DIR/_personal/$CLI_NAME" ]; then
     TOOL_DIR="$CLI_TOOLS_DIR/_personal/$CLI_NAME"
 fi
-SYMLINK_PATH="$HOME/.local/bin/$CLI_NAME"
+
+# The no-auth CLI probe below uses only standard-library Python modules.
+PYTHON_BIN="$(command -v python3 || :)"
+if [ -z "$PYTHON_BIN" ]; then
+    echo '{"error": "validate-cli-tool.sh needs python3 on PATH."}' >&2
+    exit 1
+fi
+CANONICAL_UV_TOOL_DIR="$HOME/.local/share/uv/tools"
+CANONICAL_UV_BIN_DIR="$HOME/.local/bin"
+export UV_TOOL_DIR="$CANONICAL_UV_TOOL_DIR"
+export UV_TOOL_BIN_DIR="$CANONICAL_UV_BIN_DIR"
+SYMLINK_PATH="$UV_TOOL_BIN_DIR/$CLI_NAME"
 LOCAL_SHARED_DIR="$CLI_TOOLS_DIR/_repo/cli-tools-shared"
 PKG_DIR_NAME="${CLI_NAME}-cli"
 if [ -f "$TOOL_DIR/pyproject.toml" ]; then
     PYPROJECT_NAME=$(awk -F'"' '/^name[[:space:]]*=/ { print $2; exit }' "$TOOL_DIR/pyproject.toml")
     [ -n "$PYPROJECT_NAME" ] && PKG_DIR_NAME="$PYPROJECT_NAME"
 fi
-UV_TOOL_DIR_NAME=$(printf '%s' "$PKG_DIR_NAME" | python3 -c 'import re,sys; print(re.sub(r"[-_.]+", "-", sys.stdin.read().strip()).lower())')
-UV_VENV="$HOME/.local/share/uv/tools/$UV_TOOL_DIR_NAME"
+UV_TOOL_DIR_NAME=$(printf '%s' "$PKG_DIR_NAME" | "$PYTHON_BIN" -c 'import re,sys; print(re.sub(r"[-_.]+", "-", sys.stdin.read().strip()).lower())')
+UV_VENV="$UV_TOOL_DIR/$UV_TOOL_DIR_NAME"
 PKG_NAME="$(echo "$CLI_NAME" | tr '-' '_')_cli"
 MAIN_PY="$TOOL_DIR/$PKG_NAME/main.py"
-EXPECTED_SHEBANG_PREFIX="#!$HOME/.local/share/uv/tools/$UV_TOOL_DIR_NAME/bin/python"
+EXPECTED_SHEBANG_PREFIX="#!$UV_TOOL_DIR/$UV_TOOL_DIR_NAME/bin/python"
 
 # Each check sets one of these patterns:
 #   <var>=true | <var>=false | <var>=skipped
@@ -58,21 +68,47 @@ run_silent() {
 
 help_works=false; run_silent --help && help_works=true
 version_works=false; run_silent --version && version_works=true
-is_no_auth_cli=$(python3 - "$TEST_CONFIG_PATH" "$CLI_NAME" <<'PY'
+config_declares_no_auth() {
+    "$PYTHON_BIN" - "$1" <<'PY'
+import ast
 import sys
-import tomllib
 from pathlib import Path
 
 config_path = Path(sys.argv[1])
-cli_name = sys.argv[2]
 
-with config_path.open("rb") as fh:
-    config = tomllib.load(fh)
+try:
+    tree = ast.parse(config_path.read_text(encoding="utf-8"))
+except (OSError, SyntaxError):
+    raise SystemExit(1)
 
-no_auth_clis = config.get("exclusions", {}).get("no_auth_clis", [])
-print("true" if cli_name in no_auth_clis else "false")
+for node in tree.body:
+    if not isinstance(node, ast.ClassDef) or node.name != "Config":
+        continue
+    for statement in node.body:
+        if isinstance(statement, ast.Assign):
+            targets = statement.targets
+            value = statement.value
+        elif isinstance(statement, ast.AnnAssign):
+            targets = [statement.target]
+            value = statement.value
+        else:
+            continue
+        if not any(isinstance(target, ast.Name) and target.id == "CREDENTIAL_TYPES" for target in targets):
+            continue
+        try:
+            credential_types = ast.literal_eval(value)
+        except ValueError:
+            raise SystemExit(1)
+        raise SystemExit(0 if credential_types in ([], ()) else 1)
+
+raise SystemExit(1)
 PY
-)
+}
+
+is_no_auth_cli=false
+if config_declares_no_auth "$TOOL_DIR/$PKG_NAME/config.py"; then
+    is_no_auth_cli=true
+fi
 
 auth_group_exists=false
 if [ "$is_no_auth_cli" = "true" ]; then
@@ -171,7 +207,7 @@ USES_CREATE_APP="$uses_create_app" \
 USES_RUN_APP="$uses_run_app" \
 AI_INSTRUCTION_CONTRACT="$ai_instruction_contract" \
 AI_INSTRUCTION_FORBIDDEN_FIELDS="$ai_instruction_forbidden_fields" \
-python3 - <<'PY'
+"$PYTHON_BIN" - <<'PY'
 import json, os
 
 def coerce(v):

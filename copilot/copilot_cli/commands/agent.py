@@ -1,4 +1,6 @@
 """Agent commands for Copilot CLI."""
+from cli_tools_shared.output import command
+
 import inspect
 import typer
 import httpx
@@ -23,6 +25,8 @@ def _token_cache_path(filename: str) -> Path:
     cache_dir = get_cache_root()
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir / filename
+
+
 from cli_tools_shared.output import (
     print_json,
     print_table,
@@ -40,57 +44,23 @@ from ..validation import (
 app = typer.Typer(help="Manage Copilot Studio agents")
 
 COMMAND_CREDENTIALS = {
-    "analytics": [
-        "custom"
-    ],
-    "auth": [
-        "custom"
-    ],
-    "channel": [
-        "custom"
-    ],
-    "create": [
-        "custom"
-    ],
-    "get": [
-        "custom"
-    ],
-    "knowledge": [
-        "custom"
-    ],
-    "list": [
-        "custom"
-    ],
-    "model": [
-        "custom"
-    ],
-    "permissions": [
-        "custom"
-    ],
-    "prompt": [
-        "custom"
-    ],
-    "publish": [
-        "custom"
-    ],
-    "remove": [
-        "custom"
-    ],
-    "tool": [
-        "custom"
-    ],
-    "topic": [
-        "custom"
-    ],
-    "transcript": [
-        "custom"
-    ],
-    "trigger": [
-        "custom"
-    ],
-    "update": [
-        "custom"
-    ]
+    "analytics": ["custom"],
+    "auth": ["custom"],
+    "channel": ["custom"],
+    "create": ["custom"],
+    "get": ["custom"],
+    "knowledge": ["custom"],
+    "list": ["custom"],
+    "model": ["custom"],
+    "permissions": ["custom"],
+    "prompt": ["custom"],
+    "publish": ["custom"],
+    "remove": ["custom"],
+    "tool": ["custom"],
+    "topic": ["custom"],
+    "transcript": ["custom"],
+    "trigger": ["custom"],
+    "update": ["custom"],
 }
 
 # Placeholder for permissions subcommand (coming soon)
@@ -146,6 +116,7 @@ AGENT_FIELD_ALIASES = {
     "schemaName": "schemaname",
     "logicalName": "schemaname",
     "stateCode": "statecode",
+    "status": "statuscode",
     "statusCode": "statuscode",
     "publishedOn": "publishedon",
     "createdOn": "createdon",
@@ -209,6 +180,7 @@ def format_bot_for_display(bot: dict) -> dict:
         "schemaName": schema_name,
         "logicalName": schema_name,
         "statecode": state_map.get(statecode, str(statecode) if statecode is not None else ""),
+        "status": status_map.get(statuscode, str(statuscode) if statuscode is not None else ""),
         "statuscode": status_map.get(statuscode, str(statuscode) if statuscode is not None else ""),
         "published": publishedon is not None,
         "createdon": bot.get("createdon", ""),
@@ -290,6 +262,7 @@ def format_transcript_content(content: str) -> str:
 
 
 @app.command("list")
+@command
 def list_agents(
     table: bool = typer.Option(
         False,
@@ -344,13 +317,24 @@ def list_agents(
         # Fields required by format_bot_for_display to compute derived values
         _display_deps = {"publishedon", "statecode", "statuscode", "createdon", "modifiedon"}
         if properties:
-            select_fields = [AGENT_FIELD_ALIASES.get(f.strip(), f.strip()) for f in properties.split(",")]
+            select_fields = [
+                AGENT_FIELD_ALIASES.get(f.strip(), f.strip()) for f in properties.split(",")
+            ]
             # Always fetch fields needed for display formatting (published, statecode labels, etc.)
             for dep in _display_deps:
                 if dep not in select_fields:
                     select_fields.append(dep)
         elif not all_fields:
-            select_fields = ["name", "botid", "schemaname", "statecode", "statuscode", "publishedon", "createdon", "modifiedon"]
+            select_fields = [
+                "name",
+                "botid",
+                "schemaname",
+                "statecode",
+                "statuscode",
+                "publishedon",
+                "createdon",
+                "modifiedon",
+            ]
 
         bots = client.list_bots(
             select=select_fields,
@@ -394,7 +378,9 @@ def list_agents(
                             prop_set.add(AGENT_FIELD_ALIASES[p])
                         if p in _reverse_aliases:
                             prop_set.add(_reverse_aliases[p])
-                    formatted = [{k: v for k, v in item.items() if k in prop_set} for item in formatted]
+                    formatted = [
+                        {k: v for k, v in item.items() if k in prop_set} for item in formatted
+                    ]
                 print_json(formatted)
     except Exception as e:
         exit_code = handle_error(e)
@@ -402,6 +388,7 @@ def list_agents(
 
 
 @app.command("get")
+@command
 def get_agent(
     agent_id: str = typer.Argument(..., help="The agent's unique identifier (GUID)"),
     include_components: bool = typer.Option(
@@ -458,10 +445,18 @@ def get_agent(
             if response_instructions:
                 bot["configuration"]["gPTSettings"]["responseInstructions"] = response_instructions
 
+        # Overlay the same normalized identity/status fields that `agent list`
+        # produces so both subcommands agree on field names and values
+        # (id, published, label-form statecode/statuscode, schema aliases).
+        # format_bot_for_display is the single shared normalizer; the detailed
+        # payload (configuration object, components, GPT instructions) is
+        # preserved because we update onto the assembled bot rather than
+        # replacing it with the compact list shape.
+        bot.update(format_bot_for_display(bot))
+
         if table:
-            formatted = format_bot_for_display(bot)
             print_table(
-                [formatted],
+                [bot],
                 columns=["name", "botid", "statecode", "published"],
                 headers=["Name", "Agent ID", "State", "Published"],
             )
@@ -473,6 +468,7 @@ def get_agent(
 
 
 @app.command("remove")
+@command
 def remove_agent(
     agent_id: str = typer.Argument(..., help="The agent's unique identifier (GUID)"),
     force: bool = typer.Option(
@@ -521,13 +517,19 @@ def remove_agent(
             # Check if error is about referenced components
             if "referenced by" in error_msg and "other components" in error_msg:
                 # List the dependent components
-                typer.echo(f"\nAgent '{agent_name}' cannot be deleted due to dependent components:\n")
+                typer.echo(
+                    f"\nAgent '{agent_name}' cannot be deleted due to dependent components:\n"
+                )
                 components = client.get_bot_components(agent_id)
 
                 if components:
                     # Group by component type
                     topics = [c for c in components if c.get("componenttype") in (0, 9)]
-                    tools = [c for c in components if "InvokeConnectedAgentTaskAction" in (c.get("schemaname") or "")]
+                    tools = [
+                        c
+                        for c in components
+                        if "InvokeConnectedAgentTaskAction" in (c.get("schemaname") or "")
+                    ]
                     other = [c for c in components if c not in topics and c not in tools]
 
                     if topics:
@@ -547,7 +549,9 @@ def remove_agent(
                     if other:
                         typer.echo(f"\n  Other components ({len(other)}):")
                         for c in other[:10]:
-                            typer.echo(f"    - {c.get('name', 'Unknown')} (type: {c.get('componenttype')})")
+                            typer.echo(
+                                f"    - {c.get('name', 'Unknown')} (type: {c.get('componenttype')})"
+                            )
                         if len(other) > 10:
                             typer.echo(f"    ... and {len(other) - 10} more")
 
@@ -584,6 +588,7 @@ def _delete_agent_components(client, agent_id: str) -> None:
 
 
 @app.command("publish")
+@command
 def publish_agent(
     agent_id: str = typer.Argument(..., help="The agent's unique identifier (GUID)"),
 ):
@@ -592,6 +597,8 @@ def publish_agent(
 
     Publishing makes the latest changes to your agent available to users.
     This includes changes to topics, knowledge sources, tools, and settings.
+    The target environment must have Copilot Studio capacity or an enabled
+    pay-as-you-go billing policy; authoring and attachment commands do not.
 
     Note: Publishing may take a few minutes to complete.
 
@@ -620,6 +627,7 @@ def publish_agent(
 
 
 @app.command("update")
+@command
 def update_agent(
     agent_id: str = typer.Argument(..., help="The agent's unique identifier (GUID)"),
     name: Optional[str] = typer.Option(
@@ -665,6 +673,21 @@ def update_agent(
         "--content-moderation",
         help="Content moderation level: low, moderate, or high",
     ),
+    model_knowledge: Optional[bool] = typer.Option(
+        None,
+        "--model-knowledge/--no-model-knowledge",
+        help="Enable/disable model knowledge",
+    ),
+    file_analysis: Optional[bool] = typer.Option(
+        None,
+        "--file-analysis/--no-file-analysis",
+        help="Enable/disable file analysis",
+    ),
+    semantic_search: Optional[bool] = typer.Option(
+        None,
+        "--semantic-search/--no-semantic-search",
+        help="Enable/disable semantic search",
+    ),
     web_search: Optional[bool] = typer.Option(
         None,
         "--web-search/--no-web-search",
@@ -694,6 +717,7 @@ def update_agent(
         copilot agent update <agent-id> --no-orchestration
         copilot agent update <agent-id> --auth-mode integrated --auth-trigger always
         copilot agent update <agent-id> --content-moderation low
+        copilot agent update <agent-id> --no-file-analysis
         copilot agent update <agent-id> --web-search
         copilot agent update <agent-id> --no-web-search
         copilot agent update <agent-id> --response-format "Always respond in bullet points"
@@ -705,7 +729,10 @@ def update_agent(
         if auth_mode is not None:
             auth_mode_lower = auth_mode.lower()
             if auth_mode_lower not in AUTH_MODE_MAP:
-                typer.echo(f"Error: Invalid auth-mode '{auth_mode}'. Valid options: none, integrated, custom", err=True)
+                typer.echo(
+                    f"Error: Invalid auth-mode '{auth_mode}'. Valid options: none, integrated, custom",
+                    err=True,
+                )
                 raise typer.Exit(1)
             auth_mode_int = AUTH_MODE_MAP[auth_mode_lower]
 
@@ -718,7 +745,10 @@ def update_agent(
         if auth_trigger is not None:
             auth_trigger_lower = auth_trigger.lower()
             if auth_trigger_lower not in AUTH_TRIGGER_MAP:
-                typer.echo(f"Error: Invalid auth-trigger '{auth_trigger}'. Valid options: as-needed, always", err=True)
+                typer.echo(
+                    f"Error: Invalid auth-trigger '{auth_trigger}'. Valid options: as-needed, always",
+                    err=True,
+                )
                 raise typer.Exit(1)
             auth_trigger_int = AUTH_TRIGGER_MAP[auth_trigger_lower]
 
@@ -727,7 +757,10 @@ def update_agent(
         if content_moderation is not None:
             content_moderation_lower = content_moderation.lower()
             if content_moderation_lower not in CONTENT_MODERATION_LEVELS:
-                typer.echo(f"Error: Invalid content-moderation '{content_moderation}'. Valid options: low, moderate, high", err=True)
+                typer.echo(
+                    f"Error: Invalid content-moderation '{content_moderation}'. Valid options: low, moderate, high",
+                    err=True,
+                )
                 raise typer.Exit(1)
             content_moderation_value = CONTENT_MODERATION_LEVELS[content_moderation_lower]
 
@@ -758,12 +791,18 @@ def update_agent(
                 with open(response_format_file, "r") as f:
                     agent_response_format = f.read()
             except FileNotFoundError:
-                typer.echo(f"Error: Response format file not found: {response_format_file}", err=True)
+                typer.echo(
+                    f"Error: Response format file not found: {response_format_file}", err=True
+                )
                 raise typer.Exit(1)
             except IOError as e:
                 typer.echo(f"Error reading response format file: {e}", err=True)
                 raise typer.Exit(1)
 
+        # NOTE: agent update takes no inline tool/knowledge payload, so no
+        # capacity pre-check is needed here. If inline tool/knowledge params are
+        # ever added, call ensure_tools_and_knowledge_entitled() (from
+        # ..capacity) when the attach count >= 1, before any mutation.
         client = get_client()
 
         # Get current agent name for success message
@@ -773,14 +812,25 @@ def update_agent(
         # Track what was updated for success message
         updates_made = []
 
-        # Update bot settings (name, description, orchestration, content moderation - NOT instructions)
-        if name or description or orchestration is not None or content_moderation_value is not None:
+        # Update bot settings (not instructions, auth, web search, or response format)
+        if (
+            name
+            or description
+            or orchestration is not None
+            or content_moderation_value is not None
+            or model_knowledge is not None
+            or file_analysis is not None
+            or semantic_search is not None
+        ):
             client.update_bot(
                 bot_id=agent_id,
                 name=name,
                 description=description,
                 orchestration=orchestration,
                 content_moderation=content_moderation_value,
+                use_model_knowledge=model_knowledge,
+                file_analysis=file_analysis,
+                semantic_search=semantic_search,
             )
             if name:
                 updates_made.append("name")
@@ -790,6 +840,16 @@ def update_agent(
                 updates_made.append("orchestration")
             if content_moderation_value is not None:
                 updates_made.append(f"content-moderation={content_moderation_value}")
+            if model_knowledge is not None:
+                updates_made.append(
+                    f"model-knowledge={'enabled' if model_knowledge else 'disabled'}"
+                )
+            if file_analysis is not None:
+                updates_made.append(f"file-analysis={'enabled' if file_analysis else 'disabled'}")
+            if semantic_search is not None:
+                updates_made.append(
+                    f"semantic-search={'enabled' if semantic_search else 'disabled'}"
+                )
 
         # Update instructions via botcomponent API (the correct API)
         if agent_instructions:
@@ -826,6 +886,7 @@ def update_agent(
 
 
 @app.command("create")
+@command
 def create_agent(
     name: str = typer.Option(
         ...,
@@ -901,14 +962,20 @@ def create_agent(
         # Validate and convert auth_mode
         auth_mode_lower = auth_mode.lower()
         if auth_mode_lower not in AUTH_MODE_MAP:
-            typer.echo(f"Error: Invalid auth-mode '{auth_mode}'. Valid options: none, integrated, custom", err=True)
+            typer.echo(
+                f"Error: Invalid auth-mode '{auth_mode}'. Valid options: none, integrated, custom",
+                err=True,
+            )
             raise typer.Exit(1)
         auth_mode_int = AUTH_MODE_MAP[auth_mode_lower]
 
         # Validate and convert auth_trigger
         auth_trigger_lower = auth_trigger.lower()
         if auth_trigger_lower not in AUTH_TRIGGER_MAP:
-            typer.echo(f"Error: Invalid auth-trigger '{auth_trigger}'. Valid options: as-needed, always", err=True)
+            typer.echo(
+                f"Error: Invalid auth-trigger '{auth_trigger}'. Valid options: as-needed, always",
+                err=True,
+            )
             raise typer.Exit(1)
         auth_trigger_int = AUTH_TRIGGER_MAP[auth_trigger_lower]
 
@@ -943,12 +1010,18 @@ def create_agent(
                 with open(response_format_file, "r") as f:
                     agent_response_format = f.read()
             except FileNotFoundError:
-                typer.echo(f"Error: Response format file not found: {response_format_file}", err=True)
+                typer.echo(
+                    f"Error: Response format file not found: {response_format_file}", err=True
+                )
                 raise typer.Exit(1)
             except IOError as e:
                 typer.echo(f"Error reading response format file: {e}", err=True)
                 raise typer.Exit(1)
 
+        # NOTE: agent create takes no inline tool/knowledge payload, so no
+        # capacity pre-check is needed here. If inline tool/knowledge params are
+        # ever added, call ensure_tools_and_knowledge_entitled() (from
+        # ..capacity) when the attach count >= 1, before any mutation.
         client = get_client()
         result = client.create_bot(
             name=name,
@@ -967,11 +1040,7 @@ def create_agent(
         if agent_response_format and bot_id:
             client.update_response_instructions(bot_id, agent_response_format)
 
-        print_json({
-            "name": name,
-            "botid": bot_id,
-            "status": "created"
-        })
+        print_json({"name": name, "botid": bot_id, "status": "created"})
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
@@ -984,7 +1053,133 @@ def create_agent(
 DIRECTLINE_URL = "https://directline.botframework.com/v3/directline"
 
 
+# =============================================================================
+# Power Platform cloud resolution (M365 Agents SDK path)
+# =============================================================================
+#
+# The M365 Agents SDK resolves the Copilot Studio host from the
+# ``PowerPlatformCloud`` category. For commercial tenants this is the public
+# cloud (``api.powerplatform.com``); sovereign clouds (US Gov, DoD, China) are
+# first-class SDK enum values, so a correct cloud is derived deterministically
+# from the Dataverse environment host — never hardcoded to a single tenant and
+# never forced to ``Other`` (which requires an explicit base address and breaks
+# normal commercial environments).
+#
+# Data-driven: add a sovereign cloud by adding a row here, not a code branch.
+# Maps a Dataverse host suffix (the org host in DATAVERSE_URL) to the
+# PowerPlatformCloud enum *name*. Commercial hosts are intentionally absent —
+# they resolve to the SDK default (public/PROD) via cloud=None.
+# Source: Microsoft Learn "Dynamics 365 US Government URLs" and "Discover user
+# organizations" (Global Discovery Service per-cloud hosts).
+DATAVERSE_HOST_CLOUD_MAP = {
+    ".crm.microsoftdynamics.us": "HIGH",  # US Gov GCC High
+    ".crm.appsplatform.us": "DOD",  # US Gov DoD
+    ".crm9.dynamics.com": "GOV",  # US Gov GCC
+    ".crm.dynamics.cn": "MOONCAKE",  # China (operated by 21Vianet)
+}
+
+# Commercial Dataverse hosts resolve to the public cloud (cloud=None). Regional
+# commercial orgs use ``.crmN.dynamics.com`` (N = region number) plus the
+# unnumbered North America ``.crm.dynamics.com``; GCC reuses N=9 and is handled
+# above, so any other ``.dynamics.com`` host is commercial.
+_COMMERCIAL_DYNAMICS_SUFFIX = ".dynamics.com"
+
+# Optional explicit cloud override for the rare case where the Dataverse host
+# cannot be auto-classified (e.g. a private/preview cloud the table does not
+# cover). The value is a ``PowerPlatformCloud`` enum *name* understood by the
+# installed M365 Agents SDK (case-insensitive), e.g. ``Prod``, ``Gov``,
+# ``High``, ``DoD``, ``Mooncake``.
+#
+# This is intentionally a known cloud category, NOT a free-form base address:
+# the SDK's ``Other`` / ``custom_power_platform_cloud`` code path cannot build a
+# valid connection URL (it concatenates the raw value into the host), so a
+# base-address override would not actually work. The legacy
+# ``POWERPLATFORM_CLOUD_URL`` value (a Direct Line island-gateway host) is
+# unrelated and is never consulted here.
+POWERPLATFORM_CLOUD_ENV = "POWERPLATFORM_CLOUD"
+
+
+def resolve_power_platform_cloud(dataverse_url, override=None):
+    """Resolve the M365 Agents SDK cloud for the active Dataverse environment.
+
+    Returns a ``(cloud, custom_base_address)`` tuple to pass straight to
+    ``ConnectionSettings(cloud=..., custom_power_platform_cloud=...)``. The
+    second element is always ``None`` — every supported cloud (commercial and
+    sovereign) is a first-class SDK enum, so the broken ``Other`` base-address
+    path is never used.
+
+    - Commercial tenants -> ``(None, None)`` so the SDK uses the public cloud
+      (``api.powerplatform.com``). This is the no-config default.
+    - Sovereign clouds (US Gov GCC/GCC High/DoD, China) -> ``(<enum>, None)``
+      derived from the Dataverse host; the SDK already knows their hosts.
+    - Explicit ``override`` (a ``PowerPlatformCloud`` enum name) -> the matching
+      enum, for clouds the host table does not classify.
+
+    Fails loudly (ValueError) for an unknown override name or an unidentifiable
+    non-commercial Dataverse host, instead of silently defaulting to public.
+
+    :param dataverse_url: The active environment's Dataverse URL
+        (e.g. ``https://org23192677.crm.dynamics.com/``). May be ``None``.
+    :param override: Optional ``PowerPlatformCloud`` enum name override.
+    :return: ``(cloud, custom_base_address)`` for ConnectionSettings.
+    """
+    from urllib.parse import urlparse
+
+    from microsoft_agents.copilotstudio.client.power_platform_cloud import (
+        PowerPlatformCloud,
+    )
+
+    # 1. Explicit operator override wins. It must name a known SDK cloud, since
+    #    only enum-based clouds resolve to a usable endpoint in this SDK.
+    if override:
+        cloud = _coerce_power_platform_cloud(override, PowerPlatformCloud)
+        if cloud is None:
+            valid = ", ".join(c.value for c in PowerPlatformCloud)
+            raise ValueError(
+                f"{POWERPLATFORM_CLOUD_ENV}={override!r} is not a known Power "
+                f"Platform cloud. Valid values: {valid}."
+            )
+        return (None if cloud is PowerPlatformCloud.PROD else cloud), None
+
+    # 2. Derive from the Dataverse environment host.
+    host = urlparse(dataverse_url).hostname if dataverse_url else None
+    if not host:
+        # No environment host to classify; let the SDK default to public cloud.
+        return None, None
+
+    host = host.lower()
+    for suffix, cloud_name in DATAVERSE_HOST_CLOUD_MAP.items():
+        if host.endswith(suffix):
+            return PowerPlatformCloud[cloud_name], None
+
+    # 3. Commercial Dataverse hosts -> public cloud (SDK default).
+    if host.endswith(_COMMERCIAL_DYNAMICS_SUFFIX):
+        return None, None
+
+    # 4. Unidentifiable non-commercial host: fail loudly rather than guess.
+    raise ValueError(
+        f"Could not determine the Power Platform cloud for Dataverse host "
+        f"'{host}'. If this is a sovereign cloud, add its Dataverse suffix to "
+        f"DATAVERSE_HOST_CLOUD_MAP; otherwise set {POWERPLATFORM_CLOUD_ENV} to a "
+        f"known cloud name (e.g. Prod, Gov, High, DoD, Mooncake)."
+    )
+
+
+def _coerce_power_platform_cloud(value, power_platform_cloud_enum):
+    """Coerce a string to a PowerPlatformCloud enum member, or None if unknown.
+
+    Accepts either the enum member name (e.g. ``DOD``) or its value
+    (e.g. ``DoD``), case-insensitively.
+    """
+    candidate = value.strip()
+    for member in power_platform_cloud_enum:
+        if candidate.lower() in (member.name.lower(), member.value.lower()):
+            return member
+    return None
+
+
 @app.command("prompt")
+@command
 def prompt_agent(
     agent_id: str = typer.Argument(
         ...,
@@ -1130,36 +1325,60 @@ def prompt_agent(
             if auth_mode == 2:  # Integrated authentication ("Authenticate with Microsoft")
                 # Use M365 Agents SDK for integrated auth agents
                 if verbose:
-                    typer.echo("Agent uses 'Authenticate with Microsoft' - using M365 Agents SDK...")
+                    typer.echo(
+                        "Agent uses 'Authenticate with Microsoft' - using M365 Agents SDK..."
+                    )
 
                 try:
-                    from microsoft_agents.copilotstudio.client import ConnectionSettings, CopilotClient
+                    from microsoft_agents.copilotstudio.client import (
+                        ConnectionSettings,
+                        CopilotClient,
+                    )
                     from microsoft_agents.activity import ActivityTypes
                     import asyncio
                     import msal
                 except ImportError as e:
-                    typer.echo(f"Error: Required package not found: {e}. Reinstall with: pip install -e .", err=True)
+                    typer.echo(
+                        f"Error: Required package not found: {e}. Reinstall with: pip install -e .",
+                        err=True,
+                    )
                     raise typer.Exit(1)
 
                 # Get required parameters for M365 SDK
                 from copilot_cli.config import Config
+
                 config = Config()
 
-                m365_environment_id = os.environ.get("DATAVERSE_ENVIRONMENT_ID") or os.environ.get("POWERPLATFORM_ENVIRONMENT_ID")
+                m365_environment_id = os.environ.get("DATAVERSE_ENVIRONMENT_ID") or os.environ.get(
+                    "POWERPLATFORM_ENVIRONMENT_ID"
+                )
                 m365_client_id = client_id or os.environ.get("ENTRA_CLIENT_ID")
-                m365_tenant_id = tenant_id or os.environ.get("AZURE_TENANT_ID") or os.environ.get("ENTRA_TENANT_ID")
+                m365_tenant_id = (
+                    tenant_id
+                    or os.environ.get("AZURE_TENANT_ID")
+                    or os.environ.get("ENTRA_TENANT_ID")
+                )
 
                 if not m365_environment_id:
                     typer.echo("Error: Environment ID required for M365 SDK.", err=True)
-                    typer.echo("Set DATAVERSE_ENVIRONMENT_ID or POWERPLATFORM_ENVIRONMENT_ID env var.", err=True)
+                    typer.echo(
+                        "Set DATAVERSE_ENVIRONMENT_ID or POWERPLATFORM_ENVIRONMENT_ID env var.",
+                        err=True,
+                    )
                     raise typer.Exit(1)
 
                 if not m365_client_id:
-                    typer.echo("Error: --client-id or ENTRA_CLIENT_ID env var required for M365 SDK.", err=True)
+                    typer.echo(
+                        "Error: --client-id or ENTRA_CLIENT_ID env var required for M365 SDK.",
+                        err=True,
+                    )
                     raise typer.Exit(1)
 
                 if not m365_tenant_id:
-                    typer.echo("Error: --tenant-id or AZURE_TENANT_ID env var required for M365 SDK.", err=True)
+                    typer.echo(
+                        "Error: --tenant-id or AZURE_TENANT_ID env var required for M365 SDK.",
+                        err=True,
+                    )
                     raise typer.Exit(1)
 
                 # Get agent's schema name from bot data
@@ -1175,22 +1394,36 @@ def prompt_agent(
                     typer.echo(f"  Client ID: {m365_client_id[:8]}...")
                     typer.echo(f"  Tenant ID: {m365_tenant_id[:8]}...")
 
-                # Create connection settings
-                # Check for custom Power Platform cloud URL (for environments with non-standard endpoints)
-                from microsoft_agents.copilotstudio.client.power_platform_cloud import PowerPlatformCloud
-                custom_cloud_url = os.environ.get("POWERPLATFORM_CLOUD_URL")
-                cloud_setting = PowerPlatformCloud.OTHER if custom_cloud_url else None
-                
+                # Create connection settings.
+                # Derive the Power Platform cloud from the Dataverse environment
+                # host so commercial tenants resolve to the public cloud with no
+                # config, and sovereign clouds map to their SDK enum. An explicit
+                # base-address override is honored for private/unlisted clouds.
+                cloud_override = os.environ.get(POWERPLATFORM_CLOUD_ENV)
+                try:
+                    cloud_setting, custom_cloud_base = resolve_power_platform_cloud(
+                        config.dataverse_url,
+                        override=cloud_override,
+                    )
+                except ValueError as cloud_err:
+                    typer.echo(f"Error: {cloud_err}", err=True)
+                    raise typer.Exit(1)
+
                 settings = ConnectionSettings(
                     environment_id=m365_environment_id,
                     agent_identifier=agent_schema_name,
                     cloud=cloud_setting,
                     copilot_agent_type=None,
-                    custom_power_platform_cloud=custom_cloud_url,
+                    custom_power_platform_cloud=custom_cloud_base,
                 )
-                
-                if verbose and custom_cloud_url:
-                    typer.echo(f"  Custom Cloud URL: {custom_cloud_url}")
+
+                if verbose:
+                    if custom_cloud_base:
+                        typer.echo(f"  Power Platform cloud: Other ({custom_cloud_base})")
+                    elif cloud_setting is not None:
+                        typer.echo(f"  Power Platform cloud: {cloud_setting.value}")
+                    else:
+                        typer.echo("  Power Platform cloud: Public (api.powerplatform.com)")
 
                 # Acquire token using MSAL device code flow
                 if verbose:
@@ -1216,15 +1449,17 @@ def prompt_agent(
 
                 token_scopes = ["https://api.powerplatform.com/.default"]
                 access_token = None
+                m365_used_service_principal = False
 
                 # Check for service principal credentials (client secret) for non-interactive auth
                 from ..config import get_config as _get_copilot_config
+
                 _cfg = _get_copilot_config()
-                m365_client_secret = (
-                    _cfg._get("M365_SDK_CLIENT_SECRET")
-                    or _cfg._get("AZURE_CLIENT_SECRET")
+                m365_client_secret = _cfg._get("M365_SDK_CLIENT_SECRET") or _cfg._get(
+                    "AZURE_CLIENT_SECRET"
                 )
                 if m365_client_secret:
+                    m365_used_service_principal = True
                     if verbose:
                         typer.echo("Using service principal (client credentials) authentication...")
                     cca = msal.ConfidentialClientApplication(
@@ -1240,7 +1475,10 @@ def prompt_agent(
                     else:
                         error_msg = result.get("error_description", result.get("error", "Unknown"))
                         typer.echo(f"Error: Service principal auth failed: {error_msg}", err=True)
-                        typer.echo("Check M365_SDK_CLIENT_SECRET and ensure admin consent is granted.", err=True)
+                        typer.echo(
+                            "Check M365_SDK_CLIENT_SECRET and ensure admin consent is granted.",
+                            err=True,
+                        )
                         raise typer.Exit(1)
 
                 # Try silent token acquisition from user cache (device code flow)
@@ -1261,7 +1499,10 @@ def prompt_agent(
 
                     flow = pca.initiate_device_flow(scopes=token_scopes)
                     if "user_code" not in flow:
-                        typer.echo(f"Error: Failed to initiate device flow: {flow.get('error_description', 'Unknown error')}", err=True)
+                        typer.echo(
+                            f"Error: Failed to initiate device flow: {flow.get('error_description', 'Unknown error')}",
+                            err=True,
+                        )
                         raise typer.Exit(1)
 
                     # Display device code message to user
@@ -1273,7 +1514,10 @@ def prompt_agent(
                     result = pca.acquire_token_by_device_flow(flow)
 
                     if "error" in result:
-                        typer.echo(f"Error: Authentication failed: {result.get('error_description', result.get('error'))}", err=True)
+                        typer.echo(
+                            f"Error: Authentication failed: {result.get('error_description', result.get('error'))}",
+                            err=True,
+                        )
                         raise typer.Exit(1)
 
                     access_token = result["access_token"]
@@ -1303,13 +1547,17 @@ def prompt_agent(
                     if verbose:
                         typer.echo("Starting conversation...")
 
-                    async for activity in copilot_client.start_conversation(emit_start_conversation_event=True):
+                    async for activity in copilot_client.start_conversation(
+                        emit_start_conversation_event=True
+                    ):
                         if verbose:
                             typer.echo(f"Start activity type: {activity.type}")
                         # Process all start activities - the SDK sets conversation ID from response header
                         if copilot_client._current_conversation_id:
                             if verbose:
-                                typer.echo(f"Conversation ID set: {copilot_client._current_conversation_id}")
+                                typer.echo(
+                                    f"Conversation ID set: {copilot_client._current_conversation_id}"
+                                )
                             break
 
                     if not copilot_client._current_conversation_id:
@@ -1317,7 +1565,7 @@ def prompt_agent(
 
                     # Now send the actual message
                     if verbose:
-                        typer.echo(f"Sending message: \"{message}\"")
+                        typer.echo(f'Sending message: "{message}"')
 
                     responses = []
                     replies = copilot_client.ask_question(message)
@@ -1334,6 +1582,24 @@ def prompt_agent(
                     bot_response = asyncio.run(prompt_with_m365_sdk())
                 except Exception as sdk_error:
                     typer.echo(f"Error: M365 SDK request failed: {sdk_error}", err=True)
+                    # A 405 on the Direct-to-Engine conversations endpoint while
+                    # using app-only (service principal) auth means the
+                    # environment rejects app-only S2S calls. The server body is
+                    # "App-only S2S access is not enabled for this environment."
+                    if m365_used_service_principal and "405" in str(sdk_error):
+                        typer.echo(
+                            "Cause: the environment does not allow app-only "
+                            "(service principal) access for Copilot Studio "
+                            "conversations.",
+                            err=True,
+                        )
+                        typer.echo(
+                            "Fix: use delegated (user) auth by removing the "
+                            "service-principal secret from the active profile so "
+                            "the device-code flow runs, or have an admin enable "
+                            "app-only S2S access for this environment.",
+                            err=True,
+                        )
                     raise typer.Exit(1)
 
                 if not bot_response:
@@ -1361,7 +1627,10 @@ def prompt_agent(
         except Exception as auth_check_error:
             # If we can't check auth mode, continue anyway - the Direct Line call will fail with a clear error
             if verbose:
-                typer.echo(f"Warning: Could not verify agent authentication mode: {auth_check_error}", err=True)
+                typer.echo(
+                    f"Warning: Could not verify agent authentication mode: {auth_check_error}",
+                    err=True,
+                )
 
         # Determine authentication method
         directline_token = None
@@ -1372,18 +1641,36 @@ def prompt_agent(
             entra_client_id = client_id or os.environ.get("ENTRA_CLIENT_ID")
             entra_tenant_id = tenant_id or os.environ.get("ENTRA_TENANT_ID")
             # Default to Power Platform API scope with CopilotStudio.Copilots.Invoke permission
-            entra_scope = scope or os.environ.get("ENTRA_SCOPE") or "https://api.powerplatform.com/.default"
-            agent_token_endpoint = token_endpoint or os.environ.get("AGENT_TOKEN_ENDPOINT") or os.environ.get("BOT_TOKEN_ENDPOINT")
+            entra_scope = (
+                scope or os.environ.get("ENTRA_SCOPE") or "https://api.powerplatform.com/.default"
+            )
+            agent_token_endpoint = (
+                token_endpoint
+                or os.environ.get("AGENT_TOKEN_ENDPOINT")
+                or os.environ.get("BOT_TOKEN_ENDPOINT")
+            )
 
             if not entra_client_id:
-                typer.echo("Error: --client-id or ENTRA_CLIENT_ID env var required for Entra ID auth", err=True)
+                typer.echo(
+                    "Error: --client-id or ENTRA_CLIENT_ID env var required for Entra ID auth",
+                    err=True,
+                )
                 raise typer.Exit(1)
             if not entra_tenant_id:
-                typer.echo("Error: --tenant-id or ENTRA_TENANT_ID env var required for Entra ID auth", err=True)
+                typer.echo(
+                    "Error: --tenant-id or ENTRA_TENANT_ID env var required for Entra ID auth",
+                    err=True,
+                )
                 raise typer.Exit(1)
             if not agent_token_endpoint:
-                typer.echo("Error: --token-endpoint or AGENT_TOKEN_ENDPOINT env var required for Entra ID auth", err=True)
-                typer.echo("Get endpoint from: Copilot Studio > Channels > Mobile app > Token Endpoint", err=True)
+                typer.echo(
+                    "Error: --token-endpoint or AGENT_TOKEN_ENDPOINT env var required for Entra ID auth",
+                    err=True,
+                )
+                typer.echo(
+                    "Get endpoint from: Copilot Studio > Channels > Mobile app > Token Endpoint",
+                    err=True,
+                )
                 raise typer.Exit(1)
 
             if verbose:
@@ -1396,7 +1683,10 @@ def prompt_agent(
             try:
                 import msal
             except ImportError:
-                typer.echo("Error: msal package required for Entra ID auth. Install with: pip install msal", err=True)
+                typer.echo(
+                    "Error: msal package required for Entra ID auth. Install with: pip install msal",
+                    err=True,
+                )
                 raise typer.Exit(1)
 
             # Persistent token cache under the user's home dir
@@ -1438,7 +1728,10 @@ def prompt_agent(
 
                 flow = app.initiate_device_flow(scopes=[entra_scope])
                 if "user_code" not in flow:
-                    typer.echo(f"Error: Failed to initiate device flow: {flow.get('error_description', 'Unknown error')}", err=True)
+                    typer.echo(
+                        f"Error: Failed to initiate device flow: {flow.get('error_description', 'Unknown error')}",
+                        err=True,
+                    )
                     raise typer.Exit(1)
 
                 # Display device code message to user
@@ -1450,7 +1743,10 @@ def prompt_agent(
                 result = app.acquire_token_by_device_flow(flow)
 
                 if "error" in result:
-                    typer.echo(f"Error: Authentication failed: {result.get('error_description', result.get('error'))}", err=True)
+                    typer.echo(
+                        f"Error: Authentication failed: {result.get('error_description', result.get('error'))}",
+                        err=True,
+                    )
                     raise typer.Exit(1)
 
                 access_token = result["access_token"]
@@ -1482,7 +1778,10 @@ def prompt_agent(
                     typer.echo(f"Token endpoint response: HTTP {token_response.status_code}")
 
                 if token_response.status_code != 200:
-                    typer.echo(f"Error: Failed to get Direct Line token (HTTP {token_response.status_code})", err=True)
+                    typer.echo(
+                        f"Error: Failed to get Direct Line token (HTTP {token_response.status_code})",
+                        err=True,
+                    )
                     if verbose:
                         typer.echo(f"Response: {token_response.text}", err=True)
                     raise typer.Exit(1)
@@ -1502,6 +1801,7 @@ def prompt_agent(
         else:
             # Direct Line secret authentication (original flow)
             from ..config import get_config as _get_copilot_config
+
             directline_secret = secret or _get_copilot_config()._get("DIRECTLINE_SECRET")
             if directline_secret:
                 directline_token = directline_secret
@@ -1513,14 +1813,18 @@ def prompt_agent(
                     bot = client.get_bot(agent_id)
                     schema_name = bot.get("schemaname")
                     if not schema_name:
-                        typer.echo(f"Error: Could not get schema name for agent {agent_id}", err=True)
+                        typer.echo(
+                            f"Error: Could not get schema name for agent {agent_id}", err=True
+                        )
                         raise typer.Exit(1)
 
                     token_data = client.get_directline_token(schema_name)
                     directline_token = token_data.get("token")
 
                     if not directline_token:
-                        typer.echo("Error: No token returned from Direct Line token endpoint", err=True)
+                        typer.echo(
+                            "Error: No token returned from Direct Line token endpoint", err=True
+                        )
                         raise typer.Exit(1)
 
                     if verbose:
@@ -1528,7 +1832,9 @@ def prompt_agent(
                 except typer.Exit:
                     raise
                 except Exception as token_err:
-                    typer.echo(f"Error: Failed to auto-retrieve Direct Line token: {token_err}", err=True)
+                    typer.echo(
+                        f"Error: Failed to auto-retrieve Direct Line token: {token_err}", err=True
+                    )
                     typer.echo(
                         "Provide a secret manually via --secret or DIRECTLINE_SECRET env var.",
                         err=True,
@@ -1585,7 +1891,9 @@ def prompt_agent(
                     "content_type": content_type,
                 }
                 if verbose:
-                    typer.echo(f"Prepared file for upload: {file_name} ({len(file_content)} bytes, {content_type})")
+                    typer.echo(
+                        f"Prepared file for upload: {file_name} ({len(file_content)} bytes, {content_type})"
+                    )
             except IOError as e:
                 typer.echo(f"Error reading file: {e}", err=True)
                 raise typer.Exit(1)
@@ -1608,11 +1916,16 @@ def prompt_agent(
                 if entra_id:
                     typer.echo("Check that the Entra ID token exchange was successful", err=True)
                 else:
-                    typer.echo("Check that the Direct Line secret is valid and not expired", err=True)
+                    typer.echo(
+                        "Check that the Direct Line secret is valid and not expired", err=True
+                    )
                 raise typer.Exit(1)
 
             if conv_response.status_code != 201:
-                typer.echo(f"Error: Failed to start conversation (HTTP {conv_response.status_code})", err=True)
+                typer.echo(
+                    f"Error: Failed to start conversation (HTTP {conv_response.status_code})",
+                    err=True,
+                )
                 if verbose:
                     typer.echo(f"Response: {conv_response.text}", err=True)
                 raise typer.Exit(1)
@@ -1629,23 +1942,29 @@ def prompt_agent(
 
             # Step 4: Send message (with file upload if applicable)
             if verbose:
-                typer.echo(f"Sending message: \"{message}\"")
+                typer.echo(f'Sending message: "{message}"')
 
             if file_to_upload:
                 # Use Direct Line upload endpoint for file attachments
                 # This uses multipart/form-data with the activity and file
                 import json as json_module
 
-                activity_json = json_module.dumps({
-                    "type": "message",
-                    "from": {"id": user_id, "name": "Copilot CLI"},
-                    "text": message,
-                })
+                activity_json = json_module.dumps(
+                    {
+                        "type": "message",
+                        "from": {"id": user_id, "name": "Copilot CLI"},
+                        "text": message,
+                    }
+                )
 
                 # Build multipart form data
                 files = {
                     "activity": (None, activity_json, "application/vnd.microsoft.activity"),
-                    "file": (file_to_upload["name"], file_to_upload["content"], file_to_upload["content_type"]),
+                    "file": (
+                        file_to_upload["name"],
+                        file_to_upload["content"],
+                        file_to_upload["content_type"],
+                    ),
                 }
 
                 if verbose:
@@ -1676,7 +1995,9 @@ def prompt_agent(
                 )
 
             if send_response.status_code not in (200, 201, 204):
-                typer.echo(f"Error: Failed to send message (HTTP {send_response.status_code})", err=True)
+                typer.echo(
+                    f"Error: Failed to send message (HTTP {send_response.status_code})", err=True
+                )
                 if verbose:
                     typer.echo(f"Response: {send_response.text}", err=True)
                 raise typer.Exit(1)
@@ -1687,7 +2008,9 @@ def prompt_agent(
 
             # Step 5: Poll for response
             if verbose:
-                typer.echo(f"Polling for response (max {max_polls} attempts, {poll_interval}s interval)...")
+                typer.echo(
+                    f"Polling for response (max {max_polls} attempts, {poll_interval}s interval)..."
+                )
 
             bot_response = None
             bot_from = None
@@ -1716,7 +2039,10 @@ def prompt_agent(
 
                 if activities_response.status_code != 200:
                     if verbose:
-                        typer.echo(f"Warning: Poll failed (HTTP {activities_response.status_code})", err=True)
+                        typer.echo(
+                            f"Warning: Poll failed (HTTP {activities_response.status_code})",
+                            err=True,
+                        )
                     continue
 
                 activities_data = activities_response.json()
@@ -1725,7 +2051,8 @@ def prompt_agent(
                 # Find bot messages (exclude our user messages)
                 activities = activities_data.get("activities", [])
                 bot_messages = [
-                    a for a in activities
+                    a
+                    for a in activities
                     if a.get("type") == "message" and a.get("from", {}).get("id") != user_id
                 ]
 
@@ -1733,7 +2060,9 @@ def prompt_agent(
                     # Get the last bot message
                     last_message = bot_messages[-1]
                     bot_response = last_message.get("text", "")
-                    bot_from = last_message.get("from", {}).get("name") or last_message.get("from", {}).get("id")
+                    bot_from = last_message.get("from", {}).get("name") or last_message.get(
+                        "from", {}
+                    ).get("id")
 
                 if verbose and not bot_response:
                     typer.echo(f"  Polling... attempt {poll_count}/{max_polls}", nl=False)
@@ -1743,7 +2072,9 @@ def prompt_agent(
                 typer.echo("")  # Clear the polling line
 
             if not bot_response:
-                typer.echo(f"Error: No response received after {poll_count} polling attempts", err=True)
+                typer.echo(
+                    f"Error: No response received after {poll_count} polling attempts", err=True
+                )
                 typer.echo("Possible causes:", err=True)
                 typer.echo("  - Agent is not published", err=True)
                 typer.echo("  - Agent is experiencing errors (check Copilot Studio)", err=True)
@@ -1751,12 +2082,15 @@ def prompt_agent(
                 raise typer.Exit(1)
 
             # Check for error responses
-            is_error = any(phrase in bot_response for phrase in [
-                "something unexpected happened",
-                "Error code:",
-                "InvalidContent",
-                "We're looking into it",
-            ])
+            is_error = any(
+                phrase in bot_response
+                for phrase in [
+                    "something unexpected happened",
+                    "Error code:",
+                    "InvalidContent",
+                    "We're looking into it",
+                ]
+            )
 
             # Output the response
             if table:
@@ -1822,6 +2156,7 @@ def format_knowledge_source(source: dict) -> dict:
 
 
 @knowledge_app.command("list")
+@command
 def knowledge_list(
     agent_id: Optional[str] = typer.Argument(
         None,
@@ -1874,21 +2209,32 @@ def knowledge_list(
     # Support both positional argument and --agentId option
     resolved_agent_id = agent_id or agent_id_option
     if not resolved_agent_id:
-        typer.echo("Error: Agent ID is required. Provide it as a positional argument or use --agentId.", err=True)
+        typer.echo(
+            "Error: Agent ID is required. Provide it as a positional argument or use --agentId.",
+            err=True,
+        )
         raise typer.Exit(2)
     try:
         client = get_client()
         sources = client.list_knowledge_sources(resolved_agent_id, source_type=source_type)
 
         if not sources:
-            typer.echo("No knowledge sources found for this agent.")
+            if table:
+                typer.echo("No knowledge sources found for this agent.")
+            else:
+                print_json([])
             return
 
         formatted = [format_knowledge_source(s) for s in sources]
 
         # Apply filters
         if filter:
-            from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
+            from cli_tools_shared.filters import (
+                apply_filters,
+                validate_filters,
+                FilterValidationError,
+            )
+
             try:
                 validate_filters(filter)
                 formatted = apply_filters(formatted, filter)
@@ -1902,7 +2248,9 @@ def knowledge_list(
         # Apply properties filter
         if properties:
             property_list = [p.strip() for p in properties.split(",")]
-            formatted = [{k: v for k, v in item.items() if k in property_list} for item in formatted]
+            formatted = [
+                {k: v for k, v in item.items() if k in property_list} for item in formatted
+            ]
 
         if table:
             print_table(
@@ -1918,8 +2266,11 @@ def knowledge_list(
 
 
 @knowledge_app.command("remove")
+@command
 def knowledge_remove(
-    component_id: str = typer.Argument(..., help="The knowledge source component's unique identifier (GUID)"),
+    component_id: str = typer.Argument(
+        ..., help="The knowledge source component's unique identifier (GUID)"
+    ),
     disassociate: bool = typer.Option(
         False,
         "--disassociate",
@@ -1971,6 +2322,7 @@ def knowledge_remove(
 
 
 @knowledge_app.command("add")
+@command
 def knowledge_add(
     agent_id: Optional[str] = typer.Argument(
         None,
@@ -2003,7 +2355,10 @@ def knowledge_add(
     # Support both positional argument and --agentId option
     resolved_agent_id = agent_id or agent_id_option
     if not resolved_agent_id:
-        typer.echo("Error: Agent ID is required. Provide it as a positional argument or use --agentId.", err=True)
+        typer.echo(
+            "Error: Agent ID is required. Provide it as a positional argument or use --agentId.",
+            err=True,
+        )
         raise typer.Exit(2)
 
     try:
@@ -2016,6 +2371,7 @@ def knowledge_add(
 
 
 @knowledge_app.command("upload")
+@command
 def knowledge_upload(
     agent_id: Optional[str] = typer.Argument(
         None,
@@ -2068,7 +2424,10 @@ def knowledge_upload(
     # Support both positional argument and --agentId option
     resolved_agent_id = agent_id or agent_id_option
     if not resolved_agent_id:
-        typer.echo("Error: Agent ID is required. Provide it as a positional argument or use --agentId.", err=True)
+        typer.echo(
+            "Error: Agent ID is required. Provide it as a positional argument or use --agentId.",
+            err=True,
+        )
         raise typer.Exit(2)
 
     try:
@@ -2089,10 +2448,7 @@ def knowledge_upload(
 
         # Check if a knowledge source with this name already exists for the agent
         existing_sources = client.list_knowledge_sources(resolved_agent_id, source_type="file")
-        existing_source = next(
-            (s for s in existing_sources if s.get("name") == name),
-            None
-        )
+        existing_source = next((s for s in existing_sources if s.get("name") == name), None)
 
         if existing_source:
             existing_id = existing_source.get("botcomponentid")
@@ -2146,15 +2502,17 @@ def knowledge_upload(
 
             action = "replaced" if existing_source else "uploaded"
             print_success(f"Knowledge file '{name}' {action} successfully.")
-            print_json({
-                "componentId": component_id,
-                "name": name,
-                "fileName": file_info.name,
-                "fileSize": file_size,
-                "mimeType": mime_type,
-                "agentId": resolved_agent_id,
-                "replaced": existing_source is not None,
-            })
+            print_json(
+                {
+                    "componentId": component_id,
+                    "name": name,
+                    "fileName": file_info.name,
+                    "fileSize": file_size,
+                    "mimeType": mime_type,
+                    "agentId": resolved_agent_id,
+                    "replaced": existing_source is not None,
+                }
+            )
 
         except Exception as upload_error:
             # If file upload fails, clean up the component record
@@ -2173,6 +2531,7 @@ def knowledge_upload(
 
 
 @knowledge_app.command("get")
+@command
 def knowledge_get(
     component_id: str = typer.Argument(
         ...,
@@ -2202,6 +2561,7 @@ def knowledge_get(
 
 
 @knowledge_app.command("download")
+@command
 def knowledge_download(
     component_id: str = typer.Argument(
         ...,
@@ -2244,12 +2604,14 @@ def knowledge_download(
             f.write(file_data)
 
         print_success(f"File downloaded to: {save_path}")
-        print_json({
-            "componentId": component_id,
-            "fileName": file_name,
-            "savedTo": save_path,
-            "fileSize": len(file_data),
-        })
+        print_json(
+            {
+                "componentId": component_id,
+                "fileName": file_name,
+                "savedTo": save_path,
+                "fileSize": len(file_data),
+            }
+        )
 
     except Exception as e:
         if isinstance(e, typer.Exit):
@@ -2263,6 +2625,7 @@ azure_search_app = typer.Typer(help="Manage Azure AI Search knowledge sources")
 
 
 @azure_search_app.command("add")
+@command
 def azure_search_add(
     agent_id: Optional[str] = typer.Argument(
         None,
@@ -2333,7 +2696,10 @@ def azure_search_add(
     # Support both positional argument and --agentId option
     resolved_agent_id = agent_id or agent_id_option
     if not resolved_agent_id:
-        typer.echo("Error: Agent ID is required. Provide it as a positional argument or use --agentId.", err=True)
+        typer.echo(
+            "Error: Agent ID is required. Provide it as a positional argument or use --agentId.",
+            err=True,
+        )
         raise typer.Exit(2)
 
     try:
@@ -2362,8 +2728,6 @@ knowledge_app.add_typer(azure_search_app, name="azure-ai-search")
 app.add_typer(knowledge_app, name="knowledge")
 
 
-
-
 # =============================================================================
 # Transcript Commands
 # =============================================================================
@@ -2374,11 +2738,13 @@ transcript_app = typer.Typer(help="View conversation transcripts for troubleshoo
 def _is_guid(value: str) -> bool:
     """Check if a string looks like a GUID."""
     import re
-    guid_pattern = r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+
+    guid_pattern = r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
     return bool(re.match(guid_pattern, value))
 
 
 @transcript_app.command("list")
+@command
 def transcript_list(
     agent: Optional[str] = typer.Option(
         None,
@@ -2447,7 +2813,12 @@ def transcript_list(
 
         # Apply filters
         if filter:
-            from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
+            from cli_tools_shared.filters import (
+                apply_filters,
+                validate_filters,
+                FilterValidationError,
+            )
+
             try:
                 validate_filters(filter)
                 formatted = apply_filters(formatted, filter)
@@ -2458,7 +2829,9 @@ def transcript_list(
         # Apply properties filter
         if properties:
             property_list = [p.strip() for p in properties.split(",")]
-            formatted = [{k: v for k, v in item.items() if k in property_list} for item in formatted]
+            formatted = [
+                {k: v for k, v in item.items() if k in property_list} for item in formatted
+            ]
 
         if table:
             print_table(
@@ -2474,6 +2847,7 @@ def transcript_list(
 
 
 @transcript_app.command("get")
+@command
 def transcript_get(
     transcript_id: str = typer.Argument(
         ...,
@@ -2559,6 +2933,7 @@ def format_topic_for_display(topic: dict) -> dict:
 
 
 @topic_app.command("list")
+@command
 def topic_list(
     agent_id: str = typer.Option(
         ...,
@@ -2629,7 +3004,12 @@ def topic_list(
 
         # Apply filters
         if filter:
-            from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
+            from cli_tools_shared.filters import (
+                apply_filters,
+                validate_filters,
+                FilterValidationError,
+            )
+
             try:
                 validate_filters(filter)
                 formatted = apply_filters(formatted, filter)
@@ -2643,7 +3023,9 @@ def topic_list(
         # Apply properties filter
         if properties:
             property_list = [p.strip() for p in properties.split(",")]
-            formatted = [{k: v for k, v in item.items() if k in property_list} for item in formatted]
+            formatted = [
+                {k: v for k, v in item.items() if k in property_list} for item in formatted
+            ]
 
         if table:
             print_table(
@@ -2659,6 +3041,7 @@ def topic_list(
 
 
 @topic_app.command("enable")
+@command
 def topic_enable(
     topic_id: str = typer.Argument(
         ...,
@@ -2688,6 +3071,7 @@ def topic_enable(
 
 
 @topic_app.command("delete")
+@command
 @topic_app.command("remove")
 def topic_delete(
     topic_id: str = typer.Argument(
@@ -2718,7 +3102,9 @@ def topic_delete(
         topic_name = topic.get("name", topic_id)
 
         if not force:
-            confirm = typer.confirm(f"Are you sure you want to delete topic '{topic_name}'? This cannot be undone.")
+            confirm = typer.confirm(
+                f"Are you sure you want to delete topic '{topic_name}'? This cannot be undone."
+            )
             if not confirm:
                 typer.echo("Aborted.")
                 raise typer.Exit(0)
@@ -2731,6 +3117,7 @@ def topic_delete(
 
 
 @topic_app.command("disable")
+@command
 def topic_disable(
     topic_id: str = typer.Argument(
         ...,
@@ -2773,6 +3160,7 @@ def topic_disable(
 
 
 @topic_app.command("get")
+@command
 def topic_get(
     topic_id: str = typer.Argument(
         ...,
@@ -2820,22 +3208,29 @@ def topic_get(
                 typer.echo("# No YAML content found for this topic")
         else:
             # Print full topic info as JSON
-            print_json({
-                "name": topic.get("name"),
-                "component_id": topic.get("botcomponentid"),
-                "schema_name": topic.get("schemaname"),
-                "component_type": TOPIC_COMPONENT_TYPE_NAMES.get(topic.get("componenttype", 0), "unknown"),
-                "status": topic.get("statecode@OData.Community.Display.V1.FormattedValue", "Active"),
-                "is_managed": topic.get("ismanaged", False),
-                "description": topic.get("description", ""),
-                "content": content,
-            })
+            print_json(
+                {
+                    "name": topic.get("name"),
+                    "component_id": topic.get("botcomponentid"),
+                    "schema_name": topic.get("schemaname"),
+                    "component_type": TOPIC_COMPONENT_TYPE_NAMES.get(
+                        topic.get("componenttype", 0), "unknown"
+                    ),
+                    "status": topic.get(
+                        "statecode@OData.Community.Display.V1.FormattedValue", "Active"
+                    ),
+                    "is_managed": topic.get("ismanaged", False),
+                    "description": topic.get("description", ""),
+                    "content": content,
+                }
+            )
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
 
 
 @topic_app.command("create")
+@command
 def topic_create(
     agent_id: str = typer.Option(
         ...,
@@ -2939,6 +3334,7 @@ def topic_create(
 
 
 @topic_app.command("update")
+@command
 def topic_update(
     topic_id: str = typer.Argument(
         ...,
@@ -3021,7 +3417,9 @@ def topic_update(
                 raise typer.Exit(1)
         elif triggers or message:
             if not (triggers and message):
-                print_error("When updating triggers/message, both --triggers and --message must be provided")
+                print_error(
+                    "When updating triggers/message, both --triggers and --message must be provided"
+                )
                 raise typer.Exit(1)
             # Generate new simple topic YAML
             display_name = name or topic_name
@@ -3099,6 +3497,7 @@ def format_trigger_for_display(trigger: dict) -> dict:
 
 
 @trigger_app.command("list")
+@command
 def trigger_list(
     agent_id: str = typer.Option(
         ...,
@@ -3146,14 +3545,26 @@ def trigger_list(
         triggers = client.list_triggers(agent_id)
 
         if not triggers:
-            typer.echo("No triggers found for this agent.")
+            if table:
+                print_table(
+                    [],
+                    columns=["name", "trigger_type", "status", "trigger_id"],
+                    headers=["Name", "Type", "Status", "Trigger ID"],
+                )
+            else:
+                print_json([])
             return
 
         formatted = [format_trigger_for_display(t) for t in triggers]
 
         # Apply filters
         if filter:
-            from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
+            from cli_tools_shared.filters import (
+                apply_filters,
+                validate_filters,
+                FilterValidationError,
+            )
+
             try:
                 validate_filters(filter)
                 formatted = apply_filters(formatted, filter)
@@ -3167,7 +3578,9 @@ def trigger_list(
         # Apply properties filter
         if properties:
             property_list = [p.strip() for p in properties.split(",")]
-            formatted = [{k: v for k, v in item.items() if k in property_list} for item in formatted]
+            formatted = [
+                {k: v for k, v in item.items() if k in property_list} for item in formatted
+            ]
 
         if table:
             print_table(
@@ -3183,6 +3596,7 @@ def trigger_list(
 
 
 @trigger_app.command("get")
+@command
 def trigger_get(
     trigger_id: str = typer.Argument(
         ...,
@@ -3208,7 +3622,9 @@ def trigger_get(
 
         # Verify it's actually a trigger (componenttype=17)
         if trigger.get("componenttype") != 17:
-            print_error(f"Component {trigger_id} is not an external trigger (componenttype={trigger.get('componenttype')})")
+            print_error(
+                f"Component {trigger_id} is not an external trigger (componenttype={trigger.get('componenttype')})"
+            )
             raise typer.Exit(1)
 
         result = trigger
@@ -3228,6 +3644,7 @@ def trigger_get(
 
 
 @trigger_app.command("enable")
+@command
 def trigger_enable(
     trigger_id: str = typer.Argument(
         ...,
@@ -3257,6 +3674,7 @@ def trigger_enable(
 
 
 @trigger_app.command("disable")
+@command
 def trigger_disable(
     trigger_id: str = typer.Argument(
         ...,
@@ -3286,6 +3704,7 @@ def trigger_disable(
 
 
 @trigger_app.command("delete")
+@command
 @trigger_app.command("remove")
 def trigger_delete(
     trigger_id: str = typer.Argument(
@@ -3374,7 +3793,8 @@ def get_tool_category(schema_name: str, data: str = "") -> str:
     elif "TaskAction" in search_text:
         # Generic task action - extract the type
         import re
-        match = re.search(r'Invoke(\w+)TaskAction', search_text)
+
+        match = re.search(r"Invoke(\w+)TaskAction", search_text)
         if match:
             return match.group(1)
         return "Action"
@@ -3424,6 +3844,7 @@ def format_tool_for_display(tool: dict, truncate: bool = False) -> dict:
 
 
 @tool_app.command("list")
+@command
 def tool_list(
     agent_id: str = typer.Option(
         ...,
@@ -3492,14 +3913,22 @@ def tool_list(
         tools = client.list_tools(agent_id, category=category)
 
         if not tools:
-            typer.echo("No agent tools found for this agent.")
+            if table:
+                typer.echo("No agent tools found for this agent.")
+            else:
+                print_json([])
             return
 
         formatted = [format_tool_for_display(t, truncate=table) for t in tools]
 
         # Apply filters
         if filter:
-            from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
+            from cli_tools_shared.filters import (
+                apply_filters,
+                validate_filters,
+                FilterValidationError,
+            )
+
             try:
                 validate_filters(filter)
                 formatted = apply_filters(formatted, filter)
@@ -3513,7 +3942,9 @@ def tool_list(
         # Apply properties filter
         if properties:
             property_list = [p.strip() for p in properties.split(",")]
-            formatted = [{k: v for k, v in item.items() if k in property_list} for item in formatted]
+            formatted = [
+                {k: v for k, v in item.items() if k in property_list} for item in formatted
+            ]
 
         if table:
             print_table(
@@ -3529,6 +3960,7 @@ def tool_list(
 
 
 @tool_app.command("get")
+@command
 def tool_get(
     component_id: str = typer.Argument(
         ...,
@@ -3597,7 +4029,9 @@ def tool_get(
         typer.echo(f"Component ID: {tool.get('botcomponentid', '')}")
         typer.echo(f"Category: {category}")
         typer.echo(f"Schema Name: {schema_name}")
-        typer.echo(f"Status: {tool.get('statecode@OData.Community.Display.V1.FormattedValue', 'Active')}")
+        typer.echo(
+            f"Status: {tool.get('statecode@OData.Community.Display.V1.FormattedValue', 'Active')}"
+        )
 
         # Show entity-level description if present
         entity_description = tool.get("description", "")
@@ -3663,14 +4097,15 @@ def tool_get(
         elif yaml_parse_error and data:
             # YAML couldn't be parsed, but try to extract key fields with regex
             import re
+
             typer.echo("--- Configuration ---")
             typer.echo("(Note: YAML data contains formatting issues)")
             # Try to extract modelDisplayName
-            display_match = re.search(r'modelDisplayName:\s*(.+?)(?:\n|$)', data)
+            display_match = re.search(r"modelDisplayName:\s*(.+?)(?:\n|$)", data)
             if display_match:
                 typer.echo(f"Display Name: {display_match.group(1).strip()}")
             # Try to extract modelDescription
-            desc_match = re.search(r'modelDescription:\s*(.+?)(?:\noutputs:|$)', data, re.DOTALL)
+            desc_match = re.search(r"modelDescription:\s*(.+?)(?:\noutputs:|$)", data, re.DOTALL)
             if desc_match:
                 desc = desc_match.group(1).strip()
                 if len(desc) > 200:
@@ -3680,26 +4115,26 @@ def tool_get(
             # Try to extract outputs from raw YAML
             typer.echo("")
             typer.echo("--- Outputs ---")
-            output_matches = re.findall(r'propertyName:\s*(\S+)', data)
+            output_matches = re.findall(r"propertyName:\s*(\S+)", data)
             for out_name in output_matches:
                 typer.echo(f"  {out_name}")
 
             # Try to extract action details
             typer.echo("")
             typer.echo("--- Action Details ---")
-            kind_match = re.search(r'kind:\s*(\S+)', data)
+            kind_match = re.search(r"kind:\s*(\S+)", data)
             if kind_match and "TaskDialog" not in kind_match.group(1):
                 typer.echo(f"Action Type: {kind_match.group(1)}")
             # Look for action kind specifically
-            action_kind_match = re.search(r'action:\s*\n\s*kind:\s*(\S+)', data)
+            action_kind_match = re.search(r"action:\s*\n\s*kind:\s*(\S+)", data)
             if action_kind_match:
                 typer.echo(f"Action Type: {action_kind_match.group(1)}")
 
-            conn_ref_match = re.search(r'connectionReference:\s*(\S+)', data)
+            conn_ref_match = re.search(r"connectionReference:\s*(\S+)", data)
             if conn_ref_match:
                 typer.echo(f"Connection Ref: {conn_ref_match.group(1)}")
 
-            op_id_match = re.search(r'operationId:\s*(\S+)', data)
+            op_id_match = re.search(r"operationId:\s*(\S+)", data)
             if op_id_match:
                 typer.echo(f"Operation ID: {op_id_match.group(1)}")
 
@@ -3722,7 +4157,9 @@ def tool_get(
                     connector_id = action.get("connectorId", "")
                     operation_id = action.get("operationId", "")
                     # Support both connectionReferenceLogicalName and connectionReference
-                    conn_ref = action.get("connectionReferenceLogicalName") or action.get("connectionReference", "")
+                    conn_ref = action.get("connectionReferenceLogicalName") or action.get(
+                        "connectionReference", ""
+                    )
                     if connector_id:
                         typer.echo(f"Connector ID: {connector_id}")
                     if operation_id:
@@ -3795,6 +4232,7 @@ def tool_get(
 
 
 @tool_app.command("add")
+@command
 def tool_add(
     agent_id: str = typer.Option(
         ...,
@@ -3828,7 +4266,7 @@ def tool_add(
     inputs: Optional[str] = typer.Option(
         None,
         "--inputs",
-        help="Static input values as JSON, e.g., '{\"workspace\": \"123\"}'. Sets fixed values instead of AI-filled.",
+        help='Static input values as JSON, e.g., \'{"workspace": "123"}\'. Sets fixed values instead of AI-filled.',
     ),
     outputs: Optional[str] = typer.Option(
         None,
@@ -3929,22 +4367,30 @@ def tool_add(
     import json
 
     # Validate tool type
-    valid_types = ['connector', 'prompt', 'flow', 'http', 'agent']
+    valid_types = ["connector", "prompt", "flow", "http", "agent"]
     if tool_type.lower() not in valid_types:
-        typer.echo(f"Error: Invalid tool type '{tool_type}'. Must be one of: {', '.join(valid_types)}", err=True)
+        typer.echo(
+            f"Error: Invalid tool type '{tool_type}'. Must be one of: {', '.join(valid_types)}",
+            err=True,
+        )
         raise typer.Exit(1)
 
     # Validate and map credential mode to internal connection mode
     credential_map = {
-        'maker-provided': 'Maker',
-        'end-user': 'Invoker',
+        "maker-provided": "Maker",
+        "end-user": "Invoker",
         # Also accept legacy values for backwards compatibility
-        'Maker': 'Maker',
-        'Invoker': 'Invoker',
+        "Maker": "Maker",
+        "Invoker": "Invoker",
     }
-    credential_lower = credential.lower() if credential.lower() in ['maker-provided', 'end-user'] else credential
+    credential_lower = (
+        credential.lower() if credential.lower() in ["maker-provided", "end-user"] else credential
+    )
     if credential_lower not in credential_map and credential not in credential_map:
-        typer.echo(f"Error: Invalid credential mode '{credential}'. Must be one of: maker-provided, end-user", err=True)
+        typer.echo(
+            f"Error: Invalid credential mode '{credential}'. Must be one of: maker-provided, end-user",
+            err=True,
+        )
         raise typer.Exit(1)
     connection_mode = credential_map.get(credential_lower) or credential_map.get(credential)
 
@@ -4006,6 +4452,7 @@ def tool_add(
 
 
 @tool_app.command("remove")
+@command
 def tool_remove(
     component_id: str = typer.Argument(
         ...,
@@ -4041,6 +4488,7 @@ def tool_remove(
 
 
 @tool_app.command("update")
+@command
 def tool_update(
     component_id: str = typer.Argument(
         ...,
@@ -4133,30 +4581,51 @@ def tool_update(
         # Combined update
         copilot agent tool update <component-id> -n "Name" -d "Description" --available --confirm
     """
-    if not any([name, description, availability is not None, confirmation is not None, confirmation_message, inputs, credential]):
+    if not any(
+        [
+            name,
+            description,
+            availability is not None,
+            confirmation is not None,
+            confirmation_message,
+            inputs,
+            credential,
+        ]
+    ):
         typer.echo("Error: At least one option must be provided.", err=True)
-        typer.echo("Options: --name, --description, --available/--not-available, --confirm/--no-confirm, --confirm-message, --inputs, --credential")
+        typer.echo(
+            "Options: --name, --description, --available/--not-available, --confirm/--no-confirm, --confirm-message, --inputs, --credential"
+        )
         raise typer.Exit(1)
 
     # Validate and map credential mode to internal connection mode
     connection_mode = None
     if credential:
         credential_map = {
-            'maker-provided': 'Maker',
-            'end-user': 'Invoker',
+            "maker-provided": "Maker",
+            "end-user": "Invoker",
             # Also accept legacy values for backwards compatibility
-            'Maker': 'Maker',
-            'Invoker': 'Invoker',
+            "Maker": "Maker",
+            "Invoker": "Invoker",
         }
-        credential_lower = credential.lower() if credential.lower() in ['maker-provided', 'end-user'] else credential
+        credential_lower = (
+            credential.lower()
+            if credential.lower() in ["maker-provided", "end-user"]
+            else credential
+        )
         if credential_lower not in credential_map and credential not in credential_map:
-            typer.echo(f"Error: Invalid credential mode '{credential}'. Must be one of: maker-provided, end-user", err=True)
+            typer.echo(
+                f"Error: Invalid credential mode '{credential}'. Must be one of: maker-provided, end-user",
+                err=True,
+            )
             raise typer.Exit(1)
         connection_mode = credential_map.get(credential_lower) or credential_map.get(credential)
 
     # Validate description length
     if description and len(description) > 1024:
-        typer.echo(f"Error: Description exceeds 1024 character limit ({len(description)} chars).", err=True)
+        typer.echo(
+            f"Error: Description exceeds 1024 character limit ({len(description)} chars).", err=True
+        )
         raise typer.Exit(1)
 
     # Parse inputs JSON if provided
@@ -4185,19 +4654,19 @@ def tool_update(
         )
         print_success(f"Tool updated successfully!")
         typer.echo(f"Name: {result.get('name', 'N/A')}")
-        if result.get('description'):
-            desc = result['description']
+        if result.get("description"):
+            desc = result["description"]
             if len(desc) > 100:
                 desc = desc[:100] + "..."
             typer.echo(f"Description: {desc}")
 
         # Show additional settings if they were updated
-        data = result.get('data', '')
+        data = result.get("data", "")
         if availability is not None:
             status = "Available for dynamic use" if availability else "Only available from topics"
             typer.echo(f"Availability: {status}")
         if confirmation is not None or confirmation_message:
-            if 'confirmation:' in data:
+            if "confirmation:" in data:
                 typer.echo(f"User Confirmation: Enabled")
             else:
                 typer.echo(f"User Confirmation: Disabled")
@@ -4223,11 +4692,19 @@ analytics_app = typer.Typer(help="Manage Application Insights telemetry for agen
 
 
 @analytics_app.command("list")
+@command
 def analytics_list(
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of agents to return"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
-    filter: Optional[list[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)"),
-    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields"),
+    filter: Optional[list[str]] = typer.Option(
+        None,
+        "--filter",
+        "-f",
+        help="Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+    ),
+    properties: Optional[str] = typer.Option(
+        None, "--properties", "-p", help="Comma-separated fields"
+    ),
 ):
     """
     List all agents with their Application Insights analytics status.
@@ -4251,23 +4728,32 @@ def analytics_list(
             bot_name = bot.get("name", "")
             try:
                 config = client.get_bot_app_insights(bot_id)
-                results.append({
-                    "id": bot_id,
-                    "name": bot_name,
-                    "analytics_enabled": config["enabled"],
-                    "log_activities": config["logActivities"],
-                })
+                results.append(
+                    {
+                        "id": bot_id,
+                        "name": bot_name,
+                        "analytics_enabled": config["enabled"],
+                        "log_activities": config["logActivities"],
+                    }
+                )
             except Exception:
-                results.append({
-                    "id": bot_id,
-                    "name": bot_name,
-                    "analytics_enabled": False,
-                    "log_activities": False,
-                })
+                results.append(
+                    {
+                        "id": bot_id,
+                        "name": bot_name,
+                        "analytics_enabled": False,
+                        "log_activities": False,
+                    }
+                )
 
         # Apply filters
         if filter:
-            from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
+            from cli_tools_shared.filters import (
+                apply_filters,
+                validate_filters,
+                FilterValidationError,
+            )
+
             try:
                 validate_filters(filter)
                 results = apply_filters(results, filter)
@@ -4298,6 +4784,7 @@ def analytics_list(
 
 
 @analytics_app.command("get")
+@command
 def analytics_get(
     agent_id: str = typer.Argument(..., help="The agent's unique identifier (GUID)"),
 ):
@@ -4318,15 +4805,17 @@ def analytics_get(
 
         config = client.get_bot_app_insights(agent_id)
 
-        print_json({
-            "id": agent_id,
-            "agent_id": agent_id,
-            "agent_name": agent_name,
-            "enabled": config["enabled"],
-            "connectionString": config.get("connectionString", ""),
-            "logActivities": config["logActivities"],
-            "logSensitiveProperties": config["logSensitiveProperties"],
-        })
+        print_json(
+            {
+                "id": agent_id,
+                "agent_id": agent_id,
+                "agent_name": agent_name,
+                "enabled": config["enabled"],
+                "connectionString": config.get("connectionString", ""),
+                "logActivities": config["logActivities"],
+                "logSensitiveProperties": config["logSensitiveProperties"],
+            }
+        )
 
     except Exception as e:
         exit_code = handle_error(e)
@@ -4334,6 +4823,7 @@ def analytics_get(
 
 
 @analytics_app.command("enable")
+@command
 def analytics_enable(
     agent_id: str = typer.Argument(..., help="The agent's unique identifier (GUID)"),
     connection_string: str = typer.Option(
@@ -4400,6 +4890,7 @@ def analytics_enable(
 
 
 @analytics_app.command("disable")
+@command
 def analytics_disable(
     agent_id: str = typer.Argument(..., help="The agent's unique identifier (GUID)"),
     force: bool = typer.Option(
@@ -4447,6 +4938,7 @@ def analytics_disable(
 
 
 @analytics_app.command("update")
+@command
 def analytics_update(
     agent_id: str = typer.Argument(..., help="The agent's unique identifier (GUID)"),
     log_activities: Optional[bool] = typer.Option(
@@ -4529,6 +5021,7 @@ def _convert_timespan(timespan: str) -> str:
 
     # Parse number and unit
     import re
+
     match = re.match(r"^(\d+)([hd])$", timespan)
     if not match:
         raise ValueError(f"Invalid timespan format: {timespan}. Use format like '24h' or '7d'")
@@ -4545,6 +5038,7 @@ def _convert_timespan(timespan: str) -> str:
 
 
 @analytics_app.command("query")
+@command
 def analytics_query(
     agent_id: str = typer.Argument(..., help="The agent's unique identifier (GUID)"),
     timespan: str = typer.Option(
@@ -4699,6 +5193,7 @@ AUTH_MODE_NAMES = {
 
 
 @auth_app.command("get")
+@command
 def auth_get(
     agent_id: str = typer.Argument(..., help="The agent's unique identifier (GUID)"),
 ):
@@ -4724,16 +5219,18 @@ def auth_get(
 
         auth_config = client.get_bot_auth(agent_id)
 
-        print_json({
-            "id": agent_id,
-            "agent_id": agent_id,
-            "agent_name": agent_name,
-            "mode": auth_config["mode"],
-            "mode_name": auth_config["mode_name"],
-            "trigger": auth_config["trigger"],
-            "trigger_name": auth_config["trigger_name"],
-            "configuration": auth_config.get("configuration"),
-        })
+        print_json(
+            {
+                "id": agent_id,
+                "agent_id": agent_id,
+                "agent_name": agent_name,
+                "mode": auth_config["mode"],
+                "mode_name": auth_config["mode_name"],
+                "trigger": auth_config["trigger"],
+                "trigger_name": auth_config["trigger_name"],
+                "configuration": auth_config.get("configuration"),
+            }
+        )
 
     except Exception as e:
         exit_code = handle_error(e)
@@ -4741,6 +5238,7 @@ def auth_get(
 
 
 @auth_app.command("set")
+@command
 def auth_set(
     agent_id: str = typer.Argument(..., help="The agent's unique identifier (GUID)"),
     mode: Optional[int] = typer.Option(
@@ -4778,11 +5276,16 @@ def auth_set(
             raise typer.Exit(1)
 
         if mode is not None and mode not in AUTH_MODE_NAMES:
-            typer.echo(f"Error: Invalid mode {mode}. Valid modes: 1=None, 2=Integrated, 3=Custom Azure AD", err=True)
+            typer.echo(
+                f"Error: Invalid mode {mode}. Valid modes: 1=None, 2=Integrated, 3=Custom Azure AD",
+                err=True,
+            )
             raise typer.Exit(1)
 
         if trigger is not None and trigger not in (0, 1):
-            typer.echo(f"Error: Invalid trigger {trigger}. Valid triggers: 0=As Needed, 1=Always", err=True)
+            typer.echo(
+                f"Error: Invalid trigger {trigger}. Valid triggers: 0=As Needed, 1=Always", err=True
+            )
             raise typer.Exit(1)
 
         client = get_client()
@@ -4812,6 +5315,7 @@ def auth_set(
 
 
 @auth_app.command("list")
+@command
 def auth_list(
     table: bool = typer.Option(
         False,
@@ -4849,9 +5353,7 @@ def auth_list(
     """
     try:
         client = get_client()
-        bots = client.list_bots(
-            select=["name", "botid", "authenticationmode", "statecode"]
-        )
+        bots = client.list_bots(select=["name", "botid", "authenticationmode", "statecode"])
 
         if not bots:
             typer.echo("No agents found.")
@@ -4862,17 +5364,24 @@ def auth_list(
         for bot in bots:
             auth_mode = bot.get("authenticationmode", 2)
             bot_id = bot.get("botid")
-            formatted.append({
-                "id": bot_id,
-                "name": bot.get("name"),
-                "bot_id": bot_id,
-                "auth_mode": auth_mode,
-                "auth_mode_name": AUTH_MODE_NAMES.get(auth_mode, f"Unknown({auth_mode})"),
-            })
+            formatted.append(
+                {
+                    "id": bot_id,
+                    "name": bot.get("name"),
+                    "bot_id": bot_id,
+                    "auth_mode": auth_mode,
+                    "auth_mode_name": AUTH_MODE_NAMES.get(auth_mode, f"Unknown({auth_mode})"),
+                }
+            )
 
         # Apply filters
         if filter:
-            from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
+            from cli_tools_shared.filters import (
+                apply_filters,
+                validate_filters,
+                FilterValidationError,
+            )
+
             try:
                 validate_filters(filter)
                 formatted = apply_filters(formatted, filter)
@@ -4886,7 +5395,9 @@ def auth_list(
         # Apply properties filter
         if properties:
             property_list = [p.strip() for p in properties.split(",")]
-            formatted = [{k: v for k, v in item.items() if k in property_list} for item in formatted]
+            formatted = [
+                {k: v for k, v in item.items() if k in property_list} for item in formatted
+            ]
 
         if table:
             print_table(
@@ -5026,7 +5537,9 @@ def _get_current_default_model() -> dict:
     """Return the current default model from the documented catalog."""
     default_model = KNOWN_MODELS_BY_ID.get(CURRENT_DEFAULT_MODEL_ID)
     if not default_model:
-        raise RuntimeError(f"Current default model '{CURRENT_DEFAULT_MODEL_ID}' is not in KNOWN_MODELS")
+        raise RuntimeError(
+            f"Current default model '{CURRENT_DEFAULT_MODEL_ID}' is not in KNOWN_MODELS"
+        )
     return default_model
 
 
@@ -5054,7 +5567,9 @@ def _resolve_stored_model(model_kind: Optional[str], model_hint: Optional[str]) 
 
     if not model_kind or not model_hint:
         result["resolution"] = "incomplete"
-        result["issues"].append("Stored model configuration is incomplete; both kind and modelNameHint are required.")
+        result["issues"].append(
+            "Stored model configuration is incomplete; both kind and modelNameHint are required."
+        )
         return result
 
     pair_key = (model_kind.lower(), model_hint.lower())
@@ -5137,7 +5652,9 @@ def _parse_requested_model(model: str) -> dict:
     }
 
 
-_MODEL_DOCS_URL = "https://learn.microsoft.com/en-us/microsoft-copilot-studio/authoring-select-agent-model"
+_MODEL_DOCS_URL = (
+    "https://learn.microsoft.com/en-us/microsoft-copilot-studio/authoring-select-agent-model"
+)
 
 
 def _fetch_model_catalog() -> list[dict]:
@@ -5156,28 +5673,29 @@ def _fetch_model_catalog() -> list[dict]:
     # Parse HTML table rows: each row has <td> cells for Model, Tag/Category, then regions
     # We only need columns 0 (Model) and 1 (Tag/Category) plus any region to get availability
     table_match = re.search(
-        r'<h3[^>]*>\s*Public availability\s*</h3>.*?<table[^>]*>(.*?)</table>',
-        html, re.DOTALL | re.IGNORECASE
+        r"<h3[^>]*>\s*Public availability\s*</h3>.*?<table[^>]*>(.*?)</table>",
+        html,
+        re.DOTALL | re.IGNORECASE,
     )
     if not table_match:
         raise RuntimeError("Could not find Public availability table in docs page")
 
     table_html = table_match.group(1)
-    rows = re.findall(r'<tr[^>]*>(.*?)</tr>', table_html, re.DOTALL)
+    rows = re.findall(r"<tr[^>]*>(.*?)</tr>", table_html, re.DOTALL)
 
     models = []
     for row in rows[1:]:  # skip header row
-        cells = re.findall(r'<td[^>]*>(.*?)</td>', row, re.DOTALL)
+        cells = re.findall(r"<td[^>]*>(.*?)</td>", row, re.DOTALL)
         if len(cells) < 3:
             continue
 
-        name = re.sub(r'<[^>]+>', '', cells[0]).strip()
+        name = re.sub(r"<[^>]+>", "", cells[0]).strip()
         # Clean up footnote references like "(see important note below)"
-        name = re.sub(r'\s*\(see\s+.*?\)', '', name, flags=re.IGNORECASE).strip()
-        category = re.sub(r'<[^>]+>', '', cells[1]).strip()
+        name = re.sub(r"\s*\(see\s+.*?\)", "", name, flags=re.IGNORECASE).strip()
+        category = re.sub(r"<[^>]+>", "", cells[1]).strip()
 
         # Determine availability from US column (last) or first non-empty region
-        us_status = re.sub(r'<[^>]+>', '', cells[-1]).strip() if len(cells) > 2 else ""
+        us_status = re.sub(r"<[^>]+>", "", cells[-1]).strip() if len(cells) > 2 else ""
 
         # Normalize availability to a simple tag
         status_lower = us_status.lower()
@@ -5199,11 +5717,13 @@ def _fetch_model_catalog() -> list[dict]:
         if not name:
             continue
 
-        models.append({
-            "name": name,
-            "category": category,
-            "availability": availability,
-        })
+        models.append(
+            {
+                "name": name,
+                "category": category,
+                "availability": availability,
+            }
+        )
 
     return models
 
@@ -5212,8 +5732,7 @@ def _discover_hints_from_agents() -> dict:
     """Scan agents to discover modelKind:modelNameHint for models in use."""
     client = get_client()
     result = client.get(
-        "botcomponents?$filter=componenttype eq 15"
-        "&$select=botcomponentid,name,data"
+        "botcomponents?$filter=componenttype eq 15" "&$select=botcomponentid,name,data"
     )
 
     # Map display-name-like keys to kind:hint
@@ -5239,7 +5758,7 @@ def _match_hint_to_model(model_name: str, hints: dict) -> Optional[dict]:
 
     # Compact: lowercase, strip separators
     def compact(s):
-        return re.sub(r'[\s.\-_]', '', s.lower())
+        return re.sub(r"[\s.\-_]", "", s.lower())
 
     name_c = compact(model_name)
 
@@ -5252,8 +5771,12 @@ def _match_hint_to_model(model_name: str, hints: dict) -> Optional[dict]:
 
         # Model-family match: extract the family word (opus, sonnet, grok, gpt)
         # and qualifier words (reasoning, chat, auto) from both
-        hint_words = re.findall(r'[a-z]{3,}', hint_c)  # e.g. ["gpt", "reasoning"] from "gpt5reasoning"
-        name_words = re.findall(r'[a-z]{3,}', name_c)  # e.g. ["gpt", "reasoning"] from "gpt5reasoning"
+        hint_words = re.findall(
+            r"[a-z]{3,}", hint_c
+        )  # e.g. ["gpt", "reasoning"] from "gpt5reasoning"
+        name_words = re.findall(
+            r"[a-z]{3,}", name_c
+        )  # e.g. ["gpt", "reasoning"] from "gpt5reasoning"
 
         if not hint_words:
             continue
@@ -5268,8 +5791,8 @@ def _match_hint_to_model(model_name: str, hints: dict) -> Optional[dict]:
             continue
 
         # Extract version-like digit sequences from both
-        hint_digits = re.findall(r'\d+', hint_key)  # e.g. ["4", "1"] from "opus4-1"
-        name_digits = re.findall(r'\d+', model_name)  # e.g. ["4", "6"] from "Claude Opus 4.6"
+        hint_digits = re.findall(r"\d+", hint_key)  # e.g. ["4", "1"] from "opus4-1"
+        name_digits = re.findall(r"\d+", model_name)  # e.g. ["4", "6"] from "Claude Opus 4.6"
 
         # Version match: first digit group must match (major version)
         if hint_digits and name_digits and hint_digits[0] == name_digits[0]:
@@ -5279,6 +5802,7 @@ def _match_hint_to_model(model_name: str, hints: dict) -> Optional[dict]:
 
 
 @model_app.command("list")
+@command
 def model_list(
     table: bool = typer.Option(
         False,
@@ -5328,11 +5852,20 @@ def model_list(
         for model in catalog:
             matched_hint = _match_hint_to_model(model["name"], hints)
             model["id"] = model["name"]
-            model["kind_hint"] = f"{matched_hint['modelKind']}:{matched_hint['modelNameHint']}" if matched_hint else "-"
+            model["kind_hint"] = (
+                f"{matched_hint['modelKind']}:{matched_hint['modelNameHint']}"
+                if matched_hint
+                else "-"
+            )
 
         # Apply filters
         if filter:
-            from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
+            from cli_tools_shared.filters import (
+                apply_filters,
+                validate_filters,
+                FilterValidationError,
+            )
+
             try:
                 validate_filters(filter)
                 catalog = apply_filters(catalog, filter)
@@ -5363,6 +5896,7 @@ def model_list(
 
 
 @model_app.command("get")
+@command
 def model_get(
     agent_id: str = typer.Argument(..., help="Agent ID (GUID) or model name"),
 ):
@@ -5423,7 +5957,9 @@ def model_get(
         effective_kind = runtime_kind or component_kind
         effective_hint = runtime_hint or component_hint
         effective_source = "runtime" if runtime_kind and runtime_hint else "component"
-        effective_resolved = runtime_resolved if effective_source == "runtime" else component_resolved
+        effective_resolved = (
+            runtime_resolved if effective_source == "runtime" else component_resolved
+        )
 
         if not effective_kind or not effective_hint:
             typer.echo(f"No model configuration found for agent {agent_id}", err=True)
@@ -5442,7 +5978,9 @@ def model_get(
         issues.extend(runtime_resolved["issues"])
         issues.extend(component_resolved["issues"])
         if last_publish.get("status") == "Failed":
-            issues.append("The last publish attempt failed; the live published model may not match the current draft model.")
+            issues.append(
+                "The last publish attempt failed; the live published model may not match the current draft model."
+            )
 
         result = {
             "id": agent_id,
@@ -5493,6 +6031,7 @@ def model_get(
 
 
 @model_app.command("set")
+@command
 def model_set(
     agent_id: str = typer.Argument(..., help="Agent ID (GUID)"),
     model: str = typer.Argument(
@@ -5563,9 +6102,7 @@ def model_set(
             current_yaml = gpt_component.get("data", "")
             current_config = client.parse_gpt_component_yaml(current_yaml)
             current_hint = (
-                runtime_model.get("model_hint")
-                or current_config.get("model_hint")
-                or "unknown"
+                runtime_model.get("model_hint") or current_config.get("model_hint") or "unknown"
             )
             current_instructions = current_config.get("instructions")
             current_response_instructions = current_config.get("response_instructions")
@@ -5581,9 +6118,7 @@ def model_set(
                 "model_hint": model_hint,
                 "web_browsing": current_web_browsing,
             }
-            supported_yaml_args = set(
-                inspect.signature(client.build_gpt_component_yaml).parameters
-            )
+            supported_yaml_args = set(inspect.signature(client.build_gpt_component_yaml).parameters)
             new_yaml = client.build_gpt_component_yaml(
                 **{
                     key: value
@@ -5678,6 +6213,7 @@ def _resolve_agent_id(client, agent_id: str) -> tuple[str, dict]:
 
 
 @channel_app.command("get-token")
+@command
 def channel_get_token(
     agent_id: str = typer.Argument(..., help="Agent ID (GUID) or name"),
     table: bool = typer.Option(
@@ -5726,6 +6262,7 @@ def channel_get_token(
 
 
 @channel_app.command("list")
+@command
 def channel_list(
     agent_id: str = typer.Argument(..., help="Agent ID (GUID) or name"),
     limit: int = typer.Option(
@@ -5771,7 +6308,12 @@ def channel_list(
         channels = channel_info.get("channels", [])
 
         if filter:
-            from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
+            from cli_tools_shared.filters import (
+                apply_filters,
+                validate_filters,
+                FilterValidationError,
+            )
+
             try:
                 validate_filters(filter)
                 channels = apply_filters(channels, filter)
@@ -5783,10 +6325,7 @@ def channel_list(
 
         if properties:
             property_list = [p.strip() for p in properties.split(",")]
-            channels = [
-                {k: v for k, v in item.items() if k in property_list}
-                for item in channels
-            ]
+            channels = [{k: v for k, v in item.items() if k in property_list} for item in channels]
             channel_info = {**channel_info, "channels": channels}
 
         if table:
@@ -5798,12 +6337,14 @@ def channel_list(
             else:
                 rows = []
                 for ch in channels:
-                    rows.append({
-                        "Name": ch.get("name", ""),
-                        "Type": ch.get("type", ""),
-                        "Status": ch.get("status", ""),
-                        "Description": ch.get("description", ""),
-                    })
+                    rows.append(
+                        {
+                            "Name": ch.get("name", ""),
+                            "Type": ch.get("type", ""),
+                            "Status": ch.get("status", ""),
+                            "Description": ch.get("description", ""),
+                        }
+                    )
                 print_table(rows)
             typer.echo("")
         else:
@@ -5817,6 +6358,7 @@ def channel_list(
 
 
 @channel_app.command("get")
+@command
 def channel_get(
     agent_id: str = typer.Argument(..., help="Agent ID (GUID) or name"),
     channel_name: str = typer.Argument(..., help="Channel name (e.g., 'directline', 'msteams')"),
@@ -5843,8 +6385,11 @@ def channel_get(
 
         target = channel_name.lower()
         match = next(
-            (ch for ch in channels if ch.get("name", "").lower() == target
-             or ch.get("type", "").lower() == target),
+            (
+                ch
+                for ch in channels
+                if ch.get("name", "").lower() == target or ch.get("type", "").lower() == target
+            ),
             None,
         )
         if match is None:
@@ -5857,12 +6402,16 @@ def channel_get(
         if table:
             agent_name = channel_info.get("bot_name", bot_id)
             typer.echo(f"\nChannel '{match.get('name', channel_name)}' for '{agent_name}':\n")
-            print_table([{
-                "Name": match.get("name", ""),
-                "Type": match.get("type", ""),
-                "Status": match.get("status", ""),
-                "Description": match.get("description", ""),
-            }])
+            print_table(
+                [
+                    {
+                        "Name": match.get("name", ""),
+                        "Type": match.get("type", ""),
+                        "Status": match.get("status", ""),
+                        "Description": match.get("description", ""),
+                    }
+                ]
+            )
             typer.echo("")
         else:
             print_json(match)

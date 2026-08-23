@@ -51,6 +51,30 @@ def test_validate_payload_rejects_unauthenticated_profile():
     assert errors == ["profile default authenticated must be true in auth status output"]
 
 
+def test_validate_payload_can_check_schema_without_requiring_authentication():
+    errors = validate_payload(
+        {
+            "profiles": [
+                {
+                    "name": "default",
+                    "auth_type": "default",
+                    "active": True,
+                    "authenticated": False,
+                    "credential_types": {
+                        "api_key": {
+                            "credentials_saved": False,
+                            "authenticated": False,
+                        }
+                    },
+                }
+            ]
+        },
+        require_authenticated=False,
+    )
+
+    assert errors == []
+
+
 def test_validate_payload_reports_missing_credential_authenticated_as_schema_error():
     errors = validate_payload({
         "profiles": [

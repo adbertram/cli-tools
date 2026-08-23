@@ -1,6 +1,10 @@
 ---
-name: "fitnesspal-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute fitnesspal operations using the `fitnesspal` CLI tool. MyFitnessPal CLI -- view diary, exercises, measurements, reports, food search, recipes, and meals. Triggers: fitnesspal, fitnesspal cli, myfitnesspal, food diary, calorie diary, fitness diary, fitnesspal exercises, fitnesspal measurements, fitnesspal recipes, fitnesspal food search"
+name: fitnesspal-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute fitnesspal operations using the `fitnesspal` CLI tool.
+  MyFitnessPal CLI -- view diary, exercises, measurements, reports, food search, recipes, and meals.
+  Triggers: fitnesspal, fitnesspal cli, myfitnesspal, food diary, calorie diary, fitness diary, fitnesspal exercises, fitnesspal measurements, fitnesspal recipes, fitnesspal food search
 ---
 
 <objective>
@@ -19,7 +23,7 @@ fitnesspal <command-group> <action> [arguments] [options]
 | View exercises | `fitnesspal exercises list --table` |
 | View measurements | `fitnesspal measurements list --table` |
 | View reports | `fitnesspal reports list --table` |
-| Search food | `fitnesspal food list "<query>" --table` |
+| Search food | `fitnesspal food list --table` |
 | List recipes | `fitnesspal recipes list --table` |
 | List meals | `fitnesspal meals list --table` |
 | Check auth | `fitnesspal auth status` |
@@ -27,7 +31,7 @@ fitnesspal <command-group> <action> [arguments] [options]
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `fitnesspal` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `fitnesspal` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 
@@ -39,7 +43,7 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **food** — Search and view food items (list, get)
 - **recipes** — Manage saved recipes (list, get, create, delete)
 - **meals** — View saved meals (list, get)
-- **auth** — Manage authentication (login, logout, status, test)
+- **auth** — Manage authentication (login, logout, status, refresh, test)
 - **cache** — Manage response cache (clear)
 - **auth** -- Authentication commands and nested `auth profiles` management
 </principle>

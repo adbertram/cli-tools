@@ -1,6 +1,10 @@
 ---
-name: "raptive-cli"
-description: "Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert. MANDATORY: Execute raptive operations using the `raptive` CLI tool. CLI interface for Raptive traffic and revenue data. Triggers: raptive, raptive cli, raptive earnings, raptive traffic, ad revenue, raptive dashboard, raptive RPM, earnings by page, traffic sources, ad network earnings"
+name: raptive-cli
+description: >-
+  Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
+  Execute raptive operations using the `raptive` CLI tool.
+  CLI interface for Raptive traffic and revenue data.
+  Triggers: raptive, raptive cli, raptive earnings, raptive traffic, ad revenue, raptive dashboard, raptive RPM, earnings by page, traffic sources, ad network earnings
 ---
 
 <objective>
@@ -27,7 +31,7 @@ raptive <command-group> <action> [options]
 
 <essential_principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `raptive` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `raptive` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 

@@ -1,5 +1,5 @@
-"""Conversation summary model for Claude Code sessions."""
-from typing import Optional
+"""Conversation models for Claude Code sessions."""
+from typing import Dict, List, Optional
 from pydantic import computed_field
 from .base import CLIModel
 
@@ -15,6 +15,9 @@ class ConversationSummary(CLIModel):
     session_id: str
     project: str
     conversation_id: int  # Sequential number (1, 2, 3...)
+
+    # Model from the most recent assistant turn in this conversation
+    model: Optional[str] = None
 
     # Message counts
     message_count: int
@@ -48,3 +51,9 @@ class ConversationSummary(CLIModel):
             + self.total_output_tokens
             - int(self.total_cache_read_tokens * 0.9)
         )
+
+
+class ConversationDetail(ConversationSummary):
+    """Conversation metadata with bounded user and assistant message content."""
+
+    messages: List[Dict[str, str]]

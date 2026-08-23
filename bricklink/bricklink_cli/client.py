@@ -9,7 +9,7 @@ from requests_oauthlib import OAuth1Session
 from .config import get_config
 from cli_tools_shared.activity_log import get_activity_logger
 from cli_tools_shared.exceptions import ClientError
-from cli_tools_shared.data_cache import cached
+from cli_tools_shared.data_cache import cached, invalidate
 
 activity = get_activity_logger("bricklink")
 
@@ -25,6 +25,31 @@ RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 # Bricklink meta.code values that indicate success
 SUCCESS_CODES = {200, 201, 204}
+
+SEQUENCE_ITEM_EXAMPLES = {
+    "INSTRUCTION": "4184-1",
+    "SET": "6868-1",
+}
+
+
+def _validate_catalog_item_number(item_type: str, item_no: str) -> None:
+    """Require the sequence suffix used by BrickLink set-like item IDs."""
+    normalized_type = item_type.upper()
+    example = SEQUENCE_ITEM_EXAMPLES.get(normalized_type)
+    if example is None:
+        return
+
+    item_prefix, separator, item_sequence = item_no.rpartition("-")
+    if (
+        not item_prefix
+        or not separator
+        or not item_sequence.isdecimal()
+        or int(item_sequence) < 1
+    ):
+        raise ClientError(
+            f"{normalized_type} item numbers must include a positive sequence "
+            f"suffix, for example '{example}'."
+        )
 
 
 class BricklinkClient:
@@ -107,7 +132,13 @@ class BricklinkClient:
                 requests.exceptions.ChunkedEncodingError,
             ))
         if response is not None:
-            return response.status_code in RETRYABLE_STATUS_CODES
+            if response.status_code in RETRYABLE_STATUS_CODES:
+                return True
+            try:
+                meta_code = response.json().get("meta", {}).get("code")
+            except (ValueError, AttributeError):
+                return False
+            return meta_code in RETRYABLE_STATUS_CODES
         return False
 
     def _get_retry_after(self, response: requests.Response) -> Optional[float]:
@@ -324,7 +355,13 @@ class BricklinkClient:
         Returns:
             Updated order dict.
         """
-        return self._make_request("PUT", f"/orders/{order_id}", data=updates)
+        result = self._make_request("PUT", f"/orders/{order_id}", data=updates)
+        # Invalidate cached reads so the next `get_order`/`list_orders` reflects
+        # this mutation instead of serving a stale on-disk snapshot for up to
+        # CACHE_TTL seconds (see cli_tools_shared.data_cache.invalidate).
+        invalidate(self, "get_order", order_id)
+        invalidate(self, "list_orders")
+        return result
 
     def update_order_status(self, order_id: Union[str, int], status: str) -> Dict:
         """Update the status of an order.
@@ -336,11 +373,16 @@ class BricklinkClient:
         Returns:
             Result dict.
         """
-        return self._make_request(
+        result = self._make_request(
             "PUT",
             f"/orders/{order_id}/status",
             data={"field": "status", "value": status},
         )
+        # Same staleness hazard as update_order — invalidate the cached
+        # get_order/list_orders snapshots for this order.
+        invalidate(self, "get_order", order_id)
+        invalidate(self, "list_orders")
+        return result
 
     def mark_shipped(
         self,
@@ -492,6 +534,7 @@ class BricklinkClient:
         Returns:
             Catalog item dict.
         """
+        _validate_catalog_item_number(item_type, item_no)
         return self._make_request("GET", f"/items/{item_type}/{item_no}")
 
     @cached
@@ -523,6 +566,8 @@ class BricklinkClient:
         Returns:
             Price guide dict.
         """
+        _validate_catalog_item_number(item_type, item_no)
+
         params: Dict[str, Any] = {}
         if color_id is not None:
             params["color_id"] = color_id

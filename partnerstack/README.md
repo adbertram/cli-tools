@@ -1,6 +1,10 @@
 # PartnerStack CLI
 
-Command-line access to the [PartnerStack Partner API](https://docs.partnerstack.com/docs/partner-api).
+## DESCRIPTION
+
+The `partnerstack` CLI provides a command-line interface for Partnerstack API.
+
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows.
 
 ## Installation
 

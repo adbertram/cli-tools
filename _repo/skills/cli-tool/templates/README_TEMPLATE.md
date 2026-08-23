@@ -1,6 +1,14 @@
 # {ToolName} CLI
 
-A command-line interface for [{ServiceName}]({service_url}). {Brief description of what users can do with this CLI}.
+## DESCRIPTION
+
+A command-line interface for {ServiceName}. {Brief description of what users can do with this CLI}.
+
+Use this CLI when you need scriptable, JSON-first access to {ServiceName} from agents, automation, or terminal workflows.
+
+## Docs
+
+- Service/API docs: {service_url}
 
 ## Installation
 

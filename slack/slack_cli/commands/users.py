@@ -19,13 +19,14 @@ import typer
 from pathlib import Path
 from typing import Optional, List
 from ..client import get_client, ClientError
-from cli_tools_shared.output import print_json, print_table, print_success, handle_error
+from cli_tools_shared.output import print_json, print_table, print_success, handle_error, command
 from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError, apply_properties_filter
 
 app = typer.Typer(help="Manage Slack users")
 
 
 @app.command("list")
+@command
 def list_users(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     include_deleted: bool = typer.Option(
@@ -106,6 +107,7 @@ def list_users(
 
 
 @app.command("get")
+@command
 def user_get(
     user_id: str = typer.Argument(..., help="User ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -149,6 +151,7 @@ def user_get(
 
 
 @app.command("set-status")
+@command
 def set_status(
     text: str = typer.Argument(..., help="Status text"),
     emoji: str = typer.Option("", "--emoji", "-e", help="Status emoji (e.g., :coffee:)"),
@@ -176,6 +179,7 @@ def set_status(
 
 
 @app.command("set-photo")
+@command
 def set_photo(
     image_path: Path = typer.Argument(..., help="Path to the profile image file"),
 ):

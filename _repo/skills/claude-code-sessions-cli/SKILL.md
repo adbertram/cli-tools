@@ -25,6 +25,7 @@ Common commands:
 | List Claude projects | `claude-code-sessions projects list --limit 20` |
 | List recent Claude sessions | `claude-code-sessions sessions list --limit 20` |
 | Search transcript content | `claude-code-sessions search run "query" --limit 20` |
+| Get one conversation with user and assistant messages | `claude-code-sessions conversations get <session-id>:<conversation-number>` |
 | List tool calls | `claude-code-sessions tool-calls list --session-id <session-id> --project <project>` |
 | List subagent launches | `claude-code-sessions subagent-activity list --session-id <session-id> --project <project>` |
 | List update-plan items | `claude-code-sessions todos list --session-id <session-id> --project <project>` |
@@ -33,7 +34,7 @@ Common commands:
 
 <principles>
 <principle name="Usage Reference">
-**MANDATORY: Consult `usage.json` before executing ANY `claude-code-sessions` command.**
+**MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `claude-code-sessions` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 

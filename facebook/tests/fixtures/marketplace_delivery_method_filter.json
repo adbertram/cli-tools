@@ -1,0 +1,137 @@
+{
+  "_measured": "Live Facebook Marketplace search-page filter state captured 2026-08-18. `radios` is Facebook's own Delivery method radio group (innerText + aria-checked) and `delivery_button` is the collapsed filter button's text, read back after navigating to the requested URL. This is Facebook confirming which deliveryMethod token it accepted.",
+  "cases": {
+    "evansville-plain": {
+      "requested_url": "https://www.facebook.com/marketplace/evansville/search/?query=lego%20bulk&sortBy=creation_time_descend",
+      "served_url": "https://www.facebook.com/marketplace/evansville/search/?query=lego%20bulk&sortBy=creation_time_descend",
+      "delivery_radios": [
+        {
+          "role": "radio",
+          "label": "",
+          "text": "All",
+          "checked": "true"
+        },
+        {
+          "role": "radio",
+          "label": "",
+          "text": "Local pickup",
+          "checked": "false"
+        },
+        {
+          "role": "radio",
+          "label": "",
+          "text": "Shipping",
+          "checked": "false"
+        },
+        {
+          "role": "radio",
+          "label": "",
+          "text": "All",
+          "checked": "true"
+        }
+      ],
+      "delivery_button": [
+        "Delivery method"
+      ]
+    },
+    "shipping": {
+      "requested_url": "https://www.facebook.com/marketplace/evansville/search/?query=lego%20bulk&sortBy=creation_time_descend&deliveryMethod=shipping",
+      "served_url": "https://www.facebook.com/marketplace/evansville/search/?query=lego%20bulk&sortBy=creation_time_descend&deliveryMethod=shipping",
+      "delivery_radios": [
+        {
+          "role": "radio",
+          "label": "",
+          "text": "All",
+          "checked": "false"
+        },
+        {
+          "role": "radio",
+          "label": "",
+          "text": "Local pickup",
+          "checked": "false"
+        },
+        {
+          "role": "radio",
+          "label": "",
+          "text": "Shipping",
+          "checked": "true"
+        },
+        {
+          "role": "radio",
+          "label": "",
+          "text": "All",
+          "checked": "true"
+        }
+      ],
+      "delivery_button": [
+        "Delivery method: Shipping"
+      ]
+    },
+    "local_pick_up": {
+      "requested_url": "https://www.facebook.com/marketplace/evansville/search/?query=lego%20bulk&sortBy=creation_time_descend&deliveryMethod=local_pick_up",
+      "served_url": "https://www.facebook.com/marketplace/evansville/search/?query=lego%20bulk&sortBy=creation_time_descend&deliveryMethod=local_pick_up",
+      "delivery_radios": [
+        {
+          "role": "radio",
+          "label": "",
+          "text": "All",
+          "checked": "false"
+        },
+        {
+          "role": "radio",
+          "label": "",
+          "text": "Local pickup",
+          "checked": "true"
+        },
+        {
+          "role": "radio",
+          "label": "",
+          "text": "Shipping",
+          "checked": "false"
+        },
+        {
+          "role": "radio",
+          "label": "",
+          "text": "All",
+          "checked": "true"
+        }
+      ],
+      "delivery_button": [
+        "Delivery method: Local pickup"
+      ]
+    },
+    "local": {
+      "requested_url": "https://www.facebook.com/marketplace/evansville/search/?query=lego%20bulk&sortBy=creation_time_descend&deliveryMethod=local",
+      "served_url": "https://www.facebook.com/marketplace/evansville/search/?query=lego%20bulk&sortBy=creation_time_descend&deliveryMethod=local",
+      "delivery_radios": [
+        {
+          "role": "radio",
+          "label": "",
+          "text": "All",
+          "checked": "false"
+        },
+        {
+          "role": "radio",
+          "label": "",
+          "text": "Local pickup",
+          "checked": "false"
+        },
+        {
+          "role": "radio",
+          "label": "",
+          "text": "Shipping",
+          "checked": "false"
+        },
+        {
+          "role": "radio",
+          "label": "",
+          "text": "All",
+          "checked": "true"
+        }
+      ],
+      "delivery_button": [
+        "Delivery method:"
+      ]
+    }
+  }
+}

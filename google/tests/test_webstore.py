@@ -1,5 +1,7 @@
 import json
 from pathlib import Path
+import subprocess
+import sys
 import zlib
 from zipfile import ZipFile
 
@@ -58,6 +60,14 @@ def make_client(session):
     return ChromeWebStoreClient(access_token="access-token", session=session)
 
 
+@pytest.fixture(scope="session")
+def playwright_chromium_headless_shell():
+    subprocess.run(
+        [sys.executable, "-m", "playwright", "install", "chromium-headless-shell"],
+        check=True,
+    )
+
+
 def png_chunk(chunk_type: bytes, payload: bytes) -> bytes:
     checksum = zlib.crc32(chunk_type + payload) & 0xFFFFFFFF
     return len(payload).to_bytes(4, "big") + chunk_type + payload + checksum.to_bytes(4, "big")
@@ -106,19 +116,19 @@ def write_listing_fixture(root: Path, screenshot_count: int = 5):
 Title:
 
 ```text
-BrickBuddyScan
+DemoWebClipper
 ```
 
 Summary:
 
 ```text
-Identify LEGO parts from webpage images and screenshot selections.
+Capture webpage screenshots and organize visual notes.
 ```
 
 Detailed description:
 
 ```text
-Identify LEGO parts from webpage images and screenshot selections.
+Capture webpage screenshots and organize visual notes.
 ```
 
 Suggested category:
@@ -136,19 +146,19 @@ English
 Homepage URL:
 
 ```text
-https://brickbuddy.io/
+https://example.com/
 ```
 
 Support URL:
 
 ```text
-https://brickbuddy.io/support
+https://example.com/support
 ```
 
 Privacy policy URL:
 
 ```text
-https://gist.github.com/adbertram/7635e5647973d4f7c258bc2c6722b5f7
+https://example.com/privacy
 ```
 
 ## Graphic Assets
@@ -197,7 +207,7 @@ def test_parse_listing_file_validates_fields_assets_and_dimensions(tmp_path):
 
     result = parse_listing_file(listing_file)
 
-    assert result.title == "BrickBuddyScan"
+    assert result.title == "DemoWebClipper"
     assert result.category == "Shopping"
     assert len(result.screenshots) == 5
     assert [Path(asset.path).name for asset in result.screenshots] == [
@@ -347,7 +357,7 @@ def test_listing_update_command_passes_listing_data_to_browser(monkeypatch, tmp_
     assert payload["item_id"] == "ext-123"
     assert payload["save_status"] == "saved"
     assert calls[0][0:2] == ("pub-123", "ext-123")
-    assert calls[0][2].title == "BrickBuddyScan"
+    assert calls[0][2].title == "DemoWebClipper"
     assert calls[-1] == ("close",)
 
 
@@ -368,8 +378,8 @@ def test_listing_editability_rejects_review_locked_statuses():
             return f"""
 Store Listing
 Publisher:
-adbertram
-BrickBuddyScan
+example-user
+DemoWebClipper
 Status: {self.status}
 ID: mjcpgmoefpffompneljbkkndhconnnff
 """
@@ -385,7 +395,7 @@ ID: mjcpgmoefpffompneljbkkndhconnnff
             _assert_listing_is_editable(FakeService(status))
 
 
-def test_text_field_update_rejects_disabled_review_field():
+def test_text_field_update_rejects_disabled_review_field(playwright_chromium_headless_shell):
     from playwright.sync_api import sync_playwright
 
     fields = [{"name": "description", "labels": ("Description",), "value": "new value"}]
@@ -461,7 +471,7 @@ def marked_file_inputs(html: str, section_name: str) -> list[dict]:
             browser.close()
 
 
-def test_file_input_marker_targets_nearest_promo_section():
+def test_file_input_marker_targets_nearest_promo_section(playwright_chromium_headless_shell):
     marked = marked_file_inputs(
         """
         <section>
@@ -490,7 +500,7 @@ def test_file_input_marker_targets_nearest_promo_section():
     ]
 
 
-def test_file_input_marker_ignores_hidden_template_input():
+def test_file_input_marker_ignores_hidden_template_input(playwright_chromium_headless_shell):
     marked = marked_file_inputs(
         """
         <section>
@@ -514,7 +524,7 @@ def test_file_input_marker_ignores_hidden_template_input():
     ]
 
 
-def test_file_input_marker_clears_stale_markers():
+def test_file_input_marker_clears_stale_markers(playwright_chromium_headless_shell):
     marked = marked_file_inputs(
         """
         <section>
@@ -541,8 +551,8 @@ def test_extract_dashboard_status_text_parses_pending_review():
     body_text = """
 Store Listing
 Publisher:
-adbertram
-BrickBuddyScan
+example-user
+DemoWebClipper
 Status: Pending review
 ID: mjcpgmoefpffompneljbkkndhconnnff
 """
@@ -554,7 +564,7 @@ def test_package_command_creates_webstore_zip_with_manifest_at_root(tmp_path):
     extension_dir = tmp_path / "extension"
     extension_dir.mkdir()
     (extension_dir / "manifest.json").write_text(
-        json.dumps({"manifest_version": 3, "name": "BrickBuddyScan", "version": "1.2.3"})
+        json.dumps({"manifest_version": 3, "name": "DemoWebClipper", "version": "1.2.3"})
     )
     (extension_dir / "popup.html").write_text("<html></html>")
     (extension_dir / "package.json").write_text("{}")
@@ -588,8 +598,8 @@ def test_package_command_creates_webstore_zip_with_manifest_at_root(tmp_path):
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
     assert payload == {
-        "zip_path": str(output_dir / "BrickBuddyScan-1.2.3.zip"),
-        "manifest_name": "BrickBuddyScan",
+        "zip_path": str(output_dir / "DemoWebClipper-1.2.3.zip"),
+        "manifest_name": "DemoWebClipper",
         "manifest_version": "1.2.3",
         "file_count": 2,
         "files": ["manifest.json", "popup.html"],
@@ -603,7 +613,7 @@ def test_package_command_runs_verify_command_before_creating_zip(tmp_path):
     extension_dir.mkdir()
     marker = tmp_path / "verified.txt"
     (extension_dir / "manifest.json").write_text(
-        json.dumps({"manifest_version": 3, "name": "BrickBuddyScan", "version": "1.2.3"})
+        json.dumps({"manifest_version": 3, "name": "DemoWebClipper", "version": "1.2.3"})
     )
 
     result = CliRunner().invoke(
@@ -627,7 +637,7 @@ def test_package_command_rejects_remote_hosted_scripts(tmp_path):
     extension_dir = tmp_path / "extension"
     extension_dir.mkdir()
     (extension_dir / "manifest.json").write_text(
-        json.dumps({"manifest_version": 3, "name": "BrickBuddyScan", "version": "1.2.3"})
+        json.dumps({"manifest_version": 3, "name": "DemoWebClipper", "version": "1.2.3"})
     )
     (extension_dir / "popup.html").write_text(
         '<script src="https://cdn.example.com/remote.js"></script>'
@@ -652,7 +662,7 @@ def test_release_command_packages_uploads_and_publishes(monkeypatch, tmp_path):
     extension_dir = tmp_path / "extension"
     extension_dir.mkdir()
     (extension_dir / "manifest.json").write_text(
-        json.dumps({"manifest_version": 3, "name": "BrickBuddyScan", "version": "1.2.3"})
+        json.dumps({"manifest_version": 3, "name": "DemoWebClipper", "version": "1.2.3"})
     )
     calls = []
 
@@ -717,8 +727,8 @@ def test_release_command_packages_uploads_and_publishes(monkeypatch, tmp_path):
     payload = json.loads(result.stdout)
     assert payload == {
         "package": {
-            "zip_path": str(tmp_path / "release" / "BrickBuddyScan-1.2.3.zip"),
-            "manifest_name": "BrickBuddyScan",
+            "zip_path": str(tmp_path / "release" / "DemoWebClipper-1.2.3.zip"),
+            "manifest_name": "DemoWebClipper",
             "manifest_version": "1.2.3",
             "file_count": 1,
             "files": ["manifest.json"],
@@ -736,7 +746,7 @@ def test_release_command_packages_uploads_and_publishes(monkeypatch, tmp_path):
         },
     }
     assert calls == [
-        ("upload", "pub-123", "ext-123", "BrickBuddyScan-1.2.3.zip"),
+        ("upload", "pub-123", "ext-123", "DemoWebClipper-1.2.3.zip"),
         ("publish", "pub-123", "ext-123", "STAGED_PUBLISH", 25, True),
     ]
 
@@ -745,14 +755,14 @@ def test_upload_extension_command_packages_and_uploads(monkeypatch, tmp_path):
     extension_dir = tmp_path / "extension"
     extension_dir.mkdir()
     (extension_dir / "manifest.json").write_text(
-        json.dumps({"manifest_version": 3, "name": "BrickBuddyScan", "version": "1.2.3"})
+        json.dumps({"manifest_version": 3, "name": "DemoWebClipper", "version": "1.2.3"})
     )
 
     class FakeClient:
         def upload_package(self, publisher_id, item_id, package):
             assert publisher_id == "pub-123"
             assert item_id == "ext-123"
-            assert package == tmp_path / "release" / "BrickBuddyScan-1.2.3.zip"
+            assert package == tmp_path / "release" / "DemoWebClipper-1.2.3.zip"
             return WebStoreUploadResult(
                 name="publishers/pub-123/items/ext-123",
                 item_id="ext-123",
@@ -780,8 +790,8 @@ def test_upload_extension_command_packages_and_uploads(monkeypatch, tmp_path):
     assert result.exit_code == 0
     assert json.loads(result.stdout) == {
         "package": {
-            "zip_path": str(tmp_path / "release" / "BrickBuddyScan-1.2.3.zip"),
-            "manifest_name": "BrickBuddyScan",
+            "zip_path": str(tmp_path / "release" / "DemoWebClipper-1.2.3.zip"),
+            "manifest_name": "DemoWebClipper",
             "manifest_version": "1.2.3",
             "file_count": 1,
             "files": ["manifest.json"],

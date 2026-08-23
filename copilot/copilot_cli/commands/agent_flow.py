@@ -13,7 +13,7 @@ from typing import Optional
 import yaml as yaml_lib
 
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_table, print_success, print_error, handle_error, safe_symbol
+from cli_tools_shared.output import print_json, print_table, print_success, print_error, handle_error, safe_symbol, command
 from ..validation import FlowYAMLValidator, validate_agent_flow_yaml
 
 
@@ -45,6 +45,9 @@ COMMAND_CREDENTIALS = {
         "custom"
     ],
     "permissions": [
+        "custom"
+    ],
+    "publish": [
         "custom"
     ],
     "remove": [
@@ -131,6 +134,7 @@ def list_available_scaffolds(truncate: bool = False) -> list:
 
 
 @scaffold_app.command("list")
+@command
 def scaffold_list(
     table: bool = typer.Option(
         False,
@@ -201,6 +205,7 @@ def scaffold_list(
 
 
 @scaffold_app.command("get")
+@command
 def scaffold_get(
     template_name: str = typer.Argument(..., help="Template name (without .yaml extension)"),
     table: bool = typer.Option(
@@ -253,6 +258,7 @@ def scaffold_get(
 
 
 @runs_app.command("list")
+@command
 def runs_list(
     workflow_id: str = typer.Argument(
         ...,
@@ -344,6 +350,7 @@ def runs_list(
 
 
 @runs_app.command("get")
+@command
 def runs_get(
     workflow_id: str = typer.Argument(
         ...,
@@ -373,6 +380,7 @@ def runs_get(
 
 
 @runs_app.command("cancel")
+@command
 def runs_cancel(
     workflow_id: str = typer.Argument(
         ...,
@@ -513,6 +521,7 @@ def format_agent_flow_for_display(flow: dict, include_triggers: bool = False, tr
 
 
 @app.command("list")
+@command
 def agent_flow_list(
     filter: Optional[list[str]] = typer.Option(
         None,
@@ -617,6 +626,7 @@ def agent_flow_list(
 
 
 @app.command("create")
+@command
 def agent_flow_create(
     name: str = typer.Option(
         ...,
@@ -910,6 +920,7 @@ def agent_flow_create(
 
 
 @app.command("get")
+@command
 def agent_flow_get(
     workflow_id: str = typer.Argument(
         ...,
@@ -985,6 +996,7 @@ def agent_flow_get(
 
 
 @app.command("update")
+@command
 def agent_flow_update(
     workflow_id: str = typer.Argument(
         ...,
@@ -1032,6 +1044,7 @@ def agent_flow_update(
 
 
 @app.command("export")
+@command
 def agent_flow_export(
     workflow_id: str = typer.Argument(
         ...,
@@ -1064,7 +1077,10 @@ def agent_flow_export(
     draft: bool = typer.Option(
         False,
         "--draft",
-        help="Export the draft version instead of published (for solution-aware flows with drafts)",
+        help=(
+            "Export the unpublished (draft) definition. Fails when the flow has no "
+            "unpublished draft instead of returning published content labeled 'draft'."
+        ),
     ),
 ):
     """
@@ -1074,8 +1090,10 @@ def agent_flow_export(
     connection references. The output can be used for documentation,
     backup, or as a template for creating similar flows.
 
-    By default, outputs the published version of the flow. Use --draft
-    to get the draft version (for solution-aware flows with versioning).
+    By default, outputs the published version of the flow. Use --draft to get
+    the unpublished draft that a "Save draft" in the web designer left behind.
+    --draft fails when no unpublished draft exists, so published content is
+    never labeled as a draft.
 
     Use --definition-only to output just the flow definition.
     Use --yaml for human-readable YAML format.
@@ -1092,10 +1110,13 @@ def agent_flow_export(
         client = get_client()
         flow_data = client.export_agent_flow(workflow_id, draft=draft)
 
-        # Show which version was retrieved
-        version = flow_data.get("version", "unknown")
-        if draft and version != "draft":
-            typer.echo(f"Note: Retrieved version is '{version}' (draft may not exist separately)", err=True)
+        # Warn when the published export is not the newest definition.
+        if not draft and flow_data.get("has_unpublished_draft"):
+            typer.echo(
+                "Note: this flow has an unpublished draft. This export is the "
+                "PUBLISHED definition. Use --draft to export the draft.",
+                err=True,
+            )
 
         # Handle raw output
         if raw:
@@ -1149,6 +1170,7 @@ def agent_flow_export(
 
 
 @app.command("import")
+@command
 def agent_flow_import(
     workflow_id: str = typer.Argument(
         ...,
@@ -1181,6 +1203,19 @@ def agent_flow_import(
         "--warnings-as-errors",
         "-W",
         help="Treat validation warnings as errors",
+    ),
+    discard_draft: bool = typer.Option(
+        False,
+        "--discard-draft",
+        help=(
+            "Resolve an existing unpublished web-designer draft by publishing it and "
+            "then overwriting it with the imported definition. The draft edits are lost."
+        ),
+    ),
+    publish: bool = typer.Option(
+        False,
+        "--publish",
+        help="Publish the flow after the import so the imported definition goes live",
     ),
 ):
     """
@@ -1216,6 +1251,16 @@ def agent_flow_import(
         copilot agent-flow import <flow-id> -f flow.yaml --include-connections
         copilot agent-flow import <flow-id> -f flow.yaml --dry-run
         copilot agent-flow import <flow-id> -f flow.yaml --warnings-as-errors
+        copilot agent-flow import <flow-id> -f flow.yaml --discard-draft
+        copilot agent-flow import <flow-id> -f flow.yaml --publish
+
+    UNPUBLISHED DRAFTS:
+    A "Save draft" in the Power Automate / Copilot Studio web designer leaves the
+    flow in the Dataverse ActiveUnpublished state, and Dataverse rejects any
+    published definition update while that draft exists. This command checks the
+    publish state first and refuses with an explanation. Publish the draft in the
+    designer to keep those edits, or pass --discard-draft to publish the pending
+    draft and immediately overwrite it with the imported definition.
     """
     try:
         # Read and parse the file
@@ -1336,6 +1381,16 @@ def agent_flow_import(
                 typer.echo(f"Connection references: {list(connection_refs.keys())}", err=True)
             else:
                 typer.echo("Connection references: (preserving existing)", err=True)
+            state = get_client().get_agent_flow_publish_state(workflow_id)
+            if state["has_unpublished_draft"]:
+                typer.echo(
+                    "Publish state: UNPUBLISHED DRAFT present — a real import would be "
+                    f"refused ({state['draft_evidence']}). Use --discard-draft to "
+                    "overwrite it.",
+                    err=True,
+                )
+            else:
+                typer.echo("Publish state: published (no unpublished draft)", err=True)
             typer.echo("\nValidation passed. Run without --dry-run to apply changes.", err=True)
             return
 
@@ -1345,9 +1400,11 @@ def agent_flow_import(
             workflow_id=workflow_id,
             definition=definition,
             connection_references=connection_refs,
+            discard_draft=discard_draft,
+            publish=publish,
         )
 
-        print_success(f"Flow {workflow_id} updated successfully")
+        print_success(f"Flow {workflow_id} {result['status']}")
         if connection_refs:
             typer.echo("Connection references were also updated.", err=True)
         else:
@@ -1362,6 +1419,7 @@ def agent_flow_import(
 
 
 @app.command("validate")
+@command
 def agent_flow_validate(
     file: Optional[str] = typer.Argument(
         None,
@@ -1558,6 +1616,7 @@ def format_action_result(action_name: str, action_data: dict) -> dict:
 
 
 @app.command("test")
+@command
 def agent_flow_test(
     workflow_id: str = typer.Argument(
         ...,
@@ -1702,7 +1761,7 @@ def agent_flow_test(
                 if run_list:
                     latest_run_id = run_list[0].get("name")
                     run_result = _wait_for_run(client, workflow_id, latest_run_id, timeout)
-                    _print_flow_test_result(run_result)
+                    _print_flow_test_run_result(run_result)
                 else:
                     _print_flow_test_status("RunNotFound", "Could not find the triggered run")
             else:
@@ -1732,18 +1791,21 @@ def agent_flow_test(
             if run_list:
                 latest_run_id = run_list[0].get("name")
                 run_result = _wait_for_run(client, workflow_id, latest_run_id, timeout)
-                _print_flow_test_result(run_result)
+                _print_flow_test_run_result(run_result)
             else:
                 _print_flow_test_status("RunNotFound", "Could not find the triggered run")
         else:
             _print_flow_test_result(result)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         exit_code = handle_error(e)
         raise typer.Exit(exit_code)
 
 
 @app.command("remove")
+@command
 def agent_flow_remove(
     workflow_id: str = typer.Argument(
         ...,
@@ -1818,7 +1880,41 @@ def agent_flow_remove(
         raise typer.Exit(exit_code)
 
 
+@app.command("publish")
+@command
+def agent_flow_publish(
+    workflow_id: str = typer.Argument(
+        ...,
+        help="The agent flow's unique identifier (GUID)",
+    ),
+):
+    """
+    Publish an agent flow's pending definition.
+
+    Promotes the flow's unpublished (draft) definition to the published
+    definition using the Dataverse PublishXml action. Use this to keep the edits
+    made with "Save draft" in the web designer, and to clear the
+    ActiveUnpublished state that blocks 'agent-flow import'.
+
+    Examples:
+        copilot agent-flow publish <flow-id>
+    """
+    try:
+        client = get_client()
+        state = client.get_agent_flow_publish_state(workflow_id)
+        if not state["has_unpublished_draft"]:
+            typer.echo(
+                "Note: no unpublished draft detected; publishing anyway.", err=True
+            )
+        result = client.publish_agent_flow(workflow_id)
+        print_json(result)
+    except Exception as e:
+        exit_code = handle_error(e)
+        raise typer.Exit(exit_code)
+
+
 @app.command("enable")
+@command
 def agent_flow_enable(
     workflow_id: str = typer.Argument(
         ...,
@@ -1853,6 +1949,7 @@ def agent_flow_enable(
 
 
 @app.command("disable")
+@command
 def agent_flow_disable(
     workflow_id: str = typer.Argument(
         ...,
@@ -1931,6 +2028,13 @@ def _print_flow_test_result(result: dict):
     print_json(result)
 
 
+def _print_flow_test_run_result(result: dict):
+    """Print a completed run and fail the command unless it succeeded."""
+    _print_flow_test_result(result)
+    if result["status"] != "Succeeded":
+        raise typer.Exit(1)
+
+
 def _print_flow_test_status(status: str, message: str):
     """Print a machine-readable agent-flow test status message."""
     _print_flow_test_result({"status": status, "message": message})
@@ -1940,8 +2044,8 @@ def _wait_for_run(client, workflow_id: str, run_id: str, timeout: int) -> dict:
     """Wait for a flow run to complete and display results.
 
     Returns:
-        dict with run_id, status, duration, and body (response body from
-        the flow's Response action, if present) for easy parsing.
+        dict with run_id, status, duration, error (when present), and body
+        (response body from the flow's Response action, if present).
     """
     start_time = time.time()
     poll_interval = 3  # seconds
@@ -1967,6 +2071,8 @@ def _wait_for_run(client, workflow_id: str, run_id: str, timeout: int) -> dict:
                     pass
 
             result = {"run_id": run_id, "status": final_status, "duration": final_duration}
+            if props.get("error") is not None:
+                result["error"] = props["error"]
 
             # Extract response body from Response action if present
             response_body = _extract_response_body(client, run_data)
@@ -2070,6 +2176,7 @@ def _display_run_details(run_data: dict, full_data_to_stderr: bool = False):
 
 
 @app.command("actions")
+@command
 def agent_flow_actions(
     workflow_id: str = typer.Argument(
         ...,
