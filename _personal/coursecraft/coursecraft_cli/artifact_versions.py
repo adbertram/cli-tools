@@ -354,28 +354,6 @@ def _paired_review_targets(slug: str) -> List[str]:
     return fields
 
 
-def _uniform_paired_review_fields(candidates: Tuple[str, ...]) -> Optional[List[str]]:
-    """Paired review fields shared identically by every slug in ``candidates``.
-
-    Used by :func:`stamp_versions`'s unresolved-slide-type fallback (Finding
-    5): when a Slides write's real slide type can't be resolved, clearing a
-    review field is still safe if EVERY candidate slug that could plausibly
-    own the touched field agrees on the exact same field(s) to clear -- e.g.
-    every ``slide.*`` slug pairs to the identical ``["Script Human
-    Verified"]`` today (verified against course-pipeline.json's
-    ``human_verified_pairs``), so which one of them the record actually is
-    does not change what gets cleared. If even one candidate disagrees, or
-    ``candidates`` is empty, returns ``None`` -- never guess.
-    """
-    if not candidates:
-        return None
-    sets = [frozenset(_paired_review_targets(slug)) for slug in candidates]
-    first = sets[0]
-    if any(other != first for other in sets[1:]):
-        return None
-    return sorted(first)
-
-
 def check_write_conflict(
     table: str,
     sent_fields: Dict[str, Any],

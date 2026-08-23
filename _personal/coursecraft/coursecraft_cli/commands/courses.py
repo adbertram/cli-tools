@@ -1,5 +1,4 @@
 """Courses command module."""
-from enum import Enum
 import json
 import os
 import typer
@@ -58,10 +57,6 @@ from ..objective_override import (
 app = typer.Typer(help="Manage course records")
 
 POWERPOINT_SLIDE_DECK_VERSION_FIELD = validate_field("powerpoint_slide_deck_version", "Courses")
-class RecordingDictationMethod(str, Enum):
-    """Allowed values for the Recording Dictation Method field."""
-    AUTOMATIC = "Automatic Narration Generation"
-    INSTRUCTOR = "Manual Instructor Generation"
 
 
 def _collect_course_records(client, course_record_id: str) -> Dict[str, List[Dict]]:
@@ -180,8 +175,7 @@ def create_course(
     course_requirements_link: Optional[str] = typer.Option(None, "--course-requirements-link", "-l", help="Google Doc URL for the Pluralsight course requirements"),
     feedback_sheet_id: Optional[str] = typer.Option(None, "--feedback-sheet-id", help="Google Sheet ID for Pluralsight recording feedback"),
     platform: Optional[str] = typer.Option(None, "--platform", "-p", help="Course platform (Pluralsight, Udemy)"),
-    recording_dictation_method: Optional[RecordingDictationMethod] = typer.Option(None, "--recording-dictation-method", help="Recording dictation method (Automatic Narration Generation, Manual Instructor Generation)"),
-    powerpoint_slide_deck_version: Optional[str] = typer.Option(None, "--powerpoint-slide-deck-version", help="PowerPoint slide deck version (e.g., '2025.09.a'); stored verbatim in the singleSelect field"),
+    powerpoint_slide_deck_version: Optional[str] = typer.Option(None, "--powerpoint-slide-deck-version", help="PowerPoint slide deck version (e.g., '2026.05.a'); stored verbatim in the singleSelect field"),
     short_description: Optional[str] = typer.Option(None, "--short-description", help="Brief course summary"),
     long_description: Optional[str] = typer.Option(None, "--long-description", help="Detailed description"),
     content_level: Optional[str] = typer.Option(None, "--content-level", help="Entry-level, Intermediate, Advanced"),
@@ -228,8 +222,6 @@ def create_course(
             fields["Feedback Sheet ID"] = feedback_sheet_id
         if platform is not None:
             fields["Platform"] = platform
-        if recording_dictation_method is not None:
-            fields["Recording Dictation Method"] = recording_dictation_method.value
         if powerpoint_slide_deck_version is not None:
             fields[POWERPOINT_SLIDE_DECK_VERSION_FIELD] = powerpoint_slide_deck_version
         if short_description:
@@ -536,12 +528,10 @@ def update_course(
     skill_path: Optional[str] = typer.Option(None, "--skill-path", help="Skill path name"),
     path_placement: Optional[str] = typer.Option(None, "--path-placement", help="Position in skill path (1, 2, 3, etc.)"),
     slack_channel_name: Optional[str] = typer.Option(None, "--slack-channel-name", help="Slack channel name for Pluralsight course communication"),
-    recording_dictation_method: Optional[RecordingDictationMethod] = typer.Option(None, "--recording-dictation-method", help="Recording dictation method (Automatic Narration Generation, Manual Instructor Generation)"),
-    powerpoint_slide_deck_version: Optional[str] = typer.Option(None, "--powerpoint-slide-deck-version", help="PowerPoint slide deck version (e.g., '2025.09.a'); stored verbatim in the singleSelect field"),
+    powerpoint_slide_deck_version: Optional[str] = typer.Option(None, "--powerpoint-slide-deck-version", help="PowerPoint slide deck version (e.g., '2026.05.a'); stored verbatim in the singleSelect field"),
     active: Optional[bool] = typer.Option(None, "--active", help="Active status (true/false)"),
     brainstorming_outline: Optional[str] = typer.Option(None, "--brainstorming-outline", "-B", help="Course brainstorming outline content"),
     brainstorming_outline_file: Optional[Path] = typer.Option(None, "--brainstorming-outline-file", help="Path to file containing brainstorming outline"),
-    brainstorming_outline_fact_checked: Optional[bool] = typer.Option(None, "--brainstorming-outline-fact-checked/--no-brainstorming-outline-fact-checked", help="Set or clear the brainstorming outline fact-checked flag"),
     feedback_requested: Optional[bool] = typer.Option(None, "--feedback-requested/--no-feedback-requested", help="Set or clear the feedback-requested gate flag"),
     feedback_requested_at: Optional[str] = typer.Option(None, "--feedback-requested-at", help="ISO 8601 timestamp the feedback gate was requested"),
     version: Optional[int] = typer.Option(None, "--version", help="Course update version (1 = original contracted course)"),
@@ -667,15 +657,8 @@ def update_course(
             fields["Outline Draft"] = outline_draft
         if slack_channel_name is not None:
             fields["Slack Channel Name"] = slack_channel_name
-        if recording_dictation_method is not None:
-            fields["Recording Dictation Method"] = recording_dictation_method.value
         if active is not None:
             fields["Active"] = str(active).lower()
-
-        # Check for fact-check reset warning
-        existing_fields = existing.get("fields", {})
-        existing_fact_checked = existing_fields.get("Brainstorming Outline Fact Checked", False)
-        updating_brainstorming = brainstorming_outline is not None or brainstorming_outline_file is not None
 
         # Handle brainstorming outline (file takes precedence over inline)
         if brainstorming_outline_file:
@@ -685,18 +668,6 @@ def update_course(
             fields["Brainstorming Outline"] = brainstorming_outline_file.read_text()
         elif brainstorming_outline is not None:
             fields["Brainstorming Outline"] = brainstorming_outline
-
-        # If updating brainstorming outline and it was previously fact-checked, warn and reset
-        if updating_brainstorming and existing_fact_checked:
-            print_info("")
-            print_info("⚠️  WARNING: The previous Brainstorming Outline was marked as Fact-Checked.")
-            print_info("   This update resets the fact-check status. Re-verification may be needed.")
-            # Automatically reset the fact-check flag
-            fields["Brainstorming Outline Fact Checked"] = False
-
-        # Handle explicit fact-checked checkbox (overrides auto-reset if explicitly set)
-        if brainstorming_outline_fact_checked is not None:
-            fields["Brainstorming Outline Fact Checked"] = brainstorming_outline_fact_checked
 
         # Handle feedback gate fields
         # Course-update identity and artifacts
@@ -857,7 +828,6 @@ INTAKE_INHERITED_FIELDS = (
     "Job Role",
     "Content Tags",
     "Target Length (Min)",
-    "Recording Dictation Method",
     "Skill Path",
 )
 

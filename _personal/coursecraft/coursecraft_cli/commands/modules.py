@@ -296,7 +296,6 @@ def update_module(
     notes: Optional[str] = typer.Option(None, "--notes", help="Internal notes"),
     brainstorming_outline: Optional[str] = typer.Option(None, "--brainstorming-outline", "-b", help="Module brainstorming outline content"),
     brainstorming_outline_file: Optional[Path] = typer.Option(None, "--brainstorming-outline-file", help="Path to file containing brainstorming outline"),
-    brainstorming_outline_fact_checked: Optional[bool] = typer.Option(None, "--brainstorming-outline-fact-checked/--no-brainstorming-outline-fact-checked", help="Set or clear the brainstorming outline fact-checked flag"),
     module_plan_complete: Optional[bool] = typer.Option(None, "--module-plan-complete/--no-module-plan-complete", help="Set or clear the module plan complete flag"),
     module_review_complete: Optional[bool] = typer.Option(None, "--module-review-complete/--no-module-review-complete", help="Set or clear the module review complete flag"),
     plan_review_ai: Optional[str] = typer.Option(None, "--plan-review-ai", help="AI review of the module plan"),
@@ -338,8 +337,6 @@ def update_module(
             print_error(f"Module not found: {record_id}")
             raise typer.Exit(1)
 
-        existing_fields = existing.get("fields", {})
-
         # Build fields dictionary with only provided values
         fields = collect_mapped_updates(
             "Modules",
@@ -368,10 +365,6 @@ def update_module(
             },
         )
 
-        # Check for fact-check reset warning
-        existing_fact_checked = existing_fields.get("Brainstorming Outline Fact Checked", False)
-        updating_brainstorming = brainstorming_outline is not None or brainstorming_outline_file is not None
-
         # Handle brainstorming outline (file takes precedence over inline)
         if brainstorming_outline_file:
             if not brainstorming_outline_file.exists():
@@ -380,18 +373,6 @@ def update_module(
             fields["Brainstorming Outline"] = brainstorming_outline_file.read_text()
         elif brainstorming_outline is not None:
             fields["Brainstorming Outline"] = brainstorming_outline
-
-        # If updating brainstorming outline and it was previously fact-checked, warn and reset
-        if updating_brainstorming and existing_fact_checked:
-            print_info("")
-            print_info("⚠️  WARNING: The previous Brainstorming Outline was marked as Fact-Checked.")
-            print_info("   This update resets the fact-check status. Re-verification may be needed.")
-            # Automatically reset the fact-check flag
-            fields["Brainstorming Outline Fact Checked"] = False
-
-        # Handle explicit fact-checked checkbox (overrides auto-reset if explicitly set)
-        if brainstorming_outline_fact_checked is not None:
-            fields["Brainstorming Outline Fact Checked"] = brainstorming_outline_fact_checked
 
         if base_record is not None:
             fields["Base Record"] = [base_record]
@@ -585,7 +566,7 @@ def _print_module_tree(module: Dict, clips: List[Dict], demos_by_clip: Dict[str,
         is_last_clip = clip_idx == len(sorted_clips) - 1
         clip_fields = clip.get("fields", {})
         clip_name = clip_fields.get("Name", clip["id"])
-        clip_status = clip_fields.get("Status Formula", "") or clip_fields.get("Status", "")
+        clip_status = clip_fields.get("Status", "")
 
         # Clip line
         clip_connector = "└── " if is_last_clip else "├── "
