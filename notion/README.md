@@ -14,6 +14,8 @@ The Notion CLI provides access to:
 - **Template** - List and manage database page templates
 - **Field** - Manage database field schemas (properties)
 - **Pages** - Query and manage standalone pages (not in databases)
+- **Page files** - Download Notion-hosted or external file attachments
+- **Official skills** - Download Notion's published Skills for Claude ZIP files
 - **Comments** - Manage comments on pages and blocks
 
 ## Authentication
@@ -405,6 +407,37 @@ notion field delete <database-id> "Field Name" --force
 
 ---
 
+## Official Notion Skills
+
+List, inspect, and download the ZIP attachments published on Notion's official
+`Notion Skills for Claude` page. These commands are anonymous and do not require
+the page to be shared with your integration.
+
+```bash
+notion skills list --table
+notion skills list --filter "name:contains:meeting" --properties id,name
+notion skills get 28ea4445-d271-8016-8a2c-d0b69f68ad6b
+notion skills download 28ea4445-d271-8016-8a2c-d0b69f68ad6b --output ./notion-skills
+```
+
+`skills list` supports the standard `--filter/-f`, `--limit/-l`,
+`--properties/-p`, and `--table/-t` options. `skills get` supports
+`--table/-t`. `skills download` requires `--output/-o` and supports
+`--force/-F` and `--table/-t`.
+
+The skill ID is the UUID of the skill's file block on the live Notion page.
+Notion uses that same UUID as the attachment signing permission record. The CLI
+rejects duplicate IDs while parsing the catalog, so each ID resolves to exactly
+one attachment. `skills download` signs and downloads only the requested ID.
+
+Notion's documented public API has no skills catalog or page-export endpoint.
+These commands read the public page through Notion's anonymous web JSON endpoints
+and resolves its attachment references through `getSignedFileUrls`. Those
+endpoints are not part of Notion's documented public API; schema changes fail
+the command clearly instead of producing partial or guessed downloads.
+
+---
+
 ## Pages Commands
 
 Query and manage standalone pages (not in databases).
@@ -522,6 +555,30 @@ notion pages export <page-id> -o blocks.json --format notion-json
 | `-f, --format` | Export format: `pdf`, `html`, `md`, or `notion-json` (default: pdf) |
 
 The `notion-json` format exports raw Notion block structures preserving all formatting. The exported JSON can be re-imported with `content set --json-file` or `blocks append --json-file`.
+
+### Download Page Files
+
+Download every file block attached to a page, including nested file blocks.
+This is the supported API path for downloadable Notion-hosted attachments such
+as skill `.zip` files. Notion-hosted URLs are refreshed immediately before the
+download because the API signs them for one hour.
+
+```bash
+notion pages files download <page-id> --output ./skills
+notion pages files download <page-id> -o ./skills --table
+notion pages files download <page-id> -o ./skills --force
+```
+
+| Option | Description |
+|--------|-------------|
+| `-o, --output` | **(Required)** Destination directory |
+| `-t, --table` | Display downloaded-file metadata as a table |
+| `-F, --force` | Overwrite files that already exist |
+
+The page must be shared with the configured Notion integration. A page being
+public on the web does not grant API access to an integration. The Notion API
+does not expose a skills catalog or a page-export/download endpoint; this
+command follows file-block URLs returned by `GET /v1/blocks/{block_id}/children`.
 
 ### Delete Page
 

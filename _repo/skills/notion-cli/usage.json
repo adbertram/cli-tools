@@ -1,8 +1,8 @@
 {
   "tool": "notion",
   "description": "CLI interface for Notion API with database query filtering",
-  "discovered_at": "2026-08-21T22:15:55Z",
-  "total_commands": 59,
+  "discovered_at": "2026-08-23T14:27:26Z",
+  "total_commands": 63,
   "global_options": [
     {
       "name": "--version",
@@ -42,7 +42,8 @@
               "type": "bool",
               "required": false,
               "help": "Clear existing ephemeral auth state and re-authenticate",
-              "short": "-F"
+              "short": "-F",
+              "takes_value": false
             }
           ]
         },
@@ -96,7 +97,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -117,7 +119,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
@@ -131,7 +134,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -172,7 +176,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -197,14 +202,16 @@
                   "name": "--keep-old",
                   "type": "bool",
                   "required": false,
-                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
                 },
                 {
                   "name": "--force",
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -239,7 +246,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -253,14 +261,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--verbose",
               "type": "bool",
               "required": false,
               "help": "Show detailed checks",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -365,7 +375,8 @@
               "type": "bool",
               "required": false,
               "help": "Display result as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -395,7 +406,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -442,20 +454,23 @@
               "type": "bool",
               "required": false,
               "help": "Include parent block text as context (only with --page-id)",
-              "short": "-c"
+              "short": "-c",
+              "takes_value": false
             },
             {
               "name": "--open-only",
               "type": "bool",
               "required": false,
-              "help": "Acknowledge that Notion's public API can list only open/unresolved comments; resolved comments cannot be enumerated"
+              "help": "Acknowledge that Notion's public API can list only open/unresolved comments; resolved comments cannot be enumerated",
+              "takes_value": false
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Display as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -535,6 +550,8 @@
               "type": "bool",
               "required": false,
               "help": "Create the database inline in the parent page",
+              "takes_value": false,
+              "secondary": "--no-inline",
               "default": "no-inline"
             },
             {
@@ -657,14 +674,16 @@
               "name": "--restore",
               "type": "bool",
               "required": false,
-              "help": "Restore the database from the trash instead of trashing it"
+              "help": "Restore the database from the trash instead of trashing it",
+              "takes_value": false
             },
             {
               "name": "--force",
               "type": "bool",
               "required": false,
               "help": "Skip confirmation prompt",
-              "short": "-F"
+              "short": "-F",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -696,7 +715,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--data-source",
@@ -729,7 +749,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--sort",
@@ -847,7 +868,8 @@
                       "type": "bool",
                       "required": false,
                       "help": "Skip confirmation prompt",
-                      "short": "-F"
+                      "short": "-F",
+                      "takes_value": false
                     },
                     {
                       "name": "--profile",
@@ -880,14 +902,16 @@
                       "type": "bool",
                       "required": false,
                       "help": "Recursively include nested child blocks",
-                      "short": "-r"
+                      "short": "-r",
+                      "takes_value": false
                     },
                     {
                       "name": "--table",
                       "type": "bool",
                       "required": false,
                       "help": "Display as formatted table",
-                      "short": "-t"
+                      "short": "-t",
+                      "takes_value": false
                     },
                     {
                       "name": "--limit",
@@ -990,13 +1014,16 @@
                       "name": "--checked",
                       "type": "bool",
                       "required": false,
-                      "help": "Set the checked state for a to_do block"
+                      "help": "Set the checked state for a to_do block",
+                      "takes_value": false,
+                      "secondary": "--unchecked"
                     },
                     {
                       "name": "--table",
                       "type": "bool",
                       "required": false,
-                      "help": "Display the updated block as a formatted table"
+                      "help": "Display the updated block as a formatted table",
+                      "takes_value": false
                     },
                     {
                       "name": "--profile",
@@ -1105,7 +1132,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation prompt",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -1138,14 +1166,16 @@
                   "type": "bool",
                   "required": false,
                   "help": "Include page content blocks in output",
-                  "short": "-b"
+                  "short": "-b",
+                  "takes_value": false
                 },
                 {
                   "name": "--markdown",
                   "type": "bool",
                   "required": false,
                   "help": "Output blocks as markdown (requires --include-blocks)",
-                  "short": "-m"
+                  "short": "-m",
+                  "takes_value": false
                 },
                 {
                   "name": "--out-file",
@@ -1179,7 +1209,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as formatted table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--filter",
@@ -1283,7 +1314,9 @@
                   "name": "--archive",
                   "type": "bool",
                   "required": false,
-                  "help": "Archive or restore the page"
+                  "help": "Archive or restore the page",
+                  "takes_value": false,
+                  "secondary": "--restore"
                 },
                 {
                   "name": "--profile",
@@ -1317,7 +1350,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--data-source",
@@ -1390,7 +1424,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as formatted table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--name",
@@ -1546,7 +1581,8 @@
               "type": "bool",
               "required": false,
               "help": "Skip confirmation prompt",
-              "short": "-F"
+              "short": "-F",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1583,7 +1619,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1616,7 +1653,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -1884,13 +1922,15 @@
                   "name": "--is-toggleable",
                   "type": "bool",
                   "required": false,
-                  "help": "Make all heading_1/2/3 blocks generated from markdown into toggle headings (markdown input only; ignored with --json/--json-file)"
+                  "help": "Make all heading_1/2/3 blocks generated from markdown into toggle headings (markdown input only; ignored with --json/--json-file)",
+                  "takes_value": false
                 },
                 {
                   "name": "--synced",
                   "type": "bool",
                   "required": false,
-                  "help": "Wrap the supplied content in one original synced block"
+                  "help": "Wrap the supplied content in one original synced block",
+                  "takes_value": false
                 },
                 {
                   "name": "--synced-from",
@@ -1928,14 +1968,16 @@
                   "type": "bool",
                   "required": false,
                   "help": "Delete all children blocks first (in parallel)",
-                  "short": "-r"
+                  "short": "-r",
+                  "takes_value": false
                 },
                 {
                   "name": "--force",
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation prompt",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -1967,14 +2009,16 @@
                   "type": "bool",
                   "required": false,
                   "help": "Output block as markdown",
-                  "short": "-m"
+                  "short": "-m",
+                  "takes_value": false
                 },
                 {
                   "name": "--children",
                   "type": "bool",
                   "required": false,
                   "help": "Include child blocks",
-                  "short": "-c"
+                  "short": "-c",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -2008,21 +2052,24 @@
                   "type": "bool",
                   "required": false,
                   "help": "Recursively fetch all nested blocks",
-                  "short": "-r"
+                  "short": "-r",
+                  "takes_value": false
                 },
                 {
                   "name": "--table",
                   "type": "bool",
                   "required": false,
                   "help": "Display as formatted table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--markdown",
                   "type": "bool",
                   "required": false,
                   "help": "Output blocks as markdown",
-                  "short": "-m"
+                  "short": "-m",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -2098,7 +2145,9 @@
                   "name": "--checked",
                   "type": "bool",
                   "required": false,
-                  "help": "Set checked state for to_do blocks"
+                  "help": "Set checked state for to_do blocks",
+                  "takes_value": false,
+                  "secondary": "--unchecked"
                 },
                 {
                   "name": "--json",
@@ -2118,13 +2167,16 @@
                   "name": "--toggleable",
                   "type": "bool",
                   "required": false,
-                  "help": "For heading_1/2/3 blocks: turn the toggle arrow on or off"
+                  "help": "For heading_1/2/3 blocks: turn the toggle arrow on or off",
+                  "takes_value": false,
+                  "secondary": "--no-toggleable"
                 },
                 {
                   "name": "--no-nest",
                   "type": "bool",
                   "required": false,
-                  "help": "When using --toggleable, skip auto-nesting of the heading's section siblings as children. Default behavior moves the blocks between this heading and the next same/higher-level heading into the toggle so the expanded toggle actually shows them"
+                  "help": "When using --toggleable, skip auto-nesting of the heading's section siblings as children. Default behavior moves the blocks between this heading and the next same/higher-level heading into the toggle so the expanded toggle actually shows them",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -2186,7 +2238,8 @@
                   "name": "--is-toggleable",
                   "type": "bool",
                   "required": false,
-                  "help": "Make all heading_1/2/3 blocks generated from markdown into toggle headings"
+                  "help": "Make all heading_1/2/3 blocks generated from markdown into toggle headings",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -2217,7 +2270,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation prompt",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -2285,7 +2339,8 @@
                   "name": "--dry-run",
                   "type": "bool",
                   "required": false,
-                  "help": "Show what would be replaced without making changes"
+                  "help": "Show what would be replaced without making changes",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -2337,7 +2392,8 @@
                   "name": "--is-toggleable",
                   "type": "bool",
                   "required": false,
-                  "help": "Make all heading_1/2/3 blocks generated from markdown into toggle headings (markdown input only; ignored with --json-file)"
+                  "help": "Make all heading_1/2/3 blocks generated from markdown into toggle headings (markdown input only; ignored with --json-file)",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -2391,7 +2447,8 @@
               "name": "--is-toggleable",
               "type": "bool",
               "required": false,
-              "help": "Make all heading_1/2/3 blocks generated from --content-file into toggle headings"
+              "help": "Make all heading_1/2/3 blocks generated from --content-file into toggle headings",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2422,7 +2479,8 @@
               "type": "bool",
               "required": false,
               "help": "Skip confirmation prompt",
-              "short": "-F"
+              "short": "-F",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2528,6 +2586,59 @@
             }
           ]
         },
+        "files": {
+          "help": "Download file attachments from pages",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "download": {
+              "help": "Download every file block on an accessible Notion page. Notion-hosted file URLs are refreshed by reading the page immediately before download because the API signs them for one hour.",
+              "examples": [
+                "notion pages files download PAGE_ID --output ./skills",
+                "notion pages files download PAGE_ID -o ./skills --table"
+              ],
+              "arguments": [
+                {
+                  "name": "page_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Page ID containing file blocks"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--output",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Directory where file attachments will be written",
+                  "short": "-o"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display result as a table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Overwrite files that already exist",
+                  "short": "-F",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        },
         "get": {
           "help": "Get a specific page by ID.",
           "examples": [
@@ -2552,21 +2663,24 @@
               "type": "bool",
               "required": false,
               "help": "Display as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--include-blocks",
               "type": "bool",
               "required": false,
               "help": "Include page content blocks in output",
-              "short": "-b"
+              "short": "-b",
+              "takes_value": false
             },
             {
               "name": "--markdown",
               "type": "bool",
               "required": false,
               "help": "Output blocks as markdown (requires --include-blocks)",
-              "short": "-m"
+              "short": "-m",
+              "takes_value": false
             },
             {
               "name": "--out-file",
@@ -2646,7 +2760,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--sort",
@@ -2706,7 +2821,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--sort",
@@ -2765,7 +2881,137 @@
               "name": "--archive",
               "type": "bool",
               "required": false,
-              "help": "Archive or restore the page"
+              "help": "Archive or restore the page",
+              "takes_value": false,
+              "secondary": "--restore"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "skills": {
+      "help": "List, inspect, and download official Notion Skills",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "download": {
+          "help": "Download one official Notion Skill by its stable skill ID.",
+          "examples": [
+            "notion skills download --output ./notion-skills",
+            "notion skills download -o ./notion-skills --table"
+          ],
+          "arguments": [
+            {
+              "name": "skill_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Stable skill ID from 'notion skills list'"
+            }
+          ],
+          "options": [
+            {
+              "name": "--output",
+              "type": "TEXT",
+              "required": true,
+              "help": "Destination directory",
+              "short": "-o"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Overwrite an existing ZIP file",
+              "short": "-F",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display result as a table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get one official Notion Skill by its stable skill ID.",
+          "arguments": [
+            {
+              "name": "skill_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Stable skill ID from 'notion skills list'"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as a table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List official Notion Skills and their stable skill IDs.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum skills to return",
+              "short": "-l"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as a table",
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2808,7 +3054,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2833,7 +3080,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",

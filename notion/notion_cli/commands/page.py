@@ -16,11 +16,13 @@ COMMAND_CREDENTIALS = {
     "delete": ["custom"],
     "content": ["custom"],
     "blocks": ["custom"],
+    "files": ["custom"],
 }
 
-from ..client import get_client
+from ..client import flatten_block_tree, get_client
 from ..block_limits import enforce_block_limits, find_oversize_rich_text as _find_oversize_rich_text
 from ..markdown_images import process_markdown_images
+from ..downloads import download_files
 from cli_tools_shared import confirm_destructive_action
 from cli_tools_shared.filters import validate_filters, apply_filters, FilterValidationError
 from ..output import (
@@ -41,8 +43,84 @@ from ..output import (
 app = typer.Typer(help="Query and manage standalone pages")
 content_app = typer.Typer(help="Manage page content (blocks)")
 blocks_app = typer.Typer(help="Manage individual blocks")
+files_app = typer.Typer(help="Download file attachments from pages")
 app.add_typer(content_app, name="content")
 app.add_typer(blocks_app, name="blocks")
+app.add_typer(files_app, name="files")
+
+
+def _page_file_downloads(blocks: List[dict]) -> List[dict]:
+    """Return download metadata for file blocks from the public API shape."""
+    downloads = []
+    for block in flatten_block_tree(blocks):
+        if block.get("type") != "file":
+            continue
+
+        payload = block.get("file", {})
+        source_type = payload.get("type")
+        source = payload.get(source_type, {}) if source_type else {}
+        name = payload.get("name")
+        url = source.get("url")
+        if not name or not url:
+            raise ValueError(
+                f"File block {block.get('id', '<unknown>')} is missing its name or download URL"
+            )
+
+        downloads.append(
+            {
+                "block_id": block.get("id", ""),
+                "name": name,
+                "source_type": source_type,
+                "url": url,
+                "expiry_time": source.get("expiry_time"),
+            }
+        )
+    return downloads
+
+
+@files_app.command("download")
+@command
+def page_files_download(
+    page_id: str = typer.Argument(..., help="Page ID containing file blocks"),
+    output: str = typer.Option(
+        ...,
+        "--output",
+        "-o",
+        help="Directory where file attachments will be written",
+    ),
+    table: bool = typer.Option(False, "--table", "-t", help="Display result as a table"),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        "-F",
+        help="Overwrite files that already exist",
+    ),
+):
+    """Download every file block on an accessible Notion page.
+
+    Notion-hosted file URLs are refreshed by reading the page immediately
+    before download because the API signs them for one hour.
+
+    Examples:
+        notion pages files download PAGE_ID --output ./skills
+        notion pages files download PAGE_ID -o ./skills --table
+    """
+    client = get_client()
+    blocks = client.get_block_children_all(page_id, recursive=True)
+    files = _page_file_downloads(blocks)
+
+    results = download_files(files, output, force=force)
+
+    if table:
+        print_table(
+            results,
+            columns=["name", "source_type", "bytes", "output"],
+            headers=["Name", "Source", "Bytes", "Output"],
+        )
+    else:
+        print_json(results)
+
+    print_success(f"Downloaded {len(results)} file(s) to {output}")
 
 
 def format_search_result_for_display(result: dict) -> dict:
