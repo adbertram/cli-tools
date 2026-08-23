@@ -39,6 +39,25 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
 - **search** -- Keyword search over the public Pluralsight catalog
 - **suggestions** -- Return query suggestions from the catalog search engine
 </principle>
+
+<principle name="Catalog API Quirks (verified live 2026-08-23)">
+- The CLI needs NO credentials. The endpoint is the public Cludo site-search
+  behind pluralsight.com/browse, authorized by a static SiteKey header baked
+  into Pluralsight's own pages. Do not look for or create credentials.
+- Category mapping: `path` and `skill` both map to index token `skill`.
+  Default content types mirror pluralsight.com/browse: courses, labs,
+  certificates, skills. `-c all` widens to every indexed type including blogs.
+- Tags: the index has no dedicated tag taxonomy. Record `tags` = subjects
+  (`course-category`) + role tags (`roles`). On paths/skills, the raw
+  "Skill Levels" field mirrors the title; the CLI nulls non-level values.
+- `publish-date` parses to YYYY-MM-DD; some entries (many paths) have no
+  publish date and return `null`. Ratings can be absent on brand-new items.
+- `get <prodId>` uses a server-side `prodId:<id>` query; the prodId is the
+  course URL slug (e.g. `docker-developers-docker-foundations`).
+- If a command errors right after install with a legacy-profile message under
+  `~/.local/share/cli-tools/pluralsight/`, remove any leftover `.profiles/`
+  directory there; canonical auth profiles live in `authentication_profiles/`.
+</principle>
 </essential_principles>
 
 <reference_index>
