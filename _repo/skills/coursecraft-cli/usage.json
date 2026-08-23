@@ -1,7 +1,7 @@
 {
   "tool": "coursecraft",
   "description": "Manage CourseCraft course content in Airtable",
-  "discovered_at": "2026-08-23T13:53:16Z",
+  "discovered_at": "2026-08-23T14:14:52Z",
   "total_commands": 76,
   "global_options": [
     {
@@ -641,7 +641,6 @@
             "coursecraft clips update recXXX --name \"New Name\"",
             "coursecraft clips update recXXX --order 2",
             "coursecraft clips update recXXX --learning-objectives \"- Objective 1\\n- Objective 2\"",
-            "coursecraft clips update recXXX --brainstorming-outline \"---\"",
             "coursecraft clips update recXXX --content-done"
           ],
           "arguments": [
@@ -706,13 +705,6 @@
               "type": "TEXT",
               "required": false,
               "help": "Internal notes"
-            },
-            {
-              "name": "--brainstorming-outline",
-              "type": "TEXT",
-              "required": false,
-              "help": "Brainstorming outline content",
-              "short": "-b"
             },
             {
               "name": "--clip-plan-review-ai",
