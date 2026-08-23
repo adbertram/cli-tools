@@ -27,6 +27,7 @@ coursecraft <command-group> <action> [arguments] [options]
 | `coursecraft courses sync-requirements <slug>` | Sync linked Pluralsight requirements; no Deadline/child writes, with gated audit/state transitions during an objective-override exception |
 | `coursecraft courses request-objective-correction <slug>` | Start the gated Pluralsight objective-correction exception after a current NEEDS REVISION review |
 | `coursecraft courses mark-requirements-update-received <slug>` | Move an audited correction request to Update Received after Pluralsight returns it |
+| `coursecraft courses update <slug> --course-outline-file <path>` | Write the built Course Outline from a file |
 | `coursecraft courses submit-outline-for-review <slug>` | Submit or resubmit the exact current Course Outline revision |
 | `coursecraft modules submit-slide-deck-for-review <module>` | Submit or resubmit the exact current Slide Deck revision |
 | `coursecraft modules submit-videos-for-review <module>` | Submit or resubmit the exact current Module Video manifest |
@@ -90,6 +91,11 @@ commands. Course Outline uses `submit-outline-for-review`,
 `mark-slide-deck-approved`. Module Video uses `submit-videos-for-review` and
 `mark-videos-approved`; the feedback-ingest workflow owns the internal
 `mark-video-changes-requested` action.
+
+`mark-outline-changes-requested` clears the built `Course Outline`,
+`Outline Draft Review (AI)`, and `Outline Draft Human Verified` fields from the
+course-outline instance's lifecycle contract. It does not apply those invalidations
+to Slide Deck or Module Video transitions.
 
 The hidden `accept-approved-slide-deck` action belongs only to the approved-deck release
 workflow. That workflow supplies explicit approval evidence and atomically registers the

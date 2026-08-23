@@ -68,6 +68,8 @@ coursecraft courses update my-course-slug --name "New Name"
 coursecraft courses update recXXX --active --content-level "Intermediate"
 coursecraft courses update my-course --target-length 60
 coursecraft courses update my-course --research-report-file report.md
+coursecraft courses update my-course --course-outline "# Course Outline"
+coursecraft courses update my-course --course-outline-file course-outline.md
 
 # Create a course
 coursecraft courses create --name "My Course" --course-id "my-course" \

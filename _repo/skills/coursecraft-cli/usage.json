@@ -1,7 +1,7 @@
 {
   "tool": "coursecraft",
   "description": "Manage CourseCraft course content in Airtable",
-  "discovered_at": "2026-08-23T15:53:16Z",
+  "discovered_at": "2026-08-23T16:27:44Z",
   "total_commands": 78,
   "global_options": [
     {
@@ -1567,7 +1567,8 @@
             "coursecraft courses update my-course-slug --name \"New Name\"",
             "coursecraft courses update recXXX --active",
             "coursecraft courses update my-course --target-length 60",
-            "coursecraft courses update my-course --brainstorming-outline-file outline.md"
+            "coursecraft courses update my-course --brainstorming-outline-file outline.md",
+            "coursecraft courses update my-course --course-outline-file course-outline.md"
           ],
           "arguments": [
             {
@@ -1733,6 +1734,18 @@
               "help": "Set or clear Adam's approval of the Course Outline Draft",
               "takes_value": false,
               "secondary": "--no-outline-draft-human-verified"
+            },
+            {
+              "name": "--course-outline",
+              "type": "TEXT",
+              "required": false,
+              "help": "Built Course Outline content"
+            },
+            {
+              "name": "--course-outline-file",
+              "type": "PATH",
+              "required": false,
+              "help": "Path to file containing the built Course Outline"
             },
             {
               "name": "--notes",
