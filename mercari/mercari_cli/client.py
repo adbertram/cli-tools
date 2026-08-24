@@ -232,15 +232,23 @@ class MercariClient:
             """() => {
                 const title = (document.title || '').toLowerCase();
                 const body = (document.body && document.body.innerText || '');
+                // Mercari's own invisible reCAPTCHA Enterprise badge mounts an
+                // iframe[src*="recaptcha"] on every page, logged in or not --
+                // it is site chrome, NOT a Cloudflare challenge. Only the
+                // Cloudflare interstitial selectors and the challenge text
+                // markers mean a real block; counting any recaptcha/hcaptcha
+                // iframe turned every healthy page into a false positive and
+                // blocked all search/get calls.
+                const cfChallenge = !!document.querySelector(
+                    '#cf-challenge-running, .cf-browser-verification, '
+                    + 'iframe[src*="challenges.cloudflare.com"]'
+                );
                 return {
                     title,
                     bodyLen: body.length,
                     routerReady: !!(window.next && window.next.router && window.next.router.push),
-                    challenged: !!document.querySelector(
-                        '#cf-challenge-running, .cf-browser-verification, '
-                        + 'iframe[src*="challenges.cloudflare.com"], '
-                        + 'iframe[src*="recaptcha"], iframe[src*="hcaptcha"]'
-                    ) || /just a moment|security verification|verify you are human|checking your browser|ray id/i.test(title + ' ' + body),
+                    challenged: cfChallenge
+                        || /just a moment|security verification|verify you are human|checking your browser|ray id/i.test(title + ' ' + body),
                 };
             }"""
         )
