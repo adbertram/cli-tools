@@ -171,6 +171,21 @@ def test_date_filter_combines_with_other_property_filters():
     }
 
 
+def test_two_sided_date_range_translates_both_bounds():
+    """The weekly-quota shape: gte+lte on one date property must become
+    Notion-native on_or_after + on_or_before conditions, never number-style
+    comparison keys the API rejects with a 400."""
+    assert database_cmd.build_filter_from_standard(
+        ["Publish Date:gte:2026-08-24", "Publish Date:lte:2026-08-30"],
+        schema=SCHEMA,
+    ) == {
+        "and": [
+            {"property": "Publish Date", "date": {"on_or_after": "2026-08-24"}},
+            {"property": "Publish Date", "date": {"on_or_before": "2026-08-30"}},
+        ]
+    }
+
+
 def test_number_property_still_uses_number_comparison_operators():
     assert build("Word Count:gte:1000") == {
         "property": "Word Count",
