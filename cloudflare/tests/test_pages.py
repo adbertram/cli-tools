@@ -240,26 +240,37 @@ runner = CliRunner()
 
 
 def test_list_pages_projects_paginates_and_authenticates(monkeypatch):
-    page_one = [_project(i) for i in range(25)]
-    page_two = [_project(25 + i) for i in range(5)]
-    first = _FakeResponse(
-        200,
-        {
-            "success": True,
-            "errors": [],
-            "result": page_one,
-            "result_info": {"total_pages": 2},
-        },
-    )
-    client, transport = _build_client(monkeypatch, [first, _ok(page_two)])
+    # Live /pages/projects rejects per_page > 10 with a 400, so the client
+    # caps every request at 10 regardless of the requested limit.
+    pages = [
+        [_project(i) for i in range(0, 10)],
+        [_project(i) for i in range(10, 20)],
+        [_project(i) for i in range(20, 30)],
+    ]
+    responses = [
+        _FakeResponse(
+            200,
+            {
+                "success": True,
+                "errors": [],
+                "result": page_items,
+                "result_info": {"total_pages": 3},
+            },
+        )
+        for page_items in pages
+    ]
+    client, transport = _build_client(monkeypatch, responses)
 
     result = client.list_pages_projects(ACCOUNT_ID, limit=30)
 
     assert [p["name"] for p in result] == [f"site-{i}" for i in range(30)]
-    assert len(transport.calls) == 2
+    assert len(transport.calls) == 3
     assert transport.calls[0]["url"].endswith(f"/accounts/{ACCOUNT_ID}/pages/projects")
-    assert transport.calls[0]["params"] == {"per_page": 25, "page": 1}
-    assert transport.calls[1]["params"] == {"per_page": 5, "page": 2}
+    assert [call["params"] for call in transport.calls] == [
+        {"per_page": 10, "page": 1},
+        {"per_page": 10, "page": 2},
+        {"per_page": 10, "page": 3},
+    ]
     assert transport.calls[0]["headers"]["Authorization"] == f"Bearer {FAKE_TOKEN}"
 
 
@@ -343,6 +354,31 @@ def test_list_pages_deployments_sends_env_param(monkeypatch):
     call = transport.calls[0]
     assert call["url"].endswith(f"/accounts/{ACCOUNT_ID}/pages/projects/{PROJECT_NAME}/deployments")
     assert call["params"] == {"per_page": 10, "page": 1, "env": "production"}
+
+
+def test_list_pages_deployments_keeps_default_25_per_request(monkeypatch):
+    # Unlike /pages/projects, the deployments endpoint accepts per_page up
+    # to 25, so its pagination keeps the larger default cap.
+    first = _FakeResponse(
+        200,
+        {
+            "success": True,
+            "errors": [],
+            "result": [_deployment(i) for i in range(25)],
+            "result_info": {"total_pages": 2},
+        },
+    )
+    client, transport = _build_client(
+        monkeypatch, [first, _ok([_deployment(i) for i in range(25, 30)])]
+    )
+
+    result = client.list_pages_deployments(ACCOUNT_ID, PROJECT_NAME, limit=30)
+
+    assert len(result) == 30
+    assert [call["params"] for call in transport.calls] == [
+        {"per_page": 25, "page": 1},
+        {"per_page": 5, "page": 2},
+    ]
 
 
 def test_get_pages_deployment_hits_deployment_path(monkeypatch):

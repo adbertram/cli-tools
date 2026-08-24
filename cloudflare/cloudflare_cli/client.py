@@ -1368,9 +1368,18 @@ class CloudflareClient:
     # domains. All endpoints live under /accounts/{account_id}/pages/...
     # (Cloudflare v4 API). Projects and deployments list endpoints paginate
     # with page/per_page; the domains list endpoint returns everything in a
-    # single response (no pagination parameters).
+    # single response (no pagination parameters). Measured against the live
+    # API: /pages/projects rejects per_page > 10 with HTTP 400, while the
+    # deployments list endpoint accepts per_page up to 25, so the shared
+    # helper takes a per-endpoint cap instead of one global maximum.
 
-    def _paginated_list(self, endpoint: str, limit: int, base_params: Optional[Dict] = None) -> List[Dict]:
+    def _paginated_list(
+        self,
+        endpoint: str,
+        limit: int,
+        base_params: Optional[Dict] = None,
+        max_per_page: int = 25,
+    ) -> List[Dict]:
         """
         Fetch a paginated Cloudflare list endpoint up to ``limit`` items.
 
@@ -1378,18 +1387,18 @@ class CloudflareClient:
             endpoint: API path returning {"result": [...], "result_info": {...}}
             limit: Maximum number of items to return
             base_params: Query params merged into every page request
+            max_per_page: Largest per-request ``per_page`` value the endpoint
+                accepts; ``limit`` still controls the total item count
 
         Returns:
             Combined result items across pages
         """
-        API_MAX_PER_PAGE = 25
-
         all_items: List[Dict] = []
         page = 1
         remaining = limit
 
         while remaining > 0:
-            per_page = min(remaining, API_MAX_PER_PAGE)
+            per_page = min(remaining, max_per_page)
             params = {**(base_params or {}), "per_page": per_page, "page": page}
 
             response = self._envelope("GET", endpoint, params=params)
@@ -1422,7 +1431,11 @@ class CloudflareClient:
         Returns:
             List of project dicts (id/name via "name", production_branch, ...)
         """
-        return self._paginated_list(f"/accounts/{account_id}/pages/projects", limit)
+        # Live /pages/projects rejects per_page > 10 with a 400 even though
+        # other Cloudflare list endpoints accept larger pages.
+        return self._paginated_list(
+            f"/accounts/{account_id}/pages/projects", limit, max_per_page=10
+        )
 
     def get_pages_project(self, account_id: str, project_name: str) -> Dict:
         """
