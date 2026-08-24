@@ -53,7 +53,7 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **workers routes** — Zone-scoped Worker routes: `workers routes list ZONE`, `workers routes get ZONE ROUTE_ID`, `workers routes create ZONE --pattern ... --script ...`, and `workers routes delete ZONE ROUTE_ID --force`. Requires `Zone > Workers Routes > Read` (list/get) or `Zone > Workers Routes > Edit` (create/delete).
 - **pages** — Account-level Cloudflare Pages management with three sub-groups:
   - `pages projects` — `list`, `get PROJECT_NAME`, `create`, `update`, `delete`, `purge-build-cache`, `get-upload-token`. Projects are addressed by NAME, not ID.
-  - `pages deployments` — `list PROJECT`, `get PROJECT DEPLOYMENT_ID`, `create` (multipart POST; pass `--manifest '{json}'` for direct uploads), `retry`, `rollback`, `delete`.
+  - `pages deployments` — `list PROJECT`, `get PROJECT DEPLOYMENT_ID`, `create` (pass `--directory PATH` for full direct-upload deploys: hashes the tree, uploads missing assets, ships the site; pass `--manifest '{json}'` only for advanced manual creates), `retry`, `rollback`, `delete`.
   - `pages domains` — `list PROJECT`, `get PROJECT DOMAIN`, `create` (add), `update` (reprovision/retry validation), `delete`.
   - All Pages commands take an optional ACCOUNT argument (name or ID). Requires `Pages Read` (list/get) or `Pages Write` (mutations) on the API token.
 </principle>
