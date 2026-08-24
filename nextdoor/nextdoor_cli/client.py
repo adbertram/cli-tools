@@ -531,17 +531,25 @@ def normalize_classified_detail(raw: dict) -> dict:
 def normalize_search_result(section: Optional[str], raw: dict) -> dict:
     """Map one global-``search`` result node to the public CLI record shape.
 
-    Nextdoor returns two node shapes. The For Sale & Free section reuses the
-    classifieds grid node (``SearchResultItem`` wrapping a
-    ``SearchResultGridItem`` in ``item``), so those rows get the same
-    price/title split as ``classifieds list``. Neighbor, business, event and
-    post sections return the ``SearchResult`` payload directly. ``section`` is
-    the owning result view's type; ``type`` is the item's own ``contentType``
-    and is None for sponsored ad slots, which carry no content identity.
+    Nextdoor returns two node shapes. The For Sale & Free section wraps its
+    classifieds grid node in an ``item`` object (the same
+    ``SearchResultGridItem`` payload ``classifieds list`` parses), so those
+    rows get the same price/title split as ``classifieds list``. Neighbor,
+    business, event and post sections return the ``SearchResult`` payload
+    directly. ``section`` is the owning result view's type; ``type`` is the
+    item's own ``contentType`` and is None for sponsored ad slots, which carry
+    no content identity.
+
+    The wrapper is detected STRUCTURALLY — by the presence of its ``item``
+    object — not by ``node.__typename == 'SearchResultItem'``. This client's
+    own ``search`` document does not select ``__typename`` on edge nodes, so
+    live responses omit it entirely; dispatching on it made every grid row
+    read its fields off the wrapper (which has none of them) and come back
+    all-null except ``section``. Same contract as
+    ``normalize_classified_item``, which always unwraps ``item``.
     """
-    if raw.get("__typename") == "SearchResultItem":
-        item = required_path(raw, ["item"], dict)
-    else:
+    item = _optional_dict(raw, "item")
+    if item is None:
         item = raw
     parts = _result_item_parts(item)
     subtitle = _optional_dict(item, "subtitle")
