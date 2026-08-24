@@ -162,3 +162,4 @@ untitled
 # Never let any later rule hide the shape-only example env files.
 !.env.example
 !**/.env.example
+cat_*.png
