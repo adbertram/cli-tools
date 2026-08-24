@@ -54,12 +54,31 @@ Use `coursecraft versions reconcile` only to repair one stale SHA in an existing
 Course-owned `airtable_content` Version Control entry. Always run the exact
 command with `--check` first. The command requires the course, artifact slug,
 version, current stale ledger SHA, and current persisted-content SHA; any drift
-fails before a write. It preserves the target entry's `v` and `at`, every other
+fails before a write. This one stays hard: it exists to repair the ledger, so an
+inexact match would corrupt the thing it is meant to fix. It preserves the target entry's `v` and `at`, every other
 ledger entry, and the Course content/lifecycle/review fields, then verifies an
 uncached readback. Omit `--check` only for the already-verified repair.
 </principle>
 
 <essential_principles>
+<principle name="Workflow Rules Are Reminders, Not Gates">
+This CLI does not block workflow. Lifecycle order, readiness, review state,
+override state, version identity, legacy-import provenance, a disabled course,
+and a missing remediation claim are all REPORTED on stderr as
+`⚠ REMINDER [<rule>] <what changed or is not yet true>` and the command then
+proceeds and exits 0. Enforcement lives in each artifact's `requirements.md` and
+`checks.json` and in the reviewer, never in a refused write.
+
+Read every reminder. It is telling you that something downstream now needs
+re-running -- a review to redo, a parity check that may now fail, a sync to
+refresh -- not that the command failed.
+
+The CLI still fails hard for three things, and these are not workflow rules:
+malformed input or an unreadable contract, a record that does not exist, and a
+readback proving a write did not persist. Voice generation additionally stays
+fail-closed on audio and identity integrity, because that path spends money and
+promotes a take.
+</principle>
 <principle name="Pluralsight Objective Overrides Are A Gated Exception">
 Never use generic `courses update --learning-objectives` for a Pluralsight course.
 Use the dedicated state machine in order: `request-objective-correction`,
@@ -67,8 +86,9 @@ Use the dedicated state machine in order: `request-objective-correction`,
 post-feedback course.requirements review,
 `authorize-objective-override`, then `apply-objective-override --reason ...`.
 
-The commands fail closed against `Learning Objectives Override State` and the exact
-`Reviewed-Version: course.requirements@vN sha256:<hash>` trailer. The audit field is a
+The commands REPORT against `Learning Objectives Override State` and the exact
+`Reviewed-Version: course.requirements@vN sha256:<hash>` trailer; an out-of-order
+step warns and proceeds rather than refusing. The audit field is a
 schema-versioned JSON event document whose prior operational events are preserved on every
 append. `mark-requirements-update-received` requires the exact `Correction Requested`
 state plus its matching correction-request audit event, moves to `Update Received`, and
@@ -79,13 +99,17 @@ When the state is `Override Active`, later `sync-requirements` calls preserve th
 If a later outline review finds an error in the active objectives, rerun
 `authorize-objective-override` while the state is `Override Active`, then use
 `apply-objective-override`. The authorization is bound to the current
-`course.outline_draft` review/version and the current objective content; apply fails if
-either changes. Generic `courses update` rejects both active-lifecycle objective edits and
-post-gap-analysis Carry-Forward Plan edits.
+`course.outline_draft` review/version and the current objective content; apply WARNS if
+either changed, so re-authorize when you see that reminder. Generic `courses update`
+warns on active-lifecycle objective edits and on post-gap-analysis Carry-Forward Plan
+edits, then writes.
 </principle>
 <principle name="External Reviews Use Dedicated Lifecycle Commands">
 Do not write the Pluralsight review state or submitted-revision fields through generic update
-commands. Course Outline uses `submit-outline-for-review`,
+commands -- the lifecycle commands keep the state field, submitted evidence, and
+invalidations consistent with each other, which a generic field write does not. Readiness
+and transition order are reminders now, so an out-of-order transition warns and proceeds;
+read the reminder and re-run whatever it names. Course Outline uses `submit-outline-for-review`,
 `mark-outline-changes-requested`, and `mark-outline-approved`. Slide Deck uses
 `submit-slide-deck-for-review`, `mark-slide-deck-changes-requested`, and
 `mark-slide-deck-approved`. Module Video uses `submit-videos-for-review` and
@@ -101,6 +125,8 @@ The hidden `accept-approved-slide-deck` action belongs only to the approved-deck
 workflow. That workflow supplies explicit approval evidence and atomically registers the
 canonical returned deck, replaces submitted revision evidence, enters `Approved`, and
 invalidates AI/human deck-review gates. Do not call it as an operator approval shortcut.
+Its PPTX integrity checks and post-write readback remain hard: a corrupt archive or a
+write that did not land still fails.
 </principle>
 <principle name="Usage Reference">
 **MANDATORY: Consult the adjacent `usage.json` before executing ANY `coursecraft` command.**
@@ -150,13 +176,13 @@ If a mutating `coursecraft <group> update ...` command times out with `airtable 
 </principle>
 
 <principle name="Feedback Remediation Claims Are Fail-Closed">
-`coursecraft feedback update` accepts a repeatable `--remediation-claim`. It is REQUIRED whenever `--processing-status Applied` is passed together with `--remediation`; omitting it in that combination exits non-zero and writes nothing (`--processing-status Applied with --remediation requires at least one --remediation-claim`). This exists because an `Applied` stamp is an assertion that remediation work actually happened, and free-prose `--remediation` text alone cannot prove it -- see Known Issue #27.
+`coursecraft feedback update` accepts a repeatable `--remediation-claim`. It is EXPECTED whenever `--processing-status Applied` is passed together with `--remediation`; omitting it in that combination warns and still writes. This matters because an `Applied` stamp is an assertion that remediation work actually happened, and free-prose `--remediation` text alone cannot prove it -- see Known Issue #27. Supply the claims; the reminder exists so a missing one is visible, not so the stamp is refused.
 
 Two claim forms, both verified against live state before ANY field is written:
-- `check:<dotted.check.id>` -- the id must be declared as an `id` in a `checks.json` under the CourseCraft skills tree (`.agents/skills`, resolved via `COURSECRAFT_PROJECT_ROOT` or the known repo path), and that contract must be reported reachable by `.agents/skills/course-pipeline/tools/check_validation_coverage.py --json`. If that gate's JSON has no top-level `unreachable` key, reachability is UNVERIFIABLE and the claim fails closed rather than silently passing.
+- `check:<dotted.check.id>` -- the id must be declared as an `id` in a `checks.json` under the CourseCraft skills tree (`.agents/skills`, resolved via `COURSECRAFT_PROJECT_ROOT` or the known repo path), and that contract must be reported reachable by `.agents/skills/course-pipeline/tools/check_validation_coverage.py --json`. If that gate's JSON has no top-level `unreachable` key, reachability is UNVERIFIABLE and the claim is reported as not verified rather than silently passing.
 - `record:<recordId>:<Field>=<expected>` -- the live record (read through the CLI's own uncached read path, searched across Slides/Demos/Clips/Modules/Courses/Feedback/Slide Templates) must have `<Field>` equal to `<expected>` as trimmed strings. Use `record:<recordId>:<Field>~=<substring>` instead for a long-text field where an exact match is impractical -- that form checks containment.
 
-Any claim that fails to verify aborts the whole command with exit 1 and writes NOTHING -- no partial update, no warn-and-continue. The error names the exact claim and what was actually found (e.g. the real field value vs. the claimed one, or the check id search that came up empty).
+Every claim is still checked before the write. A claim that does not verify is REPORTED as a reminder naming the exact claim and what was actually found (the real field value vs. the claimed one, or the check id search that came up empty), and the update then proceeds. Treat that reminder as a failed assertion about your own work, not as noise.
 
 Example:
 ```
@@ -178,7 +204,7 @@ coursecraft feedback update recXXX --processing-status Applied --processed-at "2
 - **demos** -- CRUD for demo records with hierarchical filtering (--clip, --module, --course)
 - **slides** -- CRUD for slide records with hierarchical filtering and build-instructions/script fields
 - **slide-templates** -- Manage PowerPoint slide template definitions with --platform filtering
-- **feedback** -- CRUD for CourseCraft Feedback rows with per-level link filters (`--demo`, `--slide`, `--clip`, `--module`, `--course`), `Processing Status`/`Patterns Learned`/`Processed At` writes, write verification, and fail-closed `--remediation-claim` verification for `Applied` stamps. This is the first-class path for Feedback-table I/O; do not use raw `airtable` for the Feedback table.
+- **feedback** -- CRUD for CourseCraft Feedback rows with per-level link filters (`--demo`, `--slide`, `--clip`, `--module`, `--course`), `Processing Status`/`Patterns Learned`/`Processed At` writes, write verification, and advisory `--remediation-claim` verification for `Applied` stamps. This is the first-class path for Feedback-table I/O; do not use raw `airtable` for the Feedback table.
 - **voice-recordings** -- Generate demo narration audio with ElevenLabs and store recording metadata (demos only; slides carry an instructor WAV take)
 </principle>
 
@@ -186,10 +212,12 @@ coursecraft feedback update recXXX --processing-status Applied --processed-at "2
 `coursecraft courses scaffold --base <course>` still requires the base course's
 computed Status to be `Complete`. The only exception is the explicit
 `--legacy-import-base` flag for a published pre-CourseCraft Pluralsight predecessor.
-That flag fails closed unless the base is Version 1, its Notes begin with the canonical
-legacy-import marker and contain its canonical Pluralsight course-overview source,
-it has Module and Clip records, every Clip ID has a unique `M#C#` prefix, and every
-corresponding `<courses-root>/<base-slug>/clips/m#c#.mp4` file is regular and non-empty. Use
+That flag REPORTS each expectation it does not meet -- base not Version 1, Notes missing
+the canonical legacy-import marker or its canonical Pluralsight course-overview source,
+no Module or Clip records, a Clip ID without a unique `M#C#` prefix, or a missing/empty
+`<courses-root>/<base-slug>/clips/m#c#.mp4` -- and proceeds. The returned
+`legacy_import_evidence` records what was actually found, so read it rather than assuming
+a silent run means a clean base. Use
 `--dry-run` first to read the `legacy_import_evidence` object without
 creating a Course record or folder. Do not use `courses create` for this workflow;
 the scaffold intake remains the single writer of Version, the `-vN` slug, and the
@@ -220,7 +248,7 @@ Demo generation is fail-closed and transactional. It keys idempotence on the can
 </principle>
 
 <principle name="Course Disable Gate">
-The Courses table has a `Disabled` checkbox plus required `Disabled Notes` long-text reason. Use `coursecraft courses disable <course> --why "<reason>"` to disable a course; do not set `Disabled` through ad hoc Airtable writes. After `Disabled` is checked, CourseCraft CLI mutations to the course and to records in its course hierarchy (Modules, Clips, Demos, Slides, linked Feedback) are blocked by the client. The only allowed transition is the initial disable write while the course is still enabled. Read-only commands remain allowed so agents can inspect and report the disabled reason.
+The Courses table has a `Disabled` checkbox plus required `Disabled Notes` long-text reason. Use `coursecraft courses disable <course> --why "<reason>"` to disable a course; do not set `Disabled` through ad hoc Airtable writes. After `Disabled` is checked, CourseCraft CLI mutations to the course and to records in its course hierarchy (Modules, Clips, Demos, Slides, linked Feedback) emit a `course.disabled` reminder naming the course and its `Disabled Notes`, and then proceed. The checkbox records that work on the course was stood down; it does not lock the records.
 </principle>
 
 <reference_index>

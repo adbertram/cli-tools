@@ -11,6 +11,7 @@ from typing import Dict, FrozenSet, List, Optional, Any
 from .artifact_versions import plan_record_update
 from .config import get_config
 from .filter_translator import escape_value
+from .output import warn_policy
 
 
 AIRTABLE_CLI_COMMAND_TIMEOUT_SECONDS = 45
@@ -1527,14 +1528,15 @@ class CourseCraftClient:
             return value.strip().lower() in {"true", "1", "yes"}
         return False
 
-    def _disabled_course_error(self, course: Dict[str, Any]) -> ClientError:
+    def _warn_disabled_course(self, course: Dict[str, Any]) -> None:
+        """Report that a mutation targets a disabled course. Advisory; never blocks."""
         fields = course.get("fields", {}) if isinstance(course, dict) else {}
         name = fields.get("Name") or course.get("id", "")
         notes = fields.get("Disabled Notes")
-        message = f"Course is disabled: {name} ({course.get('id', '')}). Changes are blocked."
+        message = f"Course is disabled: {name} ({course.get('id', '')})."
         if isinstance(notes, str) and notes.strip():
             message = f"{message} Disabled Notes: {notes.strip()}"
-        return ClientError(message)
+        warn_policy("course.disabled", message)
 
     def _course_from_record_reference(self, table: str, record_id: str) -> Optional[Dict[str, Any]]:
         record = self.get_record(table, record_id)
@@ -1592,14 +1594,18 @@ class CourseCraftClient:
         record_id: Optional[str] = None,
         fields: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """Block mutations to disabled courses and records inside them."""
+        """Report mutations to disabled courses and records inside them.
+
+        Advisory: a disabled course is a reminder that work on it was stood
+        down, not a lock. The mutation proceeds.
+        """
         if table not in _COURSE_SCOPED_TABLES:
             return
 
         if table == "Courses" and record_id and fields and set(fields).issubset(_COURSE_DISABLE_FIELDS):
             existing = self.get_record("Courses", record_id)
             if existing and self._truthy_checkbox(existing.get("fields", {}).get("Disabled")):
-                raise self._disabled_course_error(existing)
+                self._warn_disabled_course(existing)
             return
 
         if record_id:
@@ -1608,7 +1614,7 @@ class CourseCraftClient:
             course = self._course_from_create_fields(table, fields or {})
 
         if course and self._truthy_checkbox(course.get("fields", {}).get("Disabled")):
-            raise self._disabled_course_error(course)
+            self._warn_disabled_course(course)
 
     def update_record(
         self,

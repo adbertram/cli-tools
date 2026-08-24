@@ -10,7 +10,7 @@ from cli_tools_shared.output import command
 from ..batch import load_batch_payload
 from ..client import get_client, ClientError
 from ..coursecraft_project import run_coursecraft_script, script_flags
-from ..output import apply_properties_filter, project_record, print_success, print_error, print_info, print_json, print_table
+from ..output import apply_properties_filter, project_record, print_success, print_error, print_info, print_json, print_table, warn_policy
 from ..filter_map import translate_filters
 from ..field_mappings import collect_mapped_updates, validate_field
 from ..course_versions import (
@@ -715,9 +715,13 @@ def update_course(
             except json.JSONDecodeError as exc:
                 raise ObjectiveOverrideError(f"Version Control is not valid JSON: {exc}") from None
             if isinstance(ledger, dict) and CARRY_FORWARD_PLAN_SLUG in ledger:
-                raise ObjectiveOverrideError(
-                    "The completed Carry-Forward Plan cannot be changed through generic "
-                    "courses update; update-planner rebuilds it."
+                warn_policy(
+                    "carry_forward_plan.rebuild",
+                    "Editing a completed Carry-Forward Plan. update-planner normally "
+                    "rebuilds it, and downstream artifacts validated against the old "
+                    "structure (module/clip identities, order, and durations) may now "
+                    "disagree with it -- re-run update.review and the Outline Draft "
+                    "parity check.",
                 )
 
         if not fields:
@@ -1007,9 +1011,10 @@ def courses_request_objective_correction(
         client = get_client()
         record_id, fields = _objective_override_course(client, course)
         if current_state(fields):
-            raise ObjectiveOverrideError(
-                "request-objective-correction requires a blank override state; "
-                f"current state is {current_state(fields)!r}."
+            warn_policy(
+                "objective_override.state",
+                "request-objective-correction normally starts from a blank override "
+                f"state; current state is {current_state(fields)!r}.",
             )
         version = current_requirements_version(fields)
         review = require_current_needs_revision_review(fields, version)
@@ -1052,9 +1057,10 @@ def courses_mark_requirements_update_received(
         correction_event = audit["events"][-1]
         version = current_requirements_version(fields)
         if correction_event.get("requirementsVersion") != version:
-            raise ObjectiveOverrideError(
+            warn_policy(
+                "objective_override.audit",
                 "The correction request audit does not match the current Course "
-                "Requirements revision."
+                "Requirements revision.",
             )
         event = {
             "type": "update_received",
@@ -1179,10 +1185,12 @@ def courses_authorize_objective_override(
             }
         else:
             rendered = state or "blank"
-            raise ObjectiveOverrideError(
-                "Learning-objective override authorization requires either the initial "
-                f"{FEEDBACK_RESYNCED!r} state or an active override with a current "
-                f"downstream NEEDS REVISION review; current state is {rendered!r}."
+            warn_policy(
+                "objective_override.state",
+                "Learning-objective override authorization normally runs from either "
+                f"the initial {FEEDBACK_RESYNCED!r} state or an active override with a "
+                f"current downstream NEEDS REVISION review; current state is "
+                f"{rendered!r}.",
             )
         updates = {
             STATE_FIELD: OVERRIDE_AUTHORIZED,
@@ -1240,13 +1248,16 @@ def courses_apply_objective_override(
                 authorization.get("reviewArtifactVersion") != review_version
                 or authorization.get("downstreamReview") != review
             ):
-                raise ObjectiveOverrideError(
-                    "The downstream review changed after objective-override authorization; "
-                    "authorize again."
+                warn_policy(
+                    "objective_override.authorization",
+                    "The downstream review changed after objective-override "
+                    "authorization; consider authorizing again.",
                 )
             if authorization.get("sourceLearningObjectivesSha256") != sha256_text(old_objectives):
-                raise ObjectiveOverrideError(
-                    "Learning Objectives changed after downstream authorization; authorize again."
+                warn_policy(
+                    "objective_override.authorization",
+                    "Learning Objectives changed after downstream authorization; "
+                    "consider authorizing again.",
                 )
         event = {
             "type": "override_applied",
