@@ -1595,6 +1595,75 @@ class CloudflareClient:
         )
         return response.get("result", {})
 
+    def check_missing_page_assets(self, jwt: str, hashes: List[str]) -> List[str]:
+        """
+        Ask Cloudflare which asset hashes are missing for direct upload.
+
+        Mirrors wrangler's POST /pages/assets/check-missing call. This
+        account-level asset endpoint authenticates with the project's
+        short-lived upload token, not the account API token.
+
+        Args:
+            jwt: Upload token from get_pages_upload_token
+            hashes: All content hashes of the local deploy tree
+
+        Returns:
+            The subset of hashes Cloudflare does not have stored yet
+        """
+        response = self._envelope(
+            "POST",
+            "/pages/assets/check-missing",
+            data={"hashes": hashes},
+            headers={"Authorization": f"Bearer {jwt}"},
+        )
+        result = response.get("result", [])
+        return list(result) if isinstance(result, list) else []
+
+    def upload_page_assets(self, jwt: str, payload: List[Dict]) -> Dict:
+        """
+        Upload one batch of assets to the Pages asset store.
+
+        Mirrors wrangler's POST /pages/assets/upload call: a JSON array of
+        {key: hash, value: base64 content, metadata: {contentType}, base64:
+        true} records authenticated with the upload token.
+
+        Args:
+            jwt: Upload token from get_pages_upload_token
+            payload: Batch records built by pages_assets.build_upload_payload
+
+        Returns:
+            Result dict from the API (empty when nothing is returned)
+        """
+        response = self._envelope(
+            "POST",
+            "/pages/assets/upload",
+            data=payload,
+            headers={"Authorization": f"Bearer {jwt}"},
+        )
+        return response.get("result") or {}
+
+    def upsert_page_asset_hashes(self, jwt: str, hashes: List[str]) -> Dict:
+        """
+        Record all deployed hashes so future deploys can skip re-uploads.
+
+        Mirrors wrangler's POST /pages/assets/upsert-hashes call. Failure is
+        non-fatal for a deployment; it only slows down the next upload.
+
+        Args:
+            jwt: Upload token from get_pages_upload_token
+            hashes: All content hashes of the local deploy tree
+
+        Returns:
+            Result dict from the API
+        """
+        response = self._envelope(
+            "POST",
+            "/pages/assets/upsert-hashes",
+            data={"hashes": hashes},
+            headers={"Authorization": f"Bearer {jwt}"},
+        )
+        return response.get("result") or {}
+
     def create_pages_deployment(
         self,
         account_id: str,
@@ -1604,14 +1673,16 @@ class CloudflareClient:
         commit_hash: Optional[str] = None,
         commit_dirty: Optional[bool] = None,
         manifest: Optional[str] = None,
+        headers_text: Optional[str] = None,
+        redirects_text: Optional[str] = None,
     ) -> Dict:
         """
         Start a new deployment (multipart/form-data POST).
 
         For git-connected projects pass --branch to build from the branch HEAD.
-        For direct-upload projects pass --manifest (a JSON object mapping file
-        paths to content hashes); uploading the actual asset files uses the
-        separate Pages assets endpoints, which this CLI does not automate.
+        For direct-upload projects pass --manifest (a JSON object mapping
+        "/path" keys to content hashes); the pages deployments create command
+        automates hashing and asset upload when given a --directory.
 
         Args:
             account_id: The account ID
@@ -1620,7 +1691,9 @@ class CloudflareClient:
             commit_message: Commit message metadata
             commit_hash: Commit SHA metadata
             commit_dirty: Whether the source had uncommitted changes
-            manifest: JSON string of {path: hash} entries for direct upload
+            manifest: JSON string of {"/path": hash} entries for direct upload
+            headers_text: _headers file content sent as a form file part
+            redirects_text: _redirects file content sent as a form file part
 
         Returns:
             Created deployment dict
@@ -1636,6 +1709,10 @@ class CloudflareClient:
             files["commit_dirty"] = (None, "true" if commit_dirty else "false", None)
         if manifest is not None:
             files["manifest"] = (None, manifest, None)
+        if headers_text is not None:
+            files["_headers"] = ("_headers", headers_text)
+        if redirects_text is not None:
+            files["_redirects"] = ("_redirects", redirects_text)
 
         response = self._envelope(
             "POST",

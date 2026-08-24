@@ -306,8 +306,22 @@ cloudflare pages deployments get my-site DEPLOYMENT_ID
 cloudflare pages deployments create my-site --branch main
 cloudflare pages deployments create my-site --commit-message "add docs" --commit-dirty
 
-# Start a direct-upload deployment from a manifest
-cloudflare pages deployments create my-site --manifest '{"index.html":"<content-hash>"}'
+# Direct-upload deploy of a local directory in one command: hashes every file,
+# uploads assets Cloudflare is missing, then creates the deployment.
+# This is the full `wrangler pages deploy <dir>` equivalent.
+cloudflare pages deployments create my-site --directory ./dist
+
+# Preview-branch direct upload with commit metadata (--branch selects
+# production vs preview; production needs no flag)
+cloudflare pages deployments create my-site -d ./dist --branch preview \
+  --commit-message "docs update"
+
+# Force re-upload of every file even when Cloudflare already stores its hash
+cloudflare pages deployments create my-site -d ./dist --skip-caching
+
+# Start a direct-upload deployment from an existing manifest (advanced/manual;
+# assets must already be uploaded out-of-band)
+cloudflare pages deployments create my-site --manifest '{"/index.html":"<content-hash>"}'
 
 # Retry a failed build
 cloudflare pages deployments retry my-site DEPLOYMENT_ID
@@ -324,12 +338,20 @@ cloudflare pages deployments delete my-site DEPLOYMENT_ID --allow-aliased --forc
 **Notes / API gaps:**
 - The Cloudflare API has **no bulk deployment deletion** endpoint; delete
   deployments one at a time.
-- Full direct-upload deployments also require uploading asset files through
-  the separate Pages assets endpoints (hash + upload + upsert-hashes). This
-  CLI sends the multipart create request (`--manifest`, `_headers`,
-  `_redirects`, and Worker files are accepted by the API but asset upload is
-  not automated here), so direct-upload creates are practical only when the
-  assets were already uploaded out-of-band. Git-connected creates work fully.
+
+**Direct uploads (`--directory`):** `pages deployments create PROJECT
+--directory PATH` ships a local folder end to end — no wrangler needed. The
+flow mirrors wrangler 4.125.0 exactly: per-file content hash
+(`blake3(base64(content) + extension)`, first 32 hex chars), a check-missing
+call against the project upload token, batched uploads (≤40 MiB / ≤2000 files
+per POST), hash upsert, then the multipart deployment create with the
+manifest plus `_headers`/`_redirects` from the directory root. Ignored like
+wrangler: `_worker.js`, `_redirects`, `_headers`, `_routes.json`, `functions`,
+`.wrangler` at the directory root; `.DS_Store`, `node_modules`, and `.git` at
+any depth; symlinks are skipped. Files over the Pages 25 MiB per-file cap are
+rejected before any upload. `--manifest` remains available for advanced/manual
+creates when assets were already uploaded out-of-band (manifest keys use
+"/path" form).
 
 #### Pages Domains
 

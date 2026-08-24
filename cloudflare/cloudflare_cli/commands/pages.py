@@ -6,15 +6,18 @@ Account-level Cloudflare Pages management:
   domains      - Manage custom domains attached to a project
 
 Endpoints verified against https://developers.cloudflare.com/api/resources/pages/
+Direct-upload asset flow mirrored from wrangler 4.125.0 (see pages_assets.py).
 """
 import json
 from datetime import datetime
 from enum import Enum
-from typing import Dict, Optional
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 import typer
 
 from ..client import get_client
+from .. import pages_assets
 from cli_tools_shared.exceptions import ClientError
 from cli_tools_shared.filters import (
     apply_filters,
@@ -23,6 +26,7 @@ from cli_tools_shared.filters import (
 from cli_tools_shared.output import (
     print_json,
     print_table,
+    print_warning,
     command,
     print_success,
     confirm_destructive_action,
@@ -406,44 +410,149 @@ def get_deployment(
     _print_single_result(result, table, properties)
 
 
+# wrangler truncates commit_message metadata to 384 UTF-8 bytes
+# (MAX_COMMIT_MESSAGE_BYTES in src/api/pages/deploy.ts).
+MAX_COMMIT_MESSAGE_BYTES = 384
+
+
+def _truncate_utf8_bytes(text: Optional[str], limit: int = MAX_COMMIT_MESSAGE_BYTES) -> Optional[str]:
+    """Truncate a string to at most `limit` UTF-8 bytes without splitting a char."""
+    if text is None:
+        return None
+    encoded = text.encode("utf-8")
+    if len(encoded) <= limit:
+        return text
+    return encoded[:limit].decode("utf-8", errors="ignore")
+
+
+def _upload_directory_assets(
+    client,
+    account_id: str,
+    project_name: str,
+    site_dir: Path,
+    skip_caching: bool,
+) -> Tuple[str, int, int, Optional[str], Optional[str]]:
+    """
+    Run the direct-upload asset flow for one local directory.
+
+    Mirrors wrangler's pages deploy sequence: hash every file, fetch the
+    project upload token, check which hashes Cloudflare is missing, upload
+    the rest in bounded batches, record all hashes, and read _headers /
+    _redirects from the directory root for the deployment create call.
+
+    Returns:
+        (manifest_json, uploaded_count, total_files, headers_text, redirects_text)
+    """
+    assets = pages_assets.collect_files(site_dir)
+    hashes = [asset["hash"] for asset in assets]
+    typer.echo(f"Hashed {len(assets)} files in {site_dir}", err=True)
+
+    token_result = client.get_pages_upload_token(account_id=account_id, project_name=project_name)
+    jwt = token_result.get("jwt") if isinstance(token_result, dict) else None
+    if not jwt:
+        raise ClientError("Cloudflare did not return an upload token JWT for this project")
+
+    if skip_caching:
+        missing_hashes = list(hashes)
+    else:
+        known = set(hashes)
+        missing_hashes = [h for h in client.check_missing_page_assets(jwt, hashes) if h in known]
+
+    by_hash = {asset["hash"]: asset for asset in assets}
+    to_upload = [by_hash[h] for h in missing_hashes]
+    buckets = pages_assets.bucket_files(to_upload)
+
+    uploaded = 0
+    for index, bucket in enumerate(buckets, start=1):
+        typer.echo(
+            f"Uploading asset batch {index}/{len(buckets)} ({uploaded + len(bucket)}/{len(to_upload)} files)...",
+            err=True,
+        )
+        client.upload_page_assets(jwt, pages_assets.build_upload_payload(bucket))
+        uploaded += len(bucket)
+
+    try:
+        client.upsert_page_asset_hashes(jwt, hashes)
+    except ClientError as e:
+        print_warning(
+            f"Could not record asset hashes for future deploys ({e}); "
+            "the deployment itself is unaffected"
+        )
+
+    headers_path = site_dir / "_headers"
+    redirects_path = site_dir / "_redirects"
+    headers_text = headers_path.read_text(encoding="utf-8") if headers_path.is_file() else None
+    redirects_text = redirects_path.read_text(encoding="utf-8") if redirects_path.is_file() else None
+
+    return json.dumps(pages_assets.build_manifest(assets)), uploaded, len(assets), headers_text, redirects_text
+
+
 @deployments_app.command("create")
 @command
 def create_deployment(
     project: str = typer.Argument(..., help="The Pages project name"),
-    branch: Optional[str] = typer.Option(None, "--branch", "-b", help="Branch to build from (git-connected projects; defaults to production branch)"),
+    branch: Optional[str] = typer.Option(None, "--branch", "-b", help="Branch to build from (git-connected projects; defaults to production branch). With --directory it selects production vs preview"),
     commit_message: Optional[str] = typer.Option(None, "--commit-message", help="Commit message metadata"),
     commit_hash: Optional[str] = typer.Option(None, "--commit-hash", help="Commit SHA metadata"),
     commit_dirty: Optional[bool] = typer.Option(None, "--commit-dirty", help="Mark the source as having uncommitted changes"),
-    manifest: Optional[str] = typer.Option(None, "--manifest", help='Direct-upload manifest JSON string mapping file paths to content hashes'),
+    directory: Optional[str] = typer.Option(None, "--directory", "-d", help="Local directory of static assets to deploy via direct upload: hashes the tree, uploads missing assets, then creates the deployment (wrangler pages deploy equivalent)"),
+    skip_caching: bool = typer.Option(False, "--skip-caching", help="With --directory: re-upload every file even if Cloudflare already stores its content hash"),
+    manifest: Optional[str] = typer.Option(None, "--manifest", help='Advanced/manual use: direct-upload manifest JSON string mapping "/path" keys to content hashes (assets must already be uploaded out-of-band)'),
     account: Optional[str] = typer.Argument(None, help="Account name or ID (defaults to the single visible account)"),
 ):
     """
-    Start a new deployment (multipart POST).
+    Start a new deployment.
 
     Git-connected projects: pass --branch to build the branch HEAD.
-    Direct-upload projects: pass --manifest (see README for the asset
-    upload limitation).
+    Direct-upload projects: pass --directory to ship a local folder in one
+    command — files are hashed (blake3), missing assets are uploaded via the
+    Pages asset endpoints, and the deployment goes live once every hash lands.
+    Pass --branch to target a preview branch; production deploys need no flag.
+    Advanced/manual use only: --manifest creates a deployment from an existing
+    manifest without uploading anything.
 
     Examples:
         cloudflare pages deployments create my-site --branch main
-        cloudflare pages deployments create my-site --manifest '{"index.html":"<hash>"}'
+        cloudflare pages deployments create my-site --directory ./dist
+        cloudflare pages deployments create my-site -d ./dist --branch preview --commit-message "docs update"
+        cloudflare pages deployments create my-site --manifest '{"/index.html":"<content-hash>"}'
     """
     client = get_client()
     account_id = _resolve_account(client, account)
     manifest_json = _parse_json_object(manifest, "--manifest")
 
+    if directory is not None and manifest_json is not None:
+        raise ClientError("--directory and --manifest are mutually exclusive; pass one of them")
+
+    manifest_str = json.dumps(manifest_json) if manifest_json is not None else None
+    headers_text: Optional[str] = None
+    redirects_text: Optional[str] = None
+    upload_note = ""
+    if directory is not None:
+        site_dir = Path(directory).expanduser()
+        if not site_dir.is_dir():
+            raise ClientError(f"Deployment directory does not exist or is not a directory: {site_dir}")
+        manifest_str, uploaded, total, headers_text, redirects_text = _upload_directory_assets(
+            client, account_id, project, site_dir, skip_caching=skip_caching
+        )
+        upload_note = f" (uploaded {uploaded}/{total} assets)"
+
     result = client.create_pages_deployment(
         account_id=account_id,
         project_name=project,
         branch=branch,
-        commit_message=commit_message,
+        commit_message=_truncate_utf8_bytes(commit_message),
         commit_hash=commit_hash,
         commit_dirty=commit_dirty,
-        manifest=json.dumps(manifest_json) if manifest_json is not None else None,
+        manifest=manifest_str,
+        headers_text=headers_text,
+        redirects_text=redirects_text,
     )
 
     print_json(result)
-    print_success(f"Created deployment for Pages project {project}: {result.get('id', '')}")
+    print_success(
+        f"Created deployment for Pages project {project}: {result.get('id', '')}{upload_note}"
+    )
 
 
 @deployments_app.command("retry")

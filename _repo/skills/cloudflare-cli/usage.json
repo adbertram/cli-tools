@@ -1,7 +1,7 @@
 {
   "tool": "cloudflare",
   "description": "CLI interface for Cloudflare API",
-  "discovered_at": "2026-08-24T17:50:48Z",
+  "discovered_at": "2026-08-24T21:51:44Z",
   "total_commands": 54,
   "global_options": [
     {
@@ -1164,10 +1164,12 @@
           "options": [],
           "commands": {
             "create": {
-              "help": "Start a new deployment (multipart POST). Git-connected projects: pass --branch to build the branch HEAD. Direct-upload projects: pass --manifest (see README for the asset upload limitation).",
+              "help": "Start a new deployment. Git-connected projects: pass --branch to build the branch HEAD. Direct-upload projects: pass --directory to ship a local folder in one command — files are hashed (blake3), missing assets are uploaded via the Pages asset endpoints, and the deployment goes live once every hash lands. Pass --branch to target a preview branch; production deploys need no flag. Advanced/manual use only: --manifest creates a deployment from an existing manifest without uploading anything.",
               "examples": [
                 "cloudflare pages deployments create my-site --branch main",
-                "cloudflare pages deployments create my-site --manifest '{\"index.html\":\"<hash>\"}'"
+                "cloudflare pages deployments create my-site --directory ./dist",
+                "cloudflare pages deployments create my-site -d ./dist --branch preview --commit-message \"docs update\"",
+                "cloudflare pages deployments create my-site --manifest '{\"/index.html\":\"<content-hash>\"}'"
               ],
               "arguments": [
                 {
@@ -1188,7 +1190,7 @@
                   "name": "--branch",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Branch to build from (git-connected projects; defaults to production branch)",
+                  "help": "Branch to build from (git-connected projects; defaults to production branch). With --directory it selects production vs preview",
                   "short": "-b"
                 },
                 {
@@ -1211,10 +1213,24 @@
                   "takes_value": false
                 },
                 {
+                  "name": "--directory",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Local directory of static assets to deploy via direct upload: hashes the tree, uploads missing assets, then creates the deployment (wrangler pages deploy equivalent)",
+                  "short": "-d"
+                },
+                {
+                  "name": "--skip-caching",
+                  "type": "bool",
+                  "required": false,
+                  "help": "With --directory: re-upload every file even if Cloudflare already stores its content hash",
+                  "takes_value": false
+                },
+                {
                   "name": "--manifest",
                   "type": "TEXT",
                   "required": false,
-                  "help": "Direct-upload manifest JSON string mapping file paths to content hashes"
+                  "help": "Advanced/manual use: direct-upload manifest JSON string mapping \"/path\" keys to content hashes (assets must already be uploaded out-of-band)"
                 },
                 {
                   "name": "--profile",
