@@ -209,6 +209,134 @@ def delete_script(
     print_success(f"Deleted worker script {deleted_id}")
 
 
+routes_app = typer.Typer(help="Manage zone Worker routes", no_args_is_help=True)
+
+
+@routes_app.command("list")
+@command
+def list_routes(
+    zone: str = typer.Argument(..., help="Zone name or ID"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of routes to return"),
+    filter_str: Optional[list[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., script:eq:my-worker)"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to display"),
+):
+    """
+    List Worker routes for a zone.
+
+    Examples:
+        cloudflare workers routes list example.com
+        cloudflare workers routes list example.com --table
+        cloudflare workers routes list example.com --filter "script:eq:my-worker"
+        cloudflare workers routes list example.com --properties "id,pattern,script"
+    """
+    client = get_client()
+    zone_id = client.resolve_zone_id(zone)
+    routes = client.list_worker_routes(zone_id=zone_id)
+
+    # Apply client-side filters
+    if filter_str:
+        routes = apply_filters(routes, filter_str)
+
+    routes = routes[:limit]
+
+    # Apply properties filter
+    if properties:
+        routes = apply_properties_filter(routes, properties)
+
+    if table:
+        flattened = [{
+            "id": r.get("id"),
+            "pattern": r.get("pattern"),
+            "script": r.get("script"),
+        } for r in routes]
+        print_table(
+            flattened,
+            ["id", "pattern", "script"],
+            ["ID", "Pattern", "Script"],
+        )
+    else:
+        print_json(routes)
+
+
+@routes_app.command("get")
+@command
+def get_route(
+    zone: str = typer.Argument(..., help="Zone name or ID"),
+    route_id: str = typer.Argument(..., help="The route ID"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as key-value table"),
+):
+    """
+    Get a single Worker route for a zone.
+
+    Examples:
+        cloudflare workers routes get example.com <route-id>
+        cloudflare workers routes get example.com <route-id> --table
+    """
+    client = get_client()
+    zone_id = client.resolve_zone_id(zone)
+    route = client.get_worker_route(zone_id=zone_id, route_id=route_id)
+
+    if table:
+        rows = []
+        for k, v in route.items():
+            if v is not None:
+                rows.append({"field": k, "value": str(v)})
+        print_table(rows, ["field", "value"], ["Field", "Value"])
+    else:
+        print_json(route)
+
+
+@routes_app.command("create")
+@command
+def create_route(
+    zone: str = typer.Argument(..., help="Zone name or ID"),
+    pattern: str = typer.Option(..., "--pattern", help="Route pattern (e.g. 'example.com/llms.txt*')"),
+    script: str = typer.Option(..., "--script", help="Worker script name to invoke for matching requests"),
+):
+    """
+    Create a Worker route binding a URL pattern to a script.
+
+    Examples:
+        cloudflare workers routes create example.com --pattern 'example.com/llms.txt*' --script my-worker
+    """
+    client = get_client()
+    zone_id = client.resolve_zone_id(zone)
+    result = client.create_worker_route(zone_id=zone_id, pattern=pattern, script=script)
+    print_json(result)
+    print_success(f"Created route {pattern} -> {script}")
+
+
+@routes_app.command("delete")
+@command
+def delete_route(
+    zone: str = typer.Argument(..., help="Zone name or ID"),
+    route_id: str = typer.Argument(..., help="The route ID to delete"),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
+):
+    """
+    Delete a Worker route.
+
+    Examples:
+        cloudflare workers routes delete example.com <route-id> --force
+    """
+    client = get_client()
+    zone_id = client.resolve_zone_id(zone)
+
+    confirm_destructive_action(
+        f"Are you sure you want to delete worker route {route_id}?",
+        assume_yes=force,
+        action_description=f"delete worker route {route_id}",
+        skip_flag_hint="--force",
+    )
+
+    client.delete_worker_route(zone_id=zone_id, route_id=route_id)
+    print_success(f"Deleted worker route {route_id}")
+
+
+app.add_typer(routes_app, name="routes")
+
+
 COMMAND_CREDENTIALS = {
     "list": [
         "api_key"
@@ -220,6 +348,9 @@ COMMAND_CREDENTIALS = {
         "api_key"
     ],
     "delete": [
+        "api_key"
+    ],
+    "routes": [
         "api_key"
     ]
 }

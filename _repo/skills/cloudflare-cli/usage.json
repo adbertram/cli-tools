@@ -1,8 +1,8 @@
 {
   "tool": "cloudflare",
   "description": "CLI interface for Cloudflare API",
-  "discovered_at": "2026-08-22T22:23:45Z",
-  "total_commands": 32,
+  "discovered_at": "2026-08-24T17:50:48Z",
+  "total_commands": 54,
   "global_options": [
     {
       "name": "--version",
@@ -1146,6 +1146,874 @@
         }
       }
     },
+    "pages": {
+      "help": "Manage Cloudflare Pages (projects, deployments, domains)",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "deployments": {
+          "help": "Manage Pages deployments",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Start a new deployment (multipart POST). Git-connected projects: pass --branch to build the branch HEAD. Direct-upload projects: pass --manifest (see README for the asset upload limitation).",
+              "examples": [
+                "cloudflare pages deployments create my-site --branch main",
+                "cloudflare pages deployments create my-site --manifest '{\"index.html\":\"<hash>\"}'"
+              ],
+              "arguments": [
+                {
+                  "name": "project",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The Pages project name"
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID (defaults to the single visible account)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--branch",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Branch to build from (git-connected projects; defaults to production branch)",
+                  "short": "-b"
+                },
+                {
+                  "name": "--commit-message",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Commit message metadata"
+                },
+                {
+                  "name": "--commit-hash",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Commit SHA metadata"
+                },
+                {
+                  "name": "--commit-dirty",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Mark the source as having uncommitted changes",
+                  "takes_value": false
+                },
+                {
+                  "name": "--manifest",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Direct-upload manifest JSON string mapping file paths to content hashes"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "delete": {
+              "help": "[account] Delete a deployment. The Cloudflare API does not support bulk deployment deletion; delete deployments one at a time.",
+              "examples": [
+                "cloudflare pages deployments delete my-site DEPLOYMENT_ID --force",
+                "cloudflare pages deployments delete my-site DEPLOYMENT_ID --allow-aliased --force"
+              ],
+              "arguments": [
+                {
+                  "name": "project",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The Pages project name"
+                },
+                {
+                  "name": "deployment_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The deployment ID to delete"
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID (defaults to the single visible account)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--allow-aliased",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Allow deleting aliased non-production deployments (sends force=true to the API)",
+                  "takes_value": false
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation prompt",
+                  "short": "-F",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "[account] Get a single deployment.",
+              "examples": [
+                "cloudflare pages deployments get my-site DEPLOYMENT_ID",
+                "cloudflare pages deployments get my-site DEPLOYMENT_ID --table"
+              ],
+              "arguments": [
+                {
+                  "name": "project",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The Pages project name"
+                },
+                {
+                  "name": "deployment_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The deployment ID"
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID (defaults to the single visible account)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display summary as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to display",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "List deployments for a Pages project.",
+              "examples": [
+                "cloudflare pages deployments list my-site",
+                "cloudflare pages deployments list my-site --env production --table",
+                "cloudflare pages deployments list my-site --filter \"branch:eq:main\" --properties \"id,status\""
+              ],
+              "arguments": [
+                {
+                  "name": "project",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The Pages project name"
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID (defaults to the single visible account)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--env",
+                  "type": "PRODUCTION|PREVIEW",
+                  "required": false,
+                  "help": "Filter by environment (production or preview)",
+                  "short": "-e"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of deployments to return",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., status:eq:success)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to display",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "retry": {
+              "help": "[account] Retry a failed deployment build.",
+              "examples": [
+                "cloudflare pages deployments retry my-site DEPLOYMENT_ID"
+              ],
+              "arguments": [
+                {
+                  "name": "project",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The Pages project name"
+                },
+                {
+                  "name": "deployment_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The deployment ID to retry"
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID (defaults to the single visible account)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "rollback": {
+              "help": "{deployment_id} [account] Roll production back to a previous successful production deployment.",
+              "examples": [
+                "cloudflare pages deployments rollback my-site DEPLOYMENT_ID --force"
+              ],
+              "arguments": [
+                {
+                  "name": "project",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The Pages project name"
+                },
+                {
+                  "name": "deployment_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Target deployment ID (must be a successful production deployment)"
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID (defaults to the single visible account)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation prompt",
+                  "short": "-F",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        },
+        "domains": {
+          "help": "Manage custom domains for a Pages project",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Add a custom domain to a Pages project.",
+              "examples": [
+                "cloudflare pages domains create my-site docs.example.com"
+              ],
+              "arguments": [
+                {
+                  "name": "project",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The Pages project name"
+                },
+                {
+                  "name": "domain",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Custom domain name to add"
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID (defaults to the single visible account)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "delete": {
+              "help": "Remove a custom domain from a Pages project.",
+              "examples": [
+                "cloudflare pages domains delete my-site docs.example.com --force"
+              ],
+              "arguments": [
+                {
+                  "name": "project",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The Pages project name"
+                },
+                {
+                  "name": "domain",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The domain name"
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID (defaults to the single visible account)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation prompt",
+                  "short": "-F",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get a single custom domain.",
+              "examples": [
+                "cloudflare pages domains get my-site docs.example.com",
+                "cloudflare pages domains get my-site docs.example.com --table"
+              ],
+              "arguments": [
+                {
+                  "name": "project",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The Pages project name"
+                },
+                {
+                  "name": "domain",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The domain name"
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID (defaults to the single visible account)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display summary as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to display",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "List custom domains attached to a Pages project. The domains endpoint returns all domains in one response; --limit is applied client-side after filtering.",
+              "examples": [
+                "cloudflare pages domains list my-site",
+                "cloudflare pages domains list my-site --table",
+                "cloudflare pages domains list my-site --filter \"status:eq:active\""
+              ],
+              "arguments": [
+                {
+                  "name": "project",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The Pages project name"
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID (defaults to the single visible account)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of domains to show (applied client-side; this endpoint returns all domains in one response)",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., status:eq:pending)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to display",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "update": {
+              "help": "Retry validation for a custom domain (reprovision via the PATCH edit endpoint).",
+              "examples": [
+                "cloudflare pages domains update my-site docs.example.com"
+              ],
+              "arguments": [
+                {
+                  "name": "project",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The Pages project name"
+                },
+                {
+                  "name": "domain",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The domain name"
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID (defaults to the single visible account)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        },
+        "projects": {
+          "help": "Manage Pages projects",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a Pages project.",
+              "examples": [
+                "cloudflare pages projects create my-site --production-branch main",
+                "cloudflare pages projects create my-site -b main --config '{\"build_config\":{\"build_command\":\"npm run build\"}}'"
+              ],
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The new project name"
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID (defaults to the single visible account)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--production-branch",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Branch that identifies production deployments",
+                  "short": "-b"
+                },
+                {
+                  "name": "--config",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Extra JSON body fields (e.g. '{\"build_config\":{\"build_command\":\"npm run build\"}}')"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "delete": {
+              "help": "Delete a Pages project.",
+              "examples": [
+                "cloudflare pages projects delete my-site --force"
+              ],
+              "arguments": [
+                {
+                  "name": "project",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The Pages project name"
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID (defaults to the single visible account)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation prompt",
+                  "short": "-F",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a single Pages project.",
+              "examples": [
+                "cloudflare pages projects get my-site",
+                "cloudflare pages projects get my-site ACCOUNT_NAME --table",
+                "cloudflare pages projects get my-site --properties \"name,production_branch\""
+              ],
+              "arguments": [
+                {
+                  "name": "project",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The Pages project name"
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID (defaults to the single visible account)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display summary as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to display",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get-upload-token": {
+              "help": "[account] Get the direct-upload token for a Pages project.",
+              "examples": [
+                "cloudflare pages projects get-upload-token my-site"
+              ],
+              "arguments": [
+                {
+                  "name": "project",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The Pages project name"
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID (defaults to the single visible account)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "List Pages projects for an account.",
+              "examples": [
+                "cloudflare pages projects list",
+                "cloudflare pages projects list ACCOUNT_NAME --table",
+                "cloudflare pages projects list --filter \"name:contains:docs\" --properties \"name,production_branch\""
+              ],
+              "arguments": [
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID (defaults to the single visible account)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of projects to return",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., name:contains:blog)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to display",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "purge-build-cache": {
+              "help": "[account] Purge all cached build artifacts for a Pages project.",
+              "examples": [
+                "cloudflare pages projects purge-build-cache my-site --force"
+              ],
+              "arguments": [
+                {
+                  "name": "project",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The Pages project name"
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID (defaults to the single visible account)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation prompt",
+                  "short": "-F",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "update": {
+              "help": "Update a Pages project via the PATCH edit endpoint. At least one setting must be specified.",
+              "examples": [
+                "cloudflare pages projects update my-site --production-branch develop",
+                "cloudflare pages projects update my-site --build-command \"npm run build\" --destination-dir dist",
+                "cloudflare pages projects update my-site --config '{\"deployment_configs\":{\"preview\":{\"env_vars\":{\"API_URL\":null}}}}'"
+              ],
+              "arguments": [
+                {
+                  "name": "project",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The Pages project name"
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID (defaults to the single visible account)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--production-branch",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "New production branch",
+                  "short": "-b"
+                },
+                {
+                  "name": "--build-command",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "New build command"
+                },
+                {
+                  "name": "--destination-dir",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "New build output directory"
+                },
+                {
+                  "name": "--root-dir",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Directory to run the build command in"
+                },
+                {
+                  "name": "--build-caching",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Enable/disable build caching",
+                  "takes_value": false
+                },
+                {
+                  "name": "--config",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Extra JSON body fields merged last (e.g. '{\"deployment_configs\":{...}}')"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
     "workers": {
       "help": "Manage Workers scripts",
       "arguments": [],
@@ -1286,6 +2154,175 @@
               "help": "Auth profile name"
             }
           ]
+        },
+        "routes": {
+          "help": "Manage zone Worker routes",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a Worker route binding a URL pattern to a script.",
+              "examples": [
+                "cloudflare workers routes create example.com --pattern 'example.com/llms.txt*' --script my-worker"
+              ],
+              "arguments": [
+                {
+                  "name": "zone",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Zone name or ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--pattern",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Route pattern (e.g. 'example.com/llms.txt*')"
+                },
+                {
+                  "name": "--script",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Worker script name to invoke for matching requests"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "delete": {
+              "help": "Delete a Worker route.",
+              "examples": [
+                "cloudflare workers routes delete example.com <route-id> --force"
+              ],
+              "arguments": [
+                {
+                  "name": "zone",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Zone name or ID"
+                },
+                {
+                  "name": "route_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The route ID to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation prompt",
+                  "short": "-f",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get a single Worker route for a zone.",
+              "examples": [
+                "cloudflare workers routes get example.com <route-id>",
+                "cloudflare workers routes get example.com <route-id> --table"
+              ],
+              "arguments": [
+                {
+                  "name": "zone",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Zone name or ID"
+                },
+                {
+                  "name": "route_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The route ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as key-value table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "List Worker routes for a zone.",
+              "examples": [
+                "cloudflare workers routes list example.com",
+                "cloudflare workers routes list example.com --table",
+                "cloudflare workers routes list example.com --filter \"script:eq:my-worker\"",
+                "cloudflare workers routes list example.com --properties \"id,pattern,script\""
+              ],
+              "arguments": [
+                {
+                  "name": "zone",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Zone name or ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of routes to return",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., script:eq:my-worker)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to display",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
         },
         "upload": {
           "help": "Upload (create or replace) a Worker script.",

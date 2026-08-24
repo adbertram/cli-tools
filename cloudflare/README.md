@@ -248,6 +248,111 @@ cloudflare workers delete my-worker --force
   a single-file service-worker script.
 - `--bindings` must be a JSON array of Cloudflare binding objects.
 
+### Pages
+
+Account-level Cloudflare Pages management. The `ACCOUNT` argument accepts an
+account name or a 32-character account ID; omit it when the token can see
+exactly one account. All endpoints are account-scoped
+(`/accounts/{account_id}/pages/...`) and require the `Pages Read` permission
+for reads or `Pages Write` for writes on the API token.
+
+#### Pages Projects
+
+```bash
+# List projects in the account (JSON default, --table for table)
+cloudflare pages projects list
+cloudflare pages projects list ACCOUNT_NAME --table
+cloudflare pages projects list --filter "name:contains:docs" --properties "name,production_branch"
+
+# Get a single project
+cloudflare pages projects get my-site
+cloudflare pages projects get my-site ACCOUNT_NAME --table
+
+# Create a project (--production-branch is required)
+cloudflare pages projects create my-site --production-branch main
+cloudflare pages projects create my-site -b main \
+  --config '{"build_config":{"build_command":"npm run build","destination_dir":"dist"}}'
+
+# Update a project (Cloudflare exposes a single PATCH edit endpoint; at least
+# one setting is required)
+cloudflare pages projects update my-site --production-branch develop
+cloudflare pages projects update my-site --build-command "npm run build" --destination-dir dist
+cloudflare pages projects update my-site --build-caching false
+cloudflare pages projects update my-site --config '{"deployment_configs":{"preview":{"env_vars":{"API_URL":null}}}}'
+
+# Delete a project (confirmation prompt; --force skips it)
+cloudflare pages projects delete my-site --force
+
+# Purge cached build artifacts (confirmation prompt; --force skips it)
+cloudflare pages projects purge-build-cache my-site --force
+
+# Get the direct-upload token used by wrangler/direct-upload clients
+cloudflare pages projects get-upload-token my-site
+```
+
+#### Pages Deployments
+
+```bash
+# List deployments for a project
+cloudflare pages deployments list my-site
+cloudflare pages deployments list my-site --env production --table
+cloudflare pages deployments list my-site --filter "branch:eq:main" --properties "id,status"
+
+# Get a single deployment
+cloudflare pages deployments get my-site DEPLOYMENT_ID
+
+# Start a new deployment from a branch (git-connected projects; defaults to
+# the production branch when --branch is omitted)
+cloudflare pages deployments create my-site --branch main
+cloudflare pages deployments create my-site --commit-message "add docs" --commit-dirty
+
+# Start a direct-upload deployment from a manifest
+cloudflare pages deployments create my-site --manifest '{"index.html":"<content-hash>"}'
+
+# Retry a failed build
+cloudflare pages deployments retry my-site DEPLOYMENT_ID
+
+# Roll production back to a previous successful production deployment
+# (confirmation prompt; --force skips it)
+cloudflare pages deployments rollback my-site DEPLOYMENT_ID --force
+
+# Delete a deployment (confirmation prompt; --force skips it).
+# Pass --allow-aliased to delete aliased non-production deployments.
+cloudflare pages deployments delete my-site DEPLOYMENT_ID --allow-aliased --force
+```
+
+**Notes / API gaps:**
+- The Cloudflare API has **no bulk deployment deletion** endpoint; delete
+  deployments one at a time.
+- Full direct-upload deployments also require uploading asset files through
+  the separate Pages assets endpoints (hash + upload + upsert-hashes). This
+  CLI sends the multipart create request (`--manifest`, `_headers`,
+  `_redirects`, and Worker files are accepted by the API but asset upload is
+  not automated here), so direct-upload creates are practical only when the
+  assets were already uploaded out-of-band. Git-connected creates work fully.
+
+#### Pages Domains
+
+```bash
+# List custom domains attached to a project (the API returns all domains in
+# one response; --limit applies client-side)
+cloudflare pages domains list my-site
+cloudflare pages domains list my-site --table
+cloudflare pages domains list my-site --filter "status:eq:active"
+
+# Get a single domain
+cloudflare pages domains get my-site docs.example.com
+
+# Add a custom domain
+cloudflare pages domains create my-site docs.example.com
+
+# Retry validation for a domain (reprovision via the PATCH edit endpoint)
+cloudflare pages domains update my-site docs.example.com
+
+# Remove a custom domain (confirmation prompt; --force skips it)
+cloudflare pages domains delete my-site docs.example.com --force
+```
+
 ## Output Formats
 
 All commands support two output formats:

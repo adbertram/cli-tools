@@ -50,6 +50,12 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **dns** — Manage DNS with sub-groups: `dns zones` (list/get zones) and `dns records` (full CRUD on DNS records)
 - **analytics** — Zone traffic analytics via the GraphQL Analytics API: `analytics summary` (totals for a date range) and `analytics top-paths` (top pages by HTML page views). Zone argument accepts a zone name or zone ID. Requires the `Analytics: Read` zone permission on the API token.
 - **workers** — Account-level Workers script management: `workers list`, `workers get SCRIPT_NAME` (raw source to stdout or `--output FILE`), `workers upload SCRIPT_NAME --file ./worker.js [--format modules|service-worker] [--compatibility-date YYYY-MM-DD] [--bindings '<json-array>']`, and `workers delete SCRIPT_NAME --force`. All four take an optional ACCOUNT argument (name or ID); omit it when the token sees exactly one account. Requires `Account > Workers Scripts > Read` (list/get) or `Account > Workers Scripts > Edit` (upload/delete) on the API token.
+- **workers routes** — Zone-scoped Worker routes: `workers routes list ZONE`, `workers routes get ZONE ROUTE_ID`, `workers routes create ZONE --pattern ... --script ...`, and `workers routes delete ZONE ROUTE_ID --force`. Requires `Zone > Workers Routes > Read` (list/get) or `Zone > Workers Routes > Edit` (create/delete).
+- **pages** — Account-level Cloudflare Pages management with three sub-groups:
+  - `pages projects` — `list`, `get PROJECT_NAME`, `create`, `update`, `delete`, `purge-build-cache`, `get-upload-token`. Projects are addressed by NAME, not ID.
+  - `pages deployments` — `list PROJECT`, `get PROJECT DEPLOYMENT_ID`, `create` (multipart POST; pass `--manifest '{json}'` for direct uploads), `retry`, `rollback`, `delete`.
+  - `pages domains` — `list PROJECT`, `get PROJECT DOMAIN`, `create` (add), `update` (reprovision/retry validation), `delete`.
+  - All Pages commands take an optional ACCOUNT argument (name or ID). Requires `Pages Read` (list/get) or `Pages Write` (mutations) on the API token.
 </principle>
 
 <principle name="Optional Capability Probes">
@@ -76,8 +82,8 @@ Error: API request failed (403): Authentication error
 The failure hits every record and every zone identically.
 
 **Cause.** The stored credential is a scoped Cloudflare **User API Token**, not
-the legacy Global API Key that the secret name `cloudflare-legacy-api-key`
-suggests. That token carries only Read permission groups. Cloudflare returns
+a Global API Key; the CLI authenticates with `Authorization: Bearer <token>`
+using the API token stored in the CLI-tools secret manager as `cloudflare-api-key`. That token carries only Read permission groups. Cloudflare returns
 HTTP 403 with the generic message `Authentication error` for an out-of-scope
 token, which reads like a broken or expired credential and sends diagnosis down
 the wrong path.
@@ -153,7 +159,7 @@ To change or rotate the API key, update the secret directly (never edit the prof
 <cli-tools-root>/_repo/_secret-manager/secrets.sh set cloudflare-api-key
 ```
 
-If `auth login` reports `Missing secret 'cloudflare-legacy-api-key'`, the referenced
+If `auth login` reports `Missing secret 'cloudflare-api-key'`, the referenced
 secret is absent from the secret manager. Set it with the command above; do not
 attempt to re-enter the key through `auth login`.
 

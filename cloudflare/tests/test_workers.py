@@ -146,7 +146,7 @@ runner = CliRunner()
 # --------------------------------------------------------------------------
 
 
-def test_list_worker_scripts_stops_after_single_partial_page(monkeypatch):
+def test_list_worker_scripts_returns_all_in_single_call(monkeypatch):
     scripts = [_script(i) for i in range(3)]
     client, transport = _build_client(
         monkeypatch, [_ok(scripts)]
@@ -157,29 +157,22 @@ def test_list_worker_scripts_stops_after_single_partial_page(monkeypatch):
     assert [s["id"] for s in result] == ["worker-0", "worker-1", "worker-2"]
     assert len(transport.calls) == 1
     assert transport.calls[0]["url"].endswith(f"/accounts/{ACCOUNT_ID}/workers/scripts")
-    assert transport.calls[0]["params"] == {"per_page": 10, "page": 1}
+    assert "params" not in transport.calls[0] or not transport.calls[0]["params"]
     assert transport.calls[0]["headers"]["Authorization"] == f"Bearer {FAKE_TOKEN}"
 
 
-def test_list_worker_scripts_paginates_until_limit(monkeypatch):
-    page_one = [_script(i) for i in range(50)]
-    page_two = [_script(50 + i) for i in range(5)]
-    first = _FakeResponse(
-        200,
-        {
-            "success": True,
-            "errors": [],
-            "result": page_one,
-            "result_info": {"total_pages": 2},
-        },
+def test_list_worker_scripts_enforces_limit_client_side(monkeypatch):
+    # The Workers Scripts endpoint returns everything in one response and
+    # ignores pagination query params, so the limit must slice client-side.
+    scripts = [_script(i) for i in range(13)]
+    client, transport = _build_client(
+        monkeypatch, [_ok(scripts)]
     )
-    client, transport = _build_client(monkeypatch, [first, _ok(page_two)])
 
-    result = client.list_worker_scripts(ACCOUNT_ID, limit=55)
+    result = client.list_worker_scripts(ACCOUNT_ID, limit=1)
 
-    assert len(result) == 55
-    assert len(transport.calls) == 2
-    assert transport.calls[1]["params"] == {"per_page": 5, "page": 2}
+    assert [s["id"] for s in result] == ["worker-0"]
+    assert len(transport.calls) == 1
 
 
 def test_get_worker_script_returns_raw_content_with_javascript_accept(monkeypatch):
@@ -473,3 +466,138 @@ def test_commands_accept_explicit_account_argument(fake_client):
 
     assert result.exit_code == 0
     assert ("resolve_account_id", "my-account") in fake_client.calls
+
+
+# --------------------------------------------------------------------------
+# Worker routes: command layer (list flags, get) and client.
+# --------------------------------------------------------------------------
+
+
+def _route(index):
+    return {
+        "id": f"route-{index}",
+        "pattern": f"example.com/path{index}*",
+        "script": f"worker-{index}",
+    }
+
+
+def test_list_worker_routes_returns_result_list(monkeypatch):
+    client, transport = _build_client(monkeypatch, [_ok([_route(1), _route(2)])])
+
+    result = client.list_worker_routes(zone_id=ACCOUNT_ID)
+
+    assert [r["id"] for r in result] == ["route-1", "route-2"]
+    assert len(transport.calls) == 1
+    assert transport.calls[0]["url"].endswith(f"/zones/{ACCOUNT_ID}/workers/routes")
+
+
+def test_get_worker_route_hits_detail_endpoint(monkeypatch):
+    client, transport = _build_client(monkeypatch, [_ok(_route(1))])
+
+    result = client.get_worker_route(zone_id=ACCOUNT_ID, route_id="route-1")
+
+    assert result["id"] == "route-1"
+    assert len(transport.calls) == 1
+    assert transport.calls[0]["method"] == "GET"
+    assert transport.calls[0]["url"].endswith(
+        f"/zones/{ACCOUNT_ID}/workers/routes/route-1"
+    )
+
+
+def test_worker_routes_detail_permission_group():
+    assert (
+        required_permission_group(
+            "GET", f"/zones/{ACCOUNT_ID}/workers/routes/{SCRIPT_NAME}"
+        )
+        == "Zone > Workers Routes > Read"
+    )
+
+
+class _FakeRoutesClient(_FakeWorkersClient):
+    """Extends the fake workers client with zone-route methods."""
+
+    def __init__(self):
+        super().__init__()
+        self.routes = [_route(1), _route(2)]
+
+    def resolve_zone_id(self, zone):
+        self.calls.append(("resolve_zone_id", zone))
+        return ACCOUNT_ID
+
+    def list_worker_routes(self, zone_id):
+        self.calls.append(("list_worker_routes", zone_id))
+        return [dict(r) for r in self.routes]
+
+    def get_worker_route(self, zone_id, route_id):
+        self.calls.append(("get_worker_route", zone_id, route_id))
+        return dict(self.routes[0])
+
+
+@pytest.fixture()
+def fake_routes_client(monkeypatch):
+    fake = _FakeRoutesClient()
+    monkeypatch.setattr(workers_module, "get_client", lambda: fake)
+    return fake
+
+
+def test_routes_list_json_output(fake_routes_client):
+    result = runner.invoke(workers_module.app, ["routes", "list", "example.com"])
+
+    assert result.exit_code == 0
+    parsed = json.loads(result.stdout)
+    assert [r["id"] for r in parsed] == ["route-1", "route-2"]
+    assert ("list_worker_routes", ACCOUNT_ID) in fake_routes_client.calls
+
+
+def test_routes_list_table_output(fake_routes_client):
+    result = runner.invoke(
+        workers_module.app, ["routes", "list", "example.com", "--table"]
+    )
+
+    assert result.exit_code == 0
+    out = result.stdout
+    assert "ID" in out and "Pattern" in out and "Script" in out
+    assert "route-1" in out and "example.com/path1*" in out
+
+
+def test_routes_list_applies_limit_filter_and_properties(fake_routes_client):
+    result = runner.invoke(
+        workers_module.app,
+        [
+            "routes",
+            "list",
+            "example.com",
+            "--limit",
+            "1",
+            "--filter",
+            "script:eq:worker-1",
+            "--properties",
+            "id",
+        ],
+    )
+
+    assert result.exit_code == 0
+    parsed = json.loads(result.stdout)
+    assert parsed == [{"id": "route-1"}]
+
+
+def test_routes_get_json_output(fake_routes_client):
+    result = runner.invoke(
+        workers_module.app, ["routes", "get", "example.com", "route-1"]
+    )
+
+    assert result.exit_code == 0
+    parsed = json.loads(result.stdout)
+    assert parsed["id"] == "route-1"
+    assert ("get_worker_route", ACCOUNT_ID, "route-1") in fake_routes_client.calls
+
+
+def test_routes_get_table_output(fake_routes_client):
+    result = runner.invoke(
+        workers_module.app, ["routes", "get", "example.com", "route-1", "--table"]
+    )
+
+    assert result.exit_code == 0
+    out = result.stdout
+    assert "Field" in out and "Value" in out
+    assert "route-1" in out
