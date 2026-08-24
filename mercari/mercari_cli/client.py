@@ -234,14 +234,15 @@ class MercariClient:
                 const body = (document.body && document.body.innerText || '');
                 // Mercari's own invisible reCAPTCHA Enterprise badge mounts an
                 // iframe[src*="recaptcha"] on every page, logged in or not --
-                // it is site chrome, NOT a Cloudflare challenge. Only the
-                // Cloudflare interstitial selectors and the challenge text
-                // markers mean a real block; counting any recaptcha/hcaptcha
-                // iframe turned every healthy page into a false positive and
-                // blocked all search/get calls.
+                // it is site chrome, NOT a Cloudflare challenge, so it stays
+                // out of this check. Real evidence remains: the Cloudflare
+                // interstitial selectors, hCaptcha iframes, and the challenge
+                // text markers below. Counting the site's recaptcha badge
+                // turned every healthy page into a false positive and blocked
+                // all search/get calls.
                 const cfChallenge = !!document.querySelector(
                     '#cf-challenge-running, .cf-browser-verification, '
-                    + 'iframe[src*="challenges.cloudflare.com"]'
+                    + 'iframe[src*="challenges.cloudflare.com"], iframe[src*="hcaptcha"]'
                 );
                 return {
                     title,
