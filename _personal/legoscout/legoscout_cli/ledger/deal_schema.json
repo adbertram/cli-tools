@@ -1,0 +1,851 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://legoscout.internal/deal_schema.json",
+  "title": "LEGO Scout deal record",
+  "description": "The canonical shape of one `deals[]` row. Full field semantics live in references/output_contract.md; this file exists to let a phase's field set be QUERIED (`phase == \"crawl\"` etc.) instead of hand-maintained as a second document. `crawl` fields come from legoscout-sources (the listing page itself). `appraisal` fields come from legoscout-pricing plus the vision pass. `synthesis` fields are written only by legoscout-ledger/scripts/build_deal_record.py, which assembles the other two into one record -- including every mirror column.",
+  "type": "object",
+  "properties": {
+    "listing_key": {
+      "type": "string",
+      "phase": "crawl",
+      "description": "Stable ID, `namespace|item_id`."
+    },
+    "source": {
+      "type": "string",
+      "phase": "crawl",
+      "description": "The listing_key namespace; must match source_names.CANONICAL for the namespace. The display name is derived at render time and never stored."
+    },
+    "title": {
+      "type": "string",
+      "phase": "crawl",
+      "description": "Listing title, or `unknown` only after direct-page verification."
+    },
+    "url": {
+      "type": "string",
+      "phase": "crawl",
+      "description": "Direct listing URL."
+    },
+    "direct_url": {
+      "type": "string",
+      "phase": "crawl",
+      "description": "Direct listing URL used by callers; same as `url` unless a canonical URL differs."
+    },
+    "posted_date": {
+      "type": "string",
+      "phase": "crawl",
+      "description": "Posted/listed date, or `unknown`."
+    },
+    "auction_start_date": {
+      "type": "string",
+      "phase": "crawl",
+      "description": "When bidding opens, or `not-an-auction`/`unknown`. The value is an ISO date or one of the two sentinels VERBATIM; an explanation belongs in `notes`, not here.",
+      "pattern": "^(unknown|not-an-auction|\\d{4}-\\d{2}-\\d{2}([T ].*)?)$"
+    },
+    "bidding_open": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "phase": "crawl",
+      "description": "Whether the lot accepts a bid RIGHT NOW, as the worker observed it. Prefer `auction_start_date`: a date self-updates against the clock, a flag goes stale. Set this when the source publishes no bid-open timestamp but the lot is visibly live -- AuctionZip, AuctionNinja, K-BID and eBay all publish none, and eBay dropped 2 good lots on 2026-08-04 because the contract demanded a date that does not exist. `null` on a fixed-price row and whenever openness was not read."
+    },
+    "auction_end_date": {
+      "type": "string",
+      "phase": "crawl",
+      "description": "When bidding closes, or `not-an-auction`/`unknown`. The value is an ISO date or one of the two sentinels VERBATIM; an explanation belongs in `notes`, not here.",
+      "pattern": "^(unknown|not-an-auction|\\d{4}-\\d{2}-\\d{2}([T ].*)?)$"
+    },
+    "current_price": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "phase": "crawl",
+      "description": "Current auction/listing price. `0` is valid on a zero-bid auction."
+    },
+    "buy_now_price": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "phase": "crawl",
+      "description": "Buy It Now/static price when available."
+    },
+    "static_price": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "phase": "crawl",
+      "description": "Static purchase price when available."
+    },
+    "price_basis": {
+      "type": "string",
+      "phase": "crawl",
+      "description": "Which price field is authoritative; see the source module's `PRICE_BASIS_RULE`. Every value here must be a key of `schema.PRICE_BASIS_COLUMNS`. A fixed ask is `static_price`: the retired `ask_price` named one column while its rows filled another, so 256 of 484 rows carried no readable price at all. The retired `estimated` named no column, so a $45 listing could store a $999 hammer and pass `--strict`.",
+      "enum": [
+        "buy_now",
+        "static_price",
+        "current_price",
+        "unknown"
+      ]
+    },
+    "listing_type": {
+      "type": "string",
+      "phase": "crawl",
+      "description": "`auction` | `auction_with_buy_now` | `fixed`.",
+      "enum": [
+        "auction",
+        "auction_with_buy_now",
+        "fixed"
+      ]
+    },
+    "weight_lbs": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "phase": "crawl",
+      "description": "Weight in pounds AS STATED on the listing. A vision-estimated weight lives at `observations.vision.weight_estimate_lbs`, not here. BOUNDED, because nothing else bounds it: not the scorer, not build_deal_record, not validate. `weight_lbs: 1e300` on a $45.00 bulk lot scored 97 with `max_price` 4.88e+300 and `--strict` reported no error, because $/lb is landed/weight and a big enough divisor makes any price look free. 2000 lb is a full shipping pallet of loose LEGO -- the physical ceiling on a lot one person collects or has freighted. The heaviest weight the ledger has ever stored is 100 lb. The floor is 0.01 lb -- one 4.5 g minifigure, the smallest LEGO object that can be a lot -- because `weight_lbs: 1e-9` is the same defect pointed the other way: it drove $/lb to 5.5e+10 and `max_price` to $0.00, which is a listing deleted from the table rather than promoted to the top of it. Exactly 0 is allowed ALONGSIDE that floor, not instead of it, because nine rows already store it (three of them active) as ShopGoodwill's 'no weight published'; that is what `null` is for, those rows want repairing, and rejecting them here would make the whole ledger unwritable.",
+      "minimum": 0,
+      "maximum": 2000,
+      "anyOf": [
+        {
+          "const": 0
+        },
+        {
+          "minimum": 0.01
+        }
+      ]
+    },
+    "item_location": {
+      "type": "string",
+      "phase": "crawl",
+      "description": "Listing's stated location, verbatim and state-qualified."
+    },
+    "origin_zip": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "phase": "crawl",
+      "description": "Seller's ship-FROM ZIP, when the listing exposes one."
+    },
+    "seller_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "phase": "crawl",
+      "description": "The marketplace's own stable seller key, verbatim as a string (ShopGoodwill `sellerId`, Poshmark `lister_id`, OfferUp `ownerId`, an eBay username). `null` carries two meanings, told apart by that source's reader module: a module that writes no `seller_id()` and says why in `NEEDS_PAGE_READ` (Craigslist, StockX) means the marketplace has no seller identity, and a module that does read one means the worker did not and said so in `evidence_summary`. Never invent one."
+    },
+    "seller_name": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "phase": "crawl",
+      "description": "The seller's display name, store name, or auction house, verbatim. Same `null` rule as `seller_id`. ShopGoodwill sellers 8, 43, 122 and 376 produce consistently different landed $/lb; this field is what makes that queryable instead of prose in a source note."
+    },
+    "available_fulfillment": {
+      "type": "array",
+      "phase": "crawl",
+      "description": "Non-empty subset of `[\"local_pickup\", \"shipping\"]`, read off the listing per that source's `available_fulfillment()` reader."
+    },
+    "image_urls": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "phase": "crawl",
+      "description": "Listing photo URLs, captured through the source's authenticated CLI."
+    },
+    "shipping_estimate": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "phase": "crawl",
+      "description": "The SOURCE's own destination-rate quote to 47725, or an explicit unquoted answer with a reason. `null` means the source publishes no rate at all (HiBid, K-BID, Facebook). Written only through `shipping_estimate.py`'s quoted()/unquoted(); `total_of()` computes the delivered charge. `destination_zip`, `country` and `total` are NOT stored: the first two are project constants and the third is derived from its own parts, and storing a derived value is what let one number disagree with itself.",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "status",
+            "shipping_price",
+            "handling_price",
+            "service"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "status": {
+              "const": "quoted"
+            },
+            "shipping_price": {
+              "type": "number"
+            },
+            "handling_price": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "null means the source publishes no separate handling line, the normal Poshmark/eBay/Depop shape"
+            },
+            "service": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "status",
+            "reason"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "status": {
+              "const": "unquoted"
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "description": "why no rate exists -- pickup only, weight invalid, freight invoiced after the sale"
+            }
+          }
+        }
+      ]
+    },
+    "winning_bid": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "phase": "crawl",
+      "description": "Closed-auction hammer price, when the source reports one."
+    },
+    "cost_per_lb_note": {
+      "type": "string",
+      "phase": "appraisal",
+      "description": "Human-readable per-pound note, or `unknown`."
+    },
+    "handling_fee": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "phase": "appraisal",
+      "description": "Handling fee when available."
+    },
+    "estimated_total": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "phase": "appraisal",
+      "description": "Landed total: price plus shipping/fees."
+    },
+    "price_override": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "phase": "appraisal",
+      "additionalProperties": false,
+      "required": [
+        "price",
+        "evidence"
+      ],
+      "properties": {
+        "price": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "evidence": {
+          "type": "string"
+        }
+      },
+      "description": "Evidence-backed correction of a crawl price the listing's own text contradicts. `price` is the seller's actual ask parsed from that text and `evidence` quotes it verbatim; both REQUIRED when the object is present, null when absent. Fixed-price asks only -- an auction hammer belongs to bidding, never to description prose. Applied deterministically by build_deal_record (_apply_price_override): static_price, price_basis and fee_breakdown.hammer move to the override before any landed cost or score is computed. Born 2026-08-24 from facebook|1024732190360342, where a $5 placeholder hid five sets priced $200 in the body yet scored 100 off the phantom $5."
+    },
+    "per_lb_price": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "phase": "appraisal",
+      "description": "Numeric dollars per pound."
+    },
+    "per_lb_price_basis": {
+      "type": "string",
+      "phase": "appraisal",
+      "description": "Basis for `per_lb_price`: `landed`, `before_shipping`, `before_tax`, `before_pickup_or_travel`, `estimated`, or `unknown`."
+    },
+    "listing_category": {
+      "type": "string",
+      "phase": "appraisal",
+      "description": "`bulk` (multi-pound loose LEGO lot), `set` (one or more complete sets, used or new), `minifigure` (a single minifigure or a lot of minifigures), or `excluded` (not a LEGO-piece listing at all: books, hardware/storage, displays, manuals only, or anything the classifier excluded -- always recorded as `status: rejected`, never active).",
+      "enum": [
+        "bulk",
+        "set",
+        "minifigure",
+        "excluded"
+      ]
+    },
+    "exclusion_reason": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "phase": "appraisal",
+      "description": "Why the classifier excluded this listing (books/hardware/non-brick item, partial set with no complete-set identity, etc.). Required non-empty whenever `listing_category` is `excluded`; null otherwise. Displayed in `notes` on the rejected record."
+    },
+    "figure_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "phase": "appraisal",
+      "description": "How many minifigures the listing contains. Stated count from the listing text first; otherwise an exact count read off the listing photos -- inspecting the images is MANDATORY for every minifigure candidate, so a null means text and photos both failed to yield a countable answer, never a skipped look. The minifigure pricing path multiplies the eBay $/fig comp average by this -- without it a minifigure lot cannot be priced and stays `profit_incomplete`. Provenance is `figure_count_source`.",
+      "minimum": 1
+    },
+    "figure_count_source": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "stated",
+        "photo_count",
+        "unknown",
+        null
+      ],
+      "phase": "appraisal",
+      "description": "How `figure_count` was determined on a minifigure lot: `stated` (the seller's own text), `photo_count` (counted off the listing images by the mandatory vision pass), or `unknown` (images were inspected but no exact count was determinable). Null on every non-minifigure category. Required whenever `figure_count` is a number."
+    },
+    "set_completeness": {
+      "type": "string",
+      "phase": "appraisal",
+      "description": "`complete`, `incomplete`, or `unknown` \u2014 decided by the Completeness Gate before any BrickLink pricing."
+    },
+    "set_condition": {
+      "type": "string",
+      "phase": "appraisal",
+      "description": "`N` (sealed/new) or `U` (used)."
+    },
+    "potential_profit": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "phase": "appraisal",
+      "description": "Net-of-fees resale less landed cost, set-category only."
+    },
+    "profit_incomplete": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "phase": "appraisal",
+      "description": "True when any detected set could not be priced, or completeness is not `complete`."
+    },
+    "used_avg_6mo": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "phase": "appraisal",
+      "description": "BrickLink used 6-month sold average."
+    },
+    "new_avg_6mo": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "phase": "appraisal",
+      "description": "BrickLink new 6-month sold average."
+    },
+    "ebay_avg_sold_price": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "phase": "appraisal",
+      "description": "eBay sold-listing average price from `legoscout pricing comps`/`ebay-comps`, set category only. On a SET record this lot-level SUM stays informational, same as `used_avg_6mo`/`new_avg_6mo` (BrickLink) -- the actual profit input is the per-set `set_analysis[].blended_avg_sold_price`, a comp-count-weighted average of BrickLink's selected-condition sold price and this same eBay number, computed by `legoscout_cli.ledger.build_record._apply_comps` (see `set_analysis[].comp_basis` for the derivation). On a BULK record this field is still never fed into `potential_profit` or the score -- bulk has no BrickLink comp to blend against."
+    },
+    "ebay_comp_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "phase": "appraisal",
+      "description": "How many eBay sold listings backed `ebay_avg_sold_price` after exact set-number-token matching and denylist exclusion."
+    },
+    "ebay_avg_price_per_lb": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "phase": "appraisal",
+      "description": "eBay sold $/lb average for a bulk lot, from `legoscout pricing comps --bulk`. Informational for bulk; not fed into `potential_profit`."
+    },
+    "ebay_avg_price_per_fig": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "phase": "appraisal",
+      "description": "eBay sold $/fig average for a minifigure lot, from `legoscout pricing comps --minifigure` (only listings whose titles state a figure count). `potential_profit` on a minifigure lot is this times `figure_count`."
+    },
+    "shipping_estimated": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "phase": "appraisal",
+      "description": "True when `shipping_estimate`/`fee_breakdown.shipping_handling` was computed rather than quoted by the source."
+    },
+    "confidence": {
+      "type": "string",
+      "phase": "appraisal",
+      "description": "`high`, `medium`, `low`, or `unknown` \u2014 capped at `medium` for a purely visual set ID."
+    },
+    "risks_unknowns": {
+      "type": "string",
+      "phase": "appraisal",
+      "description": "Evidence-backed risk note, or `unknown`."
+    },
+    "destination_zip_note": {
+      "type": "string",
+      "phase": "appraisal",
+      "description": "Note on how the destination ZIP 47725 was applied, when relevant."
+    },
+    "pickup_miles": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "phase": "appraisal",
+      "description": "Road-miles proxy from ZIP 47725, via `legoscout-pricing/scripts/pickup_area.py`. `null` when outside the 30-mile pickup set."
+    },
+    "zero_comp_note": {
+      "type": "string",
+      "phase": "appraisal",
+      "description": "Why a six-month sold average is missing, in the appraiser's own words: `no sold comps`, `no set # in listing`, `set # not in BrickLink`, or `used avg unavailable: unpriced` when only one condition is missing. `unknown` when nothing is missing. This is the ONLY home for that reason -- 51 rows kept it inside `used_avg_6mo`/`new_avg_6mo`, which are typed `number|null` and which no profit calculation could then read. `build_rows.mjs`'s `compValue` renders it in the comp cell and `serve_deals.py` renders it as the dagger tooltip."
+    },
+    "fee_breakdown": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "phase": "appraisal",
+      "description": "Hammer, premium, tax, and shipping/handling breakdown. `hammer` must equal the price named by `price_basis`, and is REQUIRED: `build_deal_record._resolve_shipping` rebuilds the landed total around it whenever the source quotes freight, and a missing one used to be read as a $0.00 item. TYPED, with the same rigor `shipping_estimate` carries. It was a bare `object` with no `properties` for its whole life, so an appraiser writing `premium_pct: \"18%\"` cleared build_deal_record AND `deals validate --strict` (`{\"checked\": 4, \"invalid\": 0}`) and then threw in legoscout_cli/display/rows.py with `unsupported format character '%'` -- which returns ZERO rows for the WHOLE ledger, so three clean deals were lost alongside the one poisoned row. `validate.py` already argues an illegal `listing_type` is an ERROR precisely because the page throws on anything else; this field had the identical consequence and no rule at all. Every numeric line is bounded as well as typed: `inf` and `NaN` are floats that pass a bare `number`, and a `maximum` is what rejects `inf` (`NaN` is caught separately by `schema._reject_non_finite`, since it fails no comparison). `additionalProperties: false` is what stops the NEXT invented spelling; the block below the canonical keys is the 26 that already reached the ledger before anything enforced one shape, kept only so the stored rows stay writable. They are LEGACY: nothing reads them, `fees.landed_cost` writes none of them, and a producer emitting one today is writing a fee nothing will price. Fold them into the canonical keys and delete them from here.",
+      "required": [
+        "hammer"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "hammer": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000000,
+          "description": "The price `price_basis` names. Required."
+        },
+        "premium_pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Buyer premium as a FRACTION (0.18), never a percent (18) and never a string ('18%'). rows.py renders it with `%.1f%%` and throws on anything that is not a number."
+        },
+        "premium_fixed": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "premium_amount": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "premium_is_default": {
+          "type": "boolean"
+        },
+        "buyer_protection_fee": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000000,
+          "description": "The numeric buyer fee published by the marketplace. Mercari calls this the Buyer Protection fee and exposes it in priceSummary."
+        },
+        "sales_tax_pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Sales tax as a FRACTION (0.07), same rule as premium_pct."
+        },
+        "sales_tax_amount": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "sales_tax_rule": {
+          "type": "string"
+        },
+        "sales_tax_is_default": {
+          "type": "boolean"
+        },
+        "tax_basis": {
+          "type": "string"
+        },
+        "shipping_handling": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1000000,
+          "description": "Freight plus handling, and the ONLY freight figure the deals page reads. `null` DECLARES it unknown, which is different from free."
+        },
+        "shipping_unknown": {
+          "type": "boolean"
+        },
+        "landed_is_floor": {
+          "type": "boolean"
+        },
+        "landed_total": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "fee_multiple": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 10000,
+          "description": "`landed_total / hammer`. `null` on a $0.00 hammer, where the ratio does not exist."
+        },
+        "confidence_note": {
+          "type": "string"
+        },
+        "premium": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "premium_source": {
+          "type": "string"
+        },
+        "premium_label": {
+          "type": "string"
+        },
+        "buyer_premium": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "buyer_premium_pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "buyer_premium_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "buyer_premium_is_source_default": {
+          "type": "boolean"
+        },
+        "tax": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "tax_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "sales_tax": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "sales_tax_basis": {
+          "type": "string"
+        },
+        "sales_tax_note": {
+          "type": "string"
+        },
+        "sales_tax_is_source_default": {
+          "type": "boolean"
+        },
+        "handling": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "handling_fee": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "shipping_known": {
+          "type": "boolean"
+        },
+        "shipping_estimated": {
+          "type": "boolean"
+        },
+        "shipping_is_estimated": {
+          "type": "boolean"
+        },
+        "shipping_source": {
+          "type": "string"
+        },
+        "shipping_basis": {
+          "type": "string"
+        },
+        "price_basis_used": {
+          "type": "string"
+        },
+        "house": {
+          "type": "string"
+        },
+        "auction_house": {
+          "type": "string"
+        },
+        "fee_note": {
+          "type": "string"
+        },
+        "fee_source": {
+          "type": "string"
+        },
+        "rate_source": {
+          "type": "string"
+        }
+      }
+    },
+    "set_numbers": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "phase": "appraisal",
+      "description": "Detected BrickLink set numbers, set-category only."
+    },
+    "set_analysis": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "object"
+      },
+      "phase": "appraisal",
+      "description": "One entry per detected set: BrickLink catalog metadata plus 6-month sold summaries, from `lookup_set_sales.py`. An ARRAY because `summarize_set()` returns exactly one per-set object and the appraiser calls it once per set; `null` when no set was priced, and never `[]`, which is the same answer spelled twice. It was typed `object|null` until 2026-08-05 while 331 rows already held the array, and the ledger carried four incompatible dict spellings beside it (a `sets` wrapper, keyed by set number, a bare per-set object, an unkeyed blob). Read and write it only through `legoscout-ledger/scripts/set_analysis.py` -- `normalize()`/`entries()`/`names()`. A lot-level value (`potential_profit_total`, `purchase_price`, `used_avg_6mo`, `set_numbers`) does NOT belong in an entry: it has its own column, and the wrapper copy had already gone stale on 7 rows."
+    },
+    "id": {
+      "type": "string",
+      "phase": "synthesis",
+      "description": "Same value as `listing_key`."
+    },
+    "status": {
+      "type": "string",
+      "phase": "synthesis",
+      "description": "Lifecycle/action state; see `legoscout-ledger` `output_contract.md`."
+    },
+    "last_status": {
+      "type": "string",
+      "phase": "synthesis",
+      "description": "Legacy/latest status mirror."
+    },
+    "first_seen_at": {
+      "type": "string",
+      "phase": "synthesis",
+      "description": "ISO-8601 timestamp when first recorded. Preserved across updates, never recomputed."
+    },
+    "last_seen_at": {
+      "type": "string",
+      "phase": "synthesis",
+      "description": "ISO-8601 timestamp when last verified or updated."
+    },
+    "score": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "phase": "synthesis",
+      "description": "Mirror of `scoring.score`, written by calling `score_deal.score_record()`."
+    },
+    "last_score": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "phase": "synthesis",
+      "description": "Legacy/latest score mirror."
+    },
+    "quality_score": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "phase": "synthesis",
+      "description": "Mirror of `scoring.quality`."
+    },
+    "max_price": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "phase": "synthesis",
+      "description": "Mirror of `scoring.max_price`."
+    },
+    "model_score": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "phase": "synthesis",
+      "description": "Mirror of `scoring.model_score`, the model's advisory verdict."
+    },
+    "last_price": {
+      "type": "string",
+      "phase": "synthesis",
+      "description": "Display-only human-readable price summary, derived from the numeric price fields \u2014 never the sole record of the price."
+    },
+    "notes": {
+      "type": "string",
+      "phase": "synthesis",
+      "description": "Evidence-backed rationale, risk note, or update note."
+    },
+    "prospect_id": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "phase": "synthesis",
+      "description": "Link to the prospect that produced this deal. NULL until phase 2."
+    },
+    "observations": {
+      "type": "object",
+      "phase": "synthesis",
+      "description": "`text_signals.scan()` output merged with the appraiser's `vision`/`description`/`model_score`, via `score_deal.build_observations()`. Only ONE key inside it is typed here, and deliberately so: `vision.weight_estimate_lbs` is the model-authored twin of `weight_lbs` and feeds the same $/lb divisor, so it carries the same bound. The rest of this object is `text_signals.scan()` output owned by legoscout_cli/scoring, and typing it from here would be a second, drifting copy of a contract that module already owns -- it belongs in scoring, next to the code that writes it. `additionalProperties` stays open for the same reason.",
+      "properties": {
+        "vision": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "weight_estimate_lbs": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 2000,
+              "anyOf": [
+                {
+                  "const": 0
+                },
+                {
+                  "minimum": 0.01
+                }
+              ],
+              "description": "Vision-estimated weight in pounds. Same bound as `weight_lbs`, because the scorer falls back to this divisor when the listing states no weight, and an absurd value here inflates the score exactly the same way."
+            }
+          }
+        }
+      }
+    },
+    "scoring": {
+      "type": "object",
+      "phase": "synthesis",
+      "description": "Output of `score_deal.score_record()`. The only place a scoring number may be written."
+    },
+    "verification": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "phase": "synthesis",
+      "description": "Legacy verification metadata; not part of the documented output contract."
+    }
+  },
+  "required": [
+    "listing_key",
+    "source",
+    "title",
+    "url",
+    "direct_url",
+    "posted_date",
+    "auction_start_date",
+    "auction_end_date",
+    "current_price",
+    "buy_now_price",
+    "static_price",
+    "price_basis",
+    "listing_type",
+    "weight_lbs",
+    "item_location",
+    "origin_zip",
+    "seller_id",
+    "seller_name",
+    "available_fulfillment",
+    "image_urls",
+    "shipping_estimate",
+    "winning_bid",
+    "cost_per_lb_note",
+    "handling_fee",
+    "estimated_total",
+    "per_lb_price",
+    "per_lb_price_basis",
+    "listing_category",
+    "set_completeness",
+    "set_condition",
+    "potential_profit",
+    "profit_incomplete",
+    "used_avg_6mo",
+    "new_avg_6mo",
+    "ebay_avg_sold_price",
+    "ebay_comp_count",
+    "ebay_avg_price_per_lb",
+    "shipping_estimated",
+    "confidence",
+    "risks_unknowns",
+    "destination_zip_note",
+    "pickup_miles",
+    "zero_comp_note",
+    "fee_breakdown",
+    "set_numbers",
+    "set_analysis",
+    "id",
+    "status",
+    "last_status",
+    "first_seen_at",
+    "last_seen_at",
+    "score",
+    "last_score",
+    "quality_score",
+    "max_price",
+    "model_score",
+    "last_price",
+    "notes",
+    "prospect_id",
+    "observations",
+    "scoring",
+    "verification"
+  ]
+}

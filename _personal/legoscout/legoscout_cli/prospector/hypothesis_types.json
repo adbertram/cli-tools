@@ -1,0 +1,71 @@
+{
+ "_doc": "Registered prospecting hypothesis types. Each type is ONE testable idea about where used-LEGO inventory can be sourced outside the listed marketplaces, either within 60 straight-line miles of ZIP 47725 for a local_pickup source or nationwide for a source that ships. Read via hypothesis_types.py -- never hardcode a type list. A prospects or prospect_runs row may only reference a type registered here; add an evidence-cited entry BEFORE exploring a new type. Every prospect run must add and explore at least 2 NEW types.",
+ "_field_values": {
+  "description": "What the type IS: the concrete population of inventory holders it names. A local type is scoped to the 60-mile prospecting area; a national type instead names a population that ships nationwide. One idea, stated so a run can go look for it.",
+  "rationale": "Why this population should hold used LEGO that legoscout-sources does not already reach. This is the buying thesis, not a restatement of the description.",
+  "evidence": "A URL that was opened live and confirmed to serve the described population for the Evansville IN area, OR a string starting `unverified -- ` that states the conservative position when no URL could be confirmed.",
+  "verified_at": "ISO date the evidence URL was opened and confirmed. null when the evidence string is the `unverified -- ` form."
+ },
+ "types": {
+  "estate_sale_companies": {
+   "description": "Estate sale companies operating within 60 miles of 47725 that clear households with toy/LEGO lots, reachable before or outside their public listings.",
+   "rationale": "Liquidators price bulk toys to clear them; a standing ask to call when LEGO shows up beats waiting for a public listing.",
+   "evidence": "https://www.estatesales.net/companies/IN/Evansville",
+   "verified_at": "2026-08-01"
+  },
+  "storage_unit_auctions": {
+   "description": "Self-storage facilities and storage-auction platforms running lien auctions of abandoned units within 60 miles of 47725; family units frequently contain toy bins.",
+   "rationale": "Unit auctions sell sight-mostly-unseen at deep discounts and are not covered by any legoscout-sources marketplace.",
+   "evidence": "https://www.lockerfox.com/storage-auctions/us/indiana/evansville/",
+   "verified_at": "2026-08-01"
+  },
+  "kids_resale_stores": {
+   "description": "Brick-and-mortar kids resale and consignment STORES within 60 miles of 47725 that buy used toys over the counter from the public every day, so LEGO reaches their back room before it reaches any marketplace.",
+   "rationale": "These stores pay cash on the spot for whatever walks in and price the floor to move it; a standing ask to call when a bulk LEGO tub arrives puts Adam ahead of their own sales floor, and none of that inventory is listed on a legoscout-sources marketplace.",
+   "evidence": "https://onceuponachild.com/locations/evansville-in/",
+   "verified_at": "2026-08-02"
+  },
+  "childrens_consignment_sales": {
+   "description": "Seasonal pop-up children's consignment SALE EVENTS within 60 miles of 47725 that gather hundreds of local families' toy lots into one venue for a few days and end with a half-price day and consignor pick-up.",
+   "rationale": "Hundreds of households liquidate toys in one room, the last day is half price, and unsold LEGO has to leave the venue that afternoon; none of it appears on a legoscout-sources marketplace.",
+   "evidence": "https://www.pigtailsandcowlicks.com/evansville-sale",
+   "verified_at": "2026-08-02"
+  },
+  "flea_markets_and_vendor_malls": {
+   "description": "Indoor flea markets and permanent vendor malls within 60 miles of 47725 whose booth holders resell household clear-out toys, including bulk LEGO tubs priced by the container.",
+   "rationale": "Booth holders buy whole households and price toys to clear booth rent rather than to match comps; their stock never reaches an online marketplace, and the mall office can say which booths carry toys.",
+   "evidence": "https://www.flea-markets.org/evansville/",
+   "verified_at": "2026-08-02"
+  },
+  "national_restore_and_thrift_chains": {
+   "description": "Nonprofit ReStore / thrift-chain operations (e.g. Habitat for Humanity ReStores) that run their own online storefront and ship product nationwide, rather than being scoped to the 60-mile local area.",
+   "rationale": "These nonprofits receive a steady stream of donated household and toy lots and sell the overflow through their own e-commerce shop; a standing recurring-buyer relationship reaches LEGO before it is priced piece-by-piece or discarded, and none of it is listed on a legoscout-sources marketplace.",
+   "evidence": "https://www.shopmorrisrestore.com/",
+   "verified_at": "2026-08-02"
+  },
+  "pawn_shops": {
+   "description": "Pawn shops operating within 60 miles of 47725 that take in collectibles, electronics, and toys, and may accept bulk LEGO or large boxed sets.",
+   "rationale": "Pawn shops offer immediate cash for items of value. LEGO is highly liquid and holds value well. Unlisted bulk or sets could sit on shelves, avoiding online marketplaces.",
+   "evidence": "https://rcpawn.com/",
+   "verified_at": "2026-08-03"
+  },
+  "independent_toy_stores": {
+   "description": "Independent local toy stores and hobby shops within 60 miles of 47725 that occasionally buy used LEGO from local customers for resale or store displays.",
+   "rationale": "Independent stores have the flexibility to buy used inventory directly from their local customer base over the counter, bypassing online legoscout-sources marketplaces.",
+   "evidence": "https://toystotreasurestore.com",
+   "verified_at": "2026-08-03"
+  },
+  "bulk_lego_by_the_pound_sellers": {
+   "description": "Dedicated used-LEGO bulk retailers running their OWN e-commerce storefront that sells washed, pre-owned LEGO by the pound and ships nationwide, plus any walk-in retail floor they operate.",
+   "rationale": "These operators buy whole household LEGO collections in bulk, keep the sortable parts, and move the unsorted remainder by weight through their own Shopify-style store rather than a legoscout-sources marketplace. A standing wholesale ask reaches that unsorted remainder at per-pound cost, and their per-pound price is a live, citable floor for bulk economics.",
+   "evidence": "https://bamgoodbricks.com/collections/lego-bulk",
+   "verified_at": "2026-08-06"
+  },
+  "junk_removal_and_cleanout_services": {
+   "description": "Junk removal, estate cleanout, and garage/hoarder cleanout haulers operating within 60 miles of 47725 that empty whole households and haul the contents away in their own trucks.",
+   "rationale": "A hauler is paid by the customer to make the contents disappear, so every toy tub they load is free stock they must otherwise pay a tipping fee to dump. They reach the household BEFORE any estate-sale or resale channel does, they never list what they haul on a legoscout-sources marketplace, and a standing call-me-first ask costs them nothing and saves them disposal weight.",
+   "evidence": "https://unclesamjunkremoval.com/locations/evansville",
+   "verified_at": "2026-08-06"
+  }
+ }
+}
