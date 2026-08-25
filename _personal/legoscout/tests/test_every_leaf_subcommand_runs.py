@@ -153,7 +153,12 @@ def ids(ledger):
     conn = registry._connect(ledger)
     try:
         note = conn.execute(
-            "SELECT id, namespace FROM source_notes ORDER BY id LIMIT 1").fetchone()
+            "SELECT id, namespace FROM source_notes "
+            "WHERE id IS NOT NULL ORDER BY id LIMIT 1").fetchone()
+        if note is None:
+            raise RuntimeError(
+                "source_notes has no row with a non-null id -- the leaf-command "
+                "smoke test needs one real note id to invoke `sources notes get`")
         prospect = conn.execute(
             "SELECT prospect_id FROM prospects ORDER BY prospect_id LIMIT 1").fetchone()
         contact = conn.execute(

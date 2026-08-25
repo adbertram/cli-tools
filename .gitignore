@@ -162,4 +162,6 @@ untitled
 # Never let any later rule hide the shape-only example env files.
 !.env.example
 !**/.env.example
+
+# Fetched catalog PNGs (runtime artifacts of set-identification runs)
 cat_*.png
