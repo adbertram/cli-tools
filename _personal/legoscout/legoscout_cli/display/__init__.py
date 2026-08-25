@@ -1,0 +1,2 @@
+"""LegoScout display.
+"""

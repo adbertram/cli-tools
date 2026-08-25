@@ -1,0 +1,39 @@
+{
+ "_doc": "Filter and category rules for `legoscout triage`. DATA, not code: triage.py is the engine that loads this once, applies the filter, and tags the first matching category. Lifted verbatim from the three retired root scripts (categorize.py, filter_items.py, process_candidates.py).",
+ "min_price_default": 15.0,
+ "bad_words": [
+  "dvd",
+  "wii",
+  "xbox",
+  "ps4",
+  "polybag",
+  "plate",
+  "brickheadz",
+  "book",
+  "stands",
+  "manual",
+  "display",
+  "sticker"
+ ],
+ "bad_word_exceptions": {},
+ "categories": [
+  {
+   "name": "set",
+   "_doc": "Checked FIRST: a four- or five-digit run in the title is a set number, and that beats the bulk keywords a set listing may also carry.",
+   "regexes": ["\\b\\d{4,5}\\b"],
+   "keywords": ["set", "sealed", "nib"]
+  },
+  {
+   "name": "minifigure",
+   "_doc": "A single minifigure or a lot of minifigures. The classifier re-tags every candidate authoritatively; this is the crawl-side pre-filter tag.",
+   "regexes": [],
+   "keywords": ["minifigure", "minifigures", "minifigs", "minifig"]
+  },
+  {
+   "name": "bulk",
+   "regexes": [],
+   "keywords": ["bulk", "lot", "lbs", "pound", "kg"]
+  }
+ ],
+ "default_category": "other"
+}
