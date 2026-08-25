@@ -1,6 +1,6 @@
 """Main entry point for the LegoScout CLI.
 
-Seven groups plus `triage`. Every `list` carries `--table/-t`, `--filter/-f`,
+Nine command groups plus `triage`. Every `list` carries `--table/-t`, `--filter/-f`,
 `--limit/-l` and `--properties/-p`; every `get` carries `--table/-t`.
 """
 
@@ -13,7 +13,7 @@ import typer
 from cli_tools_shared.output import command
 
 from . import delegate
-from .commands import deals, deploy, display, pricing, prospects, score, sellers, sources
+from .commands import deals, deploy, display, minifig, pricing, prospects, score, sellers, sources
 from .sources import triage as triage_module
 
 app = create_app(
@@ -29,6 +29,7 @@ app.add_typer(deals.app, name="deals")
 app.add_typer(sellers.app, name="sellers")
 app.add_typer(prospects.app, name="prospects")
 app.add_typer(pricing.app, name="pricing")
+app.add_typer(minifig.app, name="minifig")
 app.add_typer(score.app, name="score")
 app.add_typer(display.app, name="display")
 app.add_typer(deploy.app, name="deploy")

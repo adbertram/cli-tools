@@ -248,12 +248,14 @@ def files(tmp_path_factory, ledger):
            "notes": "written by the leaf-subcommand smoke test"}
     written = {}
     for name, payload in (("candidate", candidate), ("appraisal", appraisal),
-                          ("triage", []), ("prospect", prospect),
+                          ("triage", []), ("minifig_input", []),
+                          ("prospect", prospect),
                           ("contact", contact), ("run", run),
                           ("entry", {ADDED_SOURCE: _source_entry(ADDED_SOURCE)})):
         path = root / ("%s.json" % name)
         path.write_text(json.dumps(payload), encoding="utf-8")
         written[name] = str(path)
+    written["minifig_output"] = str(root / "minifig_output.json")
     manifest_dir = root / "run-manifest"
     manifest_dir.mkdir()
     for namespace in registry.active_namespaces():
@@ -402,6 +404,11 @@ def cases(ids, files):
         ("pricing", "profit"): _case(
             ["--avg-price", "100", "--price-detail-count", "5",
              "--estimated-total", "50", "--fee-rate", "0.13"]),
+
+        ("minifig", "detect"): _case([
+            "--input", files["minifig_input"],
+            "--output", files["minifig_output"],
+        ]),
 
         ("score", "deal"): _case([ids["listing_key"]]),
         ("score", "rescore"): _case(["--dry-run", "--limit", "5"]),
