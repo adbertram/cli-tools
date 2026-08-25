@@ -121,6 +121,23 @@ def test_set_candidate_without_set_numbers_is_blocked_not_failed(fake_comps):
     assert fake_comps == []
 
 
+def test_minifigure_candidate_is_not_dispatched_by_comps_batch(fake_comps):
+    result = comps_batch.price_one({
+        "listing_key": "k-mf",
+        "listing_category": "minifigure",
+        "description": "star wars lot",
+    }, limit=50)
+    assert result == {
+        "listing_key": "k-mf",
+        "mode": "minifigure",
+        "blocked": True,
+        "blocker": (
+            "minifigure pricing moved to legoscout minifig detect|identify|price"
+        ),
+    }
+    assert fake_comps == []
+
+
 def test_unknown_listing_category_is_never_guessed(fake_comps):
     result = comps_batch.price_one(
         {"listing_key": "k4", "listing_category": "minifig"}, limit=50)

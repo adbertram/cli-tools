@@ -6,6 +6,7 @@ import json
 import math
 from pathlib import Path
 
+from ..ledger import minifig_analysis
 from ..sources import registry
 
 
@@ -141,16 +142,7 @@ def validate_comps_result(
                 "auth lapse still reports ebay: {\"available\": false, ...})"
                 % (label, ", ".join(missing)))
         return
-    if mode == "minifigure":
-        missing = [name for name in ("bricklink", "ebay") if name not in record]
-        if missing:
-            raise AppraisalBatchKeyError(
-                "%s is missing %s -- a minifigure comps result always carries "
-                "both keys, even when one is null (minifigure lots have no "
-                "bricklink price guide; an eBay auth lapse still reports "
-                "ebay: {\"available\": false, ...})"
-                % (label, ", ".join(missing)))
-        return
+
     if mode == "set":
         sets = record.get("sets")
         if not isinstance(sets, list) or not sets:
@@ -180,13 +172,125 @@ def validate_comps_result(
                 % (label, ", ".join(set_no_duplicates)))
         return
     raise AppraisalBatchKeyError(
-        "%s has mode %r -- must be 'set', 'bulk', 'minifigure', or a blocked "
+        "%s has mode %r -- must be 'set', 'bulk', or a blocked "
         "record" % (label, mode))
+
+
+def validate_identification_result(
+    record: dict,
+    label: str = "identification result",
+) -> None:
+    if not isinstance(record, dict):
+        raise AppraisalBatchKeyError(
+            f"{label} must be an object, got {type(record).__name__}")
+    key = record.get("listing_key")
+    if not isinstance(key, str) or not key:
+        raise AppraisalBatchKeyError(f"{label} has no non-empty listing_key")
+    if record.get("blocked") is True:
+        blocker = record.get("blocker")
+        if not isinstance(blocker, str) or not blocker.strip():
+            raise AppraisalBatchKeyError(
+                f"{label} is blocked but has no non-empty blocker")
+        if record.get("minifig_analysis") is not None:
+            raise AppraisalBatchKeyError(
+                f"{label} is blocked but carries minifig_analysis")
+        return
+    analysis = record.get("minifig_analysis")
+    if not isinstance(analysis, list) or not analysis:
+        raise AppraisalBatchKeyError(
+            f"{label} minifig_analysis must be a non-empty array")
+    try:
+        normalized = [minifig_analysis.normalize_entry(entry)
+                      for entry in analysis]
+    except minifig_analysis.Unreadable as exc:
+        raise AppraisalBatchKeyError(f"{label} minifig_analysis: {exc}") from exc
+    errors = [
+        f"entry {index}: {error}"
+        for index, entry in enumerate(normalized)
+        for error in minifig_analysis.entry_errors(entry)
+    ] + minifig_analysis.batch_errors(normalized)
+    if errors:
+        raise AppraisalBatchKeyError(
+            f"{label} minifig_analysis invalid: {'; '.join(errors)}")
+    expected = {
+        "figure_count": minifig_analysis.figure_count(normalized),
+        "figure_count_source": "detection",
+        "identified_count": minifig_analysis.identified_count(normalized),
+        "unknown_count": minifig_analysis.unknown_count(normalized),
+        "priced_subtotal": minifig_analysis.round_cents(
+            minifig_analysis.priced_subtotal(normalized)),
+        "sold_count": minifig_analysis.sold_count(normalized),
+    }
+    for field, value in expected.items():
+        if record.get(field) != value:
+            raise AppraisalBatchKeyError(
+                f"{label} {field}={record.get(field)!r} does not equal "
+                f"canonical {value!r}")
+    reason = record.get("reason")
+    if reason is not None and (not isinstance(reason, str) or not reason.strip()):
+        raise AppraisalBatchKeyError(
+            f"{label} reason must be a non-empty string or null")
+    failed_groups = record.get("failed_groups", [])
+    if not isinstance(failed_groups, list):
+        raise AppraisalBatchKeyError(f"{label} failed_groups must be an array")
+    complete = (expected["unknown_count"] == 0
+                and reason is None
+                and not failed_groups
+                and all(
+                    entry.get("quantity") == 0
+                    or (entry.get("unit_value") is not None
+                        and not entry.get("errors"))
+                    for entry in normalized))
+    if record.get("pricing_complete") is not complete:
+        raise AppraisalBatchKeyError(
+            f"{label} pricing_complete does not match canonical completeness")
+
+
+def validate_identification_batch(
+    source_candidates: list[dict],
+    appraisal_results: list[dict],
+    identification_results: list[dict],
+) -> dict[str, dict]:
+    _require_list(source_candidates, "source candidates")
+    _require_list(appraisal_results, "appraisal results")
+    _require_list(identification_results, "identification results")
+    candidate_keys = _listing_keys(source_candidates, "source candidate")
+    appraisal_keys = _listing_keys(appraisal_results, "appraisal result")
+    if set(candidate_keys) != set(appraisal_keys):
+        raise AppraisalBatchKeyError(
+            "appraisal keys must be validated before identification coverage")
+    appraisals = {row["listing_key"]: row for row in appraisal_results}
+    expected_keys = [
+        key for key in candidate_keys
+        if appraisals[key].get("listing_category") == "minifigure"
+    ]
+    expected = set(expected_keys)
+    keys = _listing_keys(identification_results, "identification result")
+    duplicates = _duplicates(keys)
+    missing = sorted(expected - set(keys))
+    extra = sorted(set(keys) - expected)
+    problems = []
+    if duplicates:
+        problems.append(
+            "duplicate identification result keys: " + ", ".join(duplicates))
+    if missing:
+        problems.append("missing identification results: " + ", ".join(missing))
+    if extra:
+        problems.append("extra identification results: " + ", ".join(extra))
+    if not duplicates and not missing and not extra and keys != expected_keys:
+        problems.append(
+            "identification result order must match classifier minifigure "
+            f"subset order: expected {expected_keys!r}, got {keys!r}")
+    if problems:
+        raise AppraisalBatchKeyError(
+            "identification batch key mismatch: " + "; ".join(problems))
+    return {row["listing_key"]: row for row in identification_results}
 
 
 def validate_comps_batch(
     source_candidates: list[dict],
     comps_results: list[dict],
+    appraisal_results: list[dict] | None = None,
 ) -> dict[str, dict]:
     """Return comps results by key after the same exact-key check as appraisals.
 
@@ -207,6 +311,13 @@ def validate_comps_batch(
     candidate_duplicates = _duplicates(candidate_keys)
     comps_duplicates = _duplicates(comps_keys)
     candidate_set = set(candidate_keys)
+    if appraisal_results is not None:
+        _require_list(appraisal_results, "appraisal results")
+        appraisals = {row["listing_key"]: row for row in appraisal_results}
+        candidate_set = {
+            key for key in candidate_keys
+            if appraisals[key].get("listing_category") != "minifigure"
+        }
     comps_set = set(comps_keys)
     missing = sorted(candidate_set - comps_set)
     extra = sorted(comps_set - candidate_set)
@@ -335,6 +446,7 @@ def synthesis_coverage(
     appraisal_results: list[dict],
     comps_results: list[dict] | None = None,
     fee_rate: float | None = None,
+    identification_results: list[dict] | None = None,
 ) -> dict:
     """Prove exact keys and build every candidate/appraisal(/comps) pair.
 
@@ -356,10 +468,24 @@ def synthesis_coverage(
     if not report["complete"]:
         return report
 
+    appraisals = {row["listing_key"]: row for row in appraisal_results}
+    try:
+        identification_by_key = validate_identification_batch(
+            source_candidates,
+            appraisal_results,
+            identification_results if identification_results is not None else [],
+        )
+    except AppraisalBatchKeyError as exc:
+        report["complete"] = False
+        report["error"] = str(exc)
+        return report
+    report["identification_count"] = len(identification_by_key)
+
     comps_by_key = None
     if comps_results is not None:
         try:
-            comps_by_key = validate_comps_batch(source_candidates, comps_results)
+            comps_by_key = validate_comps_batch(
+                source_candidates, comps_results, appraisal_results)
         except AppraisalBatchKeyError as exc:
             report["complete"] = False
             report["error"] = str(exc)
@@ -367,13 +493,13 @@ def synthesis_coverage(
 
     from ..ledger import build_record
 
-    appraisals = {row["listing_key"]: row for row in appraisal_results}
     built = 0
     gate_rejected = 0
     errors = []
     for candidate in source_candidates:
         key = candidate["listing_key"]
         comps = comps_by_key.get(key) if comps_by_key is not None else None
+        identification = identification_by_key.get(key)
 
         def _build(status: str):
             return build_record.build_deal_record(
@@ -383,11 +509,15 @@ def synthesis_coverage(
                 last_seen_at=SYNTHESIS_VALIDATION_TIMESTAMP,
                 favorite_sellers=set(),
                 comps=comps,
+                identification=identification,
                 fee_rate=fee_rate,
                 status=status,
             )
 
         try:
+            if identification is not None:
+                validate_identification_result(
+                    identification, "identification result for %r" % key)
             if comps is not None:
                 validate_comps_result(
                     comps, "comps result for %r" % key,
@@ -461,6 +591,12 @@ def build_run_manifest(run_dir: str, active_sources: list[str] | None = None) ->
     root = Path(run_dir).expanduser().resolve()
     planned = sorted(set(active_sources if active_sources is not None
                          else registry.active_namespaces()))
+    all_identification_paths = sorted(root.glob("*.identify-*.json"))
+    orphan_identification_artifacts = [
+        str(path) for path in all_identification_paths
+        if not any(path.name.startswith(source + ".identify-")
+                   for source in planned)
+    ]
     sources = []
     for source in planned:
         source_path = root / (source + ".json")
@@ -529,6 +665,18 @@ def build_run_manifest(run_dir: str, active_sources: list[str] | None = None) ->
             else:
                 comps_files[number] = path
 
+        identification_files = {}
+        for path in sorted(root.glob("%s.identify-*.json" % source)):
+            number = _batch_number(path, source, "identify")
+            if number is None:
+                problems.append(
+                    "invalid identification artifact name: %s" % path.name)
+            elif number in identification_files:
+                problems.append(
+                    "duplicate identification batch number: %d" % number)
+            else:
+                identification_files[number] = path
+
         expected_batches = ((len(candidates) + BATCH_SIZE - 1) // BATCH_SIZE
                             if not problems or candidates else 0)
         batch_reports = []
@@ -536,15 +684,19 @@ def build_run_manifest(run_dir: str, active_sources: list[str] | None = None) ->
             expected = candidates[(number - 1) * BATCH_SIZE:number * BATCH_SIZE]
             path = batch_files.get(number)
             comps_path = comps_files.get(number)
+            identification_path = identification_files.get(number)
             if path is None:
                 report = {
                     "batch": number,
                     "artifact": str(root / ("%s.appraisal-%d.json" % (source, number))),
                     "comps_artifact": str(comps_path) if comps_path else None,
+                    "identification_artifact": (
+                        str(identification_path) if identification_path else None),
                     "complete": False,
                     "candidate_count": len(expected),
                     "appraisal_count": None,
                     "comps_count": None,
+                    "identification_count": None,
                     "listing_keys": [],
                     "error": "appraisal artifact is missing",
                 }
@@ -552,19 +704,45 @@ def build_run_manifest(run_dir: str, active_sources: list[str] | None = None) ->
                 try:
                     results = _read_json(path)
                     comps_results = _read_json(comps_path) if comps_path is not None else None
+                    needs_identification = (
+                        isinstance(results, list)
+                        and any(isinstance(row, dict)
+                                and row.get("listing_category") == "minifigure"
+                                for row in results)
+                    )
+                    if needs_identification and identification_path is None:
+                        raise ValueError("identification artifact is missing")
+                    identification_results = (
+                        _read_json(identification_path)
+                        if identification_path is not None else None)
                     report = dict(
-                        synthesis_coverage(expected, results, comps_results),
+                        synthesis_coverage(
+                            expected,
+                            results,
+                            comps_results,
+                            identification_results=identification_results,
+                        ),
                         batch=number, artifact=str(path),
                         comps_artifact=str(comps_path) if comps_path else None,
+                        identification_artifact=(
+                            str(identification_path)
+                            if identification_path else None),
                         comps_count=(len(comps_results)
-                                    if isinstance(comps_results, list) else None))
+                                    if isinstance(comps_results, list) else None),
+                        identification_count=(
+                            len(identification_results)
+                            if isinstance(identification_results, list) else None),
+                    )
                 except ValueError as exc:
                     report = {
                         "batch": number, "artifact": str(path),
                         "comps_artifact": str(comps_path) if comps_path else None,
+                        "identification_artifact": (
+                            str(identification_path)
+                            if identification_path else None),
                         "complete": False,
                         "candidate_count": len(expected), "appraisal_count": None,
-                        "comps_count": None,
+                        "comps_count": None, "identification_count": None,
                         "listing_keys": [], "error": str(exc),
                     }
             if not report["complete"]:
@@ -579,6 +757,11 @@ def build_run_manifest(run_dir: str, active_sources: list[str] | None = None) ->
         if extra_comps_batches:
             problems.append("unexpected comps batches: %s"
                             % ", ".join(map(str, extra_comps_batches)))
+        extra_identification_batches = sorted(
+            set(identification_files) - set(range(1, expected_batches + 1)))
+        if extra_identification_batches:
+            problems.append("unexpected identification batches: %s"
+                            % ", ".join(map(str, extra_identification_batches)))
 
         terminal = source_status in ("checked", "blocked")
         coverage_complete = not problems and len(batch_reports) == expected_batches
@@ -601,7 +784,10 @@ def build_run_manifest(run_dir: str, active_sources: list[str] | None = None) ->
         "terminal_source_count": sum(item["terminal"] for item in sources),
         "coverage_complete_source_count": sum(
             item["coverage_complete"] for item in sources),
-        "complete": all(item["terminal"] and item["coverage_complete"]
-                        for item in sources),
+        "orphan_identification_artifacts": orphan_identification_artifacts,
+        "complete": (
+            not orphan_identification_artifacts
+            and all(item["terminal"] and item["coverage_complete"]
+                    for item in sources)),
         "sources": sources,
     }

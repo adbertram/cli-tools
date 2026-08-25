@@ -7,7 +7,10 @@ building, scoring, and validation -- and an `excluded` tag must always build as
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
+from typer.testing import CliRunner
 
 from legoscout_cli.ledger import build_record
 from legoscout_cli.ledger import db as ledger_db
@@ -19,62 +22,60 @@ from legoscout_cli.orchestrator import (
 )
 from legoscout_cli.pricing import comps, comps_batch, ebay_comps
 from legoscout_cli.scoring import score
+from legoscout_cli.main import app
 
 
 # ---------------------------------------------------------------------------
-# eBay minifigure comps
+# Minifigure eBay $/fig retirement
 # ---------------------------------------------------------------------------
 
 
-def test_minifig_count_parses_stated_forms():
-    assert ebay_comps._minifig_count("LEGO Star Wars Minifigure Lot of 20") == 20
-    assert ebay_comps._minifig_count("20x Minifigs Lego Lot") == 20
-    assert ebay_comps._minifig_count("25 Minifigures Bundle") == 25
-    assert ebay_comps._minifig_count("Boba Fett minifigure sw0711") == 1
-    assert ebay_comps._minifig_count("LEGO minifigure lot") is None
-    assert ebay_comps._minifig_count("lego minifigure set") is None
+def test_pricing_comps_rejects_minifigure_option_and_help_omits_it():
+    runner = CliRunner()
+    rejected = runner.invoke(app, ["pricing", "comps", "--minifigure"])
+    assert rejected.exit_code == 2
+    assert "No such option" in rejected.output
+    help_result = runner.invoke(app, ["pricing", "comps", "--help"])
+    assert help_result.exit_code == 0
+    assert "minifigure" not in help_result.stdout.lower()
 
 
-def test_search_minifigure_comps_prices_per_figure(monkeypatch):
-    raw = [
-        {"title": "LEGO Star Wars Minifigure Lot of 10", "price": "$50.00",
-         "item_id": "1", "url": "http://x/1"},
-        {"title": "LEGO 5 Minifigs", "price": "$20.00", "item_id": "2",
-         "url": "http://x/2"},
-        {"title": "LEGO minifigure lot", "price": "$30.00", "item_id": "3",
-         "url": "http://x/3"},  # no stated count: excluded
+def test_pricing_modules_expose_no_executable_minifigure_dispatch():
+    assert not hasattr(ebay_comps, "search_minifigure_comps")
+    assert not hasattr(ebay_comps, "_minifig_count")
+    assert not hasattr(comps, "minifigure_comps")
+    assert not hasattr(comps_batch.comps_module, "minifigure_comps")
+    blocked = comps_batch.price_one({
+        "listing_key": "ebay|1",
+        "listing_category": "minifigure",
+        "description": "star wars",
+    }, limit=50)
+    assert blocked["blocked"] is True
+    assert "legoscout minifig" in blocked["blocker"]
+
+
+def test_no_new_path_ebay_per_figure_execution_surface_remains():
+    package = Path(comps.__file__).parents[1]
+    paths = [
+        package / "pricing" / "ebay_comps.py",
+        package / "pricing" / "comps.py",
+        package / "pricing" / "comps_batch.py",
+        package / "commands" / "pricing.py",
+        package / "ledger" / "build_record.py",
+        package / "scoring" / "score.py",
     ]
-
-    result = ebay_comps.search_minifigure_comps("star wars", runner=lambda args: raw)
-
-    assert result["available"] is True
-    assert result["matched_count"] == 2
-    assert result["excluded_reasons"] == ["no parseable figure count"]
-    # $5.00/fig and $4.00/fig -> $4.50/fig
-    assert result["avg_price_per_fig"] == 4.5
-
-
-def test_search_minifigure_comps_unavailable_on_auth_lapse(monkeypatch):
-    def raise_auth(args):
-        raise ebay_comps.LookupFailed("ebay browser session not authenticated")
-
-    result = ebay_comps.search_minifigure_comps("star wars", runner=raise_auth)
-
-    assert result["available"] is False
-    assert result["reason"] == "ebay_auth_required"
-    assert result["avg_price_per_fig"] is None
-
-
-def test_minifigure_comps_mode_shape(monkeypatch):
-    monkeypatch.setattr(ebay_comps, "search_minifigure_comps",
-                        lambda description, limit=50:
-                        {"available": True, "avg_price_per_fig": 3.0})
-
-    result = comps.minifigure_comps("star wars lot")
-
-    assert result["mode"] == "minifigure"
-    assert result["bricklink"] is None
-    assert result["ebay"]["avg_price_per_fig"] == 3.0
+    forbidden = (
+        "search_minifigure_comps",
+        "_minifig_count",
+        "minifigure_comps",
+        "_apply_minifigure_comps",
+        "avg_price_per_fig",
+        "ebay_avg_price_per_fig",
+        "--minifigure",
+    )
+    for path in paths:
+        text = path.read_text(encoding="utf-8")
+        assert not any(token in text for token in forbidden), path
 
 
 def test_excluded_comps_is_a_blocked_result():
@@ -88,28 +89,6 @@ def test_excluded_comps_is_a_blocked_result():
 # ---------------------------------------------------------------------------
 # Batch dispatch
 # ---------------------------------------------------------------------------
-
-
-def test_price_one_dispatches_minifigure(monkeypatch):
-    monkeypatch.setattr(comps_batch.comps_module, "minifigure_comps",
-                        lambda description, limit=50:
-                        {"mode": "minifigure", "bricklink": None,
-                         "ebay": {"available": True}})
-
-    result = comps_batch.price_one(
-        {"listing_key": "ebay|1", "listing_category": "minifigure",
-         "description": "star wars"}, limit=50)
-
-    assert result["mode"] == "minifigure"
-    assert result["listing_key"] == "ebay|1"
-
-
-def test_price_one_minifigure_requires_description():
-    result = comps_batch.price_one(
-        {"listing_key": "ebay|1", "listing_category": "minifigure"}, limit=50)
-
-    assert result["blocked"] is True
-    assert "description" in result["blocker"]
 
 
 def test_price_one_dispatches_excluded_with_reason():
@@ -134,18 +113,12 @@ def test_price_one_excluded_without_reason_is_blocked_with_that_defect():
 # ---------------------------------------------------------------------------
 
 
-def test_validate_comps_result_accepts_minifigure_mode():
-    validate_comps_result(
-        {"listing_key": "ebay|1", "mode": "minifigure",
-         "bricklink": None, "ebay": {"available": True, "avg_price_per_fig": 4.0}},
-        "minifigure result")
-
-
-def test_validate_comps_result_rejects_minifigure_without_both_keys():
-    with pytest.raises(Exception, match="missing bricklink"):
+def test_validate_comps_result_rejects_retired_minifigure_mode():
+    with pytest.raises(Exception, match="must be 'set', 'bulk'"):
         validate_comps_result(
-            {"listing_key": "ebay|1", "mode": "minifigure", "ebay": {}},
-            "minifigure result")
+            {"listing_key": "ebay|1", "mode": "minifigure",
+             "bricklink": None, "ebay": {"available": True}},
+            "retired minifigure result")
 
 
 def test_validate_comps_result_blocked_excluded_is_exempt_from_mode_check():
@@ -238,84 +211,9 @@ def test_build_excluded_record_as_rejected_carries_reason():
     assert record["score"] is None
 
 
-def test_build_minifigure_record_prices_profit():
-    comps_result = {
-        "listing_key": "ebay|1", "mode": "minifigure", "bricklink": None,
-        "ebay": {"available": True, "avg_price_per_fig": 5.0,
-                 "avg_sold_price": 100.0, "matched_count": 8},
-    }
-    record = build_record.build_deal_record(
-        _candidate(),
-        _appraisal("minifigure", figure_count=20,
-                   figure_count_source="stated"),
-        first_seen_at="2026-08-01T00:00:00Z",
-        last_seen_at="2026-08-01T00:00:00Z",
-        comps=comps_result, fee_rate=0.13,
-        status="active")
-
-    # resale = 20 figs x $5 = $100; profit = 100*(1-0.13) - 40 = 47.0
-    assert record["potential_profit"] == 47.0
-    assert record["ebay_avg_price_per_fig"] == 5.0
-    assert record["figure_count_source"] == "stated"
-    assert record["scoring"]["category"] == "minifigure"
-    assert record["score"] is not None
-
-
-def test_build_minifigure_record_rejects_a_count_without_provenance():
-    """A bare figure_count is exactly how an invented number reaches the money.
-
-    `figure_count` without `figure_count_source` violates the ledger contract
-    and the build refuses to persist it.
-    """
-    comps_result = {
-        "listing_key": "ebay|1", "mode": "minifigure", "bricklink": None,
-        "ebay": {"available": True, "avg_price_per_fig": 5.0,
-                 "avg_sold_price": 100.0, "matched_count": 8},
-    }
-    with pytest.raises(ValueError, match="figure_count_source"):
-        build_record.build_deal_record(
-            _candidate(), _appraisal("minifigure", figure_count=20),
-            first_seen_at="2026-08-01T00:00:00Z",
-            last_seen_at="2026-08-01T00:00:00Z",
-            comps=comps_result, fee_rate=0.13,
-            status="active")
-
-
-def test_build_minifigure_record_without_figure_count_stays_unpriced():
-    comps_result = {
-        "listing_key": "ebay|1", "mode": "minifigure", "bricklink": None,
-        "ebay": {"available": True, "avg_price_per_fig": 5.0,
-                 "avg_sold_price": 100.0, "matched_count": 8},
-    }
-    record = build_record.build_deal_record(
-        _candidate(), _appraisal("minifigure"),
-        first_seen_at="2026-08-01T00:00:00Z",
-        last_seen_at="2026-08-01T00:00:00Z",
-        comps=comps_result, fee_rate=0.13,
-        status="active")
-
-    assert record["potential_profit"] is None
-    assert record["profit_incomplete"] is True
-    assert "figure_count" in record["zero_comp_note"]
-
-
 # ---------------------------------------------------------------------------
 # Scoring
 # ---------------------------------------------------------------------------
-
-
-def test_score_record_accepts_minifigure():
-    record = {
-        "listing_key": "ebay|1", "listing_category": "minifigure",
-        "figure_count": 20, "estimated_total": 40.0,
-        "potential_profit": 47.0, "ebay_comp_count": 8,
-        "observations": {}, "title": "star wars minifig lot",
-    }
-    result = score.score_record(record)
-
-    assert result["scoring"]["category"] == "minifigure"
-    assert result["scoring"]["score"] is not None
-    assert result["scoring"]["max_price"] is not None
 
 
 def test_score_record_excluded_is_unscorable_with_reason():
@@ -423,3 +321,35 @@ def test_minifigure_numeric_columns_round_trip_integers(tmp_path):
     assert loaded["figure_count"] == 20
     assert isinstance(loaded["ebay_avg_price_per_fig"], float)
     assert loaded["ebay_avg_price_per_fig"] == 5.0
+
+
+# --- legacy read freeze (Phase A): retirement must never eat the evidence ----
+
+
+def test_legacy_ebay_avg_price_per_fig_survives_connect_and_roundtrip(tmp_path):
+    """A stored pre-identification minifigure row stays readable through the
+    canonical write/read path. The positive twin of Phase F's negative
+    retirement contract: code may retire, the stored evidence may not.
+    """
+    import legoscout_cli.ledger.db as ledger_db
+    path = str(tmp_path / "found_deals.db")
+    ledger_db.init(path).close()
+    deal = {
+        "listing_key": "shopgoodwill|900001",
+        "source": "shopgoodwill",
+        "status": "active",
+        "url": "https://www.shopgoodwill.com/Listing/900001",
+        "title": "Star Wars minifigure lot",
+        "listing_type": "fixed",
+        "price_basis": "current_price",
+        "current_price": 40.0,
+        "listing_category": "minifigure",
+        "available_fulfillment": ["shipping"],
+        "observations": {},
+        "figure_count": 8,
+        "figure_count_source": "stated",
+        "ebay_avg_price_per_fig": 5.25,
+    }
+    ledger_db.upsert_deals([deal], path=path)
+    back = ledger_db.get_deal("shopgoodwill|900001", path=path)
+    assert back["ebay_avg_price_per_fig"] == 5.25

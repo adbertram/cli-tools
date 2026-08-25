@@ -257,118 +257,6 @@ def search_set_comps(
     }
 
 
-def search_minifigure_comps(
-    description: str,
-    limit: int = 50,
-    runner: Runner = cached_ebay_json,
-) -> dict[str, Any]:
-    """eBay sold $/fig comps for one minifigure or a lot of minifigures.
-
-    The bulk analogue: bulk extracts a stated weight from each title because
-    $/lb is the only comparable unit, and minifigure lots do the same with a
-    stated FIGURE COUNT -- a 50-fig lot priced against a 3-fig lot's listing
-    price is fiction, exactly like an unweighted bulk listing. Titles that
-    state no count are excluded from the $/fig average, not guessed at; a
-    bare single-fig title (\"boba fett minifigure\") counts as one figure, and
-    \"lot of N\" / \"N minifigs\" / \"N figs\" forms are parsed explicitly.
-
-    No `--category`: like bulk lots, minifigure lots scatter across eBay's
-    LEGO categories, so this searches on keywords alone.
-    """
-    query = "lego minifigure"
-    if description:
-        query = "%s %s" % (query, description.strip())
-
-    args = [
-        "listings", "search", query,
-        "--sold", "--us-only",
-        "--condition", "used",
-        "--limit", str(limit),
-    ]
-    try:
-        raw_listings = runner(args)
-    except LookupFailed as exc:
-        reason = "ebay_auth_required" if _is_auth_failure(str(exc)) else "ebay_lookup_failed: %s" % exc
-        result = _unavailable(query, reason)
-        result["avg_price_per_fig"] = None
-        return result
-
-    matched: list[dict] = []
-    excluded_reasons: list[str] = []
-    for listing in raw_listings:
-        if not isinstance(listing, dict):
-            continue
-        title = listing.get("title") or ""
-        denylist_hits = _matched_terms(title, _DENYLIST_COMPILED)
-        if denylist_hits:
-            excluded_reasons.extend(denylist_hits)
-            continue
-        price = _parse_price(listing.get("price"))
-        if price is None:
-            excluded_reasons.append("no parseable price")
-            continue
-        figure_count = _minifig_count(title)
-        if figure_count is None:
-            excluded_reasons.append("no parseable figure count")
-            continue
-        if figure_count <= 0:
-            excluded_reasons.append("no parseable figure count")
-            continue
-        matched.append({
-            "item_id": listing.get("item_id"),
-            "title": title,
-            "price": price,
-            "figure_count": figure_count,
-            "price_per_fig": round(price / figure_count, 4),
-            "url": listing.get("url"),
-        })
-
-    per_fig_values = [row["price_per_fig"] for row in matched]
-    avg_per_fig = round(sum(per_fig_values) / len(per_fig_values), 4) if per_fig_values else None
-
-    return {
-        "available": True,
-        "query": query,
-        "category_id": None,
-        "condition": "used",
-        "reason": None,
-        "matched_count": len(matched),
-        "excluded_count": len(raw_listings) - len(matched),
-        "excluded_reasons": sorted(set(excluded_reasons)),
-        "avg_sold_price": round(sum(row["price"] for row in matched) / len(matched), 2) if matched else None,
-        "min_sold_price": min((row["price"] for row in matched), default=None),
-        "max_sold_price": max((row["price"] for row in matched), default=None),
-        "avg_price_per_fig": avg_per_fig,
-        "listings": matched,
-    }
-
-
-def _minifig_count(title: str) -> int | None:
-    """Figure count stated in an eBay minifig-lot title, or 1 for a bare
-    single-figure title. `None` when the title states no count at all (\"lego
-    minifigure lot\"), which is ambiguous between 2 and 200 -- that listing
-    cannot price a $/fig average and is excluded, never assumed.
-
-    Forms parsed, in order:
-      \"lot of N\"                          -> N
-      \"N x minifigure(s)\", \"Nx minifigs\"  -> N
-      \"N minifigures/figs\"                  -> N
-      bare single-fig title                  -> 1
-    """
-    text = title.lower()
-    lot_match = re.search(r"\blot\s+of\s+(\d+)", text)
-    if lot_match:
-        return int(lot_match.group(1))
-    times_match = re.search(r"(\d+)\s*x\s*(?:lego\s+)?mini\s?-?fig", text)
-    if times_match:
-        return int(times_match.group(1))
-    n_match = re.search(r"(\d+)\s*(?:mini\s?-?figs?|mini\s?-?figures?|figs?)\b", text)
-    if n_match:
-        return int(n_match.group(1))
-    if re.search(r"mini\s?-?fig", text) and not re.search(r"\blots?\b|\bsets?\b", text):
-        return 1
-    return None
-
 
 def search_bulk_comps(
     description: str,
@@ -461,39 +349,31 @@ def parse_args(argv: list[str] | None):
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="eBay sold comps for one LEGO set, one bulk lot with --bulk, "
-                    "or one minifigure lot with --minifigure.")
+        description="eBay sold comps for one LEGO set or one bulk lot with --bulk.")
     parser.add_argument("set_no", nargs="?", default=None,
-                        help="A LEGO set number. Required unless --bulk or --minifigure.")
+                        help="A LEGO set number. Required unless --bulk.")
     parser.add_argument("--bulk", action="store_true",
                         help="Bulk-lot mode: match by weight, not a set number.")
-    parser.add_argument("--minifigure", action="store_true",
-                        help="Minifigure-lot mode: match by figure count, not a set number.")
     parser.add_argument("--condition", choices=["N", "U"], default=None,
-                        help="N or U. Required unless --bulk or --minifigure.")
+                        help="N or U. Required unless --bulk.")
     parser.add_argument("--description", default=None,
-                        help="Extra search keywords -- set name/theme, bulk lot description, "
-                             "or minifigure theme/name.")
+                        help="Extra search keywords -- set name/theme or bulk lot description.")
     parser.add_argument("--dollars-per-lb", type=float, default=None,
                         help="Bulk mode only: the target listing's own $/lb, for comparison.")
     parser.add_argument("--limit", type=int, default=50)
     return parser.parse_args(argv)
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int | str:
     import json
 
     args = parse_args(argv)
     if args.bulk:
         result = search_bulk_comps(args.description, dollars_per_lb=args.dollars_per_lb,
                                    limit=args.limit)
-    elif args.minifigure:
-        if not args.description:
-            return "--description is required in --minifigure mode"
-        result = search_minifigure_comps(args.description, limit=args.limit)
     else:
         if not args.set_no or not args.condition:
-            return "set_no and --condition are required unless --bulk or --minifigure"
+            return "set_no and --condition are required unless --bulk"
         result = search_set_comps(args.set_no, args.condition,
                                   description=args.description, limit=args.limit)
     print(json.dumps(result, indent=2, sort_keys=True))

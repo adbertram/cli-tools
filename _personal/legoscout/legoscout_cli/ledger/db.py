@@ -188,6 +188,12 @@ JSON_FIELDS: tuple[str, ...] = (
     "fee_breakdown",
     "set_numbers",
     "set_analysis",
+    # Per-figure identification evidence behind a minifigure row: one entry
+    # per identifier match group (detections/crops, candidates, agent
+    # verification, verified identity, detector-owned quantity, used-sold
+    # value). Read/written only through ledger/minifig_analysis.py; null on
+    # every legacy row.
+    "minifig_analysis",
     # The classifier's evidence-backed correction of a crawl price the listing
     # text contradicts ({price, evidence}). Kept verbatim on the record so the
     # correction's evidence survives next to the numbers it moved -- the deals

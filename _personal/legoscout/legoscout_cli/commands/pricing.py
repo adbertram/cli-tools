@@ -101,25 +101,20 @@ def set_sales_command(
 @command
 def ebay_comps_command(
     set_no: Optional[str] = typer.Argument(
-        None, help="A LEGO set number. Required unless --bulk or --minifigure"),
+        None, help="A LEGO set number. Required unless --bulk"),
     bulk: bool = typer.Option(
         False, "--bulk", help="Bulk-lot mode: match by weight, not a set number"),
-    minifigure: bool = typer.Option(
-        False, "--minifigure",
-        help="Minifigure-lot mode: match by figure count, not a set number"),
     condition: Optional[str] = typer.Option(
-        None, "--condition", help="N or U. Required unless --bulk or --minifigure"),
+        None, "--condition", help="N or U. Required unless --bulk"),
     description: Optional[str] = typer.Option(
         None, "--description",
-        help="Extra search keywords: set name/theme, bulk lot description, "
-             "or minifigure theme/name"),
+        help="Extra search keywords: set name/theme or bulk lot description"),
     dollars_per_lb: Optional[float] = typer.Option(
         None, "--dollars-per-lb",
         help="Bulk mode only: the target listing's own $/lb, for comparison"),
     limit: int = typer.Option(50, "--limit", help="Max eBay results to search"),
 ):
-    """eBay sold comps for one LEGO set, one bulk lot with --bulk, or one
-    minifigure lot with --minifigure.
+    """eBay sold comps for one LEGO set or one bulk lot with --bulk.
 
     Never fails on an eBay auth lapse -- returns `{"available": false,
     "reason": "ebay_auth_required", ...}` instead. Run `ebay auth login
@@ -129,7 +124,6 @@ def ebay_comps_command(
     if set_no:
         argv.append(set_no)
     delegate.flag(argv, "--bulk", bulk)
-    delegate.flag(argv, "--minifigure", minifigure)
     delegate.option(argv, "--condition", condition)
     delegate.option(argv, "--description", description)
     delegate.option(argv, "--dollars-per-lb", dollars_per_lb)
@@ -143,25 +137,20 @@ def comps_command(
     set_no: Optional[List[str]] = typer.Option(
         None, "--set-no",
         help="A LEGO set number. Repeatable -- pass it once per detected set on a "
-             "multi-set listing. Required unless --bulk or --minifigure"),
+             "multi-set listing. Required unless --bulk"),
     bulk: bool = typer.Option(
         False, "--bulk", help="Bulk-lot mode: eBay $/lb comps only, no BrickLink"),
-    minifigure: bool = typer.Option(
-        False, "--minifigure",
-        help="Minifigure-lot mode: eBay $/fig comps only, no BrickLink"),
     condition: Optional[str] = typer.Option(
-        None, "--condition", help="N or U. Required unless --bulk or --minifigure"),
+        None, "--condition", help="N or U. Required unless --bulk"),
     description: Optional[str] = typer.Option(
         None, "--description",
-        help="Extra search keywords: set name/theme, bulk lot description, "
-             "or minifigure theme/name"),
+        help="Extra search keywords: set name/theme or bulk lot description"),
     dollars_per_lb: Optional[float] = typer.Option(
         None, "--dollars-per-lb",
         help="Bulk mode only: the target listing's own $/lb, for comparison"),
     limit: int = typer.Option(50, "--limit", help="Max eBay results to search"),
 ):
-    """BrickLink + eBay sold comps for a LEGO set (or several, on one listing),
-    eBay-only for a bulk lot, or eBay-only $/fig for a minifigure lot.
+    """BrickLink + eBay sold comps for sets, or eBay-only for a bulk lot.
 
     The single command the comps-only appraiser calls. Pass --set-no once per
     detected set number; a single-set listing still passes it once. BrickLink
@@ -173,7 +162,6 @@ def comps_command(
         for one in set_no:
             argv.extend(["--set-no", one])
     delegate.flag(argv, "--bulk", bulk)
-    delegate.flag(argv, "--minifigure", minifigure)
     delegate.option(argv, "--condition", condition)
     delegate.option(argv, "--description", description)
     delegate.option(argv, "--dollars-per-lb", dollars_per_lb)
@@ -186,10 +174,9 @@ def comps_command(
 def comps_batch_command(
     input: str = typer.Option(
         ..., "--input", metavar="FILE",
-        help="JSON array file of the classifier's comps hand-offs: listing_key, "
+        help="JSON array file of classifier comps hand-offs: listing_key, "
              "listing_category, and set_numbers/condition/description (set), "
-             "description/dollars_per_lb (bulk), description/figure_count/"
-             "figure_count_source (minifigure), or exclusion_reason (excluded)"),
+             "description/dollars_per_lb (bulk), or exclusion_reason (excluded)"),
     output: str = typer.Option(
         ..., "--output", metavar="FILE",
         help="Write the full batch JSON here (timings + one result per candidate)"),

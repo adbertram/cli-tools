@@ -31,9 +31,11 @@ import math
 import re
 import sys
 from datetime import datetime, timezone
+from urllib.parse import quote
 
 from ..ledger import db as ledger_db
 from ..ledger import fulfillment
+from ..ledger import minifig_analysis
 from ..ledger import sellers as sellers_db
 from ..sources import registry
 
@@ -412,23 +414,60 @@ def row(deal, favorites, reg=registry.sources):
         # only, per Decision A: never fed into `potential_profit` or the score.
         out["ebayPerLb"] = parse_money(deal.get("ebay_avg_price_per_lb"))
     elif cat == "minifigure":
-        out["figCount"] = (deal.get("figure_count")
-                           if isinstance(deal.get("figure_count"), int) else None)
-        # eBay sold $/fig from `legoscout pricing comps --minifigure` -- this IS
-        # the resale basis: potential_profit = $/fig x figure_count.
-        out["perFig"] = parse_money(deal.get("ebay_avg_price_per_fig"))
         out["profit"] = parse_money(deal.get("potential_profit"))
-        out["ebayCount"] = (deal.get("ebay_comp_count")
-                            if isinstance(deal.get("ebay_comp_count"), int) else None)
-        out["zeroCompNote"] = (deal.get("zero_comp_note")
-                               if isinstance(deal.get("zero_comp_note"), str) else None)
         out["pinc"] = profit_incomplete(deal)
-        # Where the count came from: the seller's own text ("stated") or the
-        # mandatory image pass's exact count ("photo_count"). Adam prices on
-        # this number, so whose word it is rides with it.
-        out["figSrc"] = (deal.get("figure_count_source")
-                         if deal.get("figure_count_source") in
-                         ("stated", "photo_count", "unknown") else None)
+        # The canonical reader owns the field shape and all aggregate semantics.
+        # In particular, counts are quantity sums and sold depth is the deepest
+        # single identity market, never an ad-hoc sum in this display layer.
+        analysis = minifig_analysis.entries(deal)
+        if analysis:
+            out["figCount"] = minifig_analysis.figure_count(analysis)
+            out["identifiedCount"] = minifig_analysis.identified_count(analysis)
+            out["unknownCount"] = minifig_analysis.unknown_count(analysis)
+            out["minifigSubtotal"] = minifig_analysis.priced_subtotal(analysis)
+            out["minifigSoldCount"] = minifig_analysis.sold_count(analysis)
+            out["figSrc"] = ("detection" if deal.get("figure_count_source")
+                             == "detection" else None)
+            out["identificationComplete"] = (
+                out["unknownCount"] == 0
+                and all(entry.get("unit_value") is not None
+                        and not entry.get("errors") for entry in analysis)
+            )
+            out["figures"] = [
+                {
+                    "figNo": entry.get("fig_no"),
+                    "name": ((entry.get("catalog") or {}).get("name")
+                             or "Unknown"),
+                    "quantity": entry["quantity"],
+                    "unitValue": entry.get("unit_value"),
+                    "extendedValue": entry.get("extended_value"),
+                    "soldCount": ((entry.get("used") or {})
+                                  .get("price_detail_count")),
+                    "conditionNotes": entry.get("condition_notes"),
+                    "cropUrl": ("/crops/" + quote(
+                        entry["representative_crop_ref"], safe="/")
+                        if entry.get("representative_crop_ref") else None),
+                    "status": (entry.get("verification") or {}).get("status"),
+                    "nullValueReason": entry.get("null_value_reason"),
+                    "errors": entry.get("errors") or [],
+                }
+                for entry in analysis
+            ]
+        else:
+            # Positive reader-only compatibility branch. These values are never
+            # selected for an identifier-backed row.
+            out["figCount"] = (deal.get("figure_count")
+                               if isinstance(deal.get("figure_count"), int) else None)
+            out["perFig"] = parse_money(deal.get("ebay_avg_price_per_fig"))
+            out["ebayCount"] = (deal.get("ebay_comp_count")
+                                if isinstance(deal.get("ebay_comp_count"), int)
+                                else None)
+            out["zeroCompNote"] = (
+                deal.get("zero_comp_note")
+                if isinstance(deal.get("zero_comp_note"), str) else None)
+            out["figSrc"] = (deal.get("figure_count_source")
+                             if deal.get("figure_count_source") in
+                             ("stated", "photo_count", "unknown") else None)
         # Same auction floor as a set: the profit is built on the current bid,
         # so show what Adam nets if he holds the line at Max Bid.
         out["profitAtMaxBid"] = (

@@ -20,21 +20,26 @@ app = typer.Typer(help="Sync the ledger and app code to adam-server", no_args_is
 @app.command("pull-db")
 @command
 def pull_db():
-    """Snapshot adam-server's shared ledger down to the local working copy."""
-    db_sync.pull()
-    print_json({"ok": True})
+    """Pull adam-server's shared ledger and crops into the local workspace."""
+    report = db_sync.pull()
+    print_json(report)
+    if not report["ok"]:
+        raise typer.Exit(1)
 
 
 @app.command("push")
 @command
 def push():
-    """Push the local ledger to adam-server, then deploy code if it changed."""
-    db_sync.push()
+    """Push the local ledger/crops, then deploy code if sync succeeded."""
+    sync = db_sync.push()
+    if not sync["ok"]:
+        print_json({"ok": False, "sync": sync, "code_deployed": False})
+        raise typer.Exit(1)
     result = release.deploy_code()
     print_json(
         {
             "ok": True,
-            "db_pushed": True,
+            "sync": sync,
             "code_deployed": not result.skipped,
             "release_name": result.release_name,
         }

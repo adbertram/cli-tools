@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -14,7 +15,11 @@ from ..invalidate import sweep as expire_module
 from ..ledger import build_record, db as ledger_db, schema as deal_schema
 from ..ledger import sweep as sweep_module
 from ..ledger import validate as validate_module
-from ..orchestrator import build_run_manifest, replay_fixtures
+from ..orchestrator import (
+    build_run_manifest,
+    replay_fixtures,
+    validate_identification_result,
+)
 from ..sources import listing, readers
 
 COMMAND_CREDENTIALS = ["no_auth"]
@@ -43,6 +48,36 @@ def _where(filters):
         clauses.append("%s %s ?" % (column, _SQL_OPS[op]))
         params.append("%%%s%%" % value if op == "contains" else value)
     return (" WHERE " + " AND ".join(clauses)) if clauses else "", tuple(params)
+
+
+def _select_identification_record(batch, listing_key: str) -> dict:
+    """Validate one canonical priced batch and select its unique keyed row."""
+    if not isinstance(batch, list):
+        raise ValueError(
+            "identification JSON root must be an array, got %s"
+            % type(batch).__name__)
+
+    matches = []
+    for index, record in enumerate(batch):
+        if not isinstance(record, dict):
+            raise ValueError(
+                "identification record %d must be an object, got %s"
+                % (index, type(record).__name__))
+        try:
+            validate_identification_result(
+                record, "identification record %d" % index)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "identification record %d is malformed: %s" % (index, exc)
+            ) from exc
+        if record.get("listing_key") == listing_key:
+            matches.append(record)
+
+    if len(matches) != 1:
+        raise ValueError(
+            "identification batch must contain exactly one record matching "
+            "candidate listing_key %r; found %d" % (listing_key, len(matches)))
+    return matches[0]
 
 
 @app.command("list")
@@ -163,6 +198,12 @@ def refresh(
 def build(
     candidate: str = typer.Argument(..., help="A crawl-phase candidate JSON file"),
     appraisal: str = typer.Argument(..., help="The matching appraisal JSON file"),
+    identification: Optional[str] = typer.Option(
+        None, "--identification",
+        help="Canonical priced minifigure identification JSON array"),
+    fee_rate: Optional[float] = typer.Option(
+        None, "--fee-rate",
+        help="Explicit resale fee rate as a decimal; required with --identification"),
     first_seen_at: Optional[str] = typer.Option(
         None, "--first-seen-at",
         help="When this listing was first seen; now (UTC) when omitted"),
@@ -194,9 +235,36 @@ def build(
         raise ValueError(
             "appraisal JSON root must be an object, got %s"
             % type(appraisal_record).__name__)
+    candidate_key = candidate_record.get("listing_key")
+    if not isinstance(candidate_key, str) or not candidate_key.strip():
+        raise ValueError(
+            "candidate listing_key must be a non-empty string")
+    appraisal_key = appraisal_record.get("listing_key")
+    if appraisal_key is not None and appraisal_key != candidate_key:
+        raise ValueError(
+            "appraisal listing_key does not match candidate listing_key: "
+            "%r != %r" % (appraisal_key, candidate_key))
+
+    identification_record = None
+    if identification is not None:
+        if fee_rate is None:
+            raise ValueError(
+                "--fee-rate is required when --identification is supplied")
+        if not math.isfinite(fee_rate) or not 0 <= fee_rate < 1:
+            raise ValueError(
+                "fee rate must be a finite decimal from 0 through less than 1")
+        with open(identification, encoding="utf-8") as fh:
+            identification_batch = json.load(fh)
+        identification_record = _select_identification_record(
+            identification_batch, candidate_key)
+    elif fee_rate is not None:
+        raise ValueError(
+            "--identification is required when --fee-rate is supplied")
+
     print_json(build_record.build_deal_record(
         candidate_record, appraisal_record,
-        first_seen_at=first_seen_at, last_seen_at=last_seen_at))
+        first_seen_at=first_seen_at, last_seen_at=last_seen_at,
+        identification=identification_record, fee_rate=fee_rate))
 
 
 @app.command("run-manifest")

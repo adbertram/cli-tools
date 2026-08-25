@@ -178,23 +178,24 @@ def _enum_errors(rec):
                    "listing and fix whichever field is wrong"
                    % (lt, rec.get("auction_end_date")))
     out.extend(_figure_count_errors(rec, cat))
+    out.extend(_minifig_analysis_errors(rec, cat))
     return out
 
 
-FIGURE_COUNT_SOURCES = ("stated", "photo_count", "unknown")
+# `detection` arrived with per-figure identification (2026-08): the
+# identifier pipeline owns the count and `minifig_analysis` carries the
+# evidence. `stated`/`photo_count` remain legal on legacy rows.
+FIGURE_COUNT_SOURCES = ("stated", "photo_count", "unknown", "detection")
 
 
 def _figure_count_errors(rec, cat):
     """`figure_count` and its provenance travel together.
 
-    The minifigure pricing path multiplies the eBay $/fig average by
-    `figure_count`, so a bare number with no provenance is exactly how an
-    invented count reaches Adam's money: `stated` is the seller's own claim,
-    `photo_count` is the mandatory image pass's exact count, and `unknown`
-    means the images were inspected (they always are, on a minifigure
-    candidate) but no exact count was determinable. A number with no source,
+    Identifier-backed rows use `detection`, with `figure_count` equal to the
+    canonical analysis quantity sum. `stated`, `photo_count`, and `unknown`
+    remain legal only so legacy rows stay readable. A number with no source,
     or a source on a non-minifigure row, is a hand-off defect -- report it by
-    name rather than letting pricing silently consume it.
+    name rather than letting downstream readers silently consume it.
     """
     out = []
     count = rec.get("figure_count")
@@ -202,10 +203,10 @@ def _figure_count_errors(rec, cat):
     if isinstance(count, (int, float)) and not isinstance(count, bool):
         if source not in FIGURE_COUNT_SOURCES:
             out.append(
-                "figure_count=%s has figure_count_source=%r -- a stated or "
-                "photo-counted figure must say which; use 'stated', "
-                "'photo_count', or 'unknown' so pricing knows whose word the "
-                "count is" % (count, source))
+                "figure_count=%s has figure_count_source=%r -- use "
+                "'detection' with canonical minifig_analysis on "
+                "identifier-backed rows; legacy rows may retain 'stated', "
+                "'photo_count', or 'unknown'" % (count, source))
         if cat != "minifigure":
             out.append(
                 "figure_count=%s on a %r row -- a figure count belongs to a "
@@ -216,6 +217,60 @@ def _figure_count_errors(rec, cat):
             "figure_count_source=%r but figure_count=%r -- provenance without "
             "a count names nothing; null both when there is no count"
             % (source, count))
+    analysis = rec.get("minifig_analysis")
+    if source == "detection" and not isinstance(analysis, list):
+        out.append(
+            "figure_count_source='detection' but minifig_analysis is %r -- a "
+            "detector-owned count needs its canonical per-figure analysis on "
+            "the same row" % (analysis,))
+    if isinstance(analysis, list) \
+            and isinstance(count, (int, float)) and not isinstance(count, bool):
+        quantities = []
+        for entry in analysis:
+            q = entry.get("quantity") if isinstance(entry, dict) else None
+            if isinstance(q, (int, float)) and not isinstance(q, bool):
+                quantities.append(int(q))
+        total = sum(quantities)
+        if count != total:
+            out.append(
+                "figure_count=%s disagrees with the minifig_analysis "
+                "entries' quantity sum %s -- on identified rows figure_count "
+                "IS the summed entry quantity; re-price or fix whichever is "
+                "stale"
+                % (count, total))
+    return out
+
+
+def _minifig_analysis_errors(rec, cat):
+    """Record-level rules for the canonical per-figure artifact.
+
+    Entry SEMANTICS live canonically in `minifig_analysis.entry_errors()` --
+    this wrapper only decides whether the artifact belongs on the row at all,
+    then reports each entry's defects named by index so one bad group never
+    hides its siblings. A malformed stored artifact is reported, not raised:
+    strict validation lists it, readers of unrelated rows keep working.
+    """
+    from legoscout_cli.ledger import minifig_analysis as mfa
+
+    analysis = rec.get("minifig_analysis")
+    if analysis is None:
+        return []
+    if cat != "minifigure":
+        return [
+            "minifig_analysis on a %r row -- per-figure identification "
+            "belongs to minifigure lots only; a priced listing carrying one "
+            "is a misclassified record" % (cat,)]
+    try:
+        normalized = mfa.normalize(analysis)
+    except mfa.Unreadable as exc:
+        return ["minifig_analysis unreadable: %s" % (exc,)]
+    if not normalized:
+        return []
+    out = []
+    for i, entry in enumerate(normalized):
+        for err in mfa.entry_errors(entry):
+            out.append("minifig_analysis[%d]: %s" % (i, err))
+    out.extend(mfa.batch_errors(normalized))
     return out
 
 

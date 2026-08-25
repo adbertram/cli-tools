@@ -120,6 +120,7 @@ import sqlite3
 import pytest
 from typer.testing import CliRunner
 
+import legoscout_cli.orchestrator as orchestrator
 from legoscout_cli.ledger import build_record, db as ledger_db, schema as deal_schema, validate as ledger_validate
 from legoscout_cli.main import app
 from legoscout_cli.orchestrator import (
@@ -245,6 +246,30 @@ def test_orchestrator_one_malformed_comps_entry_does_not_block_a_sibling_candida
     assert report["buildable_count"] == 1
     assert len(report["build_errors"]) == 1
     assert report["build_errors"][0]["listing_key"] == "ebay|2"
+
+
+def test_minifigure_handoff_uses_identification_not_comps():
+    with pytest.raises(AppraisalBatchKeyError, match="must be 'set', 'bulk'"):
+        validate_comps_result({
+            "listing_key": "ebay|1",
+            "mode": "minifigure",
+            "bricklink": None,
+            "ebay": {"available": True},
+        })
+    orchestrator.validate_identification_result({
+        "listing_key": "ebay|1",
+        "blocked": True,
+        "blocker": "no detector crops",
+        "minifig_analysis": None,
+        "figure_count": None,
+        "figure_count_source": None,
+        "identified_count": 0,
+        "unknown_count": 0,
+        "priced_subtotal": 0.0,
+        "sold_count": None,
+        "pricing_complete": False,
+        "status": "blocked",
+    })
 
 
 def test_appraisal_result_requires_listing_category():

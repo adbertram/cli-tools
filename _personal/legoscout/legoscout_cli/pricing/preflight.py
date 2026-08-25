@@ -5,8 +5,8 @@ A deal run touches far more than the two comps credentials: a dozen source
 CLIs (some needing live authenticated sessions), a runtime headless browser,
 the adam-server deployment the `pull-db`/`push` bookends depend on, the
 source registry's own structural health and researched fee configs, the
-ledger working copy, four custom-agent definitions plus their hard-rules
-parity contract, nine project skills, the global agent standards file the
+ledger working copy, five custom-agent definitions plus their hard-rules
+parity contract, ten project skills, the global agent standards file the
 worker prompts reference verbatim, and the per-run workspace directories.
 This command verifies every one of those BEFORE any worker spawns, because
 each of them has already silently cost a run something when skipped:
@@ -63,8 +63,11 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
+import requests
+
 from .. import paths
 from ..deploy import config as deploy_config
+from . import brickognize, minifig_detector
 
 BRICKLINK_COMMAND = "bricklink"
 EBAY_COMMAND = "ebay"
@@ -90,6 +93,9 @@ SOURCE_CLI_BINARIES = {
 
 PLAYWRIGHT_CLI = "playwright-cli"
 GOOGLE_CLI = "google"
+BRICKOGNIZE_HEALTH_URL = "https://api.brickognize.com/health/"
+BRICKOGNIZE_TIMEOUT_SECONDS = 10
+MINIFIG_DETECTOR = "grounding-dino-tiny"
 
 PROJECT_SKILLS = (
     "legoscout-orchestrator",
@@ -101,6 +107,7 @@ PROJECT_SKILLS = (
     "legoscout-deal-invalidate",
     "legoscout-display",
     "start-legoscout-run",
+    "legoscout-minifig-identifier",
 )
 
 AGENT_NAMES = (
@@ -108,6 +115,7 @@ AGENT_NAMES = (
     "legoscout-classifier",
     "legoscout-appraiser",
     "legoscout-prospect-scout",
+    "legoscout-minifig-identifier",
 )
 
 GLOBAL_STANDARDS_PATH = (Path("~/.agents/skills/agent-expert/references/"
@@ -116,7 +124,7 @@ GLOBAL_STANDARDS_PATH = (Path("~/.agents/skills/agent-expert/references/"
 AUTH_TIMEOUT_SECONDS = 30
 SSH_TIMEOUT_SECONDS = 45
 PARITY_TIMEOUT_SECONDS = 60
-POOL_WORKERS = 8          # top-level independent checks
+POOL_WORKERS = 9          # top-level independent checks
 INNER_AUTH_WORKERS = 4    # concurrent auth round-trips inside the source scan
 
 
@@ -238,6 +246,41 @@ def _require_on_path(binary_name: str) -> dict[str, Any]:
     if resolved is None:
         row["error"] = ("%s executable was not located on PATH or in ~/.local/bin"
                         % binary_name)
+    return row
+
+
+def _check_brickognize() -> dict[str, Any]:
+    """Probe provider health without identifying or uploading a figure."""
+    try:
+        response = requests.get(
+            BRICKOGNIZE_HEALTH_URL,
+            headers={"User-Agent": brickognize.USER_AGENT},
+            timeout=BRICKOGNIZE_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+    except Exception as exc:  # noqa: BLE001 -- provider evidence, never an escape
+        return {
+            "reachable": False,
+            "error": "%s: %s" % (type(exc).__name__, exc),
+        }
+    return {"reachable": True, "error": None}
+
+
+def _check_minifig_detector() -> dict[str, Any]:
+    """Load the selected runtime and pinned model exactly as detection does."""
+    row: dict[str, Any] = {
+        "available": False,
+        "detector": MINIFIG_DETECTOR,
+        "model": minifig_detector.GROUNDING_DINO_MODEL,
+        "revision": minifig_detector.GROUNDING_DINO_REVISION,
+        "error": None,
+    }
+    try:
+        minifig_detector.load_detector(MINIFIG_DETECTOR)
+    except Exception as exc:  # noqa: BLE001 -- runtime/model failure is warning evidence
+        row["error"] = "%s: %s" % (type(exc).__name__, exc)
+        return row
+    row["available"] = True
     return row
 
 
@@ -431,8 +474,7 @@ def _check_adam_server() -> dict[str, Any]:
 
 
 def _check_agents(project_root: Path) -> dict[str, Any]:
-    """The four custom-agent definitions on both harnesses plus the hard-rules
-    parity contract between them."""
+    """Custom-agent definitions plus their executable harness contracts."""
     claude_missing = [name for name in AGENT_NAMES
                       if not (project_root / ".claude" / "agents"
                               / ("%s.md" % name)).is_file()]
@@ -458,9 +500,34 @@ def _check_agents(project_root: Path) -> dict[str, Any]:
         parity["ok"] = False
         parity["error"] = ("scripts/check_hard_rules_parity.py is missing from "
                            "the project root")
+
+    identifier_script = (
+        project_root / "scripts" / "test_minifig_identifier_contracts.py")
+    identifier: dict[str, Any] = {
+        "script_present": identifier_script.is_file()}
+    if identifier_script.is_file():
+        try:
+            proc = subprocess.run(
+                ["python3", str(identifier_script)], cwd=str(project_root),
+                capture_output=True, text=True, check=False,
+                timeout=PARITY_TIMEOUT_SECONDS)
+            identifier["ok"] = proc.returncode == 0
+            if not identifier["ok"]:
+                combined = "\n".join(
+                    part for part in [proc.stdout, proc.stderr] if part)
+                identifier["error"] = _shorten(combined)
+        except (OSError, subprocess.TimeoutExpired, UnicodeDecodeError) as exc:
+            identifier["ok"] = False
+            identifier["error"] = str(exc)
+    else:
+        identifier["ok"] = False
+        identifier["error"] = (
+            "scripts/test_minifig_identifier_contracts.py is missing from "
+            "the project root")
     return {"claude_definitions_missing": claude_missing,
             "codex_definitions_missing": codex_missing,
-            "hard_rules_parity": parity}
+            "hard_rules_parity": parity,
+            "identifier_contract": identifier}
 
 
 def _check_skills() -> dict[str, Any]:
@@ -557,9 +624,9 @@ def main(argv: list[str] | None = None) -> int:
     for error in workspaces_row["errors"]:
         failures.append(("workspaces", error))
 
-    # Everything that waits on a subprocess runs CONCURRENTLY: five-plus
-    # auth round-trips, the ssh probe, the parity script, and the registry
-    # reads collapse to roughly the slowest single wait instead of their sum.
+    # Every expensive independent check runs CONCURRENTLY: auth round-trips,
+    # ssh, parity, provider health, and detector runtime/model loading collapse
+    # to roughly the slowest single wait instead of their sum.
     with ThreadPoolExecutor(max_workers=POOL_WORKERS) as pool:
         futures = {
             "bricklink": pool.submit(_check, BRICKLINK_COMMAND, args.profile),
@@ -569,6 +636,8 @@ def main(argv: list[str] | None = None) -> int:
             "agents": pool.submit(_check_agents, paths.LEGOSCOUT_ROOT),
             "registry": pool.submit(_registry_health, scoped),
             "google": pool.submit(_check, GOOGLE_CLI, None),
+            "brickognize": pool.submit(_check_brickognize),
+            "minifig_detector": pool.submit(_check_minifig_detector),
         }
         bricklink = futures["bricklink"].result()
         ebay = futures["ebay"].result()
@@ -578,6 +647,8 @@ def main(argv: list[str] | None = None) -> int:
         agents_row = futures["agents"].result()
         registry_row = futures["registry"].result()
         google_status = futures["google"].result()
+        brickognize_row = futures["brickognize"].result()
+        detector_row = futures["minifig_detector"].result()
 
     # 1. Comps credentials -- BrickLink AND eBay, live-authenticated.
     checks["comps_credentials"] = {"bricklink": bricklink, "ebay": ebay}
@@ -605,7 +676,7 @@ def main(argv: list[str] | None = None) -> int:
     elif not server_row.get("pm2_app_online"):
         failures.append(("adam_server", server_row.get("error", "pm2 app offline")))
 
-    # 5. Agent definitions + hard-rules parity.
+    # 5. Agent definitions + executable cross-runtime contracts.
     checks["agents"] = agents_row
     for name in agents_row["claude_definitions_missing"]:
         failures.append(("agents", ".claude/agents/%s.md is missing" % name))
@@ -615,6 +686,13 @@ def main(argv: list[str] | None = None) -> int:
         failures.append(("agents",
                          "hard-rules parity: %s"
                          % agents_row["hard_rules_parity"].get("error", "failed")))
+    identifier_contract = agents_row.get("identifier_contract", {})
+    if not identifier_contract.get("ok"):
+        failures.append((
+            "agents",
+            "minifig identifier contract: %s"
+            % identifier_contract.get("error", "failed"),
+        ))
 
     # 6. Outreach channel -- WARNING tier: only the optional prospect half
     # needs Gmail, so a dead credential degrades rather than blocks.
@@ -623,6 +701,25 @@ def main(argv: list[str] | None = None) -> int:
         warnings.append("gmail outreach unavailable (%s) -- prospect email "
                         "drafts cannot be sent; deals half unaffected"
                         % (google_status.get("error") or "not authenticated"))
+
+    # 7. Minifigure identification -- WARNING tier. Provider or detector
+    # outages skip only minifigure identification; unrelated lot categories
+    # still price and score normally.
+    checks["minifig_identification"] = {
+        "brickognize": brickognize_row,
+        "detector": detector_row,
+    }
+    if not brickognize_row["reachable"]:
+        warnings.append(
+            "brickognize unreachable (%s) -- every minifigure lot this run "
+            "will be recorded as an identifier skip; bulk and set pricing "
+            "unaffected" % (brickognize_row.get("error") or "unknown error"))
+    if not detector_row["available"]:
+        warnings.append(
+            "minifig detector unavailable (%s) -- every minifigure lot this "
+            "run will be recorded as an identifier skip; restore the declared "
+            "local torch/transformers runtime and pinned model; bulk and set "
+            "pricing unaffected" % (detector_row.get("error") or "unknown error"))
 
     ok = not failures
     print(json.dumps({"ok": ok, "checks": checks, "warnings": warnings},
