@@ -12,14 +12,16 @@ anything remotely, then applies strict age, fraction, and count guards.
 """
 from __future__ import annotations
 
+import fcntl
 import json
 import math
 import os
 import shlex
 import tempfile
 import time
+from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 from ..ledger import db as ledger_db
 from ..ledger import minifig_analysis
@@ -133,22 +135,24 @@ def _pull_database() -> dict[str, bool]:
     return {"copied": True}
 
 
-def _push_database() -> dict[str, bool]:
+def _push_database(snapshot_path: str | None = None) -> dict[str, bool]:
     """Snapshot the local working copy up to adam-server's shared ledger."""
-    with tempfile.TemporaryDirectory() as tmp:
-        local_snapshot = os.path.join(tmp, "found_deals.db")
-        ssh.run_local(
-            ["sqlite3", config.LOCAL_DB, ".backup %s" % local_snapshot]
-        )
-        remote_tmp = "/tmp/legoscout-push-%d.db" % os.getpid()
-        ssh.run_local(
-            [
-                "scp",
-                "-q",
-                local_snapshot,
-                "%s:%s" % (config.REMOTE_HOST, remote_tmp),
-            ]
-        )
+    if snapshot_path is None:
+        with tempfile.TemporaryDirectory() as tmp:
+            return _push_database(os.path.join(tmp, "found_deals.db"))
+
+    ssh.run_local(
+        ["sqlite3", config.LOCAL_DB, ".backup %s" % snapshot_path]
+    )
+    remote_tmp = "/tmp/legoscout-push-%d.db" % os.getpid()
+    ssh.run_local(
+        [
+            "scp",
+            "-q",
+            snapshot_path,
+            "%s:%s" % (config.REMOTE_HOST, remote_tmp),
+        ]
+    )
     # Same-filesystem replacement is atomic, so the display never opens a
     # partially copied ledger.
     ssh.run_remote_script(
@@ -366,8 +370,14 @@ def _delete_remote_candidates(candidates: list[str]) -> list[str]:
     return deleted
 
 
-def _retention(*, now: float | None = None) -> dict[str, Any]:
-    references = referenced_crop_refs(config.LOCAL_DB)
+def _retention(
+    snapshot_path: str | None = None,
+    *,
+    now: float | None = None,
+) -> dict[str, Any]:
+    references = referenced_crop_refs(
+        config.LOCAL_DB if snapshot_path is None else snapshot_path
+    )
     inventory = _remote_inventory()
     candidates = retention_candidates(inventory, references, now=now)
     deleted = _delete_remote_candidates(candidates) if candidates else []
@@ -396,21 +406,46 @@ def pull() -> dict[str, Any]:
     }
 
 
-def push() -> dict[str, Any]:
-    """Attempt both push legs; retain only after both are successful."""
-    database = _outcome(_push_database)
-    crops = _outcome(_push_crops)
-    if database["ok"] and crops["ok"]:
-        retention = _outcome(_retention)
-    else:
-        retention = {
-            "ok": False,
-            "skipped": True,
-            "reason": "database and crop push must both succeed",
-        }
+@contextmanager
+def _push_lock() -> Iterator[None]:
+    """Serialize remote DB installation through crop retention."""
+    with open(config.LOCAL_DB + ".push.lock", "a", encoding="utf-8") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def _skipped_retention() -> dict[str, Any]:
     return {
-        "ok": database["ok"] and crops["ok"] and retention["ok"],
-        "db": database,
-        "crops": crops,
-        "retention": retention,
+        "ok": False,
+        "skipped": True,
+        "reason": "database and crop push must both succeed",
     }
+
+
+def push() -> dict[str, Any]:
+    """Attempt both push legs; retain against the installed DB snapshot."""
+    with _push_lock():
+        try:
+            snapshot_context = tempfile.TemporaryDirectory()
+        except Exception as exc:
+            database = {"ok": False, "error": str(exc)}
+            crops = _outcome(_push_crops)
+            retention = _skipped_retention()
+        else:
+            with snapshot_context as tmp:
+                snapshot_path = os.path.join(tmp, "found_deals.db")
+                database = _outcome(lambda: _push_database(snapshot_path))
+                crops = _outcome(_push_crops)
+                if database["ok"] and crops["ok"]:
+                    retention = _outcome(lambda: _retention(snapshot_path))
+                else:
+                    retention = _skipped_retention()
+        return {
+            "ok": database["ok"] and crops["ok"] and retention["ok"],
+            "db": database,
+            "crops": crops,
+            "retention": retention,
+        }

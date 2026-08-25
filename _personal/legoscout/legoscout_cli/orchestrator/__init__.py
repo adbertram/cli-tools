@@ -226,9 +226,21 @@ def validate_identification_result(
             raise AppraisalBatchKeyError(
                 f"{label} {field}={record.get(field)!r} does not equal "
                 f"canonical {value!r}")
-    complete = expected["unknown_count"] == 0 and all(
-        entry.get("unit_value") is not None and not entry.get("errors")
-        for entry in normalized)
+    reason = record.get("reason")
+    if reason is not None and (not isinstance(reason, str) or not reason.strip()):
+        raise AppraisalBatchKeyError(
+            f"{label} reason must be a non-empty string or null")
+    failed_groups = record.get("failed_groups", [])
+    if not isinstance(failed_groups, list):
+        raise AppraisalBatchKeyError(f"{label} failed_groups must be an array")
+    complete = (expected["unknown_count"] == 0
+                and reason is None
+                and not failed_groups
+                and all(
+                    entry.get("quantity") == 0
+                    or (entry.get("unit_value") is not None
+                        and not entry.get("errors"))
+                    for entry in normalized))
     if record.get("pricing_complete") is not complete:
         raise AppraisalBatchKeyError(
             f"{label} pricing_complete does not match canonical completeness")
@@ -248,10 +260,11 @@ def validate_identification_batch(
         raise AppraisalBatchKeyError(
             "appraisal keys must be validated before identification coverage")
     appraisals = {row["listing_key"]: row for row in appraisal_results}
-    expected = {
+    expected_keys = [
         key for key in candidate_keys
         if appraisals[key].get("listing_category") == "minifigure"
-    }
+    ]
+    expected = set(expected_keys)
     keys = _listing_keys(identification_results, "identification result")
     duplicates = _duplicates(keys)
     missing = sorted(expected - set(keys))
@@ -264,6 +277,10 @@ def validate_identification_batch(
         problems.append("missing identification results: " + ", ".join(missing))
     if extra:
         problems.append("extra identification results: " + ", ".join(extra))
+    if not duplicates and not missing and not extra and keys != expected_keys:
+        problems.append(
+            "identification result order must match classifier minifigure "
+            f"subset order: expected {expected_keys!r}, got {keys!r}")
     if problems:
         raise AppraisalBatchKeyError(
             "identification batch key mismatch: " + "; ".join(problems))

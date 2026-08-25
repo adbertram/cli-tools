@@ -665,7 +665,7 @@
         "type": "object"
       },
       "phase": "synthesis",
-      "description": "One entry per identifier match group behind a minifigure row: stable-ref detections, Brickognize candidates, agent verification, verified identity (fig_no + catalog), detector-owned quantity, condition notes, and per-figure BrickLink used-sold value. Written by `legoscout minifig price`; null on every legacy row. Read/write ONLY through legoscout_cli/ledger/minifig_analysis.py -- normalize()/entries()/entry_errors(); that module solely owns entry semantics, this schema gates only array-or-null shape. Cross-photo repeats collapse into one entry's quantity (max simultaneous in any photo); unknown/unverifiable figures stay present with crops and null values, never estimates."
+      "description": "One entry per identifier match group behind a minifigure row: stable-ref detections, Brickognize candidates, agent verification, verified identity (fig_no + catalog), detector-owned quantity, condition notes, and per-figure BrickLink used-sold value. Written by `legoscout minifig price`; null on every legacy row. Read/write ONLY through legoscout_cli/ledger/minifig_analysis.py -- normalize()/entries()/entry_errors(); that module solely owns entry semantics, this schema gates only array-or-null shape. Quantity is listing-owned: choose the representative listing photo with the maximum globally de-duplicated simultaneous detections, allocate its crop IDs to their evidence entries, and sum those entry quantities. Groups seen only in other repeated photos remain present with quantity zero, crops, and null values; catalog evidence is preserved without inventing physical inventory."
     },
     "id": {
       "type": "string",

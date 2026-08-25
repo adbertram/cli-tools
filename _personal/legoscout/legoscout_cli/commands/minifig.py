@@ -2,15 +2,27 @@
 
 from __future__ import annotations
 
+import json
+from enum import Enum
 from pathlib import Path
 
 import typer
 from cli_tools_shared.output import command, print_json
 
 from ..paths import MINIFIG_CROP_ROOT
-from ..pricing import minifig_identification
+from ..pricing import minifig_eval, minifig_identification
 
 COMMAND_CREDENTIALS = ["no_auth"]
+
+
+class EvalStage(str, Enum):
+    """Evaluation stage selectors exposed as a closed CLI enum."""
+
+    all = "all"
+    detect = "detect"
+    identify = "identify"
+    quantity = "quantity"
+
 
 app = typer.Typer(
     help="Detect, identify, price, and evaluate listing minifigures",
@@ -89,3 +101,51 @@ def price(
         refresh=refresh,
     )
     print_json(summary)
+
+
+@app.command("eval")
+@command
+def evaluate(
+    manifest: Path = typer.Option(
+        ..., "--manifest", help="Versioned 33-real-listing manifest JSON"),
+    labels: Path = typer.Option(
+        ..., "--labels", help="Adam-owned human label decisions JSON"),
+    workspace: Path = typer.Option(
+        ..., "--workspace",
+        help="Disposable asset/detection/identification workspace"),
+    output: Path = typer.Option(
+        ..., "--output", help="Atomic evaluation report JSON path"),
+    approval: Path | None = typer.Option(
+        None, "--approval",
+        help="Out-of-band Adam approval artifact bound to exact labels"),
+    host_report: list[Path] = typer.Option(
+        [], "--host-report",
+        help="Verified host report; repeat for mac and adam-server"),
+    crop_root: Path | None = typer.Option(
+        None, "--crop-root",
+        help="Root containing content-addressed evaluation crops"),
+    queue: bool = typer.Option(
+        True, "--queue/--no-queue",
+        help="Best-effort labeling queue generation"),
+    stage: EvalStage = typer.Option(
+        EvalStage.all, "--stage", help="Evaluation stage bar subset"),
+):
+    """Emit a human-label queue and score only completed human labels."""
+    try:
+        exit_code = minifig_eval.evaluate_files(
+            manifest,
+            labels,
+            workspace,
+            output,
+            stage=stage.value,
+            approval_path=approval,
+            host_report_paths=host_report,
+            crop_root=crop_root,
+            write_queue=queue,
+        )
+    except minifig_eval.EvalDataError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    report = json.loads(output.read_text(encoding="utf-8"))
+    print_json(report)
+    if exit_code:
+        raise typer.Exit(exit_code)

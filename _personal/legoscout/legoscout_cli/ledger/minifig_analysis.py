@@ -3,7 +3,7 @@
 `minifig_analysis`.
 
 `minifig_analysis` is the per-figure evidence behind a minifigure row: one
-entry per provisional match group the identifier produced. The producer chain
+entry per final match group the identifier produced. The producer chain
 is ``legoscout minifig detect`` -> ``identify`` -> agent verification ->
 ``price``; the stored shape is an ARRAY of group objects, or `null` when no
 identification ran (every legacy row). It is typed `array|null` and stays that
@@ -26,6 +26,13 @@ coupling, quantity rules, value consistency, duplicate ID rejection.
 adds only record-level rules of its own (category, provenance pairing,
 count-equals-sum). The Phase F price finalizer calls the same functions before
 pricing. Never add an entry invariant in a second place.
+
+Quantity is listing-owned, not group-additive. The finalizer chooses the one
+listing photo with the greatest simultaneous globally de-duplicated detection
+count and allocates those countable crop IDs to their evidence entries. Groups
+seen only in other repeated photos stay present with quantity zero and an
+explicit `quantity_basis`; they remain catalog evidence without inventing more
+physical inventory.
 """
 from __future__ import annotations
 
@@ -60,6 +67,15 @@ ENTRY_FIELDS: tuple[str, ...] = (
 
 # Verification statuses the identifier contract defines.
 VERIFICATION_STATUSES = ("verified", "unknown", "unverifiable")
+REPRESENTATIVE_PHOTO_QUANTITY_RULE = (
+    "representative-photo-max-simultaneous-v1"
+)
+QUANTITY_BASIS_FIELDS = frozenset({
+    "rule",
+    "photo_relative_id",
+    "source_photo_sha256",
+    "counted_crop_ids",
+})
 
 _PROTOCOL_RELATIVE_PREFIX = "//"
 
@@ -116,7 +132,7 @@ def normalize_entry(entry: dict) -> dict:
 
     Raises `Unreadable` on malformed structure (non-dict entry, non-list
     detections, detection without a crop ref) or invalid numerics (boolean,
-    NaN/infinite, zero/negative quantity or unit value). Structure and numeric
+    NaN/infinite, negative quantity or unit value). Structure and numeric
     TYPE problems raise here; cross-field RELATIONSHIPS are reported by
     `entry_errors()` below so one bad entry reports every defect instead of
     only its first.
@@ -152,12 +168,20 @@ def normalize_entry(entry: dict) -> dict:
 
     quantity = out["quantity"]
     if quantity is not None:
-        if not _is_finite(quantity) or quantity <= 0:
+        if not _is_finite(quantity) or quantity < 0:
             raise Unreadable(
-                "quantity must be a positive finite number, got %r" % (quantity,))
+                "quantity must be a non-negative finite number, got %r"
+                % (quantity,))
         if quantity != int(quantity):
             raise Unreadable(
                 "quantity must be a whole number, got %r" % (quantity,))
+        basis = entry.get("quantity_basis")
+        if (quantity == 0
+                and (not isinstance(basis, dict)
+                     or basis.get("rule")
+                     != REPRESENTATIVE_PHOTO_QUANTITY_RULE)):
+            raise Unreadable(
+                "zero quantity requires representative-photo quantity_basis")
 
     for field in ("unit_value", "extended_value"):
         value = out[field]
@@ -230,20 +254,77 @@ def entry_errors(entry: dict) -> list[str]:
             % (entry.get("null_value_reason"), entry.get("extended_value")))
 
     quantity = entry.get("quantity")
+    basis = entry.get("quantity_basis")
     if quantity is None:
         errors.append("quantity missing")
-    elif not _is_number(quantity) or quantity < 1:
-        errors.append("quantity must be a positive integer, got %r" % (quantity,))
+    elif not _is_number(quantity) or quantity < 0:
+        errors.append(
+            "quantity must be a non-negative integer, got %r" % (quantity,))
+    elif basis is None and quantity < 1:
+        errors.append(
+            "zero quantity requires representative-photo quantity_basis")
+
+    if basis is not None:
+        if not isinstance(basis, dict) or set(basis) != QUANTITY_BASIS_FIELDS:
+            errors.append(
+                "quantity_basis must contain exact fields %s"
+                % sorted(QUANTITY_BASIS_FIELDS))
+        else:
+            if basis.get("rule") != REPRESENTATIVE_PHOTO_QUANTITY_RULE:
+                errors.append(
+                    "quantity_basis.rule=%r is not %r"
+                    % (basis.get("rule"), REPRESENTATIVE_PHOTO_QUANTITY_RULE))
+            photo_id = basis.get("photo_relative_id")
+            photo_hash = basis.get("source_photo_sha256")
+            counted = basis.get("counted_crop_ids")
+            if not isinstance(photo_id, str) or not photo_id:
+                errors.append("quantity_basis.photo_relative_id is required")
+            if not isinstance(photo_hash, str) or not photo_hash:
+                errors.append("quantity_basis.source_photo_sha256 is required")
+            if (not isinstance(counted, list)
+                    or any(not isinstance(value, str) or not value
+                           for value in counted)
+                    or len(set(counted or [])) != len(counted or [])):
+                errors.append(
+                    "quantity_basis.counted_crop_ids must be a unique string array")
+            else:
+                detections_by_id = {
+                    detection.get("crop_id"): detection
+                    for detection in entry.get("detections") or []
+                    if isinstance(detection, dict)
+                }
+                missing = [crop_id for crop_id in counted
+                           if crop_id not in detections_by_id]
+                wrong_photo = [crop_id for crop_id in counted
+                               if crop_id in detections_by_id
+                               and detections_by_id[crop_id].get(
+                                   "source_photo_sha256") != photo_hash]
+                if missing:
+                    errors.append(
+                        "quantity_basis counted crops are not entry detections: %s"
+                        % ", ".join(missing))
+                if wrong_photo:
+                    errors.append(
+                        "quantity_basis counted crops use another photo: %s"
+                        % ", ".join(wrong_photo))
+                if _is_number(quantity) and quantity != len(counted):
+                    errors.append(
+                        "quantity=%r does not equal counted_crop_ids length %s"
+                        % (quantity, len(counted)))
 
     unit_value = entry.get("unit_value")
     extended = entry.get("extended_value")
+    if unit_value is None and extended is not None:
+        errors.append(
+            "extended_value=%r present without unit_value -- resale money "
+            "requires both prices" % (extended,))
     if unit_value is not None and extended is None:
         if entry.get("null_value_reason") is None:
             errors.append(
                 "unit_value present but without a value overall: "
                 "extended_value is null and null_value_reason is unset")
     if unit_value is not None and extended is not None:
-        if _is_number(quantity) and quantity >= 1:
+        if _is_number(quantity) and quantity >= 0:
             expected = round_cents(unit_value * int(quantity))
             if abs(extended - expected) > 0.005:
                 errors.append(
@@ -273,13 +354,60 @@ def entry_errors(entry: dict) -> list[str]:
 
 
 def batch_errors(analysis: list[dict]) -> list[str]:
-    """Batch-level defects across entries: duplicate match_group_id."""
+    """Batch-level duplicate IDs and crop evidence across entries."""
+    errors: list[str] = []
+
     ids = [i for i in (e.get("match_group_id") for e in analysis)
            if isinstance(i, str)]
     dupes = sorted({i for i in ids if ids.count(i) > 1})
     if dupes:
-        return ["duplicate match_group_id: %s" % ", ".join(map(str, dupes))]
-    return []
+        errors.append(
+            "duplicate match_group_id: %s" % ", ".join(map(str, dupes)))
+
+    for field in ("crop_id", "crop_ref"):
+        entry_indexes_by_value: dict[str, set[int]] = {}
+        for entry_index, entry in enumerate(analysis):
+            for detection in entry.get("detections") or []:
+                if not isinstance(detection, dict):
+                    continue
+                value = detection.get(field)
+                if isinstance(value, str):
+                    entry_indexes_by_value.setdefault(value, set()).add(entry_index)
+
+        for value, entry_indexes in sorted(entry_indexes_by_value.items()):
+            if len(entry_indexes) < 2:
+                continue
+            errors.append(
+                "duplicate %s=%r across entries %s"
+                % (field, value, ", ".join(map(str, sorted(entry_indexes)))))
+
+    bases = [entry.get("quantity_basis") for entry in analysis]
+    if any(basis is not None for basis in bases):
+        if any(not isinstance(basis, dict) for basis in bases):
+            errors.append(
+                "representative-photo quantity_basis must exist on every entry")
+        else:
+            listing_keys = {
+                (
+                    basis.get("rule"),
+                    basis.get("photo_relative_id"),
+                    basis.get("source_photo_sha256"),
+                )
+                for basis in bases
+            }
+            if len(listing_keys) != 1:
+                errors.append(
+                    "quantity_basis entries disagree on the representative photo")
+            counted = [crop_id for basis in bases
+                       for crop_id in basis.get("counted_crop_ids", [])]
+            duplicates = sorted({crop_id for crop_id in counted
+                                 if counted.count(crop_id) > 1})
+            if duplicates:
+                errors.append(
+                    "quantity_basis counts crops more than once: %s"
+                    % ", ".join(duplicates))
+
+    return errors
 
 
 # ---------------------------------------------------------------------------
@@ -339,9 +467,9 @@ def _count_quantities(analysis: list[dict], *, verified: bool) -> int:
             continue
         quantity = entry.get("quantity")
         if (not _is_number(quantity) or quantity != int(quantity)
-                or quantity < 1):
+                or quantity < 0):
             raise Unreadable(
-                "quantity must be a positive integer, got %r" % (quantity,))
+                "quantity must be a non-negative integer, got %r" % (quantity,))
         total += int(quantity)
     return total
 
@@ -364,11 +492,11 @@ def figure_count(analysis: list[dict]) -> int | None:
         q = e.get("quantity")
         if q is None:
             continue
-        if not _is_number(q) or q != int(q) or q < 1:
+        if not _is_number(q) or q != int(q) or q < 0:
             raise Unreadable(
-                "quantity must be a positive integer, got %r" % (q,))
+                "quantity must be a non-negative integer, got %r" % (q,))
         total += int(q)
-    return total or None
+    return total
 
 
 def priced_subtotal(analysis: list[dict]) -> float:

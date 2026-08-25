@@ -191,14 +191,11 @@ FIGURE_COUNT_SOURCES = ("stated", "photo_count", "unknown", "detection")
 def _figure_count_errors(rec, cat):
     """`figure_count` and its provenance travel together.
 
-    The minifigure pricing path multiplies the eBay $/fig average by
-    `figure_count`, so a bare number with no provenance is exactly how an
-    invented count reaches Adam's money: `stated` is the seller's own claim,
-    `photo_count` is the mandatory image pass's exact count, and `unknown`
-    means the images were inspected (they always are, on a minifigure
-    candidate) but no exact count was determinable. A number with no source,
+    Identifier-backed rows use `detection`, with `figure_count` equal to the
+    canonical analysis quantity sum. `stated`, `photo_count`, and `unknown`
+    remain legal only so legacy rows stay readable. A number with no source,
     or a source on a non-minifigure row, is a hand-off defect -- report it by
-    name rather than letting pricing silently consume it.
+    name rather than letting downstream readers silently consume it.
     """
     out = []
     count = rec.get("figure_count")
@@ -206,10 +203,10 @@ def _figure_count_errors(rec, cat):
     if isinstance(count, (int, float)) and not isinstance(count, bool):
         if source not in FIGURE_COUNT_SOURCES:
             out.append(
-                "figure_count=%s has figure_count_source=%r -- a stated or "
-                "photo-counted figure must say which; use 'stated', "
-                "'photo_count', or 'unknown' so pricing knows whose word the "
-                "count is" % (count, source))
+                "figure_count=%s has figure_count_source=%r -- use "
+                "'detection' with canonical minifig_analysis on "
+                "identifier-backed rows; legacy rows may retain 'stated', "
+                "'photo_count', or 'unknown'" % (count, source))
         if cat != "minifigure":
             out.append(
                 "figure_count=%s on a %r row -- a figure count belongs to a "

@@ -26,6 +26,8 @@ DETECTION_ARTIFACT_KIND = "minifig_detection"
 IDENTIFICATION_ARTIFACT_VERSION = 1
 IDENTIFICATION_ARTIFACT_KIND = "minifig_identification"
 GROUP_CONTRACT_VERSION = "minifig-group-v1"
+SOURCE_MEMBER_CONTRACT_VERSION = "minifig-source-members-v1"
+SOURCE_MEMBER_DIGEST_PREFIX = "figmembers-v1-"
 DETECTION_INPUT_KEYS = frozenset({
     "listing_key",
     "saved_photo_paths",
@@ -35,6 +37,7 @@ DETECTION_INPUT_KEYS = frozenset({
 DetectorFn = Callable[[str, Sequence[str]], list[dict[str, Any]]]
 CropWriter = Callable[[str, dict[str, Any], str], str]
 Predictor = Callable[..., list[dict[str, Any]]]
+STAGE_STATUSES = frozenset({"success", "skipped", "blocked"})
 
 
 class DetectionInputError(ValueError):
@@ -217,7 +220,9 @@ def _listing_status(photos: list[dict[str, Any]]) -> tuple[str, str | None]:
         return "success", None
     if skipped == len(photos):
         return "skipped", "all photos skipped"
-    return "partial", f"{skipped} of {len(photos)} photos skipped"
+    # The stage completed and retains the skipped-photo reason; `partial` is
+    # not part of the locked success|skipped|blocked status vocabulary.
+    return "success", f"{skipped} of {len(photos)} photos skipped"
 
 
 def _summary(listings: list[dict[str, Any]]) -> dict[str, int]:
@@ -225,7 +230,7 @@ def _summary(listings: list[dict[str, Any]]) -> dict[str, int]:
     return {
         "listing_count": len(listings),
         "success_count": sum(row["status"] == "success" for row in listings),
-        "partial_count": sum(row["status"] == "partial" for row in listings),
+        "partial_count": 0,
         "skipped_count": sum(row["status"] == "skipped" for row in listings),
         "photo_count": len(photos),
         "photo_success_count": sum(
@@ -246,6 +251,7 @@ def detect_batch(
     crop_writer: CropWriter = minifig_detector.write_crop,
 ) -> dict[str, Any]:
     """Detect all saved photos once and build a path-free durable artifact."""
+    started_at = time.perf_counter()
     if detector_name not in minifig_detector.DETECTOR_LOADERS:
         raise DetectionInputError(f"unknown detector: {detector_name}")
     flat_paths = [path for listing in listings
@@ -255,24 +261,40 @@ def detect_batch(
         raise DetectionBatchError(
             "detector batch must return exactly one result per saved photo")
 
-    output_listings = []
+    photo_items = []
     cursor = 0
     for listing in listings:
-        photos = []
         for index, path in enumerate(listing["saved_photo_paths"], start=1):
             raw = raw_rows[cursor]
             cursor += 1
             if not isinstance(raw, dict) or raw.get("path") != path:
                 raise DetectionBatchError(
                     "detector result path/order does not match input")
-            photos.append(_photo_result(
-                path,
-                raw,
-                photo_relative_id=f"photo-{index:04d}",
-                detector_name=detector_name,
-                crop_root=crop_root,
-                crop_writer=crop_writer,
-            ))
+            photo_items.append({
+                "listing_key": listing["listing_key"],
+                "path": path,
+                "raw": raw,
+                "photo_relative_id": f"photo-{index:04d}",
+            })
+
+    def persist_photo(item: dict[str, Any]) -> dict[str, Any]:
+        return _photo_result(
+            item["path"],
+            item["raw"],
+            photo_relative_id=item["photo_relative_id"],
+            detector_name=detector_name,
+            crop_root=crop_root,
+            crop_writer=crop_writer,
+        )
+
+    persisted_photos = run_batch_stage(
+        "detect", photo_items, persist_photo, 1, None)["results"]
+    output_listings = []
+    cursor = 0
+    for listing in listings:
+        photo_count = len(listing["saved_photo_paths"])
+        photos = persisted_photos[cursor:cursor + photo_count]
+        cursor += photo_count
         status, reason = _listing_status(photos)
         output_listings.append({
             "listing_key": listing["listing_key"],
@@ -282,6 +304,7 @@ def detect_batch(
             "photos": photos,
         })
 
+    elapsed = time.perf_counter() - started_at
     return {
         "version": DETECTION_ARTIFACT_VERSION,
         "kind": DETECTION_ARTIFACT_KIND,
@@ -291,10 +314,15 @@ def detect_batch(
         },
         "listings": output_listings,
         "summary": _summary(output_listings),
+        "timings": {
+            "total_seconds": elapsed,
+            "mean_per_photo_seconds": (
+                elapsed / len(flat_paths) if flat_paths else 0.0),
+        },
     }
 
 
-def atomic_write_json(path: str | Path, payload: dict[str, Any]) -> None:
+def atomic_write_json(path: str | Path, payload: object) -> None:
     """Write JSON through a sibling temporary file, preserving old output."""
     output_path = Path(path)
     try:
@@ -318,6 +346,71 @@ def atomic_write_json(path: str | Path, payload: dict[str, Any]) -> None:
         raise DetectionOutputError(
             f"unable to write output {output_path}: {type(exc).__name__}: {exc}"
         ) from exc
+
+
+def run_batch_stage(
+    stage_name: str,
+    items: Sequence[dict[str, Any]],
+    process_one: Callable[[dict[str, Any]], dict[str, Any]],
+    workers: int,
+    output_path: str | Path | None,
+    *,
+    clock: Callable[[], float] = time.monotonic,
+    executor_factory: Callable[..., Any] = ThreadPoolExecutor,
+) -> dict[str, Any]:
+    """Preserve order and isolate keyed failures for every batch stage."""
+    if not isinstance(stage_name, str) or not stage_name.strip():
+        raise ValueError("stage_name must be a non-empty string")
+    if type(workers) is not int or workers < 1:
+        raise ValueError("workers must be a positive integer")
+    rows = list(items)
+    wall_started = clock()
+
+    def run(item: dict[str, Any]) -> tuple[dict[str, Any], float]:
+        started = clock()
+        try:
+            result = process_one(item)
+            if not isinstance(result, dict):
+                raise TypeError("stage callback must return an object")
+            if result.get("status") not in STAGE_STATUSES:
+                raise ValueError(
+                    "stage callback status must be success, skipped, or blocked")
+        except Exception as exc:  # one item must not abort valid siblings
+            result = {
+                key: deepcopy(item[key])
+                for key in ("listing_key", "crop_id", "match_group_id")
+                if key in item
+            }
+            result.update({
+                "status": "blocked",
+                "reason": f"{type(exc).__name__}: {exc}",
+            })
+        return result, max(0.0, clock() - started)
+
+    if rows:
+        with executor_factory(max_workers=min(workers, len(rows))) as pool:
+            futures = [pool.submit(run, item) for item in rows]
+            resolved = [future.result() for future in futures]
+    else:
+        resolved = []
+    results = [result for result, _ in resolved]
+    durations = [duration for _, duration in resolved]
+    summary = {
+        "stage": stage_name,
+        "processed": len(results),
+        "succeeded": sum(row["status"] == "success" for row in results),
+        "skipped": sum(row["status"] == "skipped" for row in results),
+        "failed": sum(row["status"] == "blocked" for row in results),
+        "reasons": [row["reason"] for row in results
+                    if isinstance(row.get("reason"), str) and row["reason"]],
+        "workers": workers,
+        "wall_seconds": round(max(0.0, clock() - wall_started), 6),
+        "serial_equivalent_seconds": round(sum(durations), 6),
+    }
+    report = {"results": results, "summary": summary}
+    if output_path is not None:
+        atomic_write_json(output_path, report)
+    return report
 
 
 def detect_file(
@@ -410,6 +503,17 @@ def _validate_detected(value: object, label: str) -> dict[str, Any]:
                    for coord in box)):
         raise IdentificationArtifactError(
             f"{label} box must contain four normalized coordinates")
+    x1, y1, x2, y2 = (float(coord) for coord in box)
+    if x2 < x1 or y2 < y1:
+        raise IdentificationArtifactError(f"{label} box is inverted")
+    if x2 == x1 or y2 == y1:
+        raise IdentificationArtifactError(f"{label} box has zero-area")
+    try:
+        minifig_detector.iou(box, box)
+    except minifig_detector.DetectorError as exc:
+        raise IdentificationArtifactError(
+            f"{label} box is invalid before detector_confidence-ranked "
+            f"finalization: {exc}") from exc
     detector_name = value["detector_name"]
     detector_version = value["detector_version"]
     if not isinstance(detector_name, str) or not detector_name:
@@ -456,7 +560,6 @@ def validate_identification_artifact(payload: object) -> dict[str, Any]:
             "identification input summary must be an object")
 
     listing_keys = []
-    crop_ids = []
     for listing_index, listing in enumerate(listings):
         label = f"listing {listing_index}"
         if (not isinstance(listing, dict)
@@ -471,7 +574,7 @@ def validate_identification_artifact(payload: object) -> dict[str, Any]:
         if not isinstance(listing["observations"], dict):
             raise IdentificationArtifactError(
                 f"{label} observations must be an object")
-        if listing["status"] not in ("success", "partial", "skipped"):
+        if listing["status"] not in STAGE_STATUSES:
             raise IdentificationArtifactError(f"{label} status is invalid")
         if listing["reason"] is not None and not isinstance(
                 listing["reason"], str):
@@ -481,6 +584,7 @@ def validate_identification_artifact(payload: object) -> dict[str, Any]:
         if not isinstance(photos, list):
             raise IdentificationArtifactError(
                 f"{label} photos must be an array")
+        crop_ids = []
         for photo_index, photo in enumerate(photos):
             photo_label = f"{label} photo {photo_index}"
             if (not isinstance(photo, dict)
@@ -499,17 +603,18 @@ def validate_identification_artifact(payload: object) -> dict[str, Any]:
                     f"{photo_label} detection {detection_index}")
                 row = _validate_detected(detection, detection_label)
                 crop_ids.append(row["crop_id"])
+        duplicate_crops = sorted({key for key in crop_ids
+                                  if crop_ids.count(key) > 1})
+        if duplicate_crops:
+            raise IdentificationArtifactError(
+                f"{label} has duplicate crop_id values: "
+                + ", ".join(duplicate_crops))
 
     duplicate_listings = sorted({key for key in listing_keys
                                  if listing_keys.count(key) > 1})
     if duplicate_listings:
         raise IdentificationArtifactError(
             "duplicate listing_key values: " + ", ".join(duplicate_listings))
-    duplicate_crops = sorted({key for key in crop_ids
-                              if crop_ids.count(key) > 1})
-    if duplicate_crops:
-        raise IdentificationArtifactError(
-            "duplicate crop_id values: " + ", ".join(duplicate_crops))
     return deepcopy(payload)
 
 
@@ -607,7 +712,7 @@ def _representative(members: list[dict[str, Any]]) -> dict[str, Any]:
 def _group_record(members: list[dict[str, Any]]) -> dict[str, Any]:
     representative = _representative(members)
     detections = [deepcopy(row["detection"]) for row in members]
-    status = "skipped" if representative["status"] == "skipped" else "success"
+    status = "success" if representative["status"] == "success" else "skipped"
     return {
         "match_group_id": _group_id(
             detections, representative["candidate_signature"]),
@@ -623,54 +728,80 @@ def _group_record(members: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def source_member_digest(listing: dict[str, Any]) -> str:
+    """Bind one listing to its detector-owned group and crop membership."""
+    membership = {
+        "contract_version": SOURCE_MEMBER_CONTRACT_VERSION,
+        "listing_key": listing["listing_key"],
+        "groups": [
+            {
+                "match_group_id": group["match_group_id"],
+                "detections": [
+                    {field: detection[field] for field in sorted(DETECTION_FIELDS)}
+                    for detection in group["detections"]
+                ],
+            }
+            for group in listing["groups"]
+        ],
+    }
+    encoded = json.dumps(
+        membership, sort_keys=True, separators=(",", ":"),
+    ).encode("utf-8")
+    return SOURCE_MEMBER_DIGEST_PREFIX + hashlib.sha256(encoded).hexdigest()
+
+
 def _listing_identification(
     listing: dict[str, Any],
-    evidence: dict[str, dict[str, Any]],
+    evidence: dict[tuple[str, str], dict[str, Any]],
 ) -> dict[str, Any]:
     grouped: dict[str, list[dict[str, Any]]] = {}
     for photo in listing["photos"]:
         for detection in photo["detections"]:
-            row = evidence[detection["crop_id"]]
+            row = evidence[(listing["listing_key"], detection["crop_id"])]
             signature = row["candidate_signature"]
             key = signature if signature is not None else (
                 "isolated:" + detection["crop_id"])
             grouped.setdefault(key, []).append(row)
     groups = [_group_record(members) for members in grouped.values()]
     skipped_groups = sum(row["status"] == "skipped" for row in groups)
+    upstream_reason = listing.get("reason")
     if not groups:
         status = listing["status"]
-        reason = listing["reason"]
+        reason = upstream_reason
     elif skipped_groups == len(groups):
         status = "skipped"
-        reason = "all provider groups skipped"
+        reason = "; ".join(value for value in (
+            upstream_reason, "all provider groups skipped") if value)
     elif skipped_groups:
-        status = "partial"
-        reason = f"{skipped_groups} of {len(groups)} provider groups skipped"
-    elif listing["status"] == "partial":
-        status = "partial"
-        reason = listing["reason"]
+        status = "success"
+        reason = "; ".join(value for value in (
+            upstream_reason,
+            f"{skipped_groups} of {len(groups)} provider groups skipped",
+        ) if value)
     else:
         status = "success"
-        reason = None
-    return {
+        reason = upstream_reason
+    output = {
         "listing_key": listing["listing_key"],
         "observations": deepcopy(listing["observations"]),
         "status": status,
         "reason": reason,
         "groups": groups,
     }
+    output["source_member_digest"] = source_member_digest(output)
+    return output
 
 
 def _identification_summary(
     listings: list[dict[str, Any]],
-    evidence: dict[str, dict[str, Any]],
+    evidence: dict[tuple[str, str], dict[str, Any]],
 ) -> dict[str, int]:
     groups = [group for listing in listings for group in listing["groups"]]
     rows = list(evidence.values())
     return {
         "listing_count": len(listings),
         "success_count": sum(row["status"] == "success" for row in listings),
-        "partial_count": sum(row["status"] == "partial" for row in listings),
+        "partial_count": 0,
         "skipped_count": sum(row["status"] == "skipped" for row in listings),
         "crop_count": len(rows),
         "group_count": len(groups),
@@ -701,12 +832,13 @@ def identify_batch(
         timeout=brickognize.DEFAULT_TIMEOUT,
     )
     artifact = validate_identification_artifact(detection_artifact)
-    detections = [
-        detection
+    detection_slots = [
+        (listing["listing_key"], detection)
         for listing in artifact["listings"]
         for photo in listing["photos"]
         for detection in photo["detections"]
     ]
+    detections = [detection for _, detection in detection_slots]
     crop_paths = [
         _crop_path(crop_root, detection["crop_ref"])
         for detection in detections
@@ -728,10 +860,13 @@ def identify_batch(
         raise IdentificationArtifactError(
             "provider batch must return exactly one result per crop")
 
-    evidence = {}
-    for index, (detection, crop_path, raw) in enumerate(zip(
-            detections, crop_paths, provider_rows)):
+    def normalize_provider(item: dict[str, Any]) -> dict[str, Any]:
+        index = item["index"]
+        detection = item["detection"]
+        crop_path = item["crop_path"]
+        raw = item["raw"]
         base = {
+            "listing_key": item["listing_key"],
             "detection": detection,
             "status": "skipped",
             "reason": None,
@@ -773,7 +908,25 @@ def identify_batch(
                     "candidate_signature": candidate_signature(candidates),
                     "contract": deepcopy(contract),
                 })
-        evidence[detection["crop_id"]] = base
+        return base
+
+    provider_items = [
+        {
+            "index": index,
+            "listing_key": listing_key,
+            "detection": detection,
+            "crop_path": crop_path,
+            "raw": raw,
+        }
+        for index, ((listing_key, detection), crop_path, raw) in enumerate(zip(
+            detection_slots, crop_paths, provider_rows))
+    ]
+    normalized_rows = run_batch_stage(
+        "identify", provider_items, normalize_provider, workers, None)["results"]
+    evidence = {
+        (row["listing_key"], row["detection"]["crop_id"]): row
+        for row in normalized_rows
+    }
 
     output_listings = [
         _listing_identification(listing, evidence)
@@ -859,8 +1012,6 @@ def _validate_price_artifact(payload: object) -> dict[str, Any]:
     if not isinstance(listings, list):
         raise IdentificationArtifactError("price input listings must be an array")
     listing_keys = []
-    group_ids = []
-    crop_ids = []
     for listing_index, listing in enumerate(listings):
         if not isinstance(listing, dict):
             raise IdentificationArtifactError(
@@ -877,6 +1028,8 @@ def _validate_price_artifact(payload: object) -> dict[str, Any]:
         if not isinstance(groups, list):
             raise IdentificationArtifactError(
                 f"price listing {listing_index} groups must be an array")
+        group_ids = []
+        crop_ids = []
         for group_index, group in enumerate(groups):
             if not isinstance(group, dict):
                 raise IdentificationArtifactError(
@@ -906,16 +1059,35 @@ def _validate_price_artifact(payload: object) -> dict[str, Any]:
                     raise IdentificationArtifactError(
                         f"price group {group_id} detection has no crop_id")
                 crop_ids.append(crop_id)
-    for label, values in (
-        ("listing_key", listing_keys),
-        ("match_group_id", group_ids),
-        ("crop_id", crop_ids),
-    ):
-        duplicates = sorted({value for value in values
-                             if values.count(value) > 1})
-        if duplicates:
+        for label, values in (
+            ("match_group_id", group_ids),
+            ("crop_id", crop_ids),
+        ):
+            duplicates = sorted({value for value in values
+                                 if values.count(value) > 1})
+            if duplicates:
+                raise IdentificationArtifactError(
+                    f"price listing {listing_key} has duplicate {label} values: "
+                    + ", ".join(duplicates))
+        expected_digest = listing.get("source_member_digest")
+        if (not isinstance(expected_digest, str)
+                or not expected_digest.startswith(SOURCE_MEMBER_DIGEST_PREFIX)
+                or len(expected_digest) != len(SOURCE_MEMBER_DIGEST_PREFIX) + 64
+                or any(character not in "0123456789abcdef"
+                       for character in expected_digest[
+                           len(SOURCE_MEMBER_DIGEST_PREFIX):])):
             raise IdentificationArtifactError(
-                f"duplicate {label} values: {', '.join(duplicates)}")
+                f"price listing {listing_key} source_member_digest is invalid")
+        actual_digest = source_member_digest(listing)
+        if expected_digest != actual_digest:
+            raise IdentificationArtifactError(
+                f"price listing {listing_key} detector membership drift: "
+                "source_member_digest does not match its groups and detections")
+    duplicates = sorted({value for value in listing_keys
+                         if listing_keys.count(value) > 1})
+    if duplicates:
+        raise IdentificationArtifactError(
+            f"duplicate listing_key values: {', '.join(duplicates)}")
     return deepcopy(payload)
 
 
@@ -968,19 +1140,38 @@ def _verification_error(group: dict[str, Any]) -> str | None:
     candidates = group.get("brickognize_candidates")
     if not isinstance(candidates, list):
         return f"group {group_id} brickognize_candidates must be an array"
-    candidate_ids = [row.get("id") for row in candidates
-                     if isinstance(row, dict)]
+    if any(not isinstance(row, dict)
+           or not isinstance(row.get("id"), str)
+           or not row["id"] for row in candidates):
+        return f"group {group_id} Brickognize candidates must have string ids"
+    candidate_ids = [row["id"] for row in candidates]
+    if len(set(candidate_ids)) != len(candidate_ids):
+        return f"group {group_id} Brickognize candidate ids must be unique"
     if any(value not in candidate_ids for value in compared):
         return (f"group {group_id} compared_candidate_ids contains an unknown "
                 "Brickognize candidate")
     fig_no = group.get("fig_no")
     catalog = group.get("catalog")
     if status == "verified":
+        if group.get("status") != "success":
+            return (f"group {group_id} verified identity requires a "
+                    "provider-success group")
+        if compared != candidate_ids:
+            return (f"group {group_id} verified identity must compare all "
+                    "Brickognize candidates in ranked order")
         if not isinstance(fig_no, str) or not fig_no:
             return f"group {group_id} verified identity requires fig_no"
+        if fig_no not in candidate_ids:
+            return (f"group {group_id} verified fig_no must be one of the "
+                    "Brickognize candidates")
         if not isinstance(catalog, dict) or catalog.get("no") != fig_no:
             return (f"group {group_id} verified fig_no does not match catalog "
                     "number")
+        if not isinstance(catalog.get("name"), str) or not catalog["name"].strip():
+            return f"group {group_id} verified identity requires catalog name"
+        image = catalog.get("thumbnail_url")
+        if not isinstance(image, str) or not image.strip():
+            return f"group {group_id} verified identity requires catalog image"
     elif fig_no is not None or catalog is not None:
         return (f"group {group_id} {status} verification must not carry fig_no "
                 "or catalog")
@@ -1000,9 +1191,21 @@ def _clean_detections(group: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _stage_failed_group(group: dict[str, Any], error: str) -> dict[str, Any]:
+    try:
+        detections = _clean_detections(group)
+    except IdentificationArtifactError as exc:
+        # A malformed detector row cannot be emitted as canonical
+        # minifig_analysis. Keep the keyed raw evidence outside the canonical
+        # entries so this group does not abort valid siblings.
+        return {
+            "stage_failed": True,
+            "match_group_id": group.get("match_group_id"),
+            "detections": deepcopy(group.get("detections")),
+            "errors": [f"VerificationError: {error}; {exc}"],
+        }
     return {
         "source_group_ids": [group["match_group_id"]],
-        "detections": _clean_detections(group),
+        "detections": detections,
         "brickognize_candidates": deepcopy(
             group.get("brickognize_candidates") or []),
         "verification": {
@@ -1054,8 +1257,7 @@ def _suppress_listing_overlaps(
         duplicate = any(
             existing["source_photo_sha256"]
             == detection["source_photo_sha256"]
-            and minifig_detector.iou(existing["box"], detection["box"])
-            >= minifig_detector.DUPLICATE_IOU_THRESHOLD
+            and _same_identity_detection_duplicate(existing, detection)
             for _, existing in kept
         )
         if not duplicate:
@@ -1103,6 +1305,62 @@ def _quantity(detections: list[dict[str, Any]]) -> int:
     return max(counts.values())
 
 
+def _same_identity_detection_duplicate(
+    left: dict[str, Any],
+    right: dict[str, Any],
+) -> bool:
+    """Suppress a duplicate box without erasing simultaneous figures.
+
+    IoU remains the exact 0.70 contract. Deeply nested detector splits are also
+    duplicates only when the retained box has at least twice the confidence of
+    the inner box. This preserves similarly confident, simultaneous detections
+    just below the IoU boundary while removing the low-confidence inner crop
+    emitted for the same physical figure.
+    """
+    if (minifig_detector.iou(left["box"], right["box"])
+            >= minifig_detector.DUPLICATE_IOU_THRESHOLD):
+        return True
+    if not minifig_detector.boxes_duplicate(left["box"], right["box"]):
+        return False
+    high = max(float(left["detector_confidence"]),
+               float(right["detector_confidence"]))
+    low = min(float(left["detector_confidence"]),
+              float(right["detector_confidence"]))
+    return high > low and high >= 2 * low
+
+
+def _representative_photo_quantity_basis(
+    entries: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Choose one physical-lot view and the countable crops shown in it.
+
+    Identity groups are evidence, not additive inventories: repeated listing
+    photos show the same physical lot. Quantity therefore comes from the one
+    photo with the greatest simultaneous globally de-duplicated detection
+    count. Stable photo ID/hash ordering breaks ties. The entries themselves
+    remain intact so every catalog-verification group stays auditable.
+    """
+    by_photo: dict[str, list[dict[str, Any]]] = {}
+    for entry in entries:
+        for detection in entry["detections"]:
+            by_photo.setdefault(detection["source_photo_sha256"], []).append(detection)
+    photo_hash, detections = min(
+        by_photo.items(),
+        key=lambda item: (
+            -len(item[1]),
+            min(row["photo_relative_id"] for row in item[1]),
+            item[0],
+        ),
+    )
+    return {
+        "rule": minifig_analysis.REPRESENTATIVE_PHOTO_QUANTITY_RULE,
+        "photo_relative_id": min(
+            row["photo_relative_id"] for row in detections),
+        "source_photo_sha256": photo_hash,
+        "counted_crop_ids": sorted(row["crop_id"] for row in detections),
+    }
+
+
 def _merge_final_groups(groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
     buckets: dict[str, list[dict[str, Any]]] = {}
     for group in groups:
@@ -1141,7 +1399,7 @@ def _merge_final_groups(groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "verification": deepcopy(representative["verification"]),
             "fig_no": representative["fig_no"],
             "catalog": deepcopy(representative["catalog"]),
-            "quantity": _quantity(detections),
+            "quantity": None,
             "condition_notes": "; ".join(notes) if notes else None,
             "used": None,
             "unit_value": None,
@@ -1150,25 +1408,59 @@ def _merge_final_groups(groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "errors": errors,
         }
         entries.append(entry)
+    listing_basis = _representative_photo_quantity_basis(entries)
+    countable = set(listing_basis["counted_crop_ids"])
+    for entry in entries:
+        counted_crop_ids = sorted(
+            detection["crop_id"] for detection in entry["detections"]
+            if detection["crop_id"] in countable
+        )
+        entry["quantity"] = len(counted_crop_ids)
+        entry["quantity_basis"] = {
+            **listing_basis,
+            "counted_crop_ids": counted_crop_ids,
+        }
+        if (entry["quantity"] == 0
+                and entry["verification"]["status"] == "verified"):
+            entry["null_value_reason"] = "evidence_only"
     return entries
 
 
 def _prepared_listing(listing: dict[str, Any]) -> dict[str, Any]:
+    base = {
+        "listing_key": listing["listing_key"],
+        "source_status": listing.get("status"),
+        "source_reason": listing.get("reason"),
+        "failed_groups": [],
+    }
     if not listing["groups"]:
         return {
-            "listing_key": listing["listing_key"],
+            **base,
             "blocked": True,
             "blocker": listing.get("reason") or "no minifigure groups",
             "entries": [],
         }
     groups = []
+    failed_groups = []
     for group in listing["groups"]:
         error = _verification_error(group)
-        groups.append(
-            _stage_failed_group(group, error)
-            if error is not None else _verified_group(group))
+        row = (_stage_failed_group(group, error)
+               if error is not None else _verified_group(group))
+        if row.get("stage_failed") is True:
+            failed_groups.append(row)
+        else:
+            groups.append(row)
+    if not groups:
+        return {
+            **base,
+            "failed_groups": failed_groups,
+            "blocked": True,
+            "blocker": "all minifigure groups failed verification",
+            "entries": [],
+        }
     return {
-        "listing_key": listing["listing_key"],
+        **base,
+        "failed_groups": failed_groups,
         "blocked": False,
         "blocker": None,
         "entries": _merge_final_groups(groups),
@@ -1190,7 +1482,6 @@ def _apply_price(entry: dict[str, Any], outcome: object) -> None:
         entry["errors"].append(
             "PricingError: minifig pricer returned a non-object")
         return
-    entry["catalog"] = deepcopy(outcome.get("catalog"))
     entry["used"] = deepcopy(outcome.get("used"))
     unit_value = outcome.get("unit_value")
     if unit_value is None:
@@ -1211,11 +1502,17 @@ def _apply_price(entry: dict[str, Any], outcome: object) -> None:
 
 
 def _result_from_prepared(prepared: dict[str, Any]) -> dict[str, Any]:
+    failed_groups = deepcopy(prepared.get("failed_groups") or [])
+    reason = prepared.get("source_reason")
+    if reason is None and failed_groups:
+        reason = f"{len(failed_groups)} minifigure groups failed verification"
     if prepared["blocked"]:
         return {
             "listing_key": prepared["listing_key"],
             "blocked": True,
             "blocker": prepared["blocker"],
+            "reason": reason or prepared["blocker"],
+            "failed_groups": failed_groups,
             "minifig_analysis": None,
             "figure_count": None,
             "figure_count_source": None,
@@ -1238,11 +1535,18 @@ def _result_from_prepared(prepared: dict[str, Any]) -> dict[str, Any]:
             "final minifig_analysis violates canonical invariants: "
             + "; ".join(errors))
     unknown = minifig_analysis.unknown_count(normalized)
-    complete = unknown == 0 and all(
-        entry["unit_value"] is not None and not entry["errors"]
-        for entry in normalized)
+    complete = (unknown == 0
+                and not failed_groups
+                and prepared.get("source_reason") is None
+                and prepared.get("source_status") == "success"
+                and all(
+                    entry["quantity"] == 0
+                    or (entry["unit_value"] is not None and not entry["errors"])
+                    for entry in normalized))
     return {
         "listing_key": prepared["listing_key"],
+        "reason": reason,
+        "failed_groups": failed_groups,
         "minifig_analysis": normalized,
         "figure_count": minifig_analysis.figure_count(normalized),
         "figure_count_source": "detection",
@@ -1252,8 +1556,7 @@ def _result_from_prepared(prepared: dict[str, Any]) -> dict[str, Any]:
             minifig_analysis.priced_subtotal(normalized)),
         "sold_count": minifig_analysis.sold_count(normalized),
         "pricing_complete": complete,
-        "status": "partial" if any(entry["errors"] for entry in normalized)
-        else "success",
+        "status": "success",
     }
 
 
@@ -1274,34 +1577,44 @@ def price_batch(
     targets = [entry for listing in prepared if not listing["blocked"]
                for entry in listing["entries"]
                if entry["verification"]["status"] == "verified"
+               and entry["quantity"] > 0
                and not entry["errors"]]
-    durations = []
-    if targets:
-        wall_started = clock()
-
+    target_groups: dict[str, list[dict[str, Any]]] = {}
+    for entry in targets:
+        target_groups.setdefault(entry["fig_no"], []).append(entry)
+    unique_targets = [entries[0] for entries in target_groups.values()]
+    if unique_targets:
         def run(entry):
-            started = clock()
             try:
                 outcome = pricer(
                     entry["fig_no"], entry["catalog"], refresh=refresh)
             except Exception as exc:
                 outcome = exc
-            return outcome, max(0.0, clock() - started)
+            return {"status": "success", "reason": None, "outcome": outcome}
 
-        with executor_factory(max_workers=min(workers, len(targets))) as pool:
-            futures = [pool.submit(run, entry) for entry in targets]
-            for entry, future in zip(targets, futures):
-                outcome, duration = future.result()
-                durations.append(duration)
-                _apply_price(entry, outcome)
-        wall_seconds = max(0.0, clock() - wall_started)
+        stage = run_batch_stage(
+            "price",
+            unique_targets,
+            run,
+            min(workers, len(unique_targets)),
+            None,
+            clock=clock,
+            executor_factory=executor_factory,
+        )
+        for entries, resolved in zip(target_groups.values(), stage["results"]):
+            for entry in entries:
+                _apply_price(entry, resolved["outcome"])
+        wall_seconds = stage["summary"]["wall_seconds"]
+        serial_equivalent_seconds = stage["summary"][
+            "serial_equivalent_seconds"]
     else:
         wall_seconds = 0.0
+        serial_equivalent_seconds = 0.0
     results = [_result_from_prepared(listing) for listing in prepared]
     summary = {
         "listing_count": len(results),
         "success_count": sum(row["status"] == "success" for row in results),
-        "partial_count": sum(row["status"] == "partial" for row in results),
+        "partial_count": 0,
         "blocked_count": sum(row["status"] == "blocked" for row in results),
         "entry_count": sum(len(row.get("minifig_analysis") or [])
                            for row in results),
@@ -1310,7 +1623,7 @@ def price_batch(
             for entry in (row.get("minifig_analysis") or [])),
         "workers": workers,
         "wall_seconds": round(wall_seconds, 6),
-        "serial_equivalent_seconds": round(sum(durations), 6),
+        "serial_equivalent_seconds": round(serial_equivalent_seconds, 6),
     }
     return {"results": results, "summary": summary}
 

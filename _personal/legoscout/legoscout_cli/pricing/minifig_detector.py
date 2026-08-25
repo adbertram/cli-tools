@@ -14,6 +14,7 @@ from PIL import Image
 
 DETECTOR_CONTRACT_VERSION = "v1"
 DUPLICATE_IOU_THRESHOLD = 0.70
+DUPLICATE_CONTAINMENT_THRESHOLD = 0.90
 GROUNDING_DINO_MODEL = "IDEA-Research/grounding-dino-tiny"
 GROUNDING_DINO_REVISION = "a2bb814dd30d776dcf7e30523b00659f4f141c71"
 GROUNDING_DINO_WEIGHTS_SHA256 = (
@@ -73,8 +74,11 @@ def stable_crop_id(photo_bytes: bytes, box: Sequence[float]) -> str:
     return f"figcrop-{DETECTOR_CONTRACT_VERSION}-{digest}"
 
 
-def iou(left: Sequence[float], right: Sequence[float]) -> float:
-    """Intersection-over-union for two normalized boxes."""
+def _overlap_metrics(
+    left: Sequence[float],
+    right: Sequence[float],
+) -> tuple[float, float]:
+    """Return IoU and the fraction of the smaller box that intersects."""
     lx1, ly1, lx2, ly2 = _normalized_box(left)
     rx1, ry1, rx2, ry2 = _normalized_box(right)
     width = max(0.0, min(lx2, rx2) - max(lx1, rx1))
@@ -82,7 +86,68 @@ def iou(left: Sequence[float], right: Sequence[float]) -> float:
     intersection = width * height
     left_area = (lx2 - lx1) * (ly2 - ly1)
     right_area = (rx2 - rx1) * (ry2 - ry1)
-    return intersection / (left_area + right_area - intersection)
+    union = left_area + right_area - intersection
+    return intersection / union, intersection / min(left_area, right_area)
+
+
+def iou(left: Sequence[float], right: Sequence[float]) -> float:
+    """Intersection-over-union for two normalized boxes."""
+    return _overlap_metrics(left, right)[0]
+
+
+def boxes_duplicate(
+    left: Sequence[float],
+    right: Sequence[float],
+    threshold: float = DUPLICATE_IOU_THRESHOLD,
+) -> bool:
+    """Whether two boxes are duplicate views of one detected object.
+
+    The IoU boundary remains the general duplicate rule. A pair is also a
+    duplicate when its intersection covers at least 90% of the smaller box.
+    That symmetric containment ratio catches nested or slightly jittered
+    same-figure crops without changing the 0.70 IoU boundary for neighboring,
+    non-contained figures.
+    """
+    overlap, containment = _overlap_metrics(left, right)
+    return (
+        overlap >= threshold
+        or containment >= DUPLICATE_CONTAINMENT_THRESHOLD
+    )
+
+
+def suppress_connected_components(
+    items: list[Any],
+    is_duplicate: Callable[[Any, Any], bool],
+    rank_key: Callable[[Any], tuple],
+) -> list[Any]:
+    """Union items linked by is_duplicate; keep one best-ranked per group.
+
+    Duplicate relation is transitive here: a chain where each neighbor pair
+    is duplicate forms ONE component even when the endpoints are not
+    directly duplicate. Greedy pairwise suppression would keep both ends of
+    such a chain and double-count the physical object.
+    """
+    parent = list(range(len(items)))
+
+    def find(index: int) -> int:
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    for left in range(len(items)):
+        for right in range(left + 1, len(items)):
+            if is_duplicate(items[left], items[right]):
+                left_root, right_root = find(left), find(right)
+                if left_root != right_root:
+                    parent[right_root] = left_root
+
+    best: dict[int, int] = {}
+    for index, item in enumerate(items):
+        root = find(index)
+        if root not in best or rank_key(item) < rank_key(items[best[root]]):
+            best[root] = index
+    return [items[best[root]] for root in sorted(best)]
 
 
 def suppress_overlaps(
@@ -90,15 +155,12 @@ def suppress_overlaps(
     threshold: float = DUPLICATE_IOU_THRESHOLD,
 ) -> list[dict[str, Any]]:
     """Suppress duplicate boxes, keeping confidence then crop-ID order."""
-    ranked = sorted(
+    kept = suppress_connected_components(
         detections,
-        key=lambda row: (-row["confidence"], row["crop_id"]),
+        is_duplicate=lambda left, right: boxes_duplicate(
+            left["box"], right["box"], threshold),
+        rank_key=lambda row: (-row["confidence"], row["crop_id"]),
     )
-    kept: list[dict[str, Any]] = []
-    for candidate in ranked:
-        if all(iou(candidate["box"], existing["box"]) < threshold
-               for existing in kept):
-            kept.append(candidate)
     return sorted(
         kept,
         key=lambda row: (*row["box"], row["crop_id"]),
