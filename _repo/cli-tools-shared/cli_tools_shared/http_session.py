@@ -210,19 +210,30 @@ class BrowserAuthState:
             raise BrowserAuthStateError(
                 "Config does not expose a browser (config.get_browser() is None)."
             )
+        tool_name = getattr(config, "_tool_name", "<tool>")
         try:
-            raw_cookies = browser.live_cookies()
+            return cls.from_browser(
+                browser,
+                f"No browser session for {tool_name}. Run '{tool_name} auth login'.",
+            )
         finally:
             if hasattr(browser, "close"):
                 browser.close()
+
+    @classmethod
+    def from_browser(cls, browser, empty_session_message: str) -> "BrowserAuthState":
+        """Build auth state from a caller-owned browser's live cookies.
+
+        The caller keeps ownership of ``browser``: this never closes it, so a
+        client that already holds an open persistent-profile session reuses that
+        one session instead of launching a second Chromium against the same
+        user-data-dir. Callers that must not consult any stored cookie snapshot
+        use this directly instead of :meth:`from_config`.
+        """
+        raw_cookies = browser.live_cookies()
         if not raw_cookies:
-            tool_name = getattr(config, "_tool_name", "<tool>")
-            raise BrowserAuthStateError(
-                f"No browser session for {tool_name}. "
-                f"Run '{tool_name} auth login'."
-            )
-        cookies = tuple(_parse_cookie(item) for item in raw_cookies)
-        return cls(cookies=cookies, origins=())
+            raise BrowserAuthStateError(empty_session_message)
+        return cls(cookies=tuple(_parse_cookie(item) for item in raw_cookies), origins=())
 
     def cookies_for_host(
         self,

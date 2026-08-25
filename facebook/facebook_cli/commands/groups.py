@@ -16,15 +16,16 @@ from typing import Optional, List
 
 from cli_tools_shared.output import print_json, command
 
-from .._helpers import client_session, output_list, output_single
+from .._helpers import client_session, output_list, output_single, report_client_error
+from ..client import FeedExtractionFailed
 
 app = typer.Typer(help="Manage Facebook Groups", no_args_is_help=True)
 
 POST_COLUMNS = ["post_id", "author", "text", "timestamp"]
 POST_HEADERS = ["Post ID", "Author", "Text", "Timestamp"]
 
-GROUP_COLUMNS = ["group_id", "name", "member_count", "url"]
-GROUP_HEADERS = ["Group ID", "Name", "Members", "URL"]
+GROUP_COLUMNS = ["group_id", "name", "membership", "url"]
+GROUP_HEADERS = ["Group ID", "Name", "Membership", "URL"]
 
 # --- Posts sub-app ---
 posts_app = typer.Typer(help="Manage posts in Facebook Groups", no_args_is_help=True)
@@ -43,6 +44,17 @@ def posts_list(
 ):
     """List posts from a Facebook Group.
 
+    Zero posts on stdout at exit 0 means one thing only: this readable group's
+    feed really is empty. Every other outcome is a distinct non-zero exit with a
+    greppable stderr marker, so a caller never has to guess:
+
+      exit 0  []                        readable group, no posts
+      exit 1  "UNREADABLE_GROUP: ..."   private group not joined, or join pending
+      exit 2  "LOGGED_OUT_HTML: ..."    the saved session is signed out; re-login
+      exit 3  "FEED_EXTRACTION_FAILED:" readable group whose feed could not be parsed
+
+    Use 'facebook groups get <group_id>' to check posts_readable before crawling.
+
     Examples:
         facebook groups posts list 123456789
         facebook groups posts list my-group-name --table --limit 10
@@ -50,7 +62,10 @@ def posts_list(
         facebook groups posts list 123456789 --filter "author:contains:John"
     """
     with client_session() as client:
-        posts = client.list_group_posts(group_id, limit=limit, full_threads=full_threads)
+        try:
+            posts = client.list_group_posts(group_id, limit=limit, full_threads=full_threads)
+        except FeedExtractionFailed as exc:
+            raise typer.Exit(report_client_error(exc))
         items = [post.model_dump() for post in posts]
 
         output_list(
@@ -142,11 +157,17 @@ def groups_list(
     filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
-    """List Facebook Groups the logged-in user has joined.
+    """List Facebook Groups the logged-in user has joined or requested to join.
+
+    Every row carries group_id, name, url, and membership ("member" or
+    "pending"); joined groups are listed before pending requests. Facebook does
+    not render privacy or member counts on this page, so those stay null - use
+    'facebook groups get <group_id>' for them.
 
     Examples:
         facebook groups list
         facebook groups list --table --limit 50
+        facebook groups list --filter "membership:eq:member"
         facebook groups list --filter "name:contains:Python"
     """
     with client_session() as client:
@@ -167,11 +188,17 @@ def groups_get(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
-    """Get a specific Facebook Group by ID.
+    """Get a specific Facebook Group by ID, slug, or URL.
+
+    Reports the group's privacy ("public"/"private"), this session's membership
+    ("member"/"pending"/"non_member"), and posts_readable - whether this session
+    can actually read the group's posts. All three are read from the live group
+    page and never inferred.
 
     Examples:
         facebook groups get 123456789
         facebook groups get 123456789 --table
+        facebook groups get 123456789 --properties group_id,privacy,membership,posts_readable
     """
     with client_session() as client:
         group = client.get_group(group_id)

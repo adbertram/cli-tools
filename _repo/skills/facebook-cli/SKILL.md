@@ -24,8 +24,10 @@ facebook <command-group> <action> [arguments] [options]
 | Browse Today's picks | `facebook marketplace list --table` |
 | Get listing details | `facebook marketplace get ITEM_ID` |
 | Check listing availability | `facebook marketplace status ITEM_ID` |
-| List group posts | `facebook groups list GROUP_ID --table` |
-| Get a group post | `facebook groups get GROUP_ID/posts/POST_ID` |
+| List your groups + pending requests | `facebook groups list --limit 100 --table` |
+| Check a group's privacy/membership | `facebook groups get GROUP_ID` |
+| List group posts | `facebook groups posts list GROUP_ID --table` |
+| Get a group post | `facebook groups posts get GROUP_ID/posts/POST_ID` |
 | List conversations | `facebook messenger list --table` |
 | Read messages | `facebook messenger get CONVERSATION_ID` |
 | Send message | `facebook messenger send CONVERSATION_ID --text "Hello"` |
@@ -39,7 +41,7 @@ This file contains complete command syntax, all arguments, all options, and usag
 </principle>
 
 <principle name="Command Groups">
-- **groups** — Read posts from Facebook Groups (list, get)
+- **groups** — Enumerate your groups and pending join requests (`groups list`), read one group's privacy/membership/readability (`groups get`), and read or write its posts (`groups posts list|get|create|comment|reply`)
 - **marketplace** — Search, browse, inspect, and check Facebook Marketplace listings (list, get, status)
 - **messenger** — Messenger conversations (list, get, send, requests)
 - **auth** — Manage authentication via headed browser (login, logout, status, test)
@@ -51,6 +53,57 @@ This file contains complete command syntax, all arguments, all options, and usag
 <reference_index>
 **`usage.json`** — Complete command tree with arguments, options, defaults, and usage instructions for every command.
 </reference_index>
+
+<principle name="Group Membership, Privacy, and Readability">
+Whether a group's posts can be read is a function of the group's privacy AND the
+authenticated account's membership. Both are reported by `facebook groups get`,
+read from the live group page and never inferred:
+
+- `privacy` — `"public"` or `"private"`.
+- `membership` — `"member"`, `"pending"` (join request submitted, not yet approved), or `"non_member"`.
+- `posts_readable` — whether THIS session can actually read the group's posts. A member always can; a non-member or pending requester can read a public group and cannot read a private one.
+
+An unknown Facebook privacy label or `viewer_join_state` raises instead of
+defaulting, so a Facebook change surfaces as a loud failure rather than a group
+silently reported as unreadable (or readable).
+
+`facebook groups posts list` on an unreadable group exits **1** and writes a
+stderr message starting with the stable marker `UNREADABLE_GROUP:`, naming the
+privacy and membership that produced it. It NEVER returns `[]` with exit 0 for a
+group this session cannot see — that silent-empty made a private group with a
+pending join request indistinguishable from a group with no new posts. The exit
+contract for `groups posts list`:
+
+| Outcome | Exit | stdout | stderr |
+|---------|------|--------|--------|
+| Readable group, posts found | 0 | post array | progress only |
+| Readable group, no posts in window | 0 | `[]` | progress only |
+| Unreadable group | 1 | (empty) | `Error: UNREADABLE_GROUP: ...` |
+| Session signed out / credential failure | 2 | (empty) | `Error: LOGGED_OUT_HTML: ...` |
+| Readable group whose feed could not be parsed | 3 | (empty) | `Error: FEED_EXTRACTION_FAILED: ...` |
+
+Exit **0** with `[]` therefore means exactly one thing: this readable group's
+feed really is empty. There is no rendered-feed DOM scraper behind this command
+any more — see Known Issue #9 — so a page shape this CLI cannot parse fails at
+exit **3** instead of answering `[]`. `LOGGED_OUT_HTML:` at exit **2** means the
+saved browser session no longer identifies a signed-in viewer; run `facebook
+auth login --force`.
+
+Before crawling a group you have not confirmed, call `facebook groups get
+<group_id>` and gate on `posts_readable`.
+
+`facebook groups list` returns BOTH joined groups and pending join requests,
+joined first, each row carrying `membership`. Filter with
+`--filter "membership:eq:member"` when only joined groups matter. Every row
+carries `group_id`, `name`, and `url`; `group_id` is Facebook's own URL
+reference — the numeric id, or the vanity slug for groups that have one, and
+every `facebook groups ...` command accepts either. Facebook renders neither
+privacy nor member counts on that page, so `privacy`, `posts_readable`, and
+`member_count` are `null` on `list` rows — run `groups get` for those. `--limit`
+caps how many rows are read from the scrolled page, so pass a limit at or above
+the counts Facebook prints in its own section headings ("All groups you've
+joined (34)", "Pending group requests (7)") to enumerate everything.
+</principle>
 
 <principle name="Group Comment Verification">
 `facebook groups posts comment` and `facebook groups posts reply` perform multi-stage verification after submitting (composer-cleared → comment-count delta → markdown-stripped text-on-page) and return:
@@ -317,6 +370,27 @@ Facebook's own filter button on both rejected pages still read `Location: Evansv
 **Verification:** The exact failing command now exits 1 with `Error: Facebook does not recognize the Marketplace location slug 'losangeles'. It served https://www.facebook.com/marketplace/category/search/?... instead of the requested https://www.facebook.com/marketplace/losangeles/search/?...`. All four valid controls still exit 0 and return their own city: `evansville` (11 Evansville + 1 Henderson KY), `chicago` (Chicago/Elmwood Park/Evanston/Morton Grove/Riverside IL), `seattle` (Seattle/Redmond/Bellevue WA), `nyc` (Astoria/Brooklyn/Flushing NY + Bloomfield/Leonia NJ). Regression coverage in `facebook/tests/test_marketplace_delivery_and_location.py` against verbatim live URL captures in `facebook/tests/fixtures/marketplace_location_slugs.json`, including a `_paginated_fetch` test proving the guard fires before extraction and is not masked by the zero-result path. Full suite: `337 passed`.
 
 **Recurrence Prevention:** Never trust that Facebook searched what the CLI asked for. Facebook's Marketplace surfaces answer an unrecognized identifier by substituting a default rather than failing, so any new location-, category-, or filter-bearing URL must be re-read from the served page and compared against the request. `--delivery-method shipping` is exempt from caring about the slug (Facebook serves one nationwide pool from any city), but it is NOT exempt from the check, because an unknown slug still means the caller believes something false.
+
+### 9. `groups posts list` returned `[]` at exit 0 for a third of joined groups
+
+**Symptom (2026-08-25):** Eight of Adam's twenty-four joined LEGO groups answered `[]` on stdout at exit 0 while `facebook groups get` reported `posts_readable: true` for every one of them and the groups were plainly active. Every failing run printed the same two stderr lines: `Fetching up to N posts from group <id>...` then `Group discussion preload missing; reading the rendered group feed instead`. The other sixteen returned posts. A caller could not tell "no new posts" from "the extractor missed the posts that are there" — the exact silent-zero class Known Issue #8 and the `UNREADABLE_GROUP` work each removed one layer up.
+
+**Cause (two defects, proven live):**
+
+1. **Stale stored cookie snapshot → logged-out HTML.** The profile stored an `AUTH_COOKIES_JSON` secret, and `BrowserAuthState.from_config` prefers that snapshot over the live browser. Its `xs` session cookie no longer matched the live Chromium profile's (`c_user` still matched, which is why every authentication check passed). Facebook does not reject a request carrying a retired session — it answers HTTP 200 with the LOGGED-OUT variant of the same page, whose `CurrentUserInitialData.USER_ID` is `"0"`. That page still renders the group's name, privacy, and member count, but carries no feed and no `CometGroupDiscussionRootSuccessQuery` preload. So the preload was "missing" on EVERY group — the sixteen "working" ones were all being answered by the rendered-feed DOM scraper too, and it simply happened to find posts on those pages. Measured live: the same three groups fetched with the stale snapshot returned `USER_ID "0"` and no preload; fetched with live browser cookies they returned `USER_ID 47201652` and a valid preload with `document_id 27950770684584803`.
+2. **Vanity slug never equals the numeric group ID.** `_extract_group_discussion_request` scored preload candidates by `contains_group_id(variables)`, comparing the CALLER'S reference against Facebook's Relay values. Requesting a group by slug (`Legosforsale`) scored every candidate zero even though the page's preload carried `groupID 266584920129216`, so the preload looked missing on a page that had one.
+
+**Fix (`facebook/facebook_cli/`):**
+
+- `_facebook_http_client` builds its auth state with the new `BrowserAuthState.from_browser(self._browser, ...)`, so cookies come from THIS client's live persistent Chromium profile and nowhere else. `AUTH_COOKIES_JSON` was removed from the facebook `Config` auth fields and the stored secret deleted: one session store, no frozen copy to go stale, and one Chromium bound to the user-data-dir instead of a second one opened and closed.
+- `_fetch_authenticated_facebook_page` asserts the response is authenticated at the single fetch seam, raising `FacebookSessionLoggedOut` (`LOGGED_OUT_HTML:`, exit 2) so no parser downstream can read a logged-out page as an empty one.
+- `_canonical_group_id` resolves a slug to the numeric ID Facebook's own payloads use (a group page carries exactly one distinct `"groupID":"<digits>"`; zero or several fails loudly rather than picking one).
+- **The rendered-feed DOM scraper is gone.** `_extract_group_posts` and `_list_group_post_summaries` were deleted, and `list_group_posts` no longer catches `GroupDiscussionPreloadMissing` into a fallback. A missing preload on a page already proven signed-in is diagnosed by `_group_feed_unavailable` from the group's own live state: not readable → `GroupNotReadable` (`UNREADABLE_GROUP:`, exit 1); readable → `FeedExtractionFailed` (`FEED_EXTRACTION_FAILED:`, exit 3). Neither is ever `[]`.
+- `_helpers.report_client_error` is the single owner of the exit-code contract, used by both the Typer command and the fast argv path in `main.py`, which previously bypassed the Typer command entirely and would have ignored a mapping installed only there.
+
+**Verification:** All 8 previously-zero groups now return 3/3 posts with real authors and text at exit 0 (`3367761036773668`, `827463510672407`, `1457540554300292`, `1351019278661675`, `735053390610330`, `Legosforsale`, `701073159947799`, `1202687183194441`). All 16 previously-working groups still return 3/3 — four of them previously returned only 2. `1647953932130640` (private, pending) still exits 1 with `UNREADABLE_GROUP:`. All three exit codes verified through the installed dispatch: `FEED_EXTRACTION_FAILED`→3, `LOGGED_OUT_HTML`→2, `UNREADABLE_GROUP`→1, each with empty stdout. Regression coverage in `facebook/tests/test_group_feed_silent_zero_regression.py` against verbatim live captures in `facebook/tests/fixtures/group_feed_preload_*.txt` and `group_feed_logged_out_1457540554300292.txt` (session tokens redacted; every group ID, query ID, and Relay variable untouched), including a test that asserts the deleted scraper cannot come back and one that asserts a genuinely empty readable group is still `[]` at exit 0.
+
+**Recurrence Prevention:** Never validate a Facebook parser against a capture without first asserting a positive authentication marker in that same capture — a logged-out page produces parsers that pass on fixtures and answer wrongly in production, and Facebook signals it only through `CurrentUserInitialData.USER_ID == "0"` on an HTTP 200. Never keep a second copy of a browser session (cookie snapshot, storage-state file, exported header) alongside the live profile: the live profile rotates, the copy does not, and the divergence is silent. And never add a fallback extractor behind a primary one that can return an empty list — the fallback's empty answer is indistinguishable from a real empty result, which is what turned this into a month-shaped blind spot rather than a crash.
 
 ## Raw Browser Fallback Notes
 

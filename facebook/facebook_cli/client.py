@@ -16,7 +16,7 @@ from cli_tools_shared.http_session import (
     extract_embedded_define,
 )
 from cli_tools_shared.data_cache import cached
-from cli_tools_shared.exceptions import ClientError
+from cli_tools_shared.exceptions import ClientError, CredentialError
 from cli_tools_shared.output import print_info, print_warning
 from cli_tools_shared._debug_logging import get_debug_logger
 
@@ -44,7 +44,25 @@ FACEBOOK_DESKTOP_HEADERS = {
     "Sec-Fetch-Dest": "document",
     "Upgrade-Insecure-Requests": "1",
 }
+# The complete set of trailing relative-time phrases Facebook appends to an
+# author name inside a comment aria-label. Anchored to the end and never
+# case-folded, so "Yesterday Once More" and "LegoFan99" are left alone.
+RELATIVE_TIME_SUFFIX_RE = re.compile(
+    r"""\s+(?:
+        just\s+now
+      | (?:about\s+)?(?:\d+|an?|a\s+few)\s+
+        (?:second|minute|hour|day|week|month|year)s?\s+ago
+      | \d+[smhdwy]
+      | Edited(?:\s.*)?
+      | Yesterday(?:\s.*)?
+    )\Z""",
+    re.VERBOSE,
+)
 GROUP_DISCUSSION_FRIENDLY_NAME = "CometGroupDiscussionRootSuccessQuery"
+# Facebook's own marker for "nobody is signed in": the logged-out variant of any
+# page still returns HTTP 200 and still defines CurrentUserInitialData, with
+# USER_ID set to this literal.
+LOGGED_OUT_USER_ID = "0"
 GROUP_DISCUSSION_DOC_ID = "26647538378198347"
 GROUP_DISCUSSION_BOOTSTRAP_MARKERS = [
     '["CurrentUserInitialData",',
@@ -517,8 +535,194 @@ CAPTURE_CONFLICT_MAPS = {
 TILE_SHIPPING_PLACEHOLDER_LOCATION = "Ships to you"
 
 
+# Facebook's own group profile header lives in a single embedded Relay
+# stream payload on the rendered group page. Captured live 2026-08-25 on an
+# authenticated session: exactly one <script> on /groups/<ref>/ carries
+# "profile_header_renderer", and that one script is ~25-160KB while the whole
+# document is 3-4MB. Pulling only the matching scripts across CDP keeps the read
+# cheap without giving up the verbatim payload.
+GROUP_HEADER_SCRIPTS_JS = """() => {
+    const marker = '"profile_header_renderer"';
+    return Array.from(document.querySelectorAll('script'))
+        .map((node) => node.textContent || '')
+        .filter((text) => text.includes(marker));
+}"""
+
+# Facebook's own ``Group.viewer_join_state`` enum, mapped to the membership
+# answer this CLI reports. Values captured live 2026-08-25 from the
+# authenticated group page of four known-state groups:
+#
+#   MEMBER                 -> 2318028917 (public, joined) and 1865822383631015
+#                             (private, joined); page renders "Joined".
+#   REQUESTED              -> 1647953932130640 (private, join request pending);
+#                             page renders "Cancel request" and "Your membership
+#                             is pending".
+#   CAN_JOIN               -> 250458852075384 (public, never joined); page
+#                             renders "Join group".
+#   CAN_REQUEST            -> a private related-group card on the same page,
+#                             never joined; page renders "Join group".
+#   CANNOT_JOIN_OR_REQUEST -> the same private pending group rendered by a
+#                             LOGGED-OUT fetch of the identical URL, i.e. a
+#                             viewer with no way in.
+#
+# An enum value outside this table is a Facebook change, not a viewer state to
+# guess at: the extractor raises instead of defaulting to "non_member", because
+# guessing "non_member" for a state that actually means "member" would silently
+# mark a readable group unreadable.
+GROUP_JOIN_STATE_MEMBERSHIP = {
+    "MEMBER": "member",
+    "REQUESTED": "pending",
+    "CAN_JOIN": "non_member",
+    "CAN_REQUEST": "non_member",
+    "CANNOT_JOIN_OR_REQUEST": "non_member",
+}
+
+# Facebook's rendered ``privacy_info.title.text`` for a group, mapped to the
+# privacy answer this CLI reports. Both strings captured live 2026-08-25 in the
+# same payload as the join states above. Anything else raises: a group whose
+# privacy cannot be read cannot have its readability derived either.
+GROUP_PRIVACY_TITLES = {
+    "Public group": "public",
+    "Private group": "private",
+}
+
+# Facebook's own section headings on /groups/joins/, mapped to the membership
+# each section describes. Captured live 2026-08-25: the page's [role="main"]
+# subtree contains exactly these two headings, each followed by its own list of
+# [role="listitem"] rows. Everything else on the page (the notification tray,
+# the left navigation, the recently-visited rail) lives OUTSIDE [role="main"],
+# so scoping the extractor there is what keeps navigation chrome out of the
+# result.
+JOINED_GROUPS_SECTION_MEMBERSHIP = (
+    ("All groups you've joined", "member"),
+    ("Groups you've joined", "member"),
+    ("Pending group requests", "pending"),
+)
+
+# Extract Facebook's own "Your groups" rows from the rendered /groups/joins/ page.
+#
+# Each row is a [role="listitem"] holding three links to the same group: an
+# avatar link, a name link, and a "View group" link. Captured live 2026-08-25,
+# the avatar link's image carries the group name as an aria-label on an <svg>
+# (there is no <img alt> and no aria-label on the anchor itself), and the name
+# link holds the name as its own text with NO span/strong/h3 descendant.
+#
+# That shape is exactly what the previous extractor could not read: it looked
+# only at <img alt>, the anchor's aria-label, and span/strong/h3 children, so
+# both the avatar link and the name link produced no name, and the only anchor
+# that DID produce one was the "View group" link -- whose aria-label is the
+# literal string "View group". Every row past the first handful was therefore
+# reported with the name "View group".
+#
+# Rows are returned in section order (joined first, then pending) so a small
+# --limit still answers "which groups has Adam joined?" first. A row that does
+# not yield exactly one group reference and one avatar aria-label name, or that
+# sits under a heading this CLI does not recognize, is returned in `unparsed`
+# so the caller can fail loudly instead of dropping it.
+JOINED_GROUPS_JS = """(sections) => {
+    const HREF = /^https?:\\/\\/(?:www\\.)?facebook\\.com\\/groups\\/([^/?#]+)/;
+    const main = document.querySelector('[role="main"]');
+    if (!main) {
+        return {main_exists: false, groups: [], unparsed: []};
+    }
+    const headingText = (row) => {
+        let node = row.closest('ul, [role="list"]');
+        for (let hop = 0; hop < 6 && node; hop++) {
+            const parent = node.parentElement;
+            const heading = parent
+                ? parent.querySelector('h1, h2, h3, h4, [role="heading"]')
+                : null;
+            if (heading) {
+                return (heading.textContent || '').replace(/\\s+/g, ' ').trim();
+            }
+            node = parent;
+        }
+        return '';
+    };
+    const buckets = new Map(sections.map((entry) => [entry[1], []]));
+    const unparsed = [];
+    const seen = new Set();
+    main.querySelectorAll('[role="listitem"]').forEach((row) => {
+        const anchors = Array.from(row.querySelectorAll('a[href*="/groups/"]'));
+        if (!anchors.length) {
+            return;
+        }
+        const heading = headingText(row);
+        const section = sections.find((entry) => heading.startsWith(entry[0]));
+        const refs = [...new Set(anchors.map((a) => {
+            const match = HREF.exec(a.href || '');
+            return match ? match[1] : null;
+        }).filter(Boolean))];
+        const names = [...new Set(
+            Array.from(row.querySelectorAll('svg[aria-label], [role="img"][aria-label]'))
+                .map((node) => (node.getAttribute('aria-label') || '').trim())
+                .filter(Boolean)
+        )];
+        if (!section || refs.length !== 1 || names.length !== 1) {
+            unparsed.push({
+                heading: heading.slice(0, 120),
+                refs: refs.slice(0, 5),
+                names: names.slice(0, 5),
+                text: (row.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160),
+            });
+            return;
+        }
+        if (seen.has(refs[0])) {
+            return;
+        }
+        seen.add(refs[0]);
+        buckets.get(section[1]).push({
+            group_id: refs[0],
+            name: names[0],
+            url: 'https://www.facebook.com/groups/' + refs[0] + '/',
+            membership: section[1],
+        });
+    });
+    const groups = [];
+    [...new Set(sections.map((entry) => entry[1]))].forEach((membership) => {
+        buckets.get(membership).forEach((row) => groups.push(row));
+    });
+    return {main_exists: true, groups, unparsed};
+}"""
+
+
 class GroupDiscussionPreloadMissing(ClientError):
     """Facebook omitted the Relay request metadata needed for feed GraphQL."""
+
+
+class FacebookSessionLoggedOut(CredentialError):
+    """Facebook answered an authenticated fetch with logged-out HTML.
+
+    Facebook does not reject a request carrying a dead session: it returns HTTP
+    200 with the LOGGED-OUT variant of the same page, whose
+    ``CurrentUserInitialData.USER_ID`` is ``"0"``. That page still renders a
+    group's name, privacy, and member count, but carries no feed and no Relay
+    discussion preload, so every parser downstream reads "nothing here" instead
+    of "you are not signed in". Every message starts with ``LOGGED_OUT_HTML:``
+    and the command exits 2 (the credential code), because the remedy is
+    re-authentication, not a retry.
+    """
+
+
+class FeedExtractionFailed(ClientError):
+    """A readable group's feed could not be extracted from its live page.
+
+    Distinct from an empty group ON PURPOSE. An empty readable group is ``[]``
+    at exit 0; a feed this CLI cannot parse is this error at exit 3, with a
+    message that starts with ``FEED_EXTRACTION_FAILED:``. A caller therefore
+    never has to guess whether zero posts means "no posts" or "the parser
+    missed them".
+    """
+
+
+class GroupNotReadable(ClientError):
+    """The authenticated session cannot read the requested group's posts.
+
+    Raised instead of returning an empty post list, because an empty list is
+    indistinguishable from a group that simply has no posts. Every message
+    starts with ``UNREADABLE_GROUP:`` so a caller can tell "this session cannot
+    see the group" from any other listing failure without parsing prose.
+    """
 
 
 class FacebookClient:
@@ -2001,73 +2205,163 @@ class FacebookClient:
     # --- Groups methods ---
 
     def _extract_joined_groups(self, page) -> List[Dict]:
-        """Extract groups from the user's joined groups page.
+        """Extract the user's joined groups and pending join requests.
 
         Returns:
-            List of group dicts with group_id, name, url, member_count.
+            List of group dicts with group_id, name, url, membership. Joined
+            groups come first, then pending join requests.
+
+        Raises:
+            ClientError: The page has no ``[role="main"]`` subtree, or a row in
+                one of Facebook's own group sections could not be read. Both are
+                Facebook markup changes, and dropping the affected rows silently
+                would under-report which groups the account can reach.
         """
-        js = (
-            '() => {'
-            ' const groups = [];'
-            ' const seen = new Set();'
-            ' const links = document.querySelectorAll(\'a[href*="/groups/"]\');'
-            ' links.forEach(a => {'
-            '   const href = a.href || "";'
-            '   const m = href.match(/\\/groups\\/([^/?]+)/);'
-            '   if (!m) return;'
-            '   const gid = m[1];'
-            '   if (gid === "feed" || gid === "discover" || gid === "joins" || seen.has(gid)) return;'
-            # Try to get a clean group name from an image alt text or aria-label first,
-            # then fall back to the shortest meaningful text child.
-            '   let name = "";'
-            '   const img = a.querySelector("img[alt]");'
-            '   if (img && img.alt && img.alt.length > 1 && img.alt.length < 100) {'
-            '     name = img.alt.trim();'
-            '   }'
-            '   if (!name) {'
-            '     const label = a.getAttribute("aria-label");'
-            '     if (label && label.length > 1 && label.length < 100) name = label.trim();'
-            '   }'
-            '   if (!name) {'
-            # Walk child spans/divs for the shortest non-trivial text (likely the group name)
-            # Skip text containing notification indicators
-            '     const candidates = [];'
-            '     a.querySelectorAll("span, strong, h3").forEach(el => {'
-            '       const t = (el.innerText || "").trim();'
-            '       if (t.length >= 3 && t.length <= 80'
-            '           && !t.includes("Unread") && !t.includes("Mark as read")'
-            '           && !t.includes("posted in") && !t.includes("ago")'
-            '           && !t.match(/^\\d+[hmd]$/)) {'
-            '         candidates.push(t);'
-            '       }'
-            '     });'
-            '     if (candidates.length > 0) {'
-            '       candidates.sort((a, b) => a.length - b.length);'
-            '       name = candidates[0];'
-            '     }'
-            '   }'
-            '   if (!name || name.length < 2) return;'
-            '   seen.add(gid);'
-            '   let memberCount = "";'
-            '   const fullText = (a.innerText || "");'
-            '   const mMatch = fullText.match(/(\\d[\\d,.]*\\s*[KkMm]?\\s*members?)/i);'
-            '   if (mMatch) memberCount = mMatch[1].trim();'
-            '   groups.push({group_id: gid, name: name, url: href.split("?")[0], member_count: memberCount});'
-            ' });'
-            ' return groups;'
-            ' }'
-        )
-        result = page.evaluate(js)
-        return result if isinstance(result, list) else []
+        result = page.evaluate(JOINED_GROUPS_JS, [list(entry) for entry in JOINED_GROUPS_SECTION_MEMBERSHIP])
+        if not isinstance(result, dict):
+            raise ClientError("Joined-groups extractor returned a non-object result.")
+        if not result.get("main_exists"):
+            raise ClientError(
+                "Facebook's joined-groups page rendered no [role=\"main\"] subtree, so its "
+                "group sections could not be read."
+            )
+        unparsed = result.get("unparsed")
+        if not isinstance(unparsed, list):
+            raise ClientError("Joined-groups extractor returned a non-list `unparsed` field.")
+        if unparsed:
+            raise ClientError(
+                f"Facebook's joined-groups page contained {len(unparsed)} group row(s) this CLI "
+                f"could not read. First: {unparsed[0]}. A recognized row needs a heading from "
+                f"{[entry[0] for entry in JOINED_GROUPS_SECTION_MEMBERSHIP]}, exactly one group "
+                "link, and exactly one avatar aria-label naming the group."
+            )
+        groups = result.get("groups")
+        if not isinstance(groups, list):
+            raise ClientError("Joined-groups extractor returned a non-list `groups` field.")
+        return groups
 
     def list_joined_groups(self, limit: int = 50) -> List[Group]:
-        """List Facebook Groups the user has joined."""
+        """List Facebook Groups the user has joined, plus pending join requests.
+
+        Each row carries ``membership`` ("member" or "pending"), and joined
+        groups are returned before pending requests. Facebook does not render a
+        member count or a privacy setting on this page, so ``member_count``,
+        ``privacy``, and ``posts_readable`` stay None; run ``get_group`` for
+        those.
+
+        ``limit`` caps how many rows are read from the page, and Facebook loads
+        the joined-groups list in scrolled batches. Pass a limit at or above the
+        counts Facebook prints in its own section headings to enumerate every
+        row.
+        """
         print_info("Loading joined groups...")
         page = self._get_page(f"{GROUPS_BASE}/joins/", settle_ms=0)
         page.wait_for_selector('a[href*="/groups/"]', timeout=15000)
 
         items = self._scroll_collect(page, self._extract_joined_groups, "group_id", limit, "group")
+        # Facebook renders pending requests above the joined list, and each
+        # scrolled batch appends more joined rows after them. Group the answer
+        # so "which groups has Adam joined?" is not interleaved with requests
+        # that have not been approved.
+        items.sort(key=lambda row: row["membership"] != "member")
         return [Group(**g) for g in items]
+
+    def _extract_group_state(self, page, group_ref: str) -> Dict:
+        """Read a group's identity, privacy, and viewer membership from its live page.
+
+        Reads Facebook's own ``profile_header_renderer`` Relay payload on the
+        rendered group page, scoped to the requested group -- the same page also
+        embeds "Related groups" cards carrying their own ``viewer_join_state``
+        and ``privacy_info``, so an unscoped read would answer for the wrong
+        group. The page must be an authenticated navigation: a logged-out fetch
+        of the identical URL still renders the name, privacy, and member count,
+        but reports a viewer join state for nobody.
+
+        Returns:
+            Dict with group_id, name, member_count, privacy, membership, and
+            posts_readable.
+
+        Raises:
+            ClientError: The header payload is missing, ambiguous, or carries a
+                privacy or join-state token this CLI has not verified.
+        """
+        scripts = page.evaluate(GROUP_HEADER_SCRIPTS_JS)
+        if not isinstance(scripts, list):
+            raise ClientError("Group header script extractor returned a non-list result.")
+
+        headers: List[Dict] = []
+        for text in scripts:
+            if not isinstance(text, str):
+                raise ClientError("Group header script extractor returned a non-string entry.")
+            for result in self._iter_relay_prefetched_stream_results(text, allow_truncated_tail=True):
+                data = result.get("data")
+                if not isinstance(data, dict):
+                    continue
+                group = data.get("group")
+                if not isinstance(group, dict):
+                    continue
+                renderer = group.get("profile_header_renderer")
+                if not isinstance(renderer, dict):
+                    continue
+                header = renderer.get("group")
+                if not isinstance(header, dict):
+                    raise ClientError("Facebook group profile header payload is not an object.")
+                headers.append(header)
+
+        found_ids = [str(header.get("id") or "") for header in headers]
+        matches = [header for header in headers if str(header.get("id") or "") == group_ref]
+        if not matches and not group_ref.isdigit() and len(headers) == 1:
+            # The group was requested by its vanity slug, so the numeric id in
+            # the payload cannot be compared to it. One header on the page is
+            # the requested group's own header.
+            matches = headers
+        if len(matches) != 1:
+            raise ClientError(
+                f"Expected exactly one Facebook group profile header for {group_ref}; the page "
+                f"carried {len(headers)} header(s) with ids {found_ids}."
+            )
+
+        header = matches[0]
+        group_id = str(header.get("id") or "")
+        if not group_id:
+            raise ClientError(f"Facebook group profile header for {group_ref} carries no group id.")
+
+        name = self._extract_text_path(header, ["featurable_title", "text"])
+        if not name:
+            raise ClientError(f"Facebook group {group_id} rendered no group title.")
+
+        privacy_title = self._extract_text_path(header, ["privacy_info", "title", "text"])
+        if privacy_title not in GROUP_PRIVACY_TITLES:
+            raise ClientError(
+                f"Unsupported Facebook group privacy label for {group_id}: {privacy_title!r}. "
+                f"Known labels: {sorted(GROUP_PRIVACY_TITLES)}."
+            )
+        privacy = GROUP_PRIVACY_TITLES[privacy_title]
+
+        join_state = header.get("viewer_join_state")
+        if join_state not in GROUP_JOIN_STATE_MEMBERSHIP:
+            raise ClientError(
+                f"Unsupported Facebook viewer_join_state for group {group_id}: {join_state!r}. "
+                f"Known states: {sorted(GROUP_JOIN_STATE_MEMBERSHIP)}."
+            )
+        membership = GROUP_JOIN_STATE_MEMBERSHIP[join_state]
+
+        member_count = self._extract_text_path(
+            header, ["group_member_profiles", "formatted_count_text"]
+        )
+
+        return {
+            "group_id": group_id,
+            "name": re.sub(r"\s+", " ", name).strip(),
+            "member_count": member_count or None,
+            "privacy": privacy,
+            "membership": membership,
+            # A member reads its own group whatever the privacy setting; a
+            # non-member (or a pending request) reads a public group's posts and
+            # nothing from a private one. Verified live 2026-08-25 against all
+            # four combinations this account can produce.
+            "posts_readable": membership == "member" or privacy == "public",
+        }
 
     def get_group(self, group_id: str) -> Group:
         """Get a Facebook Group by ID or slug."""
@@ -2083,58 +2377,42 @@ class FacebookClient:
 
         page = self._get_page(url)
         self._assert_authenticated_page(page, url, f"Facebook group {group_ref}")
-        metadata = page.evaluate(
-            """() => {
-                const main = document.querySelector('[role="main"]') || document.body;
-                const h1 = main?.querySelector('h1');
-                const name = (h1?.innerText || document.title || '').trim();
-                const text = main?.innerText || document.body?.innerText || '';
-                const memberMatch = text.match(/\\b\\d[\\d,.]*\\s*[KkMm]?\\s+members?\\b/);
-                return {
-                    name,
-                    memberCount: memberMatch ? memberMatch[0].trim() : ''
-                };
-            }"""
-        )
-        if not isinstance(metadata, dict):
-            raise ClientError("Rendered Facebook group metadata extractor returned a non-object result.")
-        name = re.sub(r"\s+", " ", str(metadata.get("name") or "")).strip()
-        if not name or name in ("Facebook", "Error"):
-            raise ClientError("Rendered Facebook group page did not include a group title.")
-        member_count = re.sub(r"\s+", " ", str(metadata.get("memberCount") or "")).strip()
+        state = self._extract_group_state(page, group_ref)
 
         return Group(
-            group_id=group_ref,
-            name=name,
-            url=f"{GROUPS_BASE}/{group_ref}/",
-            member_count=member_count or None,
+            group_id=state["group_id"],
+            name=state["name"],
+            url=f"{GROUPS_BASE}/{state['group_id']}/",
+            member_count=state["member_count"],
+            privacy=state["privacy"],
+            membership=state["membership"],
+            posts_readable=state["posts_readable"],
         )
 
     def _facebook_http_client(self) -> BrowserAuthenticatedHttpClient:
-        """Get the shared fast HTTP client for browser-authenticated reads."""
+        """Get the shared fast HTTP client for browser-authenticated reads.
+
+        Cookies come from THIS client's live persistent Chromium profile and
+        from nowhere else. ``BrowserAuthState.from_config`` would prefer a
+        stored ``AUTH_COOKIES_JSON`` snapshot, and that second source is exactly
+        what broke this path: Facebook rotates the ``xs`` session cookie in the
+        browser profile, the frozen snapshot keeps the retired value, and every
+        HTTP read silently comes back as the logged-out variant of the page.
+        Reusing ``self._browser`` also keeps one Chromium bound to the
+        user-data-dir instead of opening (and closing) a second one.
+        """
         if self._http_client is None:
             self._http_client = BrowserAuthenticatedHttpClient(
-                auth_state=BrowserAuthState.from_config(self.config),
+                auth_state=BrowserAuthState.from_browser(
+                    self._browser,
+                    "No Facebook browser session. Run 'facebook auth login'.",
+                ),
                 allowed_domains=["facebook.com"],
                 required_cookies=["c_user"],
                 headers=FACEBOOK_DESKTOP_HEADERS,
                 timeout=10,
             )
         return self._http_client
-
-    def _fetch_authenticated_facebook_html(self, url: str) -> str:
-        """Fetch enough authenticated Facebook HTML for group metadata."""
-        return self._fetch_authenticated_facebook_page(
-            url,
-            stop_markers=[
-                "</title>",
-                '"group_member_profiles":{"formatted_count_text":"',
-            ],
-        )
-
-    def _fetch_authenticated_facebook_full_html(self, url: str) -> str:
-        """Fetch a complete authenticated Facebook page without launching Chromium."""
-        return self._fetch_authenticated_facebook_page(url)
 
     def _fetch_authenticated_facebook_bootstrap_html(self, url: str) -> str:
         """Fetch only the Facebook Relay bootstrap slice needed for group posts."""
@@ -2148,7 +2426,14 @@ class FacebookClient:
         url: str,
         stop_markers: Optional[List[str]] = None,
     ) -> str:
-        """Fetch an authenticated Facebook page without launching Chromium."""
+        """Fetch an authenticated Facebook page without launching Chromium.
+
+        Raises:
+            FacebookSessionLoggedOut: Facebook answered with the logged-out
+                variant of the page. Checked here, on the single fetch seam, so
+                no parser downstream can mistake a logged-out page for a page
+                with nothing on it.
+        """
         result = self._facebook_http_client().get_text_result(
             url,
             stop_after_markers=stop_markers or (),
@@ -2159,25 +2444,20 @@ class FacebookClient:
             len(result.text),
             result.bytes_read,
         )
+        self._assert_authenticated_html(result.text, url)
         return result.text
 
-    def _extract_group_name(self, body: str) -> str:
-        """Extract the group name from fetched Facebook HTML."""
-        title_match = re.search(r"<title[^>]*>(.*?)</title>", body, re.IGNORECASE | re.DOTALL)
-        if not title_match:
-            raise ClientError("Failed to extract group name from Facebook HTML title.")
-
-        name = html.unescape(re.sub(r"\s+", " ", title_match.group(1))).strip()
-        if not name or name == "Facebook" or name == "Error":
-            raise ClientError("Facebook group page did not include a group title.")
-        return name
-
-    def _extract_group_member_count(self, body: str) -> str:
-        """Extract the group member count from fetched Facebook HTML."""
-        match = re.search(r'"group_member_profiles":\{"formatted_count_text":"([^"]+)"', body)
-        if not match:
-            raise ClientError("Failed to extract group member count from Facebook HTML.")
-        return html.unescape(match.group(1))
+    def _assert_authenticated_html(self, body: str, url: str) -> None:
+        """Fail loudly when fetched Facebook HTML belongs to a logged-out viewer."""
+        user_id = extract_embedded_define(body, "CurrentUserInitialData").get("USER_ID")
+        if isinstance(user_id, str) and user_id and user_id != LOGGED_OUT_USER_ID:
+            return
+        raise FacebookSessionLoggedOut(
+            f"LOGGED_OUT_HTML: Facebook returned logged-out HTML for {url} "
+            f"(CurrentUserInitialData.USER_ID={user_id!r}). The cookies this CLI sent no "
+            "longer identify a signed-in viewer, so the page carries no feed and no Relay "
+            "preload. Run 'facebook auth login --force' to re-authenticate."
+        )
 
     def _facebook_server_define(self, body: str, name: str) -> Dict:
         """Extract a ServerJS define payload from Facebook HTML."""
@@ -2613,8 +2893,33 @@ class FacebookClient:
             raise ClientError("Facebook group feed HTML did not include a pagination cursor.")
         return posts, cursor
 
-    def _extract_group_discussion_request(self, body: str, group_id: str) -> tuple[Dict, str]:
+    @staticmethod
+    def _canonical_group_id(body: str, group_ref: str) -> str:
+        """Resolve a group reference to the numeric ID Facebook's own payloads use.
+
+        A group can be addressed by vanity slug ("Legosforsale"), but every Relay
+        payload on its page identifies it numerically ("266584920129216"). The
+        discussion-query matcher compares the reference against those payload
+        values, so a slug reference matched nothing and the preload looked
+        missing on a page that plainly had one.
+
+        A group page's HTML carries exactly one distinct ``"groupID":"<digits>"``
+        -- the requested group's own. Anything else (none, or several) is an
+        unrecognized page shape and fails loudly rather than picking one.
+        """
+        if group_ref.isdigit():
+            return group_ref
+        found = sorted(set(re.findall(r'"groupID":"(\d+)"', body)))
+        if len(found) == 1:
+            return found[0]
+        raise ClientError(
+            f"Cannot resolve Facebook group reference {group_ref!r} to a numeric group ID: "
+            f"its page carried {len(found)} distinct groupID value(s) {found[:8]}."
+        )
+
+    def _extract_group_discussion_request(self, body: str, group_ref: str) -> tuple[Dict, str]:
         """Extract the current group discussion Relay variables and document ID."""
+        group_id = self._canonical_group_id(body, group_ref)
         friendly_marker = f'"queryName":"{GROUP_DISCUSSION_FRIENDLY_NAME}"'
         decoder = json.JSONDecoder()
         decoded_variable_keys: List[List[str]] = []
@@ -2841,6 +3146,19 @@ class FacebookClient:
         return posts, has_next_page, next_cursor
 
     @staticmethod
+    def _strip_relative_time_suffix(text: str) -> str:
+        """Remove the trailing relative-time phrase Facebook appends to a name.
+
+        Facebook writes comment aria-labels as "Comment by <name> <when>", where
+        ``<when>`` is a whole phrase: "about an hour ago", "a few seconds ago",
+        "5 minutes ago", "just now", "38m", "Edited 12:45 PM", "Yesterday at
+        3:10 PM". Only these known shapes are removed, and only at the very end,
+        so a display name that merely contains a digit ("LegoFan99") or a
+        time-ish word ("Yesterday Once More") survives intact.
+        """
+        return RELATIVE_TIME_SUFFIX_RE.sub("", text).strip()
+
+    @staticmethod
     def _parse_aria_label(aria: str) -> Optional[Dict[str, Optional[str]]]:
         """Classify an aria-label as a comment or reply.
 
@@ -2849,17 +3167,18 @@ class FacebookClient:
         """
         if not isinstance(aria, str) or not aria:
             return None
+        strip = FacebookClient._strip_relative_time_suffix
         # Reply first — "Reply by X to Y's comment ..."
         m = re.match(r"^Reply by (.+?) to (.+?)'s comment(?:\s.*)?$", aria)
         if m:
-            return {"kind": "reply", "author": m.group(1).strip(), "parent_author": m.group(2).strip()}
-        m = re.match(r"^Comment by (.+?)(?:\s\d.*|\s[a-z]+ ago.*|\sjust now.*|\sEdited.*|\sYesterday.*)?$", aria)
-        if m:
-            return {"kind": "comment", "author": m.group(1).strip(), "parent_author": None}
-        # Fallback: "Comment by X" with no age suffix
+            return {
+                "kind": "reply",
+                "author": strip(m.group(1).strip()),
+                "parent_author": strip(m.group(2).strip()),
+            }
         m = re.match(r"^Comment by (.+)$", aria)
         if m:
-            return {"kind": "comment", "author": m.group(1).strip(), "parent_author": None}
+            return {"kind": "comment", "author": strip(m.group(1).strip()), "parent_author": None}
         return None
 
     def _extract_comments_from_rendered_page(self, page, post_id: str) -> List[Dict]:
@@ -3120,133 +3439,39 @@ class FacebookClient:
                 return match
         return matches[0] if matches else None
 
-    def _extract_group_posts(self, page) -> List[Dict]:
-        """Extract posts from a Facebook Group feed via h2 author elements.
+    def _group_feed_unavailable(self, group_id: str, cause: Exception) -> ClientError:
+        """Diagnose an authenticated group page that carries no discussion preload.
 
-        Facebook's authenticated group feed renders posts inside a [role="feed"]
-        container. Each post has an h2 with the author name, followed by post
-        text in [dir="auto"] elements, and reaction counts in "All reactions: N"
-        text. Timestamps are obfuscated (individual scrambled characters) and
-        cannot be reliably extracted.
+        The page was already proven to belong to a signed-in viewer, so a
+        missing Relay preload has exactly two explanations, and this tells them
+        apart from the group's OWN live state rather than guessing:
 
-        Returns:
-            List of post dicts with post_id, author, text, url,
-            reactions, comments.
+        * the session cannot read this group at all -> ``GroupNotReadable``
+          (``UNREADABLE_GROUP:``, exit 1);
+        * the session can read it, so Facebook served a page shape this CLI
+          does not parse -> ``FeedExtractionFailed``
+          (``FEED_EXTRACTION_FAILED:``, exit 3).
+
+        Neither one is ever an empty list. A readable group with nothing in it
+        reaches the GraphQL feed normally and returns ``[]`` at exit 0.
         """
-        js = (
-            '() => {'
-            ' const feed = document.querySelector(\'[role="feed"]\');'
-            ' if (!feed) return [];'
-            ' const h2s = [...feed.querySelectorAll("h2")];'
-            ' const posts = [];'
-            ' const seen = new Set();'
-            ' for (const h2 of h2s) {'
-            '   const authorText = (h2.innerText || "").trim();'
-            '   if (!authorText || authorText.length > 80'
-            '       || authorText === "New posts"'
-            '       || authorText.toLowerCase().includes("sort")) continue;'
-            # Walk up to find the post container (has Like/Comment buttons)
-            '   let container = h2;'
-            '   for (let i = 0; i < 15; i++) {'
-            '     container = container.parentElement;'
-            '     if (!container) break;'
-            '     const t = (container.innerText || "");'
-            '     if (t.includes("Like") && t.includes("Comment") && t.length > 50) break;'
-            '   }'
-            '   if (!container) continue;'
-            # Post text: longest dir="auto" block, skip scrambled timestamps
-            '   let text = "";'
-            '   const dirAutos = container.querySelectorAll(\'[dir="auto"]\');'
-            '   for (const el of dirAutos) {'
-            '     const t = (el.innerText || "").trim();'
-            # Skip: author name, UI labels, scrambled timestamps (single chars with spaces)
-            '     if (t === authorText || t === "Like" || t === "Share"'
-            '         || t.includes("Comment as") || t.length < 3) continue;'
-            # Skip scrambled timestamp text: mostly single chars with no spaces/words
-            '     const lines = t.split("\\n");'
-            '     const singleCharLines = lines.filter(l => l.trim().length <= 2).length;'
-            '     if (lines.length > 5 && singleCharLines / lines.length > 0.5) continue;'
-            # Also skip text that looks like concatenated single chars (no spaces, no real words)
-            '     const words = t.split(/\\s+/).filter(w => w.length > 0);'
-            '     const avgWordLen = words.reduce((s, w) => s + w.length, 0) / (words.length || 1);'
-            '     if (words.length <= 3 && avgWordLen > 15 && !t.includes(" ")) continue;'
-            '     if (t.length > text.length) text = t;'
-            '   }'
-            # Fallback: h3 strong content
-            '   if (!text) {'
-            '     const h3 = container.querySelector("h3 strong, h3");'
-            '     if (h3) { const t = (h3.innerText||"").trim(); if (t) text = t; }'
-            '   }'
-            # Reactions
-            '   let reactions = 0;'
-            '   const allText = container.innerText || "";'
-            '   const rxm = allText.match(/All reactions:[\\s\\n]*(\\d+)/);'
-            '   if (rxm) reactions = parseInt(rxm[1]);'
-            # Comments
-            '   let comments = 0;'
-            '   const cm = allText.match(/(\\d+)\\s+comments?/i);'
-            '   if (cm) comments = parseInt(cm[1]);'
-            # Post ID: require a stable permalink.
-            '   let postId = ""; let postUrl = "";'
-            '   const links = [...container.querySelectorAll("a")];'
-            '   for (const a of links) {'
-            '     const href = a.href || "";'
-            '     const m = href.match(/\\/posts\\/(\\d+)/) || href.match(/\\/permalink\\/(\\d+)/);'
-            '     if (m) { postId = m[1]; postUrl = href.split("?")[0]; break; }'
-            '   }'
-            '   if (!postId) continue;'
-            '   if (seen.has(postId)) continue;'
-            '   seen.add(postId);'
-            '   const summaryText = text.substring(0, 500);'
-            '   posts.push({post_id: postId, title: null, author: authorText, text: summaryText, body: summaryText,'
-            '     url: postUrl, thread_url: postUrl, reactions: reactions, comment_count: comments, image_urls: null});'
-            ' }'
-            ' return posts;'
-            ' }'
-        )
-        result = page.evaluate(js)
-        return result if isinstance(result, list) else []
-
-    def _list_group_post_summaries(self, group_id: str, limit: int) -> List[GroupPost]:
-        """List summary posts from a rendered Facebook Group feed."""
         url = f"{GROUPS_BASE}/{group_id}/"
         page = self._get_page(url, settle_ms=5000)
         self._assert_authenticated_page(page, url, "group feed")
-
-        collected: List[Dict] = []
-        seen_post_ids: set[str] = set()
-        scrolls = 0
-        no_progress_scrolls = 0
-        max_scrolls = 10
-        while True:
-            added = 0
-            for item in self._extract_group_posts(page):
-                post_id = item.get("post_id")
-                if not isinstance(post_id, str) or not post_id or post_id in seen_post_ids:
-                    continue
-                seen_post_ids.add(post_id)
-                collected.append(item)
-                added += 1
-                if len(collected) >= limit:
-                    break
-            if len(collected) >= limit or scrolls >= max_scrolls:
-                break
-
-            # Facebook's virtualized group feed only loads another batch after a
-            # trusted user-input scroll. JavaScript window.scrollBy reaches the
-            # bottom but does not trigger the loader, and rendered batches replace
-            # earlier DOM nodes, so keep a deduplicated accumulator across batches.
-            page.keyboard_press("End")
-            scrolls += 1
-            page.wait_for_timeout(2500)
-            no_progress_scrolls = 0 if added else no_progress_scrolls + 1
-            if no_progress_scrolls >= 2:
-                break
-
-        if not collected:
-            return []
-        print_info(f"Loaded {len(collected[:limit])} post(s) after {scrolls} scroll(s)")
-        return [GroupPost(**p) for p in collected[:limit]]
+        state = self._extract_group_state(page, group_id)
+        if not state["posts_readable"]:
+            return GroupNotReadable(
+                f"UNREADABLE_GROUP: Facebook group {state['group_id']} "
+                f"(privacy={state['privacy']}, membership={state['membership']}) is not readable "
+                "by this authenticated session, so its posts cannot be listed. Run "
+                f"'facebook groups get {state['group_id']}' for the full membership state."
+            )
+        return FeedExtractionFailed(
+            f"FEED_EXTRACTION_FAILED: Facebook group {state['group_id']} "
+            f"(privacy={state['privacy']}, membership={state['membership']}) is readable by this "
+            "session, but its page carried no group discussion Relay preload, so its posts could "
+            f"not be extracted. This is NOT an empty group. Underlying cause: {cause}"
+        )
 
     def list_group_posts(self, group_id: str, limit: int = 20, full_threads: bool = False) -> List[GroupPost]:
         """List posts from a Facebook Group via GraphQL (no browser scroll limit)."""
@@ -3255,85 +3480,86 @@ class FacebookClient:
         body = self._fetch_authenticated_facebook_bootstrap_html(url)
         try:
             self._extract_group_discussion_request(body, group_id)
-        except GroupDiscussionPreloadMissing:
-            # Facebook can serve an authenticated group page without the Relay
-            # discussion query preload. The rendered feed is the owning fallback
-            # for that response shape; auth is checked again by that browser path.
-            print_info("Group discussion preload missing; reading the rendered group feed instead")
-            posts = self._list_group_post_summaries(group_id, limit)
-        else:
-            posts_data: List[Dict] = []
-            seen_post_ids: set[str] = set()
-            next_cursor: Optional[str] = None
-            has_next_page = True
-            page_count = 0
-            max_pages = 12
-            # A healthy follow-up page always adds at least one new post: we
-            # request one extra story (remaining + 1) precisely to absorb the
-            # single inclusive-boundary post Facebook repeats as the first edge.
-            # So a *full* page that adds zero new posts is not the 1-post overlap
-            # — it is a stalled cursor handing back an already-seen window. Stop
-            # after a small bounded run of these instead of paging (and burning
-            # GraphQL calls) until the socket read times out.
-            max_consecutive_zero_add_pages = 2
-            consecutive_zero_add_pages = 0
-            while len(posts_data) < limit and has_next_page and page_count < max_pages:
-                remaining = limit - len(posts_data)
-                cursor_before = next_cursor
-                # Facebook's group feed cursor is inclusive of the boundary post:
-                # a follow-up page fetched with after=end_cursor repeats the
-                # previous page's last post as its first edge. Request one extra
-                # story past what is missing so that duplicate boundary post does
-                # not consume the whole page and stall an otherwise-fillable feed.
-                requested_count = remaining + 1 if cursor_before is not None else remaining
-                page_posts, has_next_page, next_cursor = self._graphql_group_discussion_posts(
-                    group_id,
-                    body,
-                    count=requested_count,
-                    after=cursor_before,
-                )
-                page_count += 1
-                _added = 0
-                for post in page_posts:
-                    post_id = post.get("post_id")
-                    if not isinstance(post_id, str) or not post_id or post_id in seen_post_ids:
-                        continue
-                    seen_post_ids.add(post_id)
-                    posts_data.append(post)
-                    _added += 1
-                    if len(posts_data) >= limit:
-                        break
-                logger.debug(
-                    "list_group_posts: page=%d requested=%d returned=%d added=%d total=%d "
-                    "has_next=%s cursor_advanced=%s",
-                    page_count, requested_count, len(page_posts), _added, len(posts_data),
-                    has_next_page, next_cursor != cursor_before,
-                )
-                # Enough posts collected to satisfy the requested limit: return
-                # immediately rather than paging for a boundary post we will slice
-                # off anyway.
+        except GroupDiscussionPreloadMissing as exc:
+            # No rendered-feed fallback lives here on purpose. Every observed
+            # "preload missing" response turned out to be logged-out HTML, and
+            # the DOM scraper that used to absorb it answered [] at exit 0 --
+            # indistinguishable from a quiet group. The fetch above now proves
+            # the viewer is signed in, so reaching this point means the page is
+            # either unreadable or unparseable, and both fail loudly.
+            raise self._group_feed_unavailable(group_id, exc) from exc
+        posts_data: List[Dict] = []
+        seen_post_ids: set[str] = set()
+        next_cursor: Optional[str] = None
+        has_next_page = True
+        page_count = 0
+        max_pages = 12
+        # A healthy follow-up page always adds at least one new post: we
+        # request one extra story (remaining + 1) precisely to absorb the
+        # single inclusive-boundary post Facebook repeats as the first edge.
+        # So a *full* page that adds zero new posts is not the 1-post overlap
+        # — it is a stalled cursor handing back an already-seen window. Stop
+        # after a small bounded run of these instead of paging (and burning
+        # GraphQL calls) until the socket read times out.
+        max_consecutive_zero_add_pages = 2
+        consecutive_zero_add_pages = 0
+        while len(posts_data) < limit and has_next_page and page_count < max_pages:
+            remaining = limit - len(posts_data)
+            cursor_before = next_cursor
+            # Facebook's group feed cursor is inclusive of the boundary post:
+            # a follow-up page fetched with after=end_cursor repeats the
+            # previous page's last post as its first edge. Request one extra
+            # story past what is missing so that duplicate boundary post does
+            # not consume the whole page and stall an otherwise-fillable feed.
+            requested_count = remaining + 1 if cursor_before is not None else remaining
+            page_posts, has_next_page, next_cursor = self._graphql_group_discussion_posts(
+                group_id,
+                body,
+                count=requested_count,
+                after=cursor_before,
+            )
+            page_count += 1
+            _added = 0
+            for post in page_posts:
+                post_id = post.get("post_id")
+                if not isinstance(post_id, str) or not post_id or post_id in seen_post_ids:
+                    continue
+                seen_post_ids.add(post_id)
+                posts_data.append(post)
+                _added += 1
                 if len(posts_data) >= limit:
                     break
-                # Stop when Facebook reports no further pages, returns no cursor,
-                # or the cursor stops advancing (which would otherwise refetch the
-                # same window forever).
-                if not next_cursor or next_cursor == cursor_before:
+            logger.debug(
+                "list_group_posts: page=%d requested=%d returned=%d added=%d total=%d "
+                "has_next=%s cursor_advanced=%s",
+                page_count, requested_count, len(page_posts), _added, len(posts_data),
+                has_next_page, next_cursor != cursor_before,
+            )
+            # Enough posts collected to satisfy the requested limit: return
+            # immediately rather than paging for a boundary post we will slice
+            # off anyway.
+            if len(posts_data) >= limit:
+                break
+            # Stop when Facebook reports no further pages, returns no cursor,
+            # or the cursor stops advancing (which would otherwise refetch the
+            # same window forever).
+            if not next_cursor or next_cursor == cursor_before:
+                break
+            # Stall guard: a non-empty page that adds no new posts while the
+            # cursor keeps advancing is Facebook handing back an already-seen
+            # window. The inclusive-boundary overlap only ever repeats ONE
+            # post, so a full zero-add page is not that overlap — it is a
+            # stalled feed. Page past a small bounded run of these in case a
+            # single batch legitimately collides, then stop and return what we
+            # have instead of looping until the socket read times out and
+            # burning GraphQL calls that aggravate the rate limit.
+            if page_posts and _added == 0:
+                consecutive_zero_add_pages += 1
+                if consecutive_zero_add_pages >= max_consecutive_zero_add_pages:
                     break
-                # Stall guard: a non-empty page that adds no new posts while the
-                # cursor keeps advancing is Facebook handing back an already-seen
-                # window. The inclusive-boundary overlap only ever repeats ONE
-                # post, so a full zero-add page is not that overlap — it is a
-                # stalled feed. Page past a small bounded run of these in case a
-                # single batch legitimately collides, then stop and return what we
-                # have instead of looping until the socket read times out and
-                # burning GraphQL calls that aggravate the rate limit.
-                if page_posts and _added == 0:
-                    consecutive_zero_add_pages += 1
-                    if consecutive_zero_add_pages >= max_consecutive_zero_add_pages:
-                        break
-                else:
-                    consecutive_zero_add_pages = 0
-            posts = [GroupPost(**p) for p in posts_data[:limit]]
+            else:
+                consecutive_zero_add_pages = 0
+        posts = [GroupPost(**p) for p in posts_data[:limit]]
         if not full_threads:
             return posts
 

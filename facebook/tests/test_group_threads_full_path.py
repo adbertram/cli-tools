@@ -1,10 +1,22 @@
 import json
+from pathlib import Path
 
+import pytest
 from facebook_cli import client as client_mod
 from facebook_cli import main as main_mod
 from facebook_cli import _helpers as helpers_mod
 from cli_tools_shared.exceptions import ClientError
 from facebook_cli.models import Comment, GroupPost
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def _group_header_script(stem: str) -> str:
+    """Verbatim group profile header script captured live 2026-08-25.
+
+    See ``test_group_membership_and_readability.py`` for the capture details.
+    """
+    return (FIXTURES / f"{stem}.script.txt").read_text(encoding="utf-8")
 
 
 def test_group_post_model_dump_includes_thread_metadata():
@@ -170,8 +182,17 @@ def test_list_group_posts_full_threads_fetches_permalink_metadata(monkeypatch):
 
     monkeypatch.setattr(
         client_mod.FacebookClient,
-        "_list_group_post_summaries",
-        lambda self, group_id, limit: summaries,
+        "_extract_group_discussion_request",
+        lambda self, body, group_ref: ({"groupID": group_ref}, "doc-1"),
+    )
+    monkeypatch.setattr(
+        client_mod.FacebookClient,
+        "_graphql_group_discussion_posts",
+        lambda self, group_id, body, count, after=None: (
+            [post.model_dump() for post in summaries],
+            False,
+            None,
+        ),
     )
 
     requested_urls = []
@@ -212,12 +233,13 @@ def test_list_group_posts_full_threads_fetches_permalink_metadata(monkeypatch):
     assert posts[0].comments[0].text == "Comment"
 
 
-def test_get_group_extracts_rendered_metadata(monkeypatch):
+def test_get_group_reports_privacy_membership_and_readability(monkeypatch):
     monkeypatch.setattr(client_mod, "get_config", lambda: object())
 
     class FakePage:
         def evaluate(self, script):
-            return {"name": "BrickLink", "memberCount": "47.2K members"}
+            assert "profile_header_renderer" in script
+            return [_group_header_script("group_header_public_member")]
 
     requested = []
     client = client_mod.FacebookClient()
@@ -228,104 +250,11 @@ def test_get_group_extracts_rendered_metadata(monkeypatch):
 
     assert requested == ["https://www.facebook.com/groups/2318028917/"]
     assert group.group_id == "2318028917"
-    assert group.name == "BrickLink"
-    assert group.member_count == "47.2K members"
-
-
-def test_list_group_post_summaries_uses_trusted_scroll_and_accumulates_virtualized_batches(monkeypatch):
-    monkeypatch.setattr(client_mod, "get_config", lambda: object())
-
-    class FakePage:
-        def __init__(self):
-            self.scrolls = 0
-            self.keys = []
-            self.waits = []
-
-        def keyboard_press(self, key):
-            assert key == "End"
-            self.keys.append(key)
-            self.scrolls += 1
-
-        def wait_for_timeout(self, ms):
-            self.waits.append(ms)
-
-    client = client_mod.FacebookClient()
-    page = FakePage()
-    requested = []
-    checked = []
-
-    def fake_get_page(url, settle_ms=3000):
-        requested.append((url, settle_ms))
-        return page
-
-    def fake_assert(page_arg, url, surface):
-        checked.append((page_arg, url, surface))
-
-    batches = [
-        [
-            {
-                "post_id": "1001",
-                "title": None,
-                "author": "Ada",
-                "text": "First",
-                "body": "First",
-                "url": "https://www.facebook.com/groups/2318028917/posts/1001/",
-                "thread_url": "https://www.facebook.com/groups/2318028917/posts/1001/",
-            }
-        ],
-        [
-            {
-                "post_id": "1001",
-                "title": None,
-                "author": "Ada",
-                "text": "First",
-                "body": "First",
-                "url": "https://www.facebook.com/groups/2318028917/posts/1001/",
-                "thread_url": "https://www.facebook.com/groups/2318028917/posts/1001/",
-            },
-            {
-                "post_id": "1002",
-                "title": None,
-                "author": "Grace",
-                "text": "Second",
-                "body": "Second",
-                "url": "https://www.facebook.com/groups/2318028917/posts/1002/",
-                "thread_url": "https://www.facebook.com/groups/2318028917/posts/1002/",
-            },
-        ],
-        [
-            {
-                "post_id": "1003",
-                "title": None,
-                "author": "Linus",
-                "text": "Third",
-                "body": "Third",
-                "url": "https://www.facebook.com/groups/2318028917/posts/1003/",
-                "thread_url": "https://www.facebook.com/groups/2318028917/posts/1003/",
-            },
-            {
-                "post_id": "1004",
-                "title": None,
-                "author": "Margaret",
-                "text": "Fourth",
-                "body": "Fourth",
-                "url": "https://www.facebook.com/groups/2318028917/posts/1004/",
-                "thread_url": "https://www.facebook.com/groups/2318028917/posts/1004/",
-            },
-        ],
-    ]
-
-    monkeypatch.setattr(client, "_get_page", fake_get_page)
-    monkeypatch.setattr(client, "_assert_authenticated_page", fake_assert)
-    monkeypatch.setattr(client, "_extract_group_posts", lambda page_arg: batches[min(page_arg.scrolls, 2)])
-
-    posts = client._list_group_post_summaries("2318028917", 4)
-
-    assert requested == [("https://www.facebook.com/groups/2318028917/", 5000)]
-    assert checked == [(page, "https://www.facebook.com/groups/2318028917/", "group feed")]
-    assert page.keys == ["End", "End"]
-    assert page.waits == [2500, 2500]
-    assert [post.post_id for post in posts] == ["1001", "1002", "1003", "1004"]
+    assert group.name == "BrickLink Worldwide Buyers and Sellers"
+    assert group.member_count == "38.9K members"
+    assert group.privacy == "public"
+    assert group.membership == "member"
+    assert group.posts_readable is True
 
 
 def test_extract_group_discussion_request_uses_dynamic_doc_id(monkeypatch):
@@ -345,32 +274,30 @@ def test_extract_group_discussion_request_uses_dynamic_doc_id(monkeypatch):
     assert variables["groupID"] == "2318028917"
 
 
-def test_list_group_posts_falls_back_when_bootstrap_omits_discussion_preload(monkeypatch):
+def test_list_group_posts_fails_loudly_when_an_authenticated_page_omits_the_preload(monkeypatch):
+    """The reported defect: a third of Adam's groups answered [] at exit 0.
+
+    A signed-in page with no discussion preload used to be absorbed by a
+    rendered-feed DOM scraper that answered [] -- byte-identical to a group with
+    nothing in it. There is no scraper now: the diagnosis decides between
+    UNREADABLE_GROUP and FEED_EXTRACTION_FAILED, and both are raised.
+    """
     monkeypatch.setattr(client_mod, "get_config", lambda: object())
     client = client_mod.FacebookClient()
     body = (
         "<title>Facebook</title>"
-        '["CurrentUserInitialData",[],{"USER_ID":"user-1"}]'
+        '["CurrentUserInitialData",[],{"USER_ID":"47201652"}]'
         '["LSD",[],{"token":"lsd-token"}]'
         '{"queryID":"27020042980986584"}'
     )
-    rendered_posts = [
-        GroupPost(
-            post_id=str(1000 + index),
-            author="Seller",
-            text=f"Rendered post {index}",
-            url=f"https://www.facebook.com/groups/2318028917/posts/{1000 + index}/",
-            thread_url=f"https://www.facebook.com/groups/2318028917/posts/{1000 + index}/",
-        )
-        for index in range(10)
-    ]
-    requested = []
+    diagnosed = []
 
     monkeypatch.setattr(client, "_fetch_authenticated_facebook_bootstrap_html", lambda url: body)
     monkeypatch.setattr(
         client,
-        "_list_group_post_summaries",
-        lambda group_id, limit: requested.append((group_id, limit)) or rendered_posts[:limit],
+        "_group_feed_unavailable",
+        lambda group_id, cause: diagnosed.append((group_id, cause))
+        or client_mod.FeedExtractionFailed("FEED_EXTRACTION_FAILED: diagnosed"),
     )
     monkeypatch.setattr(
         client,
@@ -378,10 +305,12 @@ def test_list_group_posts_falls_back_when_bootstrap_omits_discussion_preload(mon
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("GraphQL must not run without preload variables")),
     )
 
-    posts = client.list_group_posts("2318028917", limit=10)
+    with pytest.raises(client_mod.FeedExtractionFailed) as excinfo:
+        client.list_group_posts("2318028917", limit=10)
 
-    assert requested == [("2318028917", 10)]
-    assert [post.post_id for post in posts] == [str(1000 + index) for index in range(10)]
+    assert str(excinfo.value).startswith("FEED_EXTRACTION_FAILED:")
+    assert [group_id for group_id, _cause in diagnosed] == ["2318028917"]
+    assert isinstance(diagnosed[0][1], client_mod.GroupDiscussionPreloadMissing)
 
 
 def test_group_discussion_graphql_allows_empty_dtsg_for_read_only_query(monkeypatch):
