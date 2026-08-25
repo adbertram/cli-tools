@@ -294,14 +294,37 @@ def test_normalize_search_result_non_grid_title_is_verbatim():
 
 
 def test_normalize_search_result_classified_grid_node_is_unwrapped_and_priced():
+    # REGRESSION: the live grid edge node carries NO ``__typename`` on the
+    # wrapper (this client's own search document does not select it).
+    # Dispatching on ``__typename == 'SearchResultItem'`` therefore missed the
+    # unwrap and read every field off the bare wrapper, returning all-null
+    # rows except section. The wrapper must be detected structurally by its
+    # ``item`` object, exactly like normalize_classified_item does.
     node = _grid_node("$20\nPink Squishy Toy with Case", [_run(0, 3), _run(3, 1), _run(4, 25)])
-    node["__typename"] = "SearchResultItem"
+    assert "__typename" not in node  # exact live wrapper shape
     node["item"]["contentType"] = "classified"
     record = normalize_search_result("CLASSIFIED", node)
     assert record["section"] == "CLASSIFIED"
     assert record["type"] == "classified"
+    assert record["id"] == "e0a5a7da"
     assert record["title"] == "Pink Squishy Toy with Case"
     assert record["price"] == "$20"
+    assert record["url"] == "https://nextdoor.com/for_sale_and_free/e0a5a7da/?init_source=search"
+
+
+def test_normalize_search_result_list_section_node_still_parses_directly():
+    # List-section nodes ARE the payload (no ``item`` key) and must not be
+    # unwrapped or misdetected as grid wrappers.
+    raw = {
+        "__typename": "SearchResult",
+        "contentId": "2118747",
+        "contentType": "localEvent",
+        "title": {"text": "Bierstube Bootcamp"},
+        "url": "https://nextdoor.com/local_events/CDGKh7Xxdd3M/?is=search",
+    }
+    record = normalize_search_result("LOCAL_EVENT", raw)
+    assert record["id"] == "2118747"
+    assert record["title"] == "Bierstube Bootcamp"
 
 
 def test_normalize_notification_uses_type_title_badges():
@@ -453,7 +476,7 @@ def test_search_against_real_fixture(monkeypatch):
         "BUSINESS",
         "POST",
     }
-    assert len(rows) == 27
+    assert len(rows) == 25
     content = [r for r in rows if r["type"] is not None]
     assert {r["type"] for r in content} == {
         "classified",
@@ -462,13 +485,40 @@ def test_search_against_real_fixture(monkeypatch):
         "business",
         "post",
     }
-    # Every real result carries a direct URL.
+    # THE regression this fixture pins: its grid edge nodes carry no
+    # ``__typename`` on the wrapper (this client's own search document does
+    # not select it) — exactly the live shape that used to normalize to
+    # all-null rows except section. Every real result must still come out
+    # with identity, title and a direct URL.
+    grid_views = [
+        v for v in data["searchFeedV2"]["searchResultView"]
+        if "searchResultItemsV2" in v
+    ]
+    assert grid_views, "fixture must contain a CLASSIFIED grid view"
+    assert all(
+        "__typename" not in edge["node"]
+        for view in grid_views
+        for edge in view["searchResultItemsV2"]["edges"]
+    )
+    assert all(r["id"] is not None for r in content)
+    assert all(r["title"] for r in content)
     assert all(r["url"].startswith("https://nextdoor.com/") for r in content)
     # Classified results in search get the same price split as the grid.
     listings = [r for r in content if r["type"] == "classified"]
-    assert {"Pink Squishy Toy with Case", "$20"} <= {
-        r["title"] for r in listings
-    } | {r["price"] for r in listings}
+    assert len(listings) == 5
+    prices = {r["title"]: r["price"] for r in listings}
+    assert prices["Vintage Secretary Desk"] == "$400"
+    assert all(price for price in prices.values())
+    listing_urls = {r["url"] for r in listings}
+    assert all(
+        url.startswith("https://nextdoor.com/for_sale_and_free/") for url in listing_urls
+    )
+    assert all(r["id"] in r["url"] for r in listings)
+    # Sponsored ad slots are reported truthfully with no content identity.
+    sponsored = [r for r in rows if r["type"] is None]
+    assert len(sponsored) == 1
+    assert sponsored[0]["section"] == "CLASSIFIED"
+    assert sponsored[0]["id"] is None and sponsored[0]["url"] is None
     # Post results link to opaque post slugs.
     posts = [r for r in content if r["type"] == "post"]
     assert all("/p/" in r["url"] for r in posts)

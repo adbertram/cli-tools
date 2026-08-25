@@ -64,6 +64,7 @@ PERMISSION_GROUPS = (
     ),
     ("/purge_cache", "Zone > Cache Purge > Purge", "Zone > Cache Purge > Purge"),
     ("/settings/", "Zone > Zone Settings > Read", "Zone > Zone Settings > Edit"),
+    ("/pages/", "Pages Read", "Pages Write"),
     ("/graphql", "Zone > Analytics > Read", "Zone > Analytics > Read"),
     ("/zones", "Zone > Zone > Read", "Zone > Zone > Edit"),
 )
@@ -1167,7 +1168,11 @@ class CloudflareClient:
 
     def list_worker_scripts(self, account_id: str, limit: int = 100) -> List[Dict]:
         """
-        List Workers scripts for an account with automatic pagination.
+        List Workers scripts for an account.
+
+        The Workers Scripts endpoint returns the full script set in a single
+        response (it ignores ``per_page``/``page`` query parameters), so the
+        limit is enforced client-side.
 
         Args:
             account_id: The account ID
@@ -1176,36 +1181,17 @@ class CloudflareClient:
         Returns:
             List of script dicts (id, created_on, modified_on, ...)
         """
-        API_MAX_PER_PAGE = 50
-
-        all_scripts: List[Dict] = []
-        page = 1
-        remaining = limit
-
-        while remaining > 0:
-            per_page = min(remaining, API_MAX_PER_PAGE)
-            params = {"per_page": per_page, "page": page}
-
-            response = self._envelope(
-                "GET",
-                f"/accounts/{account_id}/workers/scripts",
-                params=params
+        response = self._envelope(
+            "GET",
+            f"/accounts/{account_id}/workers/scripts",
+        )
+        raw_scripts = response.get("result", [])
+        if not isinstance(raw_scripts, list):
+            raise ClientError(
+                "Unexpected non-list result for GET "
+                f"/accounts/{account_id}/workers/scripts"
             )
-            raw_scripts = response.get("result", [])
-            all_scripts.extend(raw_scripts)
-
-            if len(raw_scripts) < per_page:
-                break
-
-            result_info = response.get("result_info", {})
-            total_pages = result_info.get("total_pages", 1)
-            if page >= total_pages:
-                break
-
-            remaining -= len(raw_scripts)
-            page += 1
-
-        return all_scripts
+        return raw_scripts[:limit]
 
     def get_worker_script(self, account_id: str, script_name: str) -> str:
         """
@@ -1301,6 +1287,608 @@ class CloudflareClient:
         response = self._envelope(
             "DELETE",
             f"/accounts/{account_id}/workers/scripts/{script_name}"
+        )
+        return response.get("result", {})
+
+    # ==================== Workers Routes (zone-scoped) ====================
+
+    def list_worker_routes(self, zone_id: str) -> List[Dict]:
+        """
+        List Worker routes for a zone.
+
+        The Worker routes endpoint returns the full route set in a single
+        response (no pagination parameters), so limiting and filtering are
+        applied at the command layer.
+
+        Args:
+            zone_id: The zone ID
+
+        Returns:
+            List of route dicts (id, pattern, script)
+        """
+        response = self._envelope("GET", f"/zones/{zone_id}/workers/routes")
+        result = response.get("result", [])
+        return result if isinstance(result, list) else []
+
+    def get_worker_route(self, zone_id: str, route_id: str) -> Dict:
+        """
+        Get a single Worker route for a zone.
+
+        Args:
+            zone_id: The zone ID
+            route_id: The route ID
+
+        Returns:
+            dict with the route details (id, pattern, script)
+        """
+        response = self._envelope(
+            "GET",
+            f"/zones/{zone_id}/workers/routes/{route_id}"
+        )
+        return response.get("result", {})
+
+    def create_worker_route(self, zone_id: str, pattern: str, script: str) -> Dict:
+        """
+        Create a Worker route binding a URL pattern to a script.
+
+        Args:
+            zone_id: The zone ID
+            pattern: Route pattern (e.g. "example.com/llms.txt*")
+            script: Worker script name to invoke for matching requests
+
+        Returns:
+            dict with the created route (id, pattern, script)
+        """
+        response = self._envelope(
+            "POST",
+            f"/zones/{zone_id}/workers/routes",
+            data={"pattern": pattern, "script": script}
+        )
+        return response.get("result", {})
+
+    def delete_worker_route(self, zone_id: str, route_id: str) -> dict:
+        """
+        Delete a Worker route.
+
+        Args:
+            zone_id: The zone ID
+            route_id: The route ID
+
+        Returns:
+            dict with the deleted route ID
+        """
+        response = self._envelope(
+            "DELETE",
+            f"/zones/{zone_id}/workers/routes/{route_id}"
+        )
+        return response.get("result", {})
+
+    # ==================== Pages ====================
+    # Account-level Pages management: projects, deployments, and custom
+    # domains. All endpoints live under /accounts/{account_id}/pages/...
+    # (Cloudflare v4 API). Projects and deployments list endpoints paginate
+    # with page/per_page; the domains list endpoint returns everything in a
+    # single response (no pagination parameters). Measured against the live
+    # API: /pages/projects rejects per_page > 10 with HTTP 400, while the
+    # deployments list endpoint accepts per_page up to 25, so the shared
+    # helper takes a per-endpoint cap instead of one global maximum.
+
+    def _paginated_list(
+        self,
+        endpoint: str,
+        limit: int,
+        base_params: Optional[Dict] = None,
+        max_per_page: int = 25,
+    ) -> List[Dict]:
+        """
+        Fetch a paginated Cloudflare list endpoint up to ``limit`` items.
+
+        Args:
+            endpoint: API path returning {"result": [...], "result_info": {...}}
+            limit: Maximum number of items to return
+            base_params: Query params merged into every page request
+            max_per_page: Largest per-request ``per_page`` value the endpoint
+                accepts; ``limit`` still controls the total item count
+
+        Returns:
+            Combined result items across pages
+        """
+        all_items: List[Dict] = []
+        page = 1
+        remaining = limit
+
+        while remaining > 0:
+            per_page = min(remaining, max_per_page)
+            params = {**(base_params or {}), "per_page": per_page, "page": page}
+
+            response = self._envelope("GET", endpoint, params=params)
+            raw_items = response.get("result", [])
+            if not isinstance(raw_items, list):
+                raise ClientError(f"Unexpected non-list result for GET {endpoint}")
+            all_items.extend(raw_items)
+
+            if len(raw_items) < per_page:
+                break
+
+            result_info = response.get("result_info", {})
+            total_pages = result_info.get("total_pages", 1)
+            if page >= total_pages:
+                break
+
+            remaining -= len(raw_items)
+            page += 1
+
+        return all_items
+
+    def list_pages_projects(self, account_id: str, limit: int = 100) -> List[Dict]:
+        """
+        List Pages projects for an account with automatic pagination.
+
+        Args:
+            account_id: The account ID
+            limit: Maximum number of projects to return
+
+        Returns:
+            List of project dicts (id/name via "name", production_branch, ...)
+        """
+        # Live /pages/projects rejects per_page > 10 with a 400 even though
+        # other Cloudflare list endpoints accept larger pages.
+        return self._paginated_list(
+            f"/accounts/{account_id}/pages/projects", limit, max_per_page=10
+        )
+
+    def get_pages_project(self, account_id: str, project_name: str) -> Dict:
+        """
+        Get a single Pages project.
+
+        Args:
+            account_id: The account ID
+            project_name: The project name
+
+        Returns:
+            Project dict
+        """
+        response = self._envelope(
+            "GET", f"/accounts/{account_id}/pages/projects/{project_name}"
+        )
+        return response.get("result", {})
+
+    def create_pages_project(
+        self,
+        account_id: str,
+        name: str,
+        production_branch: str,
+        config: Optional[Dict] = None,
+    ) -> Dict:
+        """
+        Create a Pages project.
+
+        Args:
+            account_id: The account ID
+            name: Project name
+            production_branch: Branch that identifies production deployments
+            config: Optional extra body fields (build_config,
+                deployment_configs, source, ...) merged into the request
+
+        Returns:
+            Created project dict
+        """
+        data: Dict = {"name": name, "production_branch": production_branch}
+        if config:
+            data.update(config)
+
+        response = self._envelope("POST", f"/accounts/{account_id}/pages/projects", data=data)
+        return response.get("result", {})
+
+    def patch_pages_project(self, account_id: str, project_name: str, data: Dict) -> Dict:
+        """
+        Patch an existing Pages project (single PATCH edit endpoint).
+
+        Args:
+            account_id: The account ID
+            project_name: The project name
+            data: JSON body fields (production_branch, build_config,
+                deployment_configs, ...). Setting an env var key to null
+                deletes it per the Cloudflare API.
+
+        Returns:
+            Updated project dict
+        """
+        response = self._envelope(
+            "PATCH", f"/accounts/{account_id}/pages/projects/{project_name}", data=data
+        )
+        return response.get("result", {})
+
+    def delete_pages_project(self, account_id: str, project_name: str) -> Dict:
+        """
+        Delete a Pages project.
+
+        Args:
+            account_id: The account ID
+            project_name: The project name
+
+        Returns:
+            Result dict from the delete response
+        """
+        response = self._envelope(
+            "DELETE", f"/accounts/{account_id}/pages/projects/{project_name}"
+        )
+        return response.get("result", {})
+
+    def purge_pages_build_cache(self, account_id: str, project_name: str) -> Dict:
+        """
+        Purge all cached build artifacts for a Pages project.
+
+        Args:
+            account_id: The account ID
+            project_name: The project name
+
+        Returns:
+            Result dict from the purge response
+        """
+        response = self._envelope(
+            "POST", f"/accounts/{account_id}/pages/projects/{project_name}/purge_build_cache"
+        )
+        return response.get("result", {})
+
+    def get_pages_upload_token(self, account_id: str, project_name: str) -> Dict:
+        """
+        Get the direct-upload token for a Pages project.
+
+        Args:
+            account_id: The account ID
+            project_name: The project name
+
+        Returns:
+            Result dict containing the upload token (e.g. {"jwt": "..."})
+        """
+        response = self._envelope(
+            "GET", f"/accounts/{account_id}/pages/projects/{project_name}/upload-token"
+        )
+        return response.get("result", {})
+
+    def list_pages_deployments(
+        self,
+        account_id: str,
+        project_name: str,
+        limit: int = 100,
+        env: Optional[str] = None,
+    ) -> List[Dict]:
+        """
+        List deployments for a Pages project with automatic pagination.
+
+        Args:
+            account_id: The account ID
+            project_name: The project name
+            limit: Maximum number of deployments to return
+            env: Optional environment filter ("production" or "preview")
+
+        Returns:
+            List of deployment dicts
+        """
+        base_params: Dict = {}
+        if env:
+            base_params["env"] = env
+        return self._paginated_list(
+            f"/accounts/{account_id}/pages/projects/{project_name}/deployments",
+            limit,
+            base_params,
+        )
+
+    def get_pages_deployment(
+        self, account_id: str, project_name: str, deployment_id: str
+    ) -> Dict:
+        """
+        Get a single deployment.
+
+        Args:
+            account_id: The account ID
+            project_name: The project name
+            deployment_id: The deployment ID
+
+        Returns:
+            Deployment dict
+        """
+        response = self._envelope(
+            "GET",
+            f"/accounts/{account_id}/pages/projects/{project_name}/deployments/{deployment_id}",
+        )
+        return response.get("result", {})
+
+    def check_missing_page_assets(self, jwt: str, hashes: List[str]) -> List[str]:
+        """
+        Ask Cloudflare which asset hashes are missing for direct upload.
+
+        Mirrors wrangler's POST /pages/assets/check-missing call. This
+        account-level asset endpoint authenticates with the project's
+        short-lived upload token, not the account API token.
+
+        Args:
+            jwt: Upload token from get_pages_upload_token
+            hashes: All content hashes of the local deploy tree
+
+        Returns:
+            The subset of hashes Cloudflare does not have stored yet
+        """
+        response = self._envelope(
+            "POST",
+            "/pages/assets/check-missing",
+            data={"hashes": hashes},
+            headers={"Authorization": f"Bearer {jwt}"},
+        )
+        result = response.get("result", [])
+        return list(result) if isinstance(result, list) else []
+
+    def upload_page_assets(self, jwt: str, payload: List[Dict]) -> Dict:
+        """
+        Upload one batch of assets to the Pages asset store.
+
+        Mirrors wrangler's POST /pages/assets/upload call: a JSON array of
+        {key: hash, value: base64 content, metadata: {contentType}, base64:
+        true} records authenticated with the upload token.
+
+        Args:
+            jwt: Upload token from get_pages_upload_token
+            payload: Batch records built by pages_assets.build_upload_payload
+
+        Returns:
+            Result dict from the API (empty when nothing is returned)
+        """
+        response = self._envelope(
+            "POST",
+            "/pages/assets/upload",
+            data=payload,
+            headers={"Authorization": f"Bearer {jwt}"},
+        )
+        return response.get("result") or {}
+
+    def upsert_page_asset_hashes(self, jwt: str, hashes: List[str]) -> Dict:
+        """
+        Record all deployed hashes so future deploys can skip re-uploads.
+
+        Mirrors wrangler's POST /pages/assets/upsert-hashes call. Failure is
+        non-fatal for a deployment; it only slows down the next upload.
+
+        Args:
+            jwt: Upload token from get_pages_upload_token
+            hashes: All content hashes of the local deploy tree
+
+        Returns:
+            Result dict from the API
+        """
+        response = self._envelope(
+            "POST",
+            "/pages/assets/upsert-hashes",
+            data={"hashes": hashes},
+            headers={"Authorization": f"Bearer {jwt}"},
+        )
+        return response.get("result") or {}
+
+    def create_pages_deployment(
+        self,
+        account_id: str,
+        project_name: str,
+        branch: Optional[str] = None,
+        commit_message: Optional[str] = None,
+        commit_hash: Optional[str] = None,
+        commit_dirty: Optional[bool] = None,
+        manifest: Optional[str] = None,
+        headers_text: Optional[str] = None,
+        redirects_text: Optional[str] = None,
+    ) -> Dict:
+        """
+        Start a new deployment (multipart/form-data POST).
+
+        For git-connected projects pass --branch to build from the branch HEAD.
+        For direct-upload projects pass --manifest (a JSON object mapping
+        "/path" keys to content hashes); the pages deployments create command
+        automates hashing and asset upload when given a --directory.
+
+        Args:
+            account_id: The account ID
+            project_name: The project name
+            branch: Branch to build from (defaults to production branch)
+            commit_message: Commit message metadata
+            commit_hash: Commit SHA metadata
+            commit_dirty: Whether the source had uncommitted changes
+            manifest: JSON string of {"/path": hash} entries for direct upload
+            headers_text: _headers file content sent as a form file part
+            redirects_text: _redirects file content sent as a form file part
+
+        Returns:
+            Created deployment dict
+        """
+        files: Dict = {}
+        if branch is not None:
+            files["branch"] = (None, branch, None)
+        if commit_message is not None:
+            files["commit_message"] = (None, commit_message, None)
+        if commit_hash is not None:
+            files["commit_hash"] = (None, commit_hash, None)
+        if commit_dirty is not None:
+            files["commit_dirty"] = (None, "true" if commit_dirty else "false", None)
+        if manifest is not None:
+            files["manifest"] = (None, manifest, None)
+        if headers_text is not None:
+            files["_headers"] = ("_headers", headers_text)
+        if redirects_text is not None:
+            files["_redirects"] = ("_redirects", redirects_text)
+
+        response = self._envelope(
+            "POST",
+            f"/accounts/{account_id}/pages/projects/{project_name}/deployments",
+            files=files,
+        )
+        return response.get("result", {})
+
+    def delete_pages_deployment(
+        self,
+        account_id: str,
+        project_name: str,
+        deployment_id: str,
+        allow_aliased: bool = False,
+    ) -> Dict:
+        """
+        Delete a deployment.
+
+        Args:
+            account_id: The account ID
+            project_name: The project name
+            deployment_id: The deployment ID
+            allow_aliased: Send force=true so aliased non-production
+                deployments can be deleted too
+
+        Returns:
+            Result dict ({id} of the deleted deployment) when present
+        """
+        params = {"force": "true"} if allow_aliased else None
+        response = self._envelope(
+            "DELETE",
+            f"/accounts/{account_id}/pages/projects/{project_name}/deployments/{deployment_id}",
+            params=params,
+        )
+        return response.get("result") or {}
+
+    def retry_pages_deployment(
+        self, account_id: str, project_name: str, deployment_id: str
+    ) -> Dict:
+        """
+        Retry a failed deployment build.
+
+        Args:
+            account_id: The account ID
+            project_name: The project name
+            deployment_id: The deployment ID
+
+        Returns:
+            Deployment dict for the retried build
+        """
+        response = self._envelope(
+            "POST",
+            f"/accounts/{account_id}/pages/projects/{project_name}/deployments/{deployment_id}/retry",
+        )
+        return response.get("result", {})
+
+    def rollback_pages_deployment(
+        self, account_id: str, project_name: str, deployment_id: str
+    ) -> Dict:
+        """
+        Roll production back to a previous successful production deployment.
+
+        Args:
+            account_id: The account ID
+            project_name: The project name
+            deployment_id: Target deployment ID (must be a successful
+                production deployment)
+
+        Returns:
+            Deployment dict now serving production
+        """
+        response = self._envelope(
+            "POST",
+            f"/accounts/{account_id}/pages/projects/{project_name}/deployments/{deployment_id}/rollback",
+        )
+        return response.get("result", {})
+
+    def list_pages_domains(self, account_id: str, project_name: str) -> List[Dict]:
+        """
+        List custom domains attached to a Pages project.
+
+        The domains endpoint does not paginate; one request returns all
+        domains.
+
+        Args:
+            account_id: The account ID
+            project_name: The project name
+
+        Returns:
+            List of domain dicts (name, status, validation_data, ...)
+        """
+        response = self._envelope(
+            "GET", f"/accounts/{account_id}/pages/projects/{project_name}/domains"
+        )
+        result = response.get("result", [])
+        return result if isinstance(result, list) else []
+
+    def add_pages_domain(
+        self, account_id: str, project_name: str, domain_name: str
+    ) -> Dict:
+        """
+        Add a custom domain to a Pages project.
+
+        Args:
+            account_id: The account ID
+            project_name: The project name
+            domain_name: Domain name to attach
+
+        Returns:
+            Created domain dict
+        """
+        response = self._envelope(
+            "POST",
+            f"/accounts/{account_id}/pages/projects/{project_name}/domains",
+            data={"name": domain_name},
+        )
+        return response.get("result", {})
+
+    def get_pages_domain(
+        self, account_id: str, project_name: str, domain_name: str
+    ) -> Dict:
+        """
+        Get a single custom domain.
+
+        Args:
+            account_id: The account ID
+            project_name: The project name
+            domain_name: The domain name
+
+        Returns:
+            Domain dict
+        """
+        response = self._envelope(
+            "GET",
+            f"/accounts/{account_id}/pages/projects/{project_name}/domains/{domain_name}",
+        )
+        return response.get("result", {})
+
+    def revalidate_pages_domain(
+        self, account_id: str, project_name: str, domain_name: str
+    ) -> Dict:
+        """
+        Retry validation of a custom domain (PATCH edit endpoint).
+
+        Args:
+            account_id: The account ID
+            project_name: The project name
+            domain_name: The domain name
+
+        Returns:
+            Updated domain dict
+        """
+        response = self._envelope(
+            "PATCH",
+            f"/accounts/{account_id}/pages/projects/{project_name}/domains/{domain_name}",
+            data={},
+        )
+        return response.get("result", {})
+
+    def delete_pages_domain(
+        self, account_id: str, project_name: str, domain_name: str
+    ) -> Dict:
+        """
+        Remove a custom domain from a Pages project.
+
+        Args:
+            account_id: The account ID
+            project_name: The project name
+            domain_name: The domain name
+
+        Returns:
+            Result dict from the delete response
+        """
+        response = self._envelope(
+            "DELETE",
+            f"/accounts/{account_id}/pages/projects/{project_name}/domains/{domain_name}",
         )
         return response.get("result", {})
 

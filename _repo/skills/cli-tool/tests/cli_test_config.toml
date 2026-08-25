@@ -61,6 +61,24 @@ operators = ["eq", "ne", "gt", "gte", "lt", "lte", "contains", "in", "nin", "sta
 # max_nested_depth = 2
 # command_timeout = 60
 
+[cli_specific.cloudflare]
+# `workers get` downloads raw script source (not a JSON record), so the workers
+# group cannot satisfy the generic get-execution JSON contract. The allowlist
+# keeps the resource-backed groups under generic execution coverage.
+list_commands = [
+    "zones list",
+    "access-rules list",
+    "dns zones list",
+    "dns records list",
+    "workers routes list",
+    "pages projects list",
+    "pages deployments list",
+    "pages domains list",
+]
+# `workers get` returns raw script content; there is no single record to
+# render as a table.
+excluded_from_table_flag_required = ["workers"]
+
 [cli_specific.copilot]
 # Copilot has deep command trees: tool mcp tools <list|get|invoke> and
 # agent knowledge azure-ai-search add are at depth 4.
