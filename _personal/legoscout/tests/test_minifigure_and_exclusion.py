@@ -423,3 +423,35 @@ def test_minifigure_numeric_columns_round_trip_integers(tmp_path):
     assert loaded["figure_count"] == 20
     assert isinstance(loaded["ebay_avg_price_per_fig"], float)
     assert loaded["ebay_avg_price_per_fig"] == 5.0
+
+
+# --- legacy read freeze (Phase A): retirement must never eat the evidence ----
+
+
+def test_legacy_ebay_avg_price_per_fig_survives_connect_and_roundtrip(tmp_path):
+    """A stored pre-identification minifigure row stays readable through the
+    canonical write/read path. The positive twin of Phase F's negative
+    retirement contract: code may retire, the stored evidence may not.
+    """
+    import legoscout_cli.ledger.db as ledger_db
+    path = str(tmp_path / "found_deals.db")
+    ledger_db.init(path).close()
+    deal = {
+        "listing_key": "shopgoodwill|900001",
+        "source": "shopgoodwill",
+        "status": "active",
+        "url": "https://www.shopgoodwill.com/Listing/900001",
+        "title": "Star Wars minifigure lot",
+        "listing_type": "fixed",
+        "price_basis": "current_price",
+        "current_price": 40.0,
+        "listing_category": "minifigure",
+        "available_fulfillment": ["shipping"],
+        "observations": {},
+        "figure_count": 8,
+        "figure_count_source": "stated",
+        "ebay_avg_price_per_fig": 5.25,
+    }
+    ledger_db.upsert_deals([deal], path=path)
+    back = ledger_db.get_deal("shopgoodwill|900001", path=path)
+    assert back["ebay_avg_price_per_fig"] == 5.25

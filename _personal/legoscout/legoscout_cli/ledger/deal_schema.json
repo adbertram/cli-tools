@@ -313,7 +313,7 @@
         "null"
       ],
       "phase": "appraisal",
-      "description": "How many minifigures the listing contains. Stated count from the listing text first; otherwise an exact count read off the listing photos -- inspecting the images is MANDATORY for every minifigure candidate, so a null means text and photos both failed to yield a countable answer, never a skipped look. The minifigure pricing path multiplies the eBay $/fig comp average by this -- without it a minifigure lot cannot be priced and stays `profit_incomplete`. Provenance is `figure_count_source`.",
+      "description": "How many minifigures the listing contains. Stated count from the listing text first; otherwise an exact count read off the listing photos -- inspecting the images is MANDATORY for every minifigure candidate, so a null means text and photos both failed to yield a countable answer, never a skipped look. On identifier-backed rows (`figure_count_source`=`detection`) synthesis OWNS this value: build_record derives it from `minifig_analysis`, and classifier stated/photo counts survive only under `observations.vision` as mismatch evidence. Provenance is `figure_count_source`.",
       "minimum": 1
     },
     "figure_count_source": {
@@ -325,10 +325,11 @@
         "stated",
         "photo_count",
         "unknown",
+        "detection",
         null
       ],
       "phase": "appraisal",
-      "description": "How `figure_count` was determined on a minifigure lot: `stated` (the seller's own text), `photo_count` (counted off the listing images by the mandatory vision pass), or `unknown` (images were inspected but no exact count was determinable). Null on every non-minifigure category. Required whenever `figure_count` is a number."
+      "description": "How `figure_count` was determined on a minifigure lot: `stated` (the seller's own text), `photo_count` (counted off the listing images by the mandatory vision pass), `unknown` (images were inspected but no exact count was determinable), or `detection` (the identifier pipeline owns the count; required on every new identifier-backed row, where the value equals the sum of `minifig_analysis` entry quantities). Null on every non-minifigure category. Required whenever `figure_count` is a number."
     },
     "set_completeness": {
       "type": "string",
@@ -402,7 +403,7 @@
         "null"
       ],
       "phase": "appraisal",
-      "description": "eBay sold $/fig average for a minifigure lot, from `legoscout pricing comps --minifigure` (only listings whose titles state a figure count). `potential_profit` on a minifigure lot is this times `figure_count`."
+      "description": "LEGACY evidence from the retired eBay $/fig pricing path, kept readable on rows classified before per-figure identification. Current code never writes it: new minifigure rows price through `minifig_analysis` per-figure BrickLink used-sold values instead. Deliberately NOT in RETIRED_COLUMNS -- connect-time retirement would destroy this preserved evidence."
     },
     "shipping_estimated": {
       "type": [
@@ -654,6 +655,17 @@
       },
       "phase": "appraisal",
       "description": "One entry per detected set: BrickLink catalog metadata plus 6-month sold summaries, from `lookup_set_sales.py`. An ARRAY because `summarize_set()` returns exactly one per-set object and the appraiser calls it once per set; `null` when no set was priced, and never `[]`, which is the same answer spelled twice. It was typed `object|null` until 2026-08-05 while 331 rows already held the array, and the ledger carried four incompatible dict spellings beside it (a `sets` wrapper, keyed by set number, a bare per-set object, an unkeyed blob). Read and write it only through `legoscout-ledger/scripts/set_analysis.py` -- `normalize()`/`entries()`/`names()`. A lot-level value (`potential_profit_total`, `purchase_price`, `used_avg_6mo`, `set_numbers`) does NOT belong in an entry: it has its own column, and the wrapper copy had already gone stale on 7 rows."
+    },
+    "minifig_analysis": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "object"
+      },
+      "phase": "synthesis",
+      "description": "One entry per identifier match group behind a minifigure row: stable-ref detections, Brickognize candidates, agent verification, verified identity (fig_no + catalog), detector-owned quantity, condition notes, and per-figure BrickLink used-sold value. Written by `legoscout minifig price`; null on every legacy row. Read/write ONLY through legoscout_cli/ledger/minifig_analysis.py -- normalize()/entries()/entry_errors(); that module solely owns entry semantics, this schema gates only array-or-null shape. Cross-photo repeats collapse into one entry's quantity (max simultaneous in any photo); unknown/unverifiable figures stay present with crops and null values, never estimates."
     },
     "id": {
       "type": "string",
