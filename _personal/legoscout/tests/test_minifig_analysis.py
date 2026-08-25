@@ -221,9 +221,16 @@ def test_crop_refs_preserve_order():
 
 
 def test_identified_split_by_verification_status():
-    analysis = [_verified(), _unknown()]
+    analysis = [_verified(quantity=2), _unknown(quantity=3)]
     assert len(mfa.identified_entries(analysis)) == 1
     assert len(mfa.unknown_entries(analysis)) == 1
+    assert mfa.identified_count(analysis) == 2
+    assert mfa.unknown_count(analysis) == 3
+
+
+def test_identity_counts_are_zero_for_empty_analysis():
+    assert mfa.identified_count([]) == 0
+    assert mfa.unknown_count([]) == 0
 
 
 def test_helper_raises_unreadable_on_malformed_artifact_not_zero_total():

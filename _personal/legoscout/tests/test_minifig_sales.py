@@ -140,12 +140,17 @@ def test_qty_units_and_depth_stay_distinct_evidence(tmp_path):
     assert out["used"]["price_detail_count"] == 7
 
 
-def test_catalog_payload_travels_onto_the_result(tmp_path):
+def test_catalog_payload_urls_are_normalized_without_mutating_input(tmp_path):
     cat = _catalog()
     out = minifig_sales.summarize_fig(
         "sw0001a", cat, runner=_recorder(_raw_prices()),
         cache_path=_iso(tmp_path))
-    assert out["catalog"] is cat
+    assert out["catalog"] == {
+        "no": "sw0001a",
+        "name": "Luke Skywalker",
+        "thumbnail_url": "https://img.bricklink.com/M/sw0001a.jpg",
+    }
+    assert cat["thumbnail_url"].startswith("//")
 
 
 # --- zero sales ----------------------------------------------------------------
@@ -157,8 +162,7 @@ def test_zero_sales_is_a_present_null_valued_answer(tmp_path):
         runner=_recorder(_raw_prices(avg=None)), cache_path=_iso(tmp_path))
     assert out["lookup_status"] == "zero_sales"
     assert out["unit_value"] is None
-    reason = out["null_value_reason"]
-    assert isinstance(reason, str) and "sold" in reason.lower()
+    assert out["null_value_reason"] == "zero_sales"
 
 
 def test_zero_sales_is_not_zero_dollars_and_not_an_exception(tmp_path):

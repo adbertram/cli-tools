@@ -28,6 +28,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from legoscout_cli.ledger import minifig_analysis
 from legoscout_cli.pricing import set_sales
 
 LookupFailed = set_sales.LookupFailed
@@ -96,7 +97,7 @@ def summarize_fig(
     unit_value = used.get("six_month_avg_sold_price")
     result: dict[str, Any] = {
         "fig_no": fig_no,
-        "catalog": catalog,
+        "catalog": minifig_analysis.normalize_catalog(catalog),
         "used": used,
         "lookup_status": "found",
         "unit_value": unit_value,
@@ -106,6 +107,5 @@ def summarize_fig(
         # A present answer with nothing in it: the guide ran and reported no
         # six-month sold data. Not $0, not an error, never an estimate.
         result["lookup_status"] = "zero_sales"
-        result["null_value_reason"] = (
-            "no BrickLink six-month used-sold data for %s" % fig_no)
+        result["null_value_reason"] = "zero_sales"
     return result

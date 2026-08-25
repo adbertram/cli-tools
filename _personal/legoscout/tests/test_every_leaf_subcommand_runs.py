@@ -265,10 +265,37 @@ def files(tmp_path_factory, ledger):
             "detection_count": 0,
         },
     }
+    minifig_price_input = {
+        "version": 1,
+        "kind": "minifig_identification",
+        "request_contract": {
+            "endpoint": "https://api.brickognize.com/predict/figs/",
+            "contract_version": "brickognize-legacy-figs-v1",
+            "top_k_items": 10,
+            "min_similarity_items": 0.5,
+        },
+        "listings": [],
+        "summary": {
+            "listing_count": 0,
+            "success_count": 0,
+            "partial_count": 0,
+            "skipped_count": 0,
+            "crop_count": 0,
+            "group_count": 0,
+            "provider_success_count": 0,
+            "provider_skipped_count": 0,
+            "cache_hit_count": 0,
+        },
+        "timings": {
+            "total_seconds": 0.0,
+            "mean_per_crop_seconds": 0.0,
+        },
+    }
     written = {}
     for name, payload in (("candidate", candidate), ("appraisal", appraisal),
                           ("triage", []), ("minifig_input", []),
                           ("minifig_identify_input", minifig_identify_input),
+                          ("minifig_price_input", minifig_price_input),
                           ("prospect", prospect),
                           ("contact", contact), ("run", run),
                           ("entry", {ADDED_SOURCE: _source_entry(ADDED_SOURCE)})):
@@ -278,6 +305,7 @@ def files(tmp_path_factory, ledger):
     written["minifig_output"] = str(root / "minifig_output.json")
     written["minifig_identify_output"] = str(
         root / "minifig_identify_output.json")
+    written["minifig_price_output"] = str(root / "minifig_price_output.json")
     manifest_dir = root / "run-manifest"
     manifest_dir.mkdir()
     for namespace in registry.active_namespaces():
@@ -434,6 +462,10 @@ def cases(ids, files):
         ("minifig", "identify"): _case([
             "--input", files["minifig_identify_input"],
             "--output", files["minifig_identify_output"],
+        ]),
+        ("minifig", "price"): _case([
+            "--input", files["minifig_price_input"],
+            "--output", files["minifig_price_output"],
         ]),
 
         ("score", "deal"): _case([ids["listing_key"]]),

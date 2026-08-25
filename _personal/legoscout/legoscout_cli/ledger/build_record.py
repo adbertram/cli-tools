@@ -52,10 +52,15 @@ from . import schema as deal_schema  # noqa: E402
 from ..pricing import profit as profit_module  # noqa: E402
 from ..scoring import score as score_deal  # noqa: E402
 from . import sellers as sellers_db  # noqa: E402
+from . import minifig_analysis as mfa  # noqa: E402
 from . import set_analysis as sa  # noqa: E402
 from . import shipping as se  # noqa: E402
 from . import source_names  # noqa: E402
-from ..orchestrator import validate_appraisal_result, validate_comps_result  # noqa: E402
+from ..orchestrator import (  # noqa: E402
+    validate_appraisal_result,
+    validate_comps_result,
+    validate_identification_result,
+)
 
 CRAWL_FIELDS = tuple(deal_schema.fields_for_phase("crawl"))
 APPRAISAL_FIELDS = tuple(deal_schema.fields_for_phase("appraisal"))
@@ -413,18 +418,15 @@ def _apply_comps(merged: dict, comps: dict | None, fee_rate: float | None) -> No
             merged["potential_profit"] = None
             merged["profit_incomplete"] = True
             merged["zero_comp_note"] = comps.get("blocker") or "unknown"
-        elif listing_category == "minifigure":
-            merged["potential_profit"] = None
-            merged["profit_incomplete"] = True
-            merged["zero_comp_note"] = comps.get("blocker") or "unknown"
+
         # `excluded` candidates carry no economics at all -- `build_deal_record`
         # already routed them to `status: rejected` before this runs.
         return
     if comps is None:
-        if listing_category in ("set", "minifigure"):
+        if listing_category == "set":
             raise ValueError(
                 "build_deal_record: %r is a %s candidate with no comps result. "
-                "Sets and minifigure lots are priced by legoscout-appraiser's "
+                "Sets are priced by legoscout-appraiser's "
                 "`legoscout pricing comps` call -- pass its result as `comps=`, "
                 "or this record's pricing fields stay null with nothing "
                 "telling you why."
@@ -437,9 +439,6 @@ def _apply_comps(merged: dict, comps: dict | None, fee_rate: float | None) -> No
         merged["ebay_comp_count"] = ebay.get("matched_count")
         merged["ebay_avg_price_per_lb"] = ebay.get("avg_price_per_lb")
 
-    if listing_category == "minifigure":
-        _apply_minifigure_comps(merged, ebay, fee_rate)
-        return
 
     if listing_category != "set":
         return
@@ -606,63 +605,68 @@ def _apply_comps(merged: dict, comps: dict | None, fee_rate: float | None) -> No
     merged["set_analysis"] = sa.normalize(entries)
 
 
-def _apply_minifigure_comps(merged: dict, ebay: dict | None, fee_rate: float | None) -> None:
-    """Price a minifigure lot off eBay's $/fig sold average.
-
-    The bulk analogue with figures instead of pounds: `potential_profit =
-    avg_price_per_fig * figure_count` less the landed total, net of fees.
-    Both inputs are facts the pipeline captured -- `figure_count` is the
-    classifier's stated/photo-counted figure count, `avg_price_per_fig` is
-    `ebay_comps.search_minifigure_comps`'s average over listings whose titles
-    stated a count. Without EITHER there is no price: the lot stays unpriced
-    (`profit_incomplete`) rather than being assigned a guessed number.
-
-    Zero comps on a minifigure lot is NOT the set path's $0-loss rule -- that
-    rule applies only when BrickLink CONFIRMS the set exists and still has no
-    sold history. A minifigure lot has no BrickLink identity to confirm, so
-    zero eBay comps stays unpriced.
-    """
-    eb = ebay if isinstance(ebay, dict) else None
-    available = bool(eb and eb.get("available") is True)
-    avg_per_fig = eb.get("avg_price_per_fig") if available else None
-    matched_count = eb.get("matched_count") if available else None
-    figure_count = merged.get("figure_count")
-
-    # Informational, like bulk's ebay_avg_price_per_lb -- the page shows the
-    # $/fig the profit was built from.
-    merged["ebay_avg_price_per_fig"] = avg_per_fig
-
-    if not isinstance(figure_count, int) or figure_count <= 0:
-        merged["potential_profit"] = None
-        merged["profit_incomplete"] = True
-        merged["zero_comp_note"] = (
-            "minifigure lot has no stated or photo-counted figure_count -- "
-            "$/fig pricing is undefined without it")
+def _apply_minifig_identification(
+    merged: dict,
+    identification: dict | None,
+    fee_rate: float | None,
+    vision: dict | None,
+) -> None:
+    category = merged.get("listing_category")
+    if category != "minifigure":
+        if identification is not None:
+            raise ValueError(
+                "build_deal_record: identification was supplied for a "
+                "non-minifigure candidate")
         return
-    if not isinstance(avg_per_fig, (int, float)) \
-            or not profit_module.is_priced(avg_per_fig, matched_count):
-        merged["potential_profit"] = None
-        merged["profit_incomplete"] = True
-        merged["zero_comp_note"] = (
-            "no eBay sold comps with a stated figure count over the last 6 "
-            "months -- the lot stays unpriced, not assumed")
-        return
+    if identification is None:
+        raise ValueError(
+            "build_deal_record: minifigure candidate has no identification "
+            "result")
+    validate_identification_result(
+        identification, "build_deal_record identification")
+    if identification.get("listing_key") != merged.get("listing_key"):
+        raise ValueError(
+            "build_deal_record: identification listing_key does not match "
+            "candidate listing_key")
+    if identification.get("blocked") is True:
+        raise ValueError(
+            "build_deal_record: identification is blocked: %s"
+            % identification.get("blocker"))
+    analysis = mfa.normalize(identification.get("minifig_analysis"))
+    if not analysis:
+        raise ValueError(
+            "build_deal_record: identification has no minifig_analysis")
 
+    merged["minifig_analysis"] = analysis
+    count = mfa.figure_count(analysis)
+    merged["figure_count"] = count
+    merged["figure_count_source"] = "detection"
+    subtotal = mfa.round_cents(mfa.priced_subtotal(analysis))
+    complete = identification.get("pricing_complete") is True
     estimated_total = merged.get("estimated_total")
-    if not isinstance(estimated_total, (int, float)):
-        merged["potential_profit"] = None
-        merged["profit_incomplete"] = True
-        return
-
-    resale = round(float(avg_per_fig) * figure_count, 2)
-    if fee_rate is not None:
-        result = profit_module.compute_potential_profit(
-            resale, matched_count, estimated_total, fee_rate)
-        merged["potential_profit"] = result["potential_profit"]
-        merged["profit_incomplete"] = not result["priced"]
+    if (fee_rate is not None
+            and isinstance(estimated_total, (int, float))
+            and not isinstance(estimated_total, bool)):
+        merged["potential_profit"] = mfa.round_cents(
+            subtotal * (1.0 - float(fee_rate)) - float(estimated_total))
     else:
         merged["potential_profit"] = None
-        merged["profit_incomplete"] = True
+    merged["profit_incomplete"] = not complete or fee_rate is None
+    if not complete:
+        merged["zero_comp_note"] = (
+            "minifigure identification valuation is incomplete; "
+            "potential_profit is the conservative known-value floor")
+
+    if isinstance(vision, dict):
+        vision["detection_figure_count"] = count
+        stated = vision.get("stated_figure_count")
+        photo = vision.get("photo_figure_count")
+        if stated != count or photo != count:
+            vision["figure_count_mismatch"] = {
+                "stated": stated,
+                "photo": photo,
+                "detection": count,
+            }
 
 
 def build_deal_record(
@@ -674,6 +678,7 @@ def build_deal_record(
     status: str = "active",
     favorite_sellers: set[tuple[str, str]] | None = None,
     comps: dict | None = None,
+    identification: dict | None = None,
     fee_rate: float | None = None,
 ) -> dict:
     """Assemble one deal record. `candidate` and `appraisal` may carry extra keys;
@@ -682,7 +687,8 @@ def build_deal_record(
     `comps` is `legoscout-appraiser`'s per-candidate result
     (`legoscout pricing comps`'s shape) and `fee_rate` the configured resale fee
     rate; see `_apply_comps`. Both are optional for a bulk candidate, and
-    `comps` is required for a set candidate."""
+    `comps` is required for a set candidate. `identification` is required for
+    every new minifigure candidate and forbidden on other categories."""
     if not isinstance(candidate, dict):
         raise ValueError(
             "build_deal_record: candidate must be an object, got %s"
@@ -692,6 +698,9 @@ def build_deal_record(
             "build_deal_record: appraisal must be an object, got %s"
             % type(appraisal).__name__)
     validate_appraisal_result(appraisal, "build_deal_record appraisal")
+    if identification is not None and not isinstance(identification, dict):
+        raise ValueError(
+            "build_deal_record: identification must be an object or null")
     if comps is not None:
         # A 2026-08-20 review found this the ONE gap in the round-5 fix: the
         # duplicate-set_no guard lived in `pricing.comps.set_comps` (the CLI
@@ -708,6 +717,8 @@ def build_deal_record(
 
     appraisal_observations = appraisal.get("observations") or {}
     vision = appraisal_observations.get("vision")
+    if isinstance(vision, dict):
+        vision = dict(vision)
     merged.update(_pick(appraisal, APPRAISAL_FIELDS))
     # Seed `observations` with the appraiser's own contribution so
     # `score_deal.build_observations` can fold it in alongside the text scan and vision.
@@ -736,6 +747,7 @@ def build_deal_record(
     # object gets the canonical array, not a rejection.
     _resolve_shipping(merged)
     merged["set_analysis"] = sa.normalize(merged.get("set_analysis"))
+    _apply_minifig_identification(merged, identification, fee_rate, vision)
     _apply_comps(merged, comps, fee_rate)
     _require_field_types(merged)
 

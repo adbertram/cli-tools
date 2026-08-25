@@ -81,13 +81,6 @@ def bulk_comps(description: str, dollars_per_lb: float | None = None,
     return {"mode": "bulk", "bricklink": None, "ebay": ebay}
 
 
-def minifigure_comps(description: str, limit: int = 50) -> dict[str, Any]:
-    """eBay-only $/fig comps for a minifigure lot, mirroring bulk: no BrickLink
-    price guide exists for an undifferentiated figure lot, so the search runs on
-    keywords and extracts each matched listing's stated figure count."""
-    ebay = ebay_comps.search_minifigure_comps(description, limit=limit)
-    return {"mode": "minifigure", "bricklink": None, "ebay": ebay}
-
 
 def excluded_comps(blocker: str) -> dict[str, Any]:
     """The classifier already excluded this candidate (book, hardware, non-brick
@@ -98,38 +91,32 @@ def excluded_comps(blocker: str) -> dict[str, Any]:
 def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="BrickLink + eBay sold comps for a LEGO set (or several, on one listing), "
-                    "eBay-only for a bulk lot or a minifigure lot.")
+                    "eBay-only for a bulk lot.")
     parser.add_argument("--set-no", action="append", dest="set_numbers", default=None,
                         help="A LEGO set number. Repeatable -- pass it once per detected set "
-                             "on a multi-set listing. Required unless --bulk or --minifigure.")
+                             "on a multi-set listing. Required unless --bulk.")
     parser.add_argument("--bulk", action="store_true",
                         help="Bulk-lot mode: eBay $/lb comps only, no BrickLink.")
-    parser.add_argument("--minifigure", action="store_true",
-                        help="Minifigure-lot mode: eBay $/fig comps only, no BrickLink.")
+
     parser.add_argument("--condition", choices=["N", "U"], default=None,
-                        help="N or U. Required unless --bulk or --minifigure.")
+                        help="N or U. Required unless --bulk.")
     parser.add_argument("--description", default=None,
-                        help="Extra search keywords -- set name/theme, bulk lot description, "
-                             "or minifigure theme/name.")
+                        help="Extra search keywords -- set name/theme or bulk lot description.")
     parser.add_argument("--dollars-per-lb", type=float, default=None,
                         help="Bulk mode only: the target listing's own $/lb, for comparison.")
     parser.add_argument("--limit", type=int, default=50)
     return parser.parse_args(argv)
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int | str:
     args = parse_args(argv)
     if args.bulk:
         if not args.description:
             return "--description is required in --bulk mode"
         result = bulk_comps(args.description, dollars_per_lb=args.dollars_per_lb, limit=args.limit)
-    elif args.minifigure:
-        if not args.description:
-            return "--description is required in --minifigure mode"
-        result = minifigure_comps(args.description, limit=args.limit)
     else:
         if not args.set_numbers or not args.condition:
-            return "--set-no (repeatable) and --condition are required unless --bulk or --minifigure"
+            return "--set-no (repeatable) and --condition are required unless --bulk"
         result = set_comps(args.set_numbers, args.condition, description=args.description,
                            limit=args.limit)
     print(json.dumps(result, indent=2, sort_keys=True))

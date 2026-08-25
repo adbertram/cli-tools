@@ -102,13 +102,14 @@ def price_one(handoff: dict[str, Any], limit: int) -> dict[str, Any]:
             result = comps_module.bulk_comps(
                 description, dollars_per_lb=handoff.get("dollars_per_lb"), limit=limit)
         elif category == "minifigure":
-            description = handoff.get("description")
-            if not isinstance(description, str) or not description.strip():
-                return {
-                    "listing_key": key, "mode": "minifigure", "blocked": True,
-                    "blocker": "--description is required in minifigure mode",
-                }
-            result = comps_module.minifigure_comps(description, limit=limit)
+            return {
+                "listing_key": key,
+                "mode": "minifigure",
+                "blocked": True,
+                "blocker": (
+                    "minifigure pricing moved to legoscout minifig "
+                    "detect|identify|price"),
+            }
         elif category == "excluded":
             blocker = handoff.get("exclusion_reason")
             if not isinstance(blocker, str) or not blocker.strip():

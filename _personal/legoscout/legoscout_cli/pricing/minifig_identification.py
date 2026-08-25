@@ -12,12 +12,14 @@ import math
 import os
 import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
 from ..paths import BRICKOGNIZE_MINIFIG_CACHE
-from . import brickognize, minifig_detector
+from ..ledger import minifig_analysis
+from . import brickognize, minifig_detector, minifig_sales
 
 DETECTION_ARTIFACT_VERSION = 1
 DETECTION_ARTIFACT_KIND = "minifig_detection"
@@ -831,3 +833,511 @@ def identify_file(
         "summary": output["summary"],
         "timings": output["timings"],
     }
+
+
+PRICE_MAX_WORKERS = 8
+VERIFICATION_FIELDS = frozenset({
+    "status", "reason", "compared_candidate_ids", "catalog_checked_at",
+})
+IDENTIFY_GROUP_FIELDS = frozenset({
+    "match_group_id", "candidate_signature", "detections",
+    "representative_crop_ref", "brickognize_candidates",
+    "brickognize_contract", "status", "reason",
+})
+
+
+def _validate_price_artifact(payload: object) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise IdentificationArtifactError("price input must be a JSON object")
+    if payload.get("version") != IDENTIFICATION_ARTIFACT_VERSION:
+        raise IdentificationArtifactError(
+            f"price input must use version {IDENTIFICATION_ARTIFACT_VERSION}")
+    if payload.get("kind") != IDENTIFICATION_ARTIFACT_KIND:
+        raise IdentificationArtifactError(
+            f"price input kind must be {IDENTIFICATION_ARTIFACT_KIND}")
+    listings = payload.get("listings")
+    if not isinstance(listings, list):
+        raise IdentificationArtifactError("price input listings must be an array")
+    listing_keys = []
+    group_ids = []
+    crop_ids = []
+    for listing_index, listing in enumerate(listings):
+        if not isinstance(listing, dict):
+            raise IdentificationArtifactError(
+                f"price listing {listing_index} must be an object")
+        listing_key = listing.get("listing_key")
+        if not isinstance(listing_key, str) or not listing_key:
+            raise IdentificationArtifactError(
+                f"price listing {listing_index} has no listing_key")
+        listing_keys.append(listing_key)
+        if not isinstance(listing.get("observations"), dict):
+            raise IdentificationArtifactError(
+                f"price listing {listing_index} observations must be an object")
+        groups = listing.get("groups")
+        if not isinstance(groups, list):
+            raise IdentificationArtifactError(
+                f"price listing {listing_index} groups must be an array")
+        for group_index, group in enumerate(groups):
+            if not isinstance(group, dict):
+                raise IdentificationArtifactError(
+                    f"price listing {listing_index} group {group_index} must be "
+                    "an object")
+            missing = sorted(IDENTIFY_GROUP_FIELDS - set(group))
+            if missing:
+                raise IdentificationArtifactError(
+                    f"price listing {listing_index} group {group_index} missing "
+                    f"fields: {', '.join(missing)}")
+            group_id = group.get("match_group_id")
+            if not isinstance(group_id, str) or not group_id:
+                raise IdentificationArtifactError(
+                    f"price listing {listing_index} group {group_index} has no "
+                    "match_group_id")
+            group_ids.append(group_id)
+            detections = group.get("detections")
+            if not isinstance(detections, list) or not detections:
+                raise IdentificationArtifactError(
+                    f"price group {group_id} detections must be non-empty")
+            for detection in detections:
+                if not isinstance(detection, dict):
+                    raise IdentificationArtifactError(
+                        f"price group {group_id} detection must be an object")
+                crop_id = detection.get("crop_id")
+                if not isinstance(crop_id, str) or not crop_id:
+                    raise IdentificationArtifactError(
+                        f"price group {group_id} detection has no crop_id")
+                crop_ids.append(crop_id)
+    for label, values in (
+        ("listing_key", listing_keys),
+        ("match_group_id", group_ids),
+        ("crop_id", crop_ids),
+    ):
+        duplicates = sorted({value for value in values
+                             if values.count(value) > 1})
+        if duplicates:
+            raise IdentificationArtifactError(
+                f"duplicate {label} values: {', '.join(duplicates)}")
+    return deepcopy(payload)
+
+
+def load_price_input(path: str | Path) -> dict[str, Any]:
+    input_path = Path(path)
+    try:
+        text = input_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise IdentificationArtifactError(
+            f"unable to read input {input_path}: {type(exc).__name__}: {exc}"
+        ) from exc
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise IdentificationArtifactError(
+            f"invalid JSON in {input_path}: {exc.msg} at line {exc.lineno} "
+            f"column {exc.colno}") from exc
+    return _validate_price_artifact(payload)
+
+
+def _verification_error(group: dict[str, Any]) -> str | None:
+    group_id = group["match_group_id"]
+    for detection in group["detections"]:
+        if "verification" in detection:
+            return (f"group {group_id} verification must exist only on the "
+                    "representative group, never on a detection")
+        try:
+            _validate_detected(detection, f"group {group_id} detection")
+        except IdentificationArtifactError as exc:
+            return str(exc)
+    verification = group.get("verification")
+    if not isinstance(verification, dict) or set(verification) != VERIFICATION_FIELDS:
+        return (f"group {group_id} verification must contain exact fields "
+                f"{sorted(VERIFICATION_FIELDS)}")
+    status = verification.get("status")
+    if status not in minifig_analysis.VERIFICATION_STATUSES:
+        return f"group {group_id} verification.status is invalid: {status!r}"
+    reason = verification.get("reason")
+    if not isinstance(reason, str) or not reason.strip():
+        return f"group {group_id} verification.reason must be non-empty"
+    compared = verification.get("compared_candidate_ids")
+    if (not isinstance(compared, list)
+            or any(not isinstance(value, str) or not value for value in compared)
+            or len(set(compared)) != len(compared)):
+        return (f"group {group_id} verification.compared_candidate_ids must be "
+                "a unique string array")
+    checked = verification.get("catalog_checked_at")
+    if not isinstance(checked, str) or not checked:
+        return f"group {group_id} verification.catalog_checked_at is required"
+    candidates = group.get("brickognize_candidates")
+    if not isinstance(candidates, list):
+        return f"group {group_id} brickognize_candidates must be an array"
+    candidate_ids = [row.get("id") for row in candidates
+                     if isinstance(row, dict)]
+    if any(value not in candidate_ids for value in compared):
+        return (f"group {group_id} compared_candidate_ids contains an unknown "
+                "Brickognize candidate")
+    fig_no = group.get("fig_no")
+    catalog = group.get("catalog")
+    if status == "verified":
+        if not isinstance(fig_no, str) or not fig_no:
+            return f"group {group_id} verified identity requires fig_no"
+        if not isinstance(catalog, dict) or catalog.get("no") != fig_no:
+            return (f"group {group_id} verified fig_no does not match catalog "
+                    "number")
+    elif fig_no is not None or catalog is not None:
+        return (f"group {group_id} {status} verification must not carry fig_no "
+                "or catalog")
+    notes = group.get("condition_notes")
+    if notes is not None and not isinstance(notes, str):
+        return f"group {group_id} condition_notes must be a string or null"
+    return None
+
+
+def _clean_detections(group: dict[str, Any]) -> list[dict[str, Any]]:
+    cleaned = []
+    for raw in group["detections"]:
+        detection = {key: deepcopy(raw.get(key)) for key in DETECTION_FIELDS}
+        _validate_detected(detection, f"group {group['match_group_id']} detection")
+        cleaned.append(detection)
+    return cleaned
+
+
+def _stage_failed_group(group: dict[str, Any], error: str) -> dict[str, Any]:
+    return {
+        "source_group_ids": [group["match_group_id"]],
+        "detections": _clean_detections(group),
+        "brickognize_candidates": deepcopy(
+            group.get("brickognize_candidates") or []),
+        "verification": {
+            "status": "unverifiable",
+            "reason": error,
+            "compared_candidate_ids": [],
+            "catalog_checked_at": None,
+        },
+        "fig_no": None,
+        "catalog": None,
+        "condition_notes": group.get("condition_notes")
+        if isinstance(group.get("condition_notes"), str) else None,
+        "null_value_reason": "stage_failed",
+        "errors": [f"VerificationError: {error}"],
+    }
+
+
+def _verified_group(group: dict[str, Any]) -> dict[str, Any]:
+    status = group["verification"]["status"]
+    return {
+        "source_group_ids": [group["match_group_id"]],
+        "detections": _clean_detections(group),
+        "brickognize_candidates": deepcopy(group["brickognize_candidates"]),
+        "verification": deepcopy(group["verification"]),
+        "fig_no": group.get("fig_no"),
+        "catalog": deepcopy(group.get("catalog")),
+        "condition_notes": group.get("condition_notes"),
+        "null_value_reason": (
+            None if status == "verified"
+            else "unknown_identity" if status == "unknown"
+            else "unverifiable"),
+        "errors": [],
+    }
+
+
+def _suppress_listing_overlaps(
+    groups: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    nodes = []
+    for group_index, group in enumerate(groups):
+        for detection in group["detections"]:
+            nodes.append((group_index, detection))
+    nodes.sort(key=lambda item: (
+        -float(item[1]["detector_confidence"]),
+        item[1]["crop_id"],
+    ))
+    kept = []
+    for group_index, detection in nodes:
+        duplicate = any(
+            existing["source_photo_sha256"]
+            == detection["source_photo_sha256"]
+            and minifig_detector.iou(existing["box"], detection["box"])
+            >= minifig_detector.DUPLICATE_IOU_THRESHOLD
+            for _, existing in kept
+        )
+        if not duplicate:
+            kept.append((group_index, detection))
+    allowed = {detection["crop_id"] for _, detection in kept}
+    output = []
+    for group in groups:
+        row = deepcopy(group)
+        row["detections"] = [
+            detection for detection in row["detections"]
+            if detection["crop_id"] in allowed
+        ]
+        if row["detections"]:
+            output.append(row)
+    return output
+
+
+def _entry_representative(groups: list[dict[str, Any]]) -> dict[str, Any]:
+    choices = [(group, detection) for group in groups
+               for detection in group["detections"]]
+    return min(choices, key=lambda item: (
+        -float(item[1]["detector_confidence"]),
+        item[1]["crop_id"],
+    ))[0]
+
+
+def _final_group_id(groups: list[dict[str, Any]], fig_no: str | None) -> str:
+    if len(groups) == 1:
+        return groups[0]["source_group_ids"][0]
+    encoded = json.dumps({
+        "contract_version": "minifig-final-union-v1",
+        "fig_no": fig_no,
+        "crop_ids": sorted(
+            detection["crop_id"] for group in groups
+            for detection in group["detections"]),
+    }, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return "figfinal-v1-" + hashlib.sha256(encoded).hexdigest()
+
+
+def _quantity(detections: list[dict[str, Any]]) -> int:
+    counts: dict[str, int] = {}
+    for detection in detections:
+        photo = detection["source_photo_sha256"]
+        counts[photo] = counts.get(photo, 0) + 1
+    return max(counts.values())
+
+
+def _merge_final_groups(groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    buckets: dict[str, list[dict[str, Any]]] = {}
+    for group in groups:
+        status = group["verification"]["status"]
+        key = ("fig:" + group["fig_no"]
+               if status == "verified"
+               else "group:" + group["source_group_ids"][0])
+        buckets.setdefault(key, []).append(group)
+    entries = []
+    for raw_members in buckets.values():
+        # Suppress duplicate boxes only inside one identity bucket. An
+        # overlapping detection that the identifier resolved to another exact
+        # fig_no (including a letter-suffix sibling) is conflicting evidence,
+        # not permission to erase that independently verified group. Unknown
+        # and unverifiable buckets are unique and therefore never merge merely
+        # because their candidate signatures or boxes match.
+        members = _suppress_listing_overlaps(raw_members)
+        representative = _entry_representative(members)
+        detections = [deepcopy(detection) for group in members
+                      for detection in group["detections"]]
+        notes = sorted({group["condition_notes"] for group in members
+                        if isinstance(group.get("condition_notes"), str)
+                        and group["condition_notes"]})
+        errors = [error for group in members for error in group["errors"]]
+        entry = {
+            "match_group_id": _final_group_id(
+                members, representative["fig_no"]),
+            "detections": detections,
+            "representative_crop_ref": min(
+                detections,
+                key=lambda row: (
+                    -float(row["detector_confidence"]), row["crop_id"]),
+            )["crop_ref"],
+            "brickognize_candidates": deepcopy(
+                representative["brickognize_candidates"]),
+            "verification": deepcopy(representative["verification"]),
+            "fig_no": representative["fig_no"],
+            "catalog": deepcopy(representative["catalog"]),
+            "quantity": _quantity(detections),
+            "condition_notes": "; ".join(notes) if notes else None,
+            "used": None,
+            "unit_value": None,
+            "extended_value": None,
+            "null_value_reason": representative["null_value_reason"],
+            "errors": errors,
+        }
+        entries.append(entry)
+    return entries
+
+
+def _prepared_listing(listing: dict[str, Any]) -> dict[str, Any]:
+    if not listing["groups"]:
+        return {
+            "listing_key": listing["listing_key"],
+            "blocked": True,
+            "blocker": listing.get("reason") or "no minifigure groups",
+            "entries": [],
+        }
+    groups = []
+    for group in listing["groups"]:
+        error = _verification_error(group)
+        groups.append(
+            _stage_failed_group(group, error)
+            if error is not None else _verified_group(group))
+    return {
+        "listing_key": listing["listing_key"],
+        "blocked": False,
+        "blocker": None,
+        "entries": _merge_final_groups(groups),
+    }
+
+
+def _apply_price(entry: dict[str, Any], outcome: object) -> None:
+    if isinstance(outcome, Exception):
+        entry["null_value_reason"] = (
+            "price_lookup_failed"
+            if isinstance(outcome, (minifig_sales.LookupFailed,
+                                    minifig_sales.LookupNotFound))
+            else "stage_failed")
+        entry["errors"].append(
+            f"{type(outcome).__name__}: {outcome}")
+        return
+    if not isinstance(outcome, dict):
+        entry["null_value_reason"] = "stage_failed"
+        entry["errors"].append(
+            "PricingError: minifig pricer returned a non-object")
+        return
+    entry["catalog"] = deepcopy(outcome.get("catalog"))
+    entry["used"] = deepcopy(outcome.get("used"))
+    unit_value = outcome.get("unit_value")
+    if unit_value is None:
+        entry["null_value_reason"] = "zero_sales"
+        return
+    if (not isinstance(unit_value, (int, float))
+            or isinstance(unit_value, bool)
+            or not math.isfinite(float(unit_value))
+            or float(unit_value) < 0):
+        entry["null_value_reason"] = "stage_failed"
+        entry["errors"].append(
+            f"PricingError: invalid unit_value {unit_value!r}")
+        return
+    entry["unit_value"] = float(unit_value)
+    entry["extended_value"] = minifig_analysis.round_cents(
+        float(unit_value) * entry["quantity"])
+    entry["null_value_reason"] = None
+
+
+def _result_from_prepared(prepared: dict[str, Any]) -> dict[str, Any]:
+    if prepared["blocked"]:
+        return {
+            "listing_key": prepared["listing_key"],
+            "blocked": True,
+            "blocker": prepared["blocker"],
+            "minifig_analysis": None,
+            "figure_count": None,
+            "figure_count_source": None,
+            "identified_count": 0,
+            "unknown_count": 0,
+            "priced_subtotal": 0.0,
+            "sold_count": None,
+            "pricing_complete": False,
+            "status": "blocked",
+        }
+    normalized = [minifig_analysis.normalize_entry(entry)
+                  for entry in prepared["entries"]]
+    errors = [
+        f"entry {index}: {error}"
+        for index, entry in enumerate(normalized)
+        for error in minifig_analysis.entry_errors(entry)
+    ] + minifig_analysis.batch_errors(normalized)
+    if errors:
+        raise IdentificationArtifactError(
+            "final minifig_analysis violates canonical invariants: "
+            + "; ".join(errors))
+    unknown = minifig_analysis.unknown_count(normalized)
+    complete = unknown == 0 and all(
+        entry["unit_value"] is not None and not entry["errors"]
+        for entry in normalized)
+    return {
+        "listing_key": prepared["listing_key"],
+        "minifig_analysis": normalized,
+        "figure_count": minifig_analysis.figure_count(normalized),
+        "figure_count_source": "detection",
+        "identified_count": minifig_analysis.identified_count(normalized),
+        "unknown_count": unknown,
+        "priced_subtotal": minifig_analysis.round_cents(
+            minifig_analysis.priced_subtotal(normalized)),
+        "sold_count": minifig_analysis.sold_count(normalized),
+        "pricing_complete": complete,
+        "status": "partial" if any(entry["errors"] for entry in normalized)
+        else "success",
+    }
+
+
+def price_batch(
+    identification_artifact: dict[str, Any],
+    *,
+    workers: int = 4,
+    refresh: bool = False,
+    pricer: Callable[..., dict[str, Any]] = minifig_sales.summarize_fig,
+    clock: Callable[[], float] = time.monotonic,
+    executor_factory: Callable[..., Any] = ThreadPoolExecutor,
+) -> dict[str, Any]:
+    if type(workers) is not int or not 1 <= workers <= PRICE_MAX_WORKERS:
+        raise IdentificationArtifactError(
+            f"workers must be an integer in 1..{PRICE_MAX_WORKERS}")
+    artifact = _validate_price_artifact(identification_artifact)
+    prepared = [_prepared_listing(listing) for listing in artifact["listings"]]
+    targets = [entry for listing in prepared if not listing["blocked"]
+               for entry in listing["entries"]
+               if entry["verification"]["status"] == "verified"
+               and not entry["errors"]]
+    durations = []
+    if targets:
+        wall_started = clock()
+
+        def run(entry):
+            started = clock()
+            try:
+                outcome = pricer(
+                    entry["fig_no"], entry["catalog"], refresh=refresh)
+            except Exception as exc:
+                outcome = exc
+            return outcome, max(0.0, clock() - started)
+
+        with executor_factory(max_workers=min(workers, len(targets))) as pool:
+            futures = [pool.submit(run, entry) for entry in targets]
+            for entry, future in zip(targets, futures):
+                outcome, duration = future.result()
+                durations.append(duration)
+                _apply_price(entry, outcome)
+        wall_seconds = max(0.0, clock() - wall_started)
+    else:
+        wall_seconds = 0.0
+    results = [_result_from_prepared(listing) for listing in prepared]
+    summary = {
+        "listing_count": len(results),
+        "success_count": sum(row["status"] == "success" for row in results),
+        "partial_count": sum(row["status"] == "partial" for row in results),
+        "blocked_count": sum(row["status"] == "blocked" for row in results),
+        "entry_count": sum(len(row.get("minifig_analysis") or [])
+                           for row in results),
+        "priced_entry_count": sum(
+            entry["unit_value"] is not None for row in results
+            for entry in (row.get("minifig_analysis") or [])),
+        "workers": workers,
+        "wall_seconds": round(wall_seconds, 6),
+        "serial_equivalent_seconds": round(sum(durations), 6),
+    }
+    return {"results": results, "summary": summary}
+
+
+def price_file(
+    input_path: str | Path,
+    output_path: str | Path,
+    *,
+    workers: int = 4,
+    refresh: bool = False,
+    pricer: Callable[..., dict[str, Any]] = minifig_sales.summarize_fig,
+    clock: Callable[[], float] = time.monotonic,
+    executor_factory: Callable[..., Any] = ThreadPoolExecutor,
+) -> dict[str, Any]:
+    source = Path(input_path).resolve(strict=False)
+    destination = Path(output_path).resolve(strict=False)
+    if source == destination:
+        raise IdentificationArtifactError(
+            "input and output must be different paths")
+    artifact = load_price_input(input_path)
+    report = price_batch(
+        artifact,
+        workers=workers,
+        refresh=refresh,
+        pricer=pricer,
+        clock=clock,
+        executor_factory=executor_factory,
+    )
+    atomic_write_json(output_path, report["results"])
+    return report["summary"]

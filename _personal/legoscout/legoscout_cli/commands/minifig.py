@@ -66,3 +66,26 @@ def identify(
         min_similarity=min_similarity,
     )
     print_json(result)
+
+
+@app.command("price")
+@command
+def price(
+    input_path: Path = typer.Option(
+        ..., "--input", help="Agent-verified minifig_identification artifact"),
+    output_path: Path = typer.Option(
+        ..., "--output", help="Atomic plain per-listing identification results"),
+    workers: int = typer.Option(
+        4, "--workers", help="Concurrent BrickLink price lookups; 1 through 8"),
+    refresh: bool = typer.Option(
+        False, "--refresh",
+        help="Bypass and do not write the shared BrickLink call cache"),
+):
+    """Validate agent evidence, finalize quantities, and price verified IDs."""
+    summary = minifig_identification.price_file(
+        input_path,
+        output_path,
+        workers=workers,
+        refresh=refresh,
+    )
+    print_json(summary)

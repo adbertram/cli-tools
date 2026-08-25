@@ -11,8 +11,9 @@ way: unlike `set_analysis`, this field never grew historical spellings, so
 there is nothing to unwrap and no guessing is ever needed.
 
 Read it only through this module -- `entries()`, `figure_count()`,
-`priced_subtotal()`, `sold_count()`, `crop_refs()`,
-`identified_entries()`/`unknown_entries()`, `normalize()` -- the same way
+`priced_subtotal()`, `sold_count()`, `crop_refs()`, `identified_count()`,
+`unknown_count()`, `identified_entries()`/`unknown_entries()`, `normalize()` --
+the same way
 `set_analysis.py` owns its field. Nothing else in the pipeline may decide what
 shape it is looking at.
 
@@ -99,6 +100,13 @@ def _https_url(value):
     return value
 
 
+def normalize_catalog(catalog: dict | None) -> dict | None:
+    """Return catalog evidence with every protocol-relative URL made HTTPS."""
+    if catalog is None:
+        return None
+    return {key: _https_url(value) for key, value in catalog.items()}
+
+
 def normalize_entry(entry: dict) -> dict:
     """One per-group entry in the canonical shape.
 
@@ -160,7 +168,7 @@ def normalize_entry(entry: dict) -> dict:
     if unit_value is not None and unit_value < 0:
         raise Unreadable("unit_value must be >= 0, got %r" % (unit_value,))
 
-    out["catalog"] = _https_url(out["catalog"])
+    out["catalog"] = normalize_catalog(out["catalog"])
 
     verification = out["verification"]
     if verification is not None and not isinstance(verification, dict):
@@ -321,6 +329,31 @@ def unknown_entries(analysis: list[dict]) -> list[dict]:
             if isinstance(e, dict)
             and (e.get("verification") or {}).get("status")
             in ("unknown", "unverifiable")]
+
+
+def _count_quantities(analysis: list[dict], *, verified: bool) -> int:
+    total = 0
+    for entry in analysis:
+        status = (entry.get("verification") or {}).get("status")
+        if (status == "verified") != verified:
+            continue
+        quantity = entry.get("quantity")
+        if (not _is_number(quantity) or quantity != int(quantity)
+                or quantity < 1):
+            raise Unreadable(
+                "quantity must be a positive integer, got %r" % (quantity,))
+        total += int(quantity)
+    return total
+
+
+def identified_count(analysis: list[dict]) -> int:
+    """Quantity of verified figures, not number of identity entries."""
+    return _count_quantities(analysis, verified=True)
+
+
+def unknown_count(analysis: list[dict]) -> int:
+    """Quantity of every non-verified figure kept as visible evidence."""
+    return _count_quantities(analysis, verified=False)
 
 
 def figure_count(analysis: list[dict]) -> int | None:
