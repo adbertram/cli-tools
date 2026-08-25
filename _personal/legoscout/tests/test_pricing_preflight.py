@@ -220,6 +220,93 @@ def test_check_skills_reports_missing_skill_and_standards(tmp_path):
     assert row["global_standards_present"] is True
 
 
+def test_minifig_identifier_dependencies_are_required():
+    assert "legoscout-minifig-identifier" in preflight.PROJECT_SKILLS
+    assert "legoscout-minifig-identifier" in preflight.AGENT_NAMES
+
+
+def test_check_agents_executes_identifier_contract_script(tmp_path):
+    agents_dir = tmp_path / ".claude" / "agents"
+    agents_dir.mkdir(parents=True)
+    codex_dir = tmp_path / ".codex" / "agents"
+    codex_dir.mkdir(parents=True)
+    for name in preflight.AGENT_NAMES:
+        (agents_dir / ("%s.md" % name)).write_text("x")
+        (codex_dir / ("%s.toml" % name)).write_text("x")
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    parity = scripts / "check_hard_rules_parity.py"
+    contract = scripts / "test_minifig_identifier_contracts.py"
+    parity.write_text("print('OK parity')")
+    contract.write_text("print('OK identifier contract')")
+    returns = [
+        _proc(["python3", str(parity)], stdout="OK parity"),
+        _proc(["python3", str(contract)], stdout="OK identifier contract"),
+    ]
+
+    with mock.patch.object(
+            preflight.subprocess, "run", side_effect=returns) as run:
+        row = preflight._check_agents(tmp_path)
+
+    assert row["identifier_contract"] == {
+        "script_present": True,
+        "ok": True,
+    }
+    assert [call.args[0][1] for call in run.call_args_list] == [
+        str(parity), str(contract),
+    ]
+
+
+def test_check_minifig_detector_loads_selected_runtime_and_model():
+    detector = lambda paths: []
+    with mock.patch.object(
+            preflight.minifig_detector, "load_detector",
+            return_value=detector) as load:
+        row = preflight._check_minifig_detector()
+    assert row == {
+        "available": True,
+        "detector": "grounding-dino-tiny",
+        "model": preflight.minifig_detector.GROUNDING_DINO_MODEL,
+        "revision": preflight.minifig_detector.GROUNDING_DINO_REVISION,
+        "error": None,
+    }
+    load.assert_called_once_with("grounding-dino-tiny")
+
+
+def test_check_minifig_detector_reports_runtime_or_model_failure():
+    with mock.patch.object(
+            preflight.minifig_detector, "load_detector",
+            side_effect=preflight.minifig_detector.DetectorError(
+                "detector grounding-dino-tiny load failed: ModuleNotFoundError: torch")):
+        row = preflight._check_minifig_detector()
+    assert row["available"] is False
+    assert row["detector"] == "grounding-dino-tiny"
+    assert row["model"] == preflight.minifig_detector.GROUNDING_DINO_MODEL
+    assert "ModuleNotFoundError: torch" in row["error"]
+
+
+def test_check_brickognize_uses_health_endpoint_and_current_provider_headers():
+    response = mock.Mock()
+    response.raise_for_status.return_value = None
+    with mock.patch.object(preflight.requests, "get", return_value=response) as get:
+        row = preflight._check_brickognize()
+    assert row == {"reachable": True, "error": None}
+    get.assert_called_once_with(
+        preflight.BRICKOGNIZE_HEALTH_URL,
+        headers={"User-Agent": preflight.brickognize.USER_AGENT},
+        timeout=preflight.BRICKOGNIZE_TIMEOUT_SECONDS,
+    )
+
+
+def test_check_brickognize_reports_provider_outage_without_raising():
+    with mock.patch.object(
+            preflight.requests, "get",
+            side_effect=preflight.requests.ConnectionError("offline")):
+        row = preflight._check_brickognize()
+    assert row["reachable"] is False
+    assert "ConnectionError: offline" in row["error"]
+
+
 # --- gate-level tests: main() end to end under mocks ------------------------
 
 
@@ -288,10 +375,23 @@ def _subprocess_runner(fake, *, unauthed=(), no_json=(), adam="ok",
 
 
 def _run_gate(fake=None, *, unauthed=(), no_json=(), missing_binaries=(),
-              adam="ok", parity_ok=True, ledger_ok=True):
+              adam="ok", parity_ok=True, identifier_ok=True, ledger_ok=True,
+              brickognize_row=None, detector_row=None):
     fake = fake or FakeRegistry()
     ledger_row = {"path": "/tmp/found_deals.db", "exists": True,
                   "writable": ledger_ok}
+    brickognize_row = brickognize_row or {"reachable": True, "error": None}
+    detector_row = detector_row or {
+        "available": True,
+        "detector": "grounding-dino-tiny",
+        "model": "IDEA-Research/grounding-dino-tiny",
+        "revision": "a2bb814dd30d776dcf7e30523b00659f4f141c71",
+        "error": None,
+    }
+    brickognize_check = mock.Mock(
+        name="_check_brickognize", return_value=dict(brickognize_row))
+    detector_check = mock.Mock(
+        name="_check_minifig_detector", return_value=dict(detector_row))
     with mock.patch.object(preflight.shutil, "which",
                            side_effect=_which(missing_binaries)), \
          mock.patch.object(preflight.subprocess, "run",
@@ -304,10 +404,17 @@ def _run_gate(fake=None, *, unauthed=(), no_json=(), missing_binaries=(),
                                  "claude_definitions_missing": [],
                                  "codex_definitions_missing": [],
                                  "hard_rules_parity": {
-                                     "script_present": True, "ok": parity_ok}},
+                                     "script_present": True, "ok": parity_ok},
+                                 "identifier_contract": {
+                                     "script_present": True,
+                                     "ok": identifier_ok,
+                                     **({} if identifier_ok else {
+                                         "error": "identifier contract failed"})}},
                              _check_skills=lambda: {
                                  "root": "/skills/project", "missing": [],
                                  "global_standards_present": True},
+                             _check_brickognize=brickognize_check,
+                             _check_minifig_detector=detector_check,
                              _ensure_workspaces=lambda: {
                                  "created": [], "errors": [],
                                  "source_runs": "/runs",
@@ -335,6 +442,81 @@ def test_gate_all_green_exits_0_with_full_report(capsys):
     assert checks["adam_server"] == {"reachable": True, "pm2_app_online": True}
     assert checks["agents"]["hard_rules_parity"]["ok"] is True
     assert checks["skills"]["missing"] == []
+    assert checks["minifig_identification"]["brickognize"]["reachable"] is True
+    assert checks["minifig_identification"]["detector"]["available"] is True
+
+
+def test_gate_submits_provider_and_detector_checks_to_existing_pool(capsys):
+    submitted = []
+
+    class ImmediateFuture:
+        def __init__(self, value):
+            self.value = value
+
+        def result(self):
+            return self.value
+
+    class RecordingPool:
+        def __init__(self, max_workers):
+            self.max_workers = max_workers
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def submit(self, fn, *args):
+            submitted.append(fn)
+            return ImmediateFuture(fn(*args))
+
+        def map(self, fn, values):
+            return [fn(value) for value in values]
+
+    with mock.patch.object(preflight, "ThreadPoolExecutor", RecordingPool):
+        assert _run_gate() == 0
+    capsys.readouterr()
+    submitted_names = {getattr(fn, "_mock_name", None) for fn in submitted}
+    assert preflight.POOL_WORKERS >= len(submitted)
+    assert "_check_brickognize" in submitted_names
+    assert "_check_minifig_detector" in submitted_names
+
+
+def test_gate_brickognize_outage_warns_only_for_minifig_identification(capsys):
+    assert _run_gate(brickognize_row={
+        "reachable": False,
+        "error": "ConnectionError: offline",
+    }) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["ok"] is True
+    assert report["checks"]["minifig_identification"]["brickognize"] == {
+        "reachable": False,
+        "error": "ConnectionError: offline",
+    }
+    assert report["warnings"] == [
+        "brickognize unreachable (ConnectionError: offline) -- every "
+        "minifigure lot this run will be recorded as an identifier skip; "
+        "bulk and set pricing unaffected",
+    ]
+
+
+def test_gate_detector_runtime_or_model_failure_is_warning_only(capsys):
+    detector_row = {
+        "available": False,
+        "detector": "grounding-dino-tiny",
+        "model": "IDEA-Research/grounding-dino-tiny",
+        "revision": "a2bb814dd30d776dcf7e30523b00659f4f141c71",
+        "error": "DetectorError: model weights unavailable",
+    }
+    assert _run_gate(detector_row=detector_row) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["ok"] is True
+    assert report["checks"]["minifig_identification"]["detector"] == detector_row
+    assert len(report["warnings"]) == 1
+    warning = report["warnings"][0]
+    assert "minifig detector unavailable" in warning
+    assert "model weights unavailable" in warning
+    assert "bulk and set pricing unaffected" in warning
 
 
 def test_gate_dead_comps_credential_fails_and_names_it(capsys):
@@ -409,6 +591,16 @@ def test_gate_parity_drift_fails(capsys):
     assert _run_gate(parity_ok=False) == 1
     captured = capsys.readouterr()
     assert any("parity" in line.lower() for line in captured.err.splitlines())
+
+
+def test_gate_identifier_contract_failure_fails(capsys):
+    assert _run_gate(identifier_ok=False) == 1
+    captured = capsys.readouterr()
+    assert any(
+        "minifig identifier contract" in line.lower()
+        and "identifier contract failed" in line.lower()
+        for line in captured.err.splitlines()
+    )
 
 
 def test_gate_multiple_blockers_all_reported(capsys):
@@ -572,7 +764,9 @@ def test_chaos_unwritable_workspace_parent_is_reported_not_raised(capsys):
                                  "claude_definitions_missing": [],
                                  "codex_definitions_missing": [],
                                  "hard_rules_parity": {"script_present": True,
-                                                       "ok": True}},
+                                                       "ok": True},
+                                 "identifier_contract": {
+                                     "script_present": True, "ok": True}},
                              _check_skills=lambda: {
                                  "root": "/s", "missing": [],
                                  "global_standards_present": True},
