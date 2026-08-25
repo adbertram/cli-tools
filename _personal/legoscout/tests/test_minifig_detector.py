@@ -164,6 +164,55 @@ def test_should_suppress_at_iou_070_and_keep_higher_confidence(tmp_path):
     assert out[0]["detections"][0]["confidence"] == .9
 
 
+def test_should_suppress_fully_contained_duplicate_below_iou_threshold(tmp_path):
+    path = _image(tmp_path / "a.jpg")
+    outer = _box((.32, .42, .63, .74), .62)
+    inner = _box((.38, .42, .56, .69), .26)
+    assert detector.iou(outer["box"], inner["box"]) < .70
+
+    out, _ = _run([path], [_row(path, [outer, inner])])
+
+    assert out[0]["status"] == "success"
+    assert len(out[0]["detections"]) == 1
+    assert out[0]["detections"][0]["box"] == outer["box"]
+
+
+def test_should_suppress_substantially_contained_duplicate_with_edge_jitter(
+    tmp_path,
+):
+    path = _image(tmp_path / "a.jpg")
+    outer = _box((.1, .1, .9, .9), .62)
+    inner = _box((.09, .2, .29, .4), .26)
+    assert detector.iou(outer["box"], inner["box"]) < .70
+    assert inner["box"][0] < outer["box"][0]
+
+    out, _ = _run([path], [_row(path, [inner, outer])])
+
+    assert len(out[0]["detections"]) == 1
+    assert out[0]["detections"][0]["box"] == outer["box"]
+
+
+def test_should_suppress_transitive_iou_chain_to_one_detection(tmp_path):
+    # A/B and B/C each exceed the 0.70 IoU boundary, so all three boxes form
+    # one duplicate component even though A and C themselves sit below it.
+    # Greedy pairwise NMS keeps the endpoints and double-counts one figure;
+    # connected-component union must keep exactly one.
+    path = _image(tmp_path / "a.jpg")
+    width = 0.6
+    shift = width * _shift_for_iou(0.739)
+    a = _box((0, 0, width, 1), .9)
+    b = _box((shift, 0, width + shift, 1), .89)
+    c = _box((2 * shift, 0, width + 2 * shift, 1), .88)
+    assert detector.iou(a["box"], b["box"]) >= .70
+    assert detector.iou(b["box"], c["box"]) >= .70
+    assert detector.iou(a["box"], c["box"]) < .70
+
+    out, _ = _run([path], [_row(path, [a, b, c])])
+
+    assert len(out[0]["detections"]) == 1
+    assert out[0]["detections"][0]["confidence"] == .9
+
+
 def test_should_break_equal_confidence_overlap_tie_by_crop_id(tmp_path):
     path = _image(tmp_path / "a.jpg")
     width = 0.8

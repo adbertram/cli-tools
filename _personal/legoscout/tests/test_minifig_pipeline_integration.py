@@ -204,6 +204,8 @@ def test_public_minifig_pipeline_pairs_builds_persists_and_displays(
     assert identified.exit_code == 0, identified.output
 
     verified = json.loads(identify_path.read_text())
+    assert verified["listings"][0]["source_member_digest"].startswith(
+        "figmembers-v1-")
     for index, group in enumerate(verified["listings"][0]["groups"]):
         group["verification"] = {
             "status": "verified",

@@ -1,10 +1,9 @@
 """`figure_count_source`: the provenance that rides with every figure count.
 
-The minifigure pricing path multiplies the eBay $/fig average by
-`figure_count`, so a bare count with no provenance is exactly how an invented
-number reaches Adam's money. The classifier states WHICH kind of answer it is:
-`stated` (the seller's own text), `photo_count` (the mandatory image pass's
-exact count), or `unknown` (images inspected, exact count not determinable).
+Identifier-backed rows derive `figure_count` from the canonical analysis quantity
+sum and mark it `detection`. Legacy rows may retain classifier-era `stated`,
+`photo_count`, or `unknown` provenance, but those observations no longer drive
+new-row minifigure valuation.
 
 Contract covered here:
 - schema carries the field in the appraisal phase with a closed vocabulary;
@@ -72,6 +71,7 @@ def test_number_without_source_errors():
     del rec["figure_count_source"]
     errors = validate._figure_count_errors(rec, "minifigure")
     assert len(errors) == 1 and "figure_count_source" in errors[0]
+    assert "detection" in errors[0]
 
 
 def test_unknown_source_with_a_number_is_legal_but_named():

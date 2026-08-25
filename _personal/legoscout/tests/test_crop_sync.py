@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import fcntl
 import inspect
 from datetime import datetime, timezone
 from typing import Any, cast
@@ -249,6 +250,7 @@ def test_should_block_collision_crop_leg_without_changing_database_outcome(
 ):
     local_root = tmp_path / "crops"
     local_root.mkdir()
+    monkeypatch.setattr(config, "LOCAL_DB", str(tmp_path / "current.db"))
     monkeypatch.setattr(config, "LOCAL_SHARED_CROPS", str(local_root))
     monkeypatch.setattr(config, "REMOTE_SHARED_CROPS", "/remote/shared/crops")
     calls: list[list[str]] = []
@@ -260,7 +262,9 @@ def test_should_block_collision_crop_leg_without_changing_database_outcome(
 
     monkeypatch.setattr(db_sync.ssh, "run_local", fake_run_local)
     monkeypatch.setattr(db_sync.ssh, "run_remote_script", lambda _script: "")
-    monkeypatch.setattr(db_sync, "_push_database", lambda: {"copied": True})
+    monkeypatch.setattr(
+        db_sync, "_push_database", lambda _snapshot: {"copied": True}
+    )
 
     report = cast(dict[str, Any], db_sync.push())
 
@@ -309,11 +313,12 @@ def test_should_report_pull_database_and_crop_outcomes_independently(monkeypatch
 
 
 def test_should_attempt_push_legs_independently_and_skip_retention_on_failure(
-    monkeypatch,
+    monkeypatch, tmp_path
 ):
     events: list[str] = []
+    monkeypatch.setattr(config, "LOCAL_DB", str(tmp_path / "current.db"))
 
-    def push_db():
+    def push_db(_snapshot: str):
         events.append("db")
         raise RuntimeError("database unavailable")
 
@@ -321,7 +326,7 @@ def test_should_attempt_push_legs_independently_and_skip_retention_on_failure(
         events.append("crops")
         return {"transferred": True, "collisions": []}
 
-    def retain():
+    def retain(_snapshot: str):
         events.append("retention")
         return {"deleted": []}
 
@@ -347,12 +352,15 @@ def test_should_attempt_push_legs_independently_and_skip_retention_on_failure(
     }
 
 
-def test_should_run_retention_only_after_both_push_legs_succeed(monkeypatch):
+def test_should_run_retention_only_after_both_push_legs_succeed(
+    monkeypatch, tmp_path
+):
     events: list[str] = []
+    monkeypatch.setattr(config, "LOCAL_DB", str(tmp_path / "current.db"))
     monkeypatch.setattr(
         db_sync,
         "_push_database",
-        lambda: events.append("db") or {"copied": True},
+        lambda _snapshot: events.append("db") or {"copied": True},
     )
     monkeypatch.setattr(
         db_sync,
@@ -363,7 +371,7 @@ def test_should_run_retention_only_after_both_push_legs_succeed(monkeypatch):
     monkeypatch.setattr(
         db_sync,
         "_retention",
-        lambda: events.append("retention") or {"deleted": ["old.jpg"]},
+        lambda _snapshot: events.append("retention") or {"deleted": ["old.jpg"]},
     )
 
     report = cast(dict[str, Any], db_sync.push())
@@ -380,6 +388,91 @@ def test_should_run_retention_only_after_both_push_legs_succeed(monkeypatch):
             "ok": True,
             "result": {"deleted": ["old.jpg"]},
         },
+    }
+
+
+def test_should_retain_crops_referenced_by_exact_remote_installed_snapshot(
+    monkeypatch, tmp_path
+):
+    local_db = tmp_path / "current.db"
+    local_db.write_bytes(b"mutable local placeholder")
+    local_crops = tmp_path / "crops"
+    local_crops.mkdir()
+    monkeypatch.setattr(config, "LOCAL_DB", str(local_db))
+    monkeypatch.setattr(config, "LOCAL_SHARED_CROPS", str(local_crops))
+
+    snapshot_refs: dict[str, set[str]] = {str(local_db): {"local/after.jpg"}}
+    uploaded_snapshot_paths: list[str] = []
+    installed_snapshot_paths: list[str] = []
+    reference_paths: list[str] = []
+    deleted_batches: list[list[str]] = []
+    lock_events: list[int] = []
+    lock_held = False
+
+    def fake_flock(_fd: int, operation: int) -> None:
+        nonlocal lock_held
+        lock_events.append(operation)
+        if operation == fcntl.LOCK_EX:
+            assert not lock_held
+            lock_held = True
+        elif operation == fcntl.LOCK_UN:
+            assert lock_held
+            lock_held = False
+
+    def fake_run_local(argv: list[str], input: str | None = None) -> str:
+        assert lock_held
+        assert input is None
+        if argv[0] == "sqlite3":
+            snapshot_path = argv[2].removeprefix(".backup ")
+            snapshot_refs[snapshot_path] = {"remote/keep.jpg"}
+        elif argv[0] == "scp":
+            uploaded_snapshot_paths.append(argv[2])
+        return ""
+
+    def fake_run_remote_script(script: str) -> str:
+        assert lock_held
+        if "\nmv " in script:
+            installed_snapshot_paths.append(uploaded_snapshot_paths[-1])
+            snapshot_refs[str(local_db)] = {"local/after.jpg"}
+        return ""
+
+    def fake_referenced(path: str) -> set[str]:
+        assert lock_held
+        reference_paths.append(path)
+        return snapshot_refs[path]
+
+    def fake_inventory() -> list[dict[str, Any]]:
+        assert lock_held
+        return inventory
+
+    def fake_delete(paths: list[str]) -> list[str]:
+        assert lock_held
+        deleted_batches.append(list(paths))
+        return list(paths)
+
+    inventory = [
+        {"path": "remote/keep.jpg", "mtime": NOW - 31 * DAY},
+        {"path": "recent/1.jpg", "mtime": NOW - DAY},
+        {"path": "recent/2.jpg", "mtime": NOW - DAY},
+        {"path": "recent/3.jpg", "mtime": NOW - DAY},
+    ]
+    monkeypatch.setattr(fcntl, "flock", fake_flock)
+    monkeypatch.setattr(db_sync.ssh, "run_local", fake_run_local)
+    monkeypatch.setattr(db_sync.ssh, "run_remote_script", fake_run_remote_script)
+    monkeypatch.setattr(db_sync, "referenced_crop_refs", fake_referenced)
+    monkeypatch.setattr(db_sync, "_remote_inventory", fake_inventory)
+    monkeypatch.setattr(db_sync, "_delete_remote_candidates", fake_delete)
+
+    report = cast(dict[str, Any], db_sync.push())
+
+    assert len(installed_snapshot_paths) == 1
+    assert reference_paths == installed_snapshot_paths
+    assert deleted_batches == []
+    assert lock_events == [fcntl.LOCK_EX, fcntl.LOCK_UN]
+    assert not lock_held
+    assert report["retention"] == {
+        "ok": True,
+        "result": {"scanned": 4, "referenced": 1, "deleted": []},
     }
 
 

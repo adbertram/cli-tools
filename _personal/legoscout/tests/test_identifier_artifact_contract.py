@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 from pathlib import Path
 
@@ -36,7 +37,7 @@ def _detection(
 ):
     return {
         "crop_id": crop_id,
-        "source_photo_sha256": ("a" if photo == "photo-a" else "b") * 64,
+        "source_photo_sha256": hashlib.sha256(photo.encode("utf-8")).hexdigest(),
         "photo_relative_id": photo,
         "box": box or [.1, .1, .4, .8],
         "detector_name": "grounding-dino-tiny",
@@ -109,13 +110,34 @@ def _artifact(listings):
     for key, groups, status, reason in listings:
         group_count += len(groups)
         crop_count += sum(len(group["detections"]) for group in groups)
-        rows.append({
+        row = {
             "listing_key": key,
             "observations": {"vision": {"photo_figure_count": crop_count}},
             "status": status,
             "reason": reason,
             "groups": groups,
-        })
+        }
+        membership = {
+            "contract_version": "minifig-source-members-v1",
+            "listing_key": key,
+            "groups": [
+                {
+                    "match_group_id": group["match_group_id"],
+                    "detections": [
+                        {field: detection[field] for field in sorted(
+                            identification.DETECTION_FIELDS)}
+                        for detection in group["detections"]
+                    ],
+                }
+                for group in groups
+            ],
+        }
+        encoded = json.dumps(
+            membership, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")
+        row["source_member_digest"] = (
+            "figmembers-v1-" + hashlib.sha256(encoded).hexdigest())
+        rows.append(row)
     return {
         "version": 1,
         "kind": "minifig_identification",
@@ -212,6 +234,128 @@ def test_should_set_quantity_to_max_simultaneous_count(
     assert report["results"][0]["figure_count"] == expected_quantity
 
 
+def test_should_count_live_three_figure_shape_once_across_repeated_photos():
+    clone_front = _group(
+        "g-clone-front",
+        [_detection(
+            "figcrop-v1-clone-front",
+            photo="photo-a",
+            box=[.05, .25, .31, .72],
+            confidence=.72,
+        )],
+        fig_no="sw1090",
+        candidate_ids=["sw1090", "sw0201"],
+    )
+    r2 = _group(
+        "g-r2",
+        [
+            _detection(
+                "figcrop-v1-r2-a",
+                photo="photo-a",
+                box=[.32, .38, .65, .75],
+                confidence=.73,
+            ),
+            _detection(
+                "figcrop-v1-r2-b-outer",
+                photo="photo-b",
+                box=[.32, .42, .63, .74],
+                confidence=.62,
+            ),
+            _detection(
+                "figcrop-v1-r2-b-inner",
+                photo="photo-b",
+                box=[.38, .42, .56, .69],
+                confidence=.26,
+            ),
+        ],
+        fig_no="sw0527a",
+    )
+    storm = _group(
+        "g-storm",
+        [
+            _detection(
+                "figcrop-v1-storm-a",
+                photo="photo-a",
+                box=[.68, .26, .95, .72],
+                confidence=.59,
+            ),
+            _detection(
+                "figcrop-v1-storm-b",
+                photo="photo-b",
+                box=[.67, .29, .95, .72],
+                confidence=.56,
+            ),
+        ],
+        fig_no="sw0905",
+    )
+    clone_split = _group(
+        "g-clone-split",
+        [_detection(
+            "figcrop-v1-clone-b",
+            photo="photo-b",
+            box=[.05, .26, .31, .70],
+            confidence=.72,
+        )],
+        fig_no=None,
+        verification_status="unknown",
+        candidate_ids=["sw1090"],
+    )
+    backs = [
+        _group(
+            f"g-back-{index}",
+            [_detection(
+                f"figcrop-v1-back-{index}",
+                photo="photo-c",
+                box=box,
+                confidence=confidence,
+            )],
+            fig_no=None,
+            verification_status="unknown",
+            candidate_ids=[],
+        )
+        for index, (box, confidence) in enumerate((
+            ([.05, .28, .28, .74], .72),
+            ([.31, .35, .62, .71], .73),
+            ([.67, .25, .95, .71], .74),
+        ), start=1)
+    ]
+    groups = [clone_front, r2, storm, clone_split, *backs]
+    artifact = _artifact([
+        ("k-bid|66023-13 Mini Fig", groups, "success", None),
+    ])
+
+    assert len(groups) == 7
+    assert sum(len(group["detections"]) for group in groups) == 10
+    # The old per-group max-per-photo sum was 8: 1 + 2 + 1 + 1 + 1 + 1 + 1.
+    assert sum(identification._quantity(group["detections"])
+               for group in groups) == 8
+
+    result = _price(artifact)["results"][0]
+    analysis = result["minifig_analysis"]
+    quantities = {entry["match_group_id"]: entry["quantity"]
+                  for entry in analysis}
+
+    assert result["figure_count"] == 3
+    assert result["identified_count"] == 3
+    assert result["unknown_count"] == 0
+    assert quantities == {
+        "g-clone-front": 1,
+        "g-r2": 1,
+        "g-storm": 1,
+        "g-clone-split": 0,
+        "g-back-1": 0,
+        "g-back-2": 0,
+        "g-back-3": 0,
+    }
+    assert len(analysis) == 7
+    assert sum(len(entry["detections"]) for entry in analysis) == 9
+    assert {entry["quantity_basis"]["rule"] for entry in analysis} == {
+        "representative-photo-max-simultaneous-v1",
+    }
+    assert {entry["quantity_basis"]["photo_relative_id"]
+            for entry in analysis} == {"photo-a"}
+
+
 @pytest.mark.parametrize("overlap_width, expected_count, retained", [
     (.6999, 2, {"figcrop-v1-a", "figcrop-v1-b"}),
     (.70, 1, {"figcrop-v1-a"}),
@@ -221,9 +365,15 @@ def test_should_apply_iou_boundary_and_equal_confidence_crop_id_tie(
     expected_count,
     retained,
 ):
+    width = .8
+    shift = width * (1.0 - overlap_width) / (1.0 + overlap_width)
     detections = [
-        _detection("figcrop-v1-b", box=[0, 0, 1, 1], confidence=.9),
-        _detection("figcrop-v1-a", box=[0, 0, overlap_width, 1], confidence=.9),
+        _detection("figcrop-v1-b", box=[0, 0, width, 1], confidence=.9),
+        _detection(
+            "figcrop-v1-a",
+            box=[shift, 0, width + shift, 1],
+            confidence=.9,
+        ),
     ]
     entry = _price(_artifact([
         ("source|1", [_group("g1", detections)], "success", None),
@@ -258,9 +408,9 @@ def test_should_never_merge_suffix_distinct_or_differently_verified_groups():
         _group("g1", [_detection("figcrop-v1-a")], fig_no="sw0001a"),
         _group("g2", [_detection("figcrop-v1-b")], fig_no="sw0001b"),
         _group("g3", [_detection("figcrop-v1-c")], fig_no="sw0002",
-               candidate_ids=["same-a", "same-b"]),
+               candidate_ids=["sw0002", "sw0003"]),
         _group("g4", [_detection("figcrop-v1-d")], fig_no="sw0003",
-               candidate_ids=["same-a", "same-b"]),
+               candidate_ids=["sw0002", "sw0003"]),
     ]
     result = _price(_artifact([
         ("source|1", groups, "success", None),
@@ -300,13 +450,23 @@ def test_should_choose_final_representative_by_confidence_then_crop_id():
 
 
 def test_should_isolate_mixed_pricing_and_malformed_verification_matrix():
+    boxes = [
+        [index * .16, .1, index * .16 + .14, .8]
+        for index in range(6)
+    ]
     groups = [
-        _group("g-found", [_detection("figcrop-v1-a")], fig_no="sw0001"),
-        _group("g-zero", [_detection("figcrop-v1-b")], fig_no="sw0002"),
-        _group("g-not-found", [_detection("figcrop-v1-c")], fig_no="sw0003"),
-        _group("g-transient", [_detection("figcrop-v1-d")], fig_no="sw0004"),
-        _group("g-malformed", [_detection("figcrop-v1-e")], fig_no="sw0005"),
-        _group("g-unknown", [_detection("figcrop-v1-f")], fig_no=None,
+        _group("g-found", [_detection("figcrop-v1-a", box=boxes[0])],
+               fig_no="sw0001"),
+        _group("g-zero", [_detection("figcrop-v1-b", box=boxes[1])],
+               fig_no="sw0002"),
+        _group("g-not-found", [_detection("figcrop-v1-c", box=boxes[2])],
+               fig_no="sw0003"),
+        _group("g-transient", [_detection("figcrop-v1-d", box=boxes[3])],
+               fig_no="sw0004"),
+        _group("g-malformed", [_detection("figcrop-v1-e", box=boxes[4])],
+               fig_no="sw0005"),
+        _group("g-unknown", [_detection("figcrop-v1-f", box=boxes[5])],
+               fig_no=None,
                verification_status="unknown", candidate_ids=[]),
     ]
     del groups[4]["verification"]
@@ -347,7 +507,7 @@ def test_should_isolate_mixed_pricing_and_malformed_verification_matrix():
     assert by_group["g-unknown"]["null_value_reason"] == "unknown_identity"
     assert all(mfa.entry_errors(entry) == [] for entry in entries)
     assert mfa.batch_errors(entries) == []
-    assert result["status"] == "partial"
+    assert result["status"] == "success"
     assert result["figure_count"] == 6
     assert result["figure_count_source"] == "detection"
     assert result["identified_count"] == 4
@@ -387,6 +547,123 @@ def test_should_forward_refresh_and_keep_result_order_under_workers():
     ]), pricer=pricer, workers=2, refresh=True)["results"]
     assert set(calls) == {("sw0001", True), ("sw0002", True)}
     assert [row["listing_key"] for row in results] == ["source|1", "source|2"]
+
+
+def test_should_coalesce_exact_price_target_across_listings_and_fan_out():
+    calls = []
+
+    def pricer(fig_no, catalog, refresh=False):
+        calls.append((fig_no, copy.deepcopy(catalog), refresh))
+        return _found(fig_no, catalog, unit=12.5, count=7)
+
+    report = _price(_artifact([
+        ("source|1", [
+            _group("g1", [_detection("figcrop-v1-a")], fig_no="sw0001"),
+        ], "success", None),
+        ("source|2", [
+            _group("g2", [_detection("figcrop-v1-b")], fig_no="sw0001"),
+        ], "success", None),
+    ]), pricer=pricer, workers=2, refresh=True)
+
+    assert calls == [("sw0001", {
+        "no": "sw0001",
+        "name": "Catalog sw0001",
+        "thumbnail_url": "//img.bricklink.com/M/sw0001.jpg",
+    }, True)]
+    assert [row["listing_key"] for row in report["results"]] == [
+        "source|1", "source|2"]
+    assert [row["priced_subtotal"] for row in report["results"]] == [12.5, 12.5]
+    assert report["summary"]["priced_entry_count"] == 2
+
+
+def test_should_coalesce_same_fig_with_different_catalog_contracts():
+    first = _group("g1", [_detection("figcrop-v1-a")], fig_no="sw0001")
+    second = _group("g2", [_detection("figcrop-v1-b")], fig_no="sw0001")
+    second["catalog"]["name"] = "Different catalog contract"
+    calls = []
+
+    def pricer(fig_no, catalog, refresh=False):
+        calls.append((fig_no, catalog["name"]))
+        return _found(fig_no, catalog)
+
+    report = _price(_artifact([
+        ("source|1", [first], "success", None),
+        ("source|2", [second], "success", None),
+    ]), pricer=pricer, workers=2)
+
+    assert calls == [("sw0001", "Catalog sw0001")]
+    assert [row["minifig_analysis"][0]["catalog"]["name"]
+            for row in report["results"]] == [
+        "Catalog sw0001", "Different catalog contract"]
+    assert len(calls) == 1
+
+
+def test_should_fan_one_coalesced_price_failure_to_each_listing():
+    calls = []
+
+    def pricer(fig_no, catalog, refresh=False):
+        calls.append((fig_no, refresh))
+        raise minifig_sales.LookupFailed("shared BrickLink timeout")
+
+    report = _price(_artifact([
+        ("source|1", [
+            _group("g1", [_detection("figcrop-v1-a")], fig_no="sw0001"),
+        ], "success", None),
+        ("source|2", [
+            _group("g2", [_detection("figcrop-v1-b")], fig_no="sw0001"),
+        ], "success", None),
+    ]), pricer=pricer, workers=2)
+
+    assert calls == [("sw0001", False)]
+    entries = [row["minifig_analysis"][0] for row in report["results"]]
+    assert [entry["null_value_reason"] for entry in entries] == [
+        "price_lookup_failed", "price_lookup_failed"]
+    assert [entry["errors"] for entry in entries] == [[
+        "LookupFailed: shared BrickLink timeout",
+    ], [
+        "LookupFailed: shared BrickLink timeout",
+    ]]
+    assert [row["status"] for row in report["results"]] == ["success", "success"]
+
+
+@pytest.mark.parametrize("drift", ["dropped", "added", "moved", "split"])
+def test_should_reject_detector_membership_drift_before_pricing(drift):
+    artifact = _artifact([
+        ("source|1", [
+            _group("g1", [
+                _detection("figcrop-v1-a"),
+                _detection("figcrop-v1-b", box=[.5, .1, .8, .8]),
+            ], fig_no="sw0001"),
+            _group("g2", [
+                _detection("figcrop-v1-c", photo="photo-b"),
+            ], fig_no="sw0002"),
+        ], "success", None),
+    ])
+    groups = artifact["listings"][0]["groups"]
+    if drift == "dropped":
+        groups[0]["detections"].pop()
+    elif drift == "added":
+        groups[0]["detections"].append(
+            _detection("figcrop-v1-d", box=[.05, .05, .2, .7]))
+    elif drift == "moved":
+        groups[1]["detections"].append(groups[0]["detections"].pop())
+    else:
+        split = copy.deepcopy(groups[0])
+        split["match_group_id"] = "g3"
+        split["detections"] = [groups[0]["detections"].pop()]
+        split["representative_crop_ref"] = split["detections"][0]["crop_ref"]
+        groups.append(split)
+
+    calls = []
+    with pytest.raises(
+        identification.IdentificationArtifactError,
+        match="detector membership drift",
+    ):
+        _price(
+            artifact,
+            pricer=lambda *args, **kwargs: calls.append((args, kwargs)),
+        )
+    assert calls == []
 
 
 def test_should_emit_blocked_result_for_listing_without_groups():

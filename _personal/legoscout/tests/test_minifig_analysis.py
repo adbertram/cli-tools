@@ -144,6 +144,27 @@ def test_zero_quantity_raises_unreadable():
         mfa.normalize_entry(_verified(quantity=0))
 
 
+def test_zero_quantity_is_valid_only_for_evidence_outside_representative_photo():
+    entry = _verified(
+        quantity=0,
+        used=None,
+        unit_value=None,
+        extended_value=None,
+        null_value_reason="evidence_only",
+    )
+    entry["quantity_basis"] = {
+        "rule": mfa.REPRESENTATIVE_PHOTO_QUANTITY_RULE,
+        "photo_relative_id": "photo-a",
+        "source_photo_sha256": "a" * 64,
+        "counted_crop_ids": [],
+    }
+
+    normalized = mfa.normalize_entry(entry)
+
+    assert normalized["quantity"] == 0
+    assert mfa.entry_errors(normalized) == []
+
+
 def test_nan_unit_value_raises_unreadable():
     with pytest.raises(mfa.Unreadable):
         mfa.normalize_entry(_verified(unit_value=float("nan")))
@@ -247,6 +268,22 @@ def test_extended_value_must_match_unit_times_quantity_within_a_cent():
     assert any("extended_value" in e for e in mfa.entry_errors(out))
 
 
+def test_extended_without_unit_value_is_rejected():
+    # A verified entry carrying extended money with no unit price injects
+    # arbitrary resale value; unit and extended must exist together or not
+    # at all.
+    out = mfa.normalize_entry(_verified(unit_value=None, extended_value=99.0))
+    errors = mfa.entry_errors(out)
+    assert any("unit_value" in e and "extended" in e for e in errors)
+
+
+def test_extended_on_null_valued_entry_is_rejected():
+    out = mfa.normalize_entry(_unknown(extended_value=12.0,
+                                       null_value_reason="unverifiable"))
+    assert any("null_value_reason" in e and "extended" in e
+               for e in mfa.entry_errors(out))
+
+
 def test_extended_value_consistent_with_rounded_unit_times_quantity_is_clean():
     assert mfa.entry_errors(mfa.normalize_entry(_verified())) == []
 
@@ -315,21 +352,82 @@ def test_representative_crop_ref_must_be_one_of_its_detections():
 
 
 def test_batch_flags_duplicate_match_group_ids():
-    analysis = [_verified(match_group_id="g1"),
-                _verified(match_group_id="g1", fig_no="sw0217")]
-    assert len(mfa.batch_errors(analysis)) == 1
+    analysis = [
+        _verified(match_group_id="g1"),
+        _verified(
+            match_group_id="g1",
+            detections=[{"crop_id": "crop-c", "crop_ref": "c.jpg"}],
+            representative_crop_ref="c.jpg",
+        ),
+    ]
+    assert mfa.batch_errors(analysis) == ["duplicate match_group_id: g1"]
 
 
-def test_batch_flags_duplicate_crop_ids_within_an_entry():
+def test_batch_flags_duplicate_crop_refs_within_an_entry():
     out = mfa.normalize_entry(_verified(
         detections=[{"crop_ref": "same#0", "confidence": 0.9},
                     {"crop_ref": "same#0", "confidence": 0.8}]))
     assert any("crop_ref" in e for e in mfa.entry_errors(out))
 
 
-def test_batch_with_unique_ids_is_clean():
-    analysis = [_verified(match_group_id="g1"),
-                _verified(match_group_id="g2", fig_no="sw0217")]
+def test_batch_rejects_duplicate_crop_id_across_entries():
+    analysis = [
+        _verified(
+            match_group_id="g1",
+            detections=[{"crop_id": "shared-crop", "crop_ref": "a.jpg"}],
+            representative_crop_ref="a.jpg",
+        ),
+        _verified(
+            match_group_id="g2",
+            detections=[{"crop_id": "shared-crop", "crop_ref": "b.jpg"}],
+            representative_crop_ref="b.jpg",
+        ),
+    ]
+
+    assert mfa.batch_errors(analysis) == [
+        "duplicate crop_id='shared-crop' across entries 0, 1",
+    ]
+
+
+def test_batch_rejects_duplicate_crop_ref_across_entries():
+    analysis = [
+        _verified(
+            match_group_id="g1",
+            detections=[{"crop_id": "crop-a", "crop_ref": "shared.jpg"}],
+            representative_crop_ref="shared.jpg",
+        ),
+        _verified(
+            match_group_id="g2",
+            detections=[{"crop_id": "crop-b", "crop_ref": "shared.jpg"}],
+            representative_crop_ref="shared.jpg",
+        ),
+    ]
+
+    assert mfa.batch_errors(analysis) == [
+        "duplicate crop_ref='shared.jpg' across entries 0, 1",
+    ]
+
+
+def test_batch_allows_distinct_multiple_detections_across_entries():
+    analysis = [
+        _verified(
+            match_group_id="g1",
+            detections=[
+                {"crop_id": "crop-a", "crop_ref": "a.jpg"},
+                {"crop_id": "crop-b", "crop_ref": "b.jpg"},
+            ],
+            representative_crop_ref="a.jpg",
+        ),
+        _verified(
+            match_group_id="g2",
+            detections=[
+                {"crop_id": "crop-c", "crop_ref": "c.jpg"},
+                {"crop_id": "crop-d", "crop_ref": "d.jpg"},
+            ],
+            representative_crop_ref="c.jpg",
+        ),
+    ]
+
     assert mfa.batch_errors(analysis) == []
 
 

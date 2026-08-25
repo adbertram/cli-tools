@@ -24,6 +24,7 @@ ledger path in the package at that copy, so a write command writes to the copy.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import pkgutil
@@ -291,11 +292,117 @@ def files(tmp_path_factory, ledger):
             "mean_per_crop_seconds": 0.0,
         },
     }
+    minifig_eval_workspace = root / "minifig-eval-workspace"
+    minifig_eval_asset = minifig_eval_workspace / "assets" / "fixture.jpg"
+    minifig_eval_asset.parent.mkdir(parents=True)
+    minifig_eval_asset.write_bytes(b"offline minifig eval fixture")
+    minifig_eval_manifest = {
+        "version": 1,
+        "dataset_id": "smoke-minifig-eval-v1",
+        "asset_root": "workspace",
+        "assets_disposable": True,
+        "listings": [{
+            "listing_key": "fixture|1",
+            "source": "fixture",
+            "title": "Offline minifigure smoke fixture",
+            "provenance": {
+                "kind": "offline-smoke-fixture",
+                "source_url": "https://example.invalid/minifig-eval/1",
+                "run": "smoke-minifig-eval-run-v1",
+            },
+            "consent": {
+                "basis": "public-marketplace-evaluation",
+                "recorded": True,
+            },
+            "asset": "assets/fixture.jpg",
+            "photo_sha256": hashlib.sha256(
+                minifig_eval_asset.read_bytes()).hexdigest(),
+            "image_size": [100, 100],
+            "hard_case_tags": [],
+        }],
+    }
+    minifig_eval_labels = {
+        "version": 1,
+        "manifest_version": 1,
+        "dataset_id": "smoke-minifig-eval-v1",
+        "labeler": "Adam Bertram",
+        "decisions": [{
+            "listing_key": "fixture|1",
+            "expected_boxes": [[0.1, 0.1, 0.5, 0.8]],
+            "expected_quantity": 1,
+            "groups": [{
+                "match_group_id": "fixture-group-1",
+                "expected_fig_no": "fixture0001",
+                "obscure": False,
+            }],
+            "hard_case": False,
+            "reviewed_at": "2026-08-25T00:00:00Z",
+        }],
+    }
+    minifig_eval_detection = {
+        "version": 1,
+        "kind": "minifig_detection",
+        "detector": {"name": "fixture", "contract_version": "v1"},
+        "listings": [{
+            "listing_key": "fixture|1",
+            "status": "success",
+            "reason": None,
+            "observations": {},
+            "photos": [{
+                "photo_relative_id": "photo-0001",
+                "status": "success",
+                "reason": None,
+                "detections": [{
+                    "box": [0.1, 0.1, 0.5, 0.8],
+                    "crop_ref": "aa/fixture.jpg",
+                    "photo_relative_id": "photo-0001",
+                }],
+            }],
+        }],
+        "summary": {"listing_count": 1, "detection_count": 1},
+    }
+    minifig_eval_identification = {
+        "version": 1,
+        "kind": "minifig_identification",
+        "request_contract": {"contract_version": "fixture-v1"},
+        "listings": [{
+            "listing_key": "fixture|1",
+            "status": "success",
+            "reason": None,
+            "observations": {},
+            "groups": [{
+                "match_group_id": "fixture-group-1",
+                "status": "success",
+                "reason": None,
+                "representative_crop_ref": "aa/fixture.jpg",
+                "brickognize_candidates": [],
+                "detections": [{
+                    "photo_relative_id": "photo-0001",
+                    "crop_ref": "aa/fixture.jpg",
+                }],
+                "verification": {
+                    "status": "verified",
+                    "reason": "offline fixture",
+                    "compared_candidate_ids": ["fixture0001"],
+                    "catalog_checked_at": "2026-08-25T00:00:00Z",
+                },
+                "fig_no": "fixture0001",
+            }],
+        }],
+        "summary": {"listing_count": 1, "group_count": 1},
+        "timings": {"total_seconds": 0.0, "mean_per_crop_seconds": 0.0},
+    }
+    (minifig_eval_workspace / "detections.json").write_text(
+        json.dumps(minifig_eval_detection), encoding="utf-8")
+    (minifig_eval_workspace / "identifications.json").write_text(
+        json.dumps(minifig_eval_identification), encoding="utf-8")
     written = {}
     for name, payload in (("candidate", candidate), ("appraisal", appraisal),
                           ("triage", []), ("minifig_input", []),
                           ("minifig_identify_input", minifig_identify_input),
                           ("minifig_price_input", minifig_price_input),
+                          ("minifig_eval_manifest", minifig_eval_manifest),
+                          ("minifig_eval_labels", minifig_eval_labels),
                           ("prospect", prospect),
                           ("contact", contact), ("run", run),
                           ("entry", {ADDED_SOURCE: _source_entry(ADDED_SOURCE)})):
@@ -306,6 +413,8 @@ def files(tmp_path_factory, ledger):
     written["minifig_identify_output"] = str(
         root / "minifig_identify_output.json")
     written["minifig_price_output"] = str(root / "minifig_price_output.json")
+    written["minifig_eval_workspace"] = str(minifig_eval_workspace)
+    written["minifig_eval_output"] = str(root / "minifig_eval_output.json")
     manifest_dir = root / "run-manifest"
     manifest_dir.mkdir()
     for namespace in registry.active_namespaces():
@@ -466,6 +575,13 @@ def cases(ids, files):
         ("minifig", "price"): _case([
             "--input", files["minifig_price_input"],
             "--output", files["minifig_price_output"],
+        ]),
+        ("minifig", "eval"): _case([
+            "--manifest", files["minifig_eval_manifest"],
+            "--labels", files["minifig_eval_labels"],
+            "--workspace", files["minifig_eval_workspace"],
+            "--output", files["minifig_eval_output"],
+            "--stage", "detect",
         ]),
 
         ("score", "deal"): _case([ids["listing_key"]]),

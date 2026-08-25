@@ -62,6 +62,41 @@ def test_should_register_the_offline_detect_leaf():
     assert result.exit_code == 0, result.output
 
 
+def test_should_expose_release_evidence_and_queue_options_on_eval_leaf():
+    result = runner.invoke(app, ["minifig", "eval", "--help"])
+    assert result.exit_code == 0, result.output
+    for option in (
+        "--approval", "--host-report", "--crop-root", "--no-queue", "--stage",
+    ):
+        assert option in result.output
+
+
+def test_should_publicly_block_empty_canonical_labels_without_loading_artifacts(tmp_path):
+    fixture = Path(__file__).parent / "fixtures" / "minifig_eval"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    output = tmp_path / "report.json"
+
+    result = runner.invoke(app, [
+        "minifig", "eval",
+        "--manifest", str(fixture / "manifest.json"),
+        "--labels", str(fixture / "labels.json"),
+        "--workspace", str(workspace),
+        "--output", str(output),
+        "--no-queue",
+        "--stage", "all",
+    ])
+
+    assert result.exit_code == 2, result.output
+    report = json.loads(result.stdout)
+    assert report["status"] == "blocked"
+    assert report["reason"] == "human labels are incomplete"
+    assert report["human_approval"]["status"] == "not_required"
+    assert report["queue"] == {
+        "status": "skipped", "reason": "queue generation disabled"}
+    assert json.loads(output.read_text()) == report
+
+
 @pytest.mark.parametrize("payload, message", [
     ({}, "array"),
     ([{"listing_key": "source|1", "saved_photo_paths": []}], "exact keys"),
@@ -187,6 +222,9 @@ def test_should_consume_every_saved_path_once_and_write_durable_crops(tmp_path):
         "photo_skipped_count": 0,
         "detection_count": 3,
     }
+    assert artifact["timings"]["total_seconds"] >= 0.0
+    assert artifact["timings"]["mean_per_photo_seconds"] == pytest.approx(
+        artifact["timings"]["total_seconds"] / 3)
 
 
 def test_should_preserve_empty_detection_as_success_and_isolate_bad_photo(tmp_path):
@@ -220,7 +258,7 @@ def test_should_preserve_empty_detection_as_success_and_isolate_bad_photo(tmp_pa
     )
 
     assert [row["status"] for row in artifact["listings"]] == [
-        "partial", "success"]
+        "success", "success"]
     first_photos = artifact["listings"][0]["photos"]
     assert first_photos[0]["status"] == "success"
     assert first_photos[0]["detections"] == []
@@ -694,7 +732,7 @@ def test_should_isolate_provider_failure_and_preserve_listing_order(tmp_path):
     assert [row["listing_key"] for row in output["listings"]] == [
         "source|1", "source|2"]
     assert [row["status"] for row in output["listings"]] == [
-        "partial", "success"]
+        "success", "success"]
     failed = next(group for group in output["listings"][0]["groups"]
                   if group["status"] == "skipped")
     assert failed["reason"] == "HTTP 503"

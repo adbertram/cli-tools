@@ -1,6 +1,8 @@
 {
-  "version": 1,
-  "manifest_version": 1,
+  "dataset_id": "minifig-eval-33-real-listings-v1",
+  "decisions": [],
   "labeler": "Adam Bertram",
-  "decisions": []
+  "manifest_sha256": "2028e06a5f3876a093930f94a548223bc01d11a24e6101567ac38f6bc6fe28cb",
+  "manifest_version": 1,
+  "version": 1
 }
