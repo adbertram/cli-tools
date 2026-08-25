@@ -1,8 +1,8 @@
 {
   "tool": "cloudflare",
   "description": "CLI interface for Cloudflare API",
-  "discovered_at": "2026-08-24T21:51:44Z",
-  "total_commands": 54,
+  "discovered_at": "2026-08-25T23:41:25Z",
+  "total_commands": 65,
   "global_options": [
     {
       "name": "--version",
@@ -2017,6 +2017,599 @@
                   "type": "TEXT",
                   "required": false,
                   "help": "Extra JSON body fields merged last (e.g. '{\"deployment_configs\":{...}}')"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "r2": {
+      "help": "Manage R2 buckets and objects",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "buckets": {
+          "help": "Manage R2 buckets",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create an R2 bucket.",
+              "arguments": [
+                {
+                  "name": "bucket",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--location",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Location hint: apac, eeur, enam, weur, wnam, or oc"
+                },
+                {
+                  "name": "--storage-class",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "",
+                  "default": "Standard"
+                },
+                {
+                  "name": "--jurisdiction",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "",
+                  "default": "default"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get one R2 bucket.",
+              "arguments": [
+                {
+                  "name": "bucket",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--properties",
+                  "type": "bool",
+                  "required": false,
+                  "help": "<str>",
+                  "short": "-p",
+                  "takes_value": false
+                },
+                {
+                  "name": "--jurisdiction",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "",
+                  "default": "default"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "inspect": {
+              "help": "Inspect bucket properties and public-domain access.",
+              "arguments": [
+                {
+                  "name": "bucket",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--properties",
+                  "type": "bool",
+                  "required": false,
+                  "help": "<str>",
+                  "short": "-p",
+                  "takes_value": false
+                },
+                {
+                  "name": "--jurisdiction",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "",
+                  "default": "default"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "List R2 buckets.",
+              "arguments": [
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "bool",
+                  "required": false,
+                  "help": "<int range> [1<=x<=1000]",
+                  "short": "-l",
+                  "takes_value": false,
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "bool",
+                  "required": false,
+                  "help": "<str>",
+                  "short": "-f",
+                  "takes_value": false
+                },
+                {
+                  "name": "--properties",
+                  "type": "bool",
+                  "required": false,
+                  "help": "<str>",
+                  "short": "-p",
+                  "takes_value": false
+                },
+                {
+                  "name": "--jurisdiction",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "",
+                  "default": "default"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        },
+        "objects": {
+          "help": "Manage R2 objects",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "get": {
+              "help": "Download an R2 object to a file.",
+              "arguments": [
+                {
+                  "name": "bucket",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                },
+                {
+                  "name": "key",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--output",
+                  "type": "PATH",
+                  "required": true,
+                  "help": "",
+                  "short": "-o"
+                },
+                {
+                  "name": "--jurisdiction",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "",
+                  "default": "default"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "head": {
+              "help": "Read R2 object metadata without downloading its body.",
+              "arguments": [
+                {
+                  "name": "bucket",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                },
+                {
+                  "name": "key",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--properties",
+                  "type": "bool",
+                  "required": false,
+                  "help": "<str>",
+                  "short": "-p",
+                  "takes_value": false
+                },
+                {
+                  "name": "--jurisdiction",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "",
+                  "default": "default"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "head-s3": {
+              "help": "Read R2 object metadata via the S3-compatible API. Use this instead of `objects head` for object keys the REST API's edge blocks with a 403 HTML challenge, such as keys containing '..'.",
+              "arguments": [
+                {
+                  "name": "bucket",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                },
+                {
+                  "name": "key",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--properties",
+                  "type": "bool",
+                  "required": false,
+                  "help": "<str>",
+                  "short": "-p",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "List objects in an R2 bucket.",
+              "arguments": [
+                {
+                  "name": "bucket",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--prefix",
+                  "type": "bool",
+                  "required": false,
+                  "help": "<str>",
+                  "takes_value": false
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "bool",
+                  "required": false,
+                  "help": "<int range> [x>=1]",
+                  "short": "-l",
+                  "takes_value": false,
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "bool",
+                  "required": false,
+                  "help": "<str>",
+                  "short": "-f",
+                  "takes_value": false
+                },
+                {
+                  "name": "--properties",
+                  "type": "bool",
+                  "required": false,
+                  "help": "<str>",
+                  "short": "-p",
+                  "takes_value": false
+                },
+                {
+                  "name": "--jurisdiction",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "",
+                  "default": "default"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "put": {
+              "help": "Upload one file to an R2 object key.",
+              "arguments": [
+                {
+                  "name": "bucket",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                },
+                {
+                  "name": "key",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--file",
+                  "type": "FILE",
+                  "required": true,
+                  "help": ""
+                },
+                {
+                  "name": "--content-type",
+                  "type": "bool",
+                  "required": false,
+                  "help": "<str>",
+                  "takes_value": false
+                },
+                {
+                  "name": "--jurisdiction",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "",
+                  "default": "default"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "put-s3": {
+              "help": "Upload one file to an R2 object key via the S3-compatible API. Use this instead of `objects put` for object keys the REST API's edge rejects with a 403 HTML \"Attention Required\" challenge, such as keys containing '..'. This is not a permissions difference; it authenticates with the R2 S3-compatible access key pair instead of the REST API token.",
+              "arguments": [
+                {
+                  "name": "bucket",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                },
+                {
+                  "name": "key",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--file",
+                  "type": "FILE",
+                  "required": true,
+                  "help": ""
+                },
+                {
+                  "name": "--content-type",
+                  "type": "bool",
+                  "required": false,
+                  "help": "<str>",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "sync": {
+              "help": "Synchronize a directory, skipping objects verified by size and MD5 ETag.",
+              "arguments": [
+                {
+                  "name": "bucket",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                },
+                {
+                  "name": "directory",
+                  "type": "DIRECTORY",
+                  "required": true,
+                  "help": ""
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--prefix",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Destination key prefix",
+                  "default": "wp-content/uploads/"
+                },
+                {
+                  "name": "--jurisdiction",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "",
+                  "default": "default"
+                },
+                {
+                  "name": "--skip-rest-edge-blocked",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Upload representable keys and explicitly report keys containing '..' that Cloudflare's REST edge cannot address",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",

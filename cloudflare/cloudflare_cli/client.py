@@ -42,6 +42,13 @@ SECRETS_MANAGER = (
     "/Users/adam/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh"
 )
 
+# Cloudflare's exact 403 error message when the account has never enabled the
+# R2 product (no active R2 subscription), as opposed to a valid token missing
+# a permission group. Any API token, including one with full R2 scopes,
+# fails identically until R2 is enabled through the dashboard, so this case
+# needs its own guidance rather than the generic forbidden-error message.
+R2_ENABLEMENT_MESSAGE = "Please enable R2 through the Cloudflare Dashboard."
+
 # Cloudflare API-token permission groups required per endpoint family, as
 # (endpoint fragment, read permission, write permission). Ordered most specific
 # first; every fragment is matched against the request endpoint in order.
@@ -64,6 +71,11 @@ PERMISSION_GROUPS = (
     ),
     ("/purge_cache", "Zone > Cache Purge > Purge", "Zone > Cache Purge > Purge"),
     ("/settings/", "Zone > Zone Settings > Read", "Zone > Zone Settings > Edit"),
+    (
+        "/r2/",
+        "Account > Workers R2 Storage > Read",
+        "Account > Workers R2 Storage > Write",
+    ),
     ("/pages/", "Pages Read", "Pages Write"),
     ("/graphql", "Zone > Analytics > Read", "Zone > Analytics > Read"),
     ("/zones", "Zone > Zone > Read", "Zone > Zone > Edit"),
