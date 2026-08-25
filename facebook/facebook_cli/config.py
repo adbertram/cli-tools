@@ -13,8 +13,14 @@ class Config(BaseConfig):
 
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.facebook.com"
-    ADDITIONAL_AUTH_FIELDS = ("USERNAME", "PASSWORD", "AUTH_COOKIES_JSON")
-    ADDITIONAL_SENSITIVE_AUTH_FIELDS = ("USERNAME", "PASSWORD", "AUTH_COOKIES_JSON")
+    # AUTH_COOKIES_JSON is deliberately absent. A stored cookie snapshot is a
+    # second source of truth for the session, and Facebook rotates the ``xs``
+    # cookie inside the browser profile whenever it re-issues the session: the
+    # frozen copy then keeps a retired value and every HTTP read comes back as
+    # the logged-out variant of the page. The persistent Chromium profile is the
+    # only session store this CLI reads (see FacebookClient._facebook_http_client).
+    ADDITIONAL_AUTH_FIELDS = ("USERNAME", "PASSWORD")
+    ADDITIONAL_SENSITIVE_AUTH_FIELDS = ("USERNAME", "PASSWORD")
 
     def __init__(self, profile=None):
         super().__init__(

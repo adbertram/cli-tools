@@ -1,7 +1,7 @@
 {
   "tool": "facebook",
   "description": "Facebook CLI - Marketplace, Messenger, and more via browser automation",
-  "discovered_at": "2026-08-25T21:28:36Z",
+  "discovered_at": "2026-08-25T22:22:23Z",
   "total_commands": 26,
   "global_options": [
     {
@@ -515,7 +515,7 @@
               ]
             },
             "list": {
-              "help": "List posts from a Facebook Group. Fails with exit code 1 and an \"UNREADABLE_GROUP:\" stderr message when this session cannot see the group's posts (a private group you have not joined, or one whose join request is still pending), so an unreadable group is never reported as an empty one. Use 'facebook groups get <group_id>' to check posts_readable before crawling.",
+              "help": "List posts from a Facebook Group. Zero posts on stdout at exit 0 means one thing only: this readable group's feed really is empty. Every other outcome is a distinct non-zero exit with a greppable stderr marker, so a caller never has to guess: exit 0  []                        readable group, no posts exit 1  \"UNREADABLE_GROUP: ...\"   private group not joined, or join pending exit 2  \"LOGGED_OUT_HTML: ...\"    the saved session is signed out; re-login exit 3  \"FEED_EXTRACTION_FAILED:\" readable group whose feed could not be parsed Use 'facebook groups get <group_id>' to check posts_readable before crawling.",
               "examples": [
                 "facebook groups posts list 123456789",
                 "facebook groups posts list my-group-name --table --limit 10",

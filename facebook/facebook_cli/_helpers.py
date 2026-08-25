@@ -5,7 +5,30 @@ from typing import List, Optional
 from cli_tools_shared.filters import apply_filters, apply_properties_filter, apply_limit
 from cli_tools_shared.output import print_json, print_table
 
-from .client import get_client
+from .client import FeedExtractionFailed, get_client
+
+# Exit code for "the feed is there, this CLI could not read it". Deliberately
+# distinct from 0 (an empty group), 1 (UNREADABLE_GROUP and every other error),
+# and 2 (the shared credential code, which LOGGED_OUT_HTML also uses).
+FEED_EXTRACTION_FAILED_EXIT_CODE = 3
+
+
+def report_client_error(exc: Exception) -> int:
+    """Print an error and return this CLI's exit code for it.
+
+    Single owner of the exit-code contract, so the fast argv paths in
+    ``main.py`` and the Typer commands cannot drift apart:
+
+      2  ``CredentialError`` -- which ``LOGGED_OUT_HTML`` is
+      3  ``FeedExtractionFailed`` -- ``FEED_EXTRACTION_FAILED``
+      1  everything else, including ``UNREADABLE_GROUP``
+    """
+    from cli_tools_shared.output import handle_error
+
+    code = handle_error(exc)
+    if isinstance(exc, FeedExtractionFailed):
+        return FEED_EXTRACTION_FAILED_EXIT_CODE
+    return code
 
 
 @contextmanager

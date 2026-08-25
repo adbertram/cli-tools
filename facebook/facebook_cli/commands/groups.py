@@ -16,7 +16,8 @@ from typing import Optional, List
 
 from cli_tools_shared.output import print_json, command
 
-from .._helpers import client_session, output_list, output_single
+from .._helpers import client_session, output_list, output_single, report_client_error
+from ..client import FeedExtractionFailed
 
 app = typer.Typer(help="Manage Facebook Groups", no_args_is_help=True)
 
@@ -43,11 +44,16 @@ def posts_list(
 ):
     """List posts from a Facebook Group.
 
-    Fails with exit code 1 and an "UNREADABLE_GROUP:" stderr message when this
-    session cannot see the group's posts (a private group you have not joined,
-    or one whose join request is still pending), so an unreadable group is never
-    reported as an empty one. Use 'facebook groups get <group_id>' to check
-    posts_readable before crawling.
+    Zero posts on stdout at exit 0 means one thing only: this readable group's
+    feed really is empty. Every other outcome is a distinct non-zero exit with a
+    greppable stderr marker, so a caller never has to guess:
+
+      exit 0  []                        readable group, no posts
+      exit 1  "UNREADABLE_GROUP: ..."   private group not joined, or join pending
+      exit 2  "LOGGED_OUT_HTML: ..."    the saved session is signed out; re-login
+      exit 3  "FEED_EXTRACTION_FAILED:" readable group whose feed could not be parsed
+
+    Use 'facebook groups get <group_id>' to check posts_readable before crawling.
 
     Examples:
         facebook groups posts list 123456789
@@ -56,7 +62,10 @@ def posts_list(
         facebook groups posts list 123456789 --filter "author:contains:John"
     """
     with client_session() as client:
-        posts = client.list_group_posts(group_id, limit=limit, full_threads=full_threads)
+        try:
+            posts = client.list_group_posts(group_id, limit=limit, full_threads=full_threads)
+        except FeedExtractionFailed as exc:
+            raise typer.Exit(report_client_error(exc))
         items = [post.model_dump() for post in posts]
 
         output_list(

@@ -480,10 +480,23 @@ facebook groups posts list 1647953932130640 --limit 2
 #         authenticated session, so its posts cannot be listed. ...
 ```
 
-The `UNREADABLE_GROUP:` prefix is a stable marker. Exit code 1 with that marker
-means "this session cannot see the group"; exit code 0 with `[]` means the group
-is readable and genuinely has no posts in the requested window; exit code 2
-still means a credential failure.
+Every stderr marker below is stable, and each failure mode has its own exit
+code, so a caller can tell them apart without parsing prose:
+
+| Outcome | Exit | stdout | stderr marker |
+|---------|------|--------|---------------|
+| Readable group, posts found | 0 | post array | — |
+| Readable group, no posts in window | 0 | `[]` | — |
+| Session cannot see the group | 1 | (empty) | `UNREADABLE_GROUP:` |
+| Saved session is signed out | 2 | (empty) | `LOGGED_OUT_HTML:` |
+| Readable group whose feed could not be parsed | 3 | (empty) | `FEED_EXTRACTION_FAILED:` |
+
+Exit code 0 with `[]` therefore means one thing only: the group is readable and
+genuinely has no posts in the requested window. There is no rendered-DOM
+fallback extractor behind this command — a page shape the CLI cannot parse exits
+3 rather than answering `[]`. `LOGGED_OUT_HTML:` means Facebook served the
+logged-out variant of the page despite the request carrying cookies; run
+`facebook auth login --force`.
 
 `facebook groups list` reports `group_id`, `name`, `url`, and `membership`
 (`member` or `pending`) for every row, joined groups first. Facebook renders

@@ -178,12 +178,12 @@ def _fast_path_error(exc: Exception) -> int:
     own error contract. These commands used to return 2 for every ClientError,
     which is the code reserved for credential failures -- a caller could not
     tell "this session cannot read that group" from "authentication is broken".
-    ``handle_error`` is the single owner of the message format and the exit
-    code (2 for CredentialError, 1 for everything else).
+    ``report_client_error`` is the single owner of the message format and the
+    exit code for BOTH this path and the Typer commands.
     """
-    from cli_tools_shared.output import handle_error
+    from ._helpers import report_client_error
 
-    return handle_error(exc)
+    return report_client_error(exc)
 
 
 def _fast_groups_get(argv: list[str]) -> Optional[int]:

@@ -37,6 +37,8 @@ from facebook_cli.client import (
     JOINED_GROUPS_JS,
     JOINED_GROUPS_SECTION_MEMBERSHIP,
     FacebookClient,
+    FeedExtractionFailed,
+    GroupDiscussionPreloadMissing,
     GroupNotReadable,
 )
 from facebook_cli.models import Group
@@ -228,12 +230,11 @@ def test_join_state_and_privacy_tables_cover_only_verified_tokens():
 
 
 class FeedPage:
-    """A group feed page that is never scrolled, because the read fails first."""
+    """A group feed page used to diagnose a missing discussion preload."""
 
     def __init__(self, scripts):
         self.scripts = scripts
         self.url = "https://www.facebook.com/groups/1647953932130640/"
-        self.scrolled = False
 
     def evaluate(self, script, arg=None):
         if "profile_header_renderer" in script:
@@ -243,9 +244,6 @@ class FeedPage:
 
     def wait_for_timeout(self, milliseconds):
         return None
-
-    def keyboard_press(self, key):
-        self.scrolled = True
 
 
 def _client_with_feed_page(page):
@@ -259,27 +257,34 @@ def test_posts_list_fails_loudly_for_a_pending_private_group():
     page = FeedPage([(FIXTURES / "group_header_private_pending.script.txt").read_text(encoding="utf-8")])
     client = _client_with_feed_page(page)
 
-    with pytest.raises(GroupNotReadable) as excinfo:
-        client._list_group_post_summaries("1647953932130640", 2)
+    error = client._group_feed_unavailable("1647953932130640", GroupDiscussionPreloadMissing("no preload"))
 
-    message = str(excinfo.value)
+    assert isinstance(error, GroupNotReadable)
+    message = str(error)
     assert message.startswith("UNREADABLE_GROUP:")
     assert "privacy=private" in message
     assert "membership=pending" in message
-    assert page.scrolled is False
 
 
 def test_posts_list_readability_gate_passes_a_public_group_for_a_non_member():
-    """A public group must stay readable for a non-member, so the gate does not
-    turn a working crawl into a failure."""
+    """A readable group whose feed cannot be parsed is a LOUD extraction failure.
+
+    It must never be reported as UNREADABLE (the session can read it) and never
+    as an empty list (the posts are there; this CLI failed to reach them).
+    """
     page = FeedPage(
         [(FIXTURES / "group_header_public_non_member.script.txt").read_text(encoding="utf-8")]
     )
     page.url = "https://www.facebook.com/groups/250458852075384/"
     client = _client_with_feed_page(page)
-    client._extract_group_posts = lambda _page: []
 
-    assert client._list_group_post_summaries("250458852075384", 2) == []
+    error = client._group_feed_unavailable("250458852075384", GroupDiscussionPreloadMissing("no preload"))
+
+    assert isinstance(error, FeedExtractionFailed)
+    assert not isinstance(error, GroupNotReadable)
+    message = str(error)
+    assert message.startswith("FEED_EXTRACTION_FAILED:")
+    assert "This is NOT an empty group." in message
 
 
 def test_group_not_readable_is_a_client_error_so_the_command_exits_non_zero():
