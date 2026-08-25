@@ -246,9 +246,29 @@ def files(tmp_path_factory, ledger):
            "hypothesis_type": sorted(hypothesis_types.table())[0],
            "searches": ["smoke test"], "result_count": 0,
            "notes": "written by the leaf-subcommand smoke test"}
+    minifig_identify_input = {
+        "version": 1,
+        "kind": "minifig_detection",
+        "detector": {
+            "name": "grounding-dino-tiny",
+            "contract_version": "v1",
+        },
+        "listings": [],
+        "summary": {
+            "listing_count": 0,
+            "success_count": 0,
+            "partial_count": 0,
+            "skipped_count": 0,
+            "photo_count": 0,
+            "photo_success_count": 0,
+            "photo_skipped_count": 0,
+            "detection_count": 0,
+        },
+    }
     written = {}
     for name, payload in (("candidate", candidate), ("appraisal", appraisal),
                           ("triage", []), ("minifig_input", []),
+                          ("minifig_identify_input", minifig_identify_input),
                           ("prospect", prospect),
                           ("contact", contact), ("run", run),
                           ("entry", {ADDED_SOURCE: _source_entry(ADDED_SOURCE)})):
@@ -256,6 +276,8 @@ def files(tmp_path_factory, ledger):
         path.write_text(json.dumps(payload), encoding="utf-8")
         written[name] = str(path)
     written["minifig_output"] = str(root / "minifig_output.json")
+    written["minifig_identify_output"] = str(
+        root / "minifig_identify_output.json")
     manifest_dir = root / "run-manifest"
     manifest_dir.mkdir()
     for namespace in registry.active_namespaces():
@@ -408,6 +430,10 @@ def cases(ids, files):
         ("minifig", "detect"): _case([
             "--input", files["minifig_input"],
             "--output", files["minifig_output"],
+        ]),
+        ("minifig", "identify"): _case([
+            "--input", files["minifig_identify_input"],
+            "--output", files["minifig_identify_output"],
         ]),
 
         ("score", "deal"): _case([ids["listing_key"]]),

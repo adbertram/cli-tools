@@ -1,0 +1,42 @@
+{
+  "bounding_box": {
+    "image_height": 708.0,
+    "image_width": 399.0,
+    "left": 0.039094164967536926,
+    "lower": 702.2070922851562,
+    "right": 399.0,
+    "score": 0.9489588141441345,
+    "upper": 1.4808517694473267
+  },
+  "items": [
+    {
+      "category": "Star Wars / Star Wars The Clone Wars",
+      "external_sites": [
+        {
+          "name": "bricklink",
+          "url": "https://www.bricklink.com/v2/catalog/catalogitem.page?M=sw1090"
+        }
+      ],
+      "id": "sw1090",
+      "img_url": "https://storage.googleapis.com/brickognize-static/thumbnails/v2.23/fig/sw1090/0.webp",
+      "name": "Clone Trooper (Phase 1) - Large Blue Eyes",
+      "score": 0.808688223361969,
+      "type": "fig"
+    },
+    {
+      "category": "Star Wars / Star Wars The Clone Wars",
+      "external_sites": [
+        {
+          "name": "bricklink",
+          "url": "https://www.bricklink.com/v2/catalog/catalogitem.page?M=sw0201"
+        }
+      ],
+      "id": "sw0201",
+      "img_url": "https://storage.googleapis.com/brickognize-static/thumbnails/v2.23/fig/sw0201/0.webp",
+      "name": "Clone Trooper (Phase 1) - Large Eyes",
+      "score": 0.5051460266113281,
+      "type": "fig"
+    }
+  ],
+  "listing_id": "res-7afd0f64746c4d8e"
+}
