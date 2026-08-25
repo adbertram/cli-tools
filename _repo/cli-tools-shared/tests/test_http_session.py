@@ -128,6 +128,90 @@ def test_http_client_get_text_stops_after_markers():
     assert captured == {"cookie": "session=abc; hostonly=def", "timeout": 3}
 
 
+def _marker_client(response) -> BrowserAuthenticatedHttpClient:
+    return BrowserAuthenticatedHttpClient(
+        _make_state(),
+        allowed_domains=["example.com"],
+        required_cookies=["session"],
+        opener=lambda request, timeout: response,
+    )
+
+
+# The read stops on a chunk boundary, so it can overshoot the requested tail by
+# up to ``chunk_size - 1`` bytes. That slack is deliberate: the guarantee is "at
+# LEAST this many bytes past the marker", and trimming to an exact byte count
+# would happily split a multi-byte character in half. Each test below leaves a
+# pad of more than one chunk before its sentinel so the slack cannot reach it.
+def test_http_client_keeps_a_bounded_tail_after_the_last_marker():
+    """A parser usually needs a region AROUND a marker, not the marker alone.
+
+    Without a tail the only way to keep what FOLLOWS a marker is to name a
+    second marker further down the document -- one more string that can stop
+    matching without anyone noticing.
+    """
+    body = b"head target" + b"x" * 100 + b"." * 64 + b"tail that should not be read"
+    response = _FakeResponse(body, chunk_size=8)
+
+    text = _marker_client(response).get_text(
+        "https://www.example.com/groups/1",
+        stop_after_markers=["target"],
+        stop_after_tail_bytes=100,
+    )
+
+    assert text.startswith("head target" + "x" * 100)
+    assert "tail that should not be read" not in text
+
+
+def test_http_client_measures_the_tail_from_the_last_marker_to_arrive():
+    """Two markers, and the tail is counted from whichever one completes last."""
+    body = b"alpha " + b"A" * 200 + b" omega" + b"B" * 50 + b"." * 64 + b"never read"
+    response = _FakeResponse(body, chunk_size=8)
+
+    text = _marker_client(response).get_text(
+        "https://www.example.com/groups/1",
+        stop_after_markers=["alpha", "omega"],
+        stop_after_tail_bytes=50,
+    )
+
+    assert "omega" + "B" * 50 in text
+    assert "never read" not in text
+
+
+def test_http_client_tail_without_markers_is_rejected():
+    """The tail has nothing to be measured from, so it is a programming error."""
+    response = _FakeResponse(b"body", chunk_size=8)
+
+    with pytest.raises(ClientError, match="requires stop_after_markers"):
+        _marker_client(response).get_text(
+            "https://www.example.com/groups/1",
+            stop_after_tail_bytes=10,
+        )
+
+
+def test_http_client_negative_tail_is_rejected():
+    response = _FakeResponse(b"target body", chunk_size=8)
+
+    with pytest.raises(ClientError, match="must not be negative"):
+        _marker_client(response).get_text(
+            "https://www.example.com/groups/1",
+            stop_after_markers=["target"],
+            stop_after_tail_bytes=-1,
+        )
+
+
+def test_http_client_tail_never_truncates_a_short_response():
+    """A tail longer than what is left reads to the end instead of failing."""
+    response = _FakeResponse(b"head target end", chunk_size=8)
+
+    text = _marker_client(response).get_text(
+        "https://www.example.com/groups/1",
+        stop_after_markers=["target"],
+        stop_after_tail_bytes=10_000,
+    )
+
+    assert text == "head target end"
+
+
 def test_http_client_non_200_raises():
     def opener(request, timeout):
         return _FakeResponse(b"denied", status=403)

@@ -63,14 +63,39 @@ GROUP_DISCUSSION_FRIENDLY_NAME = "CometGroupDiscussionRootSuccessQuery"
 # page still returns HTTP 200 and still defines CurrentUserInitialData, with
 # USER_ID set to this literal.
 LOGGED_OUT_USER_ID = "0"
-GROUP_DISCUSSION_DOC_ID = "26647538378198347"
+# How far either side of the discussion query's friendly-name marker
+# ``_extract_group_discussion_request`` reads to find that query's own
+# ``queryID`` and ``variables``.
+GROUP_DISCUSSION_WINDOW_CHARS = 6000
+# Every marker below is either a Relay bootstrap define this client already
+# parses by name, or Facebook's own FRIENDLY name for the discussion query --
+# the same string sent back as ``X-FB-Friendly-Name``. None of them is a
+# rotating identifier.
+#
+# A previous version of this list also carried the discussion query's
+# ``"queryID":"<digits>"``. Facebook rotates that ID (it moved to
+# 27950770684584803 by 2026-08-25), and a stop marker that no longer matches is
+# silent: the marker set simply never completes, so every group listing
+# downloaded the whole ~2.8MB page instead of stopping at the ~482KB bootstrap
+# slice. The ID was duplicated data to begin with --
+# ``_extract_group_discussion_request`` reads it out of the page at runtime.
 GROUP_DISCUSSION_BOOTSTRAP_MARKERS = [
     '["CurrentUserInitialData",',
     '["DTSGInitialData",',
     '["LSD",',
-    f'"queryID":"{GROUP_DISCUSSION_DOC_ID}"',
     f'"queryName":"{GROUP_DISCUSSION_FRIENDLY_NAME}"',
 ]
+# Stopping the read AT the friendly-name marker would cut the half of the
+# extractor's window that follows it. Measured live 2026-08-25 on
+# /groups/1457540554300292/ and /groups/Legosforsale/, Facebook emits the
+# discussion query as ``"queryID":...,"variables":{...},"queryName":...``, so
+# the marker is the LAST field of the record and today's parser needs nothing
+# after it -- but that ordering is Facebook's to change, and a truncated window
+# would fail loudly on every group at once. Reading a bounded tail keeps the
+# full window without naming anything that rotates. UTF-8 needs at most four
+# bytes per character, so this covers the window in the worst case (~24KB on
+# top of a ~482KB read).
+GROUP_DISCUSSION_BOOTSTRAP_TAIL_BYTES = 4 * GROUP_DISCUSSION_WINDOW_CHARS
 GROUP_POST_THREAD_STOP_MARKERS = [
     "CometFeedStorySeoLLMCommentSummarySection_story",
 ]
@@ -2419,12 +2444,14 @@ class FacebookClient:
         return self._fetch_authenticated_facebook_page(
             url,
             stop_markers=GROUP_DISCUSSION_BOOTSTRAP_MARKERS,
+            stop_tail_bytes=GROUP_DISCUSSION_BOOTSTRAP_TAIL_BYTES,
         )
 
     def _fetch_authenticated_facebook_page(
         self,
         url: str,
         stop_markers: Optional[List[str]] = None,
+        stop_tail_bytes: int = 0,
     ) -> str:
         """Fetch an authenticated Facebook page without launching Chromium.
 
@@ -2437,6 +2464,7 @@ class FacebookClient:
         result = self._facebook_http_client().get_text_result(
             url,
             stop_after_markers=stop_markers or (),
+            stop_after_tail_bytes=stop_tail_bytes,
         )
         logger.debug(
             "_fetch_authenticated_facebook_page: fetched in %.2fs (%d chars, %d bytes)",
@@ -2938,8 +2966,8 @@ class FacebookClient:
 
         start = body.find(friendly_marker)
         while start >= 0:
-            window_start = max(0, start - 6000)
-            window_end = min(len(body), start + 6000)
+            window_start = max(0, start - GROUP_DISCUSSION_WINDOW_CHARS)
+            window_end = min(len(body), start + GROUP_DISCUSSION_WINDOW_CHARS)
             window = body[window_start:window_end]
 
             doc_matches = list(re.finditer(r'"queryID":"(\d+)"', window))
