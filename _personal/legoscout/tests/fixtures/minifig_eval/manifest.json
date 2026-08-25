@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "asset_root": "workspace",
+  "assets_disposable": true,
+  "listings": [
+    {
+      "listing_key": "k-bid|66023-13 Mini Fig",
+      "source": "k-bid",
+      "provenance": {
+        "kind": "classifier-saved-photo",
+        "source_url": "https://k-img.k-bid.com/66023/35633983.jpg?v=1786991511"
+      },
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "asset": "assets/kbid-66023-13-front.jpg",
+      "photo_sha256": "99506f93ddfa95161c515b412968ced31f7861dbee97eacc1911a4fc5aab4f94",
+      "image_size": [1512, 1512],
+      "expected_boxes": [
+        [0.052, 0.250, 0.311, 0.736],
+        [0.324, 0.377, 0.620, 0.753],
+        [0.661, 0.263, 0.956, 0.730]
+      ],
+      "expected_identities": [null, null, null],
+      "expected_quantities": [1, 1, 1],
+      "hard_case_tags": ["non-humanoid-droid", "white-background"]
+    },
+    {
+      "listing_key": "k-bid|66023-16 Mini Fig",
+      "source": "k-bid",
+      "provenance": {
+        "kind": "classifier-saved-photo",
+        "source_url": "https://k-img.k-bid.com/66023/35634005.jpg?v=1786991617"
+      },
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "asset": "assets/kbid-66023-16-front.jpg",
+      "photo_sha256": "e4815dfdaeb3f0fa829ce3181b003c199f6e68f64c94285df6ec665ff8331466",
+      "image_size": [1512, 1512],
+      "expected_boxes": [
+        [0.047, 0.300, 0.328, 0.716],
+        [0.278, 0.277, 0.690, 0.724],
+        [0.665, 0.303, 0.953, 0.733]
+      ],
+      "expected_identities": [null, null, null],
+      "expected_quantities": [1, 1, 1],
+      "hard_case_tags": ["accessory-arms", "same-identity-multiples"]
+    },
+    {
+      "listing_key": "k-bid|66023-18 Mini Fig",
+      "source": "k-bid",
+      "provenance": {
+        "kind": "classifier-saved-photo",
+        "source_url": "https://k-img.k-bid.com/66023/35634015.jpg?v=1786991706"
+      },
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "asset": "assets/kbid-66023-18-front.jpg",
+      "photo_sha256": "09f0815143541b28afd19a2e91f81493fe22f415c01622bb073fafabd4415210",
+      "image_size": [1512, 1512],
+      "expected_boxes": [
+        [0.020, 0.298, 0.214, 0.645],
+        [0.205, 0.309, 0.397, 0.652],
+        [0.365, 0.350, 0.584, 0.691],
+        [0.578, 0.342, 0.784, 0.717],
+        [0.766, 0.368, 0.975, 0.711]
+      ],
+      "expected_identities": [null, null, null, null, null],
+      "expected_quantities": [1, 1, 1, 1, 1],
+      "hard_case_tags": ["five-across", "close-spacing"]
+    }
+  ]
+}

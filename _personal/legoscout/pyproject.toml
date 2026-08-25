@@ -13,6 +13,8 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "jsonschema>=4",
     "Pillow>=12.2.0",
+    "torch==2.13.0",
+    "transformers==5.15.1",
 ]
 
 [dependency-groups]
