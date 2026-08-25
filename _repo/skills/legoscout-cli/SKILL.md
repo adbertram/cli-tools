@@ -31,12 +31,16 @@ legoscout <command-group> <action> [arguments] [options]
 | Print the deal-record schema for one pipeline phase | `legoscout deals schema [PHASE]` |
 | Set one deal's status | `legoscout deals status <LISTING_KEY> <STATUS>` |
 | Hard gate: a deal record is invalid unless it stores a usable numeric price | `legoscout deals validate` |
-| Snapshot adam-server's shared ledger down to the local working copy | `legoscout deploy pull-db` |
-| Push the local ledger to adam-server, then deploy code if it changed | `legoscout deploy push` |
+| Pull adam-server's shared ledger and crops into the local workspace | `legoscout deploy pull-db` |
+| Push the local ledger/crops, then deploy code if sync succeeded | `legoscout deploy push` |
 | Roll adam-server back to an earlier release and restart it | `legoscout deploy rollback [TARGET]` |
 | Whether adam-server's code is in sync, release list, pm2 status | `legoscout deploy status` |
 | Print the deals-table rows as JSON | `legoscout display rows` |
 | Serve the deals page | `legoscout display serve` |
+| Detect figures in already-saved listing photos | `legoscout minifig detect --input <FILE> --output <FILE>` |
+| Group cached Brickognize evidence without claiming identity | `legoscout minifig identify --input <FILE> --output <FILE>` |
+| Validate agent evidence, finalize quantities, and price verified IDs | `legoscout minifig price --input <FILE> --output <FILE>` |
+| Emit a human-label queue and score completed labels | `legoscout minifig eval --manifest <FILE> --labels <FILE> --workspace <DIR> --output <FILE> [--stage all]` |
 | Discover an AuctionNinja house's published premium, tax and origin | `legoscout pricing auctionninja-fees` |
 | The published fee configuration for one source | `legoscout pricing fees --source <SOURCE>` |
 | Fetch a listing's images for the vision pass | `legoscout pricing images` |
@@ -88,6 +92,7 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
 - **deals** -- The canonical deal ledger (subcommands: build, expire, get, list, read, refresh, replay, run-manifest, schema, status, validate)
 - **deploy** -- Sync the ledger and app code to adam-server (subcommands: pull-db, push, rollback, status)
 - **display** -- The local deals web page (subcommands: rows, serve)
+- **minifig** -- Detect, identify, price, and evaluate listing minifigures (subcommands: detect, eval, identify, price)
 - **pricing** -- Deal economics: fees, landed cost, comps and freight (subcommands: auctionninja-fees, comps, comps-batch, ebay-comps, fees, images, landed-cost, pickup-area, preflight, profit, rebuild-pickup-area, set-sales, shipping)
 - **prospects** -- Prospecting: new inventory sources and their contacts (subcommands: contacts, create, get, hypotheses, list, outreach, runs)
 - **score** -- The deterministic 0-100 deal score (subcommands: deal, rescore)
