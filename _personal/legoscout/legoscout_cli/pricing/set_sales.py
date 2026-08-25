@@ -122,6 +122,7 @@ def cached_bricklink_json(
     runner: Runner = run_bricklink_json,
     cache_path: str = CACHE,
     now: datetime | None = None,
+    refresh: bool = False,
 ) -> dict[str, Any]:
     """`run_bricklink_json` with an expiring on-disk cache.
 
@@ -134,12 +135,18 @@ def cached_bricklink_json(
     LookupFailed is NOT cached -- a rate limit, a network error, or a missing
     CLI are all transient, and storing one would turn a blip into a lasting
     wrong answer.
+
+    `refresh=True` bypasses a warm entry, refetches, and rewrites the cache:
+    the caller decides staleness is wrong (a price that moved under a live
+    deal, an operator-forced reprice). The TTL still governs ordinary reads.
     """
     now = now or datetime.now(timezone.utc)
     key = " ".join(args)
     ttl = _ttl_days(args)
 
     entry = json_cache.read(cache_path).get(key)
+    if refresh:
+        entry = None
     if entry is not None:
         window = _NOT_FOUND_TTL_DAYS if entry.get("not_found") else ttl
         if _fresh(entry, window, now):
