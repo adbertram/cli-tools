@@ -385,9 +385,14 @@ facebook messenger requests --table
 Read posts from Facebook Groups, list joined groups, create posts, comment, and reply.
 
 ```bash
-# List all groups you've joined
+# List the groups you've joined and the join requests still pending
 facebook groups list
 facebook groups list --table --limit 50
+facebook groups list --filter "membership:eq:member"
+
+# Get one group, including whether this session can read its posts
+facebook groups get 123456789
+facebook groups get 123456789 --properties group_id,privacy,membership,posts_readable
 
 # List posts from a group (by ID or name)
 facebook groups posts list 123456789
@@ -445,6 +450,47 @@ Measure end-to-end process timing for `facebook groups posts list`, including CL
 `--limit` values from 1 to 25. Add `--full-threads` to fetch the thread
 permalink, full body text, image URLs, and nested comments/replies for each
 returned post in a single command invocation.
+
+### Group membership and readability
+
+`facebook groups get` reports three fields read from the live group page and
+never inferred:
+
+| Field | Values | Meaning |
+|-------|--------|---------|
+| `privacy` | `public`, `private` | Facebook's own privacy setting for the group. |
+| `membership` | `member`, `pending`, `non_member` | Where the authenticated account stands. `pending` means a join request was submitted and has not been approved. |
+| `posts_readable` | `true`, `false` | Whether this session can actually read the group's posts. A member always can; a non-member or pending requester can read a public group and cannot read a private one. |
+
+```bash
+facebook groups get 1647953932130640
+# {"group_id": "1647953932130640", "name": "The Lego Group - Buy, Sell & Swap",
+#  "url": "...", "member_count": "13.9K members", "privacy": "private",
+#  "membership": "pending", "posts_readable": false}
+```
+
+`facebook groups posts list` **fails loudly** on an unreadable group instead of
+returning an empty list:
+
+```bash
+facebook groups posts list 1647953932130640 --limit 2
+# exit code 1
+# stderr: Error: UNREADABLE_GROUP: Facebook group 1647953932130640
+#         (privacy=private, membership=pending) is not readable by this
+#         authenticated session, so its posts cannot be listed. ...
+```
+
+The `UNREADABLE_GROUP:` prefix is a stable marker. Exit code 1 with that marker
+means "this session cannot see the group"; exit code 0 with `[]` means the group
+is readable and genuinely has no posts in the requested window; exit code 2
+still means a credential failure.
+
+`facebook groups list` reports `group_id`, `name`, `url`, and `membership`
+(`member` or `pending`) for every row, joined groups first. Facebook renders
+neither privacy nor member counts on that page, so `privacy`, `posts_readable`,
+and `member_count` stay `null` there — run `groups get` for those. `group_id` is
+Facebook's own URL reference: the numeric id, or the vanity slug for groups that
+have one. Every `facebook groups ...` command accepts either.
 
 ### Profiles
 

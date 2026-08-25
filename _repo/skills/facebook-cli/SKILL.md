@@ -24,8 +24,10 @@ facebook <command-group> <action> [arguments] [options]
 | Browse Today's picks | `facebook marketplace list --table` |
 | Get listing details | `facebook marketplace get ITEM_ID` |
 | Check listing availability | `facebook marketplace status ITEM_ID` |
-| List group posts | `facebook groups list GROUP_ID --table` |
-| Get a group post | `facebook groups get GROUP_ID/posts/POST_ID` |
+| List your groups + pending requests | `facebook groups list --limit 100 --table` |
+| Check a group's privacy/membership | `facebook groups get GROUP_ID` |
+| List group posts | `facebook groups posts list GROUP_ID --table` |
+| Get a group post | `facebook groups posts get GROUP_ID/posts/POST_ID` |
 | List conversations | `facebook messenger list --table` |
 | Read messages | `facebook messenger get CONVERSATION_ID` |
 | Send message | `facebook messenger send CONVERSATION_ID --text "Hello"` |
@@ -39,7 +41,7 @@ This file contains complete command syntax, all arguments, all options, and usag
 </principle>
 
 <principle name="Command Groups">
-- **groups** — Read posts from Facebook Groups (list, get)
+- **groups** — Enumerate your groups and pending join requests (`groups list`), read one group's privacy/membership/readability (`groups get`), and read or write its posts (`groups posts list|get|create|comment|reply`)
 - **marketplace** — Search, browse, inspect, and check Facebook Marketplace listings (list, get, status)
 - **messenger** — Messenger conversations (list, get, send, requests)
 - **auth** — Manage authentication via headed browser (login, logout, status, test)
@@ -51,6 +53,49 @@ This file contains complete command syntax, all arguments, all options, and usag
 <reference_index>
 **`usage.json`** — Complete command tree with arguments, options, defaults, and usage instructions for every command.
 </reference_index>
+
+<principle name="Group Membership, Privacy, and Readability">
+Whether a group's posts can be read is a function of the group's privacy AND the
+authenticated account's membership. Both are reported by `facebook groups get`,
+read from the live group page and never inferred:
+
+- `privacy` — `"public"` or `"private"`.
+- `membership` — `"member"`, `"pending"` (join request submitted, not yet approved), or `"non_member"`.
+- `posts_readable` — whether THIS session can actually read the group's posts. A member always can; a non-member or pending requester can read a public group and cannot read a private one.
+
+An unknown Facebook privacy label or `viewer_join_state` raises instead of
+defaulting, so a Facebook change surfaces as a loud failure rather than a group
+silently reported as unreadable (or readable).
+
+`facebook groups posts list` on an unreadable group exits **1** and writes a
+stderr message starting with the stable marker `UNREADABLE_GROUP:`, naming the
+privacy and membership that produced it. It NEVER returns `[]` with exit 0 for a
+group this session cannot see — that silent-empty made a private group with a
+pending join request indistinguishable from a group with no new posts. The exit
+contract for `groups posts list`:
+
+| Outcome | Exit | stdout | stderr |
+|---------|------|--------|--------|
+| Readable group, posts found | 0 | post array | progress only |
+| Readable group, no posts in window | 0 | `[]` | progress only |
+| Unreadable group | 1 | (empty) | `Error: UNREADABLE_GROUP: ...` |
+| Credential failure | 2 | (empty) | `Error: ...` |
+
+Before crawling a group you have not confirmed, call `facebook groups get
+<group_id>` and gate on `posts_readable`.
+
+`facebook groups list` returns BOTH joined groups and pending join requests,
+joined first, each row carrying `membership`. Filter with
+`--filter "membership:eq:member"` when only joined groups matter. Every row
+carries `group_id`, `name`, and `url`; `group_id` is Facebook's own URL
+reference — the numeric id, or the vanity slug for groups that have one, and
+every `facebook groups ...` command accepts either. Facebook renders neither
+privacy nor member counts on that page, so `privacy`, `posts_readable`, and
+`member_count` are `null` on `list` rows — run `groups get` for those. `--limit`
+caps how many rows are read from the scrolled page, so pass a limit at or above
+the counts Facebook prints in its own section headings ("All groups you've
+joined (34)", "Pending group requests (7)") to enumerate everything.
+</principle>
 
 <principle name="Group Comment Verification">
 `facebook groups posts comment` and `facebook groups posts reply` perform multi-stage verification after submitting (composer-cleared → comment-count delta → markdown-stripped text-on-page) and return:

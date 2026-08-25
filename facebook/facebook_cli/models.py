@@ -151,12 +151,33 @@ class MarketplaceListing(CLIModel):
 
 
 class Group(CLIModel):
-    """A Facebook Group the user has joined."""
+    """A Facebook Group, as the authenticated session sees it."""
 
+    #: Facebook's own URL reference for the group: its numeric id, or the
+    #: vanity slug when the group has one and the surface that was read only
+    #: rendered the slug. Every `facebook groups ...` command accepts either.
+    #: `get` always reports the numeric id, because Facebook's group payload
+    #: carries it even when the URL used a slug.
     group_id: str = Field(frozen=True)
     name: str
     url: Optional[str] = None
     member_count: Optional[str] = None
+    #: Facebook's own privacy setting for the group: "public" or "private".
+    #: None means it was not read -- the joined-groups list page never renders
+    #: it, so only `get` reports it. It is NEVER inferred.
+    privacy: Optional[str] = None
+    #: Where the authenticated account stands with this group: "member" (joined),
+    #: "pending" (join request submitted, not yet approved), or "non_member".
+    #: None means it was not read.
+    membership: Optional[str] = None
+    #: Whether this authenticated session can actually read the group's posts,
+    #: derived from privacy and membership: a member always can; a non-member or
+    #: pending requester can read a public group and cannot read a private one.
+    #:
+    #: This exists because `groups posts list` on an unreadable group used to
+    #: return [] with exit 0, which is indistinguishable from a group that has
+    #: no posts. None means it was not determined; it is never guessed.
+    posts_readable: Optional[bool] = None
 
 
 class Comment(CLIModel):

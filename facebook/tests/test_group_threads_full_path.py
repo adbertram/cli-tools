@@ -1,10 +1,21 @@
 import json
+from pathlib import Path
 
 from facebook_cli import client as client_mod
 from facebook_cli import main as main_mod
 from facebook_cli import _helpers as helpers_mod
 from cli_tools_shared.exceptions import ClientError
 from facebook_cli.models import Comment, GroupPost
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def _group_header_script(stem: str) -> str:
+    """Verbatim group profile header script captured live 2026-08-25.
+
+    See ``test_group_membership_and_readability.py`` for the capture details.
+    """
+    return (FIXTURES / f"{stem}.script.txt").read_text(encoding="utf-8")
 
 
 def test_group_post_model_dump_includes_thread_metadata():
@@ -212,12 +223,13 @@ def test_list_group_posts_full_threads_fetches_permalink_metadata(monkeypatch):
     assert posts[0].comments[0].text == "Comment"
 
 
-def test_get_group_extracts_rendered_metadata(monkeypatch):
+def test_get_group_reports_privacy_membership_and_readability(monkeypatch):
     monkeypatch.setattr(client_mod, "get_config", lambda: object())
 
     class FakePage:
         def evaluate(self, script):
-            return {"name": "BrickLink", "memberCount": "47.2K members"}
+            assert "profile_header_renderer" in script
+            return [_group_header_script("group_header_public_member")]
 
     requested = []
     client = client_mod.FacebookClient()
@@ -228,8 +240,11 @@ def test_get_group_extracts_rendered_metadata(monkeypatch):
 
     assert requested == ["https://www.facebook.com/groups/2318028917/"]
     assert group.group_id == "2318028917"
-    assert group.name == "BrickLink"
-    assert group.member_count == "47.2K members"
+    assert group.name == "BrickLink Worldwide Buyers and Sellers"
+    assert group.member_count == "38.9K members"
+    assert group.privacy == "public"
+    assert group.membership == "member"
+    assert group.posts_readable is True
 
 
 def test_list_group_post_summaries_uses_trusted_scroll_and_accumulates_virtualized_batches(monkeypatch):
@@ -240,6 +255,10 @@ def test_list_group_post_summaries_uses_trusted_scroll_and_accumulates_virtualiz
             self.scrolls = 0
             self.keys = []
             self.waits = []
+
+        def evaluate(self, script):
+            assert "profile_header_renderer" in script
+            return [_group_header_script("group_header_public_member")]
 
         def keyboard_press(self, key):
             assert key == "End"

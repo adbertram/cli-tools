@@ -285,6 +285,7 @@ def _extract_items(data):
 
 GET_IDENTIFIER_FIELDS = {
     ("ahrefs", "site-audit"): "project_id",
+    ("facebook", "groups"): "group_id",
     ("progress-servicenow", "ticket template"): "key",
     ("venmo", "transactions"): "payment_id",
 }

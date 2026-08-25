@@ -23,8 +23,8 @@ app = typer.Typer(help="Manage Facebook Groups", no_args_is_help=True)
 POST_COLUMNS = ["post_id", "author", "text", "timestamp"]
 POST_HEADERS = ["Post ID", "Author", "Text", "Timestamp"]
 
-GROUP_COLUMNS = ["group_id", "name", "member_count", "url"]
-GROUP_HEADERS = ["Group ID", "Name", "Members", "URL"]
+GROUP_COLUMNS = ["group_id", "name", "membership", "url"]
+GROUP_HEADERS = ["Group ID", "Name", "Membership", "URL"]
 
 # --- Posts sub-app ---
 posts_app = typer.Typer(help="Manage posts in Facebook Groups", no_args_is_help=True)
@@ -42,6 +42,12 @@ def posts_list(
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
     """List posts from a Facebook Group.
+
+    Fails with exit code 1 and an "UNREADABLE_GROUP:" stderr message when this
+    session cannot see the group's posts (a private group you have not joined,
+    or one whose join request is still pending), so an unreadable group is never
+    reported as an empty one. Use 'facebook groups get <group_id>' to check
+    posts_readable before crawling.
 
     Examples:
         facebook groups posts list 123456789
@@ -142,11 +148,17 @@ def groups_list(
     filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
-    """List Facebook Groups the logged-in user has joined.
+    """List Facebook Groups the logged-in user has joined or requested to join.
+
+    Every row carries group_id, name, url, and membership ("member" or
+    "pending"); joined groups are listed before pending requests. Facebook does
+    not render privacy or member counts on this page, so those stay null - use
+    'facebook groups get <group_id>' for them.
 
     Examples:
         facebook groups list
         facebook groups list --table --limit 50
+        facebook groups list --filter "membership:eq:member"
         facebook groups list --filter "name:contains:Python"
     """
     with client_session() as client:
@@ -167,11 +179,17 @@ def groups_get(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
-    """Get a specific Facebook Group by ID.
+    """Get a specific Facebook Group by ID, slug, or URL.
+
+    Reports the group's privacy ("public"/"private"), this session's membership
+    ("member"/"pending"/"non_member"), and posts_readable - whether this session
+    can actually read the group's posts. All three are read from the live group
+    page and never inferred.
 
     Examples:
         facebook groups get 123456789
         facebook groups get 123456789 --table
+        facebook groups get 123456789 --properties group_id,privacy,membership,posts_readable
     """
     with client_session() as client:
         group = client.get_group(group_id)

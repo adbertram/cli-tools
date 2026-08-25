@@ -171,6 +171,21 @@ def _apply_properties(data: dict, properties: str) -> dict:
     return {field: data[field] for field in fields if field in data}
 
 
+def _fast_path_error(exc: Exception) -> int:
+    """Report a fast-path failure exactly as the Typer path reports it.
+
+    The fast paths below skip Typer for latency, so they must not invent their
+    own error contract. These commands used to return 2 for every ClientError,
+    which is the code reserved for credential failures -- a caller could not
+    tell "this session cannot read that group" from "authentication is broken".
+    ``handle_error`` is the single owner of the message format and the exit
+    code (2 for CredentialError, 1 for everything else).
+    """
+    from cli_tools_shared.output import handle_error
+
+    return handle_error(exc)
+
+
 def _fast_groups_get(argv: list[str]) -> Optional[int]:
     parsed = _parse_fast_groups_get(argv)
     if parsed is None:
@@ -183,8 +198,7 @@ def _fast_groups_get(argv: list[str]) -> Optional[int]:
     try:
         data = client.get_group(group_id).model_dump()
     except ClientError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        return 2
+        return _fast_path_error(exc)
     finally:
         client.close()
 
@@ -212,8 +226,7 @@ def _fast_groups_posts_get(argv: list[str]) -> Optional[int]:
     try:
         post = client.get_group_post(post_ref)
     except ClientError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        return 2
+        return _fast_path_error(exc)
     finally:
         client.close()
 
@@ -234,8 +247,7 @@ def _fast_groups_posts_list(argv: list[str]) -> Optional[int]:
     try:
         posts = client.list_group_posts(group_id, limit=limit, full_threads=full_threads)
     except ClientError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        return 2
+        return _fast_path_error(exc)
     finally:
         client.close()
 

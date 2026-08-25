@@ -517,8 +517,169 @@ CAPTURE_CONFLICT_MAPS = {
 TILE_SHIPPING_PLACEHOLDER_LOCATION = "Ships to you"
 
 
+# Facebook's own group profile header lives in a single embedded Relay
+# stream payload on the rendered group page. Captured live 2026-08-25 on an
+# authenticated session: exactly one <script> on /groups/<ref>/ carries
+# "profile_header_renderer", and that one script is ~25-160KB while the whole
+# document is 3-4MB. Pulling only the matching scripts across CDP keeps the read
+# cheap without giving up the verbatim payload.
+GROUP_HEADER_SCRIPTS_JS = """() => {
+    const marker = '"profile_header_renderer"';
+    return Array.from(document.querySelectorAll('script'))
+        .map((node) => node.textContent || '')
+        .filter((text) => text.includes(marker));
+}"""
+
+# Facebook's own ``Group.viewer_join_state`` enum, mapped to the membership
+# answer this CLI reports. Values captured live 2026-08-25 from the
+# authenticated group page of four known-state groups:
+#
+#   MEMBER                 -> 2318028917 (public, joined) and 1865822383631015
+#                             (private, joined); page renders "Joined".
+#   REQUESTED              -> 1647953932130640 (private, join request pending);
+#                             page renders "Cancel request" and "Your membership
+#                             is pending".
+#   CAN_JOIN               -> 250458852075384 (public, never joined); page
+#                             renders "Join group".
+#   CAN_REQUEST            -> a private related-group card on the same page,
+#                             never joined; page renders "Join group".
+#   CANNOT_JOIN_OR_REQUEST -> the same private pending group rendered by a
+#                             LOGGED-OUT fetch of the identical URL, i.e. a
+#                             viewer with no way in.
+#
+# An enum value outside this table is a Facebook change, not a viewer state to
+# guess at: the extractor raises instead of defaulting to "non_member", because
+# guessing "non_member" for a state that actually means "member" would silently
+# mark a readable group unreadable.
+GROUP_JOIN_STATE_MEMBERSHIP = {
+    "MEMBER": "member",
+    "REQUESTED": "pending",
+    "CAN_JOIN": "non_member",
+    "CAN_REQUEST": "non_member",
+    "CANNOT_JOIN_OR_REQUEST": "non_member",
+}
+
+# Facebook's rendered ``privacy_info.title.text`` for a group, mapped to the
+# privacy answer this CLI reports. Both strings captured live 2026-08-25 in the
+# same payload as the join states above. Anything else raises: a group whose
+# privacy cannot be read cannot have its readability derived either.
+GROUP_PRIVACY_TITLES = {
+    "Public group": "public",
+    "Private group": "private",
+}
+
+# Facebook's own section headings on /groups/joins/, mapped to the membership
+# each section describes. Captured live 2026-08-25: the page's [role="main"]
+# subtree contains exactly these two headings, each followed by its own list of
+# [role="listitem"] rows. Everything else on the page (the notification tray,
+# the left navigation, the recently-visited rail) lives OUTSIDE [role="main"],
+# so scoping the extractor there is what keeps navigation chrome out of the
+# result.
+JOINED_GROUPS_SECTION_MEMBERSHIP = (
+    ("All groups you've joined", "member"),
+    ("Groups you've joined", "member"),
+    ("Pending group requests", "pending"),
+)
+
+# Extract Facebook's own "Your groups" rows from the rendered /groups/joins/ page.
+#
+# Each row is a [role="listitem"] holding three links to the same group: an
+# avatar link, a name link, and a "View group" link. Captured live 2026-08-25,
+# the avatar link's image carries the group name as an aria-label on an <svg>
+# (there is no <img alt> and no aria-label on the anchor itself), and the name
+# link holds the name as its own text with NO span/strong/h3 descendant.
+#
+# That shape is exactly what the previous extractor could not read: it looked
+# only at <img alt>, the anchor's aria-label, and span/strong/h3 children, so
+# both the avatar link and the name link produced no name, and the only anchor
+# that DID produce one was the "View group" link -- whose aria-label is the
+# literal string "View group". Every row past the first handful was therefore
+# reported with the name "View group".
+#
+# Rows are returned in section order (joined first, then pending) so a small
+# --limit still answers "which groups has Adam joined?" first. A row that does
+# not yield exactly one group reference and one avatar aria-label name, or that
+# sits under a heading this CLI does not recognize, is returned in `unparsed`
+# so the caller can fail loudly instead of dropping it.
+JOINED_GROUPS_JS = """(sections) => {
+    const HREF = /^https?:\\/\\/(?:www\\.)?facebook\\.com\\/groups\\/([^/?#]+)/;
+    const main = document.querySelector('[role="main"]');
+    if (!main) {
+        return {main_exists: false, groups: [], unparsed: []};
+    }
+    const headingText = (row) => {
+        let node = row.closest('ul, [role="list"]');
+        for (let hop = 0; hop < 6 && node; hop++) {
+            const parent = node.parentElement;
+            const heading = parent
+                ? parent.querySelector('h1, h2, h3, h4, [role="heading"]')
+                : null;
+            if (heading) {
+                return (heading.textContent || '').replace(/\\s+/g, ' ').trim();
+            }
+            node = parent;
+        }
+        return '';
+    };
+    const buckets = new Map(sections.map((entry) => [entry[1], []]));
+    const unparsed = [];
+    const seen = new Set();
+    main.querySelectorAll('[role="listitem"]').forEach((row) => {
+        const anchors = Array.from(row.querySelectorAll('a[href*="/groups/"]'));
+        if (!anchors.length) {
+            return;
+        }
+        const heading = headingText(row);
+        const section = sections.find((entry) => heading.startsWith(entry[0]));
+        const refs = [...new Set(anchors.map((a) => {
+            const match = HREF.exec(a.href || '');
+            return match ? match[1] : null;
+        }).filter(Boolean))];
+        const names = [...new Set(
+            Array.from(row.querySelectorAll('svg[aria-label], [role="img"][aria-label]'))
+                .map((node) => (node.getAttribute('aria-label') || '').trim())
+                .filter(Boolean)
+        )];
+        if (!section || refs.length !== 1 || names.length !== 1) {
+            unparsed.push({
+                heading: heading.slice(0, 120),
+                refs: refs.slice(0, 5),
+                names: names.slice(0, 5),
+                text: (row.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160),
+            });
+            return;
+        }
+        if (seen.has(refs[0])) {
+            return;
+        }
+        seen.add(refs[0]);
+        buckets.get(section[1]).push({
+            group_id: refs[0],
+            name: names[0],
+            url: 'https://www.facebook.com/groups/' + refs[0] + '/',
+            membership: section[1],
+        });
+    });
+    const groups = [];
+    [...new Set(sections.map((entry) => entry[1]))].forEach((membership) => {
+        buckets.get(membership).forEach((row) => groups.push(row));
+    });
+    return {main_exists: true, groups, unparsed};
+}"""
+
+
 class GroupDiscussionPreloadMissing(ClientError):
     """Facebook omitted the Relay request metadata needed for feed GraphQL."""
+
+
+class GroupNotReadable(ClientError):
+    """The authenticated session cannot read the requested group's posts.
+
+    Raised instead of returning an empty post list, because an empty list is
+    indistinguishable from a group that simply has no posts. Every message
+    starts with ``UNREADABLE_GROUP:`` so a caller can tell "this session cannot
+    see the group" from any other listing failure without parsing prose.
+    """
 
 
 class FacebookClient:
@@ -2001,73 +2162,163 @@ class FacebookClient:
     # --- Groups methods ---
 
     def _extract_joined_groups(self, page) -> List[Dict]:
-        """Extract groups from the user's joined groups page.
+        """Extract the user's joined groups and pending join requests.
 
         Returns:
-            List of group dicts with group_id, name, url, member_count.
+            List of group dicts with group_id, name, url, membership. Joined
+            groups come first, then pending join requests.
+
+        Raises:
+            ClientError: The page has no ``[role="main"]`` subtree, or a row in
+                one of Facebook's own group sections could not be read. Both are
+                Facebook markup changes, and dropping the affected rows silently
+                would under-report which groups the account can reach.
         """
-        js = (
-            '() => {'
-            ' const groups = [];'
-            ' const seen = new Set();'
-            ' const links = document.querySelectorAll(\'a[href*="/groups/"]\');'
-            ' links.forEach(a => {'
-            '   const href = a.href || "";'
-            '   const m = href.match(/\\/groups\\/([^/?]+)/);'
-            '   if (!m) return;'
-            '   const gid = m[1];'
-            '   if (gid === "feed" || gid === "discover" || gid === "joins" || seen.has(gid)) return;'
-            # Try to get a clean group name from an image alt text or aria-label first,
-            # then fall back to the shortest meaningful text child.
-            '   let name = "";'
-            '   const img = a.querySelector("img[alt]");'
-            '   if (img && img.alt && img.alt.length > 1 && img.alt.length < 100) {'
-            '     name = img.alt.trim();'
-            '   }'
-            '   if (!name) {'
-            '     const label = a.getAttribute("aria-label");'
-            '     if (label && label.length > 1 && label.length < 100) name = label.trim();'
-            '   }'
-            '   if (!name) {'
-            # Walk child spans/divs for the shortest non-trivial text (likely the group name)
-            # Skip text containing notification indicators
-            '     const candidates = [];'
-            '     a.querySelectorAll("span, strong, h3").forEach(el => {'
-            '       const t = (el.innerText || "").trim();'
-            '       if (t.length >= 3 && t.length <= 80'
-            '           && !t.includes("Unread") && !t.includes("Mark as read")'
-            '           && !t.includes("posted in") && !t.includes("ago")'
-            '           && !t.match(/^\\d+[hmd]$/)) {'
-            '         candidates.push(t);'
-            '       }'
-            '     });'
-            '     if (candidates.length > 0) {'
-            '       candidates.sort((a, b) => a.length - b.length);'
-            '       name = candidates[0];'
-            '     }'
-            '   }'
-            '   if (!name || name.length < 2) return;'
-            '   seen.add(gid);'
-            '   let memberCount = "";'
-            '   const fullText = (a.innerText || "");'
-            '   const mMatch = fullText.match(/(\\d[\\d,.]*\\s*[KkMm]?\\s*members?)/i);'
-            '   if (mMatch) memberCount = mMatch[1].trim();'
-            '   groups.push({group_id: gid, name: name, url: href.split("?")[0], member_count: memberCount});'
-            ' });'
-            ' return groups;'
-            ' }'
-        )
-        result = page.evaluate(js)
-        return result if isinstance(result, list) else []
+        result = page.evaluate(JOINED_GROUPS_JS, [list(entry) for entry in JOINED_GROUPS_SECTION_MEMBERSHIP])
+        if not isinstance(result, dict):
+            raise ClientError("Joined-groups extractor returned a non-object result.")
+        if not result.get("main_exists"):
+            raise ClientError(
+                "Facebook's joined-groups page rendered no [role=\"main\"] subtree, so its "
+                "group sections could not be read."
+            )
+        unparsed = result.get("unparsed")
+        if not isinstance(unparsed, list):
+            raise ClientError("Joined-groups extractor returned a non-list `unparsed` field.")
+        if unparsed:
+            raise ClientError(
+                f"Facebook's joined-groups page contained {len(unparsed)} group row(s) this CLI "
+                f"could not read. First: {unparsed[0]}. A recognized row needs a heading from "
+                f"{[entry[0] for entry in JOINED_GROUPS_SECTION_MEMBERSHIP]}, exactly one group "
+                "link, and exactly one avatar aria-label naming the group."
+            )
+        groups = result.get("groups")
+        if not isinstance(groups, list):
+            raise ClientError("Joined-groups extractor returned a non-list `groups` field.")
+        return groups
 
     def list_joined_groups(self, limit: int = 50) -> List[Group]:
-        """List Facebook Groups the user has joined."""
+        """List Facebook Groups the user has joined, plus pending join requests.
+
+        Each row carries ``membership`` ("member" or "pending"), and joined
+        groups are returned before pending requests. Facebook does not render a
+        member count or a privacy setting on this page, so ``member_count``,
+        ``privacy``, and ``posts_readable`` stay None; run ``get_group`` for
+        those.
+
+        ``limit`` caps how many rows are read from the page, and Facebook loads
+        the joined-groups list in scrolled batches. Pass a limit at or above the
+        counts Facebook prints in its own section headings to enumerate every
+        row.
+        """
         print_info("Loading joined groups...")
         page = self._get_page(f"{GROUPS_BASE}/joins/", settle_ms=0)
         page.wait_for_selector('a[href*="/groups/"]', timeout=15000)
 
         items = self._scroll_collect(page, self._extract_joined_groups, "group_id", limit, "group")
+        # Facebook renders pending requests above the joined list, and each
+        # scrolled batch appends more joined rows after them. Group the answer
+        # so "which groups has Adam joined?" is not interleaved with requests
+        # that have not been approved.
+        items.sort(key=lambda row: row["membership"] != "member")
         return [Group(**g) for g in items]
+
+    def _extract_group_state(self, page, group_ref: str) -> Dict:
+        """Read a group's identity, privacy, and viewer membership from its live page.
+
+        Reads Facebook's own ``profile_header_renderer`` Relay payload on the
+        rendered group page, scoped to the requested group -- the same page also
+        embeds "Related groups" cards carrying their own ``viewer_join_state``
+        and ``privacy_info``, so an unscoped read would answer for the wrong
+        group. The page must be an authenticated navigation: a logged-out fetch
+        of the identical URL still renders the name, privacy, and member count,
+        but reports a viewer join state for nobody.
+
+        Returns:
+            Dict with group_id, name, member_count, privacy, membership, and
+            posts_readable.
+
+        Raises:
+            ClientError: The header payload is missing, ambiguous, or carries a
+                privacy or join-state token this CLI has not verified.
+        """
+        scripts = page.evaluate(GROUP_HEADER_SCRIPTS_JS)
+        if not isinstance(scripts, list):
+            raise ClientError("Group header script extractor returned a non-list result.")
+
+        headers: List[Dict] = []
+        for text in scripts:
+            if not isinstance(text, str):
+                raise ClientError("Group header script extractor returned a non-string entry.")
+            for result in self._iter_relay_prefetched_stream_results(text, allow_truncated_tail=True):
+                data = result.get("data")
+                if not isinstance(data, dict):
+                    continue
+                group = data.get("group")
+                if not isinstance(group, dict):
+                    continue
+                renderer = group.get("profile_header_renderer")
+                if not isinstance(renderer, dict):
+                    continue
+                header = renderer.get("group")
+                if not isinstance(header, dict):
+                    raise ClientError("Facebook group profile header payload is not an object.")
+                headers.append(header)
+
+        found_ids = [str(header.get("id") or "") for header in headers]
+        matches = [header for header in headers if str(header.get("id") or "") == group_ref]
+        if not matches and not group_ref.isdigit() and len(headers) == 1:
+            # The group was requested by its vanity slug, so the numeric id in
+            # the payload cannot be compared to it. One header on the page is
+            # the requested group's own header.
+            matches = headers
+        if len(matches) != 1:
+            raise ClientError(
+                f"Expected exactly one Facebook group profile header for {group_ref}; the page "
+                f"carried {len(headers)} header(s) with ids {found_ids}."
+            )
+
+        header = matches[0]
+        group_id = str(header.get("id") or "")
+        if not group_id:
+            raise ClientError(f"Facebook group profile header for {group_ref} carries no group id.")
+
+        name = self._extract_text_path(header, ["featurable_title", "text"])
+        if not name:
+            raise ClientError(f"Facebook group {group_id} rendered no group title.")
+
+        privacy_title = self._extract_text_path(header, ["privacy_info", "title", "text"])
+        if privacy_title not in GROUP_PRIVACY_TITLES:
+            raise ClientError(
+                f"Unsupported Facebook group privacy label for {group_id}: {privacy_title!r}. "
+                f"Known labels: {sorted(GROUP_PRIVACY_TITLES)}."
+            )
+        privacy = GROUP_PRIVACY_TITLES[privacy_title]
+
+        join_state = header.get("viewer_join_state")
+        if join_state not in GROUP_JOIN_STATE_MEMBERSHIP:
+            raise ClientError(
+                f"Unsupported Facebook viewer_join_state for group {group_id}: {join_state!r}. "
+                f"Known states: {sorted(GROUP_JOIN_STATE_MEMBERSHIP)}."
+            )
+        membership = GROUP_JOIN_STATE_MEMBERSHIP[join_state]
+
+        member_count = self._extract_text_path(
+            header, ["group_member_profiles", "formatted_count_text"]
+        )
+
+        return {
+            "group_id": group_id,
+            "name": re.sub(r"\s+", " ", name).strip(),
+            "member_count": member_count or None,
+            "privacy": privacy,
+            "membership": membership,
+            # A member reads its own group whatever the privacy setting; a
+            # non-member (or a pending request) reads a public group's posts and
+            # nothing from a private one. Verified live 2026-08-25 against all
+            # four combinations this account can produce.
+            "posts_readable": membership == "member" or privacy == "public",
+        }
 
     def get_group(self, group_id: str) -> Group:
         """Get a Facebook Group by ID or slug."""
@@ -2083,31 +2334,16 @@ class FacebookClient:
 
         page = self._get_page(url)
         self._assert_authenticated_page(page, url, f"Facebook group {group_ref}")
-        metadata = page.evaluate(
-            """() => {
-                const main = document.querySelector('[role="main"]') || document.body;
-                const h1 = main?.querySelector('h1');
-                const name = (h1?.innerText || document.title || '').trim();
-                const text = main?.innerText || document.body?.innerText || '';
-                const memberMatch = text.match(/\\b\\d[\\d,.]*\\s*[KkMm]?\\s+members?\\b/);
-                return {
-                    name,
-                    memberCount: memberMatch ? memberMatch[0].trim() : ''
-                };
-            }"""
-        )
-        if not isinstance(metadata, dict):
-            raise ClientError("Rendered Facebook group metadata extractor returned a non-object result.")
-        name = re.sub(r"\s+", " ", str(metadata.get("name") or "")).strip()
-        if not name or name in ("Facebook", "Error"):
-            raise ClientError("Rendered Facebook group page did not include a group title.")
-        member_count = re.sub(r"\s+", " ", str(metadata.get("memberCount") or "")).strip()
+        state = self._extract_group_state(page, group_ref)
 
         return Group(
-            group_id=group_ref,
-            name=name,
-            url=f"{GROUPS_BASE}/{group_ref}/",
-            member_count=member_count or None,
+            group_id=state["group_id"],
+            name=state["name"],
+            url=f"{GROUPS_BASE}/{state['group_id']}/",
+            member_count=state["member_count"],
+            privacy=state["privacy"],
+            membership=state["membership"],
+            posts_readable=state["posts_readable"],
         )
 
     def _facebook_http_client(self) -> BrowserAuthenticatedHttpClient:
@@ -2121,20 +2357,6 @@ class FacebookClient:
                 timeout=10,
             )
         return self._http_client
-
-    def _fetch_authenticated_facebook_html(self, url: str) -> str:
-        """Fetch enough authenticated Facebook HTML for group metadata."""
-        return self._fetch_authenticated_facebook_page(
-            url,
-            stop_markers=[
-                "</title>",
-                '"group_member_profiles":{"formatted_count_text":"',
-            ],
-        )
-
-    def _fetch_authenticated_facebook_full_html(self, url: str) -> str:
-        """Fetch a complete authenticated Facebook page without launching Chromium."""
-        return self._fetch_authenticated_facebook_page(url)
 
     def _fetch_authenticated_facebook_bootstrap_html(self, url: str) -> str:
         """Fetch only the Facebook Relay bootstrap slice needed for group posts."""
@@ -2160,24 +2382,6 @@ class FacebookClient:
             result.bytes_read,
         )
         return result.text
-
-    def _extract_group_name(self, body: str) -> str:
-        """Extract the group name from fetched Facebook HTML."""
-        title_match = re.search(r"<title[^>]*>(.*?)</title>", body, re.IGNORECASE | re.DOTALL)
-        if not title_match:
-            raise ClientError("Failed to extract group name from Facebook HTML title.")
-
-        name = html.unescape(re.sub(r"\s+", " ", title_match.group(1))).strip()
-        if not name or name == "Facebook" or name == "Error":
-            raise ClientError("Facebook group page did not include a group title.")
-        return name
-
-    def _extract_group_member_count(self, body: str) -> str:
-        """Extract the group member count from fetched Facebook HTML."""
-        match = re.search(r'"group_member_profiles":\{"formatted_count_text":"([^"]+)"', body)
-        if not match:
-            raise ClientError("Failed to extract group member count from Facebook HTML.")
-        return html.unescape(match.group(1))
 
     def _facebook_server_define(self, body: str, name: str) -> Dict:
         """Extract a ServerJS define payload from Facebook HTML."""
@@ -3208,10 +3412,26 @@ class FacebookClient:
         return result if isinstance(result, list) else []
 
     def _list_group_post_summaries(self, group_id: str, limit: int) -> List[GroupPost]:
-        """List summary posts from a rendered Facebook Group feed."""
+        """List summary posts from a rendered Facebook Group feed.
+
+        Raises:
+            GroupNotReadable: The authenticated session cannot see this group's
+                posts. Returning [] here is what made a private group with a
+                pending join request look exactly like a group with no new
+                posts, so the unreadable case fails loudly instead.
+        """
         url = f"{GROUPS_BASE}/{group_id}/"
         page = self._get_page(url, settle_ms=5000)
         self._assert_authenticated_page(page, url, "group feed")
+
+        state = self._extract_group_state(page, group_id)
+        if not state["posts_readable"]:
+            raise GroupNotReadable(
+                f"UNREADABLE_GROUP: Facebook group {state['group_id']} "
+                f"(privacy={state['privacy']}, membership={state['membership']}) is not readable "
+                "by this authenticated session, so its posts cannot be listed. Run "
+                f"'facebook groups get {state['group_id']}' for the full membership state."
+            )
 
         collected: List[Dict] = []
         seen_post_ids: set[str] = set()
