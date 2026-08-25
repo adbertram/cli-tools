@@ -26,12 +26,14 @@ a supervisor that just restarts it is pointless.
 import argparse
 import json
 import os
+import re
 import sys
 import threading
 import webbrowser
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse
+from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 from . import rows
@@ -39,6 +41,7 @@ from ..ledger import db as ledger_db
 from ..ledger import prospects as prospects_db
 from ..scoring import rescore as rescore_ledger
 from ..ledger import sellers as sellers_db
+from ..paths import MINIFIG_CROP_ROOT
 
 DEFAULT_PORT = 8787
 
@@ -67,6 +70,16 @@ _write_lock = threading.Lock()
 ALLOWED_HOSTS = set()
 ALLOWED_ORIGINS = set()
 JSON_CTYPE = "application/json"
+CROP_ROOT = Path(MINIFIG_CROP_ROOT)
+CROP_MAX_BYTES = 10 * 1024 * 1024
+CROP_TYPES = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+}
+CONTENT_HASH_CROP_RE = re.compile(
+    r"^figcrop-v[0-9]+-[0-9a-f]{64}\.(?:jpe?g|png|webp)$", re.I)
 
 
 def build_rows(active_only=True):
@@ -222,6 +235,16 @@ tr.det td{white-space:normal;background:rgba(127,127,127,.05);padding:10px 14px}
 .dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px 18px}
 .dk{font-size:11px;color:var(--dim)}
 .dv{font-size:13px}
+.minifig-summary{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0 8px;font-size:12px;color:var(--dim)}
+.id-state{padding:3px 8px;border-radius:999px;font-weight:600}
+.id-state.complete{background:#d5ead2;color:#2f6929}
+.id-state.incomplete{background:#fbe3b4;color:#875d0d}
+.fig-list{display:grid;gap:8px}
+.fig-entry{display:grid;grid-template-columns:72px minmax(180px,1.6fr) repeat(4,minmax(82px,.55fr));gap:10px;align-items:center;padding:8px;border:1px solid var(--line);border-radius:7px;background:var(--card)}
+.minifig-crop{width:64px;height:64px;object-fit:cover;border-radius:5px;border:1px solid var(--line)}
+.fig-name{font-weight:600}.fig-id,.fig-meta,.fig-notes{font-size:11px;color:var(--dim)}
+.fig-money{text-align:right}.fig-money .dk{text-transform:none}.fig-value,.fig-number{font-weight:600}
+@media(max-width:760px){.fig-entry{grid-template-columns:64px 1fr}.fig-money{text-align:left}}
 .basis{margin-top:8px;font-size:12px;color:var(--dim);font-style:italic}
 .lbl{font-size:11px;font-style:italic;color:var(--dim)}
 #toast{position:fixed;right:18px;bottom:18px;background:var(--card);border:1px solid var(--accent);
@@ -283,7 +306,7 @@ const ACTED=new Set(["rejected","purchased","inquired","bid_placed"]);
 
 const COLS=[{k:"score",l:"Score",s:1},{k:"title",l:"Title",w:"width:99%"},{k:"cat",l:"Cat"},
   {k:"source",l:"Source"},{k:"seller",l:"Seller"},{k:"price",l:"Price",s:1},{k:"total",l:"Landed",s:1},
-  {k:"perLb",l:"$ / lb·fig",s:1},{k:"profit",l:"Profit",s:1},
+  {k:"perLb",l:"$ / lb",s:1},{k:"profit",l:"Profit",s:1},
   {k:"maxPrice",l:"Max bid",s:1},{k:"quality",l:"Qual",s:1},{k:"modelScore",l:"Model",s:1},
   {k:"ends",l:"Ends"},{k:"tlb",l:"Target $"},{k:"act",l:""}];
 
@@ -314,11 +337,10 @@ function money(v){return (v===null||v===undefined||v==="")?"—":"$"+Number(v).t
 
 // Inverts legoscout-pricing's fees.py landed_cost(): that function solves
 // hammer -> landed total; this solves the reverse, target landed total (the
-// $/lb Adam types for a bulk lot, or the $/fig he types for a minifigure lot,
-// times the lot's weight or figure count) -> the hammer bid that reaches it.
+// $/lb Adam types for a bulk lot times its weight) -> the hammer bid that reaches it.
 // Mirrors all three tax_basis rules so the answer matches the Landed column's
 // own math instead of a looser approximation.
-function units(r){return r.weight!=null?r.weight:r.figCount;}
+function units(r){return r.weight;}
 function calcBid(r,target){
   const t=parseFloat(target);
   if(!isFinite(t)||t<=0)return null;
@@ -387,7 +409,7 @@ function sortVal(r,k){
     case"maxPrice":return r.maxPrice;
     case"modelScore":return r.modelScore;
     case"total":return r.total;
-    case"perLb":return r.perLb!=null?r.perLb:r.perFig;
+    case"perLb":return r.perLb;
     case"profit":return profitDisplay(r);
     case"price":return r.auc?null:r.hammer;}
   return null;}
@@ -448,8 +470,38 @@ function sellerCell(r){
     +(on?"★":"☆")+'</span> '+esc(r.sellerName||r.sellerId)+'</td>';
 }
 
+function minifigDetail(r){
+  const complete=!!r.identificationComplete;
+  const summary='<div class="minifig-summary"><span class="id-state '+(complete?"complete":"incomplete")+'">'
+    +(complete?"identification complete":"identification incomplete")+'</span><span>'
+    +Number(r.identifiedCount||0)+' identified · '+Number(r.unknownCount||0)+' unknown</span><span>Identified subtotal '
+    +money(r.minifigSubtotal)+'</span></div>';
+  const figures=(r.figures||[]).map(f=>{
+    const known=!!f.figNo;
+    const identity=known?'<a href="https://www.bricklink.com/v2/catalog/catalogitem.page?M='
+      +encodeURIComponent(f.figNo)+'" target="_blank" rel="noopener noreferrer">'+esc(f.figNo)+'</a>'
+      :'<span class="dim">unknown identity</span>';
+    const notes=[f.conditionNotes].concat(f.errors||[]).filter(Boolean).map(esc).join(' · ');
+    return '<div class="fig-entry" data-fig-status="'+esc(f.status||"unknown")+'">'
+      +'<img class="minifig-crop" src="'+esc(f.cropUrl)+'" alt="'+esc(known?(f.name||f.figNo)+' crop':"Unknown minifigure crop")+'" loading="lazy">'
+      +'<div><div class="dk">Name</div><div class="fig-name">'+esc(f.name||"Unknown")+'</div>'
+      +'<div class="dk">Identity</div><div class="fig-id">'+identity+'</div>'
+      +'<div class="dk">Condition notes</div><div class="fig-notes">'+(notes||'—')+'</div>'
+      +(f.nullValueReason?'<div class="fig-meta">'+esc(f.nullValueReason)+'</div>':'')+'</div>'
+      +'<div class="fig-money"><div class="dk">Qty</div><div class="fig-number">'+Number(f.quantity||0)+'</div></div>'
+      +'<div class="fig-money"><div class="dk">Unit value</div><div class="fig-value">'
+      +(f.unitValue!=null?money(f.unitValue):'—')+'</div></div>'
+      +'<div class="fig-money"><div class="dk">Extended value</div><div class="fig-value">'
+      +(f.extendedValue!=null?money(f.extendedValue):'—')+'</div></div>'
+      +'<div class="fig-money"><div class="dk">Market depth</div><div class="fig-number">'
+      +(f.soldCount!=null?Number(f.soldCount)+' sold':'—')+'</div></div></div>';
+  }).join("");
+  return summary+'<div class="fig-list">'+figures+'</div>';
+}
+
 function detail(r){
   const cells=[];
+  let figureBody="";
   const add=(k,v)=>cells.push('<div><div class="dk">'+k+'</div><div class="dv">'+v+'</div></div>');
   const shipTxt=r.fulfil==="pickup"?'<span class="dim" title="'+PICKUP_TIP+'">pickup</span>'
     :r.ship!=null?money(r.ship)+(r.shipEst?'<span class="dim" title="'+SHIP_TIP+'">~</span>':"")
@@ -460,8 +512,13 @@ function detail(r){
     add("Target colours",r.targetColors?esc(r.targetColors):'<span class="dim">not observed</span>');
   }else if(r.cat==="minifigure"){
     add("Figure count",r.figCount!=null?r.figCount+(r.figSrc&&r.figSrc!=="unknown"?' <span class="dim" title="Count source: '+esc(r.figSrc)+'">('+(r.figSrc==="stated"?"seller stated":"counted from photos")+')</span>':""):'<span class="dim">—</span>');
-    add("eBay $/fig",r.perFig!=null?"$"+Number(r.perFig).toFixed(2):'<span class="dim">—</span>');
-    add("eBay comps",r.ebayCount!=null?r.ebayCount:'<span class="dim">—</span>');
+    if(Array.isArray(r.figures)){
+      figureBody=minifigDetail(r);
+    }else{
+      // Reader-only compatibility for rows written before identifier artifacts.
+      add("Legacy eBay $/fig",r.perFig!=null?"$"+Number(r.perFig).toFixed(2):'<span class="dim">—</span>');
+      add("Legacy eBay comps",r.ebayCount!=null?r.ebayCount:'<span class="dim">—</span>');
+    }
     add("Potential profit",r.profit==null?'<span class="dim">—</span>'
       :'<span class="'+(r.profit>=0?"pos":"neg")+'">'+(r.profit<0?"-$":"$")+Math.abs(r.profit).toFixed(2)+(r.pinc?"*":"")+'</span>');
   }else if(r.cat==="excluded"){
@@ -480,7 +537,7 @@ function detail(r){
   add("Fees",'<span title="'+esc(feeTitle(r))+'">'+esc(r.fees)+(r.feeAmt?" = "+money(r.feeAmt):"")+'</span>');
   add("Images",esc(r.visionStatus).replace(/_/g," "));
   if(r.modelScore!=null)add("Model score",r.modelScore+(r.divergence!=null?' <span class="dim">('+(r.divergence>0?"+":"")+r.divergence+" vs computed)</span>":""));
-  let body='<div class="dgrid">'+cells.join("")+'</div>';
+  let body='<div class="dgrid">'+cells.join("")+'</div>'+figureBody;
   if(r.unscorable)body+='<div class="basis">Not scored: '+esc(r.unscorable)+'</div>';
   else if(r.scoreBasis)body+='<div class="basis">Max bid basis: '+esc(r.scoreBasis)+'</div>';
   return '<tr class="det"><td colspan="'+COLS.length+'">'+body+'</td></tr>';}
@@ -524,8 +581,8 @@ function render(){const d=rows();
       :(st!=="inquired"&&st!=="bid_placed"&&st!=="purchased"
         ?'<button class="b-rej" onclick="mark(\''+r.key+'\',\'rejected\')">Reject</button>':blank);
     const act='<div class="act">'+inqSlot+bidSlot+buySlot+rejSlot+'</div>';
-    const tlbUnit=r.cat==="minifigure"?"/fig":"/lb";
-    const tlbHasUnits=(r.cat==="bulk"&&r.weight)||(r.cat==="minifigure"&&r.figCount);
+    const tlbUnit="/lb";
+    const tlbHasUnits=r.cat==="bulk"&&r.weight;
     const tlbCell=(tlbHasUnits&&r.ltype!=="fixed")
       ?'<td class="tlb"><input type="number" step="0.01" min="0" inputmode="decimal" placeholder="$'+tlbUnit+'" '
         +'value="'+esc(TARGETLB.get(r.key)||"")+'" oninput="setTlb(\''+r.key+'\',this.value)"> '
@@ -545,7 +602,7 @@ function render(){const d=rows();
       +'<td class="num'+(r.auc?" dim":"")+'"'+(r.auc?' title="'+AUCTION_TIP+'"':"")+'>'
         +(r.hammer!=null?money(r.hammer)+(r.auc?"*":""):"—")+'</td>'
       +'<td class="num'+(r.auc?" dim":"")+'">'+(r.total!=null?money(r.total)+(r.auc?"*":""):"—")+'</td>'
-      +'<td class="num dim">'+(r.perLb!=null?"$"+r.perLb.toFixed(2):r.perFig!=null?"$"+r.perFig.toFixed(2):"—")+'</td>'
+      +'<td class="num dim">'+(r.perLb!=null?"$"+r.perLb.toFixed(2):"—")+'</td>'
       +profitCell(r)
       +'<td class="num" style="font-weight:600" title="'+MAXBID_TIP+'">'+money(r.maxPrice)+'</td>'
       +'<td class="num dim" title="'+QUAL_TIP+'">'+(r.quality!=null?r.quality:"—")+'</td>'
@@ -782,20 +839,59 @@ class Handler(BaseHTTPRequestHandler):
         return self._send(500, json.dumps(
             {"ok": False, "error": "internal error - see the server log"}))
 
-    def _send(self, code, body, ctype="application/json"):
+    def _send(self, code, body, ctype="application/json", *,
+              cache_control="no-store"):
         b = body.encode("utf-8") if isinstance(body, str) else body
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(b)))
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", cache_control)
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         self.wfile.write(b)
+
+    def _send_crop(self, encoded_relative):
+        try:
+            relative = unquote(encoded_relative, errors="strict")
+        except UnicodeDecodeError:
+            return self._send(400, json.dumps({"error": "invalid crop path"}))
+        parts = relative.split("/")
+        if (not relative or relative.startswith("/") or "\\" in relative
+                or any(part in ("", ".", "..") for part in parts)):
+            return self._send(403, json.dumps({"error": "crop path not allowed"}))
+
+        root = Path(CROP_ROOT).resolve()
+        target = (root / relative).resolve()
+        if not target.is_relative_to(root):
+            return self._send(403, json.dumps({"error": "crop path not allowed"}))
+        if not target.exists() or not target.is_file():
+            return self._send(404, json.dumps({"error": "crop not found"}))
+        ctype = CROP_TYPES.get(target.suffix.lower())
+        if ctype is None:
+            return self._send(415, json.dumps({"error": "unsupported crop type"}))
+        if target.stat().st_size > CROP_MAX_BYTES:
+            return self._send(413, json.dumps({"error": "crop is too large"}))
+        try:
+            body = target.read_bytes()
+        except OSError:
+            return self._send(404, json.dumps({"error": "crop not found"}))
+        cache_control = (
+            "public, max-age=31536000, immutable"
+            if CONTENT_HASH_CROP_RE.fullmatch(target.name) else "no-store")
+        return self._send(
+            200,
+            body,
+            ctype,
+            cache_control=cache_control,
+        )
 
     def do_GET(self):
         if not self._host_ok():
             return self._send(403, json.dumps({"error": "host not allowed"}))
         parsed = urlparse(self.path)
         path = parsed.path
+        if path.startswith("/crops/"):
+            return self._send_crop(path[len("/crops/"):])
         if path == "/":
             return self._send(200, PAGE, "text/html; charset=utf-8")
         if path == "/rows.json":

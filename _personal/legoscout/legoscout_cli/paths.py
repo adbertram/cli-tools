@@ -22,7 +22,7 @@ BRICKLINK_CALL_CACHE = str(LEGOSCOUT_ROOT / "data" / ".bricklink_call_cache.json
 EBAY_COMP_CALL_CACHE = str(LEGOSCOUT_ROOT / "data" / ".ebay_comp_call_cache.json")
 LISTING_IMAGES_ROOT = str(LEGOSCOUT_ROOT / "agent_workspaces" / "listing-images")
 MINIFIG_EVAL_WORKSPACE = "/Users/adam/Dropbox/GitRepos/Agents/LegoScout/agent_workspaces/minifig-eval"
-MINIFIG_CROP_ROOT = "/Users/adam/Dropbox/GitRepos/Agents/LegoScout/agent_workspaces/minifig-crops"
+MINIFIG_CROP_ROOT = "/Users/adam/Dropbox/GitRepos/Agents/LegoScout/agent_workspaces/shared/minifig-crops"
 BRICKOGNIZE_MINIFIG_CACHE = "/Users/adam/Dropbox/GitRepos/Agents/LegoScout/data/.brickognize_minifig_cache.json"
 SOURCE_RUNS = str(LEGOSCOUT_ROOT / "agent_workspaces" / "source-runs")
 
