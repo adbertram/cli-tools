@@ -441,6 +441,41 @@ class N8nApiClient:
         data = resp.get("data", resp) if isinstance(resp, dict) else resp
         return data if isinstance(data, list) else []
 
+    def add_data_table_column(
+        self, table_id: str, name: str, column_type: str, index: Optional[int] = None
+    ) -> Dict:
+        """Add a column to an existing data table.
+
+        Args:
+            table_id: Table ID
+            name: Column name (must match ^[a-zA-Z][a-zA-Z0-9_]*$, max 63 chars)
+            column_type: Column type (string, number, boolean, date)
+            index: Optional column position index
+
+        Returns:
+            Created column object
+        """
+        pid = self._get_project_id()
+        payload: Dict[str, Any] = {"name": name, "type": column_type}
+        if index is not None:
+            payload["index"] = index
+        resp = self._rest_request(
+            "POST", f"/rest/projects/{pid}/data-tables/{table_id}/columns", json=payload
+        )
+        return resp.get("data", resp) if isinstance(resp, dict) and "data" in resp else resp
+
+    def delete_data_table_column(self, table_id: str, column_id: str) -> None:
+        """Delete a column from a data table.
+
+        Args:
+            table_id: Table ID
+            column_id: ID of the column to delete
+        """
+        pid = self._get_project_id()
+        self._rest_request(
+            "DELETE", f"/rest/projects/{pid}/data-tables/{table_id}/columns/{column_id}"
+        )
+
     def list_data_table_rows(self, table_id: str, limit: int = 100) -> List[Dict]:
         """List rows in a data table.
 

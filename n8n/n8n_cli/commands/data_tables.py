@@ -5,13 +5,21 @@ import typer
 from typing import Optional, List
 
 from ..n8n_api import get_n8n_api_client
-from cli_tools_shared.output import print_json, print_table, print_error, print_success, handle_error
+from cli_tools_shared.output import print_json, print_table, print_error, print_info, print_success, handle_error
 from cli_tools_shared.filters import apply_filters, apply_properties_filter, apply_limit
 
 app = typer.Typer(help="Manage n8n Data Tables", no_args_is_help=True)
 
+VALID_COLUMN_TYPES = {"string", "number", "boolean", "date"}
+
 COMMAND_CREDENTIALS = {
+    "add-column": [
+        "api_key"
+    ],
     "columns": [
+        "api_key"
+    ],
+    "delete-column": [
         "api_key"
     ],
     "create": [
@@ -150,9 +158,8 @@ def tables_create(
                 print_error(f"Invalid column format '{col_def}'. Expected name:type (e.g., name:string)")
                 raise typer.Exit(1)
             col_name, col_type = parts
-            valid_types = {"string", "number", "boolean", "date"}
-            if col_type not in valid_types:
-                print_error(f"Invalid column type '{col_type}'. Must be one of: {', '.join(sorted(valid_types))}")
+            if col_type not in VALID_COLUMN_TYPES:
+                print_error(f"Invalid column type '{col_type}'. Must be one of: {', '.join(sorted(VALID_COLUMN_TYPES))}")
                 raise typer.Exit(1)
             columns.append({"name": col_name, "type": col_type})
 
@@ -208,6 +215,80 @@ def tables_columns(
         else:
             print_json(data)
 
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+@app.command("add-column")
+def tables_add_column(
+    table_id: str = typer.Argument(..., help="Data table ID"),
+    name: str = typer.Argument(..., help="Column name"),
+    column_type: str = typer.Argument(..., help="Column type: string, number, boolean, date"),
+    index: Optional[int] = typer.Option(None, "--index", "-i", help="Column position index"),
+):
+    """
+    Add a column to an existing data table.
+
+    Column types: string, number, boolean, date
+
+    Example:
+        n8n data-tables add-column L13pmzZlnNh5hPw7 status string
+        n8n data-tables add-column L13pmzZlnNh5hPw7 priority number --index 2
+    """
+    try:
+        if column_type not in VALID_COLUMN_TYPES:
+            print_error(f"Invalid column type '{column_type}'. Must be one of: {', '.join(sorted(VALID_COLUMN_TYPES))}")
+            raise typer.Exit(1)
+
+        api = get_n8n_api_client()
+        result = api.add_data_table_column(table_id, name, column_type, index=index)
+
+        print_success(f"Added column '{name}' to data table (id: {table_id})")
+        print_json(result)
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+@app.command("delete-column")
+def tables_delete_column(
+    table_id: str = typer.Argument(..., help="Data table ID"),
+    column_id: str = typer.Argument(..., help="Column ID to delete"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+):
+    """
+    Delete a column from a data table.
+
+    This permanently removes the column and its data from every row.
+
+    Example:
+        n8n data-tables delete-column L13pmzZlnNh5hPw7 col456
+        n8n data-tables delete-column L13pmzZlnNh5hPw7 col456 --yes
+    """
+    try:
+        api = get_n8n_api_client()
+
+        if not yes:
+            columns = api.get_data_table_columns(table_id)
+            match = next((c for c in columns if str(c.get("id")) == column_id), None)
+            if not match:
+                print_error(f"Column '{column_id}' not found on data table '{table_id}'")
+                raise typer.Exit(1)
+            confirm = typer.confirm(
+                f"Delete column '{match.get('name')}' (id: {column_id}) from data table '{table_id}'? "
+                "This deletes its data from every row."
+            )
+            if not confirm:
+                print_info("Aborted")
+                raise typer.Exit(0)
+
+        api.delete_data_table_column(table_id, column_id)
+        print_success(f"Deleted column (id: {column_id}) from data table (id: {table_id})")
+
+    except typer.Exit:
+        raise
     except Exception as e:
         raise typer.Exit(handle_error(e))
 
