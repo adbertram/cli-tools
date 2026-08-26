@@ -12,12 +12,23 @@ src/pages/upload.ts inside wrangler-dist/cli.js):
 - Limits: files over 25 MiB are rejected (Pages hard cap); upload batches hold
   at most 40 MiB of payload or 2000 files, largest files first.
 
+Also implements the Advanced Mode worker-script half of the protocol
+(`read_worker_script`): a root-level `_worker.js` is excluded from the static
+asset manifest above (it is not a static file — Cloudflare routes every
+request to it once it exists) and is instead uploaded as a separate
+"_worker.bundle" multipart part built by `client.build_worker_bundle`. Only a
+single self-contained `_worker.js` file is supported; a `_worker.js/`
+directory or a `functions/` directory (Pages Functions) both require
+wrangler's esbuild bundling step, which this CLI does not implement, and are
+rejected with a clear error instead of being silently ignored.
+
 No network access happens in this module; API calls live in client.py.
 """
 import base64
 import mimetypes
+import re
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import blake3
 
@@ -212,3 +223,113 @@ def build_upload_payload(assets: List[Dict]) -> List[Dict]:
 def build_manifest(assets: List[Dict]) -> Dict[str, str]:
     """Build the deployment manifest: {"/" + rel_path: hash}."""
     return {f"/{asset['rel']}": asset["hash"] for asset in assets}
+
+
+# --- Advanced Mode worker script (_worker.js) ------------------------------
+# Mirrors the relevant slice of wrangler's config-less deploy path
+# (src/api/pages/deploy.ts): a root _worker.js activates "Advanced Mode",
+# where Cloudflare routes every request to the worker instead of serving
+# static assets/applying _headers/_redirects directly. wrangler bundles
+# _worker.js with esbuild by default; this CLI does not implement a bundler,
+# so it only supports a single self-contained _worker.js file with no
+# external imports (wrangler's own `--no-bundle` shape), matching Adam's own
+# scoping decision to prioritize _worker.js and explicitly reject
+# `functions/` rather than silently ignore it.
+
+WORKER_SCRIPT_FILENAME = "_worker.js"
+FUNCTIONS_DIRNAME = "functions"
+# Content type for the worker's ES module part in the nested "_worker.bundle"
+# multipart body (moduleTypeMimeType.esm in wrangler's
+# create-worker-upload-form.ts).
+WORKER_MODULE_CONTENT_TYPE = "application/javascript+module"
+
+# Matches an import/re-export specifier or a dynamic import() call. Mirrors
+# the intent of wrangler's blockWorkerJsImports esbuild plugin
+# (src/pages/functions/buildWorker.ts checkRawWorker): a raw, unbundled
+# _worker.js can only resolve `node:*`/`cloudflare:*` built-ins at runtime, so
+# any other import would fail once deployed. This is a source-level
+# heuristic, not a real JS parser -- it exists to fail loudly before deploy
+# rather than to catch every possible import syntax.
+_IMPORT_SPECIFIER_PATTERN = re.compile(
+    r"""(?:^|[;\s{}()])import\s*(?:[\w$*{}\s,]+from\s*)?['"]([^'"]+)['"]"""
+    r"""|(?:^|[;\s{}()])export\s+(?:[\w$*{}\s,]+from\s*)?['"]([^'"]+)['"]"""
+    r"""|\bimport\s*\(\s*['"]([^'"]+)['"]""",
+    re.MULTILINE,
+)
+
+_ALLOWED_IMPORT_PREFIXES = ("node:", "cloudflare:")
+
+
+def _check_worker_script_imports(script_path: str, content: str) -> None:
+    """Reject a _worker.js that imports another module.
+
+    Raises:
+        ClientError: naming the first disallowed import specifier found.
+    """
+    for match in _IMPORT_SPECIFIER_PATTERN.finditer(content):
+        specifier = next(g for g in match.groups() if g is not None)
+        if specifier.startswith(_ALLOWED_IMPORT_PREFIXES):
+            continue
+        raise ClientError(
+            f"{script_path} is not being bundled by this CLI but it is "
+            f"importing from '{specifier}'.\nThis will throw an error if "
+            "deployed.\nBundle the Worker into a single self-contained file "
+            "before deploying (this CLI does not implement esbuild bundling), "
+            "or deploy with `npx wrangler pages deploy` instead."
+        )
+
+
+def read_worker_script(directory: Path) -> Optional[Dict]:
+    """Read a root-level `_worker.js` for Cloudflare Pages Advanced Mode.
+
+    Returns:
+        None when no `_worker.js` exists at the deploy directory root (plain
+        static-asset deployment; unchanged behavior).
+        Otherwise a dict: {"filename": "_worker.js", "content": bytes,
+        "routes_json": Optional[str]}. `routes_json` carries the raw text of
+        a root `_routes.json` file, which wrangler only uploads as its own
+        part when a worker is present (an unbundled static site has no
+        Functions/Worker layer for custom routes to affect).
+
+    Raises:
+        ClientError: `_worker.js` is a directory (multi-file Advanced Mode,
+            which requires wrangler's esbuild bundling), a `functions/`
+            directory exists with no `_worker.js` (Pages Functions, which
+            also requires esbuild bundling), or `_worker.js` imports another
+            module (see `_check_worker_script_imports`).
+    """
+    root = directory.resolve()
+    worker_path = root / WORKER_SCRIPT_FILENAME
+    functions_path = root / FUNCTIONS_DIRNAME
+
+    if worker_path.is_dir():
+        raise ClientError(
+            f"{worker_path} is a directory (multi-file Cloudflare Pages "
+            "Advanced Mode). This CLI only supports a single-file _worker.js "
+            "and does not implement wrangler's esbuild bundling step. Bundle "
+            "it into one file first, or deploy with `npx wrangler pages "
+            "deploy` instead."
+        )
+
+    if not worker_path.is_file():
+        if functions_path.is_dir():
+            raise ClientError(
+                f"{functions_path} exists but no _worker.js was found at the "
+                "deploy directory root. Cloudflare Pages Functions require "
+                "wrangler's esbuild bundling step, which this CLI does not "
+                "implement. Bundle functions/ into a single _worker.js "
+                "first, or deploy with `npx wrangler pages deploy` instead."
+            )
+        return None
+
+    content = worker_path.read_text(encoding="utf-8")
+    _check_worker_script_imports(str(worker_path), content)
+
+    routes_path = root / "_routes.json"
+    routes_json = routes_path.read_text(encoding="utf-8") if routes_path.is_file() else None
+
+    return {
+        "filename": WORKER_SCRIPT_FILENAME,
+        "content": content.encode("utf-8"),
+        "routes_json": routes_json,
+    }

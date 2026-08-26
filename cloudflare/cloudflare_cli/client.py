@@ -9,6 +9,7 @@ import time
 import requests
 
 from .config import get_config
+from . import pages_assets
 from cli_tools_shared.filters import validate_filters, apply_filters, FilterValidationError
 from .models import Zone, ZoneDetail, PurgeResult, create_zone, create_zone_detail, create_purge_result
 from .models.access_rule import AccessRule, create_access_rule
@@ -1676,6 +1677,65 @@ class CloudflareClient:
         )
         return response.get("result") or {}
 
+    @staticmethod
+    def _build_multipart_body(fields: Dict[str, tuple]) -> bytes:
+        """
+        Encode a requests-style multipart `files` dict to raw bytes.
+
+        Uses requests' own multipart encoder (the same one `_make_request`
+        uses for every `files=` call) via `PreparedRequest.prepare_body`,
+        rather than hand-rolling RFC 2388 framing. This builds the nested
+        "_worker.bundle" upload part: Cloudflare's Pages deployment endpoint
+        expects that part's raw bytes to themselves be a self-contained
+        multipart/form-data document (metadata + one file part per worker
+        module) with no Content-Type header of their own (the outer part is
+        sent as plain application/octet-stream) -- the exact shape
+        `wrangler pages deploy` sends, reproduced byte-for-byte against
+        wrangler 4.125.0's real undici FormData/File/Response output before
+        this was implemented (see pages_assets.py's Advanced Mode docstring).
+
+        Args:
+            fields: requests `files=` mapping: field name -> (filename,
+                content, content_type) for a file part, or
+                (None, content, None) for a plain text field
+
+        Returns:
+            The encoded multipart/form-data body bytes
+        """
+        prepared = requests.models.PreparedRequest()
+        prepared.headers = requests.structures.CaseInsensitiveDict()
+        prepared.prepare_body(data=None, files=fields)
+        return prepared.body
+
+    def build_worker_bundle(self, worker_script: Dict) -> bytes:
+        """
+        Build the nested "_worker.bundle" multipart body for Advanced Mode.
+
+        Mirrors wrangler's createUploadWorkerBundleContents /
+        createWorkerUploadForm for the config-less, no-bindings, single ES
+        module case this CLI supports: `metadata` is just
+        `{"main_module": "<filename>"}` (bindings/compatibility fields are
+        omitted entirely, matching wrangler's own config-less-deploy output,
+        since this CLI never reads a wrangler.toml/pages config file), and
+        the module part carries the raw script under its filename with
+        Content-Type "application/javascript+module".
+
+        Args:
+            worker_script: dict from pages_assets.read_worker_script()
+                ({"filename": ..., "content": bytes, ...})
+
+        Returns:
+            Raw bytes to send as the outer deployment request's
+            "_worker.bundle" file part
+        """
+        filename = worker_script["filename"]
+        metadata = {"main_module": filename}
+        fields = {
+            "metadata": (None, json.dumps(metadata), None),
+            filename: (filename, worker_script["content"], pages_assets.WORKER_MODULE_CONTENT_TYPE),
+        }
+        return self._build_multipart_body(fields)
+
     def create_pages_deployment(
         self,
         account_id: str,
@@ -1687,6 +1747,8 @@ class CloudflareClient:
         manifest: Optional[str] = None,
         headers_text: Optional[str] = None,
         redirects_text: Optional[str] = None,
+        worker_bundle: Optional[bytes] = None,
+        routes_json_text: Optional[str] = None,
     ) -> Dict:
         """
         Start a new deployment (multipart/form-data POST).
@@ -1706,6 +1768,11 @@ class CloudflareClient:
             manifest: JSON string of {"/path": hash} entries for direct upload
             headers_text: _headers file content sent as a form file part
             redirects_text: _redirects file content sent as a form file part
+            worker_bundle: "_worker.bundle" bytes from build_worker_bundle(),
+                for Cloudflare Pages Advanced Mode
+            routes_json_text: _routes.json file content sent as a form file
+                part (only meaningful alongside worker_bundle; an unbundled
+                static site has no Functions/Worker layer for custom routes)
 
         Returns:
             Created deployment dict
@@ -1725,6 +1792,10 @@ class CloudflareClient:
             files["_headers"] = ("_headers", headers_text)
         if redirects_text is not None:
             files["_redirects"] = ("_redirects", redirects_text)
+        if worker_bundle is not None:
+            files["_worker.bundle"] = ("_worker.bundle", worker_bundle, "application/octet-stream")
+        if routes_json_text is not None:
+            files["_routes.json"] = ("_routes.json", routes_json_text)
 
         response = self._envelope(
             "POST",
