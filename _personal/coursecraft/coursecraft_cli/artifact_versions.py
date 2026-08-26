@@ -791,6 +791,19 @@ def plan_record_update(
                 raise VersioningError(
                     f"Missing canonicalization metadata for {table}.{field}."
                 )
+            # Only derived free-text prose may be blanked on dependency
+            # invalidation. Link/attachment fields would unlink records
+            # (destroying the roster), and identity scalars such as
+            # "number" carry approved budget data that is not derived
+            # from the dependency — clearing either destroys work instead
+            # of marking staleness. Version bump + review/gate clears
+            # below already express staleness for the dependent slug.
+            if (
+                metadata.get("type")
+                in {"multipleRecordLinks", "multipleAttachments"}
+                or metadata.get("type") in _IDENTITY_STORAGE_TYPES
+            ):
+                continue
             planned[field] = ""
             predicted_fields[field] = _canonicalize_storage_value(
                 field, "", metadata
