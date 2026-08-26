@@ -197,8 +197,8 @@ def test_list_group_posts_full_threads_fetches_permalink_metadata(monkeypatch):
 
     requested_urls = []
 
-    def fake_fetch(self, url, stop_markers=None):
-        requested_urls.append((url, tuple(stop_markers or ())))
+    def fake_fetch(self, url, stop_markers=None, stop_tail_bytes=0):
+        requested_urls.append((url, tuple(stop_markers or ()), stop_tail_bytes))
         return "thread-html:" + url
 
     def fake_extract(self, group_id, post_id, url, body, allow_truncated_tail=False):
@@ -225,9 +225,21 @@ def test_list_group_posts_full_threads_fetches_permalink_metadata(monkeypatch):
 
     assert [post.post_id for post in posts] == ["1001", "1002"]
     assert sorted(requested_urls) == [
-        ("https://www.facebook.com/groups/2318028917/", tuple(client_mod.GROUP_DISCUSSION_BOOTSTRAP_MARKERS)),
-        ("https://www.facebook.com/groups/2318028917/posts/1001/", tuple(client_mod.GROUP_POST_THREAD_STOP_MARKERS)),
-        ("https://www.facebook.com/groups/2318028917/posts/1002/", tuple(client_mod.GROUP_POST_THREAD_STOP_MARKERS)),
+        (
+            "https://www.facebook.com/groups/2318028917/",
+            tuple(client_mod.GROUP_DISCUSSION_BOOTSTRAP_MARKERS),
+            client_mod.GROUP_DISCUSSION_BOOTSTRAP_TAIL_BYTES,
+        ),
+        (
+            "https://www.facebook.com/groups/2318028917/posts/1001/",
+            tuple(client_mod.GROUP_POST_THREAD_STOP_MARKERS),
+            0,
+        ),
+        (
+            "https://www.facebook.com/groups/2318028917/posts/1002/",
+            tuple(client_mod.GROUP_POST_THREAD_STOP_MARKERS),
+            0,
+        ),
     ]
     assert posts[0].image_urls == ["https://example.com/1001.jpg"]
     assert posts[0].comments[0].text == "Comment"
