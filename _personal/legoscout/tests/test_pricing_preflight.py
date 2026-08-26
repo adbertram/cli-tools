@@ -18,6 +18,7 @@ import json
 import subprocess
 import threading
 import time
+from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -308,6 +309,51 @@ def test_check_minifig_detector_deadline_expires_to_warning_not_hang():
     assert elapsed < preflight.DETECTOR_CHECK_TIMEOUT_SECONDS + 5
 
 
+REQUIRED_MINIFIG_LEAVES = ("detect", "eval", "identify", "price")
+
+
+# --- installed CLI / canonical usage map gate --------------------------------
+
+
+def test_check_installed_cli_usage_reports_missing_minifig_leaves():
+    def probe(argv, **_kwargs):
+        leaf = argv[2]
+        return subprocess.CompletedProcess(
+            argv, 0 if leaf in ("detect", "identify") else 2)
+
+    fake = mock.Mock(side_effect=probe)
+    with mock.patch.object(preflight.subprocess, "run", fake):
+        row = preflight._check_installed_cli_usage()
+    assert row["leaves"] == ["detect", "identify"]
+    assert set(row["missing"]) == {"eval", "price"}
+    assert row["error"] is None
+
+
+def test_check_installed_cli_usage_blocks_when_binary_absent():
+    with mock.patch.object(preflight.shutil, "which", return_value=None):
+        row = preflight._check_installed_cli_usage()
+    assert row["leaves"] == []
+    assert row["missing"] == list(REQUIRED_MINIFIG_LEAVES)
+    assert "not found" in (row["error"] or "")
+
+
+def test_check_installed_cli_usage_surfaces_canonical_map_drift():
+    """The worktree usage map must already contain the minifig leaves; a map
+    missing them means generated docs drifted from the code."""
+    repo_root = Path(preflight.paths.PKG).parents[2]
+    usage_path = (repo_root / "_repo" / "skills" / "legoscout-cli"
+                  / "usage.json")
+    if not usage_path.exists():
+        pytest.skip("canonical usage.json not present in this checkout")
+    leaves = sorted(
+        (json.loads(usage_path.read_text(encoding="utf-8"))
+         .get("commands", {})
+         .get("minifig", {})
+         .get("commands", {}))
+    )
+    assert REQUIRED_MINIFIG_LEAVES == tuple(leaves)
+
+
 def test_check_brickognize_uses_health_endpoint_and_current_provider_headers():
     response = mock.Mock()
     response.raise_for_status.return_value = None
@@ -399,7 +445,8 @@ def _subprocess_runner(fake, *, unauthed=(), no_json=(), adam="ok",
 
 def _run_gate(fake=None, *, unauthed=(), no_json=(), missing_binaries=(),
               adam="ok", parity_ok=True, identifier_ok=True, ledger_ok=True,
-              brickognize_row=None, detector_row=None):
+              brickognize_row=None, detector_row=None,
+              installed_minifig_leaves=None):
     fake = fake or FakeRegistry()
     ledger_row = {"path": "/tmp/found_deals.db", "exists": True,
                   "writable": ledger_ok}
@@ -415,6 +462,12 @@ def _run_gate(fake=None, *, unauthed=(), no_json=(), missing_binaries=(),
         name="_check_brickognize", return_value=dict(brickognize_row))
     detector_check = mock.Mock(
         name="_check_minifig_detector", return_value=dict(detector_row))
+    usage_check = mock.Mock(
+        name="_check_installed_cli_usage",
+        return_value=({"leaves": ["detect", "eval", "identify", "price"],
+                       "missing": []}
+                      if installed_minifig_leaves is None
+                      else installed_minifig_leaves))
     with mock.patch.object(preflight.shutil, "which",
                            side_effect=_which(missing_binaries)), \
          mock.patch.object(preflight.subprocess, "run",
@@ -436,6 +489,7 @@ def _run_gate(fake=None, *, unauthed=(), no_json=(), missing_binaries=(),
                              _check_skills=lambda: {
                                  "root": "/skills/project", "missing": [],
                                  "global_standards_present": True},
+                             _check_installed_cli_usage=usage_check,
                              _check_brickognize=brickognize_check,
                              _check_minifig_detector=detector_check,
                              _ensure_workspaces=lambda: {
@@ -503,6 +557,7 @@ def test_gate_submits_provider_and_detector_checks_to_existing_pool(capsys):
     assert preflight.POOL_WORKERS >= len(submitted)
     assert "_check_brickognize" in submitted_names
     assert "_check_minifig_detector" in submitted_names
+    assert "_check_installed_cli_usage" in submitted_names
 
 
 def test_gate_brickognize_outage_warns_only_for_minifig_identification(capsys):

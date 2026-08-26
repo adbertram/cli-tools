@@ -86,6 +86,9 @@ SOURCE_CLI_BINARIES = {
     "depop": "depop",
     "ebay": "ebay",
     "facebook": "facebook",
+    "fbgroup-bricklinkww": "facebook",
+    "fbgroup-retiredsets": "facebook",
+    "fbgroup-usabst": "facebook",
     "mercari": "mercari",
     "nextdoor": "nextdoor",
     "poshmark": "poshmark",
@@ -100,6 +103,8 @@ BRICKOGNIZE_HEALTH_URL = "https://api.brickognize.com/health/"
 BRICKOGNIZE_TIMEOUT_SECONDS = 10
 DETECTOR_CHECK_TIMEOUT_SECONDS = 120
 MINIFIG_DETECTOR = "grounding-dino-tiny"
+REQUIRED_MINIFIG_LEAVES = ("detect", "eval", "identify", "price")
+USAGE_PROBE_TIMEOUT_SECONDS = 30
 
 PROJECT_SKILLS = (
     "legoscout-orchestrator",
@@ -128,7 +133,7 @@ GLOBAL_STANDARDS_PATH = (Path("~/.agents/skills/agent-expert/references/"
 AUTH_TIMEOUT_SECONDS = 30
 SSH_TIMEOUT_SECONDS = 45
 PARITY_TIMEOUT_SECONDS = 60
-POOL_WORKERS = 9          # top-level independent checks
+POOL_WORKERS = 10         # top-level independent checks
 INNER_AUTH_WORKERS = 4    # concurrent auth round-trips inside the source scan
 
 
@@ -308,6 +313,39 @@ def _check_minifig_detector_with_deadline(
     finally:
         loader_pool.shutdown(wait=False, cancel_futures=True)
     row["available"] = True
+    return row
+
+
+def _check_installed_cli_usage() -> dict[str, Any]:
+    """Probe the INSTALLED legoscout binary for every minifig subcommand.
+
+    The worktree can expose leaves the installed tool lacks until the next
+    install; an identifier run would die mid-batch on the gap, so the gate
+    catches it before any worker spawns.
+    """
+    row: dict[str, Any] = {
+        "leaves": [],
+        "missing": list(REQUIRED_MINIFIG_LEAVES),
+        "error": None,
+    }
+    binary = shutil.which("legoscout")
+    if binary is None:
+        row["error"] = ("legoscout binary not found on PATH; install the "
+                        "repo tool before running identifier batches")
+        return row
+    present: list[str] = []
+    for leaf in REQUIRED_MINIFIG_LEAVES:
+        probe = subprocess.run(
+            [binary, "minifig", leaf, "--help"],
+            capture_output=True,
+            timeout=USAGE_PROBE_TIMEOUT_SECONDS,
+        )
+        if probe.returncode == 0:
+            present.append(leaf)
+    row["leaves"] = present
+    row["missing"] = [
+        leaf for leaf in REQUIRED_MINIFIG_LEAVES if leaf not in present
+    ]
     return row
 
 
@@ -665,6 +703,7 @@ def main(argv: list[str] | None = None) -> int:
             "google": pool.submit(_check, GOOGLE_CLI, None),
             "brickognize": pool.submit(_check_brickognize),
             "minifig_detector": pool.submit(_check_minifig_detector),
+            "installed_usage": pool.submit(_check_installed_cli_usage),
         }
         bricklink = futures["bricklink"].result()
         ebay = futures["ebay"].result()
@@ -676,6 +715,7 @@ def main(argv: list[str] | None = None) -> int:
         google_status = futures["google"].result()
         brickognize_row = futures["brickognize"].result()
         detector_row = futures["minifig_detector"].result()
+        usage_row = futures["installed_usage"].result()
 
     # 1. Comps credentials -- BrickLink AND eBay, live-authenticated.
     checks["comps_credentials"] = {"bricklink": bricklink, "ebay": ebay}
@@ -729,13 +769,23 @@ def main(argv: list[str] | None = None) -> int:
                         "drafts cannot be sent; deals half unaffected"
                         % (google_status.get("error") or "not authenticated"))
 
-    # 7. Minifigure identification -- WARNING tier. Provider or detector
-    # outages skip only minifigure identification; unrelated lot categories
-    # still price and score normally.
+    # 7. Minifigure identification -- WARNING tier for provider/detector
+    # outages, but a BLOCKER when the installed CLI lacks minifig leaves:
+    # a run would die mid-batch on the missing subcommand, so it must not
+    # start.
     checks["minifig_identification"] = {
         "brickognize": brickognize_row,
         "detector": detector_row,
+        "installed_usage": usage_row,
     }
+    if usage_row.get("error"):
+        failures.append(("installed_cli", usage_row["error"]))
+    elif usage_row["missing"]:
+        failures.append((
+            "installed_cli",
+            "installed legoscout lacks minifig subcommands: %s -- reinstall "
+            "the repo tool before running identifier batches"
+            % ", ".join(usage_row["missing"])))
     if not brickognize_row["reachable"]:
         warnings.append(
             "brickognize unreachable (%s) -- every minifigure lot this run "
