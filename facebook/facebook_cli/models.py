@@ -196,6 +196,7 @@ class GroupPost(CLIModel):
     post_id: str = Field(frozen=True)
     title: Optional[str] = None
     author: Optional[str] = None
+    author_id: Optional[str] = None
     text: Optional[str] = None
     body: Optional[str] = None
     timestamp: Optional[str] = None

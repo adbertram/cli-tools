@@ -2585,6 +2585,14 @@ class FacebookClient:
             "post_id": post_id,
             "title": self._title_from_group_post_body(body),
             "author": self._extract_text_path(node, ["feedback", "owning_profile", "name"]),
+            # Facebook's own numeric profile id for the poster, from the SAME
+            # node that supplies `author`. A display name is not an identity --
+            # a person can change it, and two members can share one -- so a
+            # consumer that keys on the seller (a deal ledger, a favourites
+            # list, a per-seller reputation note) needs this. It rides in every
+            # group story node Facebook serves (`feedback.owning_profile.id`,
+            # equal to `actors[0].id`), so nothing extra is fetched for it.
+            "author_id": self._extract_text_path(node, ["feedback", "owning_profile", "id"]),
             "text": body,
             "body": body,
             "timestamp": timestamp,

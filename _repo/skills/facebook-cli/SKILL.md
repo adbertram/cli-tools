@@ -105,6 +105,40 @@ the counts Facebook prints in its own section headings ("All groups you've
 joined (34)", "Pending group requests (7)") to enumerate everything.
 </principle>
 
+<principle name="Group Post Fields, Author Identity, Feed Order, and Depth">
+`facebook groups posts list` and `facebook groups posts get` return the SAME
+field set for a post -- verified live 2026-08-25 on three groups:
+
+    post_id, title, author, author_id, text, body, timestamp,
+    url, thread_url, reactions, comment_count, comments, image_urls
+
+- **`author_id` is Facebook's own numeric profile id** for the poster, read
+  structurally from `feedback.owning_profile.id` in the group story node (equal
+  to `actors[0].id`). `author` is the display name, which a person can change
+  and two people can share -- so join on `author_id`, never on `author`. Added
+  2026-08-25; before that this surface exposed no keyed poster identity at all
+  and consumers had to treat a name as one. Both are `null` when Facebook's
+  payload names no owning profile; an absent id is reported as absent and is
+  never derived from the name.
+- **The feed is RANKED, not chronological, and there is no `--sort`.** Measured
+  live 2026-08-25 on group 250458852075384 at `--limit 15`, the timestamps came
+  back 08-23, 08-23, 08-25, 08-25, 08-24, 08-25, **08-11**, 08-22, 08-25,
+  08-25, 08-25, 08-25, 08-25, 08-25 -- an 08-11 post ranked seventh. Two other
+  groups came back descending the same day, which is why the order can never be
+  RELIED on rather than merely being wrong. A caller that needs "everything
+  since X" must read the whole window and filter on `timestamp` itself.
+- **`--limit` is hard-capped at 50 and there is no paging option.** `--limit 51`
+  exits 2 with `51 is not in the range 1<=x<=50`. Fifty posts is the entire
+  window this command can show; unlike Marketplace, there is no deeper page to
+  scroll to.
+- **One post is not one item.** Sellers routinely list many separately priced
+  items in one post body -- live 2026-08-25, post 2559186437869269 listed 21
+  sets from $10 to $300, several annotated "(pending)" or "(2 available)".
+  There is no structured per-item price, location, or fulfillment field: a group
+  post carries no `location_text` and no `delivery_types` equivalent, only the
+  seller's prose. Never key one record per post when the post sells many things.
+</principle>
+
 <principle name="Group Comment Verification">
 `facebook groups posts comment` and `facebook groups posts reply` perform multi-stage verification after submitting (composer-cleared → comment-count delta → markdown-stripped text-on-page) and return:
 
