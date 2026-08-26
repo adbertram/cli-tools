@@ -1,0 +1,881 @@
+{
+  "asset_root": "workspace",
+  "assets_disposable": true,
+  "dataset_id": "minifig-eval-33-real-listings-v1",
+  "listings": [
+    {
+      "asset": "assets/ebay-137652880517.webp",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [
+        "clutter",
+        "count-mismatch"
+      ],
+      "image_size": [
+        1200,
+        1600
+      ],
+      "listing_key": "ebay|137652880517",
+      "photo_sha256": "cc60b8128fc3087fee3bdfaa505a759a81ec1d73ce36b21164e82feefa64622e",
+      "provenance": {
+        "image_url": "https://i.ebayimg.com/images/g/l8oAAeSww-Fqi11n/s-l1600.webp",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://www.ebay.com/itm/137652880517"
+      },
+      "source": "ebay",
+      "title": "LEGO City Lot 107 Minifigures Plus Parts Accessories and More Lot"
+    },
+    {
+      "asset": "assets/ebay-398316734836.webp",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [
+        "clutter",
+        "no-candidates"
+      ],
+      "image_size": [
+        1199,
+        1599
+      ],
+      "listing_key": "ebay|398316734836",
+      "photo_sha256": "5f4d9761731176c634de0ac632c69c92ecaf6eb3bf3daf733082317d3a4455cc",
+      "provenance": {
+        "image_url": "https://i.ebayimg.com/images/g/fosAAeSwKVxqi11A/s-l300.webp",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://www.ebay.com/itm/398316734836"
+      },
+      "source": "ebay",
+      "title": "LEGO Chima Minifigures"
+    },
+    {
+      "asset": "assets/ebay-398316765352.webp",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [],
+      "image_size": [
+        1600,
+        1200
+      ],
+      "listing_key": "ebay|398316765352",
+      "photo_sha256": "c0d943ebb19b7174cb8f663a432912fedad646f51c21b84bb554687ba29af26d",
+      "provenance": {
+        "image_url": "https://i.ebayimg.com/images/g/RQAAAeSw131qi2MA/s-l1600.webp",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://www.ebay.com/itm/398316765352"
+      },
+      "source": "ebay",
+      "title": "Lego Minifigure Bundle And Accessories"
+    },
+    {
+      "asset": "assets/hibid-318175066.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [
+        "no-candidates"
+      ],
+      "image_size": [
+        1024,
+        610
+      ],
+      "listing_key": "hibid|318175066",
+      "photo_sha256": "146a95aeaa23e3b41f5c62a792069f07cb9b1fe1fb8411bc9536075701fcba3e",
+      "provenance": {
+        "image_url": "https://cdn.hibid.com/img.axd?id=8412193816&wid=&rwl=false&p=&ext=&w=0&h=0&t=&lp=&c=true&wt=false&sz=MAX&checksum=q7tk7fpa0T%2bnD25gfmzwojKNCydPV27z",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://hibid.com/lot/318175066"
+      },
+      "source": "hibid",
+      "title": "Lego People"
+    },
+    {
+      "asset": "assets/hibid-318177366.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [
+        "non-standard-figure",
+        "no-candidates"
+      ],
+      "image_size": [
+        1024,
+        768
+      ],
+      "listing_key": "hibid|318177366",
+      "photo_sha256": "6a63169903ce32c51c2503d2c508f09a69a0a088586c0bd5420884c43068e57b",
+      "provenance": {
+        "image_url": "https://cdn.hibid.com/img.axd?id=8412208738&wid=&rwl=false&p=&ext=&w=0&h=0&t=&lp=&c=true&wt=false&sz=MAX&checksum=eDSmT6U2bZjpKnC0Eaz4FS64n0yKpWKH",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://hibid.com/lot/318177366"
+      },
+      "source": "hibid",
+      "title": "LEGO BIONICLE FIGURES"
+    },
+    {
+      "asset": "assets/hibid-318189053.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [
+        "no-candidates"
+      ],
+      "image_size": [
+        2048,
+        1536
+      ],
+      "listing_key": "hibid|318189053",
+      "photo_sha256": "2573c659ee1aafc01868de43be87e2c05e9d5ab68cdd3390cb3bedc630564b25",
+      "provenance": {
+        "image_url": "https://cdn.hibid.com/img.axd?id=8385770474&wid=&rwl=false&p=&ext=&w=0&h=0&t=&lp=&c=true&wt=false&sz=MAX&checksum=EorbqGFGPa5hBclmmlXZmZ8k07VS83nK",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://hibid.com/lot/318189053"
+      },
+      "source": "hibid",
+      "title": "Lego Minifigures"
+    },
+    {
+      "asset": "assets/hibid-318274323.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [
+        "clutter",
+        "no-candidates"
+      ],
+      "image_size": [
+        2048,
+        1536
+      ],
+      "listing_key": "hibid|318274323",
+      "photo_sha256": "1db35a5033904e409527badbe1f113e0c7f7ed3194121216f2424a12085a5ad4",
+      "provenance": {
+        "image_url": "https://cdn.hibid.com/img.axd?id=8412125405&wid=&rwl=false&p=&ext=&w=0&h=0&t=&lp=&c=true&wt=false&sz=MAX&checksum=uSkL%2fXpBr2zgoN465tEZZaXdCQq9cug5",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://hibid.com/lot/318274323"
+      },
+      "source": "hibid",
+      "title": "Lego Mini Figure Parts & Pieces"
+    },
+    {
+      "asset": "assets/hibid-318442637.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [
+        "clutter",
+        "low-similarity"
+      ],
+      "image_size": [
+        1024,
+        542
+      ],
+      "listing_key": "hibid|318442637",
+      "photo_sha256": "c6046bae2e0717ef1e20cffed5176b38ee5ae18e3cc0157550bd8f79d4ea2848",
+      "provenance": {
+        "image_url": "https://cdn.hibid.com/img.axd?id=8413220645&wid=&rwl=false&p=&ext=&w=0&h=0&t=&lp=&c=true&wt=false&sz=MAX&checksum=61Ppn8CtLpAieXTU7s2SQNxl6jt39RBi",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://hibid.com/lot/318442637"
+      },
+      "source": "hibid",
+      "title": "Lego Mini Figures, Cat & Bicycle"
+    },
+    {
+      "asset": "assets/hibid-318704945.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [],
+      "image_size": [
+        576,
+        768
+      ],
+      "listing_key": "hibid|318704945",
+      "photo_sha256": "e534da6bb1b6459a8821c9af586a63fbf26184f067c1bba1e54bc5ec6189974e",
+      "provenance": {
+        "image_url": "https://cdn.hibid.com/img.axd?id=8414212645&wid=&rwl=false&p=&ext=&w=0&h=0&t=&lp=&c=true&wt=false&sz=MAX&checksum=%2fUz7a8FMSl6Yz2PRShBKGGM5j3CiZHr3",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://hibid.com/lot/318704945"
+      },
+      "source": "hibid",
+      "title": "Lego Bionicles"
+    },
+    {
+      "asset": "assets/hibid-319022210.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [
+        "count-mismatch"
+      ],
+      "image_size": [
+        2048,
+        1536
+      ],
+      "listing_key": "hibid|319022210",
+      "photo_sha256": "ea6eb40c5182e8b0df1072870c44c829a27b61f705e7d2716b6b939a1daf9ac8",
+      "provenance": {
+        "image_url": "https://cdn.hibid.com/img.axd?id=8413997153&wid=&rwl=false&p=&ext=&w=0&h=0&t=&lp=&c=true&wt=false&sz=MAX&checksum=%2b%2bsca7DfxQ1eTInoh4epN7Ko8S3GSMVa",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://hibid.com/lot/319022210"
+      },
+      "source": "hibid",
+      "title": "Lot of 36 Lego Mini Figures & Accessories"
+    },
+    {
+      "asset": "assets/k-bid-65933-209.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [],
+      "image_size": [
+        800,
+        420
+      ],
+      "listing_key": "k-bid|65933-209",
+      "photo_sha256": "526f7be95f55a0cd98c2630ef02cf7a5248fd2f67790a2de0fb8196bd293606e",
+      "provenance": {
+        "image_url": "https://k-img.k-bid.com/65933/35582503.jpg?v=1786628985",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://www.k-bid.com/auction/65933/item/209"
+      },
+      "source": "k-bid",
+      "title": "Misc. Lego People Including Harry Potter, Batman And More"
+    },
+    {
+      "asset": "assets/k-bid-66023-13-mini-fig.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "expected_boxes": [
+        [
+          0.052,
+          0.25,
+          0.311,
+          0.736
+        ],
+        [
+          0.324,
+          0.377,
+          0.62,
+          0.753
+        ],
+        [
+          0.661,
+          0.263,
+          0.956,
+          0.73
+        ]
+      ],
+      "expected_identities": [
+        null,
+        null,
+        null
+      ],
+      "expected_quantities": [
+        1,
+        1,
+        1
+      ],
+      "hard_case_tags": [],
+      "image_size": [
+        1512,
+        1512
+      ],
+      "listing_key": "k-bid|66023-13 Mini Fig",
+      "photo_sha256": "99506f93ddfa95161c515b412968ced31f7861dbee97eacc1911a4fc5aab4f94",
+      "provenance": {
+        "image_url": "https://k-img.k-bid.com/66023/35633983.jpg?v=1786991511",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://www.k-bid.com/auction/66023/item/13+Mini+Fig"
+      },
+      "source": "k-bid",
+      "title": "LEGO Star Wars Minifigure Lot \u2013 R2-D2, Clone Trooper & Stormtrooper w/ Blaster"
+    },
+    {
+      "asset": "assets/k-bid-66023-16-mini-fig.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "expected_boxes": [
+        [
+          0.047,
+          0.3,
+          0.328,
+          0.716
+        ],
+        [
+          0.278,
+          0.277,
+          0.69,
+          0.724
+        ],
+        [
+          0.665,
+          0.303,
+          0.953,
+          0.733
+        ]
+      ],
+      "expected_identities": [
+        null,
+        null,
+        null
+      ],
+      "expected_quantities": [
+        1,
+        1,
+        1
+      ],
+      "hard_case_tags": [],
+      "image_size": [
+        1512,
+        1512
+      ],
+      "listing_key": "k-bid|66023-16 Mini Fig",
+      "photo_sha256": "e4815dfdaeb3f0fa829ce3181b003c199f6e68f64c94285df6ec665ff8331466",
+      "provenance": {
+        "image_url": "https://k-img.k-bid.com/66023/35634005.jpg?v=1786991617",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://www.k-bid.com/auction/66023/item/16+Mini+Fig"
+      },
+      "source": "k-bid",
+      "title": "Lot of 3 LEGO Marvel Outrider Minifigures \u2013 Black/Gold with Multi-Arm Accessories"
+    },
+    {
+      "asset": "assets/k-bid-66023-18-mini-fig.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "expected_boxes": [
+        [
+          0.02,
+          0.298,
+          0.214,
+          0.645
+        ],
+        [
+          0.205,
+          0.309,
+          0.397,
+          0.652
+        ],
+        [
+          0.365,
+          0.35,
+          0.584,
+          0.691
+        ],
+        [
+          0.578,
+          0.342,
+          0.784,
+          0.717
+        ],
+        [
+          0.766,
+          0.368,
+          0.975,
+          0.711
+        ]
+      ],
+      "expected_identities": [
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "expected_quantities": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "hard_case_tags": [],
+      "image_size": [
+        1512,
+        1512
+      ],
+      "listing_key": "k-bid|66023-18 Mini Fig",
+      "photo_sha256": "09f0815143541b28afd19a2e91f81493fe22f415c01622bb073fafabd4415210",
+      "provenance": {
+        "image_url": "https://k-img.k-bid.com/66023/35634015.jpg?v=1786991706",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://www.k-bid.com/auction/66023/item/18+Mini+Fig"
+      },
+      "source": "k-bid",
+      "title": "Lot of 5 LEGO & Compatible Police / Security Minifigures \u2013 Officers, Helmets & Gear"
+    },
+    {
+      "asset": "assets/k-bid-66023-19-mini-fig.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [],
+      "image_size": [
+        1512,
+        1512
+      ],
+      "listing_key": "k-bid|66023-19 Mini Fig",
+      "photo_sha256": "b0cdd71c144135a812b768add6770e34800aa66bc20404f947ee5a8e60a42f77",
+      "provenance": {
+        "image_url": "https://k-img.k-bid.com/66023/35634102.jpg?v=1786992741",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://www.k-bid.com/auction/66023/item/19+Mini+Fig"
+      },
+      "source": "k-bid",
+      "title": "Lot of 5 LEGO & Compatible Minifigures \u2013 Ferrari Racing, Firefighters & Construction"
+    },
+    {
+      "asset": "assets/k-bid-66023-20-mini-fig.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [
+        "mixed-authenticity",
+        "no-candidates"
+      ],
+      "image_size": [
+        1512,
+        1512
+      ],
+      "listing_key": "k-bid|66023-20 Mini Fig",
+      "photo_sha256": "c8e795e6bf72a7ae7b2e4944becb795b3f70fcc4524363009b2416d662e21d68",
+      "provenance": {
+        "image_url": "https://k-img.k-bid.com/66023/35634051.jpg?v=1786991876",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://www.k-bid.com/auction/66023/item/20+Mini+Fig"
+      },
+      "source": "k-bid",
+      "title": "Lot of 5 LEGO-Style Minifigures \u2013 Assorted Character & Costume Figures"
+    },
+    {
+      "asset": "assets/k-bid-66023-21-mini-fig.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [],
+      "image_size": [
+        1512,
+        1512
+      ],
+      "listing_key": "k-bid|66023-21 Mini Fig",
+      "photo_sha256": "66257a7145f063dd452cb467e18f61f15714527cec75ffff9bb0763f3b948a29",
+      "provenance": {
+        "image_url": "https://k-img.k-bid.com/66023/35634049.jpg?v=1786991862",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://www.k-bid.com/auction/66023/item/21+Mini+Fig"
+      },
+      "source": "k-bid",
+      "title": "Lot of 5 LEGO-Style Superhero Minifigures \u2013 Thanos, Vision & Assorted Characters"
+    },
+    {
+      "asset": "assets/k-bid-66023-22-mini-fig.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [],
+      "image_size": [
+        1512,
+        1512
+      ],
+      "listing_key": "k-bid|66023-22 Mini Fig",
+      "photo_sha256": "246fe2597d40af2b4aa3ad8300cbae8fe9ce501881b10c8472c0408410461940",
+      "provenance": {
+        "image_url": "https://k-img.k-bid.com/66023/35634057.jpg?v=1786991910",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://www.k-bid.com/auction/66023/item/22+Mini+Fig"
+      },
+      "source": "k-bid",
+      "title": "Lot of 5 LEGO-Style Minifigures \u2013 Ninja, Pirate, Skull, Surfer & More"
+    },
+    {
+      "asset": "assets/k-bid-66023-23-mini-fig.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [],
+      "image_size": [
+        1512,
+        1512
+      ],
+      "listing_key": "k-bid|66023-23 Mini Fig",
+      "photo_sha256": "9e4b66ca68ff9dd623a4724074fa33abb3f752fb830d15ad4140f39f4c1a28e2",
+      "provenance": {
+        "image_url": "https://k-img.k-bid.com/66023/35634061.jpg?v=1786991950",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://www.k-bid.com/auction/66023/item/23+Mini+Fig"
+      },
+      "source": "k-bid",
+      "title": "Lot of 5 LEGO-Style Minifigures \u2013 Ferrari Racing, Driver, Wrestler & Assorted Figures"
+    },
+    {
+      "asset": "assets/k-bid-66023-24-mini-fig.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [],
+      "image_size": [
+        1512,
+        1512
+      ],
+      "listing_key": "k-bid|66023-24 Mini Fig",
+      "photo_sha256": "4b477ffed2bc47c300ae94e47b41e8df39ccaba807ab8472566900798ceef966",
+      "provenance": {
+        "image_url": "https://k-img.k-bid.com/66023/35634065.jpg?v=1786991984",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://www.k-bid.com/auction/66023/item/24+Mini+Fig"
+      },
+      "source": "k-bid",
+      "title": "Lot of 5 LEGO-Style Minifigures \u2013 Worker, Tactical, Caped & Assorted Figures"
+    },
+    {
+      "asset": "assets/k-bid-66023-25-mini-fig.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [],
+      "image_size": [
+        1512,
+        1512
+      ],
+      "listing_key": "k-bid|66023-25 Mini Fig",
+      "photo_sha256": "ab85491bf6edb7867bb37989ff9d100e7b080c657585a19aba6df0b6337944e4",
+      "provenance": {
+        "image_url": "https://k-img.k-bid.com/66023/35634077.jpg?v=1786992014",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://www.k-bid.com/auction/66023/item/25+Mini+Fig"
+      },
+      "source": "k-bid",
+      "title": "Lot of 5 LEGO-Style Minifigures \u2013 Vita Rush, Chef, Space/Tech & Mini Figure"
+    },
+    {
+      "asset": "assets/k-bid-66023-26-mini-fig.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [
+        "mixed-authenticity",
+        "low-similarity"
+      ],
+      "image_size": [
+        1512,
+        1512
+      ],
+      "listing_key": "k-bid|66023-26 Mini Fig",
+      "photo_sha256": "c408afc3b6cce802602453e57b228aeb7dbed1e18079e4125a93fdb78a051a73",
+      "provenance": {
+        "image_url": "https://k-img.k-bid.com/66023/35634079.jpg?v=1786992047",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://www.k-bid.com/auction/66023/item/26+Mini+Fig"
+      },
+      "source": "k-bid",
+      "title": "Lot of 5 LEGO-Style Minifigures \u2013 Police, Firefighter, Cowboy & Assorted Figures"
+    },
+    {
+      "asset": "assets/k-bid-66023-27-mini-fig.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [],
+      "image_size": [
+        1512,
+        1512
+      ],
+      "listing_key": "k-bid|66023-27 Mini Fig",
+      "photo_sha256": "96fcb218650eea1a954fe75de2c7a81ed0234c0a02f866b65df68f3f846562ef",
+      "provenance": {
+        "image_url": "https://k-img.k-bid.com/66023/35634080.jpg?v=1786992070",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://www.k-bid.com/auction/66023/item/27+Mini+Fig"
+      },
+      "source": "k-bid",
+      "title": "Lot of 5 LEGO-Style Minifigures \u2013 Racing, Police/Work & Assorted Figures"
+    },
+    {
+      "asset": "assets/k-bid-66023-28-mini-fig.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [],
+      "image_size": [
+        1512,
+        1512
+      ],
+      "listing_key": "k-bid|66023-28 Mini Fig",
+      "photo_sha256": "5a0eb119943aebd8193cb5f5532259d22c9fc06665d335d54549072061055af9",
+      "provenance": {
+        "image_url": "https://k-img.k-bid.com/66023/35634082.jpg?v=1786992107",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://www.k-bid.com/auction/66023/item/28+Mini+Fig"
+      },
+      "source": "k-bid",
+      "title": "Lot of 5 LEGO-Style Minifigures \u2013 Red Ninja, Ferrari Racing & Assorted Figures"
+    },
+    {
+      "asset": "assets/k-bid-66023-29-mini-fig.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [
+        "mixed-authenticity",
+        "low-similarity"
+      ],
+      "image_size": [
+        1512,
+        1512
+      ],
+      "listing_key": "k-bid|66023-29 Mini Fig",
+      "photo_sha256": "514599a83205fb889ffe4cc30247d5810b51cae8756c249ab2219dddee4e9a17",
+      "provenance": {
+        "image_url": "https://k-img.k-bid.com/66023/35634085.jpg?v=1786992136",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://www.k-bid.com/auction/66023/item/29+Mini+Fig"
+      },
+      "source": "k-bid",
+      "title": "Lot of 5 LEGO-Style Minifigures \u2013 Military, Chef & Assorted Characters"
+    },
+    {
+      "asset": "assets/k-bid-66023-30-mini-fig.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [
+        "low-similarity"
+      ],
+      "image_size": [
+        1512,
+        1512
+      ],
+      "listing_key": "k-bid|66023-30 Mini Fig",
+      "photo_sha256": "b6848ec9387b5ec985ba5fc898f4720b636cd8665d96384bf7589fe5f953d043",
+      "provenance": {
+        "image_url": "https://k-img.k-bid.com/66023/35634087.jpg?v=1786992176",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://www.k-bid.com/auction/66023/item/30+Mini+Fig"
+      },
+      "source": "k-bid",
+      "title": "Lot of 5 LEGO-Style Minifigures \u2013 Chefs, Tuxedo & Assorted Characters"
+    },
+    {
+      "asset": "assets/k-bid-66023-31-mini-fig.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [
+        "mixed-authenticity",
+        "low-similarity"
+      ],
+      "image_size": [
+        1512,
+        1512
+      ],
+      "listing_key": "k-bid|66023-31 Mini Fig",
+      "photo_sha256": "820c1b20f66dbcc194c7c4a30ad42418cd67da9019b573d5e86224cb23c89d7b",
+      "provenance": {
+        "image_url": "https://k-img.k-bid.com/66023/35634089.jpg?v=1786992196",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://www.k-bid.com/auction/66023/item/31+Mini+Fig"
+      },
+      "source": "k-bid",
+      "title": "Lot of 5 LEGO-Style Minifigures \u2013 Tactical, Racing & Assorted Characters"
+    },
+    {
+      "asset": "assets/k-bid-66023-32-mini-fig.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [],
+      "image_size": [
+        1512,
+        1512
+      ],
+      "listing_key": "k-bid|66023-32 Mini Fig",
+      "photo_sha256": "1b243d0936256498447f224a74450bbd05d57738690b6ae3d197b3632a375b88",
+      "provenance": {
+        "image_url": "https://k-img.k-bid.com/66023/35634091.jpg?v=1786992229",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://www.k-bid.com/auction/66023/item/32+Mini+Fig"
+      },
+      "source": "k-bid",
+      "title": "Lot of 5 LEGO-Style Minifigures \u2013 Construction Worker, Robot & Assorted Characters"
+    },
+    {
+      "asset": "assets/k-bid-66023-33-mini-fig.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [],
+      "image_size": [
+        1512,
+        1512
+      ],
+      "listing_key": "k-bid|66023-33 Mini Fig",
+      "photo_sha256": "20825ebe2942dae37c7d6c52c15ac6aa099c467c2f23ce0d8bf06d33e96b48a0",
+      "provenance": {
+        "image_url": "https://k-img.k-bid.com/66023/35634092.jpg?v=1786992301",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://www.k-bid.com/auction/66023/item/33+Mini+Fig"
+      },
+      "source": "k-bid",
+      "title": "Lot of 5 LEGO-Style Minifigures \u2013 Space, Astronaut, Robot & Racing Figures"
+    },
+    {
+      "asset": "assets/k-bid-66023-34-mini-fig.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [
+        "mixed-authenticity",
+        "low-similarity"
+      ],
+      "image_size": [
+        1512,
+        1512
+      ],
+      "listing_key": "k-bid|66023-34 Mini Fig",
+      "photo_sha256": "4f30e7ca7b5f8339a0dca842b3af1cee1a54a7b1ed9efbcd3f2d2c5038c56471",
+      "provenance": {
+        "image_url": "https://k-img.k-bid.com/66023/35634094.jpg?v=1786992330",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://www.k-bid.com/auction/66023/item/34+Mini+Fig"
+      },
+      "source": "k-bid",
+      "title": "Lot of 5 LEGO-Style Minifigures \u2013 Police, Tactical, Security & Armored Figures"
+    },
+    {
+      "asset": "assets/k-bid-66023-35-mini-fig.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [],
+      "image_size": [
+        1512,
+        1512
+      ],
+      "listing_key": "k-bid|66023-35 Mini Fig",
+      "photo_sha256": "ad8e39800f494c423fd1230ddb3dbe772f3b88e535d3bb61dc00d9f34783c86e",
+      "provenance": {
+        "image_url": "https://k-img.k-bid.com/66023/35634099.jpg?v=1786992370",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://www.k-bid.com/auction/66023/item/35+Mini+Fig"
+      },
+      "source": "k-bid",
+      "title": "Lot of 5 Assorted LEGO Minifigures \u2013 Tactical, Sci-Fi, Female & Mixed Characters"
+    },
+    {
+      "asset": "assets/k-bid-66023-36-mini-fig.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [],
+      "image_size": [
+        1512,
+        1512
+      ],
+      "listing_key": "k-bid|66023-36 Mini Fig",
+      "photo_sha256": "7c68bfc5116442b9154e46304c6cd556d576fe6a613ef77075c7c5b925a57fe9",
+      "provenance": {
+        "image_url": "https://k-img.k-bid.com/66023/35634100.jpg?v=1786992399",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://www.k-bid.com/auction/66023/item/36+Mini+Fig"
+      },
+      "source": "k-bid",
+      "title": "Lot of 5 Assorted LEGO Minifigures \u2013 Space, Adventurer, City & Mixed Characters"
+    },
+    {
+      "asset": "assets/shopgoodwill-274862362.jpg",
+      "consent": {
+        "basis": "public-marketplace-evaluation",
+        "recorded": true
+      },
+      "hard_case_tags": [
+        "clutter",
+        "no-candidates"
+      ],
+      "image_size": [
+        2000,
+        1500
+      ],
+      "listing_key": "shopgoodwill|274862362",
+      "photo_sha256": "cca4450ed1b65c544e086ab790f94b1fff6b69af6dbaf9bbec03b64631440acb",
+      "provenance": {
+        "image_url": "https://shopgoodwillimages.azureedge.net/production/8/Item/2026-08-23/92ca1540-f1b6-4504-9cf5-a5f05ec86401ospe_08231.jpg",
+        "kind": "classifier-saved-photo",
+        "run": "20260823T145220Z",
+        "source_url": "https://shopgoodwill.com/item/274862362"
+      },
+      "source": "shopgoodwill",
+      "title": "LEGO Mixed Lot Animal Figures Vehicle Accessories R2-D2 Minifigure Lot"
+    }
+  ],
+  "version": 1
+}

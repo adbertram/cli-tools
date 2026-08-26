@@ -1,0 +1,795 @@
+[
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-ledger/scripts/ledger_db.py",
+  "new_module": "legoscout_cli.ledger.db",
+  "old_invocation": "python3 ledger_db.py [SQL]",
+  "new_command": "legoscout deals list"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-ledger/scripts/deal_schema.py",
+  "new_module": "legoscout_cli.ledger.schema",
+  "old_invocation": "python3 deal_schema.py [PHASE]",
+  "new_command": "legoscout deals schema"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-ledger/scripts/deal_schema.json",
+  "new_module": "legoscout_cli/ledger/deal_schema.json",
+  "old_invocation": null,
+  "new_command": null
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-ledger/scripts/sellers_db.py",
+  "new_module": "legoscout_cli.ledger.sellers",
+  "old_invocation": "python3 sellers_db.py [<source> <seller_id>]",
+  "new_command": "legoscout sellers list"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-ledger/scripts/prospects_db.py",
+  "new_module": "legoscout_cli.ledger.prospects",
+  "old_invocation": "python3 prospects_db.py [<prospect_id>]",
+  "new_command": "legoscout prospects list"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-ledger/scripts/available_fulfillment.py",
+  "new_module": "legoscout_cli.ledger.fulfillment",
+  "old_invocation": "python3 available_fulfillment.py [<listing_key>]",
+  "new_command": "legoscout deals get <key> --properties available_fulfillment"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-ledger/scripts/shipping_estimate.py",
+  "new_module": "legoscout_cli.ledger.shipping",
+  "old_invocation": "python3 shipping_estimate.py [<key>]",
+  "new_command": "legoscout pricing shipping"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-ledger/scripts/set_analysis.py",
+  "new_module": "legoscout_cli.ledger.set_analysis",
+  "old_invocation": null,
+  "new_command": null
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-ledger/scripts/build_deal_record.py",
+  "new_module": "legoscout_cli.ledger.build_record",
+  "old_invocation": null,
+  "new_command": "legoscout deals build"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-ledger/scripts/validate_deal_records.py",
+  "new_module": "legoscout_cli.ledger.validate",
+  "old_invocation": "python3 validate_deal_records.py [--file --strict --include-inactive]",
+  "new_command": "legoscout deals validate"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-ledger/scripts/ledger_sweep.py",
+  "new_module": "legoscout_cli.ledger.sweep",
+  "old_invocation": "python3 ledger_sweep.py <field>",
+  "new_command": "legoscout deals refresh"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-ledger/scripts/source_names.py",
+  "new_module": "legoscout_cli.ledger.source_names",
+  "old_invocation": "python3 source_names.py [--apply --namespace]",
+  "new_command": null
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-ledger/scripts/source_watermarks.py",
+  "new_module": "legoscout_cli.ledger.watermarks",
+  "old_invocation": "python3 source_watermarks.py [--apply]",
+  "new_command": "legoscout sources watermarks"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-ledger/scripts/send_outreach.py",
+  "new_module": "legoscout_cli.ledger.outreach",
+  "old_invocation": "python3 send_outreach.py <outreach_id> [--confirm --db]",
+  "new_command": "legoscout prospects outreach send"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-ledger/scripts/backfill_sellers.py",
+  "new_module": "legoscout_cli.ledger.backfill_sellers",
+  "old_invocation": "python3 backfill_sellers.py [--apply --dry-run --db]",
+  "new_command": "legoscout sellers backfill"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-deal-scoring/scripts/score_deal.py",
+  "new_module": "legoscout_cli.scoring.score",
+  "old_invocation": "python3 score_deal.py <listing_key>...",
+  "new_command": "legoscout score deal"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-deal-scoring/scripts/rescore_ledger.py",
+  "new_module": "legoscout_cli.scoring.rescore",
+  "old_invocation": "python3 rescore_ledger.py [--apply --dry-run --include-rejected --limit]",
+  "new_command": "legoscout score rescore"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-deal-scoring/scripts/text_signals.py",
+  "new_module": "legoscout_cli.scoring.text_signals",
+  "old_invocation": "python3 text_signals.py <text>",
+  "new_command": null
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-pricing/scripts/fees.py",
+  "new_module": "legoscout_cli.pricing.fees",
+  "old_invocation": "python3 fees.py --source --hammer",
+  "new_command": "legoscout pricing fees"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-pricing/scripts/pickup_area.py",
+  "new_module": "legoscout_cli.pricing.pickup_area",
+  "old_invocation": "python3 pickup_area.py \"<location>\"",
+  "new_command": "legoscout pricing pickup-area"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-pricing/scripts/pickup_area.json",
+  "new_module": "legoscout_cli/pricing/pickup_area.json",
+  "old_invocation": null,
+  "new_command": null
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-pricing/scripts/build_pickup_area.py",
+  "new_module": "legoscout_cli.pricing.build_pickup_area",
+  "old_invocation": "python3 build_pickup_area.py [--radius-miles --out]",
+  "new_command": "legoscout pricing rebuild-pickup-area"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-pricing/scripts/estimate_inbound_shipping.py",
+  "new_module": "legoscout_cli.pricing.inbound_shipping",
+  "old_invocation": "python3 estimate_inbound_shipping.py [--origin-zip --house --hibid-lot]",
+  "new_command": "legoscout pricing shipping"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-pricing/scripts/seller_origins.json",
+  "new_module": "legoscout_cli/pricing/seller_origins.json",
+  "old_invocation": null,
+  "new_command": null
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-pricing/scripts/json_cache.py",
+  "new_module": "legoscout_cli.pricing.json_cache",
+  "old_invocation": null,
+  "new_command": null
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-pricing/scripts/lookup_set_sales.py",
+  "new_module": "legoscout_cli.pricing.set_sales",
+  "old_invocation": "python3 lookup_set_sales.py <set_no>",
+  "new_command": "legoscout pricing set-sales"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-pricing/scripts/fetch_listing_images.py",
+  "new_module": "legoscout_cli.pricing.listing_images",
+  "old_invocation": "python3 fetch_listing_images.py [--url --key --urls --max]",
+  "new_command": "legoscout pricing images"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-pricing/scripts/discover_auctionninja_fees.py",
+  "new_module": "legoscout_cli.pricing.auctionninja_fees",
+  "old_invocation": "python3 discover_auctionninja_fees.py [--url --batch --register]",
+  "new_command": "legoscout pricing auctionninja-fees"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-sources/scripts/registry.py",
+  "new_module": "legoscout_cli.sources.registry",
+  "old_invocation": "python3 registry.py [source] [--notes --check --dump]",
+  "new_command": "legoscout sources list"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-sources/scripts/add_source.py",
+  "new_module": "legoscout_cli.sources.add_source",
+  "old_invocation": "python3 add_source.py [entry.json] [--template NS --dry-run --retract]",
+  "new_command": "legoscout sources add"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-sources/scripts/hibid_lot_state.py",
+  "new_module": "legoscout_cli.sources.hibid",
+  "old_invocation": "python3 hibid_lot_state.py <lot>",
+  "new_command": null
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-sources/scripts/listing.py",
+  "new_module": "legoscout_cli.sources.listing",
+  "old_invocation": null,
+  "new_command": null
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-sources/scripts/sources/",
+  "new_module": "legoscout_cli.sources.readers",
+  "old_invocation": null,
+  "new_command": "legoscout deals read"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/LegoScout/categorize.py",
+  "new_module": "legoscout_cli.sources.triage",
+  "old_invocation": "python3 categorize.py",
+  "new_command": "legoscout triage"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/LegoScout/filter_items.py",
+  "new_module": "legoscout_cli.sources.triage",
+  "old_invocation": "python3 filter_items.py",
+  "new_command": "legoscout triage"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/LegoScout/process_candidates.py",
+  "new_module": "legoscout_cli.sources.triage",
+  "old_invocation": "python3 process_candidates.py",
+  "new_command": "legoscout triage --fetch-details"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-prospector/scripts/hypothesis_types.py",
+  "new_module": "legoscout_cli.prospector.hypothesis_types",
+  "old_invocation": "python3 hypothesis_types.py [type]",
+  "new_command": "legoscout prospects hypotheses list"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-prospector/scripts/hypothesis_types.json",
+  "new_module": "legoscout_cli/prospector/hypothesis_types.json",
+  "old_invocation": null,
+  "new_command": null
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-prospector/scripts/prospect_area.json",
+  "new_module": "legoscout_cli/prospector/prospect_area.json",
+  "old_invocation": null,
+  "new_command": null
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-deal-invalidate/scripts/sweep_expired_listings.py",
+  "new_module": "legoscout_cli.invalidate.sweep",
+  "old_invocation": "python3 sweep_expired_listings.py [--apply]",
+  "new_command": "legoscout deals expire"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-orchestrator/scripts/replay_fixtures.py",
+  "new_module": "legoscout_cli.orchestrator.replay_fixtures",
+  "old_invocation": "python3 replay_fixtures.py",
+  "new_command": "legoscout deals replay"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-display/scripts/serve_deals.py",
+  "new_module": "legoscout_cli.display.server",
+  "old_invocation": "python3 serve_deals.py [--port --no-open --db]",
+  "new_command": "legoscout display serve"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-display/scripts/build_rows.mjs",
+  "new_module": "legoscout_cli.display.rows",
+  "old_invocation": "node build_rows.mjs --json [--active-only]",
+  "new_command": "legoscout display rows"
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-display/scripts/ledger_db.mjs",
+  "new_module": "legoscout_cli.display.rows",
+  "old_invocation": null,
+  "new_command": null
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-display/scripts/listing_type.mjs",
+  "new_module": "legoscout_cli.display.rows",
+  "old_invocation": null,
+  "new_command": null
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-display/scripts/available_fulfillment.mjs",
+  "new_module": "legoscout_cli.ledger.fulfillment",
+  "old_invocation": null,
+  "new_command": null
+ },
+ {
+  "kind": "module",
+  "old_path": "/Users/adam/Dropbox/GitRepos/Agents/skills/project/legoscout-display/scripts/registry.mjs",
+  "new_module": "legoscout_cli.sources.registry",
+  "old_invocation": null,
+  "new_command": null
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout sources",
+  "help_path": "sources"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout sources list",
+  "help_path": "sources list"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout sources get",
+  "help_path": "sources get"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout sources add",
+  "help_path": "sources add"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout sources remove",
+  "help_path": "sources remove"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout sources notes",
+  "help_path": "sources notes"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout sources notes list",
+  "help_path": "sources notes list"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout sources notes add",
+  "help_path": "sources notes add"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout sources validate",
+  "help_path": "sources validate"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout sources watermarks",
+  "help_path": "sources watermarks"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout deals",
+  "help_path": "deals"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout deals list",
+  "help_path": "deals list"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout deals get",
+  "help_path": "deals get"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout deals read",
+  "help_path": "deals read"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout deals refresh",
+  "help_path": "deals refresh"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout deals build",
+  "help_path": "deals build"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout deals validate",
+  "help_path": "deals validate"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout deals status",
+  "help_path": "deals status"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout deals expire",
+  "help_path": "deals expire"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout deals schema",
+  "help_path": "deals schema"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout deals replay",
+  "help_path": "deals replay"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout sellers",
+  "help_path": "sellers"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout sellers list",
+  "help_path": "sellers list"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout sellers get",
+  "help_path": "sellers get"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout sellers favorite",
+  "help_path": "sellers favorite"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout sellers backfill",
+  "help_path": "sellers backfill"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout prospects",
+  "help_path": "prospects"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout prospects list",
+  "help_path": "prospects list"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout prospects get",
+  "help_path": "prospects get"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout prospects create",
+  "help_path": "prospects create"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout prospects contacts",
+  "help_path": "prospects contacts"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout prospects contacts list",
+  "help_path": "prospects contacts list"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout prospects contacts create",
+  "help_path": "prospects contacts create"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout prospects outreach",
+  "help_path": "prospects outreach"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout prospects outreach list",
+  "help_path": "prospects outreach list"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout prospects outreach send",
+  "help_path": "prospects outreach send"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout prospects runs",
+  "help_path": "prospects runs"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout prospects runs list",
+  "help_path": "prospects runs list"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout prospects runs create",
+  "help_path": "prospects runs create"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout prospects hypotheses",
+  "help_path": "prospects hypotheses"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout prospects hypotheses list",
+  "help_path": "prospects hypotheses list"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout prospects hypotheses get",
+  "help_path": "prospects hypotheses get"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout pricing",
+  "help_path": "pricing"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout pricing fees",
+  "help_path": "pricing fees"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout pricing landed-cost",
+  "help_path": "pricing landed-cost"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout pricing set-sales",
+  "help_path": "pricing set-sales"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout pricing shipping",
+  "help_path": "pricing shipping"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout pricing images",
+  "help_path": "pricing images"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout pricing pickup-area",
+  "help_path": "pricing pickup-area"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout pricing rebuild-pickup-area",
+  "help_path": "pricing rebuild-pickup-area"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout pricing auctionninja-fees",
+  "help_path": "pricing auctionninja-fees"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout score",
+  "help_path": "score"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout score deal",
+  "help_path": "score deal"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout score rescore",
+  "help_path": "score rescore"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout display",
+  "help_path": "display"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout display serve",
+  "help_path": "display serve"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout display rows",
+  "help_path": "display rows"
+ },
+ {
+  "kind": "command",
+  "old_path": null,
+  "new_module": null,
+  "old_invocation": null,
+  "new_command": "legoscout triage",
+  "help_path": "triage"
+ }
+]

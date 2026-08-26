@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "legoscout-cli"
+version = "0.1.0"
+description = "Sources and prices used LEGO deals: ledger, scoring, pricing, sources, prospects, display"
+requires-python = ">=3.11"
+dependencies = [
+    "cli-tools-shared",
+    "typer>=0.9.0",
+    "python-dotenv>=1.0.0",
+    "jsonschema>=4",
+    "Pillow>=12.3.0",
+    "requests==2.34.2",
+    "torch==2.13.0",
+    "transformers==5.15.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+]
+
+[project.scripts]
+legoscout = "legoscout_cli.main:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["legoscout_cli*"]
+
+[tool.setuptools.package-data]
+legoscout_cli = [
+    "ledger/deal_schema.json",
+    "pricing/pickup_area.json",
+    "pricing/seller_origins.json",
+    "prospector/hypothesis_types.json",
+    "prospector/prospect_area.json",
+    "sources/triage_rules.json",
+]
+
+[tool.uv.sources]
+cli-tools-shared = { path = "../../_repo/cli-tools-shared", editable = true }

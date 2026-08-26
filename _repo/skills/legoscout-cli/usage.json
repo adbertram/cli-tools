@@ -1,8 +1,8 @@
 {
   "tool": "legoscout",
   "description": "CLI interface for legoscout",
-  "discovered_at": "2026-08-23T17:52:16Z",
-  "total_commands": 60,
+  "discovered_at": "2026-08-25T20:45:01Z",
+  "total_commands": 64,
   "global_options": [],
   "commands": {
     "deals": {
@@ -27,6 +27,18 @@
             }
           ],
           "options": [
+            {
+              "name": "--identification",
+              "type": "TEXT",
+              "required": false,
+              "help": "Canonical priced minifigure identification JSON array"
+            },
+            {
+              "name": "--fee-rate",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Explicit resale fee rate as a decimal; required with --identification"
+            },
             {
               "name": "--first-seen-at",
               "type": "TEXT",
@@ -328,12 +340,12 @@
       "options": [],
       "commands": {
         "pull-db": {
-          "help": "Snapshot adam-server's shared ledger down to the local working copy.",
+          "help": "Pull adam-server's shared ledger and crops into the local workspace.",
           "arguments": [],
           "options": []
         },
         "push": {
-          "help": "Push the local ledger to adam-server, then deploy code if it changed.",
+          "help": "Push the local ledger/crops, then deploy code if sync succeeded.",
           "arguments": [],
           "options": []
         },
@@ -416,6 +428,180 @@
         }
       }
     },
+    "minifig": {
+      "help": "Detect, identify, price, and evaluate listing minifigures",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "detect": {
+          "help": "Detect figures in already-saved listing photos; never fetch media.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--input",
+              "type": "PATH",
+              "required": true,
+              "help": "Classifier minifigure hand-off JSON array"
+            },
+            {
+              "name": "--output",
+              "type": "PATH",
+              "required": true,
+              "help": "Atomic minifig_detection artifact path"
+            },
+            {
+              "name": "--detector",
+              "type": "TEXT",
+              "required": false,
+              "help": "Registered detector name",
+              "default": "grounding-dino-tiny"
+            },
+            {
+              "name": "--crop-root",
+              "type": "PATH",
+              "required": false,
+              "help": "Shared content-addressed crop root",
+              "default": "/Users/adam/Dropbox/GitRepos/Agents/LegoScout/agent_workspaces/shared/minifig-crops"
+            }
+          ]
+        },
+        "eval": {
+          "help": "Emit a human-label queue and score only completed human labels.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--manifest",
+              "type": "PATH",
+              "required": true,
+              "help": "Versioned 33-real-listing manifest JSON"
+            },
+            {
+              "name": "--labels",
+              "type": "PATH",
+              "required": true,
+              "help": "Adam-owned human label decisions JSON"
+            },
+            {
+              "name": "--workspace",
+              "type": "PATH",
+              "required": true,
+              "help": "Disposable asset/detection/identification workspace"
+            },
+            {
+              "name": "--output",
+              "type": "PATH",
+              "required": true,
+              "help": "Atomic evaluation report JSON path"
+            },
+            {
+              "name": "--approval",
+              "type": "PATH",
+              "required": false,
+              "help": "Out-of-band Adam approval artifact bound to exact labels"
+            },
+            {
+              "name": "--host-report",
+              "type": "PATH",
+              "required": false,
+              "help": "Verified host report; repeat for mac and adam-server"
+            },
+            {
+              "name": "--crop-root",
+              "type": "PATH",
+              "required": false,
+              "help": "Root containing content-addressed evaluation crops"
+            },
+            {
+              "name": "--queue",
+              "type": "bool",
+              "required": false,
+              "help": "Best-effort labeling queue generation",
+              "takes_value": false,
+              "secondary": "--no-queue",
+              "default": "queue"
+            },
+            {
+              "name": "--stage",
+              "type": "ALL|DETECT|IDENTIFY|QUANTITY",
+              "required": false,
+              "help": "Evaluation stage bar subset",
+              "default": "all"
+            }
+          ]
+        },
+        "identify": {
+          "help": "Group cached Brickognize evidence; never claim verified identity.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--input",
+              "type": "PATH",
+              "required": true,
+              "help": "minifig_detection artifact path"
+            },
+            {
+              "name": "--output",
+              "type": "PATH",
+              "required": true,
+              "help": "Atomic minifig_identification artifact path"
+            },
+            {
+              "name": "--workers",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Concurrent Brickognize requests; maximum 2",
+              "default": "2"
+            },
+            {
+              "name": "--top-k",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum Brickognize candidates; 1 through 50",
+              "default": "10"
+            },
+            {
+              "name": "--min-similarity",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Candidates must score above this 0 through 1 threshold",
+              "default": "0.5"
+            }
+          ]
+        },
+        "price": {
+          "help": "Validate agent evidence, finalize quantities, and price verified IDs.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--input",
+              "type": "PATH",
+              "required": true,
+              "help": "Agent-verified minifig_identification artifact"
+            },
+            {
+              "name": "--output",
+              "type": "PATH",
+              "required": true,
+              "help": "Atomic plain per-listing identification results"
+            },
+            {
+              "name": "--workers",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Concurrent BrickLink price lookups; 1 through 8",
+              "default": "4"
+            },
+            {
+              "name": "--refresh",
+              "type": "bool",
+              "required": false,
+              "help": "Bypass and do not write the shared BrickLink call cache",
+              "takes_value": false
+            }
+          ]
+        }
+      }
+    },
     "pricing": {
       "help": "Deal economics: fees, landed cost, comps and freight",
       "arguments": [],
@@ -453,14 +639,14 @@
           ]
         },
         "comps": {
-          "help": "BrickLink + eBay sold comps for a LEGO set (or several, on one listing), eBay-only for a bulk lot, or eBay-only $/fig for a minifigure lot. The single command the comps-only appraiser calls. Pass --set-no once per detected set number; a single-set listing still passes it once. BrickLink and eBay are independent lookups -- one failing never blocks the other; read `bricklink.lookup_status` and `ebay.available` separately per set.",
+          "help": "BrickLink + eBay sold comps for sets, or eBay-only for a bulk lot. The single command the comps-only appraiser calls. Pass --set-no once per detected set number; a single-set listing still passes it once. BrickLink and eBay are independent lookups -- one failing never blocks the other; read `bricklink.lookup_status` and `ebay.available` separately per set.",
           "arguments": [],
           "options": [
             {
               "name": "--set-no",
               "type": "TEXT",
               "required": false,
-              "help": "A LEGO set number. Repeatable -- pass it once per detected set on a multi-set listing. Required unless --bulk or --minifigure"
+              "help": "A LEGO set number. Repeatable -- pass it once per detected set on a multi-set listing. Required unless --bulk"
             },
             {
               "name": "--bulk",
@@ -470,23 +656,16 @@
               "takes_value": false
             },
             {
-              "name": "--minifigure",
-              "type": "bool",
-              "required": false,
-              "help": "Minifigure-lot mode: eBay $/fig comps only, no BrickLink",
-              "takes_value": false
-            },
-            {
               "name": "--condition",
               "type": "TEXT",
               "required": false,
-              "help": "N or U. Required unless --bulk or --minifigure"
+              "help": "N or U. Required unless --bulk"
             },
             {
               "name": "--description",
               "type": "TEXT",
               "required": false,
-              "help": "Extra search keywords: set name/theme, bulk lot description, or minifigure theme/name"
+              "help": "Extra search keywords: set name/theme or bulk lot description"
             },
             {
               "name": "--dollars-per-lb",
@@ -511,7 +690,7 @@
               "name": "--input",
               "type": "FILE",
               "required": true,
-              "help": "JSON array file of the classifier's comps hand-offs: listing_key, listing_category, and set_numbers/condition/description (set), description/dollars_per_lb (bulk), description/figure_count/figure_count_source (minifigure), or exclusion_reason (excluded)"
+              "help": "JSON array file of classifier comps hand-offs: listing_key, listing_category, and set_numbers/condition/description (set), description/dollars_per_lb (bulk), or exclusion_reason (excluded)"
             },
             {
               "name": "--output",
@@ -536,13 +715,13 @@
           ]
         },
         "ebay-comps": {
-          "help": "eBay sold comps for one LEGO set, one bulk lot with --bulk, or one minifigure lot with --minifigure. Never fails on an eBay auth lapse -- returns `{\"available\": false, \"reason\": \"ebay_auth_required\", ...}` instead. Run `ebay auth login --credential-type browser_session` to authenticate completed/sold search.",
+          "help": "eBay sold comps for one LEGO set or one bulk lot with --bulk. Never fails on an eBay auth lapse -- returns `{\"available\": false, \"reason\": \"ebay_auth_required\", ...}` instead. Run `ebay auth login --credential-type browser_session` to authenticate completed/sold search.",
           "arguments": [
             {
               "name": "set_no",
               "type": "SET_NO",
               "required": false,
-              "help": "A LEGO set number. Required unless --bulk or --minifigure"
+              "help": "A LEGO set number. Required unless --bulk"
             }
           ],
           "options": [
@@ -554,23 +733,16 @@
               "takes_value": false
             },
             {
-              "name": "--minifigure",
-              "type": "bool",
-              "required": false,
-              "help": "Minifigure-lot mode: match by figure count, not a set number",
-              "takes_value": false
-            },
-            {
               "name": "--condition",
               "type": "TEXT",
               "required": false,
-              "help": "N or U. Required unless --bulk or --minifigure"
+              "help": "N or U. Required unless --bulk"
             },
             {
               "name": "--description",
               "type": "TEXT",
               "required": false,
-              "help": "Extra search keywords: set name/theme, bulk lot description, or minifigure theme/name"
+              "help": "Extra search keywords: set name/theme or bulk lot description"
             },
             {
               "name": "--dollars-per-lb",

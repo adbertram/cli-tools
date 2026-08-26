@@ -28,7 +28,7 @@ import sys
 # ever matched the `{"sets": [...]}` spelling and silently saw no set names on
 # every array-shaped row.
 
-from ..ledger import set_analysis  # noqa: E402
+from ..ledger import minifig_analysis, set_analysis  # noqa: E402
 from . import text_signals  # noqa: E402
 
 SCORER_VERSION = "1.2"
@@ -444,22 +444,18 @@ def _score_set(record: dict, observations: dict, price: float) -> dict:
 
 
 def _score_minifigure(record: dict, observations: dict, price: float) -> dict:
-    """A minifigure lot scores on the set resale path: its resale value comes
-    from eBay's $/fig sold average times the figure count, so `max_price` is
-    net resale less the same minimum margin, and quality follows the same
-    resale-size curve. No completeness or sealed multiplier -- a figure lot
-    has no completeness gate -- and comp depth reads eBay's matched count
-    instead of BrickLink's per-set detail count.
-    """
-    resale, _bricklink_depth, _sets_priced = _net_resale(record)
+    """Score a completely valued, identifier-backed minifigure lot."""
+    if record.get("profit_incomplete") is True:
+        return _unscorable(
+            "minifigure valuation is incomplete -- unknown, zero-sales, or "
+            "failed identities make the known subtotal only a conservative floor")
+    resale, sales_count, _sets_priced = _net_resale(record)
     if resale is None:
         return _unscorable(
             "no potential_profit against a landed cost, so there is no resale "
             "value to score"
         )
 
-    ebay_count = record.get("ebay_comp_count")
-    sales_count = ebay_count if isinstance(ebay_count, int) else None
 
     max_price = resale - SET_MIN_PROFIT
     if max_price <= 0:
@@ -520,7 +516,12 @@ def _net_resale(record: dict) -> tuple[float | None, int | None, int]:
     landed = record.get("estimated_total")
     if not isinstance(profit, (int, float)) or not isinstance(landed, (int, float)):
         return None, None, 0
-    return float(profit) + float(landed), set_analysis.sold_count(record), 1
+    if record.get("listing_category") == "minifigure":
+        sales_count = minifig_analysis.sold_count(
+            minifig_analysis.entries(record))
+    else:
+        sales_count = set_analysis.sold_count(record)
+    return float(profit) + float(landed), sales_count, 1
 
 
 def _comp_depth_multiplier(sales_count: int | None) -> float:
