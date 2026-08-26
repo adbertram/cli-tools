@@ -59,7 +59,10 @@ import os
 import shutil
 import subprocess
 import sys
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import (
+    ThreadPoolExecutor,
+    TimeoutError as FuturesTimeoutError,
+)
 from pathlib import Path
 from typing import Any
 
@@ -95,6 +98,7 @@ PLAYWRIGHT_CLI = "playwright-cli"
 GOOGLE_CLI = "google"
 BRICKOGNIZE_HEALTH_URL = "https://api.brickognize.com/health/"
 BRICKOGNIZE_TIMEOUT_SECONDS = 10
+DETECTOR_CHECK_TIMEOUT_SECONDS = 120
 MINIFIG_DETECTOR = "grounding-dino-tiny"
 
 PROJECT_SKILLS = (
@@ -267,7 +271,19 @@ def _check_brickognize() -> dict[str, Any]:
 
 
 def _check_minifig_detector() -> dict[str, Any]:
-    """Load the selected runtime and pinned model exactly as detection does."""
+    return _check_minifig_detector_with_deadline(
+        DETECTOR_CHECK_TIMEOUT_SECONDS)
+
+
+def _check_minifig_detector_with_deadline(
+    timeout_seconds: float,
+) -> dict[str, Any]:
+    """Load the selected runtime and pinned model exactly as detection does.
+
+    A stalled Hugging Face ``from_pretrained`` (cold cache on a flaky
+    network can hang indefinitely) must surface as a bounded warning row,
+    never hang the mandatory pre-run gate.
+    """
     row: dict[str, Any] = {
         "available": False,
         "detector": MINIFIG_DETECTOR,
@@ -275,11 +291,22 @@ def _check_minifig_detector() -> dict[str, Any]:
         "revision": minifig_detector.GROUNDING_DINO_REVISION,
         "error": None,
     }
+    loader_pool = ThreadPoolExecutor(max_workers=1)
     try:
-        minifig_detector.load_detector(MINIFIG_DETECTOR)
+        future = loader_pool.submit(
+            minifig_detector.load_detector, MINIFIG_DETECTOR)
+        try:
+            future.result(timeout=timeout_seconds)
+        except FuturesTimeoutError:
+            row["error"] = (
+                "detector load exceeded %ss deadline; treating as "
+                "unavailable for this run" % timeout_seconds)
+            return row
     except Exception as exc:  # noqa: BLE001 -- runtime/model failure is warning evidence
         row["error"] = "%s: %s" % (type(exc).__name__, exc)
         return row
+    finally:
+        loader_pool.shutdown(wait=False, cancel_futures=True)
     row["available"] = True
     return row
 

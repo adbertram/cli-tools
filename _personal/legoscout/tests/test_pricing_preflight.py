@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import json
 import subprocess
+import threading
+import time
 from unittest import mock
 
 import pytest
@@ -283,6 +285,27 @@ def test_check_minifig_detector_reports_runtime_or_model_failure():
     assert row["detector"] == "grounding-dino-tiny"
     assert row["model"] == preflight.minifig_detector.GROUNDING_DINO_MODEL
     assert "ModuleNotFoundError: torch" in row["error"]
+
+
+def test_check_minifig_detector_deadline_expires_to_warning_not_hang():
+    # A stalled Hugging Face from_pretrained must surface as a bounded
+    # warning row, never hang the mandatory pre-run gate.
+    def stalled_load(name):
+        event.wait(preflight.DETECTOR_CHECK_TIMEOUT_SECONDS + 5)
+
+    event = threading.Event()
+    with mock.patch.object(
+            preflight.minifig_detector, "load_detector",
+            side_effect=stalled_load):
+        started = time.monotonic()
+        row = preflight._check_minifig_detector_with_deadline(
+            preflight.DETECTOR_CHECK_TIMEOUT_SECONDS)
+        elapsed = time.monotonic() - started
+    event.set()
+    assert row["available"] is False
+    assert row["error"] is not None
+    assert "deadline" in row["error"] or "timed out" in row["error"]
+    assert elapsed < preflight.DETECTOR_CHECK_TIMEOUT_SECONDS + 5
 
 
 def test_check_brickognize_uses_health_endpoint_and_current_provider_headers():
