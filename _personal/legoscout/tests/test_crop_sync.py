@@ -146,7 +146,14 @@ def test_should_pull_remote_authoritative_crops_additively_with_exact_argv(
     def fake_run_local(argv: list[str], input: str | None = None) -> str:
         calls.append((argv, input))
         if "--dry-run" in argv:
-            return ">f+++++++++|aa/new.jpg\n"
+            # First dry-run is the preflight; the second is the post-transfer
+            # verification, which must come back clean.
+            if not any(
+                previous_argv is not argv and "--dry-run" in previous_argv
+                for previous_argv, _ in calls[:-1]
+            ):
+                return ">f+++++++++|aa/new.jpg\n"
+            return ""
         return ""
 
     monkeypatch.setattr(db_sync.ssh, "run_local", fake_run_local)
@@ -185,6 +192,19 @@ def test_should_pull_remote_authoritative_crops_additively_with_exact_argv(
             ],
             None,
         ),
+        (
+            [
+                "rsync",
+                "-a",
+                "--checksum",
+                "--dry-run",
+                "--itemize-changes",
+                "--out-format=%i|%n",
+                source,
+                destination,
+            ],
+            None,
+        ),
     ]
     assert remote_scripts == ["mkdir -p /remote/shared/crops\n"]
     assert all(not any(arg.startswith("--delete") for arg in argv) for argv, _ in calls)
@@ -201,7 +221,14 @@ def test_should_push_local_crops_additively_with_exact_argv(monkeypatch, tmp_pat
     def fake_run_local(argv: list[str], input: str | None = None) -> str:
         calls.append((argv, input))
         if "--dry-run" in argv:
-            return ">f+++++++++|bb/new.webp\n"
+            # First dry-run is the preflight; the second is the post-transfer
+            # verification, which must come back clean.
+            if not any(
+                previous is not argv and "--dry-run" in previous
+                for previous, _ in calls[:-1]
+            ):
+                return ">f+++++++++|bb/new.webp\n"
+            return ""
         return ""
 
     monkeypatch.setattr(db_sync.ssh, "run_local", fake_run_local)
@@ -235,6 +262,19 @@ def test_should_push_local_crops_additively_with_exact_argv(monkeypatch, tmp_pat
                 "rsync",
                 "-a",
                 "--ignore-existing",
+                source,
+                destination,
+            ],
+            None,
+        ),
+        (
+            [
+                "rsync",
+                "-a",
+                "--checksum",
+                "--dry-run",
+                "--itemize-changes",
+                "--out-format=%i|%n",
                 source,
                 destination,
             ],

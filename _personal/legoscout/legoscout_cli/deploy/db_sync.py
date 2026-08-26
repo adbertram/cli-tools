@@ -71,7 +71,13 @@ def _parse_rsync_preflight(output: str) -> tuple[list[str], list[str]]:
 
 
 def _sync_additive(source: str, destination: str) -> dict[str, Any]:
-    """Copy source-only files while refusing same-name content differences."""
+    """Copy source-only files while refusing same-name content differences.
+
+    ``--ignore-existing`` silently skips a destination entry that already has
+    the same name -- including a symlink or directory planted where a crop
+    belongs -- so every reported addition is re-checked afterwards and a
+    non-regular destination collision blocks the leg loudly.
+    """
     preflight = ssh.run_local(
         [
             "rsync",
@@ -87,6 +93,8 @@ def _sync_additive(source: str, destination: str) -> dict[str, Any]:
     additions, collisions = _parse_rsync_preflight(preflight)
     if collisions:
         raise ValueError("crop content collision: %s" % ", ".join(collisions))
+    if not additions:
+        return {"transferred": False, "collisions": []}
     ssh.run_local(
         [
             "rsync",
@@ -96,6 +104,27 @@ def _sync_additive(source: str, destination: str) -> dict[str, Any]:
             destination,
         ]
     )
+    verified, collisions_after = _parse_rsync_preflight(
+        ssh.run_local(
+            [
+                "rsync",
+                "-a",
+                "--checksum",
+                "--dry-run",
+                "--itemize-changes",
+                "--out-format=%i|%n",
+                source,
+                destination,
+            ]
+        )
+    )
+    if collisions_after:
+        raise ValueError(
+            "crop content collision: %s" % ", ".join(collisions_after))
+    if verified:
+        raise ValueError(
+            "crop transfer did not land (destination may hold a non-regular "
+            "entry): %s" % ", ".join(verified))
     return {"transferred": bool(additions), "collisions": []}
 
 

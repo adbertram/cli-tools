@@ -35,7 +35,20 @@ def push():
     if not sync["ok"]:
         print_json({"ok": False, "sync": sync, "code_deployed": False})
         raise typer.Exit(1)
-    result = release.deploy_code()
+    try:
+        result = release.deploy_code()
+    except Exception as exc:
+        # The sync legs already succeeded; their outcomes stay visible so a
+        # code-deploy failure never hides completed work.
+        print_json(
+            {
+                "ok": False,
+                "error": "%s: %s" % (type(exc).__name__, exc),
+                "sync": sync,
+                "code_deployed": False,
+            }
+        )
+        raise typer.Exit(1) from exc
     print_json(
         {
             "ok": True,
