@@ -8,6 +8,8 @@ is resolved relative to this file.
 """
 from __future__ import annotations
 
+import os
+
 from pathlib import Path
 
 PKG = Path(__file__).resolve().parent
@@ -22,7 +24,12 @@ BRICKLINK_CALL_CACHE = str(LEGOSCOUT_ROOT / "data" / ".bricklink_call_cache.json
 EBAY_COMP_CALL_CACHE = str(LEGOSCOUT_ROOT / "data" / ".ebay_comp_call_cache.json")
 LISTING_IMAGES_ROOT = str(LEGOSCOUT_ROOT / "agent_workspaces" / "listing-images")
 MINIFIG_EVAL_WORKSPACE = "/Users/adam/Dropbox/GitRepos/Agents/LegoScout/agent_workspaces/minifig-eval"
-MINIFIG_CROP_ROOT = "/Users/adam/Dropbox/GitRepos/Agents/LegoScout/agent_workspaces/shared/minifig-crops"
+# Deployed hosts mirror the project under ~/GitRepos/legoscout, so the crop
+# root derives from LEGOSCOUT_ROOT; LEGOSCOUT_MINIFIG_CROP_ROOT overrides for
+# any layout that keeps crops elsewhere.
+MINIFIG_CROP_ROOT = os.environ.get("LEGOSCOUT_MINIFIG_CROP_ROOT") or str(
+    LEGOSCOUT_ROOT / "agent_workspaces" / "shared" / "minifig-crops"
+)
 BRICKOGNIZE_MINIFIG_CACHE = "/Users/adam/Dropbox/GitRepos/Agents/LegoScout/data/.brickognize_minifig_cache.json"
 SOURCE_RUNS = str(LEGOSCOUT_ROOT / "agent_workspaces" / "source-runs")
 

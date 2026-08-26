@@ -260,7 +260,7 @@ def test_should_serve_url_decoded_content_hash_crop_with_exact_headers(
     monkeypatch, tmp_path,
 ):
     with _crop_server(monkeypatch, tmp_path) as (port, crop_root):
-        expected = b"\xff\xd8crop-bytes\xff\xd9"
+        expected = b"\xff\xd8\xff" + b"crop-bytes\xff\xd9"
         nested = crop_root / "aa"
         nested.mkdir()
         filename = f"figcrop-v1-{_HASH}.jpg"
@@ -278,21 +278,25 @@ def test_should_serve_url_decoded_content_hash_crop_with_exact_headers(
 
 
 @pytest.mark.parametrize(
-    ("suffix", "expected_type"),
-    [(".jpeg", "image/jpeg"), (".png", "image/png"), (".webp", "image/webp")],
+    ("suffix", "expected_type", "magic"),
+    [
+        (".jpeg", "image/jpeg", b"\xff\xd8\xff"),
+        (".png", "image/png", b"\x89PNG\r\n\x1a\n"),
+        (".webp", "image/webp", b"RIFF\x00\x00\x00\x00WEBPVP8 "),
+    ],
 )
 def test_should_serve_only_supported_crop_mime_types(
-    monkeypatch, tmp_path, suffix, expected_type,
+    monkeypatch, tmp_path, suffix, expected_type, magic,
 ):
     with _crop_server(monkeypatch, tmp_path) as (port, crop_root):
         filename = f"figcrop-v1-{_HASH}{suffix}"
-        (crop_root / filename).write_bytes(b"image")
+        payload = magic + b"-rest"
+        (crop_root / filename).write_bytes(payload)
         status, headers, body = _get(port, f"/crops/{filename}")
 
     assert status == 200
-    assert body == b"image"
+    assert body == payload
     assert headers["Content-Type"] == expected_type
-    assert headers["Content-Length"] == "5"
     assert headers["X-Content-Type-Options"] == "nosniff"
 
 
@@ -342,9 +346,11 @@ def test_should_enforce_ten_mib_crop_boundary(monkeypatch, tmp_path):
     with _crop_server(monkeypatch, tmp_path) as (port, crop_root):
         exact = crop_root / "exact.png"
         with exact.open("wb") as stream:
+            stream.write(b"\x89PNG\r\n\x1a\n")
             stream.truncate(10 * 1024 * 1024)
         too_large = crop_root / "large.png"
         with too_large.open("wb") as stream:
+            stream.write(b"\x89PNG\r\n\x1a\n")
             stream.truncate(10 * 1024 * 1024 + 1)
 
         exact_status, exact_headers, exact_body = _get(port, "/crops/exact.png")
@@ -358,7 +364,7 @@ def test_should_enforce_ten_mib_crop_boundary(monkeypatch, tmp_path):
 
 def test_should_use_no_store_for_non_content_hash_image(monkeypatch, tmp_path):
     with _crop_server(monkeypatch, tmp_path) as (port, crop_root):
-        (crop_root / "legacy.jpg").write_bytes(b"legacy")
+        (crop_root / "legacy.jpg").write_bytes(b"\xff\xd8\xfflegacy")
         status, headers, _ = _get(port, "/crops/legacy.jpg")
     assert status == 200
     assert headers["Cache-Control"] == "no-store"

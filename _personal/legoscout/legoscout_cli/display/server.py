@@ -78,6 +78,12 @@ CROP_TYPES = {
     ".png": "image/png",
     ".webp": "image/webp",
 }
+# Extension-chosen types must be proven by the file's leading bytes.
+CROP_MAGIC = {
+    "image/jpeg": b"\xff\xd8\xff",
+    "image/png": b"\x89PNG\r\n\x1a\n",
+    "image/webp": b"RIFF",
+}
 CONTENT_HASH_CROP_RE = re.compile(
     r"^figcrop-v[0-9]+-[0-9a-f]{64}\.(?:jpe?g|png|webp)$", re.I)
 
@@ -855,6 +861,11 @@ class Handler(BaseHTTPRequestHandler):
             relative = unquote(encoded_relative, errors="strict")
         except UnicodeDecodeError:
             return self._send(400, json.dumps({"error": "invalid crop path"}))
+        if "\x00" in relative:
+            # A decoded NUL terminates C-string handling in some layers and
+            # must answer 400 like any other malformed request, never drop
+            # the connection.
+            return self._send(400, json.dumps({"error": "invalid crop path"}))
         parts = relative.split("/")
         if (not relative or relative.startswith("/") or "\\" in relative
                 or any(part in ("", ".", "..") for part in parts)):
@@ -869,12 +880,18 @@ class Handler(BaseHTTPRequestHandler):
         ctype = CROP_TYPES.get(target.suffix.lower())
         if ctype is None:
             return self._send(415, json.dumps({"error": "unsupported crop type"}))
-        if target.stat().st_size > CROP_MAX_BYTES:
-            return self._send(413, json.dumps({"error": "crop is too large"}))
         try:
             body = target.read_bytes()
         except OSError:
             return self._send(404, json.dumps({"error": "crop not found"}))
+        if len(body) > CROP_MAX_BYTES:
+            return self._send(413, json.dumps({"error": "crop is too large"}))
+        magic = CROP_MAGIC.get(ctype)
+        # The extension names the type; the bytes must prove it, so arbitrary
+        # payloads cannot masquerade as images behind a .jpg name.
+        if magic is None or not body.startswith(magic):
+            return self._send(
+                415, json.dumps({"error": "crop content does not match type"}))
         cache_control = (
             "public, max-age=31536000, immutable"
             if CONTENT_HASH_CROP_RE.fullmatch(target.name) else "no-store")
