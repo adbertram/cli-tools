@@ -13,6 +13,11 @@ dependencies = [
     "requests>=2.31.0",
     "pydantic>=2.0.0",
     "blake3>=1.0.0",
+    # cloudflare_cli/commands/r2.py imports boto3/botocore at module import
+    # time for the R2 S3-compatible API. main.py imports that module
+    # unconditionally, so an undeclared boto3 breaks `cloudflare --help`
+    # outright the next time the uv tool venv is rebuilt from this manifest.
+    "boto3>=1.34.0",
     "cli-tools-shared",
 ]
 

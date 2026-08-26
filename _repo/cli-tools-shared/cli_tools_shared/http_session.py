@@ -302,18 +302,21 @@ class BrowserAuthenticatedHttpClient:
         url: str,
         headers: Mapping[str, str] | None = None,
         stop_after_markers: Sequence[str] = (),
+        stop_after_tail_bytes: int = 0,
         chunk_size: int = 65536,
         encoding: str = "utf-8",
     ) -> str:
         """GET ``url`` and return response text.
 
         When ``stop_after_markers`` is supplied, response streaming stops after
-        every marker appears in the bytes read so far.
+        every marker appears in the bytes read so far, plus
+        ``stop_after_tail_bytes`` further bytes.
         """
         return self.get_text_result(
             url,
             headers=headers,
             stop_after_markers=stop_after_markers,
+            stop_after_tail_bytes=stop_after_tail_bytes,
             chunk_size=chunk_size,
             encoding=encoding,
         ).text
@@ -323,12 +326,19 @@ class BrowserAuthenticatedHttpClient:
         url: str,
         headers: Mapping[str, str] | None = None,
         stop_after_markers: Sequence[str] = (),
+        stop_after_tail_bytes: int = 0,
         chunk_size: int = 65536,
         encoding: str = "utf-8",
     ) -> BrowserHttpResult:
         """GET ``url`` and return response text with timing metadata."""
         request = Request(url, headers=self._headers_for_url(url, headers))
-        return self._open_text_result(request, stop_after_markers, chunk_size, encoding)
+        return self._open_text_result(
+            request,
+            stop_after_markers,
+            stop_after_tail_bytes,
+            chunk_size,
+            encoding,
+        )
 
     def post_form_text(
         self,
@@ -357,7 +367,7 @@ class BrowserAuthenticatedHttpClient:
             headers=request_headers,
             method="POST",
         )
-        return self._open_text_result(request, (), 65536, encoding)
+        return self._open_text_result(request, (), 0, 65536, encoding)
 
     def _headers_for_url(
         self,
@@ -379,6 +389,7 @@ class BrowserAuthenticatedHttpClient:
         self,
         request: Request,
         stop_after_markers: Sequence[str],
+        stop_after_tail_bytes: int,
         chunk_size: int,
         encoding: str,
     ) -> BrowserHttpResult:
@@ -387,7 +398,13 @@ class BrowserAuthenticatedHttpClient:
             with self.opener(request, timeout=self.timeout) as response:
                 if response.status != 200:
                     raise ClientError(f"HTTP {response.status} returned for {request.full_url}")
-                raw = _read_response(response, stop_after_markers, chunk_size, encoding)
+                raw = _read_response(
+                    response,
+                    stop_after_markers,
+                    stop_after_tail_bytes,
+                    chunk_size,
+                    encoding,
+                )
                 wire_bytes = len(raw)
                 raw = _decode_response_body(raw, response.headers.get("Content-Encoding"))
         except HTTPError as exc:
@@ -727,17 +744,61 @@ def _cookie_header(
     return "; ".join(f"{cookie.name}={cookie.value}" for cookie in cookies)
 
 
-def _read_response(response, stop_after_markers, chunk_size, encoding) -> bytes:
+def _read_response(
+    response,
+    stop_after_markers,
+    stop_after_tail_bytes,
+    chunk_size,
+    encoding,
+) -> bytes:
+    """Read a response body, optionally stopping once every marker has arrived.
+
+    ``stop_after_tail_bytes`` keeps reading that many bytes past the point where
+    the last outstanding marker completes. A stop marker is a cheap way to skip
+    the rest of a large document, but a parser rarely needs the marker alone --
+    it needs a region AROUND it. Without a tail, the only way to keep the bytes
+    that follow a marker is to add a second marker further down the document,
+    and every such marker is one more string that can silently stop matching.
+    The tail expresses "the marker plus its surrounding region" directly, so the
+    marker set can stay limited to strings whose stability is already relied on.
+
+    The tail is a floor, not an exact length: reading stops on a chunk boundary,
+    so up to ``chunk_size - 1`` extra bytes come back with it. Trimming to the
+    exact count would split whatever multi-byte character straddles it.
+    """
+    if stop_after_tail_bytes < 0:
+        raise ClientError(
+            f"stop_after_tail_bytes must not be negative, got {stop_after_tail_bytes}."
+        )
     markers = tuple(marker.encode(encoding) for marker in stop_after_markers)
+    if stop_after_tail_bytes and not markers:
+        raise ClientError(
+            "stop_after_tail_bytes is measured from the last stop marker, so it "
+            "requires stop_after_markers."
+        )
     raw_body = bytearray()
+    stop_at: Optional[int] = None
     while True:
         chunk = response.read(chunk_size)
         if not chunk:
             break
         raw_body.extend(chunk)
-        if markers and all(marker in raw_body for marker in markers):
+        if stop_at is None and markers:
+            stop_at = _markers_complete_at(raw_body, markers, stop_after_tail_bytes)
+        if stop_at is not None and len(raw_body) >= stop_at:
             break
     return bytes(raw_body)
+
+
+def _markers_complete_at(raw_body: bytearray, markers, tail_bytes: int) -> Optional[int]:
+    """Return the byte count to read once every marker is present, else ``None``."""
+    last_marker_end = 0
+    for marker in markers:
+        index = raw_body.find(marker)
+        if index < 0:
+            return None
+        last_marker_end = max(last_marker_end, index + len(marker))
+    return last_marker_end + tail_bytes
 
 
 def _decode_response_body(raw_body: bytes, content_encoding: str | None) -> bytes:

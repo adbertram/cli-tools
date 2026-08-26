@@ -332,3 +332,16 @@ cat <<EOF
   "help_works": $HELP_WORKS
 }
 EOF
+
+# ============================================================================
+# Propagate failure to the caller's exit status
+# ============================================================================
+# A failed install must be loud at the process level, not only inside the JSON
+# body. Callers such as shippo/install.sh run this under `set -e` and treat a
+# zero exit as "installed"; returning 0 with "success": false let a broken venv
+# (e.g. a runtime import the manifest never declared, so the venv rebuild drops
+# it and --help stops working) pass as a completed install.
+if [ "$SUCCESS" != "true" ]; then
+    exit 1
+fi
+exit 0

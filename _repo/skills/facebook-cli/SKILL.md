@@ -105,6 +105,40 @@ the counts Facebook prints in its own section headings ("All groups you've
 joined (34)", "Pending group requests (7)") to enumerate everything.
 </principle>
 
+<principle name="Group Post Fields, Author Identity, Feed Order, and Depth">
+`facebook groups posts list` and `facebook groups posts get` return the SAME
+field set for a post -- verified live 2026-08-25 on three groups:
+
+    post_id, title, author, author_id, text, body, timestamp,
+    url, thread_url, reactions, comment_count, comments, image_urls
+
+- **`author_id` is Facebook's own numeric profile id** for the poster, read
+  structurally from `feedback.owning_profile.id` in the group story node (equal
+  to `actors[0].id`). `author` is the display name, which a person can change
+  and two people can share -- so join on `author_id`, never on `author`. Added
+  2026-08-25; before that this surface exposed no keyed poster identity at all
+  and consumers had to treat a name as one. Both are `null` when Facebook's
+  payload names no owning profile; an absent id is reported as absent and is
+  never derived from the name.
+- **The feed is RANKED, not chronological, and there is no `--sort`.** Measured
+  live 2026-08-25 on group 250458852075384 at `--limit 15`, the timestamps came
+  back 08-23, 08-23, 08-25, 08-25, 08-24, 08-25, **08-11**, 08-22, 08-25,
+  08-25, 08-25, 08-25, 08-25, 08-25 -- an 08-11 post ranked seventh. Two other
+  groups came back descending the same day, which is why the order can never be
+  RELIED on rather than merely being wrong. A caller that needs "everything
+  since X" must read the whole window and filter on `timestamp` itself.
+- **`--limit` is hard-capped at 50 and there is no paging option.** `--limit 51`
+  exits 2 with `51 is not in the range 1<=x<=50`. Fifty posts is the entire
+  window this command can show; unlike Marketplace, there is no deeper page to
+  scroll to.
+- **One post is not one item.** Sellers routinely list many separately priced
+  items in one post body -- live 2026-08-25, post 2559186437869269 listed 21
+  sets from $10 to $300, several annotated "(pending)" or "(2 available)".
+  There is no structured per-item price, location, or fulfillment field: a group
+  post carries no `location_text` and no `delivery_types` equivalent, only the
+  seller's prose. Never key one record per post when the post sells many things.
+</principle>
+
 <principle name="Group Comment Verification">
 `facebook groups posts comment` and `facebook groups posts reply` perform multi-stage verification after submitting (composer-cleared → comment-count delta → markdown-stripped text-on-page) and return:
 
@@ -391,6 +425,21 @@ Facebook's own filter button on both rejected pages still read `Location: Evansv
 **Verification:** All 8 previously-zero groups now return 3/3 posts with real authors and text at exit 0 (`3367761036773668`, `827463510672407`, `1457540554300292`, `1351019278661675`, `735053390610330`, `Legosforsale`, `701073159947799`, `1202687183194441`). All 16 previously-working groups still return 3/3 — four of them previously returned only 2. `1647953932130640` (private, pending) still exits 1 with `UNREADABLE_GROUP:`. All three exit codes verified through the installed dispatch: `FEED_EXTRACTION_FAILED`→3, `LOGGED_OUT_HTML`→2, `UNREADABLE_GROUP`→1, each with empty stdout. Regression coverage in `facebook/tests/test_group_feed_silent_zero_regression.py` against verbatim live captures in `facebook/tests/fixtures/group_feed_preload_*.txt` and `group_feed_logged_out_1457540554300292.txt` (session tokens redacted; every group ID, query ID, and Relay variable untouched), including a test that asserts the deleted scraper cannot come back and one that asserts a genuinely empty readable group is still `[]` at exit 0.
 
 **Recurrence Prevention:** Never validate a Facebook parser against a capture without first asserting a positive authentication marker in that same capture — a logged-out page produces parsers that pass on fixtures and answer wrongly in production, and Facebook signals it only through `CurrentUserInitialData.USER_ID == "0"` on an HTTP 200. Never keep a second copy of a browser session (cookie snapshot, storage-state file, exported header) alongside the live profile: the live profile rotates, the copy does not, and the divergence is silent. And never add a fallback extractor behind a primary one that can return an empty list — the fallback's empty answer is indistinguishable from a real empty result, which is what turned this into a month-shaped blind spot rather than a crash.
+
+### 10. The group-feed read's stop marker named a rotating Facebook query ID, so it stopped stopping
+
+**Symptom (2026-08-25):** None. That is the whole problem. `facebook groups posts list <group> --limit 3` kept returning correct posts at exit 0 while downloading the entire ~2.8MB group page on every call instead of the ~482KB Relay bootstrap slice it asks for. Measured live: the bootstrap fetch took a median 1.80s and read 2,856,012 characters, when the data it needs ends at character 482,510.
+
+**Cause:** `GROUP_DISCUSSION_BOOTSTRAP_MARKERS` — the `stop_after_markers` list handed to `BrowserAuthenticatedHttpClient.get_text_result` — included `"queryID":"26647538378198347"`, the discussion query's document ID as it stood when the list was written. Facebook rotates that ID; by 2026-08-25 the live pages served `27950770684584803` and carried the old value nowhere at all. `_read_response` stops only once ALL markers are present, so one marker that can never match means the set never completes and the stream is read to the end. A never-matching stop marker is strictly SAFE — which is exactly why nothing detected it for as long as it lasted. The ID was also duplicated data: `_extract_group_discussion_request` already reads the queryID out of the page at runtime.
+
+**Fix (`facebook/facebook_cli/client.py`, `_repo/cli-tools-shared/cli_tools_shared/http_session.py`):**
+
+- `GROUP_DISCUSSION_DOC_ID` is deleted. The marker set is now only strings whose stability this client already depends on elsewhere: the three Relay bootstrap defines it parses by name (`CurrentUserInitialData`, `DTSGInitialData`, `LSD`) and Facebook's own FRIENDLY name for the query, `CometGroupDiscussionRootSuccessQuery` — the same string sent back in the `X-FB-Friendly-Name` request header, so a change to it breaks the GraphQL call loudly rather than degrading a read.
+- Dropping the doc-id marker alone was NOT safe: `_extract_group_discussion_request` scans `GROUP_DISCUSSION_WINDOW_CHARS` (6000) either side of the friendly-name marker, and stopping the read ON that marker cuts the half of the window that follows it. So `_read_response` gained `stop_after_tail_bytes`: keep reading that many bytes past the point where the last outstanding marker completes. `GROUP_DISCUSSION_BOOTSTRAP_TAIL_BYTES` is `4 × GROUP_DISCUSSION_WINDOW_CHARS` (UTF-8's worst case is four bytes per character), and `GROUP_DISCUSSION_WINDOW_CHARS` is now one constant shared by the marker tail and the extractor's own window. The tail is a floor, not an exact length — the read stops on a chunk boundary, and trimming to an exact byte count would split a multi-byte character.
+
+**Verification:** Live 2026-08-25 on `/groups/1457540554300292/` (2,846,266 chars, friendly marker at 482,460) and `/groups/Legosforsale/` (3,099,382 chars, marker at 482,628): both pages carry exactly ONE occurrence of the friendly marker, carry the retired doc ID nowhere, and serve the query as `"queryID":...,"variables":{...},"queryName":...` with no `"queryID"` or `"variables"` anywhere in the 6000 characters that follow the marker. The bounded read returns 524,288 chars (a chunk boundary) and extracts byte-identical variables and `document_id 27950770684584803` to a whole-page read, for both the numeric reference and the vanity slug. Median bootstrap fetch 1.80s → 0.75s over four alternating rounds. `facebook groups posts list 1457540554300292 --limit 3` and `facebook groups posts list Legosforsale --limit 3` each return 3 real posts at exit 0. Regression coverage in `facebook/tests/test_group_bootstrap_stop_markers.py` (no marker may embed an 8+ digit run; `GROUP_DISCUSSION_DOC_ID` may not come back; the bounded read of a real captured slice followed by filler extracts what the full body extracts) and in `_repo/cli-tools-shared/tests/test_http_session.py` for the tail itself. Full suite: `345 passed`.
+
+**Recurrence Prevention:** Never put a rotating service identifier — a GraphQL doc/query ID, a build hash, a bundle name, a revision string — in a stop marker, a cache key, or any other predicate whose failure mode is silence. Prefer a string the code already fails loudly on when it changes (here: the friendly name, which is also a request header). When a parser needs a REGION around a marker rather than the marker itself, express that as a bounded tail on the read, not as a second marker further down the document: every extra marker is another string that can stop matching without anyone noticing. And when an optimization's only symptom of failure is that it stopped optimizing, it needs a test that asserts the bound, not just the answer.
 
 ## Raw Browser Fallback Notes
 
