@@ -427,6 +427,7 @@ def catalog_part_out_value(
         bricklink catalog part-out-value 7662-1 --exclude-figs --table
     """
     try:
+        condition = condition.upper()
         if condition not in ("N", "U"):
             raise typer.BadParameter("condition must be N or U")
 
@@ -455,7 +456,7 @@ def catalog_part_out_value(
         bulk = BulkProcessor().process(lots, _fetch_price)
 
         rows = []
-        unpriced = [dict(outcome["input"]) for outcome in bulk["errors"]]
+        unpriced = [{**outcome["input"], "error": outcome["error"]} for outcome in bulk["errors"]]
         parts = {"lots": 0, "pieces": 0, "value": 0.0}
         figs = {"lots": 0, "count": 0, "value": 0.0}
 

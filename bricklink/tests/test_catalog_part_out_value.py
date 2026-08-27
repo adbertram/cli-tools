@@ -94,6 +94,13 @@ def _run(monkeypatch, client, **kwargs):
     return printed[0]
 
 
+def _expect_exit(monkeypatch, client, set_no="7662-1", **kwargs):
+    monkeypatch.setattr("bricklink_cli.commands.catalog.get_client", lambda: client)
+    with pytest.raises(typer.Exit) as exc_info:
+        _call(set_no, **kwargs)
+    assert exc_info.value.exit_code != 0
+
+
 def test_part_out_lots_skips_alternates_and_sums_extra_quantity():
     lots = _part_out_lots(SUBSETS)
     assert lots == [
@@ -167,14 +174,36 @@ def test_unpriced_lot_reported_and_excluded(monkeypatch):
     assert result["total_value"] == 5.5
 
 
+def test_failed_price_lookup_lands_in_unpriced_with_error(monkeypatch):
+    client = _mock_client()
+
+    def _price_guide(item_type, item_no, color_id=None, **kwargs):
+        if item_no == "3622":
+            raise RuntimeError("Bricklink API error 429: quota exceeded")
+        return dict(PRICES[(item_type, item_no, color_id)])
+
+    client.get_price_guide.side_effect = _price_guide
+    result = _run(monkeypatch, client)
+    assert result["unpriced"] == [{
+        "type": "PART", "no": "3622", "color_id": 86, "qty": 2,
+        "error": "Bricklink API error 429: quota exceeded",
+    }]
+    assert result["unpriced_count"] == 1
+    assert result["parts"] == {"lots": 1, "pieces": 5, "value": 0.5}
+
+
+def test_condition_is_case_normalized(monkeypatch):
+    client = _mock_client()
+    result = _run(monkeypatch, client, condition="u")
+    assert result["condition"] == "U"
+    for call in client.get_price_guide.call_args_list:
+        assert call.kwargs["condition"] == "U"
+
+
 def test_aborts_when_majority_unpriced(monkeypatch):
     empty = {"avg_price": "0.0000", "unit_quantity": 0, "total_quantity": 0}
     prices = {key: empty for key in PRICES}
-    client = _mock_client(prices=prices)
-    monkeypatch.setattr("bricklink_cli.commands.catalog.get_client", lambda: client)
-    with pytest.raises(typer.Exit) as exc_info:
-        _call("7662-1")
-    assert exc_info.value.exit_code != 0
+    _expect_exit(monkeypatch, _mock_client(prices=prices))
 
 
 def test_aborts_when_subsets_call_fails(monkeypatch):
@@ -182,16 +211,9 @@ def test_aborts_when_subsets_call_fails(monkeypatch):
 
     client = MagicMock()
     client.get_subsets.side_effect = ClientError("Bricklink API error 404: not found")
-    monkeypatch.setattr("bricklink_cli.commands.catalog.get_client", lambda: client)
-    with pytest.raises(typer.Exit) as exc_info:
-        _call("bogus-1")
-    assert exc_info.value.exit_code != 0
+    _expect_exit(monkeypatch, client, set_no="bogus-1")
     client.get_price_guide.assert_not_called()
 
 
 def test_rejects_invalid_condition(monkeypatch):
-    client = _mock_client()
-    monkeypatch.setattr("bricklink_cli.commands.catalog.get_client", lambda: client)
-    with pytest.raises(typer.Exit) as exc_info:
-        _call("7662-1", condition="X")
-    assert exc_info.value.exit_code != 0
+    _expect_exit(monkeypatch, _mock_client(), condition="X")
