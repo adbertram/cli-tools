@@ -127,6 +127,20 @@ Set template `pricing.allowOffers` to `true` to enable Best Offer.
 **`usage.json`** — Complete command tree with arguments, options, defaults, and usage instructions for every command.
 </reference_index>
 
+## Known Issues
+
+### 1. `ebay listings search` Fails with `eBay search results container was not found on the page` and title `🐴 Error Page | eBay`
+
+**Symptom:** A browser-backed command (e.g. `ebay listings search "<q>" --sold --us-only`) intermittently exits 1 with `Error: eBay search results container was not found on the page -- the page did not load as expected. url=https://www.ebay.com/sch/i.html?... title='🐴 Error Page | eBay'`.
+
+**Cause:** eBay serves a generic error/bot-challenge interstitial titled "🐴 Error Page | eBay" AT THE REQUESTED URL instead of the real content when it flags the request as bot-like (common on a cold headless-Chromium profile). Nothing detected or retried that interstitial: the search waited for the results container, which the error page lacks, and raised the misleading container-not-found error. Like BrickLink's AWS WAF wall, the interstitial usually clears on a follow-up navigation once the first response has set its challenge cookies.
+
+**Fix:** `ebay_cli/browser.py::EbayBrowser.get_page` now (a) calls `_detect_error_page(page)` after every navigation (title-based detection via `ERROR_PAGE_TITLE_MARKERS`), (b) reloads the requested URL up to `ERROR_PAGE_MAX_RETRIES` (4) times with a growing backoff until the interstitial clears, and (c) raises a descriptive `BrowserAutomationError` if it persists. A reload that lands on eBay's captcha wall raises the shared auth-challenge error instead of looping. Source: `~/Dropbox/GitRepos/cli-tools/ebay/ebay_cli/browser.py`; tests: `tests/test_browser_error_interstitial.py`. Precedent: `bricklink_cli/browser_runtime.py::_detect_waf_challenge` / `_get_page_for`.
+
+**Verification:** Run any browser-backed listings command (e.g. `ebay listings search "LEGO 7094 King's Castle Siege" --sold --us-only --limit 10`). When the interstitial is hit, stderr shows `eBay error interstitial detected (attempt N/4) -- reloading <url>` followed by real results.
+
+**Recurrence Prevention:** Detection and retry are applied centrally in `EbayBrowser.get_page` — every browser-backed ebay operation (search, item detail, auth checks) funnels through it and inherits the protection. If eBay rotates the interstitial's title, update `ERROR_PAGE_TITLE_MARKERS`; if the challenge starts persisting past 4 reloads in practice, raise `ERROR_PAGE_MAX_RETRIES` rather than reintroducing silent waits. Detection stays title-based on purpose: body-text markers ("something went wrong", ...) can legitimately appear inside listing content.
+
 <success_criteria>
 - Command executes without error
 - Output is displayed in requested format
