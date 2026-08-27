@@ -6,6 +6,7 @@ COMMAND_CREDENTIALS = {
     "list": ["oauth"],
     "minifig": ["oauth"],
     "part": ["oauth"],
+    "part-out-value": ["oauth"],
     "price": ["oauth"],
     "set": ["oauth"],
     "subsets": ["oauth"],
@@ -17,6 +18,7 @@ from typing import Optional, List
 
 from ..client import get_client
 from ..display import print_detail, print_list
+from cli_tools_shared.exceptions import ClientError
 from cli_tools_shared.filters import apply_filters, apply_properties_filter, apply_limit
 from cli_tools_shared.output import command, print_json, print_table, handle_error
 
@@ -369,6 +371,151 @@ def catalog_subsets(
             print_table(data)
         else:
             print_json(data)
+
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+def _part_out_lots(subsets: List[dict]) -> List[dict]:
+    """Flatten subset matches into primary lots.
+
+    Skips is_alternate and is_counterpart entries: an alternate duplicates its
+    match's primary lot, and a counterpart is contained within another entry.
+    Lot quantity is quantity + extra_quantity.
+    """
+    lots = []
+    for match in subsets:
+        for entry in match["entries"]:
+            if entry["is_alternate"] or entry["is_counterpart"]:
+                continue
+            item = entry["item"]
+            lots.append({
+                "type": item["type"],
+                "no": item["no"],
+                "color_id": entry["color_id"],
+                "qty": entry["quantity"] + entry["extra_quantity"],
+            })
+    return lots
+
+
+@app.command("part-out-value")
+@command
+def catalog_part_out_value(
+    set_no: str = typer.Argument(..., help="Set number (e.g., 7662-1)"),
+    condition: str = typer.Option("U", "--condition", "-c", help="N=new, U=used"),
+    sold: bool = typer.Option(True, "--sold/--stock", help="sold=6-month sold average (default), stock=current-listing average"),
+    include_figs: bool = typer.Option(True, "--include-figs/--exclude-figs", help="Include minifig value in total_value (figs are always reported separately)"),
+    country: Optional[str] = typer.Option(None, "--country", help="Country code"),
+    region: Optional[str] = typer.Option(None, "--region", help="Region filter"),
+    currency: Optional[str] = typer.Option(None, "--currency", help="Currency code"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+):
+    """
+    Compute the BrickLink part-out value of a set.
+
+    Combines the set's subsets (contents) with per-lot price-guide lookups.
+    Each lot is priced color-specific and condition-specific (minifigs have no
+    color). Parts and minifigs are reported as separate subtotals. Lots with no
+    price data are listed in "unpriced" and excluded from the value; the command
+    aborts if the subsets call fails or more than 50% of lots are unpriced.
+
+    Quota note: one price-guide API call per lot (~150-500 per set).
+
+    Examples:
+        bricklink catalog part-out-value 7662-1
+        bricklink catalog part-out-value 7662-1 --condition N --stock
+        bricklink catalog part-out-value 7662-1 --exclude-figs --table
+    """
+    try:
+        if condition not in ("N", "U"):
+            raise typer.BadParameter("condition must be N or U")
+
+        client = get_client()
+        subsets = client.get_subsets("SET", set_no)
+        if not subsets:
+            raise ClientError(f"No subset data returned for SET {set_no}")
+
+        lots = _part_out_lots(subsets)
+        guide_type = "sold" if sold else "stock"
+
+        from cli_tools_shared.bulk import BulkProcessor
+
+        def _fetch_price(lot, index):
+            return client.get_price_guide(
+                item_type=lot["type"],
+                item_no=lot["no"],
+                color_id=lot["color_id"] if lot["color_id"] != 0 else None,
+                guide_type=guide_type,
+                condition=condition,
+                country_code=country,
+                region=region,
+                currency_code=currency,
+            )
+
+        bulk = BulkProcessor().process(lots, _fetch_price)
+
+        rows = []
+        unpriced = [dict(outcome["input"]) for outcome in bulk["errors"]]
+        parts = {"lots": 0, "pieces": 0, "value": 0.0}
+        figs = {"lots": 0, "count": 0, "value": 0.0}
+
+        for outcome in bulk["results"]:
+            lot = outcome["input"]
+            guide = outcome["result"]
+            if guide["total_quantity"] == 0:
+                unpriced.append(dict(lot))
+                continue
+            avg_price = float(guide["avg_price"])
+            line_value = round(lot["qty"] * avg_price, 4)
+            rows.append({
+                **lot,
+                "avg_price": avg_price,
+                "line_value": line_value,
+                "times_sold_or_qty_avail": guide["unit_quantity"] if sold else guide["total_quantity"],
+            })
+            if lot["type"] == "MINIFIG":
+                figs["lots"] += 1
+                figs["count"] += lot["qty"]
+                figs["value"] += line_value
+            else:
+                parts["lots"] += 1
+                parts["pieces"] += lot["qty"]
+                parts["value"] += line_value
+
+        if len(unpriced) * 2 > len(lots):
+            raise ClientError(
+                f"{len(unpriced)} of {len(lots)} lots have no {guide_type} price data (>50%); aborting"
+            )
+
+        lot_key = lambda lot: (lot["type"], lot["no"], lot["color_id"])
+        rows.sort(key=lot_key)
+        unpriced.sort(key=lot_key)
+        parts["value"] = round(parts["value"], 2)
+        figs["value"] = round(figs["value"], 2)
+
+        result = {
+            "set_no": set_no,
+            "condition": condition,
+            "guide": guide_type,
+            "parts": parts,
+            "figs": figs,
+            "total_value": round(parts["value"] + (figs["value"] if include_figs else 0.0), 2),
+            "unpriced": unpriced,
+            "unpriced_count": len(unpriced),
+            "rows": rows,
+        }
+
+        if table:
+            print_table(
+                rows,
+                ["type", "no", "color_id", "qty", "avg_price", "line_value", "times_sold_or_qty_avail"],
+                ["Type", "Item No", "Color", "Qty", "Avg Price", "Line Value", "Sold/Avail"],
+                max_columns=0,
+            )
+            summary = {k: v for k, v in result.items() if k not in ("rows", "unpriced")}
+            print_detail(summary, table=True)
+        else:
+            print_json(result)
 
     except Exception as e:
         raise typer.Exit(handle_error(e))

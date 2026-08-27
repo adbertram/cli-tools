@@ -199,6 +199,21 @@ bricklink catalog price PART 3001
 bricklink catalog colors PART 3001
 bricklink catalog subsets SET 10255-1
 bricklink catalog supersets PART 3001
+bricklink catalog part-out-value 7662-1
+```
+
+`catalog part-out-value <set_no>` computes the BrickLink part-out value of a set by
+combining the set's subsets with per-lot price-guide lookups (color- and
+condition-specific; one API call per lot, ~150-500 per set). Parts and minifigs are
+reported as separate subtotals; lots with no price data are listed in `unpriced` and
+excluded from the value. The command aborts if the subsets call fails or more than 50%
+of lots are unpriced.
+
+```bash
+bricklink catalog part-out-value 7662-1                       # used, 6-month sold average (defaults)
+bricklink catalog part-out-value 7662-1 --condition N --stock # new, current-listing average
+bricklink catalog part-out-value 7662-1 --exclude-figs        # figs still reported, excluded from total_value
+bricklink catalog part-out-value 7662-1 --table
 ```
 
 ### member
