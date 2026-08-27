@@ -26,6 +26,7 @@ google <service> <action> [arguments] [options]
 | Get Gmail metadata with decoded body | `google gmail get MESSAGE_ID --include-body` |
 | Create a Gmail draft | `google gmail draft --to "user@example.com" --subject "Hi" --body "Hello"` |
 | Inspect a Gmail draft | `google gmail draft-get DRAFT_ID --include-body` |
+| Delete a Gmail draft | `google gmail draft-delete DRAFT_ID --confirm` |
 | List Gmail filters | `google gmail filters list --table` |
 | Create a Gmail filter | `google gmail filters create --from "news@example.com" --remove-label INBOX` |
 | List today's calendar events | `google calendar today --table` |
@@ -49,7 +50,7 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **contacts** -- Google Contacts through the People API (list, get)
 - **docs** -- Google Docs (list, get, read, create, export, update, tables)
 - **drive** -- Google Drive files (list, get, search, download)
-- **gmail** -- Gmail messages (list, get, read, search, send, archive, draft, reply, reply-all, labels, filters, download-attachment)
+- **gmail** -- Gmail messages (list, get, read, search, send, archive, trash, draft, draft-get, draft-delete, send-draft, reply, reply-all, labels, filters, download-attachment)
 - **searchconsole** -- Search Console (index, sites, urls)
 - **sheets** -- Google Sheets (list, get, read, create, append, update)
 </principle>
@@ -97,11 +98,21 @@ For a known label id, use `google gmail labels get LABEL_ID`.
 <principle name="Gmail Draft IDs">
 `google gmail draft` returns `id` as the Gmail draft ID (usually beginning with
 `r...`) and `message_id` as the underlying message ID. Follow-up draft
-inspection and sending must use the draft ID with `google gmail draft-get
-DRAFT_ID` or `google gmail send-draft DRAFT_ID`. Do not use `google gmail get
-MESSAGE_ID` or `google gmail search` to inspect draft headers; the messages API
-can omit draft-only headers such as To and Subject, and deleted/sent drafts can
-return Gmail 404 for the old message ID.
+inspection, sending, and deletion must use the draft ID with `google gmail
+draft-get DRAFT_ID`, `google gmail send-draft DRAFT_ID`, or `google gmail
+draft-delete DRAFT_ID`. Do not use `google gmail get MESSAGE_ID` or `google
+gmail search` to inspect draft headers; the messages API can omit draft-only
+headers such as To and Subject, and deleted/sent drafts can return Gmail 404 for
+the old message ID.
+
+Only the draft ID is stable. A draft's underlying `message_id` can change
+between reads because Gmail re-materializes the draft's message, so never cache
+it or address a draft by it. Delete a draft with `google gmail draft-delete
+DRAFT_ID` (`--confirm`/`-y` to skip the prompt), which calls Gmail's
+`users.drafts.delete`. Do not use `google gmail trash MESSAGE_ID` on a draft:
+that calls `users.messages.modify` on an unstable message ID, returns
+intermittent Gmail 404s, and does not remove the draft. Reserve `google gmail
+trash` for real (non-draft) messages.
 </principle>
 
 <principle name="Gmail Send Approval Guard">

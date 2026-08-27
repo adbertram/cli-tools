@@ -1,8 +1,8 @@
 {
   "tool": "google",
   "description": "CLI interface for Google Workspace APIs",
-  "discovered_at": "2026-07-03T16:52:09Z",
-  "total_commands": 104,
+  "discovered_at": "2026-08-27T16:46:11Z",
+  "total_commands": 105,
   "global_options": [
     {
       "name": "--version",
@@ -50,7 +50,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--filter",
@@ -92,7 +93,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -125,7 +127,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -186,6 +189,8 @@
               "type": "bool",
               "required": false,
               "help": "Sort descending (default) or ascending",
+              "takes_value": false,
+              "secondary": "--asc",
               "default": "desc"
             },
             {
@@ -206,7 +211,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -248,7 +254,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -290,7 +297,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -324,7 +332,8 @@
               "type": "bool",
               "required": false,
               "help": "Clear existing ephemeral auth state and re-authenticate",
-              "short": "-F"
+              "short": "-F",
+              "takes_value": false
             },
             {
               "name": "--credential-type",
@@ -385,7 +394,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -406,7 +416,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
@@ -420,7 +431,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -461,7 +473,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -486,14 +499,16 @@
                   "name": "--keep-old",
                   "type": "bool",
                   "required": false,
-                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
                 },
                 {
                   "name": "--force",
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -528,7 +543,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -542,14 +558,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--verbose",
               "type": "bool",
               "required": false,
               "help": "Show detailed checks",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -612,7 +630,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -639,7 +658,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--days",
@@ -695,7 +715,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -721,7 +742,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -769,7 +791,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -804,7 +827,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--filter",
@@ -861,7 +885,8 @@
               "name": "--confirm",
               "type": "bool",
               "required": false,
-              "help": "Actually send the message. Without this flag, only previews"
+              "help": "Actually send the message. Without this flag, only previews",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -894,7 +919,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -922,7 +948,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--filter",
@@ -1041,7 +1068,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -1073,7 +1101,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -1211,7 +1240,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation prompt",
-                  "short": "-y"
+                  "short": "-y",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -1238,7 +1268,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -1266,7 +1297,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--filter",
@@ -1353,7 +1385,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation prompt",
-                  "short": "-y"
+                  "short": "-y",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -1446,7 +1479,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--filter",
@@ -1502,7 +1536,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -1536,7 +1571,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--filter",
@@ -1651,7 +1687,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1678,7 +1715,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--filter",
@@ -1797,7 +1835,8 @@
                   "name": "--list",
                   "type": "bool",
                   "required": false,
-                  "help": "List all tables and their structure"
+                  "help": "List all tables and their structure",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -1844,7 +1883,8 @@
               "type": "bool",
               "required": false,
               "help": "Append content instead of replacing",
-              "short": "-a"
+              "short": "-a",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1914,7 +1954,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1941,7 +1982,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--filter",
@@ -1989,7 +2031,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -2026,10 +2069,10 @@
           "usage_instructions": "Archive a message by MESSAGE_ID (positional). Removes INBOX label.",
           "arguments": [
             {
-              "name": "message_ids...",
+              "name": "message_ids",
               "type": "TEXT",
               "required": true,
-              "help": "TEXT  Message ID(s) to archive"
+              "help": "Message ID(s) to archive"
             }
           ],
           "options": [
@@ -2078,7 +2121,8 @@
               "name": "--all",
               "type": "bool",
               "required": false,
-              "help": "Download all attachments from the message"
+              "help": "Download all attachments from the message",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2140,6 +2184,33 @@
             }
           ]
         },
+        "draft-delete": {
+          "help": "Permanently delete a Gmail draft by draft ID. Uses Gmail's drafts.delete method keyed by the draft ID (for example, `r123...`). Do not use `gmail trash` with a draft's message ID; a draft's underlying message ID is not stable across reads and trashing it does not remove the draft.",
+          "arguments": [
+            {
+              "name": "draft_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Gmail draft ID (returned by `gmail draft`)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--confirm",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation prompt",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
+        },
         "draft-get": {
           "help": "Get an existing Gmail draft by draft ID. Use the draft ID returned by `gmail draft` (for example, `r123...`). Draft metadata is fetched through Gmail's drafts API so headers such as To and Subject are preserved; `gmail get` is for message IDs and can return incomplete draft headers.",
           "arguments": [
@@ -2156,20 +2227,23 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--raw",
               "type": "bool",
               "required": false,
               "help": "Return raw API response without processing",
-              "short": "-r"
+              "short": "-r",
+              "takes_value": false
             },
             {
               "name": "--include-body",
               "type": "bool",
               "required": false,
-              "help": "Include decoded draft body text in the result"
+              "help": "Include decoded draft body text in the result",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2222,13 +2296,15 @@
                   "name": "--has-attachment",
                   "type": "bool",
                   "required": false,
-                  "help": "Match only messages with attachments"
+                  "help": "Match only messages with attachments",
+                  "takes_value": false
                 },
                 {
                   "name": "--exclude-chats",
                   "type": "bool",
                   "required": false,
-                  "help": "Exclude chat messages"
+                  "help": "Exclude chat messages",
+                  "takes_value": false
                 },
                 {
                   "name": "--size",
@@ -2284,7 +2360,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation prompt",
-                  "short": "-y"
+                  "short": "-y",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -2310,7 +2387,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -2329,7 +2407,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -2380,20 +2459,23 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--raw",
               "type": "bool",
               "required": false,
               "help": "Return raw API response without processing",
-              "short": "-r"
+              "short": "-r",
+              "takes_value": false
             },
             {
               "name": "--include-body",
               "type": "bool",
               "required": false,
-              "help": "Include decoded message body text in the result"
+              "help": "Include decoded message body text in the result",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2453,7 +2535,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -2480,7 +2563,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -2559,7 +2643,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--label",
@@ -2585,7 +2670,8 @@
               "name": "--include-body",
               "type": "bool",
               "required": false,
-              "help": "Include decoded message body text in each result"
+              "help": "Include decoded message body text in each result",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2657,7 +2743,8 @@
               "name": "--confirm",
               "type": "bool",
               "required": false,
-              "help": "Actually send the reply. Without this flag, only previews the message"
+              "help": "Actually send the reply. Without this flag, only previews the message",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2709,7 +2796,8 @@
               "name": "--confirm",
               "type": "bool",
               "required": false,
-              "help": "Actually send the reply. Without this flag, only previews the message"
+              "help": "Actually send the reply. Without this flag, only previews the message",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2744,7 +2832,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -2809,7 +2898,8 @@
               "name": "--confirm",
               "type": "bool",
               "required": false,
-              "help": "Actually send the email. Without this flag, only previews the message"
+              "help": "Actually send the email. Without this flag, only previews the message",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2835,7 +2925,8 @@
               "name": "--confirm",
               "type": "bool",
               "required": false,
-              "help": "Actually send the draft. Without this flag, only previews the draft"
+              "help": "Actually send the draft. Without this flag, only previews the draft",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2849,10 +2940,10 @@
           "help": "Move messages to trash by adding the TRASH label.",
           "arguments": [
             {
-              "name": "message_ids...",
+              "name": "message_ids",
               "type": "TEXT",
               "required": true,
-              "help": "TEXT  Message ID(s) to move to trash"
+              "help": "Message ID(s) to move to trash"
             }
           ],
           "options": [
@@ -2917,7 +3008,8 @@
                   "name": "--explain",
                   "type": "bool",
                   "required": false,
-                  "help": "Show Linking API debug info"
+                  "help": "Show Linking API debug info",
+                  "takes_value": false
                 },
                 {
                   "name": "--measurement-id",
@@ -2929,7 +3021,8 @@
                   "name": "--keep-measurement-id",
                   "type": "bool",
                   "required": false,
-                  "help": "Use the template report measurement ID"
+                  "help": "Use the template report measurement ID",
+                  "takes_value": false
                 },
                 {
                   "name": "--data-source",
@@ -2971,14 +3064,16 @@
                   "name": "--embed",
                   "type": "bool",
                   "required": false,
-                  "help": "Generate an embed create URL"
+                  "help": "Generate an embed create URL",
+                  "takes_value": false
                 },
                 {
                   "name": "--table",
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -3005,7 +3100,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--properties",
@@ -3040,7 +3136,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--filter",
@@ -3072,7 +3169,8 @@
                   "name": "--include-trashed",
                   "type": "bool",
                   "required": false,
-                  "help": "Include reports from trash"
+                  "help": "Include reports from trash",
+                  "takes_value": false
                 },
                 {
                   "name": "--order-by",
@@ -3095,7 +3193,7 @@
               ]
             },
             "permissions-add-members": {
-              "help": "[OPTIONS] REPORT_ID Add members to a Looker Studio report permission role.",
+              "help": "[OPTIONS] {report_id} Add members to a Looker Studio report permission role.",
               "usage_instructions": "Add members to a Looker Studio report permission role by report ID.",
               "arguments": [
                 {
@@ -3108,9 +3206,9 @@
               "options": [
                 {
                   "name": "--role",
-                  "type": "bool",
+                  "type": "VIEWER|EDITOR|OWNER|LINK_VIEWER|LINK_EDITOR",
                   "required": true,
-                  "help": "[VIEWER|EDITOR|OWNER|LINK_VIEWER|LINK_EDITOR]  Role to add members to"
+                  "help": "Role to add members to"
                 },
                 {
                   "name": "--member",
@@ -3123,7 +3221,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -3150,7 +3249,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -3183,7 +3283,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -3194,7 +3295,7 @@
               ]
             },
             "permissions-revoke-all": {
-              "help": "Revoke all permissions for members on a Looker Studio report.",
+              "help": "{report_id} Revoke all permissions for members on a Looker Studio report.",
               "usage_instructions": "Revoke all permissions for members on a Looker Studio report by report ID.",
               "arguments": [
                 {
@@ -3216,7 +3317,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -3260,7 +3362,8 @@
                   "name": "--explain",
                   "type": "bool",
                   "required": false,
-                  "help": "Show Linking API debug info"
+                  "help": "Show Linking API debug info",
+                  "takes_value": false
                 },
                 {
                   "name": "--measurement-id",
@@ -3272,7 +3375,8 @@
                   "name": "--keep-measurement-id",
                   "type": "bool",
                   "required": false,
-                  "help": "Use the template report measurement ID"
+                  "help": "Use the template report measurement ID",
+                  "takes_value": false
                 },
                 {
                   "name": "--data-source",
@@ -3314,14 +3418,16 @@
                   "name": "--embed",
                   "type": "bool",
                   "required": false,
-                  "help": "Generate an embed create URL"
+                  "help": "Generate an embed create URL",
+                  "takes_value": false
                 },
                 {
                   "name": "--table",
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -3398,7 +3504,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Output as table instead of JSON",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -3418,7 +3525,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Output as table instead of JSON",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -3486,7 +3594,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Output as table instead of JSON",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -3538,7 +3647,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Output as table instead of JSON",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -3666,7 +3776,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -3693,7 +3804,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--filter",
@@ -3742,7 +3854,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -3789,7 +3902,8 @@
               "name": "--raw",
               "type": "bool",
               "required": false,
-              "help": "Use RAW input (default is USER_ENTERED which parses formulas/numbers)"
+              "help": "Use RAW input (default is USER_ENTERED which parses formulas/numbers)",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -3836,7 +3950,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -3868,7 +3983,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -3922,7 +4038,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -3967,7 +4084,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -3984,10 +4102,10 @@
           "usage_instructions": "Create a Chrome Web Store ZIP package for an unpacked extension. Run `google webstore package --help` for exact arguments and options.",
           "arguments": [
             {
-              "name": "[extension_dir]",
-              "type": "TEXT",
+              "name": "extension_dir",
+              "type": "EXTENSION_DIR",
               "required": false,
-              "help": "DIRECTORY  Unpacked extension directory",
+              "help": "Unpacked extension directory",
               "default": "."
             }
           ],
@@ -4016,7 +4134,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -4060,14 +4179,16 @@
               "name": "--skip-review",
               "type": "bool",
               "required": false,
-              "help": "Attempt to skip review when the item qualifies"
+              "help": "Attempt to skip review when the item qualifies",
+              "takes_value": false
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -4082,10 +4203,10 @@
           "usage_instructions": "Package, upload, and publish extension. Run `google webstore release --help` for exact arguments and options.",
           "arguments": [
             {
-              "name": "[extension_dir]",
-              "type": "TEXT",
+              "name": "extension_dir",
+              "type": "EXTENSION_DIR",
               "required": false,
-              "help": "DIRECTORY  Unpacked extension directory",
+              "help": "Unpacked extension directory",
               "default": "."
             }
           ],
@@ -4138,14 +4259,16 @@
               "name": "--skip-review",
               "type": "bool",
               "required": false,
-              "help": "Attempt to skip review when the item qualifies"
+              "help": "Attempt to skip review when the item qualifies",
+              "takes_value": false
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -4183,7 +4306,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -4215,7 +4339,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -4254,7 +4379,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -4269,10 +4395,10 @@
           "usage_instructions": "Package and upload extension. Run `google webstore upload-extension --help` for exact arguments and options.",
           "arguments": [
             {
-              "name": "[extension_dir]",
-              "type": "TEXT",
+              "name": "extension_dir",
+              "type": "EXTENSION_DIR",
               "required": false,
-              "help": "DIRECTORY  Unpacked extension directory",
+              "help": "Unpacked extension directory",
               "default": "."
             }
           ],
@@ -4313,7 +4439,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",

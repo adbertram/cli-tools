@@ -19,6 +19,7 @@ google/token.json
 **/chromium-profile/
 .ruff_cache/
 
+.venv/
 .virtualenv/
 .env_dir/
 venv.bak/
