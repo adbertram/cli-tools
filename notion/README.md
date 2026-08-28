@@ -493,6 +493,7 @@ Create a new page under an existing parent page.
 notion pages create <parent-page-id> --title "New Page"
 notion pages create <parent-page-id> -t "Notes" --content-file notes.md
 notion pages create <parent-page-id> -t "Project" --icon "emoji:rocket"
+notion pages create <parent-page-id> -t "Project" --icon "🚀"
 ```
 
 **Options:**
@@ -500,13 +501,14 @@ notion pages create <parent-page-id> -t "Project" --icon "emoji:rocket"
 |--------|-------------|
 | `-t, --title` | **(Required)** Page title |
 | `-f, --content-file` | File containing markdown content for body |
-| `--icon` | Page icon (format: `emoji:rocket` or `url:https://...`) |
+| `--icon` | Page icon: `emoji:<shortcode>` (e.g. `emoji:rocket`), a literal emoji character (e.g. `🚀`), or `url:https://...`. An unknown shortcode fails locally. |
 
 ### Update Page
 
 ```bash
 notion pages update <page-id> --title "New Title"
 notion pages update <page-id> --icon "emoji:star"
+notion pages update <page-id> --icon "⭐"
 notion pages update <page-id> --archive
 notion pages update <page-id> --restore
 ```
@@ -515,7 +517,7 @@ notion pages update <page-id> --restore
 | Option | Description |
 |--------|-------------|
 | `-t, --title` | New page title |
-| `--icon` | Page icon (format: `emoji:rocket` or `url:https://...`) |
+| `--icon` | Page icon: `emoji:<shortcode>` (e.g. `emoji:rocket`), a literal emoji character (e.g. `🚀`), or `url:https://...`. An unknown shortcode fails locally. |
 | `--archive/--restore` | Archive or restore the page |
 
 ### Duplicate Page

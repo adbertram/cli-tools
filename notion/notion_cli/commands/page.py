@@ -21,6 +21,7 @@ COMMAND_CREDENTIALS = {
 
 from ..client import flatten_block_tree, get_client
 from ..block_limits import enforce_block_limits, find_oversize_rich_text as _find_oversize_rich_text
+from ..icons import IconFormatError, parse_icon
 from ..markdown_images import process_markdown_images
 from ..downloads import download_files
 from cli_tools_shared import confirm_destructive_action
@@ -33,6 +34,7 @@ from ..output import (
     format_block_for_display,
     build_text_block_update,
     TEXT_EDITABLE_BLOCK_TYPES,
+    print_error,
     print_success,
     print_warning,
     blocks_to_markdown,
@@ -440,7 +442,10 @@ def page_create(
     icon: Optional[str] = typer.Option(
         None,
         "--icon",
-        help="Page icon (format: 'emoji:rocket' or 'url:https://...')",
+        help=(
+            "Page icon: 'emoji:<shortcode>' (e.g. 'emoji:rocket'), "
+            "a literal emoji character (e.g. '🚀'), or 'url:https://...'"
+        ),
     ),
     is_toggleable: bool = typer.Option(
         False,
@@ -455,6 +460,7 @@ def page_create(
         notion pages create PARENT_PAGE_ID --title "My New Page"
         notion pages create PARENT_PAGE_ID -t "Notes" --content-file notes.md
         notion pages create PARENT_PAGE_ID -t "Project" --icon "emoji:rocket"
+        notion pages create PARENT_PAGE_ID -t "Project" --icon "🚀"
         notion pages create PARENT_PAGE_ID -t "Outline" --content-file outline.md --is-toggleable
     """
     try:
@@ -463,12 +469,10 @@ def page_create(
         # Parse icon
         icon_obj = None
         if icon:
-            if icon.startswith("emoji:"):
-                icon_obj = {"type": "emoji", "emoji": icon[6:]}
-            elif icon.startswith("url:"):
-                icon_obj = {"type": "external", "external": {"url": icon[4:]}}
-            else:
-                print_warning("Invalid icon format. Use 'emoji:rocket' or 'url:https://...'")
+            try:
+                icon_obj = parse_icon(icon)
+            except IconFormatError as exc:
+                print_error(str(exc))
                 raise typer.Exit(1)
 
         # Load content file if provided
@@ -682,7 +686,10 @@ def page_import(
     icon: Optional[str] = typer.Option(
         None,
         "--icon",
-        help="Page icon (format: 'emoji:rocket' or 'url:https://...')",
+        help=(
+            "Page icon: 'emoji:<shortcode>' (e.g. 'emoji:rocket'), "
+            "a literal emoji character (e.g. '🚀'), or 'url:https://...'"
+        ),
     ),
 ):
     """
@@ -698,7 +705,7 @@ def page_import(
     Examples:
         notion pages import document.docx --parent PARENT_PAGE_ID
         notion pages import report.docx -p PARENT_PAGE_ID --title "Q4 Report"
-        notion pages import notes.docx -p PARENT_PAGE_ID --icon "emoji:📄"
+        notion pages import notes.docx -p PARENT_PAGE_ID --icon "emoji:page_facing_up"
     """
     try:
         # Validate file exists and is a .docx
@@ -717,12 +724,10 @@ def page_import(
         # Parse icon
         icon_obj = None
         if icon:
-            if icon.startswith("emoji:"):
-                icon_obj = {"type": "emoji", "emoji": icon[6:]}
-            elif icon.startswith("url:"):
-                icon_obj = {"type": "external", "external": {"url": icon[4:]}}
-            else:
-                print_warning("Invalid icon format. Use 'emoji:rocket' or 'url:https://...'")
+            try:
+                icon_obj = parse_icon(icon)
+            except IconFormatError as exc:
+                print_error(str(exc))
                 raise typer.Exit(1)
 
         # Convert Word doc to Notion blocks
@@ -1140,7 +1145,10 @@ def page_update(
     icon: Optional[str] = typer.Option(
         None,
         "--icon",
-        help="Page icon (format: 'emoji:rocket' or 'url:https://...')",
+        help=(
+            "Page icon: 'emoji:<shortcode>' (e.g. 'emoji:rocket'), "
+            "a literal emoji character (e.g. '🚀'), or 'url:https://...'"
+        ),
     ),
     archive: Optional[bool] = typer.Option(
         None,
@@ -1154,6 +1162,7 @@ def page_update(
     Examples:
         notion pages update PAGE_ID --title "New Title"
         notion pages update PAGE_ID --icon "emoji:star"
+        notion pages update PAGE_ID --icon "⭐"
         notion pages update PAGE_ID --archive
         notion pages update PAGE_ID --restore
     """
@@ -1172,12 +1181,10 @@ def page_update(
 
     # Parse icon
     if icon:
-        if icon.startswith("emoji:"):
-            icon_obj = {"type": "emoji", "emoji": icon[6:]}
-        elif icon.startswith("url:"):
-            icon_obj = {"type": "external", "external": {"url": icon[4:]}}
-        else:
-            print_warning("Invalid icon format. Use 'emoji:rocket' or 'url:https://...'")
+        try:
+            icon_obj = parse_icon(icon)
+        except IconFormatError as exc:
+            print_error(str(exc))
             raise typer.Exit(1)
 
     # Validate we have something to update
