@@ -21,17 +21,18 @@ import hashlib
 import hmac
 import json
 import os
+import random
 import re
 import struct
 import subprocess
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from ._debug_logging import get_debug_logger
-from .output import print_info, print_success
+from .output import print_info, print_success, print_warning
 from .browser import BrowserHarnessService, BrowserHarnessError
 from .browser.processes import (
     list_process_commands,
@@ -60,6 +61,74 @@ class AuthResult:
 
     def __bool__(self) -> bool:
         return self.authenticated
+
+
+# --- Interstitial walls -----------------------------------------------------
+# Sites front their real content with walls that all look like "the page did
+# not load" to a downstream selector wait, but need opposite handling. A tool
+# declares its walls as ``BrowserAutomation.INTERSTITIALS`` and the base class
+# resolves them on every navigation, so the tool stays declarative and every
+# browser-backed command inherits the handling.
+
+#: Wait the wall out in place. For a SELF-CLEARING JS check that redirects
+#: itself to the requested content (Cloudflare "Checking your browser", eBay's
+#: "Pardon Our Interruption"). Re-navigating abandons the redirect the site
+#: just issued and spends another request against its rate budget.
+INTERSTITIAL_SETTLE = "settle"
+#: Re-navigate after a jittered exponential backoff. For a server-side error
+#: or rate wall that only clears once the request rate drops.
+INTERSTITIAL_RELOAD = "reload"
+#: Stop immediately. For a real human-verification challenge, which is never
+#: solved, clicked through, or reloaded around.
+INTERSTITIAL_ABORT = "abort"
+
+
+@dataclass(frozen=True)
+class Interstitial:
+    """One declarative wall rule.
+
+    Markers are lowercase substrings. ``url_markers`` are matched against the
+    page URL; ``title_markers`` against the document title; ``body_markers``
+    against the title and visible body text together. Keep body markers narrow
+    — phrases like "something went wrong" legitimately appear inside real page
+    content and will misfire.
+
+    Rules are evaluated in declaration order and the first match wins, so
+    declare ``INTERSTITIAL_ABORT`` rules first: a human-verification wall must
+    never be masked by a broader retryable rule.
+    """
+
+    kind: str
+    label: str
+    strategy: str = INTERSTITIAL_RELOAD
+    url_markers: Tuple[str, ...] = field(default_factory=tuple)
+    title_markers: Tuple[str, ...] = field(default_factory=tuple)
+    body_markers: Tuple[str, ...] = field(default_factory=tuple)
+
+    def matches(self, url: str = "", title: str = "", body: str = "") -> bool:
+        url_l = (url or "").lower()
+        title_l = (title or "").lower()
+        text = f"{title_l} {(body or '').lower()}"
+        return (
+            any(m in url_l for m in self.url_markers)
+            or any(m in title_l for m in self.title_markers)
+            or any(m in text for m in self.body_markers)
+        )
+
+
+def classify_interstitial(
+    rules, url: str = "", title: str = "", body: str = ""
+) -> Optional[Interstitial]:
+    """Return the first :class:`Interstitial` in ``rules`` matching the page.
+
+    ``None`` means the page is real content. Exposed at module level so a tool
+    can classify a page-state dict it already captured (e.g. inside a scraper's
+    own blocker check) against the same rules the navigation path uses.
+    """
+    for rule in rules:
+        if rule.matches(url=url, title=title, body=body):
+            return rule
+    return None
 
 
 # Daemon-key sanity: ``BU_NAME`` is used as the AF_UNIX socket basename under
@@ -156,6 +225,19 @@ class BrowserAutomation:
     # single check for every other tool.
     AUTH_CHALLENGE_ATTEMPTS = 1
     AUTH_CHALLENGE_POLL_MS = 3000
+    # Interstitial walls served INSTEAD of the requested content (see the
+    # Interstitial dataclass above). Declare them most-severe first. The
+    # default empty tuple keeps navigation unchanged for tools that declare
+    # none. When set, get_page returns only once the page has settled onto
+    # real content, or raises naming the specific wall — so a downstream
+    # selector wait can never misdiagnose the failure as "element not found".
+    INTERSTITIALS: Tuple[Interstitial, ...] = ()
+    INTERSTITIAL_MAX_ATTEMPTS = 4       # Navigation attempts (first load + reloads)
+    INTERSTITIAL_BASE_DELAY_MS = 4000   # Backoff before the first reload
+    INTERSTITIAL_MAX_DELAY_MS = 32000   # Ceiling for the exponential ramp
+    INTERSTITIAL_JITTER_RATIO = 0.5     # Extra 0..N x base, so retries desynchronize
+    INTERSTITIAL_SETTLE_TIMEOUT_MS = 20000  # Budget for a self-clearing wall
+    INTERSTITIAL_POLL_INTERVAL_MS = 1000    # Poll cadence while it clears
     # Automation-free login. When True, authenticate() opens a PLAIN browser (no
     # --remote-debugging-port, no CDP, no webdriver patching) for the user to log
     # in by hand — for sites whose login flow blocks automated browsers — then
@@ -754,7 +836,138 @@ class BrowserAutomation:
                 raise BrowserAutomationError(str(e)) from e
         return svc.cookie_list()
 
+    # ---------------- Interstitial resolution ----------------
+
+    def _interstitial_page_state(self, page) -> Tuple[str, str, str]:
+        """Return ``(url, title, body)`` for interstitial classification.
+
+        Body text is only fetched when a declared rule actually needs it —
+        reading ``innerText`` on every navigation is not free. A probe can
+        fail transiently mid-navigation; that is not proof of a wall, so it
+        degrades to empty text and lets the URL carry the classification.
+        """
+        try:
+            url = page.url or ""
+        except Exception:
+            url = ""
+        try:
+            title = page.evaluate("document.title") or ""
+        except Exception:
+            title = ""
+
+        if not any(rule.body_markers for rule in self.INTERSTITIALS):
+            return url, title, ""
+        try:
+            body = page.evaluate(
+                "document.body ? document.body.innerText.slice(0, 2000) : ''"
+            ) or ""
+        except Exception:
+            body = ""
+        return url, title, body
+
+    def _classify_page_interstitial(self, page) -> Optional[Interstitial]:
+        """Classify the live page against this tool's declared walls."""
+        url, title, body = self._interstitial_page_state(page)
+        return classify_interstitial(
+            self.INTERSTITIALS, url=url, title=title, body=body
+        )
+
+    def _interstitial_delay_ms(self, attempt: int) -> int:
+        """Jittered exponential backoff, in ms, before reload ``attempt``."""
+        base = min(
+            self.INTERSTITIAL_BASE_DELAY_MS * (2 ** (attempt - 1)),
+            self.INTERSTITIAL_MAX_DELAY_MS,
+        )
+        return int(base * (1 + random.random() * self.INTERSTITIAL_JITTER_RATIO))
+
+    def _raise_for_interstitial_abort(self, rule: Interstitial, page) -> None:
+        """Hard stop on a wall that must never be automated around."""
+        try:
+            url = page.url or ""
+        except Exception:
+            url = ""
+        raise BrowserAutomationError(
+            f"Reached a {rule.label} wall at {self._safe_url_for_log(url)}. "
+            "This cannot be resolved automatically. Re-run auth login for the "
+            "browser session from an interactive shell and complete the "
+            "verification in the CLI-owned browser profile."
+        )
+
+    def _settle_interstitial(self, page) -> Optional[Interstitial]:
+        """Resolve the page to real content, or report the blocking wall.
+
+        Returns ``None`` once the page is real content, otherwise the rule a
+        reload has to clear. A ``settle`` wall is polled out in place because
+        it redirects itself; an ``abort`` wall raises immediately.
+        """
+        rule = self._classify_page_interstitial(page)
+        if rule is None:
+            return None
+        if rule.strategy == INTERSTITIAL_ABORT:
+            self._raise_for_interstitial_abort(rule, page)
+        if rule.strategy != INTERSTITIAL_SETTLE:
+            return rule
+
+        waited = 0
+        while waited < self.INTERSTITIAL_SETTLE_TIMEOUT_MS:
+            print_warning(
+                f"{rule.label} interstitial detected -- waiting for it to "
+                f"clear ({waited // 1000}s/"
+                f"{self.INTERSTITIAL_SETTLE_TIMEOUT_MS // 1000}s)"
+            )
+            page.wait_for_timeout(self.INTERSTITIAL_POLL_INTERVAL_MS)
+            waited += self.INTERSTITIAL_POLL_INTERVAL_MS
+            rule = self._classify_page_interstitial(page)
+            if rule is None:
+                return None
+            if rule.strategy == INTERSTITIAL_ABORT:
+                self._raise_for_interstitial_abort(rule, page)
+            if rule.strategy != INTERSTITIAL_SETTLE:
+                return rule
+        return rule
+
+    def _resolve_interstitials(self, page, url: str = None):
+        """Return ``page`` once it holds real content, or raise naming the wall."""
+        if not self.INTERSTITIALS:
+            return page
+
+        target = url or page.url
+        for attempt in range(1, self.INTERSTITIAL_MAX_ATTEMPTS + 1):
+            rule = self._settle_interstitial(page)
+            if rule is None:
+                return page
+
+            if attempt >= self.INTERSTITIAL_MAX_ATTEMPTS:
+                raise BrowserAutomationError(
+                    f"A {rule.label} interstitial was served for {target!r} "
+                    f"and did not clear after {self.INTERSTITIAL_MAX_ATTEMPTS} "
+                    "navigation attempts. The site is rate-limiting this "
+                    "session; wait a few minutes before retrying, or re-run "
+                    "auth login for the browser session to refresh it."
+                )
+
+            delay_ms = self._interstitial_delay_ms(attempt)
+            print_warning(
+                f"{rule.label} interstitial detected (attempt {attempt}/"
+                f"{self.INTERSTITIAL_MAX_ATTEMPTS}) -- retrying {target} in "
+                f"{delay_ms / 1000:.1f}s"
+            )
+            page.wait_for_timeout(delay_ms)
+            page.goto(target)
+            self._raise_if_auth_failure_page(page)
+
+        raise AssertionError("unreachable: interstitial loop must return or raise")
+
     def get_page(self, url: str = None) -> BrowserHarnessService:
+        """Get a page backed by the persistent profile, past any interstitial.
+
+        Navigates via :meth:`_navigate_page`, then resolves any wall declared
+        in ``INTERSTITIALS`` so callers only ever receive real content.
+        """
+        page = self._navigate_page(url)
+        return self._resolve_interstitials(page, url)
+
+    def _navigate_page(self, url: str = None) -> BrowserHarnessService:
         """Get a :class:`BrowserHarnessService` backed by the persistent profile.
 
         On first call, opens a headless browser bound to the persistent
