@@ -920,6 +920,84 @@ def markdown_to_styled_html(markdown_content: str, title: str = "Notion Export")
     return html
 
 
+# Every export format the command can produce, and the output-file extensions
+# that name each one. --output is required, so its extension is an unambiguous
+# statement of intent; honoring it is what keeps `-o page.md` from rendering a
+# PDF into a file named `.md`.
+EXPORT_FORMATS = ("pdf", "html", "md", "notion-json")
+
+EXPORT_FORMAT_BY_SUFFIX = {
+    ".pdf": "pdf",
+    ".html": "html",
+    ".htm": "html",
+    ".md": "md",
+    ".markdown": "md",
+    ".json": "notion-json",
+}
+
+
+def render_html_to_pdf(html_content: str, output_path: Path) -> None:
+    """Render HTML to PDF with headless Google Chrome.
+
+    Launches Playwright's ``chrome`` channel, which drives the Google Chrome
+    already installed on the machine -- the same binary every other browser-backed
+    CLI in this repo uses. Playwright's own bundled Chromium is deliberately not
+    used: it is a separate ~150MB download per tool venv, versioned against that
+    venv's exact Playwright release, so it silently rots the moment Playwright is
+    upgraded and has to be re-fetched by hand. System Chrome has neither problem.
+    """
+    from playwright.sync_api import Error as PlaywrightError
+    from playwright.sync_api import sync_playwright
+
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(channel="chrome")
+            try:
+                page = browser.new_page()
+                page.set_content(html_content, wait_until="networkidle")
+                page.pdf(
+                    path=str(output_path),
+                    format="Letter",
+                    margin={"top": "1in", "right": "1in", "bottom": "1in", "left": "1in"},
+                    print_background=True,
+                )
+            finally:
+                browser.close()
+    except PlaywrightError as e:
+        raise RuntimeError(
+            "PDF export needs Google Chrome, which could not be launched: "
+            f"{e}. Install Google Chrome, or export a browser-free format "
+            "instead (--format md, html, or notion-json)."
+        ) from e
+
+
+def resolve_export_format(format: Optional[str], output_path: Path) -> str:
+    """Resolve the export format from --format, or from the output extension.
+
+    An explicit --format always wins. With no --format, the extension of the
+    required --output path selects the format. An unrecognized value on either
+    side is an error, never a silent default -- exporting the wrong format is
+    worse than refusing to guess.
+    """
+    if format is not None:
+        normalized = format.lower()
+        if normalized not in EXPORT_FORMATS:
+            raise ValueError(
+                f"Unknown format: {format}. Use one of: {', '.join(EXPORT_FORMATS)}."
+            )
+        return normalized
+
+    suffix = output_path.suffix.lower()
+    if suffix not in EXPORT_FORMAT_BY_SUFFIX:
+        known = ", ".join(sorted(EXPORT_FORMAT_BY_SUFFIX))
+        raise ValueError(
+            f"Cannot determine export format from output path '{output_path}'. "
+            f"Pass --format ({', '.join(EXPORT_FORMATS)}) or use a known "
+            f"extension ({known})."
+        )
+    return EXPORT_FORMAT_BY_SUFFIX[suffix]
+
+
 @app.command("export")
 @command
 def page_export(
@@ -931,17 +1009,23 @@ def page_export(
         ...,
         "--output",
         "-o",
-        help="Output file path (e.g., document.pdf)",
+        help="Output file path (e.g., document.pdf). Its extension selects the format unless --format is given.",
     ),
-    format: str = typer.Option(
-        "pdf",
+    format: Optional[str] = typer.Option(
+        None,
         "--format",
         "-f",
-        help="Export format: pdf, html, md, or notion-json",
+        help="Export format: pdf, html, md, or notion-json. Defaults to the --output file extension.",
     ),
 ):
     """
     Export a Notion page to PDF, HTML, Markdown, or Notion JSON.
+
+    The format comes from the --output extension unless --format overrides it,
+    so '-o page.md' writes Markdown and '-o page.pdf' writes a PDF.
+
+    Markdown, HTML, and Notion JSON are built entirely from the Notion REST API
+    and need no browser. Only PDF renders through headless Google Chrome.
 
     The notion-json format exports raw Notion block structures preserving all
     formatting (colors, callouts, columns, bold annotations). The exported JSON
@@ -949,95 +1033,71 @@ def page_export(
 
     Examples:
         notion pages export PAGE_ID --output document.pdf
-        notion pages export PAGE_ID -o report.pdf
-        notion pages export PAGE_ID -o content.html --format html
-        notion pages export PAGE_ID -o content.md --format md
-        notion pages export PAGE_ID -o blocks.json --format notion-json
+        notion pages export PAGE_ID -o content.md
+        notion pages export PAGE_ID -o content.html
+        notion pages export PAGE_ID -o blocks.json
+        notion pages export PAGE_ID -o report --format pdf
     """
-    try:
-        client = get_client()
+    output_path = Path(output)
+    format_lower = resolve_export_format(format, output_path)
 
-        # Get page metadata
-        page = client.get_page(page_id)
-        page_data = format_page_for_display(page)
-        title = page_data.get("title", "Untitled")
+    client = get_client()
 
-        typer.echo(f"Exporting '{title}'...", err=True)
+    # Get page metadata
+    page = client.get_page(page_id)
+    page_data = format_page_for_display(page)
+    title = page_data.get("title", "Untitled")
 
-        output_path = Path(output)
-        format_lower = format.lower()
+    typer.echo(f"Exporting '{title}' as {format_lower}...", err=True)
 
-        if format_lower == "notion-json":
-            # Export as clean Notion JSON blocks
-            clean_blocks = client.get_blocks_as_notion_json(page_id)
+    if format_lower == "notion-json":
+        # Export as clean Notion JSON blocks
+        clean_blocks = client.get_blocks_as_notion_json(page_id)
 
-            with open(output_path, 'w', encoding='utf-8') as f:
-                json.dump(clean_blocks, f, indent=2, ensure_ascii=False)
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(clean_blocks, f, indent=2, ensure_ascii=False)
 
-            print_success(f"Exported {len(clean_blocks)} blocks to {output_path}")
-            print_json({
-                "page_id": page_id,
-                "title": title,
-                "format": format_lower,
-                "output": str(output_path),
-                "block_count": len(clean_blocks),
-            })
-            return
-
-        # Get page content as markdown for other formats
-        blocks = client.get_block_children_all(page_id, recursive=True)
-        markdown_content = blocks_to_markdown(blocks)
-
-        # Add title as H1
-        full_markdown = f"# {title}\n\n{markdown_content}"
-
-        if format_lower == "md":
-            # Export as markdown
-            with open(output_path, 'w', encoding='utf-8') as f:
-                f.write(full_markdown)
-            print_success(f"Exported to {output_path}")
-
-        elif format_lower == "html":
-            # Export as HTML
-            html_content = markdown_to_styled_html(full_markdown, title)
-            with open(output_path, 'w', encoding='utf-8') as f:
-                f.write(html_content)
-            print_success(f"Exported to {output_path}")
-
-        elif format_lower == "pdf":
-            # Export as PDF using Playwright
-            from playwright.sync_api import sync_playwright
-
-            html_content = markdown_to_styled_html(full_markdown, title)
-
-            with sync_playwright() as p:
-                browser = p.chromium.launch()
-                page = browser.new_page()
-                page.set_content(html_content, wait_until="networkidle")
-                page.pdf(
-                    path=str(output_path),
-                    format="Letter",
-                    margin={"top": "1in", "right": "1in", "bottom": "1in", "left": "1in"},
-                    print_background=True,
-                )
-                browser.close()
-
-            print_success(f"Exported to {output_path}")
-
-        else:
-            print_warning(f"Unknown format: {format}. Use pdf, html, md, or notion-json.")
-            raise typer.Exit(1)
-
+        print_success(f"Exported {len(clean_blocks)} blocks to {output_path}")
         print_json({
             "page_id": page_id,
             "title": title,
             "format": format_lower,
             "output": str(output_path),
+            "block_count": len(clean_blocks),
         })
+        return
 
-    except ImportError:
-        print_warning("playwright is required for PDF export. Install with: pip install playwright && playwright install chromium")
-        raise typer.Exit(1)
+    # Get page content as markdown for other formats
+    blocks = client.get_block_children_all(page_id, recursive=True)
+    markdown_content = blocks_to_markdown(blocks)
+
+    # Add title as H1
+    full_markdown = f"# {title}\n\n{markdown_content}"
+
+    if format_lower == "md":
+        # Export as markdown
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(full_markdown)
+        print_success(f"Exported to {output_path}")
+
+    elif format_lower == "html":
+        # Export as HTML
+        html_content = markdown_to_styled_html(full_markdown, title)
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+        print_success(f"Exported to {output_path}")
+
+    elif format_lower == "pdf":
+        html_content = markdown_to_styled_html(full_markdown, title)
+        render_html_to_pdf(html_content, output_path)
+        print_success(f"Exported to {output_path}")
+
+    print_json({
+        "page_id": page_id,
+        "title": title,
+        "format": format_lower,
+        "output": str(output_path),
+    })
 
 
 @app.command("duplicate")

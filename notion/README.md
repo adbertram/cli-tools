@@ -546,15 +546,26 @@ Export a page to PDF, HTML, Markdown, or Notion JSON.
 
 ```bash
 notion pages export <page-id> -o document.pdf
-notion pages export <page-id> -o content.md --format md
-notion pages export <page-id> -o blocks.json --format notion-json
+notion pages export <page-id> -o content.md
+notion pages export <page-id> -o content.html
+notion pages export <page-id> -o blocks.json
+notion pages export <page-id> -o report --format pdf
 ```
 
 **Options:**
 | Option | Description |
 |--------|-------------|
 | `-o, --output` | **(Required)** Output file path |
-| `-f, --format` | Export format: `pdf`, `html`, `md`, or `notion-json` (default: pdf) |
+| `-f, --format` | Export format: `pdf`, `html`, `md`, or `notion-json`. Defaults to the `--output` extension. |
+
+The format comes from the `--output` extension (`.pdf`, `.html`/`.htm`, `.md`/`.markdown`, `.json`)
+unless `--format` overrides it, so `-o page.md` writes Markdown. An output path with no recognized
+extension and no `--format` is an error rather than a guess.
+
+`md`, `html`, and `notion-json` are built entirely from the Notion REST API and need no browser.
+Only `pdf` renders through a browser, and it uses the Google Chrome already installed on the
+machine (Playwright's `chrome` channel) — no `playwright install` step, and no bundled Chromium
+download that goes stale on the next Playwright upgrade.
 
 The `notion-json` format exports raw Notion block structures preserving all formatting. The exported JSON can be re-imported with `content set --json-file` or `blocks append --json-file`.
 

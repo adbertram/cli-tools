@@ -1,7 +1,7 @@
 {
   "tool": "notion",
   "description": "CLI interface for Notion API with database query filtering",
-  "discovered_at": "2026-08-28T19:38:10Z",
+  "discovered_at": "2026-08-28T22:50:57Z",
   "total_commands": 63,
   "global_options": [
     {
@@ -2546,13 +2546,13 @@
           ]
         },
         "export": {
-          "help": "Export a Notion page to PDF, HTML, Markdown, or Notion JSON. The notion-json format exports raw Notion block structures preserving all formatting (colors, callouts, columns, bold annotations). The exported JSON can be re-imported with 'blocks append --json-file' or 'content set --json-file'.",
+          "help": "Export a Notion page to PDF, HTML, Markdown, or Notion JSON. The format comes from the --output extension unless --format overrides it, so '-o page.md' writes Markdown and '-o page.pdf' writes a PDF. Markdown, HTML, and Notion JSON are built entirely from the Notion REST API and need no browser. Only PDF renders through headless Google Chrome. The notion-json format exports raw Notion block structures preserving all formatting (colors, callouts, columns, bold annotations). The exported JSON can be re-imported with 'blocks append --json-file' or 'content set --json-file'.",
           "examples": [
             "notion pages export PAGE_ID --output document.pdf",
-            "notion pages export PAGE_ID -o report.pdf",
-            "notion pages export PAGE_ID -o content.html --format html",
-            "notion pages export PAGE_ID -o content.md --format md",
-            "notion pages export PAGE_ID -o blocks.json --format notion-json"
+            "notion pages export PAGE_ID -o content.md",
+            "notion pages export PAGE_ID -o content.html",
+            "notion pages export PAGE_ID -o blocks.json",
+            "notion pages export PAGE_ID -o report --format pdf"
           ],
           "usage_instructions": "Run `notion pages export --help` for exact arguments and options.",
           "arguments": [
@@ -2568,16 +2568,15 @@
               "name": "--output",
               "type": "TEXT",
               "required": true,
-              "help": "Output file path (e.g., document.pdf)",
+              "help": "Output file path (e.g., document.pdf). Its extension selects the format unless --format is given",
               "short": "-o"
             },
             {
               "name": "--format",
               "type": "TEXT",
               "required": false,
-              "help": "Export format: pdf, html, md, or notion-json",
-              "short": "-f",
-              "default": "pdf"
+              "help": "Export format: pdf, html, md, or notion-json. Defaults to the --output file extension",
+              "short": "-f"
             },
             {
               "name": "--profile",
