@@ -737,6 +737,9 @@ All domain knowledge in `references/`:
 **Filtering:** filtering.md (filters.py, filter_map.py architecture)
 **Caching:** caching.md (@cached decorator, cache commands, env config, serialization, integration steps)
 **Troubleshooting:** common-issues.md (quick fixes for common problems)
+**Wrapper Collisions:** wrapper-name-collisions.md (diagnosing a cli-tools wrapper that shares an executable name with an upstream/vendor CLI; gemini/kick/n8n worked examples)
+**Hermes CLI Provider:** hermes-local-cli-provider.md (running a local coding CLI as a Hermes provider without leaking OAuth credentials into Hermes; safe configuration sequence; deferred gateway restart)
+**Agent Output Contract:** output_contract.md (final-response contract for agents whose primary domain skill is `cli-tool`)
 </reference_index>
 
 <workflows_index>
