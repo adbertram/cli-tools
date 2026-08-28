@@ -25,7 +25,14 @@ from urllib.parse import urlencode
 from cli_tools_shared.browser import BrowserHarnessError
 from cli_tools_shared.output import print_info, print_warning
 
-from .browser import BrowserError, EbayBrowser
+from .browser import (
+    INTERSTITIAL_CAPTCHA,
+    INTERSTITIAL_CHALLENGE,
+    INTERSTITIAL_ERROR,
+    BrowserError,
+    EbayBrowser,
+    classify_interstitial,
+)
 from .config import get_config
 from .models.item_detail import ItemDetail
 from .models.search_result import SearchResult
@@ -741,29 +748,56 @@ class EbayBrowserClient:
 
     @staticmethod
     def _raise_for_search_blocker(state: dict) -> None:
-        """Raise if the search page landed on a CAPTCHA/interstitial/sign-in
-        page instead of real results, rather than letting that silently look
-        like zero results."""
-        lowered = f"{state['url']} {state['title']} {state['body_text_snippet']}".lower()
-        if (
-            "splashui/captcha" in lowered
-            or "hcaptcha" in lowered
-            or "recaptcha" in lowered
-            or "pardon our interruption" in lowered
-            or "verify you are human" in lowered
-        ):
+        """Raise if the search page landed on an interstitial or sign-in page
+        instead of real results, rather than letting that silently look like
+        zero results.
+
+        Interstitials are classified with the shared taxonomy in
+        ``ebay_cli.browser`` so each wall gets its own accurate message.
+        ``EbayBrowser.get_page`` already retries the retryable ones, so
+        reaching here means the wall reappeared during this page's own
+        selector wait or outlasted the retries. Sign-in is checked before the
+        container so an expired session never reports as "container missing".
+        """
+        where = f"url={state['url']} title={state['title']!r}"
+        rule = classify_interstitial(
+            url=state["url"],
+            title=state["title"],
+            body=state["body_text_snippet"],
+        )
+        kind = rule.kind if rule is not None else None
+        if kind == INTERSTITIAL_CAPTCHA:
             raise BrowserError(
-                f"eBay search is blocked by a CAPTCHA/security-verification page. url={state['url']} title={state['title']!r}"
+                "eBay search is blocked by a CAPTCHA/human-verification page. "
+                "This cannot be solved automatically -- run 'ebay auth login "
+                "--credential-type browser_session --force' from an "
+                f"interactive shell and complete the verification. {where}"
             )
+        if kind == INTERSTITIAL_CHALLENGE:
+            raise BrowserError(
+                "eBay's browser-check interstitial ('Pardon Our Interruption') "
+                "did not clear for this search. It is a transient wall, not a "
+                f"CAPTCHA -- wait a minute and retry. {where}"
+            )
+        if kind == INTERSTITIAL_ERROR:
+            raise BrowserError(
+                "eBay served its 'Error Page' instead of search results, which "
+                "is its request-rate wall, not a missing results container. "
+                f"Wait a few minutes before retrying. {where}"
+            )
+
+        lowered = f"{state['url']} {state['title']} {state['body_text_snippet']}".lower()
         if "signin.ebay.com" in lowered or "/signin" in lowered:
             raise BrowserError(
-                "eBay search redirected to sign-in instead of showing results. "
-                f"Run 'ebay auth login --credential-type browser_session'. url={state['url']} title={state['title']!r}"
+                "eBay search redirected to sign-in instead of showing results, "
+                "which means the browser session is expired or unauthenticated. "
+                "Run 'ebay auth login --credential-type browser_session --force'. "
+                f"{where}"
             )
         if not state["container_exists"]:
             raise BrowserError(
                 "eBay search results container was not found on the page -- the page "
-                f"did not load as expected. url={state['url']} title={state['title']!r}"
+                f"did not load as expected. {where}"
             )
 
     def search_completed(

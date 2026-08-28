@@ -23,9 +23,11 @@ COMMAND_CREDENTIALS = {
     "list": ["oauth_authorization_code"],
     "preview": ["oauth_authorization_code"],
     "publish": ["oauth_authorization_code"],
-    # Top-level `ebay listings search` is registered from search.py under the
-    # shared `listings` group name, so metadata consumers still expect this key.
+    # Top-level `ebay listings search` and `ebay listings status` are
+    # registered from search.py under the shared `listings` group name, so
+    # metadata consumers still expect these keys here.
     "search": ["no_auth"],
+    "status": ["no_auth"],
     "unpublish": ["oauth_authorization_code"],
     "update": ["oauth_authorization_code"],
 }

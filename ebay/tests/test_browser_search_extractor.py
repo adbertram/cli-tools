@@ -526,8 +526,17 @@ def test_search_keeps_explicit_zero_results_after_item_wait_timeout():
 
 
 def test_persistent_pardon_interruption_is_a_security_blocker():
-    """The live cold-profile DOM used eBay's exact interstitial title."""
-    with pytest.raises(BrowserError, match="CAPTCHA/security-verification"):
+    """The live cold-profile DOM used eBay's exact interstitial title.
+
+    A persistent "Pardon Our Interruption" must still hard-stop the search
+    rather than look like zero results. It is reported as the transient
+    browser check it actually is, NOT as a CAPTCHA: captured live on
+    2026-08-28, that page is ``/splashui/challenge`` and self-clears to real
+    results on the next navigation ("Your browser will redirect to your
+    requested content shortly"). Calling it a CAPTCHA sent the user off to
+    solve a challenge that does not exist.
+    """
+    with pytest.raises(BrowserError) as excinfo:
         EbayBrowserClient._raise_for_search_blocker(
             {
                 "url": "https://www.ebay.com/sch/i.html?_nkw=LEGO",
@@ -536,3 +545,7 @@ def test_persistent_pardon_interruption_is_a_security_blocker():
                 "container_exists": False,
             }
         )
+    message = str(excinfo.value)
+    assert "browser-check interstitial" in message
+    assert "transient" in message
+    assert "CAPTCHA/human-verification" not in message
