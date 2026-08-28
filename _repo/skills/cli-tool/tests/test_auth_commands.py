@@ -453,12 +453,22 @@ def test_env_has_active_profile(cli_name, cli_dir, cli_executable, help_cache, t
 
 
 def _parse_custom_allowed_fields(cli_dir, cli_name) -> set:
-    """AST-parse config.py for custom field list literal values.
+    """AST-parse config.py for the field names this CLI declares by name.
 
     Returns a set of declared field name strings, or empty set if not found.
     Fields declared there are intentionally legacy-named or optional custom
     fields preserved during auth migration and should be exempt from the
     generic-name test.
+
+    ``ROOT_CONFIG_FIELDS`` counts too. It is BaseConfig's own declaration for
+    non-authentication root-config env vars (see ``_DEFAULT_ROOT_CONFIG_FIELDS``
+    in ``cli_tools_shared.config`` and the wrapper template's
+    ``ROOT_CONFIG_FIELDS = ("CLI_COMMAND", "CLI_PATH")``). Those names are not
+    credentials, so pushing them into CUSTOM_*_FIELDS just to satisfy this test
+    would route non-secret config through credential prompting and validation.
+    Declaring them is the same explicit, reviewed act the CUSTOM_* lists are, so
+    it earns the same exemption. It is declared as a tuple, hence the tuple
+    literal handling below.
     """
     import ast
     cli_pkg = cli_dir / f"{cli_name.replace('-', '_')}_cli"
@@ -469,7 +479,11 @@ def _parse_custom_allowed_fields(cli_dir, cli_name) -> set:
         tree = ast.parse(config_file.read_text())
     except Exception:
         return set()
-    custom_field_attrs = {"CUSTOM_REQUIRED_FIELDS", "CUSTOM_ALL_FIELDS"}
+    custom_field_attrs = {
+        "CUSTOM_REQUIRED_FIELDS",
+        "CUSTOM_ALL_FIELDS",
+        "ROOT_CONFIG_FIELDS",
+    }
     fields = set()
     for node in ast.walk(tree):
         if not isinstance(node, ast.Assign):
@@ -477,7 +491,7 @@ def _parse_custom_allowed_fields(cli_dir, cli_name) -> set:
         for target in node.targets:
             if not (isinstance(target, ast.Name) and target.id in custom_field_attrs):
                 continue
-            if not isinstance(node.value, ast.List):
+            if not isinstance(node.value, (ast.List, ast.Tuple)):
                 continue
             for elt in node.value.elts:
                 if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
