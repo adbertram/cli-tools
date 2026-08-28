@@ -914,6 +914,32 @@ class FacebookClient:
             return typed
         return {"success": False, "error": "comment composer insert returned non-dict result"}
 
+    def _submit_filled_textbox_with_enter(self, page) -> Dict:
+        """Dispatch an Enter keydown to whichever textbox currently has text.
+
+        Shared by ``comment_on_post`` and ``reply_to_comment`` — both submit a
+        filled Lexical comment/reply composer identically, by finding the
+        first non-empty ``[role="textbox"][contenteditable="true"]`` and
+        dispatching a synthetic Enter keydown at it.
+        """
+        js = (
+            '() => {'
+            ' const boxes = document.querySelectorAll(\'[role="textbox"][contenteditable="true"]\');'
+            ' for (const box of boxes) {'
+            '   if (box.textContent && box.textContent.trim().length > 0) {'
+            '     box.dispatchEvent(new KeyboardEvent("keydown",'
+            '       {key: "Enter", code: "Enter", keyCode: 13, bubbles: true}));'
+            '     return {success: true};'
+            '   }'
+            ' }'
+            ' return {success: false, error: "Could not find filled comment box"};'
+            ' }'
+        )
+        submitted = page.evaluate(js)
+        if isinstance(submitted, dict):
+            return submitted
+        return {"success": False, "error": "comment/reply submit returned non-dict result"}
+
     def _assert_authenticated_page(self, page, requested_url: str, surface: str) -> None:
         """Fail fast when Facebook serves a login or challenge page."""
         current_url = getattr(page, "url", "") or ""
@@ -3891,20 +3917,7 @@ class FacebookClient:
         comment_count_before = self._count_post_comments(page)
 
         # Press Enter to submit the comment
-        js_submit = (
-            '() => {'
-            ' const boxes = document.querySelectorAll(\'[role="textbox"][contenteditable="true"]\');'
-            ' for (const box of boxes) {'
-            '   if (box.textContent && box.textContent.trim().length > 0) {'
-            '     box.dispatchEvent(new KeyboardEvent("keydown",'
-            '       {key: "Enter", code: "Enter", keyCode: 13, bubbles: true}));'
-            '     return {success: true};'
-            '   }'
-            ' }'
-            ' return {success: false, error: "Could not find filled comment box"};'
-            ' }'
-        )
-        submitted = page.evaluate(js_submit)
+        submitted = self._submit_filled_textbox_with_enter(page)
         if not isinstance(submitted, dict) or not submitted.get("success"):
             raise ClientError(f"Failed to submit comment: {(submitted or {}).get('error', 'unknown')}")
 
@@ -3954,6 +3967,7 @@ class FacebookClient:
         print_info(f"Replying to comment #{comment_index}...")
         page = self._get_page(url, settle_ms=0)
         page.wait_for_selector('[role="main"]', timeout=15000)
+        self._assert_authenticated_page(page, url, "group post reply")
 
         # Click the Reply link on the Nth comment
         js_reply = (
@@ -3978,45 +3992,41 @@ class FacebookClient:
         if not isinstance(clicked, dict) or not clicked.get("success"):
             raise ClientError(f"Failed to click Reply: {(clicked or {}).get('error', 'unknown')}")
 
-        page.wait_for_selector('[role="textbox"][contenteditable="true"]', timeout=10000)
+        # Wait for exactly one visible composer using the SAME robust locator
+        # comment_on_post relies on: visible + contenteditable, excluding
+        # obvious non-comment textboxes (e.g. Search), preferring a
+        # Lexical-marked box when present, and otherwise requiring a single
+        # "comment|reply|answer|write" labeled candidate.
+        #
+        # The previous reply-only implementation instead waited only for ANY
+        # `[role="textbox"][contenteditable="true"]` to exist ANYWHERE on the
+        # page (page.wait_for_selector with no scoping), then grabbed
+        # whichever one happened to be LAST in raw DOM query order with no
+        # visibility filter, no Search exclusion, and no uniqueness check.
+        # On a page where another textbox was already present (a collapsed
+        # top-level "Write a comment..." composer, a stale composer left over
+        # from a prior action), that heuristic could silently type into the
+        # wrong element -- one Facebook's Enter-to-submit handler was never
+        # wired to for this reply -- so the insert reported success but the
+        # composer never cleared and the comment count never moved. This is
+        # the structural gap between the reply path and the comment path,
+        # which used the guarded locator below and worked reliably. Reusing
+        # it here removes that class of bug.
+        self._assert_authenticated_page(page, url, "group post reply composer")
+        self._wait_for_visible_comment_composer(page, timeout_ms=10000)
 
-        # Type into the reply textbox (should be the most recently focused/appearing textbox)
-        js_type = (
-            '(text) => {'
-            ' const boxes = document.querySelectorAll(\'[role="textbox"][contenteditable="true"]\');'
-            ' if (!boxes.length) return {success: false, error: "Reply textbox not found"};'
-            # The reply textbox is typically the last one that appeared
-            ' const box = boxes[boxes.length - 1];'
-            ' box.focus();'
-            ' document.execCommand("insertText", false, text);'
-            ' return {success: true};'
-            ' }'
-        )
-        typed = page.evaluate(js_type, text)
+        typed = self._insert_text_into_visible_comment_composer(page, text)
         if not isinstance(typed, dict) or not typed.get("success"):
             raise ClientError(f"Failed to type reply: {(typed or {}).get('error', 'unknown')}")
 
         page.wait_for_timeout(500)
 
-        # Press Enter to submit
-        js_submit = (
-            '() => {'
-            ' const boxes = document.querySelectorAll(\'[role="textbox"][contenteditable="true"]\');'
-            ' for (const box of boxes) {'
-            '   if (box.textContent && box.textContent.trim().length > 0) {'
-            '     box.dispatchEvent(new KeyboardEvent("keydown",'
-            '       {key: "Enter", code: "Enter", keyCode: 13, bubbles: true}));'
-            '     return {success: true};'
-            '   }'
-            ' }'
-            ' return {success: false, error: "Could not find filled reply box"};'
-            ' }'
-        )
         # Snapshot count before submitting the reply (replies are nested
         # articles too, so the count delta still applies).
         comment_count_before = self._count_post_comments(page)
 
-        submitted = page.evaluate(js_submit)
+        # Press Enter to submit
+        submitted = self._submit_filled_textbox_with_enter(page)
         if not isinstance(submitted, dict) or not submitted.get("success"):
             raise ClientError(f"Failed to submit reply: {(submitted or {}).get('error', 'unknown')}")
 
