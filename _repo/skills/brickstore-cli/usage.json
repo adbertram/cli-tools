@@ -1,8 +1,8 @@
 {
   "tool": "brickstore",
   "description": "CLI interface for brickstore",
-  "discovered_at": "2026-08-18T14:56:11Z",
-  "total_commands": 8,
+  "discovered_at": "2026-08-29T22:49:42Z",
+  "total_commands": 9,
   "global_options": [],
   "commands": {
     "database": {
@@ -19,7 +19,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -32,7 +33,8 @@
               "type": "bool",
               "required": false,
               "help": "Redownload even if the local copy is current",
-              "short": "-f"
+              "short": "-f",
+              "takes_value": false
             }
           ]
         }
@@ -54,15 +56,29 @@
           "type": "bool",
           "required": false,
           "help": "Display as table",
-          "short": "-t"
+          "short": "-t",
+          "takes_value": false
         },
         {
           "name": "--leave-open",
           "type": "bool",
           "required": false,
-          "help": "Leave a BrickStore app started by this command open"
+          "help": "Leave a BrickStore app started by this command open",
+          "takes_value": false
         }
       ]
+    },
+    "minifig-contents": {
+      "help": "Return direct component records for one or more minifigs.",
+      "arguments": [
+        {
+          "name": "minifig_numbers",
+          "type": "TEXT",
+          "required": true,
+          "help": "One through 25 unique BrickLink minifig item IDs"
+        }
+      ],
+      "options": []
     },
     "part": {
       "help": "Return BrickStore price guide data for one part.",
@@ -86,13 +102,15 @@
           "type": "bool",
           "required": false,
           "help": "Display as table",
-          "short": "-t"
+          "short": "-t",
+          "takes_value": false
         },
         {
           "name": "--leave-open",
           "type": "bool",
           "required": false,
-          "help": "Leave a BrickStore app started by this command open"
+          "help": "Leave a BrickStore app started by this command open",
+          "takes_value": false
         }
       ]
     },
@@ -165,13 +183,15 @@
           "type": "bool",
           "required": false,
           "help": "Display as table",
-          "short": "-t"
+          "short": "-t",
+          "takes_value": false
         },
         {
           "name": "--leave-open",
           "type": "bool",
           "required": false,
-          "help": "Leave a BrickStore app started by this command open"
+          "help": "Leave a BrickStore app started by this command open",
+          "takes_value": false
         }
       ]
     },
@@ -191,13 +211,15 @@
           "type": "bool",
           "required": false,
           "help": "Display as table",
-          "short": "-t"
+          "short": "-t",
+          "takes_value": false
         },
         {
           "name": "--leave-open",
           "type": "bool",
           "required": false,
-          "help": "Leave a BrickStore app started by this command open"
+          "help": "Leave a BrickStore app started by this command open",
+          "takes_value": false
         }
       ]
     },
@@ -216,7 +238,8 @@
           "name": "--leave-open",
           "type": "bool",
           "required": false,
-          "help": "Leave a BrickStore app started by this command open"
+          "help": "Leave a BrickStore app started by this command open",
+          "takes_value": false
         }
       ]
     },

@@ -4,9 +4,9 @@
 
 Read BrickStore price guide and catalog data through its local MCP server.
 
-Use this CLI to get price guide data, catalog details, and local set contents in scripts.
+Use this CLI to get price guide data, catalog details, and local set and minifig contents in scripts.
 
-The CLI does not call the BrickLink API; `set-contents` reads set data from the local BrickStore catalog database.
+The CLI does not call the BrickLink API; `set-contents` and `minifig-contents` read catalog data from the local BrickStore catalog database.
 
 ## Requirements
 
@@ -14,7 +14,7 @@ The CLI does not call the BrickLink API; `set-contents` reads set data from the 
 - Enable the MCP server and Catalog Read permission in BrickStore Settings > AI.
 - Configure the MCP server port as `45111`, or set `BRICKSTORE_BASE_URL`.
 - The CLI starts `/Applications/BrickStore.app/Contents/MacOS/BrickStore` when no MCP server is available.
-- `set-contents` and `database status` need a local version 12 database.
+- `set-contents`, `minifig-contents`, and `database status` need a local version 12 database.
 - Run `brickstore database update` when the local database file does not exist.
 
 ## Installation
@@ -32,6 +32,7 @@ brickstore minifig sw0001a
 brickstore set 30670-1
 brickstore set-batch 30670-1 75313-1
 brickstore set-contents 30670-1 75313-1
+brickstore minifig-contents sw0001a sw0036
 brickstore database status
 brickstore query --item-id 3001
 brickstore part 3001 Red --table
@@ -123,6 +124,20 @@ See Output for the JSON result shape.
 brickstore set-contents 30670-1 75313-1
 ```
 
+### `minifig-contents <minifig-number> [<minifig-number> ...]`
+
+Return direct component records from the local database for one through 25 minifigs.
+
+Each input minifig ID must be unique.
+
+The command follows the same local database read, record merge, and quantity rules as `set-contents`.
+
+See Output for the JSON result shape.
+
+```bash
+brickstore minifig-contents sw0001a sw0036
+```
+
 ### `database update [--force]`
 
 Download and install the newest local version 12 database.
@@ -194,6 +209,10 @@ JSON is the default output format.
 
 Each `set-contents` record has `set_id` and an `items` array.
 
+`minifig-contents` always returns a top-level JSON array of minifig records.
+
+Each `minifig-contents` record has `minifig_id` and an `items` array.
+
 Each `items` record has these fields:
 
 | Field | Meaning |
@@ -207,7 +226,7 @@ Each `items` record has these fields:
 | `extra_quantity` | Extra unit count. |
 | `is_alternate` | Whether the item is an alternate. |
 | `is_counterpart` | Whether the item is a counterpart. |
-| `match_no` | Match number from the set inventory. |
+| `match_no` | Match number from the source inventory. |
 
 Price guide output preserves these source fields:
 
@@ -249,7 +268,7 @@ An updated database also returns `compressed_bytes` and `bytes`.
 
 An unchanged database returns `updated: false` after the server returns HTTP 304.
 
-`database status` returns an object with `path`, `version`, `generated_at`, `etag`, `colors`, `categories`, `item_types`, `items`, `sets`, and `sets_with_inventory`.
+`database status` returns an object with `path`, `version`, `generated_at`, `etag`, `colors`, `categories`, `item_types`, `items`, `sets`, `sets_with_inventory`, `minifigs`, and `minifigs_with_inventory`.
 
 ## Configuration
 
@@ -286,13 +305,15 @@ The option does not affect an existing BrickStore process.
 
 The CLI returns the source startup or readiness error when the server does not become ready.
 
-`set-contents` and `database status` return a command error when the database file does not exist.
+`set-contents`, `minifig-contents`, and `database status` return a command error when the database file does not exist.
 
 Run `brickstore database update` or set `BRICKSTORE_DATABASE_PATH` to a valid version 12 file.
 
 The CLI returns a command error when the database file is unreadable, truncated, corrupt, missing a required chunk, or has an unsupported version.
 
 `set-contents` returns a command error when the requested set does not exist in the local database.
+
+`minifig-contents` returns a command error when the requested minifig does not exist in the local database.
 
 `database update` returns a command error when the download fails, the server returns an unexpected status, the response has no ETag, or the database fails its SHA-512, LZMA, magic-byte, or version check.
 

@@ -38,7 +38,10 @@ CHUNK_HEADER_SIZE = 16
 CHUNK_ALIGNMENT = 16
 REQUIRED_CHUNKS = ("DATE", "COL ", "CAT ", "TYPE", "ITEM")
 
+PART_TYPE_ID = "P"
 SET_TYPE_ID = "S"
+MINIFIG_TYPE_ID = "M"
+INDEXED_TYPE_IDS = (SET_TYPE_ID, MINIFIG_TYPE_ID)
 ITEM_TYPE_NAMES = {
     "B": "BOOK",
     "C": "CATALOG",
@@ -316,7 +319,10 @@ class CatalogDatabase:
         self._item_category_ids = category_ids = [None] * count
         self._consists_offsets = consists_offsets = [0] * count
         self._consists_counts = consists_counts = [0] * count
-        self._set_indexes = set_indexes = {}
+        self._indexes_by_type = {type_id: {} for type_id in INDEXED_TYPE_IDS}
+        indexes_by_type_name = {
+            ITEM_TYPE_NAMES[type_id]: self._indexes_by_type[type_id] for type_id in INDEXED_TYPE_IDS
+        }
 
         for index in range(count):
             ids[index] = cursor.byte_array().decode("latin-1")
@@ -334,8 +340,9 @@ class CatalogDatabase:
             cursor.array(DIMENSIONS_RECORD_SIZE)
             cursor.array(PCC_RECORD_SIZE)
             cursor.byte_array()
-            if type_names[index] == ITEM_TYPE_NAMES[SET_TYPE_ID]:
-                set_indexes[ids[index]] = index
+            indexes = indexes_by_type_name.get(type_names[index])
+            if indexes is not None:
+                indexes[ids[index]] = index
 
         _require_exact_size(cursor, payload, size, "ITEM", self.path)
 
@@ -351,8 +358,8 @@ class CatalogDatabase:
             )
         return ITEM_TYPE_NAMES[type_id]
 
-    def set_contents(self, set_number: str) -> dict:
-        """Return the direct item records of one set.
+    def _contents_items(self, type_id: str, item_number: str) -> list:
+        """Return the merged direct item records of one catalog item.
 
         BrickStore stores one record per BrickLink inventory row. BrickLink's
         own subsets response merges the regular row and the extra row of the
@@ -360,11 +367,14 @@ class CatalogDatabase:
         ``extra_quantity`` counts the extra units only. This method applies the
         same merge.
         """
-        if set_number not in self._set_indexes:
+        indexes = self._indexes_by_type[type_id]
+        if item_number not in indexes:
             raise ClientError(
-                "BrickStore database {} holds no set with the ID {}".format(self.path, set_number)
+                "BrickStore database {} holds no {} with the ID {}".format(
+                    self.path, ITEM_TYPE_NAMES[type_id].lower(), item_number
+                )
             )
-        index = self._set_indexes[set_number]
+        index = indexes[item_number]
         offset = self._consists_offsets[index]
         entries = {}
         items = []
@@ -398,11 +408,19 @@ class CatalogDatabase:
             entry["quantity"] += quantity
             if is_extra:
                 entry["extra_quantity"] += quantity
-        return {"set_id": set_number, "items": items}
+        return items
+
+    def set_contents(self, set_number: str) -> dict:
+        """Return the direct item records of one set."""
+        return {"set_id": set_number, "items": self._contents_items(SET_TYPE_ID, set_number)}
+
+    def minifig_contents(self, minifig_number: str) -> dict:
+        """Return the direct component records of one minifigure."""
+        return {"minifig_id": minifig_number, "items": self._contents_items(MINIFIG_TYPE_ID, minifig_number)}
 
     def status(self) -> dict:
         """Return the loaded database metadata."""
-        return {
+        status = {
             "path": str(self.path),
             "version": SUPPORTED_VERSION,
             "generated_at": self._generated_at.isoformat(),
@@ -411,11 +429,15 @@ class CatalogDatabase:
             "categories": len(self._category_ids),
             "item_types": len(self._type_ids),
             "items": len(self._item_ids),
-            "sets": len(self._set_indexes),
-            "sets_with_inventory": sum(
-                1 for index in self._set_indexes.values() if self._consists_counts[index]
-            ),
         }
+        for type_id in INDEXED_TYPE_IDS:
+            indexes = self._indexes_by_type[type_id]
+            noun = "{}s".format(ITEM_TYPE_NAMES[type_id].lower())
+            status[noun] = len(indexes)
+            status["{}_with_inventory".format(noun)] = sum(
+                1 for index in indexes.values() if self._consists_counts[index]
+            )
+        return status
 
 
 def read_etag(path) -> str | None:

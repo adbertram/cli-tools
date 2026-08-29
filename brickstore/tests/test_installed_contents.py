@@ -3,7 +3,9 @@ import os
 import shutil
 import subprocess
 
-from tests.database_fixtures import two_sets_one_part_database
+import pytest
+
+from tests.database_fixtures import minifig_database, two_sets_one_part_database
 
 SOURCE_ENTRY = {
     "item": {
@@ -16,22 +18,32 @@ SOURCE_ENTRY = {
     "extra_quantity": 1,
     "is_alternate": False,
     "is_counterpart": False,
+    "match_no": 0,
     "quantity": 3,
 }
 
 
-def test_installed_set_contents_uses_the_public_launcher_and_local_database(tmp_path):
+@pytest.mark.parametrize(
+    ("database_bytes", "command_name", "id_key", "item_numbers"),
+    [
+        (two_sets_one_part_database(), "set-contents", "set_id", ["30670-1", "75313-1"]),
+        (minifig_database(["sw0001a", "sw0036"]), "minifig-contents", "minifig_id", ["sw0001a", "sw0036"]),
+    ],
+)
+def test_installed_contents_uses_the_public_launcher_and_local_database(
+    tmp_path, database_bytes, command_name, id_key, item_numbers
+):
     launcher = shutil.which("brickstore")
     assert launcher is not None
 
     database_path = tmp_path / "database-v12"
-    database_path.write_bytes(two_sets_one_part_database())
+    database_path.write_bytes(database_bytes)
     environment = os.environ.copy()
     environment["BRICKSTORE_DATABASE_PATH"] = str(database_path)
     environment["XDG_DATA_HOME"] = str(tmp_path / "profile")
 
     result = subprocess.run(
-        [launcher, "set-contents", "30670-1", "75313-1"],
+        [launcher, command_name, *item_numbers],
         capture_output=True,
         check=False,
         text=True,
@@ -42,6 +54,5 @@ def test_installed_set_contents_uses_the_public_launcher_and_local_database(tmp_
     assert result.returncode == 0
     assert result.stderr == ""
     assert json.loads(result.stdout) == [
-        {"set_id": "30670-1", "items": [{**SOURCE_ENTRY, "match_no": 0}]},
-        {"set_id": "75313-1", "items": [{**SOURCE_ENTRY, "match_no": 0}]},
+        {id_key: item_number, "items": [SOURCE_ENTRY]} for item_number in item_numbers
     ]

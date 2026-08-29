@@ -5,10 +5,7 @@ from cli_tools_shared import create_app, run_app
 from cli_tools_shared.output import command, print_json, print_table
 
 from . import __version__
-from .client import MAX_SET_BATCH_SIZE, get_client
-
-
-SET_NUMBERS_HELP = "One through {} unique BrickLink set item IDs".format(MAX_SET_BATCH_SIZE)
+from .client import MAX_BATCH_SIZE, get_client
 
 
 app = create_app(
@@ -30,10 +27,10 @@ def _print_fields(fields: dict, table: bool) -> None:
     )
 
 
-def _set_numbers_argument():
+def _item_numbers_argument(noun: str):
     return typer.Argument(
         ...,
-        help=SET_NUMBERS_HELP,
+        help="One through {} unique BrickLink {} item IDs".format(MAX_BATCH_SIZE, noun),
     )
 
 
@@ -134,7 +131,7 @@ def query(
 @app.command("set-batch")
 @command
 def set_batch(
-    set_numbers: list[str] = _set_numbers_argument(),
+    set_numbers: list[str] = _item_numbers_argument("set"),
     leave_open: bool = _leave_open_option(),
 ) -> None:
     """Return price guide data for a set batch in one source call."""
@@ -144,10 +141,19 @@ def set_batch(
 @app.command("set-contents")
 @command
 def set_contents(
-    set_numbers: list[str] = _set_numbers_argument(),
+    set_numbers: list[str] = _item_numbers_argument("set"),
 ) -> None:
     """Return direct item records for one or more sets."""
     print_json(get_client().set_contents(set_numbers))
+
+
+@app.command("minifig-contents")
+@command
+def minifig_contents(
+    minifig_numbers: list[str] = _item_numbers_argument("minifig"),
+) -> None:
+    """Return direct component records for one or more minifigs."""
+    print_json(get_client().minifig_contents(minifig_numbers))
 
 
 database_app = typer.Typer(help="Manage the local BrickStore catalog database")

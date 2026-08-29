@@ -139,17 +139,18 @@ def build_database(
     return build_chunk(MAGIC, payload)
 
 
-def set_database(set_numbers, generated_at=None) -> bytes:
-    """Build a database whose sets contain 3 of one part (2 regular + 1 extra)."""
+def _contents_database(item_numbers, item_types, holder_type_id, holder_name, generated_at=None) -> bytes:
+    """Build a database whose holder items contain 3 of one part (2 regular + 1 extra)."""
+    holder_type_index = [type_id for type_id, _ in item_types].index(holder_type_id)
     items = [
         {"no": "3001", "name": "Brick 2 x 4", "type_index": 0, "category_index": 0},
     ]
-    for set_number in set_numbers:
+    for item_number in item_numbers:
         items.append(
             {
-                "no": set_number,
-                "name": "Santa's Sleigh Ride polybag",
-                "type_index": 1,
+                "no": item_number,
+                "name": holder_name,
+                "type_index": holder_type_index,
                 "consists_of": [
                     pack_consists_of(quantity=2, item_index=0, color_index=0),
                     pack_consists_of(quantity=1, item_index=0, color_index=0, is_extra=True),
@@ -159,8 +160,30 @@ def set_database(set_numbers, generated_at=None) -> bytes:
     return build_database(
         colors=[(5, "Red")],
         categories=[(5, "Basic")],
-        item_types=[("P", "Part"), ("S", "Set")],
+        item_types=item_types,
         items=items,
+        generated_at=generated_at,
+    )
+
+
+def set_database(set_numbers, generated_at=None) -> bytes:
+    """Build a database whose sets contain 3 of one part (2 regular + 1 extra)."""
+    return _contents_database(
+        set_numbers,
+        item_types=[("P", "Part"), ("S", "Set")],
+        holder_type_id="S",
+        holder_name="Santa's Sleigh Ride polybag",
+        generated_at=generated_at,
+    )
+
+
+def minifig_database(minifig_numbers, generated_at=None) -> bytes:
+    """Build a database whose minifigs contain 3 of one part (2 regular + 1 extra)."""
+    return _contents_database(
+        minifig_numbers,
+        item_types=[("P", "Part"), ("S", "Set"), ("M", "Minifig")],
+        holder_type_id="M",
+        holder_name="Luke Skywalker (Pilot)",
         generated_at=generated_at,
     )
 

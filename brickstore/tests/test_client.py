@@ -197,14 +197,20 @@ def install_owned_server(monkeypatch):
 
 
 class FakeDatabase:
-    def __init__(self, contents_by_set=None, status_result=None):
+    def __init__(self, contents_by_set=None, status_result=None, contents_by_minifig=None):
         self.contents_by_set = contents_by_set or {}
+        self.contents_by_minifig = contents_by_minifig or {}
         self.status_result = status_result
         self.requested_sets = []
+        self.requested_minifigs = []
 
     def set_contents(self, set_number):
         self.requested_sets.append(set_number)
         return self.contents_by_set[set_number]
+
+    def minifig_contents(self, minifig_number):
+        self.requested_minifigs.append(minifig_number)
+        return self.contents_by_minifig[minifig_number]
 
     def status(self):
         return self.status_result
@@ -510,16 +516,26 @@ def test_set_batch_uses_one_price_guide_call_with_exact_set_inputs_and_preserves
 
 
 @pytest.mark.parametrize(
-    ("set_numbers", "message"),
+    ("method_name", "command_name", "noun"),
     [
-        ([], "set-batch requires from 1 through 25 unique set IDs"),
-        ([str(index) for index in range(26)], "set-batch accepts at most 25 set IDs"),
-        (["30670-1", "30670-1"], "set-batch set IDs must be unique: 30670-1"),
+        ("set_batch", "set-batch", "set"),
+        ("set_contents", "set-contents", "set"),
+        ("minifig_contents", "minifig-contents", "minifig"),
     ],
 )
-def test_set_batch_rejects_invalid_inputs_before_mcp_access(set_numbers, message):
-    with pytest.raises(ClientError, match=message):
-        BrickStoreClient(config=TestConfig()).set_batch(set_numbers)
+@pytest.mark.parametrize(
+    ("item_numbers", "message_template"),
+    [
+        ([], "{command} requires from 1 through 25 unique {noun} IDs"),
+        ([str(index) for index in range(26)], "{command} accepts at most 25 {noun} IDs"),
+        (["30670-1", "30670-1"], "{command} {noun} IDs must be unique: 30670-1"),
+    ],
+)
+def test_batch_commands_reject_invalid_inputs_before_any_source_access(
+    method_name, command_name, noun, item_numbers, message_template
+):
+    with pytest.raises(ClientError, match=message_template.format(command=command_name, noun=noun)):
+        getattr(BrickStoreClient(config=TestConfig()), method_name)(item_numbers)
 
 
 @pytest.mark.parametrize(
@@ -618,32 +634,39 @@ def test_set_contents_loads_the_configured_database_once_and_aggregates_each_set
 
 
 @pytest.mark.parametrize(
-    ("set_numbers", "message"),
+    ("method_name", "noun", "item_number"),
     [
-        ([], "set-contents requires from 1 through 25 unique set IDs"),
-        ([str(index) for index in range(26)], "set-contents accepts at most 25 set IDs"),
-        (["30670-1", "30670-1"], "set-contents set IDs must be unique: 30670-1"),
+        ("set_contents", "set", "30670-1"),
+        ("minifig_contents", "minifig", "sw9999"),
     ],
 )
-def test_set_contents_reuses_the_one_to_twenty_five_unique_id_contract(set_numbers, message):
-    with pytest.raises(ClientError, match=message):
-        BrickStoreClient(config=TestConfig()).set_contents(set_numbers)
-
-
-def test_set_contents_reports_an_unknown_set_as_a_client_error(monkeypatch):
-    database = FakeDatabase({})
-
+def test_contents_reports_an_unknown_item_as_a_client_error(monkeypatch, method_name, noun, item_number):
     def load(path):
-        def missing_set(set_number):
-            raise ClientError("BrickStore database {} holds no set with the ID {}".format(path, set_number))
+        database = FakeDatabase()
 
-        database.set_contents = missing_set
+        def missing_item(number):
+            raise ClientError("BrickStore database {} holds no {} with the ID {}".format(path, noun, number))
+
+        setattr(database, method_name, missing_item)
         return database
 
     monkeypatch.setattr("brickstore_cli.client.CatalogDatabase.load", load)
 
-    with pytest.raises(ClientError, match="holds no set with the ID 30670-1"):
-        BrickStoreClient(config=TestConfig()).set_contents(["30670-1"])
+    with pytest.raises(ClientError, match="holds no {} with the ID {}".format(noun, item_number)):
+        getattr(BrickStoreClient(config=TestConfig()), method_name)([item_number])
+
+
+def test_minifig_contents_loads_the_configured_database_once_and_aggregates_each_minifig(monkeypatch):
+    first_record = {"minifig_id": "sw0001a", "items": [{"item": {"no": "3626bp01"}, "quantity": 1}]}
+    second_record = {"minifig_id": "sw0036", "items": []}
+    database = FakeDatabase(contents_by_minifig={"sw0001a": first_record, "sw0036": second_record})
+    loaded_paths = install_database(monkeypatch, database)
+
+    result = BrickStoreClient(config=TestConfig()).minifig_contents(["sw0001a", "sw0036"])
+
+    assert result == [first_record, second_record]
+    assert database.requested_minifigs == ["sw0001a", "sw0036"]
+    assert loaded_paths == [TestConfig.database_path]
 
 
 def test_database_status_loads_the_configured_database_path(monkeypatch):

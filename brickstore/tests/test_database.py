@@ -5,7 +5,7 @@ import pytest
 from cli_tools_shared.exceptions import ClientError
 
 from brickstore_cli.database import CatalogDatabase, download, read_etag
-from tests.database_fixtures import build_database, date_chunk, one_set_one_part_database
+from tests.database_fixtures import build_database, date_chunk, minifig_database, one_set_one_part_database
 
 
 def write_database(tmp_path, data: bytes):
@@ -30,6 +30,8 @@ def test_load_reads_status_metadata(tmp_path):
         "items": 2,
         "sets": 1,
         "sets_with_inventory": 1,
+        "minifigs": 0,
+        "minifigs_with_inventory": 0,
     }
 
 
@@ -66,6 +68,58 @@ def test_set_contents_rejects_an_unknown_set(tmp_path):
 
     with pytest.raises(ClientError, match="holds no set with the ID 99999-1"):
         CatalogDatabase.load(path).set_contents("99999-1")
+
+
+def test_minifig_contents_merges_regular_and_extra_quantities_into_one_entry(tmp_path):
+    path = write_database(tmp_path, minifig_database(["sw0001a"]))
+
+    result = CatalogDatabase.load(path).minifig_contents("sw0001a")
+
+    assert result == {
+        "minifig_id": "sw0001a",
+        "items": [
+            {
+                "item": {"no": "3001", "name": "Brick 2 x 4", "type": "PART", "category_id": 5},
+                "color_id": 5,
+                "quantity": 3,
+                "extra_quantity": 1,
+                "is_alternate": False,
+                "is_counterpart": False,
+                "match_no": 0,
+            }
+        ],
+    }
+
+
+def test_minifig_contents_rejects_an_unknown_minifig(tmp_path):
+    path = write_database(tmp_path, minifig_database(["sw0001a"]))
+
+    with pytest.raises(ClientError, match="holds no minifig with the ID sw9999"):
+        CatalogDatabase.load(path).minifig_contents("sw9999")
+
+
+def test_set_contents_does_not_serve_a_minifig_id(tmp_path):
+    path = write_database(tmp_path, minifig_database(["sw0001a"]))
+
+    with pytest.raises(ClientError, match="holds no set with the ID sw0001a"):
+        CatalogDatabase.load(path).set_contents("sw0001a")
+
+
+def test_status_counts_minifigs_with_inventory(tmp_path):
+    path = write_database(tmp_path, minifig_database(["sw0001a", "sw0036"]))
+
+    status = CatalogDatabase.load(path).status()
+
+    assert status["minifigs"] == 2
+    assert status["minifigs_with_inventory"] == 2
+    assert status["sets"] == 0
+
+
+def test_minifig_contents_does_not_serve_a_set_id(tmp_path):
+    path = write_database(tmp_path, one_set_one_part_database())
+
+    with pytest.raises(ClientError, match="holds no minifig with the ID 30670-1"):
+        CatalogDatabase.load(path).minifig_contents("30670-1")
 
 
 def test_load_rejects_missing_file(tmp_path):
