@@ -1,7 +1,7 @@
 {
   "tool": "brickstore",
   "description": "CLI interface for brickstore",
-  "discovered_at": "2026-08-29T22:49:42Z",
+  "discovered_at": "2026-08-29T23:14:06Z",
   "total_commands": 9,
   "global_options": [],
   "commands": {
@@ -78,7 +78,15 @@
           "help": "One through 25 unique BrickLink minifig item IDs"
         }
       ],
-      "options": []
+      "options": [
+        {
+          "name": "--skip-unknown",
+          "type": "bool",
+          "required": false,
+          "help": "Skip minifig IDs the local database does not hold instead of failing",
+          "takes_value": false
+        }
+      ]
     },
     "part": {
       "help": "Return BrickStore price guide data for one part.",
@@ -253,7 +261,15 @@
           "help": "One through 25 unique BrickLink set item IDs"
         }
       ],
-      "options": []
+      "options": [
+        {
+          "name": "--skip-unknown",
+          "type": "bool",
+          "required": false,
+          "help": "Skip set IDs the local database does not hold instead of failing",
+          "takes_value": false
+        }
+      ]
     }
   },
   "usage_instructions": "Use the `brickstore` CLI. Run `brickstore --help` to discover command groups and `--help` on any subcommand for its options."

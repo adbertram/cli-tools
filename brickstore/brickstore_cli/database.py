@@ -367,14 +367,13 @@ class CatalogDatabase:
         ``extra_quantity`` counts the extra units only. This method applies the
         same merge.
         """
-        indexes = self._indexes_by_type[type_id]
-        if item_number not in indexes:
+        if not self.has_item(type_id, item_number):
             raise ClientError(
                 "BrickStore database {} holds no {} with the ID {}".format(
                     self.path, ITEM_TYPE_NAMES[type_id].lower(), item_number
                 )
             )
-        index = indexes[item_number]
+        index = self._indexes_by_type[type_id][item_number]
         offset = self._consists_offsets[index]
         entries = {}
         items = []
@@ -410,13 +409,14 @@ class CatalogDatabase:
                 entry["extra_quantity"] += quantity
         return items
 
-    def set_contents(self, set_number: str) -> dict:
-        """Return the direct item records of one set."""
-        return {"set_id": set_number, "items": self._contents_items(SET_TYPE_ID, set_number)}
+    def has_item(self, type_id: str, item_number: str) -> bool:
+        """Return whether the catalog holds an item of the given indexed type."""
+        return item_number in self._indexes_by_type[type_id]
 
-    def minifig_contents(self, minifig_number: str) -> dict:
-        """Return the direct component records of one minifigure."""
-        return {"minifig_id": minifig_number, "items": self._contents_items(MINIFIG_TYPE_ID, minifig_number)}
+    def contents(self, type_id: str, item_number: str) -> dict:
+        """Return the direct item records of one catalog item, keyed by its type noun."""
+        noun = ITEM_TYPE_NAMES[type_id].lower()
+        return {"{}_id".format(noun): item_number, "items": self._contents_items(type_id, item_number)}
 
     def status(self) -> dict:
         """Return the loaded database metadata."""

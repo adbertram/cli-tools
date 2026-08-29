@@ -2,7 +2,7 @@
 
 import typer
 from cli_tools_shared import create_app, run_app
-from cli_tools_shared.output import command, print_json, print_table
+from cli_tools_shared.output import command, print_json, print_table, print_warning
 
 from . import __version__
 from .client import MAX_BATCH_SIZE, get_client
@@ -32,6 +32,20 @@ def _item_numbers_argument(noun: str):
         ...,
         help="One through {} unique BrickLink {} item IDs".format(MAX_BATCH_SIZE, noun),
     )
+
+
+def _skip_unknown_option(noun: str):
+    return typer.Option(
+        False,
+        "--skip-unknown",
+        help="Skip {} IDs the local database does not hold instead of failing".format(noun),
+    )
+
+
+def _print_contents(records: list, unknown: list, noun: str) -> None:
+    for item_number in unknown:
+        print_warning("skipped unknown {} ID {}".format(noun, item_number))
+    print_json(records)
 
 
 def _leave_open_option():
@@ -142,18 +156,22 @@ def set_batch(
 @command
 def set_contents(
     set_numbers: list[str] = _item_numbers_argument("set"),
+    skip_unknown: bool = _skip_unknown_option("set"),
 ) -> None:
     """Return direct item records for one or more sets."""
-    print_json(get_client().set_contents(set_numbers))
+    records, unknown = get_client().set_contents(set_numbers, skip_unknown=skip_unknown)
+    _print_contents(records, unknown, "set")
 
 
 @app.command("minifig-contents")
 @command
 def minifig_contents(
     minifig_numbers: list[str] = _item_numbers_argument("minifig"),
+    skip_unknown: bool = _skip_unknown_option("minifig"),
 ) -> None:
     """Return direct component records for one or more minifigs."""
-    print_json(get_client().minifig_contents(minifig_numbers))
+    records, unknown = get_client().minifig_contents(minifig_numbers, skip_unknown=skip_unknown)
+    _print_contents(records, unknown, "minifig")
 
 
 database_app = typer.Typer(help="Manage the local BrickStore catalog database")

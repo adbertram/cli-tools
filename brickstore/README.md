@@ -104,11 +104,13 @@ brickstore set-batch 30670-1 75313-1
 brickstore set-batch 30670-1 75313-1 --leave-open
 ```
 
-### `set-contents <set-number> [<set-number> ...]`
+### `set-contents <set-number> [<set-number> ...] [--skip-unknown]`
 
 Return direct item records from the local database for one through 25 sets.
 
 Each input set ID must be unique.
+
+An unknown set ID fails the whole command. Use `--skip-unknown` to return records for every held ID instead; each skipped ID prints one `Warning: skipped unknown set ID <id>` line on stderr and the command exits 0.
 
 The database stores one row for each inventory record.
 
@@ -122,20 +124,22 @@ See Output for the JSON result shape.
 
 ```bash
 brickstore set-contents 30670-1 75313-1
+brickstore set-contents 30670-1 99999-1 --skip-unknown
 ```
 
-### `minifig-contents <minifig-number> [<minifig-number> ...]`
+### `minifig-contents <minifig-number> [<minifig-number> ...] [--skip-unknown]`
 
 Return direct component records from the local database for one through 25 minifigs.
 
 Each input minifig ID must be unique.
 
-The command follows the same local database read, record merge, and quantity rules as `set-contents`.
+The command follows the same local database read, record merge, quantity, and `--skip-unknown` rules as `set-contents`. Unknown IDs are normal for bulk backfills, so batch callers should pass `--skip-unknown`: known IDs return records, each unknown ID prints one `Warning: skipped unknown minifig ID <id>` stderr line, and the command exits 0.
 
 See Output for the JSON result shape.
 
 ```bash
 brickstore minifig-contents sw0001a sw0036
+brickstore minifig-contents sw0001a sw9999 --skip-unknown
 ```
 
 ### `database update [--force]`
@@ -212,6 +216,8 @@ Each `set-contents` record has `set_id` and an `items` array.
 `minifig-contents` always returns a top-level JSON array of minifig records.
 
 Each `minifig-contents` record has `minifig_id` and an `items` array.
+
+With `--skip-unknown`, unknown IDs are absent from the array; identify them by diffing the requested IDs against the returned `set_id`/`minifig_id` values, or by parsing the per-ID `Warning:` stderr lines.
 
 Each `items` record has these fields:
 
@@ -311,9 +317,9 @@ Run `brickstore database update` or set `BRICKSTORE_DATABASE_PATH` to a valid ve
 
 The CLI returns a command error when the database file is unreadable, truncated, corrupt, missing a required chunk, or has an unsupported version.
 
-`set-contents` returns a command error when the requested set does not exist in the local database.
+`set-contents` returns a command error when the requested set does not exist in the local database, unless `--skip-unknown` is set.
 
-`minifig-contents` returns a command error when the requested minifig does not exist in the local database.
+`minifig-contents` returns a command error when the requested minifig does not exist in the local database, unless `--skip-unknown` is set.
 
 `database update` returns a command error when the download fails, the server returns an unexpected status, the response has no ETag, or the database fails its SHA-512, LZMA, magic-byte, or version check.
 

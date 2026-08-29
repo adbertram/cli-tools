@@ -353,17 +353,31 @@ class BrickStoreClient:
     def _load_database(self) -> CatalogDatabase:
         return CatalogDatabase.load(self.config.database_path)
 
-    def set_contents(self, set_numbers: list[str]) -> list:
+    def _collect_contents(self, item_numbers: list[str], type_id: str, skip_unknown: bool) -> tuple[list, list]:
+        """Return (records, unknown IDs), both in input order.
+
+        Without skip_unknown, an unknown ID raises from the database read
+        instead of landing in the unknown list.
+        """
+        database = self._load_database()
+        records: list = []
+        unknown: list = []
+        for item_number in item_numbers:
+            if skip_unknown and not database.has_item(type_id, item_number):
+                unknown.append(item_number)
+                continue
+            records.append(database.contents(type_id, item_number))
+        return records, unknown
+
+    def set_contents(self, set_numbers: list[str], skip_unknown: bool = False) -> tuple[list, list]:
         """Return direct item records for each requested set from the local database."""
         validate_item_numbers(set_numbers, "set-contents", "set")
-        database = self._load_database()
-        return [database.set_contents(set_number) for set_number in set_numbers]
+        return self._collect_contents(set_numbers, SET_TYPE_ID, skip_unknown)
 
-    def minifig_contents(self, minifig_numbers: list[str]) -> list:
+    def minifig_contents(self, minifig_numbers: list[str], skip_unknown: bool = False) -> tuple[list, list]:
         """Return direct component records for each requested minifig from the local database."""
         validate_item_numbers(minifig_numbers, "minifig-contents", "minifig")
-        database = self._load_database()
-        return [database.minifig_contents(minifig_number) for minifig_number in minifig_numbers]
+        return self._collect_contents(minifig_numbers, MINIFIG_TYPE_ID, skip_unknown)
 
     def database_status(self) -> dict:
         """Return the local BrickStore catalog database's metadata."""

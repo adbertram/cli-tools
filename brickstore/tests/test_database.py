@@ -45,7 +45,7 @@ def test_load_reports_the_stored_etag_when_a_sidecar_file_exists(tmp_path):
 def test_set_contents_merges_regular_and_extra_quantities_into_one_entry(tmp_path):
     path = write_database(tmp_path, one_set_one_part_database())
 
-    result = CatalogDatabase.load(path).set_contents("30670-1")
+    result = CatalogDatabase.load(path).contents("S", "30670-1")
 
     assert result == {
         "set_id": "30670-1",
@@ -67,13 +67,13 @@ def test_set_contents_rejects_an_unknown_set(tmp_path):
     path = write_database(tmp_path, one_set_one_part_database())
 
     with pytest.raises(ClientError, match="holds no set with the ID 99999-1"):
-        CatalogDatabase.load(path).set_contents("99999-1")
+        CatalogDatabase.load(path).contents("S", "99999-1")
 
 
 def test_minifig_contents_merges_regular_and_extra_quantities_into_one_entry(tmp_path):
     path = write_database(tmp_path, minifig_database(["sw0001a"]))
 
-    result = CatalogDatabase.load(path).minifig_contents("sw0001a")
+    result = CatalogDatabase.load(path).contents("M", "sw0001a")
 
     assert result == {
         "minifig_id": "sw0001a",
@@ -95,14 +95,14 @@ def test_minifig_contents_rejects_an_unknown_minifig(tmp_path):
     path = write_database(tmp_path, minifig_database(["sw0001a"]))
 
     with pytest.raises(ClientError, match="holds no minifig with the ID sw9999"):
-        CatalogDatabase.load(path).minifig_contents("sw9999")
+        CatalogDatabase.load(path).contents("M", "sw9999")
 
 
 def test_set_contents_does_not_serve_a_minifig_id(tmp_path):
     path = write_database(tmp_path, minifig_database(["sw0001a"]))
 
     with pytest.raises(ClientError, match="holds no set with the ID sw0001a"):
-        CatalogDatabase.load(path).set_contents("sw0001a")
+        CatalogDatabase.load(path).contents("S", "sw0001a")
 
 
 def test_status_counts_minifigs_with_inventory(tmp_path):
@@ -119,7 +119,17 @@ def test_minifig_contents_does_not_serve_a_set_id(tmp_path):
     path = write_database(tmp_path, one_set_one_part_database())
 
     with pytest.raises(ClientError, match="holds no minifig with the ID 30670-1"):
-        CatalogDatabase.load(path).minifig_contents("30670-1")
+        CatalogDatabase.load(path).contents("M", "30670-1")
+
+
+def test_has_item_reports_type_scoped_membership(tmp_path):
+    path = write_database(tmp_path, minifig_database(["sw0001a"]))
+
+    database = CatalogDatabase.load(path)
+
+    assert database.has_item("M", "sw0001a") is True
+    assert database.has_item("M", "sw9999") is False
+    assert database.has_item("S", "sw0001a") is False
 
 
 def test_load_rejects_missing_file(tmp_path):

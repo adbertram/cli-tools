@@ -198,19 +198,16 @@ def install_owned_server(monkeypatch):
 
 class FakeDatabase:
     def __init__(self, contents_by_set=None, status_result=None, contents_by_minifig=None):
-        self.contents_by_set = contents_by_set or {}
-        self.contents_by_minifig = contents_by_minifig or {}
+        self.contents_by_type = {"S": contents_by_set or {}, "M": contents_by_minifig or {}}
         self.status_result = status_result
-        self.requested_sets = []
-        self.requested_minifigs = []
+        self.requested_by_type = {"S": [], "M": []}
 
-    def set_contents(self, set_number):
-        self.requested_sets.append(set_number)
-        return self.contents_by_set[set_number]
+    def has_item(self, type_id, item_number):
+        return item_number in self.contents_by_type[type_id]
 
-    def minifig_contents(self, minifig_number):
-        self.requested_minifigs.append(minifig_number)
-        return self.contents_by_minifig[minifig_number]
+    def contents(self, type_id, item_number):
+        self.requested_by_type[type_id].append(item_number)
+        return self.contents_by_type[type_id][item_number]
 
     def status(self):
         return self.status_result
@@ -626,10 +623,11 @@ def test_set_contents_loads_the_configured_database_once_and_aggregates_each_set
     database = FakeDatabase({"30670-1": first_record, "75313-1": second_record})
     loaded_paths = install_database(monkeypatch, database)
 
-    result = BrickStoreClient(config=TestConfig()).set_contents(["30670-1", "75313-1"])
+    records, unknown = BrickStoreClient(config=TestConfig()).set_contents(["30670-1", "75313-1"])
 
-    assert result == [first_record, second_record]
-    assert database.requested_sets == ["30670-1", "75313-1"]
+    assert records == [first_record, second_record]
+    assert unknown == []
+    assert database.requested_by_type["S"] == ["30670-1", "75313-1"]
     assert loaded_paths == [TestConfig.database_path]
 
 
@@ -644,10 +642,10 @@ def test_contents_reports_an_unknown_item_as_a_client_error(monkeypatch, method_
     def load(path):
         database = FakeDatabase()
 
-        def missing_item(number):
+        def missing_item(type_id, number):
             raise ClientError("BrickStore database {} holds no {} with the ID {}".format(path, noun, number))
 
-        setattr(database, method_name, missing_item)
+        database.contents = missing_item
         return database
 
     monkeypatch.setattr("brickstore_cli.client.CatalogDatabase.load", load)
@@ -662,11 +660,40 @@ def test_minifig_contents_loads_the_configured_database_once_and_aggregates_each
     database = FakeDatabase(contents_by_minifig={"sw0001a": first_record, "sw0036": second_record})
     loaded_paths = install_database(monkeypatch, database)
 
-    result = BrickStoreClient(config=TestConfig()).minifig_contents(["sw0001a", "sw0036"])
+    records, unknown = BrickStoreClient(config=TestConfig()).minifig_contents(["sw0001a", "sw0036"])
 
-    assert result == [first_record, second_record]
-    assert database.requested_minifigs == ["sw0001a", "sw0036"]
+    assert records == [first_record, second_record]
+    assert unknown == []
+    assert database.requested_by_type["M"] == ["sw0001a", "sw0036"]
     assert loaded_paths == [TestConfig.database_path]
+
+
+def test_minifig_contents_skip_unknown_returns_known_records_and_unknown_ids_in_input_order(monkeypatch):
+    record = {"minifig_id": "sw0001a", "items": [{"item": {"no": "3023"}, "quantity": 1}]}
+    database = FakeDatabase(contents_by_minifig={"sw0001a": record})
+    install_database(monkeypatch, database)
+
+    records, unknown = BrickStoreClient(config=TestConfig()).minifig_contents(
+        ["nope1", "sw0001a", "nope2"], skip_unknown=True
+    )
+
+    assert records == [record]
+    assert unknown == ["nope1", "nope2"]
+    assert database.requested_by_type["M"] == ["sw0001a"]
+
+
+def test_set_contents_skip_unknown_returns_known_records_and_unknown_ids_in_input_order(monkeypatch):
+    record = {"set_id": "30670-1", "items": []}
+    database = FakeDatabase(contents_by_set={"30670-1": record})
+    install_database(monkeypatch, database)
+
+    records, unknown = BrickStoreClient(config=TestConfig()).set_contents(
+        ["99999-1", "30670-1"], skip_unknown=True
+    )
+
+    assert records == [record]
+    assert unknown == ["99999-1"]
+    assert database.requested_by_type["S"] == ["30670-1"]
 
 
 def test_database_status_loads_the_configured_database_path(monkeypatch):
