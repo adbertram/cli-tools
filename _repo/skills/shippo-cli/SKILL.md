@@ -26,6 +26,7 @@ shippo <command-group> <action> [arguments] [options]
 | Download label | `shippo labels download LABEL_ID` |
 | Track package | `shippo tracking get TRACKING_NUMBER` |
 | List carriers | `shippo carriers list --table` |
+| Schedule a pickup | `shippo pickups create --carrier-account ID --transaction TRANSACTION_ID --start ISO --end ISO` |
 </quick_start>
 
 <essential_principles>
@@ -41,6 +42,7 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **labels** -- Purchase and manage labels (list, get, create, download, print, void)
 - **tracking** -- Track shipments (list, get, register)
 - **carriers** -- Manage carrier accounts (list, get)
+- **pickups** -- Schedule USPS and DHL Express carrier pickups (create). Create-only: Shippo has no endpoint to list, retrieve, or cancel a pickup, so save the returned `confirmation_code` and contact the carrier directly to change or cancel one. A `201` response carrying `status: "ERROR"` is a failure -- the CLI prints every `messages[]` entry to stderr and exits non-zero (a missing `--from-company` is the most common cause).
 - **auth** -- Manage authentication (login, logout, status, refresh, test)
 - **auth** -- Authentication commands and nested `auth profiles` management
 </principle>
