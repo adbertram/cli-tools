@@ -14,7 +14,7 @@ from typing import Optional, List
 from pydantic import BaseModel
 
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_table, handle_error
+from cli_tools_shared.output import command, print_json, print_table
 
 
 app = typer.Typer(help="Manage carrier accounts", no_args_is_help=True)
@@ -53,6 +53,7 @@ def extract_fields(items: list, fields: list) -> list:
 
 
 @app.command("list")
+@command
 def carriers_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of accounts to return"),
@@ -74,38 +75,35 @@ def carriers_list(
         shippo carriers list --service-levels
         shippo carriers list --properties "carrier,carrier_name,active"
     """
-    try:
-        client = get_client()
-        accounts = client.list_carrier_accounts(
-            limit=limit,
-            carrier=carrier,
-            include_service_levels=service_levels,
-            filters=filter,
-        )
+    client = get_client()
+    accounts = client.list_carrier_accounts(
+        limit=limit,
+        carrier=carrier,
+        include_service_levels=service_levels,
+        filters=filter,
+    )
 
-        # Apply properties field selection
+    # Apply properties field selection
+    if properties:
+        fields = [f.strip() for f in properties.split(",")]
+        accounts = extract_fields(accounts, fields)
+
+    if table:
         if properties:
             fields = [f.strip() for f in properties.split(",")]
-            accounts = extract_fields(accounts, fields)
-
-        if table:
-            if properties:
-                fields = [f.strip() for f in properties.split(",")]
-                print_table(accounts, fields, fields)
-            else:
-                print_table(
-                    accounts,
-                    ["carrier", "carrier_name", "account_id", "active", "is_shippo_account"],
-                    ["Carrier", "Name", "Account ID", "Active", "Shippo Account"],
-                )
+            print_table(accounts, fields, fields)
         else:
-            print_json(accounts)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+            print_table(
+                accounts,
+                ["carrier", "carrier_name", "account_id", "active", "is_shippo_account"],
+                ["Carrier", "Name", "Account ID", "Active", "Shippo Account"],
+            )
+    else:
+        print_json(accounts)
 
 
 @app.command("get")
+@command
 def carriers_get(
     account_id: str = typer.Argument(..., help="The carrier account object ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -118,25 +116,21 @@ def carriers_get(
         shippo carriers get CARRIER_ACCOUNT_ID
         shippo carriers get CARRIER_ACCOUNT_ID --table
     """
-    try:
-        client = get_client()
-        account = client.get_carrier_account(account_id)
+    client = get_client()
+    account = client.get_carrier_account(account_id)
 
-        # Apply properties field selection
+    # Apply properties field selection
+    if properties:
+        fields = [f.strip() for f in properties.split(",")]
+        account = extract_fields([account], fields)[0]
+
+    if table:
         if properties:
             fields = [f.strip() for f in properties.split(",")]
-            account = extract_fields([account], fields)[0]
-
-        if table:
-            if properties:
-                fields = [f.strip() for f in properties.split(",")]
-                print_table([account], fields, fields)
-            else:
-                item_dict = model_to_dict(account)
-                rows = [{"field": k, "value": str(v)} for k, v in item_dict.items() if v is not None]
-                print_table(rows, ["field", "value"], ["Field", "Value"])
+            print_table([account], fields, fields)
         else:
-            print_json(account)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+            item_dict = model_to_dict(account)
+            rows = [{"field": k, "value": str(v)} for k, v in item_dict.items() if v is not None]
+            print_table(rows, ["field", "value"], ["Field", "Value"])
+    else:
+        print_json(account)
