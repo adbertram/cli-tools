@@ -43,6 +43,9 @@ from .item import (
     Refund,
     CarrierAccountServiceLevel,
     CarrierAccount,
+    PickupAddress,
+    PickupLocation,
+    Pickup,
     # Factory functions
     create_address,
     create_parcel,
@@ -54,6 +57,7 @@ from .item import (
     create_refund,
     create_carrier_account_service_level,
     create_carrier_account,
+    create_pickup,
 )
 
 __all__ = [
@@ -82,6 +86,9 @@ __all__ = [
     "Refund",
     "CarrierAccountServiceLevel",
     "CarrierAccount",
+    "PickupAddress",
+    "PickupLocation",
+    "Pickup",
     # Factory functions
     "create_address",
     "create_parcel",
@@ -93,4 +100,5 @@ __all__ = [
     "create_refund",
     "create_carrier_account_service_level",
     "create_carrier_account",
+    "create_pickup",
 ]

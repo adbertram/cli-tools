@@ -271,6 +271,84 @@ shippo carriers get CARRIER_ACCOUNT_ID
 shippo carriers get CARRIER_ACCOUNT_ID --table
 ```
 
+### Pickups
+
+Schedule a carrier pickup for labels you already purchased.
+
+**Scope: USPS and DHL Express only.** Shippo's Pickups API supports no other
+carrier. Book FedEx and UPS pickups through their own carrier tools.
+
+**Create-only.** Shippo exposes `POST /pickups` and nothing else -- there is no
+endpoint to list, retrieve, or cancel a pickup. The create response is the only
+record you will get. Save the `confirmation_code`, then contact USPS or DHL
+Express directly to change or cancel a scheduled pickup.
+
+```bash
+# Schedule a pickup for one purchased label
+shippo pickups create \
+  --carrier-account CARRIER_ACCOUNT_ID \
+  --transaction TRANSACTION_ID \
+  --start 2026-08-29T10:00:00 \
+  --end 2026-08-29T16:00:00
+
+# Multiple labels in one pickup, with an explicit collection point
+shippo pickups create \
+  --carrier-account CARRIER_ACCOUNT_ID \
+  --transaction TRANSACTION_ID --transaction OTHER_TRANSACTION_ID \
+  --start 2026-08-29T10:00:00 \
+  --end 2026-08-29T16:00:00 \
+  --location-type "Front Door" \
+  --from-company "ACME Inc" \
+  --table
+
+# DHL Express international pickup (free once a DHL Express label is purchased)
+shippo carriers list --carrier dhl_express --table   # find the carrier account ID
+shippo pickups create \
+  --carrier-account DHL_EXPRESS_CARRIER_ACCOUNT_ID \
+  --transaction DHL_EXPRESS_TRANSACTION_ID \
+  --start 2026-08-29T10:00:00 \
+  --end 2026-08-29T16:00:00 \
+  --location-type "Front Door" \
+  --from-company "ACME Inc"
+
+# Non-standard collection point: instructions are mandatory for "Other"
+shippo pickups create \
+  --carrier-account CARRIER_ACCOUNT_ID \
+  --transaction TRANSACTION_ID \
+  --start 2026-08-29T10:00:00 --end 2026-08-29T16:00:00 \
+  --location-type Other --instructions "Behind the blue gate"
+```
+
+| Option | Notes |
+|--------|-------|
+| `--carrier-account` | Required. USPS or DHL Express carrier account object ID (`shippo carriers list`) |
+| `--transaction` | Required, repeatable. Object ID of a purchased label |
+| `--start`, `--end` | Required. ISO-8601 datetimes. A naive value is interpreted as local time and sent with the local UTC offset |
+| `--location-type` | Default `Front Door`. One of: Back Door, Ring Bell, Security Deck, Shipping Dock, Front Door, Knock on Door, In/At Mailbox, Mail Room, Office, Other, Reception, Side Door. `Security Deck` and `Shipping Dock` are DHL Express only |
+| `--building-type` | Optional: apartment, building, department, floor, room, suite |
+| `--instructions` | Required when `--location-type` is `Other` |
+| `--from-*` | Pickup address; defaults come from the `FROM_*` config values, including `FROM_COMPANY` |
+| `--metadata` | Optional passthrough string |
+| `--table` | Table output |
+
+There is no `--is-test` option: Shippo selects test vs. live mode from the API
+key (`shippo_test_*` vs `shippo_live_*`) on the active profile.
+
+#### Things that make a pickup fail
+
+- **Missing or invalid company name.** This is the most common failure. Shippo
+  answers with HTTP 201 but `status: "ERROR"` and a populated `messages` array.
+  The CLI prints every message to stderr and exits non-zero, so it never reads
+  as success. Set `FROM_COMPANY` or pass `--from-company`.
+- **Ship date.** The pickup window must fall on the label's ship date, which
+  Shippo restricts to today or tomorrow.
+- **USPS service restriction.** USPS accepts pickups only for Priority Mail
+  Express, Priority Mail, international, and return shipments. This restriction
+  does **not** apply to DHL Express. The CLI does not filter transaction IDs
+  locally -- they are sent as given and USPS's rejection is surfaced verbatim.
+- **USPS one-per-day limit.** USPS accepts a single pickup request per address
+  per day; a second request for the same day is rejected.
+
 ## Output Formats
 
 All commands support two output formats:
@@ -378,6 +456,7 @@ This CLI uses Pydantic models for type-safe data handling:
 | `TrackingInfo` | Tracking status and history |
 | `Refund` | Label void/refund status |
 | `CarrierAccount` | Connected carrier account (USPS, FedEx, UPS, etc.) |
+| `Pickup` | Scheduled USPS or DHL Express carrier pickup |
 
 ## Requirements
 

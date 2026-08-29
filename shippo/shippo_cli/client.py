@@ -8,6 +8,7 @@ This client wraps the Shippo SDK to provide:
 """
 import random
 import time
+from datetime import datetime
 from typing import Callable, Dict, List, Optional, Any, TypeVar
 
 import shippo
@@ -45,6 +46,7 @@ from .models import (
     TrackingInfo,
     Refund,
     CarrierAccount,
+    Pickup,
     create_address,
     create_parcel,
     create_rate,
@@ -53,6 +55,7 @@ from .models import (
     create_tracking_info,
     create_refund,
     create_carrier_account,
+    create_pickup,
 )
 
 
@@ -768,6 +771,80 @@ class ShippoClient:
             "get carrier account",
         )
         return create_carrier_account(response)
+
+    # ==================== Pickup Methods ====================
+
+    def create_pickup(
+        self,
+        carrier_account: str,
+        transactions: List[str],
+        requested_start_time: datetime,
+        requested_end_time: datetime,
+        address: Dict[str, Any],
+        building_location_type: str,
+        building_type: Optional[str] = None,
+        instructions: Optional[str] = None,
+        metadata: Optional[str] = None,
+    ) -> Pickup:
+        """
+        Schedule a carrier pickup (USPS or DHL Express).
+
+        Shippo's Pickups API is create-only: there is no endpoint to retrieve or
+        cancel a pickup afterwards, so the returned Pickup is the only record.
+
+        Args:
+            carrier_account: USPS or DHL Express carrier account object ID
+            transactions: Transaction (label) object IDs to be collected
+            requested_start_time: Start of the requested pickup window (tz-aware)
+            requested_end_time: End of the requested pickup window (tz-aware)
+            address: Pickup address fields (name, company, street1, street2,
+                city, state, zip, country, phone, email)
+            building_location_type: Where at the address the carrier collects
+            building_type: Optional building type (apartment, suite, ...)
+            instructions: Free-text instructions; required by Shippo when
+                building_location_type is "Other"
+            metadata: Optional metadata string
+
+        Returns:
+            Pickup model. A ``status`` of ``ERROR`` means Shippo rejected the
+            request; the reasons are in ``messages``.
+        """
+        pickup_address = components.AddressCompleteCreateRequest(
+            name=address["name"],
+            company=address["company"],
+            street1=address["street1"],
+            street2=address["street2"],
+            city=address["city"],
+            state=address["state"],
+            zip=address["zip"],
+            country=address["country"],
+            phone=address["phone"],
+            email=address["email"],
+        )
+
+        location = components.Location(
+            address=pickup_address,
+            building_location_type=components.BuildingLocationType(building_location_type),
+            building_type=(
+                components.BuildingType(building_type) if building_type is not None else None
+            ),
+            instructions=instructions,
+        )
+
+        request = components.PickupBase(
+            carrier_account=carrier_account,
+            location=location,
+            requested_start_time=requested_start_time,
+            requested_end_time=requested_end_time,
+            transactions=transactions,
+            metadata=metadata,
+        )
+
+        response = self._retry(
+            lambda: self.sdk.pickups.create(request=request),
+            "create pickup",
+        )
+        return create_pickup(response)
 
 
 # Module-level client instance - singleton pattern

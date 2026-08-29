@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 from ..client import get_client
 from ..config import get_config
-from cli_tools_shared.output import print_json, print_table, handle_error
+from cli_tools_shared.output import command, print_json, print_table, print_info
 from cli_tools_shared.filters import apply_filters
 
 
@@ -58,6 +58,7 @@ def extract_fields(items: list, fields: list) -> list:
 
 
 @app.command("list")
+@command
 def rates_list(
     shipment_id: str = typer.Argument(..., help="The shipment object ID to get rates for"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -75,43 +76,40 @@ def rates_list(
         shippo rates list SHIPMENT_ID --filter "service:priority"
         shippo rates list SHIPMENT_ID --properties "object_id,provider,amount,estimated_days"
     """
-    try:
-        client = get_client()
-        rates = client.list_rates(shipment_id=shipment_id, limit=limit, filters=filter)
+    client = get_client()
+    rates = client.list_rates(shipment_id=shipment_id, limit=limit, filters=filter)
 
-        # Apply properties field selection
+    # Apply properties field selection
+    if properties:
+        fields = [f.strip() for f in properties.split(",")]
+        rates = extract_fields(rates, fields)
+
+    if table:
         if properties:
             fields = [f.strip() for f in properties.split(",")]
-            rates = extract_fields(rates, fields)
-
-        if table:
-            if properties:
-                fields = [f.strip() for f in properties.split(",")]
-                print_table(rates, fields, fields)
-            else:
-                rows = []
-                for r in rates:
-                    d = model_to_dict(r)
-                    rows.append({
-                        "object_id": d.get("object_id", "")[:20],
-                        "provider": d.get("provider", ""),
-                        "service": d.get("servicelevel", {}).get("name", "") if d.get("servicelevel") else "",
-                        "amount": f"${d.get('amount', '')} {d.get('currency', '')}",
-                        "estimated_days": d.get("estimated_days", ""),
-                    })
-                print_table(
-                    rows,
-                    ["object_id", "provider", "service", "amount", "estimated_days"],
-                    ["Rate ID", "Provider", "Service", "Price", "Est. Days"],
-                )
+            print_table(rates, fields, fields)
         else:
-            print_json(rates)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+            rows = []
+            for r in rates:
+                d = model_to_dict(r)
+                rows.append({
+                    "object_id": d.get("object_id", "")[:20],
+                    "provider": d.get("provider", ""),
+                    "service": d.get("servicelevel", {}).get("name", "") if d.get("servicelevel") else "",
+                    "amount": f"${d.get('amount', '')} {d.get('currency', '')}",
+                    "estimated_days": d.get("estimated_days", ""),
+                })
+            print_table(
+                rows,
+                ["object_id", "provider", "service", "amount", "estimated_days"],
+                ["Rate ID", "Provider", "Service", "Price", "Est. Days"],
+            )
+    else:
+        print_json(rates)
 
 
 @app.command("get")
+@command
 def rates_get(
     rate_id: str = typer.Argument(..., help="The rate object ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -124,31 +122,28 @@ def rates_get(
         shippo rates get RATE_ID
         shippo rates get RATE_ID --table
     """
-    try:
-        client = get_client()
-        rate = client.get_rate(rate_id)
+    client = get_client()
+    rate = client.get_rate(rate_id)
 
-        # Apply properties field selection
+    # Apply properties field selection
+    if properties:
+        fields = [f.strip() for f in properties.split(",")]
+        rate = extract_fields([rate], fields)[0]
+
+    if table:
         if properties:
             fields = [f.strip() for f in properties.split(",")]
-            rate = extract_fields([rate], fields)[0]
-
-        if table:
-            if properties:
-                fields = [f.strip() for f in properties.split(",")]
-                print_table([rate], fields, fields)
-            else:
-                item_dict = model_to_dict(rate)
-                rows = [{"field": k, "value": str(v)[:80]} for k, v in item_dict.items() if v is not None]
-                print_table(rows, ["field", "value"], ["Field", "Value"])
+            print_table([rate], fields, fields)
         else:
-            print_json(rate)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+            item_dict = model_to_dict(rate)
+            rows = [{"field": k, "value": str(v)[:80]} for k, v in item_dict.items() if v is not None]
+            print_table(rows, ["field", "value"], ["Field", "Value"])
+    else:
+        print_json(rate)
 
 
 @app.command("estimate")
+@command
 def rates_estimate(
     weight: float = typer.Option(..., "--weight", "-w", help="Package weight in ounces (required)"),
     to_country: str = typer.Option(..., "--to-country", "-c", help="Destination country code, e.g., US, CA, FR (required)"),
@@ -199,111 +194,91 @@ def rates_estimate(
         # Filter by carrier
         shippo rates estimate --weight 4 --to-country FR --filter "provider:usps"
     """
-    try:
-        client = get_client()
-        config = get_config()
+    client = get_client()
+    config = get_config()
 
-        # Validate required FROM address fields from environment
-        missing = []
-        if not config.from_name:
-            missing.append("FROM_NAME")
-        if not config.from_street1:
-            missing.append("FROM_STREET1")
-        if not config.from_city:
-            missing.append("FROM_CITY")
-        if not config.from_state:
-            missing.append("FROM_STATE")
-        if not config.from_zip:
-            missing.append("FROM_ZIP")
+    # Validate required FROM address fields from environment
+    missing = []
+    if not config.from_name:
+        missing.append("FROM_NAME")
+    if not config.from_street1:
+        missing.append("FROM_STREET1")
+    if not config.from_city:
+        missing.append("FROM_CITY")
+    if not config.from_state:
+        missing.append("FROM_STATE")
+    if not config.from_zip:
+        missing.append("FROM_ZIP")
 
-        if missing:
-            raise typer.BadParameter(
-                f"Missing FROM address fields in .env: {', '.join(missing)}"
-            )
-
-        # Detect if this is an international shipment
-        is_international = to_country.upper() != config.from_country.upper()
-
-        # Set default customs values for international shipments
-        customs_description = item_description or "LEGO building blocks"
-        customs_value = item_value if item_value is not None else 20.0
-
-        # Create shipment to get rates
-        # Use placeholder TO address fields if not provided
-        shipment = client.create_shipment(
-            from_name=config.from_name,
-            from_street1=config.from_street1,
-            from_city=config.from_city,
-            from_state=config.from_state,
-            from_zip=config.from_zip,
-            from_country=config.from_country,
-            from_phone=config.from_phone,
-            to_name="Rate Estimate",
-            to_street1="123 Main St",
-            to_city=to_city or ("Beverly Hills" if to_country.upper() == "US" else "Paris"),
-            to_state=to_state or ("CA" if to_country.upper() == "US" else ""),
-            to_zip=to_zip or ("90210" if to_country.upper() == "US" else "75001"),
-            to_country=to_country,
-            to_phone=config.from_phone,
-            length=length,
-            width=width,
-            height=height,
-            weight=weight,
-            # Pass customs info for international shipments
-            customs_item_description=customs_description if is_international else None,
-            customs_item_value=customs_value if is_international else None,
-            customs_signer=config.from_name,
+    if missing:
+        raise typer.BadParameter(
+            f"Missing FROM address fields in .env: {', '.join(missing)}"
         )
 
-        rates = shipment.rates or []
+    # Detect if this is an international shipment
+    is_international = to_country.upper() != config.from_country.upper()
 
-        # Apply filters if provided
-        if filter and rates:
-            rates = client._filter_rates(rates, filter)
+    # Set default customs values for international shipments
+    customs_description = item_description or "LEGO building blocks"
+    customs_value = item_value if item_value is not None else 20.0
 
-        # Output rates
-        if not rates:
-            from cli_tools_shared.output import print_info
-            if is_international:
-                print_info("No rates available for this international destination/weight combination.")
-                print_info("Try adjusting the weight or check that the destination country code is valid.")
-            else:
-                print_info("No rates available for this destination/weight combination.")
-            return
+    # Create shipment to get rates
+    # Use placeholder TO address fields if not provided
+    shipment = client.create_shipment(
+        from_name=config.from_name,
+        from_street1=config.from_street1,
+        from_city=config.from_city,
+        from_state=config.from_state,
+        from_zip=config.from_zip,
+        from_country=config.from_country,
+        from_phone=config.from_phone,
+        to_name="Rate Estimate",
+        to_street1="123 Main St",
+        to_city=to_city or ("Beverly Hills" if to_country.upper() == "US" else "Paris"),
+        to_state=to_state or ("CA" if to_country.upper() == "US" else ""),
+        to_zip=to_zip or ("90210" if to_country.upper() == "US" else "75001"),
+        to_country=to_country,
+        to_phone=config.from_phone,
+        length=length,
+        width=width,
+        height=height,
+        weight=weight,
+        # Pass customs info for international shipments
+        customs_item_description=customs_description if is_international else None,
+        customs_item_value=customs_value if is_international else None,
+        customs_signer=config.from_name,
+    )
 
-        if json_output:
-            print_json(rates)
-        elif table:
-            rows = []
-            for r in rates:
-                d = model_to_dict(r)
-                rows.append({
-                    "provider": d.get("provider", ""),
-                    "service": d.get("servicelevel", {}).get("name", "") if d.get("servicelevel") else "",
-                    "amount": f"${d.get('amount', '')} {d.get('currency', '')}",
-                    "estimated_days": d.get("estimated_days", ""),
-                })
-            print_table(
-                rows,
-                ["provider", "service", "amount", "estimated_days"],
-                ["Carrier", "Service", "Price", "Est. Days"],
-            )
+    rates = shipment.rates
+
+    # Apply filters if provided
+    if filter and rates:
+        rates = client._filter_rates(rates, filter)
+
+    # Output rates
+    if not rates:
+        if is_international:
+            print_info("No rates available for this international destination/weight combination.")
+            print_info("Try adjusting the weight or check that the destination country code is valid.")
         else:
-            # Default: table output for human readability
-            rows = []
-            for r in rates:
-                d = model_to_dict(r)
-                rows.append({
-                    "provider": d.get("provider", ""),
-                    "service": d.get("servicelevel", {}).get("name", "") if d.get("servicelevel") else "",
-                    "amount": f"${d.get('amount', '')} {d.get('currency', '')}",
-                    "estimated_days": d.get("estimated_days", ""),
-                })
-            print_table(
-                rows,
-                ["provider", "service", "amount", "estimated_days"],
-                ["Carrier", "Service", "Price", "Est. Days"],
-            )
+            print_info("No rates available for this destination/weight combination.")
+        return
 
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    if json_output:
+        print_json(rates)
+    else:
+        # Table output is the default for human readability; --table is explicit.
+        rows = []
+        for r in rates:
+            d = model_to_dict(r)
+            rows.append({
+                "provider": d.get("provider", ""),
+                "service": d.get("servicelevel", {}).get("name", "") if d.get("servicelevel") else "",
+                "amount": f"${d.get('amount', '')} {d.get('currency', '')}",
+                "estimated_days": d.get("estimated_days", ""),
+            })
+        print_table(
+            rows,
+            ["provider", "service", "amount", "estimated_days"],
+            ["Carrier", "Service", "Price", "Est. Days"],
+        )

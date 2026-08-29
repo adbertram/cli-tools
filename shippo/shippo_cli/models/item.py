@@ -752,3 +752,141 @@ def create_carrier_account(sdk_account: Any) -> CarrierAccount:
         service_levels=service_levels,
         test=getattr(sdk_account, 'test', None),
     )
+
+
+# ==================== Pickup Models ====================
+
+
+class PickupAddress(CLIModel):
+    """Pickup location address (Shippo AddressCompleteCreateRequest)."""
+
+    name: Optional[str] = None
+    company: Optional[str] = None
+    street1: Optional[str] = None
+    street2: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip: Optional[str] = None
+    country: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+
+
+class PickupLocation(CLIModel):
+    """Where at the pickup address the carrier collects the parcels."""
+
+    address: Optional[PickupAddress] = None
+    building_location_type: Optional[str] = None
+    building_type: Optional[str] = None
+    instructions: Optional[str] = None
+
+
+class Pickup(CLIModel):
+    """Scheduled carrier pickup (USPS or DHL Express).
+
+    The Shippo API is create-only for pickups: there is no endpoint to retrieve
+    or cancel a pickup afterwards, so this response is the only record of it.
+    """
+
+    object_id: Optional[str] = Field(default=None, frozen=True)
+    carrier_account: Optional[str] = None
+    location: Optional[PickupLocation] = None
+    transactions: List[str] = []
+    requested_start_time: Optional[str] = None
+    requested_end_time: Optional[str] = None
+    confirmed_start_time: Optional[str] = None
+    confirmed_end_time: Optional[str] = None
+    cancel_by_time: Optional[str] = None
+    status: Optional[str] = None
+    confirmation_code: Optional[str] = None
+    timezone: Optional[str] = None
+    messages: Optional[List[str]] = None
+    metadata: Optional[str] = None
+    is_test: Optional[bool] = None
+    object_created: Optional[str] = None
+    object_updated: Optional[str] = None
+
+
+def _create_pickup_address(sdk_address: Any) -> Optional[PickupAddress]:
+    """Create PickupAddress from an SDK AddressCompleteCreateRequest dataclass."""
+    if sdk_address is None:
+        return None
+    if isinstance(sdk_address, dict):
+        return PickupAddress(**sdk_address)
+
+    return PickupAddress(
+        name=getattr(sdk_address, 'name', None),
+        company=getattr(sdk_address, 'company', None),
+        street1=getattr(sdk_address, 'street1', None),
+        street2=getattr(sdk_address, 'street2', None),
+        city=getattr(sdk_address, 'city', None),
+        state=getattr(sdk_address, 'state', None),
+        zip=getattr(sdk_address, 'zip', None),
+        country=getattr(sdk_address, 'country', None),
+        phone=getattr(sdk_address, 'phone', None),
+        email=getattr(sdk_address, 'email', None),
+    )
+
+
+def _create_pickup_location(sdk_location: Any) -> Optional[PickupLocation]:
+    """Create PickupLocation from an SDK Location dataclass."""
+    if sdk_location is None:
+        return None
+    if isinstance(sdk_location, dict):
+        return PickupLocation(**sdk_location)
+
+    building_location_type = getattr(sdk_location, 'building_location_type', None)
+    if building_location_type is not None and hasattr(building_location_type, 'value'):
+        building_location_type = building_location_type.value
+
+    building_type = getattr(sdk_location, 'building_type', None)
+    if building_type is not None and hasattr(building_type, 'value'):
+        building_type = building_type.value
+
+    return PickupLocation(
+        address=_create_pickup_address(getattr(sdk_location, 'address', None)),
+        building_location_type=str(building_location_type) if building_location_type is not None else None,
+        building_type=str(building_type) if building_type is not None else None,
+        instructions=getattr(sdk_location, 'instructions', None),
+    )
+
+
+def _convert_pickup_messages(messages: Any) -> Optional[List[str]]:
+    """Normalize SDK pickup messages to printable strings.
+
+    Shippo types ``Pickup.messages`` as a list of strings; coerce any other
+    entry so an ERROR response is always reportable.
+    """
+    if messages is None:
+        return None
+    return [msg if isinstance(msg, str) else str(msg) for msg in messages]
+
+
+def create_pickup(sdk_pickup: Any) -> Pickup:
+    """Create Pickup model from SDK Pickup dataclass."""
+    if isinstance(sdk_pickup, dict):
+        return Pickup(**sdk_pickup)
+
+    status = getattr(sdk_pickup, 'status', None)
+    if status is not None and hasattr(status, 'value'):
+        status = status.value
+
+    return Pickup(
+        object_id=getattr(sdk_pickup, 'object_id', None),
+        carrier_account=getattr(sdk_pickup, 'carrier_account', None),
+        location=_create_pickup_location(getattr(sdk_pickup, 'location', None)),
+        transactions=list(getattr(sdk_pickup, 'transactions', [])),
+        requested_start_time=_convert_datetime(getattr(sdk_pickup, 'requested_start_time', None)),
+        requested_end_time=_convert_datetime(getattr(sdk_pickup, 'requested_end_time', None)),
+        confirmed_start_time=_convert_datetime(getattr(sdk_pickup, 'confirmed_start_time', None)),
+        confirmed_end_time=_convert_datetime(getattr(sdk_pickup, 'confirmed_end_time', None)),
+        cancel_by_time=_convert_datetime(getattr(sdk_pickup, 'cancel_by_time', None)),
+        status=str(status) if status is not None else None,
+        confirmation_code=getattr(sdk_pickup, 'confirmation_code', None),
+        timezone=getattr(sdk_pickup, 'timezone', None),
+        messages=_convert_pickup_messages(getattr(sdk_pickup, 'messages', None)),
+        metadata=getattr(sdk_pickup, 'metadata', None),
+        is_test=getattr(sdk_pickup, 'is_test', None),
+        object_created=_convert_datetime(getattr(sdk_pickup, 'object_created', None)),
+        object_updated=_convert_datetime(getattr(sdk_pickup, 'object_updated', None)),
+    )
