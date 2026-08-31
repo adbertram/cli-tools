@@ -103,7 +103,7 @@ def labels_list(
             for t in transactions:
                 d = model_to_dict(t)
                 rows.append({
-                    "object_id": d.get("object_id", "")[:16],
+                    "object_id": d.get("object_id", ""),
                     "tracking_number": d.get("tracking_number", "") or "",
                     "status": d.get("status", ""),
                     "carrier": d.get("rate", {}).get("provider", "") if d.get("rate") else "",

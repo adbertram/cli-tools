@@ -6,6 +6,7 @@ This client wraps the Shippo SDK to provide:
 - Consistent error handling
 - Exponential retry with jitter for transient API failures
 """
+import json
 import random
 import time
 from datetime import datetime
@@ -22,6 +23,9 @@ T = TypeVar("T")
 # HTTP status codes worth retrying
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
+# Bound on how much of a non-JSON error body gets echoed back to the user.
+_ERROR_BODY_SNIPPET_LIMIT = 200
+
 
 def _is_retryable(exc: Exception) -> bool:
     """Determine whether an exception from the Shippo SDK is retryable."""
@@ -34,6 +38,45 @@ def _is_retryable(exc: Exception) -> bool:
     if exc_name in ("ConnectError", "TimeoutException", "ReadTimeout", "ConnectTimeout", "PoolTimeout"):
         return True
     return False
+
+
+def _describe_error_body(body: Optional[str]) -> str:
+    """Turn a raw HTTP error body into a short, clean detail string.
+
+    The Shippo SDK's ``SDKError`` normally carries a small JSON error payload,
+    but a request that misses the API layer entirely (e.g. a stale, truncated,
+    or otherwise nonexistent object ID hitting a 404 from the edge/CDN in
+    front of the API) can come back as a full HTML document with an embedded
+    JS bundle instead. That body must never be echoed verbatim -- callers only
+    need a short, clean summary.
+    """
+    if not body:
+        return "empty response body"
+    try:
+        parsed = json.loads(body)
+    except (TypeError, ValueError):
+        snippet = " ".join(body.split())[:_ERROR_BODY_SNIPPET_LIMIT]
+        return f"non-JSON error response ({len(body)} bytes): {snippet}..."
+    if isinstance(parsed, dict):
+        for key in ("detail", "message", "error"):
+            value = parsed.get(key)
+            if value:
+                return str(value)
+    return str(parsed)[:_ERROR_BODY_SNIPPET_LIMIT]
+
+
+def _format_sdk_error(operation: str, exc: Exception) -> str:
+    """Build the clean, bounded error message reported for a failed *operation*.
+
+    Falls back to the exception's own ``str()`` for anything that isn't a
+    Shippo SDK ``SDKError`` (i.e. doesn't carry ``status_code``/``body``).
+    """
+    status_code = getattr(exc, "status_code", None)
+    body = getattr(exc, "body", None)
+    if status_code is None:
+        return f"Failed to {operation}: {exc}"
+    detail = _describe_error_body(body)
+    return f"Failed to {operation}: API error occurred: Status {status_code}: {detail}"
 
 from .config import get_config
 from cli_tools_shared.filters import validate_filters, apply_filters, FilterValidationError
@@ -134,7 +177,7 @@ class ShippoClient:
                     time.sleep(delay)
                     continue
                 break
-        raise ClientError(f"Failed to {operation}: {last_exc}")
+        raise ClientError(_format_sdk_error(operation, last_exc))
 
     # ==================== Address Methods ====================
 

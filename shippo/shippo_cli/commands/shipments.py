@@ -291,7 +291,7 @@ def shipments_create(
             for r in rates:
                 d = model_to_dict(r)
                 rows.append({
-                    "rate_id": d.get("object_id", "")[:20],
+                    "rate_id": d.get("object_id", ""),
                     "provider": d.get("provider", ""),
                     "service": d.get("servicelevel", {}).get("name", "") if d.get("servicelevel") else "",
                     "amount": f"${d.get('amount', '')} {d.get('currency', '')}",
