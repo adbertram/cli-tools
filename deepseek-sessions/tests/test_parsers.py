@@ -243,6 +243,32 @@ def test_compaction_splits_conversations(compacted_log, sessions_root: Path):
     assert second.user_message_count == 1
 
 
+def test_compaction_summary_content_blocks_join_to_text(
+    compacted_block_summary_log, sessions_root: Path
+):
+    """A content-block summary array parses into joined text, not a raw list."""
+    log = load_log(
+        sessions_root
+        / "--work-demo--"
+        / compacted_block_summary_log
+        / "session.jsonl.zstd"
+    )
+
+    joined = "## Primary Request and Intent\nSpawn `debugger` on failures."
+
+    _, second = parse_conversation_summaries(log, "demo")
+    assert second.started_by == "compaction"
+    assert second.compaction_summary == joined
+
+    # The timeline reads the same field and must normalize it the same way.
+    outputs = {
+        entry.name: entry.output
+        for entry in extract_timeline(log, "demo")
+        if entry.event_type.value == "compaction"
+    }
+    assert outputs == {"start": None, "summary": joined, "end": None}
+
+
 def test_session_without_compaction_has_one_conversation(simple_log: Path):
     log = load_log(simple_log)
     assert len(parse_conversation_summaries(log, "demo")) == 1

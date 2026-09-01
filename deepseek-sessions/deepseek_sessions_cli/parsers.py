@@ -296,6 +296,18 @@ def text_of(content: Any) -> str:
     )
 
 
+def summary_text(value: Any) -> str:
+    """Normalize a dsh summary field to plain text.
+
+    dsh writes a compaction summary either as a plain string or as the same
+    provider-native content-block array it uses for message content, so the
+    array shape goes through `text_of` exactly like message content does.
+    """
+    if isinstance(value, str):
+        return value
+    return text_of(value)
+
+
 def reasoning_of(content: Any) -> str:
     """Join every `reasoning` block in a dsh content array."""
     return "\n".join(
@@ -373,7 +385,7 @@ def compaction_summaries(log: SessionLog) -> Dict[int, str]:
         kind = event.get("type")
         data = event.get("data") or {}
         if kind == "compaction/summary":
-            pending = data.get("summary") or text_of(data.get("content"))
+            pending = summary_text(data.get("summary")) or text_of(data.get("content"))
         elif kind == "compaction/end":
             conversation += 1
             if pending:
@@ -1547,11 +1559,14 @@ def extract_timeline(
             )
 
         elif kind in ("compaction/start", "compaction/end", "compaction/summary"):
+            raw_summary = data.get("summary")
             add(
                 event_type=TimelineEventType.COMPACTION,
                 name=kind.split("/", 1)[1],
                 status="invoked",
-                output=data.get("summary"),
+                # `compaction/start` and `compaction/end` carry no summary; the
+                # summary event's may arrive as a content-block array.
+                output=None if raw_summary is None else summary_text(raw_summary),
             )
 
         elif kind == "turn/end":
