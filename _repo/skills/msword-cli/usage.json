@@ -1,8 +1,8 @@
 {
   "tool": "msword",
   "description": "Read Word docs, convert to markdown, and extract comments with context",
-  "discovered_at": "2026-06-16T01:02:04Z",
-  "total_commands": 5,
+  "discovered_at": "2026-09-01T23:11:22Z",
+  "total_commands": 6,
   "global_options": [
     {
       "name": "--version",
@@ -83,7 +83,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
@@ -103,7 +104,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -151,6 +153,31 @@
             }
           ]
         },
+        "edit-tracked": {
+          "help": "Apply a batch of text edits as Word tracked changes (w:ins/w:del), leaving existing comments and tracked changes untouched.",
+          "arguments": [
+            {
+              "name": "file",
+              "type": "TEXT",
+              "required": true,
+              "help": "Path to the .docx file"
+            }
+          ],
+          "options": [
+            {
+              "name": "--edits",
+              "type": "TEXT",
+              "required": true,
+              "help": "Path to a JSON file with a list of {old_text, new_text, occurrence} edit objects"
+            },
+            {
+              "name": "--author",
+              "type": "TEXT",
+              "required": true,
+              "help": "Name attributed to every inserted tracked change"
+            }
+          ]
+        },
         "read": {
           "help": "Read text content from a Word document.",
           "arguments": [
@@ -167,7 +194,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         }
