@@ -4,9 +4,9 @@
 
 Read BrickStore price guide and catalog data through its local MCP server.
 
-Use this CLI to get price guide data, catalog details, and local set and minifig contents in scripts.
+Use this CLI to get price guide data, catalog details, and local set, minifig, and part contents in scripts.
 
-The CLI does not call the BrickLink API; `set-contents` and `minifig-contents` read catalog data from the local BrickStore catalog database.
+The CLI does not call the BrickLink API; `set-contents`, `minifig-contents`, and `part-contents` read catalog data from the local BrickStore catalog database.
 
 ## Requirements
 
@@ -14,7 +14,7 @@ The CLI does not call the BrickLink API; `set-contents` and `minifig-contents` r
 - Enable the MCP server and Catalog Read permission in BrickStore Settings > AI.
 - Configure the MCP server port as `45111`, or set `BRICKSTORE_BASE_URL`.
 - The CLI starts `/Applications/BrickStore.app/Contents/MacOS/BrickStore` when no MCP server is available.
-- `set-contents`, `minifig-contents`, and `database status` need a local version 12 database.
+- `set-contents`, `minifig-contents`, `part-contents`, and `database status` need a local version 12 database.
 - Run `brickstore database update` when the local database file does not exist.
 
 ## Installation
@@ -33,6 +33,7 @@ brickstore set 30670-1
 brickstore set-batch 30670-1 75313-1
 brickstore set-contents 30670-1 75313-1
 brickstore minifig-contents sw0001a sw0036
+brickstore part-contents 70501
 brickstore database status
 brickstore query --item-id 3001
 brickstore part 3001 Red --table
@@ -142,6 +143,23 @@ brickstore minifig-contents sw0001a sw0036
 brickstore minifig-contents sw0001a sw9999 --skip-unknown
 ```
 
+### `part-contents <part-number> [<part-number> ...] [--skip-unknown]`
+
+Return direct component records from the local database for one through 25 parts.
+
+Each input part ID must be unique. A known part with no components returns a record with an empty `items` array.
+
+The command follows the same local database read, record merge, quantity, and `--skip-unknown` rules as `set-contents`. Unknown IDs are normal for bulk backfills, so batch callers should pass `--skip-unknown`: known IDs return records, each unknown ID prints one `Warning: skipped unknown part ID <id>` stderr line, and the command exits 0.
+
+The command does not call the BrickLink CLI, the BrickLink API, a web service, or a price guide.
+
+See Output for the JSON result shape.
+
+```bash
+brickstore part-contents 70501
+brickstore part-contents 70501 nope1 --skip-unknown
+```
+
 ### `database update [--force]`
 
 Download and install the newest local version 12 database.
@@ -217,7 +235,11 @@ Each `set-contents` record has `set_id` and an `items` array.
 
 Each `minifig-contents` record has `minifig_id` and an `items` array.
 
-With `--skip-unknown`, unknown IDs are absent from the array; identify them by diffing the requested IDs against the returned `set_id`/`minifig_id` values, or by parsing the per-ID `Warning:` stderr lines.
+`part-contents` always returns a top-level JSON array of part records.
+
+Each `part-contents` record has `part_id` and an `items` array.
+
+With `--skip-unknown`, unknown IDs are absent from the array; identify them by diffing the requested IDs against the returned `set_id`, `minifig_id`, or `part_id` values, or by parsing the per-ID `Warning:` stderr lines.
 
 Each `items` record has these fields:
 
@@ -311,7 +333,7 @@ The option does not affect an existing BrickStore process.
 
 The CLI returns the source startup or readiness error when the server does not become ready.
 
-`set-contents`, `minifig-contents`, and `database status` return a command error when the database file does not exist.
+`set-contents`, `minifig-contents`, `part-contents`, and `database status` return a command error when the database file does not exist.
 
 Run `brickstore database update` or set `BRICKSTORE_DATABASE_PATH` to a valid version 12 file.
 
@@ -320,6 +342,8 @@ The CLI returns a command error when the database file is unreadable, truncated,
 `set-contents` returns a command error when the requested set does not exist in the local database, unless `--skip-unknown` is set.
 
 `minifig-contents` returns a command error when the requested minifig does not exist in the local database, unless `--skip-unknown` is set.
+
+`part-contents` returns a command error when the requested part does not exist in the local database, unless `--skip-unknown` is set.
 
 `database update` returns a command error when the download fails, the server returns an unexpected status, the response has no ETag, or the database fails its SHA-512, LZMA, magic-byte, or version check.
 

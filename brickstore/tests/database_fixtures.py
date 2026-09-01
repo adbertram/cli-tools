@@ -36,6 +36,11 @@ def _pack_array(records: list) -> bytes:
     return _UINT32.pack(len(records)) + b"".join(records)
 
 
+def pack_appears_in(color_index: int, entries: list[tuple[int, int]]) -> list[bytes]:
+    header = _UINT32.pack((color_index & 0xFFF) | (len(entries) << 12))
+    return [header, *[_UINT32.pack((quantity & 0xFFF) | (item_index << 12)) for quantity, item_index in entries]]
+
+
 def build_chunk(chunk_id: bytes, payload: bytes, version: int = VERSION) -> bytes:
     """Encode one length-prefixed, footer-verified BSDB chunk."""
     size = len(payload)
@@ -104,7 +109,7 @@ def items_chunk(items: list) -> bytes:
                 _pack_text(item["name"]),
                 _UINT16.pack(item["type_index"]),
                 b"\x00" * ITEM_SCALAR_SKIP_SIZE,
-                _pack_array([]),  # appears_in
+                _pack_array(item.get("appears_in", [])),
                 _pack_array(item.get("consists_of", [])),
                 _pack_array([]),  # unused index array
                 _pack_array(category_records),
@@ -191,6 +196,32 @@ def minifig_database(minifig_numbers, generated_at=None) -> bytes:
 def one_set_one_part_database(generated_at=None) -> bytes:
     """A minimal database with one set."""
     return set_database(["30670-1"], generated_at)
+
+
+def one_parent_part_one_child_part_database(generated_at=None) -> bytes:
+    """A parent PART assembly containing one child PART, like BrickLink 70501."""
+    return build_database(
+        colors=[(5, "Red")],
+        categories=[(5, "Basic")],
+        item_types=[("P", "Part")],
+        items=[
+            {
+                "no": "3001",
+                "name": "Brick 2 x 4",
+                "type_index": 0,
+                "category_index": 0,
+                "appears_in": pack_appears_in(0, [(2, 1)]),
+            },
+            {
+                "no": "70501",
+                "name": "Parent Part Assembly",
+                "type_index": 0,
+                "category_index": 0,
+                "consists_of": [pack_consists_of(quantity=2, item_index=0, color_index=0)],
+            },
+        ],
+        generated_at=generated_at,
+    )
 
 
 def two_sets_one_part_database(generated_at=None) -> bytes:

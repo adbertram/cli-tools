@@ -1,8 +1,8 @@
 {
   "tool": "brickstore",
   "description": "CLI interface for brickstore",
-  "discovered_at": "2026-08-29T23:14:06Z",
-  "total_commands": 9,
+  "discovered_at": "2026-09-01T12:14:48Z",
+  "total_commands": 10,
   "global_options": [],
   "commands": {
     "database": {
@@ -118,6 +118,26 @@
           "type": "bool",
           "required": false,
           "help": "Leave a BrickStore app started by this command open",
+          "takes_value": false
+        }
+      ]
+    },
+    "part-contents": {
+      "help": "Return direct component records for one or more parts.",
+      "arguments": [
+        {
+          "name": "part_numbers",
+          "type": "TEXT",
+          "required": true,
+          "help": "One through 25 unique BrickLink part item IDs"
+        }
+      ],
+      "options": [
+        {
+          "name": "--skip-unknown",
+          "type": "bool",
+          "required": false,
+          "help": "Skip part IDs the local database does not hold instead of failing",
           "takes_value": false
         }
       ]

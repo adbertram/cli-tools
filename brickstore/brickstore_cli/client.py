@@ -379,6 +379,11 @@ class BrickStoreClient:
         validate_item_numbers(minifig_numbers, "minifig-contents", "minifig")
         return self._collect_contents(minifig_numbers, MINIFIG_TYPE_ID, skip_unknown)
 
+    def part_contents(self, part_numbers: list[str], skip_unknown: bool = False) -> tuple[list, list]:
+        """Return direct component records for each requested part from the local database."""
+        validate_item_numbers(part_numbers, "part-contents", "part")
+        return self._collect_contents(part_numbers, PART_TYPE_ID, skip_unknown)
+
     def database_status(self) -> dict:
         """Return the local BrickStore catalog database's metadata."""
         return self._load_database().status()
@@ -429,6 +434,13 @@ class BrickStoreClient:
         leave_open: bool = False,
     ) -> dict:
         """Return catalog_query results for the given filters."""
+        if related_to_item_id is not None:
+            if related_to_item_type is None:
+                raise ClientError("--related-to-item-type is required with --related-to-item-id")
+            items = self._load_database().related_items(
+                related_to_item_type, related_to_item_id, relationship=relationship
+            )
+            return {"items": items, "returned_count": len(items), "total_count": len(items)}
         arguments = {
             key: value
             for key, value in {

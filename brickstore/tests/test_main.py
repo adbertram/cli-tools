@@ -48,6 +48,21 @@ MINIFIG_CONTENTS = [
     {"minifig_id": "sw0036", "items": []},
 ]
 
+PART_CONTENTS = [
+    {
+        "part_id": "70501",
+        "items": [
+            {
+                "item": {"no": "70501a", "type": "PART"},
+                "color_id": 5,
+                "match_no": 0,
+                "quantity": 1,
+            }
+        ],
+    },
+    {"part_id": "3001", "items": []},
+]
+
 QUERY_RESULT = {
     "items": [
         {
@@ -86,6 +101,7 @@ class Client:
         self.set_batch_args = None
         self.set_contents_args = None
         self.minifig_contents_args = None
+        self.part_contents_args = None
         self.query_kwargs = None
 
     def part(self, item_number, color, leave_open):
@@ -119,6 +135,12 @@ class Client:
         self.minifig_contents_args = (tuple(minifig_numbers), skip_unknown)
         records = [record for record in MINIFIG_CONTENTS if record["minifig_id"] in minifig_numbers]
         return self._contents_result(records, minifig_numbers, "minifig_id")
+
+    def part_contents(self, part_numbers, skip_unknown):
+        validate_item_numbers(part_numbers, "part-contents", "part")
+        self.part_contents_args = (tuple(part_numbers), skip_unknown)
+        records = [record for record in PART_CONTENTS if record["part_id"] in part_numbers]
+        return self._contents_result(records, part_numbers, "part_id")
 
     def query(self, **kwargs):
         self.query_kwargs = kwargs
@@ -244,6 +266,32 @@ def test_minifig_contents_prints_one_minifig_record_with_nested_items(monkeypatc
     assert client.minifig_contents_args == (("sw0001a",), False)
 
 
+def test_part_contents_prints_a_root_array_with_nested_items_and_forwards_every_id(monkeypatch):
+    client = Client()
+    monkeypatch.setattr("brickstore_cli.main.get_client", lambda: client)
+
+    result = CliRunner().invoke(app, ["part-contents", "70501", "3001"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout) == PART_CONTENTS
+    assert client.part_contents_args == (("70501", "3001"), False)
+
+
+def test_part_contents_accepts_twenty_five_ids_and_rejects_too_many_ids(monkeypatch):
+    client = Client()
+    monkeypatch.setattr("brickstore_cli.main.get_client", lambda: client)
+    part_numbers = ["part-{}".format(index) for index in range(25)]
+    runner = CliRunner()
+
+    accepted = runner.invoke(app, ["part-contents", *part_numbers])
+    rejected = runner.invoke(app, ["part-contents", *part_numbers, "part-25"])
+
+    assert accepted.exit_code == 0
+    assert client.part_contents_args == (tuple(part_numbers), False)
+    assert rejected.exit_code != 0
+    assert "at most 25 part IDs" in rejected.output
+
+
 def test_minifig_contents_skip_unknown_prints_known_records_and_warns_per_unknown_id(monkeypatch):
     client = Client()
     monkeypatch.setattr("brickstore_cli.main.get_client", lambda: client)
@@ -255,6 +303,19 @@ def test_minifig_contents_skip_unknown_prints_known_records_and_warns_per_unknow
     assert client.minifig_contents_args == (("sw0001a", "nope1", "nope2"), True)
     assert "Warning: skipped unknown minifig ID nope1" in result.output
     assert "Warning: skipped unknown minifig ID nope2" in result.output
+
+
+def test_part_contents_skip_unknown_prints_known_records_and_warns_per_unknown_id(monkeypatch):
+    client = Client()
+    monkeypatch.setattr("brickstore_cli.main.get_client", lambda: client)
+
+    result = CliRunner().invoke(app, ["part-contents", "70501", "nope1", "nope2", "--skip-unknown"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout) == [PART_CONTENTS[0]]
+    assert client.part_contents_args == (("70501", "nope1", "nope2"), True)
+    assert "Warning: skipped unknown part ID nope1" in result.output
+    assert "Warning: skipped unknown part ID nope2" in result.output
 
 
 def test_set_contents_skip_unknown_prints_known_records_and_warns_per_unknown_id(monkeypatch):
@@ -345,6 +406,20 @@ def test_minifig_contents_reports_client_errors_without_json_output(monkeypatch)
     assert result.exit_code == 1
     assert result.stdout == ""
     assert "Error: BrickStore database /tmp/database-v12 holds no minifig with the ID sw9999" in result.output
+
+
+def test_part_contents_reports_client_errors_without_json_output(monkeypatch):
+    class FailingClient:
+        def part_contents(self, part_numbers, skip_unknown):
+            raise ClientError("BrickStore database /tmp/database-v12 holds no part with the ID 70501")
+
+    monkeypatch.setattr("brickstore_cli.main.get_client", FailingClient)
+
+    result = CliRunner().invoke(app, ["part-contents", "70501"])
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "Error: BrickStore database /tmp/database-v12 holds no part with the ID 70501" in result.output
 
 
 def test_query_prints_unmodified_source_json_and_defaults_unset_filters_to_none(monkeypatch):
@@ -450,6 +525,10 @@ def test_help_exposes_the_requested_commands():
     assert minifig_contents_help.exit_code == 0
     assert "--leave-open" not in minifig_contents_help.stdout
     assert "--skip-unknown" in minifig_contents_help.stdout
+    part_contents_help = runner.invoke(app, ["part-contents", "--help"])
+    assert part_contents_help.exit_code == 0
+    assert "--leave-open" not in part_contents_help.stdout
+    assert "--skip-unknown" in part_contents_help.stdout
     query_help = runner.invoke(app, ["query", "--help"])
     assert query_help.exit_code == 0
     for option in (

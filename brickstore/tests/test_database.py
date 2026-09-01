@@ -5,7 +5,13 @@ import pytest
 from cli_tools_shared.exceptions import ClientError
 
 from brickstore_cli.database import CatalogDatabase, download, read_etag
-from tests.database_fixtures import build_database, date_chunk, minifig_database, one_set_one_part_database
+from tests.database_fixtures import (
+    build_database,
+    date_chunk,
+    minifig_database,
+    one_parent_part_one_child_part_database,
+    one_set_one_part_database,
+)
 
 
 def write_database(tmp_path, data: bytes):
@@ -98,6 +104,42 @@ def test_minifig_contents_rejects_an_unknown_minifig(tmp_path):
         CatalogDatabase.load(path).contents("M", "sw9999")
 
 
+def test_part_contents_returns_direct_components_for_a_known_parent_part(tmp_path):
+    path = write_database(tmp_path, one_parent_part_one_child_part_database())
+
+    result = CatalogDatabase.load(path).contents("P", "70501")
+
+    assert result == {
+        "part_id": "70501",
+        "items": [
+            {
+                "item": {"no": "3001", "name": "Brick 2 x 4", "type": "PART", "category_id": 5},
+                "color_id": 5,
+                "quantity": 2,
+                "extra_quantity": 0,
+                "is_alternate": False,
+                "is_counterpart": False,
+                "match_no": 0,
+            }
+        ],
+    }
+
+
+def test_part_contents_returns_an_empty_items_array_for_a_known_part_without_components(tmp_path):
+    path = write_database(tmp_path, one_parent_part_one_child_part_database())
+
+    result = CatalogDatabase.load(path).contents("P", "3001")
+
+    assert result == {"part_id": "3001", "items": []}
+
+
+def test_part_contents_rejects_an_unknown_part(tmp_path):
+    path = write_database(tmp_path, one_parent_part_one_child_part_database())
+
+    with pytest.raises(ClientError, match="holds no part with the ID nope1"):
+        CatalogDatabase.load(path).contents("P", "nope1")
+
+
 def test_set_contents_does_not_serve_a_minifig_id(tmp_path):
     path = write_database(tmp_path, minifig_database(["sw0001a"]))
 
@@ -130,6 +172,24 @@ def test_has_item_reports_type_scoped_membership(tmp_path):
     assert database.has_item("M", "sw0001a") is True
     assert database.has_item("M", "sw9999") is False
     assert database.has_item("S", "sw0001a") is False
+
+
+def test_related_items_returns_direct_children_of_a_parent_part(tmp_path):
+    path = write_database(tmp_path, one_parent_part_one_child_part_database())
+
+    result = CatalogDatabase.load(path).related_items("P", "70501")
+
+    assert result == [
+        {
+            "id": "3001",
+            "name": "Brick 2 x 4",
+            "type_id": "P",
+            "type_name": "Part",
+            "category": "Basic",
+            "year_released": 0,
+            "year_last_produced": 0,
+        }
+    ]
 
 
 def test_load_rejects_missing_file(tmp_path):

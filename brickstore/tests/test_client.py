@@ -1,5 +1,6 @@
 import json
 import subprocess
+from unittest.mock import Mock
 
 import pytest
 import requests
@@ -197,10 +198,14 @@ def install_owned_server(monkeypatch):
 
 
 class FakeDatabase:
-    def __init__(self, contents_by_set=None, status_result=None, contents_by_minifig=None):
-        self.contents_by_type = {"S": contents_by_set or {}, "M": contents_by_minifig or {}}
+    def __init__(self, contents_by_set=None, status_result=None, contents_by_minifig=None, contents_by_part=None):
+        self.contents_by_type = {
+            "S": contents_by_set or {},
+            "M": contents_by_minifig or {},
+            "P": contents_by_part or {},
+        }
         self.status_result = status_result
-        self.requested_by_type = {"S": [], "M": []}
+        self.requested_by_type = {"S": [], "M": [], "P": []}
 
     def has_item(self, type_id, item_number):
         return item_number in self.contents_by_type[type_id]
@@ -518,6 +523,7 @@ def test_set_batch_uses_one_price_guide_call_with_exact_set_inputs_and_preserves
         ("set_batch", "set-batch", "set"),
         ("set_contents", "set-contents", "set"),
         ("minifig_contents", "minifig-contents", "minifig"),
+        ("part_contents", "part-contents", "part"),
     ],
 )
 @pytest.mark.parametrize(
@@ -631,11 +637,26 @@ def test_set_contents_loads_the_configured_database_once_and_aggregates_each_set
     assert loaded_paths == [TestConfig.database_path]
 
 
+def test_part_contents_loads_the_configured_database_once_and_aggregates_each_part(monkeypatch):
+    first_record = {"part_id": "70501", "items": [{"item": {"no": "70501a"}, "quantity": 1}]}
+    second_record = {"part_id": "3001", "items": []}
+    database = FakeDatabase(contents_by_part={"70501": first_record, "3001": second_record})
+    loaded_paths = install_database(monkeypatch, database)
+
+    records, unknown = BrickStoreClient(config=TestConfig()).part_contents(["70501", "3001"])
+
+    assert records == [first_record, second_record]
+    assert unknown == []
+    assert database.requested_by_type["P"] == ["70501", "3001"]
+    assert loaded_paths == [TestConfig.database_path]
+
+
 @pytest.mark.parametrize(
     ("method_name", "noun", "item_number"),
     [
         ("set_contents", "set", "30670-1"),
         ("minifig_contents", "minifig", "sw9999"),
+        ("part_contents", "part", "70501"),
     ],
 )
 def test_contents_reports_an_unknown_item_as_a_client_error(monkeypatch, method_name, noun, item_number):
@@ -680,6 +701,20 @@ def test_minifig_contents_skip_unknown_returns_known_records_and_unknown_ids_in_
     assert records == [record]
     assert unknown == ["nope1", "nope2"]
     assert database.requested_by_type["M"] == ["sw0001a"]
+
+
+def test_part_contents_skip_unknown_returns_known_records_and_unknown_ids_in_input_order(monkeypatch):
+    record = {"part_id": "70501", "items": [{"item": {"no": "70501a"}, "quantity": 1}]}
+    database = FakeDatabase(contents_by_part={"70501": record})
+    install_database(monkeypatch, database)
+
+    records, unknown = BrickStoreClient(config=TestConfig()).part_contents(
+        ["nope1", "70501", "nope2"], skip_unknown=True
+    )
+
+    assert records == [record]
+    assert unknown == ["nope1", "nope2"]
+    assert database.requested_by_type["P"] == ["70501"]
 
 
 def test_set_contents_skip_unknown_returns_known_records_and_unknown_ids_in_input_order(monkeypatch):
@@ -824,6 +859,23 @@ def test_query_forwards_every_supported_filter_argument(monkeypatch):
         "year_min": 1970,
         "year_max": 2020,
     }
+
+
+def test_query_reads_related_items_from_the_local_database_without_starting_mcp(monkeypatch):
+    client = BrickStoreClient(config=TestConfig())
+    database = Mock()
+    database.related_items.return_value = [query_item("3001", "Brick 2 x 4")]
+    monkeypatch.setattr(client, "_load_database", lambda: database)
+    monkeypatch.setattr(client, "_start_mcp_session", Mock(side_effect=AssertionError("MCP must not start")))
+
+    result = client.query(related_to_item_id="70501", related_to_item_type="P")
+
+    assert result == {
+        "items": [query_item("3001", "Brick 2 x 4")],
+        "returned_count": 1,
+        "total_count": 1,
+    }
+    database.related_items.assert_called_once_with("P", "70501", relationship=None)
 
 
 def test_query_only_requires_the_catalog_query_tool(monkeypatch):

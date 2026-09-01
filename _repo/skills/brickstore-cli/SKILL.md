@@ -12,7 +12,7 @@ Execute BrickStore operations using the `brickstore` CLI. All BrickStore interac
 </objective>
 
 <quick_start>
-Use these commands to get BrickStore price guide data, catalog data, set and minifig contents, and database metadata:
+Use these commands to get BrickStore price guide data, catalog data, set, minifig, and part contents, and database metadata:
 ```bash
 brickstore part <item-number> [color] [--leave-open]
 brickstore minifig <item-number> [--leave-open]
@@ -20,6 +20,7 @@ brickstore set <set-number> [--leave-open]
 brickstore set-batch <set-number> [<set-number> ...] [--leave-open]
 brickstore set-contents <set-number> [<set-number> ...] [--skip-unknown]
 brickstore minifig-contents <minifig-number> [<minifig-number> ...] [--skip-unknown]
+brickstore part-contents <part-number> [<part-number> ...] [--skip-unknown]
 brickstore database update [--force]
 brickstore database status [--table]
 brickstore query [--item-id ...] [--item-name ...] [--item-type ...] [--category ...] [--color ...] [--related-to-item-id ...] [--related-to-item-type ...] [--relationship ...] [--year-min ...] [--year-max ...] [--table] [--leave-open]
@@ -33,6 +34,7 @@ brickstore query [--item-id ...] [--item-name ...] [--item-type ...] [--category
 | Get price guide data for up to 25 sets | `brickstore set-batch <set-number> [<set-number> ...] [--leave-open]` |
 | Get direct items for up to 25 sets | `brickstore set-contents <set-number> [<set-number> ...] [--skip-unknown]` |
 | Get direct components for up to 25 minifigs | `brickstore minifig-contents <minifig-number> [<minifig-number> ...] [--skip-unknown]` |
+| Get direct components for up to 25 parts | `brickstore part-contents <part-number> [<part-number> ...] [--skip-unknown]` |
 | Update the local catalog database | `brickstore database update [--force]` |
 | Show local catalog database metadata | `brickstore database status [--table]` |
 | Get general catalog info (name, type, category, years) without a price guide | `brickstore query [filters...] [--table] [--leave-open]` |
@@ -51,7 +53,8 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
 - **set-batch** -- Return price guide data for one through 25 unique BrickLink set item IDs in one source request.
 - **set-contents** -- Return direct item records from the local version 12 database for one through 25 unique BrickLink set item IDs. Merge regular and extra rows for the same item record. See README.md Output for the JSON result shape.
 - **minifig-contents** -- Return direct component records from the local version 12 database for one through 25 unique BrickLink minifig item IDs. Follows the same merge and quantity rules as `set-contents`; each record has `minifig_id` and an `items` array.
-- **--skip-unknown** -- On `set-contents` and `minifig-contents`: return records for every ID the local database holds instead of failing the batch. Each skipped ID prints one `Warning: skipped unknown <set|minifig> ID <id>` stderr line and the command exits 0. Without the flag an unknown ID fails the whole command. Bulk backfills should pass this flag.
+- **part-contents** -- Return direct component records from the local version 12 database for one through 25 unique BrickLink part item IDs. Follows the same merge and quantity rules as `set-contents`; each record has `part_id` and an `items` array. A known part with no components returns an empty `items` array.
+- **--skip-unknown** -- On `set-contents`, `minifig-contents`, and `part-contents`: return records for every ID the local database holds instead of failing the batch. Each skipped ID prints one `Warning: skipped unknown <set|minifig|part> ID <id>` stderr line and the command exits 0. Without the flag an unknown ID fails the whole command. Bulk backfills should pass this flag.
 - **database update** -- Download and validate the newest local version 12 database. Use `--force` to redownload a current local copy.
 - **database status** -- Return local database metadata. Use `--table` or `-t` for field-value output.
 - **query** -- Return general catalog items (name, type, category, release years) matching optional filters, without a price guide lookup. Every filter is optional and combinable; no filters returns the whole catalog, capped by the source. The JSON envelope has `total_count`, `returned_count`, `items`, and an optional `note` when results are capped. See README.md Output for the JSON result shape.
@@ -61,7 +64,7 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
 
 ## Local Database
 
-`set-contents` and `minifig-contents` read the local database. They do not call the BrickLink CLI or the BrickLink API.
+`set-contents`, `minifig-contents`, and `part-contents` read the local database. They do not call the BrickLink CLI or the BrickLink API.
 
 The default file is `~/Library/Caches/BrickStore/database-v12`.
 

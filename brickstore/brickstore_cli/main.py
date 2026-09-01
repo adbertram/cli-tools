@@ -174,6 +174,17 @@ def minifig_contents(
     _print_contents(records, unknown, "minifig")
 
 
+@app.command("part-contents")
+@command
+def part_contents(
+    part_numbers: list[str] = _item_numbers_argument("part"),
+    skip_unknown: bool = _skip_unknown_option("part"),
+) -> None:
+    """Return direct component records for one or more parts."""
+    records, unknown = get_client().part_contents(part_numbers, skip_unknown=skip_unknown)
+    _print_contents(records, unknown, "part")
+
+
 database_app = typer.Typer(help="Manage the local BrickStore catalog database")
 app.add_typer(database_app, name="database")
 

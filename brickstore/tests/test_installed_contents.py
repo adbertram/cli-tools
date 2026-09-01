@@ -5,7 +5,11 @@ import subprocess
 
 import pytest
 
-from tests.database_fixtures import minifig_database, two_sets_one_part_database
+from tests.database_fixtures import (
+    minifig_database,
+    one_parent_part_one_child_part_database,
+    two_sets_one_part_database,
+)
 
 SOURCE_ENTRY = {
     "item": {
@@ -74,3 +78,69 @@ def test_installed_minifig_contents_skip_unknown_returns_known_records_and_exit_
     assert json.loads(result.stdout) == [{"minifig_id": "sw0001a", "items": [SOURCE_ENTRY]}]
     assert "Warning: skipped unknown minifig ID nope1" in result.stderr
     assert "Warning: skipped unknown minifig ID nope2" in result.stderr
+
+
+def test_installed_part_contents_uses_the_public_launcher_and_local_database(tmp_path):
+    result = run_installed(
+        tmp_path,
+        one_parent_part_one_child_part_database(),
+        ["part-contents", "70501", "3001"],
+    )
+
+    assert result.returncode == 0
+    assert result.stderr == ""
+    assert json.loads(result.stdout) == [
+        {
+            "part_id": "70501",
+            "items": [
+                {
+                    "item": {
+                        "category_id": 5,
+                        "name": "Brick 2 x 4",
+                        "no": "3001",
+                        "type": "PART",
+                    },
+                    "color_id": 5,
+                    "extra_quantity": 0,
+                    "is_alternate": False,
+                    "is_counterpart": False,
+                    "match_no": 0,
+                    "quantity": 2,
+                }
+            ],
+        },
+        {"part_id": "3001", "items": []},
+    ]
+
+
+def test_installed_part_contents_skip_unknown_returns_known_records_and_exit_zero(tmp_path):
+    result = run_installed(
+        tmp_path,
+        one_parent_part_one_child_part_database(),
+        ["part-contents", "nope1", "70501", "nope2", "--skip-unknown"],
+    )
+
+    assert result.returncode == 0
+    assert json.loads(result.stdout) == [
+        {
+            "part_id": "70501",
+            "items": [
+                {
+                    "item": {
+                        "category_id": 5,
+                        "name": "Brick 2 x 4",
+                        "no": "3001",
+                        "type": "PART",
+                    },
+                    "color_id": 5,
+                    "extra_quantity": 0,
+                    "is_alternate": False,
+                    "is_counterpart": False,
+                    "match_no": 0,
+                    "quantity": 2,
+                }
+            ],
+        }
+    ]
+    assert "Warning: skipped unknown part ID nope1" in result.stderr
+    assert "Warning: skipped unknown part ID nope2" in result.stderr

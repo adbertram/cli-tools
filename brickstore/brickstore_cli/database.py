@@ -41,7 +41,6 @@ REQUIRED_CHUNKS = ("DATE", "COL ", "CAT ", "TYPE", "ITEM")
 PART_TYPE_ID = "P"
 SET_TYPE_ID = "S"
 MINIFIG_TYPE_ID = "M"
-INDEXED_TYPE_IDS = (SET_TYPE_ID, MINIFIG_TYPE_ID)
 ITEM_TYPE_NAMES = {
     "B": "BOOK",
     "C": "CATALOG",
@@ -53,6 +52,7 @@ ITEM_TYPE_NAMES = {
     "S": "SET",
     "U": "UNSORTED_LOT",
 }
+INDEXED_TYPE_IDS = tuple(ITEM_TYPE_NAMES)
 
 # A serialized QColor is a signed spec byte plus five quint16 channels.
 QCOLOR_SIZE = 11
@@ -244,10 +244,14 @@ class CatalogDatabase:
         self.path = path
         self._data = data
         self._generated_at = self._read_generation_date(chunks["DATE"])
-        self._color_ids = self._read_colors(chunks["COL "])
-        self._category_ids = self._read_categories(chunks["CAT "])
+        self._color_ids, self._color_names = self._read_indexed_values(chunks["COL "], COLOR_TAIL_SIZE, "COL ")
+        self._category_ids, self._category_names = self._read_indexed_values(
+            chunks["CAT "], CATEGORY_TAIL_SIZE, "CAT "
+        )
         self._type_ids = self._read_item_types(chunks["TYPE"])
         self._read_items(chunks["ITEM"])
+        self._relationships = self._read_relationships(chunks.get("REL "))
+        self._relationship_matches = self._read_relationship_matches(chunks.get("RELM"))
 
     @classmethod
     def load(cls, path) -> "CatalogDatabase":
@@ -280,22 +284,17 @@ class CatalogDatabase:
             return stamp.replace(tzinfo=datetime.timezone.utc)
         return stamp
 
-    def _read_indexed_ids(self, chunk: tuple, tail_size: int, chunk_id: str) -> list:
+    def _read_indexed_values(self, chunk: tuple, tail_size: int, chunk_id: str) -> tuple[list, list]:
         payload, size = chunk
         cursor = _Cursor(self._data, payload)
         ids = []
+        names = []
         for _ in range(cursor.uint32()):
             ids.append(cursor.uint32())
-            cursor.text()
+            names.append(cursor.text())
             cursor.skip(tail_size)
         _require_exact_size(cursor, payload, size, chunk_id, self.path)
-        return ids
-
-    def _read_colors(self, chunk: tuple) -> list:
-        return self._read_indexed_ids(chunk, COLOR_TAIL_SIZE, "COL ")
-
-    def _read_categories(self, chunk: tuple) -> list:
-        return self._read_indexed_ids(chunk, CATEGORY_TAIL_SIZE, "CAT ")
+        return ids, names
 
     def _read_item_types(self, chunk: tuple) -> list:
         payload, size = chunk
@@ -316,9 +315,16 @@ class CatalogDatabase:
         self._item_ids = ids = [""] * count
         self._item_names = names = [""] * count
         self._item_type_names = type_names = [""] * count
+        self._item_type_ids = type_ids = [""] * count
         self._item_category_ids = category_ids = [None] * count
+        self._item_category_names = category_names = [None] * count
+        self._item_years = years = [(0, 0)] * count
+        self._appears_offsets = appears_offsets = [0] * count
+        self._appears_counts = appears_counts = [0] * count
         self._consists_offsets = consists_offsets = [0] * count
         self._consists_counts = consists_counts = [0] * count
+        self._relationship_offsets = relationship_offsets = [0] * count
+        self._relationship_counts = relationship_counts = [0] * count
         self._indexes_by_type = {type_id: {} for type_id in INDEXED_TYPE_IDS}
         indexes_by_type_name = {
             ITEM_TYPE_NAMES[type_id]: self._indexes_by_type[type_id] for type_id in INDEXED_TYPE_IDS
@@ -328,15 +334,22 @@ class CatalogDatabase:
             ids[index] = cursor.byte_array().decode("latin-1")
             names[index] = cursor.text()
             type_index = cursor.uint16()
-            cursor.skip(2 + ITEM_SCALAR_TAIL_SIZE)
+            cursor.skip(2)
+            year_from = cursor.uint8()
+            year_to = cursor.uint8()
+            cursor.skip(8)
+            years[index] = (year_from + 1900 if year_from else 0, year_to + 1900 if year_to else 0)
             type_names[index] = self._type_name(type_index)
-            cursor.array(APPEARS_IN_RECORD_SIZE)
+            type_ids[index] = self._type_ids[type_index]
+            appears_offsets[index], appears_counts[index] = cursor.array(APPEARS_IN_RECORD_SIZE)
             consists_offsets[index], consists_counts[index] = cursor.array(CONSISTS_OF_RECORD_SIZE)
             cursor.array(INDEX_RECORD_SIZE)
             category_offset, category_count = cursor.array(INDEX_RECORD_SIZE)
             if category_count:
-                category_ids[index] = self._category_ids[_UINT16.unpack_from(self._data, category_offset)[0]]
-            cursor.array(INDEX_RECORD_SIZE)
+                category_index = _UINT16.unpack_from(self._data, category_offset)[0]
+                category_ids[index] = self._category_ids[category_index]
+                category_names[index] = self._category_names[category_index]
+            relationship_offsets[index], relationship_counts[index] = cursor.array(INDEX_RECORD_SIZE)
             cursor.array(DIMENSIONS_RECORD_SIZE)
             cursor.array(PCC_RECORD_SIZE)
             cursor.byte_array()
@@ -345,6 +358,34 @@ class CatalogDatabase:
                 indexes[ids[index]] = index
 
         _require_exact_size(cursor, payload, size, "ITEM", self.path)
+
+    def _read_relationships(self, chunk: tuple | None) -> dict:
+        if chunk is None:
+            return {}
+        payload, size = chunk
+        cursor = _Cursor(self._data, payload)
+        relationships = {}
+        for _ in range(cursor.uint32()):
+            relationship_id = cursor.uint32()
+            relationships[relationship_id] = cursor.text()
+            cursor.uint32()
+        _require_exact_size(cursor, payload, size, "REL ", self.path)
+        return relationships
+
+    def _read_relationship_matches(self, chunk: tuple | None) -> dict:
+        if chunk is None:
+            return {}
+        payload, size = chunk
+        cursor = _Cursor(self._data, payload)
+        matches = {}
+        for _ in range(cursor.uint32()):
+            match_id = cursor.uint32()
+            relationship_id = cursor.uint32()
+            offset, count = cursor.array(4)
+            indexes = [_UINT32.unpack_from(self._data, offset + index * 4)[0] for index in range(count)]
+            matches[match_id] = (relationship_id, indexes)
+        _require_exact_size(cursor, payload, size, "RELM", self.path)
+        return matches
 
     def _type_name(self, type_index: int) -> str:
         if type_index >= len(self._type_ids):
@@ -417,6 +458,52 @@ class CatalogDatabase:
         """Return the direct item records of one catalog item, keyed by its type noun."""
         noun = ITEM_TYPE_NAMES[type_id].lower()
         return {"{}_id".format(noun): item_number, "items": self._contents_items(type_id, item_number)}
+
+    def _catalog_item(self, index: int) -> dict:
+        year_released, year_last_produced = self._item_years[index]
+        return {
+            "id": self._item_ids[index],
+            "name": self._item_names[index],
+            "type_id": self._item_type_ids[index],
+            "type_name": self._item_type_names[index].title(),
+            "category": self._item_category_names[index],
+            "year_released": year_released,
+            "year_last_produced": year_last_produced or year_released,
+        }
+
+    def related_items(self, type_id: str, item_number: str, relationship: str | None = None) -> list:
+        """Return direct inventory or named catalog-relationship peers from the local database."""
+        normalized_type = type_id.upper()
+        if normalized_type not in self._indexes_by_type or not self.has_item(normalized_type, item_number):
+            raise ClientError(
+                "BrickStore database {} holds no {} item with the ID {}".format(
+                    self.path, normalized_type, item_number
+                )
+            )
+        reference_index = self._indexes_by_type[normalized_type][item_number]
+        related_indexes = []
+        if relationship is None:
+            offset = self._consists_offsets[reference_index]
+            for record in range(self._consists_counts[reference_index]):
+                value = _UINT64.unpack_from(self._data, offset + record * CONSISTS_OF_RECORD_SIZE)[0]
+                related_indexes.append((value >> 12) & 0xFFFFF)
+        else:
+            names = {name.casefold(): relationship_id for relationship_id, name in self._relationships.items()}
+            relationship_id = names.get(relationship.casefold())
+            if relationship_id is None:
+                raise ClientError(
+                    'Unknown relationship type "{}". Valid types: {}'.format(
+                        relationship, ", ".join(sorted(self._relationships.values()))
+                    )
+                )
+            offset = self._relationship_offsets[reference_index]
+            for record in range(self._relationship_counts[reference_index]):
+                match_id = _UINT16.unpack_from(self._data, offset + record * 2)[0]
+                match_relationship_id, match_indexes = self._relationship_matches[match_id]
+                if match_relationship_id == relationship_id:
+                    related_indexes.extend(index for index in match_indexes if index != reference_index)
+        unique_indexes = list(dict.fromkeys(related_indexes))
+        return [self._catalog_item(index) for index in unique_indexes]
 
     def status(self) -> dict:
         """Return the loaded database metadata."""
