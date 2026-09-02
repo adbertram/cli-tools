@@ -17,6 +17,12 @@ class Config(BaseConfig):
     profile auth type. Commands should run against the active profile without
     requiring an explicit --profile just because different profiles choose
     different token acquisition methods.
+
+    An msal_device_code profile may also set TENANT_ID to authenticate against
+    a specific Microsoft Entra tenant instead of the multi-tenant /common
+    endpoint -- for example, a tenant a client shared a OneDrive/SharePoint
+    resource from. TENANT_ID is optional; profiles that omit it keep using
+    /common exactly as before.
     """
 
     DIST_NAME = "onedrive-cli"
@@ -24,9 +30,10 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.CUSTOM]
     DEFAULT_BASE_URL = "https://graph.microsoft.com/v1.0"
 
-    # CUSTOM credential type: AUTH_METHOD is the only required field
+    # CUSTOM credential type: AUTH_METHOD is the only required field.
+    # TENANT_ID is optional per-profile authority scoping (msal_device_code only).
     CUSTOM_REQUIRED_FIELDS = ["AUTH_METHOD"]
-    CUSTOM_ALL_FIELDS = ["AUTH_METHOD"]
+    CUSTOM_ALL_FIELDS = ["AUTH_METHOD", "TENANT_ID"]
     CUSTOM_LOGIN_PROMPTS = []  # login is handled by auth commands, not prompts
     CUSTOM_EPHEMERAL_FIELDS = []
     CUSTOM_SENSITIVE_FIELDS = []
@@ -41,6 +48,17 @@ class Config(BaseConfig):
     def auth_method(self) -> Optional[str]:
         """Get auth method: 'az_cli' or 'msal_device_code'."""
         return self._get("AUTH_METHOD")
+
+    @property
+    def tenant_id(self) -> Optional[str]:
+        """Get the profile's tenant authority override, if set.
+
+        When set, msal_device_code auth uses this Microsoft Entra tenant's
+        authority (https://login.microsoftonline.com/<tenant_id>) instead of
+        the multi-tenant /common endpoint. Unset by default, preserving the
+        existing /common behavior for every other profile.
+        """
+        return self._get("TENANT_ID")
 
     def test_connection(self) -> Optional[dict]:
         """Test API connectivity by acquiring a token."""

@@ -11,8 +11,9 @@ from onedrive_cli import msal_auth
 
 
 class _FakeConfig:
-    def __init__(self, profile_dir: Path):
+    def __init__(self, profile_dir: Path, tenant_id=None):
         self._profile_dir = profile_dir
+        self.tenant_id = tenant_id
 
     def get_profile_data_dir(self) -> Path:
         self._profile_dir.mkdir(parents=True, exist_ok=True)
@@ -25,6 +26,27 @@ def test_get_cache_path_uses_profile_data_dir(tmp_path):
     cache_path = msal_auth._get_cache_path(config)
 
     assert cache_path == config.get_profile_data_dir() / "token_cache.json"
+
+
+def test_get_authority_defaults_to_common_without_tenant_id(tmp_path):
+    config = _FakeConfig(tmp_path / "authentication_profiles" / "work", tenant_id=None)
+
+    authority = msal_auth._get_authority(config)
+
+    assert authority == "https://login.microsoftonline.com/common"
+
+
+def test_get_authority_uses_profile_tenant_id_when_set(tmp_path):
+    config = _FakeConfig(
+        tmp_path / "authentication_profiles" / "progress_tenant",
+        tenant_id="db266a67-cbe0-4d26-ae1a-d0581fe03535",
+    )
+
+    authority = msal_auth._get_authority(config)
+
+    assert authority == (
+        "https://login.microsoftonline.com/db266a67-cbe0-4d26-ae1a-d0581fe03535"
+    )
 
 
 def test_az_cli_status_rejects_service_principal(monkeypatch):
