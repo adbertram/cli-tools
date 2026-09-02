@@ -29,6 +29,7 @@ MagicMock/
 agent_worktrees/
 _personal/*
 !_personal/legoscout/
+!_personal/microworker/
 bricklink/.playwright-recordings/
 
 # Skills for private CLI tools under _personal/

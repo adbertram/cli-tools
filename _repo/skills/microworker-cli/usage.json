@@ -1,0 +1,131 @@
+{
+  "tool": "microworker",
+  "description": "CLI interface for microworker",
+  "discovered_at": "2026-09-02T20:35:40Z",
+  "total_commands": 5,
+  "global_options": [],
+  "commands": {
+    "discover": {
+      "help": "Run one site's CLI and write its envelope for this run.",
+      "arguments": [
+        {
+          "name": "site",
+          "type": "TEXT",
+          "required": true,
+          "help": "Site name from config.json"
+        }
+      ],
+      "options": [
+        {
+          "name": "--run-id",
+          "type": "TEXT",
+          "required": true,
+          "help": "Discovery run identifier; the envelope lands under agent_workspaces/discovery/<run_id>/"
+        },
+        {
+          "name": "--timeout",
+          "type": "INTEGER",
+          "required": false,
+          "help": "Seconds allowed for each site CLI command",
+          "default": "300"
+        }
+      ]
+    },
+    "merge": {
+      "help": "Merge every site envelope of a run into merged.json.",
+      "arguments": [
+        {
+          "name": "run_id",
+          "type": "TEXT",
+          "required": true,
+          "help": "Discovery run identifier whose envelopes to merge"
+        }
+      ],
+      "options": []
+    },
+    "sites": {
+      "help": "Sites registered in the project's config.json",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "get": {
+          "help": "Get one site's config.json entry.",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Site name from config.json"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "list": {
+          "help": "List the sites in config.json.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of sites",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "validate": {
+      "help": "Validate an envelope or merged file against its schema.",
+      "arguments": [
+        {
+          "name": "file",
+          "type": "PATH",
+          "required": true,
+          "help": "An envelope or merged.json file to validate"
+        }
+      ],
+      "options": []
+    }
+  },
+  "usage_instructions": "Use the `microworker` CLI. Run `microworker --help` to discover command groups and `--help` on any subcommand for its options."
+}
