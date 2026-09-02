@@ -119,14 +119,14 @@ before it will accept a job application. If that verification is missing,
 surfaced as a normal command error — this is expected account state, not a
 CLI bug.
 
-**Known limitation:** every observed Microworkers job (both `microworkers` and
-`hire_group` providers) requires uploading a proof file (`Proof_file` /
-`Proof_file_N` form fields). `cli_tools_shared.browser.BrowserAutomation`
-currently has no file-input-upload primitive (no `set_input_files` / CDP
-`DOM.setFileInputFiles` wrapper), so `tasks apply --confirm` raises a clear
-error naming this gap instead of silently failing or working around it. Text-
-only jobs would submit today; file-upload jobs need that shared capability
-added first.
+Every observed Microworkers job (both `microworkers` and `hire_group`
+providers) requires uploading a proof file (`Proof_file` / `Proof_file_N`
+form fields). `--confirm` uploads the file passed via `--proof-file` into
+each required file-input field using
+`cli_tools_shared.browser.driver.BrowserHarnessService.set_input_files`
+(a CDP `DOM.setFileInputFiles` wrapper). If a job requires a proof file and
+`--proof-file` is omitted, or the path doesn't exist, `--confirm` fails with
+a clear error before any browser navigation or submission is attempted.
 
 ## Cache
 

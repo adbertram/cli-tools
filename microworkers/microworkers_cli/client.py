@@ -1,6 +1,7 @@
 """Microworkers client using BrowserAutomation from cli_tools_shared."""
 
 from contextlib import contextmanager
+from pathlib import Path
 from typing import List, Optional
 
 from cli_tools_shared.data_cache import cached
@@ -186,16 +187,14 @@ class MicroworkersClient:
         if not confirm:
             return result
 
-        if detail["proof_file_fields"]:
+        if detail["proof_file_fields"] and not proof_file:
             raise ClientError(
                 "This task requires uploading a proof file "
-                f"({', '.join(detail['proof_file_fields'])}), but "
-                "cli_tools_shared.browser.BrowserAutomation exposes no file-upload "
-                "primitive (no set_input_files / CDP DOM.setFileInputFiles wrapper). "
-                "This is a shared browser-harness capability gap, not a "
-                "Microworkers-specific bug: extend cli_tools_shared/browser with "
-                "file-input upload support before this command can submit live proof."
+                f"({', '.join(detail['proof_file_fields'])}), but no --proof-file "
+                "was provided."
             )
+        if proof_file and not Path(proof_file).expanduser().is_file():
+            raise ClientError(f"proof_file not found: {proof_file}")
 
         if log:
             log(f"Submitting proof for task: {detail['title']}")
@@ -205,6 +204,8 @@ class MicroworkersClient:
                 page.evaluate("if (typeof show5 === 'function') { show5(); }")
                 for field in detail["proof_text_fields"]:
                     page.fill(f'textarea[name="{field}"]', proof_text or "")
+                for field in detail["proof_file_fields"]:
+                    page.set_input_files(f'input[type="file"][name="{field}"]', proof_file)
                 submit = page.locator('input[type="submit"][name="B1"]')
                 if submit.count() != 1 or not submit.first.is_visible():
                     raise ClientError("Could not find the proof-submission button on the task page.")
@@ -213,7 +214,6 @@ class MicroworkersClient:
         except Exception:
             if debug_dir:
                 import json
-                from pathlib import Path
 
                 debug_path = Path(debug_dir).expanduser()
                 debug_path.mkdir(parents=True, exist_ok=True)
