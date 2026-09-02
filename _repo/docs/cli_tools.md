@@ -65,6 +65,7 @@
 | `manus` | The `manus` CLI provides a command-line interface for Manus AI API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `medium` | The `medium` CLI lets you create Medium drafts through Medium's web composer. Use it when you need repeatable access to medium workflows that are only available through a signed-in website. |
 | `mercari` | The `mercari` CLI provides read-only access to Mercari US listings by driving the authenticated web app and capturing its internal GraphQL responses. Use it to search other sellers' public listings (`listings search`), read your own listings (`listings list`), and get full item detail (`listings get`). |
+| `microworkers` | The `microworkers` CLI drives the Microworkers worker portal through an authenticated browser session. Use it to list available worker jobs (`tasks list`), inspect full job requirements (`tasks get`), and preview or (with `--confirm`) submit proof for a job (`tasks apply`, dry-run by default). |
 | `mindmeister` | The `mindmeister` CLI provides a command-line interface for Mindmeister API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `monarch` | The `monarch` CLI provides a command-line interface for Monarch API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `moz` | The `moz` CLI provides a command-line interface for Moz API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
@@ -98,6 +99,7 @@
 | `snagit` | The `snagit` CLI provides a command-line interface for Snagit API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `stockx` | Search and read StockX sneaker and streetwear market data |
 | `target` | A command-line interface for [Target](https://www.target.com) using browser automation. Target consumer CLI for searching products, adding to cart, and checking out. Use this CLI when you need repeatable access to Target workflows that are only available through the website. |
+| `taskerdata` | TaskerData gig worker portal automation |
 | `techsmith` | The `techsmith` CLI provides a command-line interface for Techsmith (browser automation). Use it when you need repeatable access to techsmith workflows that are only available through a signed-in website. |
 | `things` | The `things` CLI provides a command-line interface for Things API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `tiktok` | The `tiktok` CLI provides tikTok transcript downloader using yt-dlp. Use it when you need scriptable reads, exports, or evidence collection without opening the service UI. |
