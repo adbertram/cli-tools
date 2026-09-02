@@ -250,11 +250,17 @@ class OneDriveClient:
         if last_response is None:
             raise ClientError("Request failed: no response received")
 
+        # ``Response.ok`` is True for ANY status under 400, including 3xx
+        # redirects that requests could not auto-follow (e.g. a redirect with
+        # no ``Location`` header). Only a true 2xx is success; treat every
+        # other status as an error so its body is never blindly parsed as JSON.
+        is_success = 200 <= last_response.status_code < 300
+
         # Return response object for streaming
-        if stream and last_response.ok:
+        if stream and is_success:
             return last_response
 
-        if not last_response.ok:
+        if not is_success:
             # Try to get error details from response
             try:
                 error_data = last_response.json()
@@ -263,15 +269,28 @@ class OneDriveClient:
                     or error_data.get("message")
                     or last_response.text
                 )
-            except Exception:
+            except ValueError:
                 error_msg = last_response.text
+            if not error_msg:
+                error_msg = (
+                    "empty response body with no error details "
+                    f"(Location header: {last_response.headers.get('Location') or 'none'})"
+                    if 300 <= last_response.status_code < 400
+                    else "empty response body with no error details"
+                )
             raise ClientError(f"API request failed ({last_response.status_code}): {error_msg}")
 
         # Handle empty response (204 No Content)
         if last_response.status_code == 204:
             return {}
 
-        return last_response.json()
+        try:
+            return last_response.json()
+        except ValueError as exc:
+            raise ClientError(
+                f"Graph API returned a {last_response.status_code} response "
+                f"with a body that could not be parsed as JSON: {exc}"
+            )
 
     # ==================== Drive Methods ====================
 

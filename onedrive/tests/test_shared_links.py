@@ -101,6 +101,58 @@ def test_graph_api_errors_include_status_and_message(monkeypatch):
         client.resolve_shared_item(SHARE_URL)
 
 
+def test_graph_redirect_without_location_raises_clean_error_not_json_crash(monkeypatch):
+    """A 3xx response requests could not auto-follow (empty body, no Location
+    header) must not surface a raw json.JSONDecodeError.
+
+    ``requests.Response.ok`` is True for any status under 400, including
+    redirects, so this case previously fell through to the success branch's
+    unconditional ``.json()`` call on an empty body and crashed with
+    "Expecting value: line 1 column 1 (char 0)".
+    """
+    client = OneDriveClient(max_retries=0)
+
+    class RedirectResponse:
+        ok = True
+        status_code = 308
+        text = ""
+        content = b""
+        headers = {}
+
+        @staticmethod
+        def json():
+            raise json.JSONDecodeError("Expecting value", "", 0)
+
+    monkeypatch.setattr(client, "_get_headers", lambda: {})
+    monkeypatch.setattr("onedrive_cli.client.requests.request", lambda **kwargs: RedirectResponse())
+
+    with pytest.raises(ClientError, match=r"API request failed \(308\): empty response body"):
+        client.resolve_shared_item(SHARE_URL)
+
+
+def test_graph_2xx_with_non_json_body_raises_clean_error(monkeypatch):
+    """A 2xx response with a non-JSON/unparseable body must raise ClientError,
+    not propagate the underlying JSONDecodeError."""
+    client = OneDriveClient(max_retries=0)
+
+    class BadJsonResponse:
+        ok = True
+        status_code = 200
+        text = "not json"
+        content = b"not json"
+        headers = {}
+
+        @staticmethod
+        def json():
+            raise json.JSONDecodeError("Expecting value", "not json", 0)
+
+    monkeypatch.setattr(client, "_get_headers", lambda: {})
+    monkeypatch.setattr("onedrive_cli.client.requests.request", lambda **kwargs: BadJsonResponse())
+
+    with pytest.raises(ClientError, match=r"could not be parsed as JSON"):
+        client.resolve_shared_item(SHARE_URL)
+
+
 def test_download_shared_item_does_not_create_file_when_graph_returns_error(monkeypatch, tmp_path):
     client = OneDriveClient(max_retries=0)
     destination = tmp_path / "shared.docx"
