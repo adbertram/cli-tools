@@ -20,10 +20,14 @@ microworker <command-group> <action> [arguments] [options]
 | Task | Command |
 |------|---------|
 | Run one site's CLI and write its envelope for this run | `microworker discover <SITE>` |
-| Merge every site envelope of a run into merged.json | `microworker merge <RUN_ID>` |
+| Merge every site envelope of a run into the task database | `microworker merge <RUN_ID>` |
 | Get one site's config.json entry | `microworker sites get <NAME>` |
 | List the sites in config.json | `microworker sites list` |
-| Validate an envelope or merged file against its schema | `microworker validate <FILE>` |
+| List merged tasks, most recently seen first | `microworker tasks list` |
+| Get one merged task by site and task id | `microworker tasks get <SITE> <TASK_ID>` |
+| List recorded merges, most recent first | `microworker runs list` |
+| Get one merge with its per-site summaries | `microworker runs get <RUN_ID>` |
+| Validate a site envelope against its schema | `microworker validate <FILE>` |
 </quick_start>
 
 <essential_principles>
@@ -34,13 +38,21 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
 
 <principle name="Command Groups">
 - **discover** -- Run one site's CLI and write its envelope for this run
-- **merge** -- Merge every site envelope of a run into merged.json
+- **merge** -- Merge every site envelope of a run into the task database
+- **runs** -- Merges recorded in the task database (subcommands: get, list)
 - **sites** -- Sites registered in the project's config.json (subcommands: get, list)
-- **validate** -- Validate an envelope or merged file against its schema
+- **tasks** -- Tasks merged into the task database (subcommands: get, list)
+- **validate** -- Validate a site envelope against its schema
 </principle>
 
 <principle name="One Run Id Per Discovery Pass">
-Mint one run id (`R=$(date -u +%Y%m%dT%H%M%SZ)`), pass it to every `discover` call, then `merge "$R"`. `merge` requires an envelope for every site in `config.json`, so run `discover` for every name from `microworker sites list --properties name` before merging. Artifacts land under `<project>/agent_workspaces/discovery/<run_id>/`.
+Mint one run id (`R=$(date -u +%Y%m%dT%H%M%SZ)`), pass it to every `discover` call, then `merge "$R"`. `merge` requires an envelope for every site in `config.json`, so run `discover` for every name from `microworker sites list --properties name` before merging. Per-run envelopes land under `<project>/agent_workspaces/discovery/<run_id>/` and are disposable.
+</principle>
+
+<principle name="The Task Database Is The Durable Output">
+`merge` writes no JSON file. It upserts the run's tasks and per-site summaries into `<project>/data/tasks.db` in one transaction, and prints `{"run_id", "db_path", "sites", "task_count", "inserted", "updated"}`. Read the results back with `microworker tasks list|get` and `microworker runs list|get`; do not open the database directly. One row per `(site, task_id)`: re-seeing a task refreshes its fields and `last_seen_at`/`last_seen_run_id` while `first_seen_at`/`first_seen_run_id` stay put. Re-merging the same run id is idempotent.
+
+A query command run before any merge exits 2 naming the database path. That means "nothing has been merged yet", NOT "no tasks are open" -- never report it as an empty result.
 </principle>
 
 <principle name="Statuses Are Data, Not Failures">

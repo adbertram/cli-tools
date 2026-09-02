@@ -1,9 +1,9 @@
 """Shared fixtures: a disposable MicroWorker project root with a config.json.
 
 Every test points `MICROWORKER_ROOT` at a temp directory, so nothing here can
-read or write the real project. `SITES` mirrors the real config.json shape:
-ten sites, each with exactly `cli`, `account`, `lastpass_item` and
-`auth_command`.
+read or write the real project -- including `data/tasks.db`, which merge creates
+under that same root. `SITES` mirrors the real config.json shape: ten sites,
+each with exactly `cli`, `account`, `lastpass_item` and `auth_command`.
 """
 
 from __future__ import annotations
@@ -13,6 +13,8 @@ from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
+
+from microworker_cli import envelope
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
@@ -48,6 +50,26 @@ def project(tmp_path, monkeypatch) -> Path:
 @pytest.fixture
 def runner() -> CliRunner:
     return CliRunner()
+
+
+@pytest.fixture
+def clock(monkeypatch):
+    """`envelope.utc_now()` under test control.
+
+    Timestamps are second-resolution, so two merges in the same test would
+    otherwise stamp identical `first_seen_at` and `last_seen_at` values and the
+    first-seen/last-seen distinction could not be observed at all.
+    """
+    class Clock:
+        now = "2026-09-02T00:00:00Z"
+
+        def set(self, value: str) -> str:
+            self.now = value
+            return value
+
+    clock = Clock()
+    monkeypatch.setattr(envelope, "utc_now", lambda: clock.now)
+    return clock
 
 
 @pytest.fixture

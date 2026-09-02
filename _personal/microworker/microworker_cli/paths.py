@@ -1,8 +1,9 @@
 """Every path this tool reads or writes. Nothing else hardcodes one.
 
 The project root is `$MICROWORKER_ROOT` when set (tests point it at a temp
-directory) and the real MicroWorker project otherwise. Discovery artifacts land
-under `agent_workspaces/discovery/<run_id>/`.
+directory) and the real MicroWorker project otherwise. Per-run site envelopes
+land under `agent_workspaces/discovery/<run_id>/` and are disposable; the
+durable store is the SQLite database at `data/tasks.db`.
 """
 
 from __future__ import annotations
@@ -32,5 +33,5 @@ def envelope_path(run_id: str, site: str) -> Path:
     return run_dir(run_id) / f"{site}.json"
 
 
-def merged_path(run_id: str) -> Path:
-    return run_dir(run_id) / "merged.json"
+def db_path() -> Path:
+    return project_root() / "data" / "tasks.db"

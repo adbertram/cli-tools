@@ -1,8 +1,13 @@
-"""JSON Schema validation for envelopes, task records and merged runs.
+"""JSON Schema validation for site envelopes and task records.
 
 The schemas ship as package data under `schemas/`. A validation failure is a
 `SchemaError`, a `ClientError`, so every command exits 2 with the jsonschema
 message on stderr.
+
+There is no merged-run schema. Merged tasks live in the SQLite store (`db.py`),
+whose table definition is their structure; each one is validated against
+`task.schema.json` on the way in. `validate_file()` therefore accepts exactly
+one kind of document: a site envelope.
 """
 
 from __future__ import annotations
@@ -18,8 +23,7 @@ from referencing import Registry, Resource
 SCHEMA_DIR = Path(__file__).resolve().parent / "schemas"
 ENVELOPE = "envelope"
 TASK = "task"
-MERGED = "merged"
-NAMES = (ENVELOPE, TASK, MERGED)
+NAMES = (ENVELOPE, TASK)
 
 
 class SchemaError(ClientError):
@@ -56,25 +60,19 @@ def validate_task(data, label: str = "task") -> None:
     validate(data, TASK, label)
 
 
-def validate_merged(data, label: str = "merged run") -> None:
-    validate(data, MERGED, label)
-
-
 def detect_kind(data) -> str:
     """Which schema a loaded document claims to be, from its top-level keys."""
     if not isinstance(data, dict):
         raise SchemaError("document must be a JSON object")
-    if "run_id" in data and "sites" in data:
-        return MERGED
     if "site" in data and "status" in data:
         return ENVELOPE
     raise SchemaError(
-        "document is neither an envelope (site, status) nor a merged run "
-        f"(run_id, sites); top-level keys: {', '.join(sorted(data))}")
+        "document is not an envelope (site, status); "
+        f"top-level keys: {', '.join(sorted(data))}")
 
 
 def validate_file(path: Path) -> str:
-    """Validate a JSON file against the schema its shape selects; return the kind."""
+    """Validate a JSON file as a site envelope; return the kind it matched."""
     if not path.is_file():
         raise SchemaError(f"{path} is not a file")
     data = json.loads(path.read_text(encoding="utf-8"))

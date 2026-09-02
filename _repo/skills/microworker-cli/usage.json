@@ -1,8 +1,8 @@
 {
   "tool": "microworker",
   "description": "CLI interface for microworker",
-  "discovered_at": "2026-09-02T20:35:40Z",
-  "total_commands": 5,
+  "discovered_at": "2026-09-02T21:31:00Z",
+  "total_commands": 9,
   "global_options": [],
   "commands": {
     "discover": {
@@ -32,7 +32,7 @@
       ]
     },
     "merge": {
-      "help": "Merge every site envelope of a run into merged.json.",
+      "help": "Merge every site envelope of a run into the task database.",
       "arguments": [
         {
           "name": "run_id",
@@ -42,6 +42,77 @@
         }
       ],
       "options": []
+    },
+    "runs": {
+      "help": "Merges recorded in the task database",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "get": {
+          "help": "Get one merge with its per-site summaries.",
+          "arguments": [
+            {
+              "name": "run_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Discovery run identifier"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "list": {
+          "help": "List recorded merges, most recent first.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of runs",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        }
+      }
     },
     "sites": {
       "help": "Sites registered in the project's config.json",
@@ -114,14 +185,91 @@
         }
       }
     },
+    "tasks": {
+      "help": "Tasks merged into the task database",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "get": {
+          "help": "Get one merged task by site and task id.",
+          "arguments": [
+            {
+              "name": "site",
+              "type": "TEXT",
+              "required": true,
+              "help": "Site the task belongs to"
+            },
+            {
+              "name": "task_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Task identifier within that site"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "list": {
+          "help": "List merged tasks, most recently seen first.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of tasks",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
     "validate": {
-      "help": "Validate an envelope or merged file against its schema.",
+      "help": "Validate a site envelope against its schema.",
       "arguments": [
         {
           "name": "file",
           "type": "PATH",
           "required": true,
-          "help": "An envelope or merged.json file to validate"
+          "help": "A site envelope file to validate"
         }
       ],
       "options": []
