@@ -8,12 +8,11 @@ from __future__ import annotations
 
 from cli_tools_shared.exceptions import ClientError
 
-from . import microworkers, taskerdata, toloka
+from . import microworkers, taskerdata
 
 ADAPTERS = {
     "microworkers": microworkers.to_task,
     "taskerdata": taskerdata.to_task,
-    "toloka": toloka.to_task,
 }
 
 

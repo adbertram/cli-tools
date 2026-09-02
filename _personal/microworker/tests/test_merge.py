@@ -27,9 +27,9 @@ def write_all_envelopes(ok_sites: dict[str, list] | None = None):
 
 def test_missing_envelopes_listed_and_nothing_written(project):
     write_all_envelopes()
-    paths.envelope_path(RUN, "toloka").unlink()
+    paths.envelope_path(RUN, "mercor").unlink()
     paths.envelope_path(RUN, "outlier").unlink()
-    with pytest.raises(ClientError, match="no envelope for: toloka, outlier"):
+    with pytest.raises(ClientError, match="no envelope for: mercor, outlier"):
         merge.merge(RUN)
     assert not paths.merged_path(RUN).exists()
 
@@ -43,17 +43,17 @@ def test_ok_envelope_without_adapter_fails(project):
 
 def test_invalid_envelope_fails(project):
     write_all_envelopes()
-    path = paths.envelope_path(RUN, "toloka")
+    path = paths.envelope_path(RUN, "mercor")
     data = json.loads(path.read_text())
     data["status"] = "bogus"
     path.write_text(json.dumps(data))
-    with pytest.raises(schema.SchemaError, match="toloka.json"):
+    with pytest.raises(schema.SchemaError, match="mercor.json"):
         merge.merge(RUN)
 
 
 def test_site_name_mismatch_fails(project):
     write_all_envelopes()
-    path = paths.envelope_path(RUN, "toloka")
+    path = paths.envelope_path(RUN, "mercor")
     data = json.loads(path.read_text())
     data["site"] = "microworkers"
     path.write_text(json.dumps(data))
@@ -86,7 +86,7 @@ def test_merge_writes_validating_document(project, microworkers_record):
     assert merged["sites"]["microworkers"] == {
         "status": "ok", "error": None,
         "fetched_at": merged["sites"]["microworkers"]["fetched_at"], "task_count": 2}
-    assert merged["sites"]["toloka"]["error"] == "fixture"
+    assert merged["sites"]["mercor"]["error"] == "fixture"
     assert [task["task_id"] for task in merged["tasks"]] == [
         str(microworkers_record["campaign_id"])] * 2
 

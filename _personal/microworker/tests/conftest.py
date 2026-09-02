@@ -2,7 +2,7 @@
 
 Every test points `MICROWORKER_ROOT` at a temp directory, so nothing here can
 read or write the real project. `SITES` mirrors the real config.json shape:
-eleven sites, each with exactly `cli`, `account`, `lastpass_item` and
+ten sites, each with exactly `cli`, `account`, `lastpass_item` and
 `auth_command`.
 """
 
@@ -21,8 +21,6 @@ SITES = {
                    "auth_command": "taskerdata auth login --credential-type browser_session"},
     "microworkers": {"cli": "microworkers", "account": True, "lastpass_item": "Microworkers",
                      "auth_command": "microworkers auth login --credential-type browser_session"},
-    "toloka": {"cli": "toloka", "account": True, "lastpass_item": "Toloka",
-               "auth_command": "toloka auth login --credential-type browser_session"},
     "oneforma": {"cli": None, "account": True, "lastpass_item": "OneForma", "auth_command": None},
     "humanrail": {"cli": None, "account": False, "lastpass_item": None, "auth_command": None},
     "mercor": {"cli": None, "account": False, "lastpass_item": None, "auth_command": None},

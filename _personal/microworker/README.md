@@ -7,7 +7,7 @@ Runs the per-site gig CLIs registered in the MicroWorker project's `config.json`
 ## Prerequisites
 
 - The MicroWorker project at `/Users/adam/Dropbox/GitRepos/Agents/MicroWorker` (override with `MICROWORKER_ROOT`), holding `config.json`.
-- The site CLIs named in `config.json` installed on `PATH` (`microworkers`, `taskerdata`, `toloka`). Each owns its own authentication; this CLI only runs `<cli> auth status`, the configured `auth_command`, and `<cli> tasks list`.
+- The site CLIs named in `config.json` installed on `PATH` (`microworkers`, `taskerdata`). Each owns its own authentication; this CLI only runs `<cli> auth status`, the configured `auth_command`, and `<cli> tasks list`.
 
 ## Installation
 
@@ -50,7 +50,7 @@ microworker validate "$MICROWORKER_ROOT/agent_workspaces/discovery/$R/merged.jso
 
 `merge <run_id>` requires an envelope for every site in `config.json`, validates each, maps `ok` tasks through the site adapter (`microworker_cli/adapters/<site>.py`) into the task contract (`schemas/task.schema.json`), validates every task, then writes and validates `merged.json` (`schemas/merged.schema.json`). It is all-or-nothing: one bad envelope or task fails the whole merge and writes nothing.
 
-Adapters exist for `microworkers` (implemented), `taskerdata` and `toloka` (raise `NotImplementedError` until a real `ok` record shape is observed). An `ok` envelope for a site without an adapter fails the merge.
+Adapters exist for `microworkers` (implemented) and `taskerdata` (raises `NotImplementedError` until a real `ok` record shape is observed). An `ok` envelope for a site without an adapter fails the merge.
 
 ## Commands
 

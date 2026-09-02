@@ -104,7 +104,7 @@ def test_adapter_registry():
         adapter_for("oneforma")
 
 
-@pytest.mark.parametrize("site", ["taskerdata", "toloka"])
+@pytest.mark.parametrize("site", ["taskerdata"])
 def test_unimplemented_adapters_raise(site):
     with pytest.raises(NotImplementedError, match=site):
         adapter_for(site)({"id": 1})

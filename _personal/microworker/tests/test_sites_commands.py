@@ -57,7 +57,7 @@ def test_get_unknown_exits_2(project, runner):
 
 def test_unexpected_key_is_config_error(project, runner, tmp_path):
     sites = dict(SITES)
-    sites["toloka"] = dict(sites["toloka"], extra=True)
+    sites["mercor"] = dict(sites["mercor"], extra=True)
     write_config(tmp_path, sites)
     outcome = runner.invoke(app, ["sites", "list"])
     assert outcome.exit_code == 2, outcome.output
@@ -66,7 +66,7 @@ def test_unexpected_key_is_config_error(project, runner, tmp_path):
 
 def test_wrong_type_is_config_error(project, runner, tmp_path):
     sites = dict(SITES)
-    sites["toloka"] = dict(sites["toloka"], account="yes")
+    sites["mercor"] = dict(sites["mercor"], account="yes")
     write_config(tmp_path, sites)
     outcome = runner.invoke(app, ["sites", "list"])
     assert outcome.exit_code == 2, outcome.output
