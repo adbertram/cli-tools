@@ -8,11 +8,13 @@ from __future__ import annotations
 
 from cli_tools_shared.exceptions import ClientError
 
-from . import microworkers, taskerdata
+from . import humanrail, microworkers, oneforma, taskerdata
 
 ADAPTERS = {
     "microworkers": microworkers.to_task,
     "taskerdata": taskerdata.to_task,
+    "humanrail": humanrail.to_task,
+    "oneforma": oneforma.to_task,
 }
 
 
