@@ -36,8 +36,8 @@ def test_missing_envelopes_listed_and_no_database_created(project):
 
 
 def test_ok_envelope_without_adapter_fails(project):
-    write_all_envelopes({"oneforma": [{"id": 1}]})
-    with pytest.raises(ClientError, match="no adapter for site 'oneforma'"):
+    write_all_envelopes({"mercor": [{"id": 1}]})
+    with pytest.raises(ClientError, match="no adapter for site 'mercor'"):
         merge.merge(RUN)
     assert not paths.db_path().exists()
 
@@ -113,6 +113,7 @@ def test_first_merge_inserts_rows_and_run_summary(project, clock, microworkers_r
         "task_count": 1,
         "inserted": 1,
         "updated": 0,
+        "skipped_stale": 0,
     }
     task = db.get_task("microworkers", microworkers_record["campaign_id"])
     assert task == {
@@ -141,12 +142,31 @@ def test_first_merge_inserts_rows_and_run_summary(project, clock, microworkers_r
     assert run["sites"]["mercor"]["error"] == "fixture"
 
 
-def test_repeated_task_in_one_run_writes_one_row(project, microworkers_record):
+def test_duplicate_task_in_one_run_is_rejected_before_any_write(
+        project, microworkers_record):
+    """Two records with the same (site, task_id) in ONE run is a contradiction.
+
+    The upsert would silently let the later record overwrite the earlier one and
+    report `task_count: 2, inserted: 1` with no indication which record won.
+    """
     write_all_envelopes({"microworkers": [microworkers_record, microworkers_record]})
-    summary = merge.merge(RUN)
-    assert summary["task_count"] == 2
-    assert summary["inserted"] == 1 and summary["updated"] == 0
-    assert len(db.list_tasks()) == 1
+    with pytest.raises(ClientError, match="two records map to the same task"):
+        merge.merge(RUN)
+    assert not paths.db_path().exists()
+
+
+def test_duplicate_task_error_names_the_envelope_and_both_indexes(
+        project, microworkers_record):
+    """`100` and `"100"` are the same task id after the adapter stringifies."""
+    first = dict(microworkers_record, campaign_id=100)
+    second = dict(microworkers_record, campaign_id="100")
+    write_all_envelopes({"microworkers": [first, second]})
+    with pytest.raises(ClientError) as raised:
+        merge.merge(RUN)
+    message = str(raised.value)
+    path = str(paths.envelope_path(RUN, "microworkers"))
+    assert f"{path} tasks[0]" in message and f"{path} tasks[1]" in message
+    assert "task_id='100'" in message
 
 
 def test_later_run_updates_last_seen_and_preserves_first_seen(
@@ -196,6 +216,6 @@ def test_cli_merge_prints_summary(project, runner):
 
 
 def test_cli_merge_missing_run_exits_2(project, runner):
-    outcome = runner.invoke(app, ["merge", "never-ran"])
+    outcome = runner.invoke(app, ["merge", "20990101T000000Z"])
     assert outcome.exit_code == 2, outcome.output
     assert "no envelope for" in outcome.output

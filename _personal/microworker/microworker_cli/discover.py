@@ -12,10 +12,17 @@ fixed function of config.json and the site CLI's exit codes:
    any other exit                            -> error
 5. `<cli> tasks list` exit 0 + JSON list     -> ok (raw list untouched)
    non-zero exit, non-JSON, non-list         -> error
+   non-finite number anywhere in the JSON    -> error
    timeout / missing executable (any step)   -> error
 6. write + validate `<run>/<site>.json`
 
 `tasks` is `[]` for every status but `ok`. Nothing is ever fabricated.
+
+The stdout parse is strict (`jsonio.loads`), so `NaN` or `Infinity` from a site
+CLI is an `error` envelope naming the literal. Python's default decoder accepts
+both, and if they get through, the file this step writes is one no strict JSON
+reader can parse -- while `microworker validate` still calls it valid -- and a
+NaN price binds to SQLite as SQL NULL, so a priced task reads as unpriced.
 """
 
 from __future__ import annotations
@@ -23,7 +30,7 @@ from __future__ import annotations
 import json
 import shlex
 
-from . import envelope, paths, runner, sites
+from . import envelope, jsonio, paths, runner, sites
 from .runner import RunnerError
 from .sites import SiteConfig
 
@@ -91,11 +98,15 @@ def _list_tasks(site: SiteConfig, timeout: int) -> dict:
     if result.returncode != 0:
         return envelope.build(site.name, envelope.ERROR, _exit_message(result), [])
     try:
-        payload = json.loads(result.stdout)
+        payload = jsonio.loads(result.stdout, f"`{site.cli} tasks list` stdout")
     except json.JSONDecodeError as exc:
         return envelope.build(
             site.name, envelope.ERROR,
             f"`{site.cli} tasks list` stdout is not JSON: {exc}", [])
+    except jsonio.NonFiniteNumberError as exc:
+        return envelope.build(
+            site.name, envelope.ERROR,
+            f"`{site.cli} tasks list` printed a non-finite number: {exc}", [])
     if not isinstance(payload, list):
         return envelope.build(
             site.name, envelope.ERROR,

@@ -32,7 +32,9 @@ microworker tasks list --filter "pay_amount:gte:0.50" --table
 
 ## How It Works
 
-`config.json` has a `sites` object; every entry carries exactly `cli` (string or null), `account` (bool), `lastpass_item` (string or null) and `auth_command` (string or null). A missing, extra or mistyped key is a `ConfigError` (exit 2); nothing is defaulted.
+`config.json` has a `sites` object; every entry carries exactly `cli` (string or null), `account` (bool), `lastpass_item` (string or null) and `auth_command` (string or null). A missing, extra or mistyped key is a `ConfigError` (exit 2); nothing is defaulted, and a `config.json` that is not parseable JSON is a `ConfigError` naming the path and the decode position.
+
+A **run id** is a UTC timestamp of the form `20260902T140000Z` -- exactly what `date -u +%Y%m%dT%H%M%SZ` produces -- and a **site name** is one lowercase segment matching `^[a-z0-9][a-z0-9-]*$`. Both are interpolated into filesystem paths, so both are validated in `paths.py` and every constructed path is asserted to resolve under the project root. Anything else exits 2 and writes nothing.
 
 `discover <site>` follows a fixed decision table with no model judgment:
 
@@ -49,11 +51,19 @@ microworker tasks list --filter "pay_amount:gte:0.50" --table
 
 `tasks` is `[]` for every status but `ok`; `error` is `null` only for `ok`. Envelopes land at `<root>/agent_workspaces/discovery/<run_id>/<site>.json` and are validated against `microworker_cli/schemas/envelope.schema.json` before they are written.
 
-`merge <run_id>` requires an envelope for every site in `config.json`, validates each, maps `ok` tasks through the site adapter (`microworker_cli/adapters/<site>.py`) into the task contract (`schemas/task.schema.json`), validates every task, and only then writes -- the run row, its per-site summaries and every task upsert commit in one SQLite transaction. It is all-or-nothing: one bad envelope or task fails the whole merge and the database is left exactly as it was.
+Every JSON boundary is strict. Python's `json` accepts and emits `NaN`, `Infinity` and `-Infinity`, none of which are JSON, and silently turns an overflowing literal such as `1e999` into infinity. A site CLI that prints any of them gets an `error` envelope naming the literal; envelope files and the stored `raw` column are written with `allow_nan=False`; and `validate_task` rejects a non-finite number anywhere in the record, `raw` included. Without that, a NaN price binds to SQLite as SQL NULL, so a task the site priced reads back as `pay_amount: null` with its currency still attached, and an Infinity in the ledger makes `tasks list` emit output that strict JSON parsers reject.
+
+`merge <run_id>` requires the run directory to hold an envelope for every site in `config.json` **and no `*.json` for anything else**, validates each, maps `ok` tasks through the site adapter (`microworker_cli/adapters/<site>.py`) into the task contract (`schemas/task.schema.json`), validates every task, checks the run's tasks are unique by `(site, task_id)`, and only then writes -- the run row, its per-site summaries and every task upsert commit in one SQLite transaction. It is all-or-nothing: one bad envelope or task fails the whole merge and the database is left exactly as it was.
+
+The envelope set is checked in both directions on purpose. Requiring one per configured site catches a worker that never ran; rejecting a stray or misnamed `<site>.json` (e.g. `microworkers2.json`) catches the opposite mistake, which would otherwise contribute nothing, get no `run_sites` row and let the run exit 0 as though it had been complete.
+
+Two records mapping to the same `(site, task_id)` inside ONE run is a contradiction, not a re-sighting, and is rejected before the transaction opens -- naming the envelope and both record indexes. Left alone, the upsert would let the later record silently overwrite the earlier one and report more tasks than rows.
+
+A task id must be a JSON string or integer. `str(value)` accepts everything, so a guard on the stringified value lets JSON `true` through as the id `"True"` and a JSON object through as `"{'oops': 1}"` -- a Python repr that exists nowhere on the site. The type is therefore checked before the stringify (`adapters/ids.py`), the id is stripped and must be non-empty, and it may be at most 200 characters.
 
 Envelopes are per-run and disposable. The database is the durable store.
 
-Adapters exist for `microworkers` (implemented) and `taskerdata` (raises `NotImplementedError` until a real `ok` record shape is observed). An `ok` envelope for a site without an adapter fails the merge.
+Adapters exist for `microworkers` and `humanrail` (implemented) and `taskerdata` (a `ClientError` until a real `ok` record shape is observed -- a contract failure of the merge, so exit 2, not the exit 1 a bare `NotImplementedError` would produce). An `ok` envelope for a site without an adapter fails the merge.
 
 ## Commands
 
@@ -72,9 +82,17 @@ Prints `{"site", "status", "path", "task_count"}` and exits 0 for every recorded
 microworker merge 20260902T120000Z
 ```
 
-Prints `{"run_id", "db_path", "sites": {"<site>": "<status>"}, "task_count", "inserted", "updated"}`. `task_count` counts the tasks the run merged; `inserted` and `updated` count distinct `(site, task_id)` rows written, so a run carrying the same task twice reports `task_count: 2, inserted: 1`.
+Prints `{"run_id", "db_path", "sites": {"<site>": "<status>"}, "task_count", "inserted", "updated", "skipped_stale"}`. `task_count` counts the tasks the run merged, and the other three partition exactly those tasks:
 
-Re-running `merge` for the same run id is idempotent: its `runs` and `run_sites` rows are replaced rather than duplicated, and its tasks upsert again.
+| Count | Meaning |
+|-------|---------|
+| `inserted` | the `(site, task_id)` was not in the database |
+| `updated` | the row existed and this sighting was at least as fresh, so its contract columns were refreshed |
+| `skipped_stale` | the row existed and this sighting was OLDER than the stored `last_seen_at`, so the contract columns were left alone (only `first_seen_at` could move) |
+
+`skipped_stale` exists because reporting a skipped sighting as `updated` would claim a change that never happened, and reporting it as `inserted` would be plainly false. The three always sum to `task_count`, because a run's tasks are unique by `(site, task_id)`.
+
+Re-running `merge` for the same run id is idempotent: its `runs` and `run_sites` rows are replaced rather than duplicated, and its tasks upsert again (the observation is exactly as fresh, so it counts as `updated`).
 
 ### Validate
 
@@ -114,6 +132,8 @@ One row per `(site, task_id)`, newest `last_seen_at` first. In JSON, `raw` is th
 
 `tasks get` exits 2 when the `(site, task_id)` pair is not in the database.
 
+`--limit` defaults to 100. When it truncates the result, the pre-limit total goes to **stderr** (`Showing 100 of 2000 tasks (--limit 100); raise --limit for the rest.`) so a partial answer can never be mistaken for a complete one. stdout stays data only, so piping into `jq` is unaffected.
+
 ### Runs
 
 ```bash
@@ -127,11 +147,26 @@ microworker runs get 20260902T120000Z --table
 
 One row per recorded merge, newest `merged_at` first. `runs get` adds a `sites` object keyed by site, each carrying `{status, error, fetched_at, task_count}` from that run's envelope. An unknown run id exits 2.
 
-Every query command reads through a `mode=ro` SQLite connection, so no read can write. A query against a database that does not exist yet exits 2 naming the path and telling you to run a merge; it never returns an empty list, because "nothing has been merged" and "no tasks are open" are different facts.
+Every query command reads through a `mode=ro` SQLite connection, so no read can write. A query against a database that does not exist yet exits 2 naming the path and telling you to run a merge; it never returns an empty list, because "nothing has been merged" and "no tasks are open" are different facts. A database the SQLite engine itself refuses -- a file that is not a database, or a stale `-wal` beside a read-only `data/` -- is also exit 2 naming the path, rather than an unwrapped `sqlite3` error at exit 1.
+
+### Field names are validated
+
+`--filter` and `--properties` are both checked against the exact columns the command's rows carry, and an unknown name exits 2 listing the real fields. Both options otherwise fail silently in opposite directions: a misspelled filter field returns `[]` with exit 0, so "that field does not exist" is indistinguishable from "no task matched"; and a misspelled property is emitted as `null` on every row, so a typo reads as "the field exists and is empty".
+
+```bash
+microworker tasks list --filter "pay_amout:gt:1"
+# Error: Field 'pay_amout' is not filterable. Supported fields: est_minutes, expires_at, ...
+microworker tasks list --properties "task_id,pay_amout"
+# Error: --properties names no such field: pay_amout; available fields: site, task_id, ...
+```
+
+A real field whose value is `null` still projects as `null` -- the allowlist rejects typos, it does not hide data. Note that the shared filter operators are non-null comparisons, so a row whose field is `NULL` is dropped by `eq`, `gt`, `contains` and the rest; use `--filter "<field>:null:"` or `:notnull:` to ask about presence.
+
+Only the first dotted segment of a `--properties` name is checked, so `runs get --properties "sites.microworkers"` still works: the top-level names are fixed columns, while the keys beneath `sites` are data.
 
 ## The Task Database
 
-`<project_root>/data/tasks.db` (`data/` is created on first merge). Schema version 1, recorded in `meta`.
+`<project_root>/data/tasks.db` (`data/` is created on first merge). Schema version 2, recorded in `meta`. A version-1 database is migrated in place on the next write connection: `runs.skipped_stale` is added with a backfill of 0, which is a fact rather than a default -- under version 1 every sighting was applied unconditionally, so no version-1 run skipped anything.
 
 ```sql
 CREATE TABLE tasks (
@@ -153,10 +188,11 @@ CREATE TABLE tasks (
 );
 CREATE TABLE runs (
     run_id TEXT PRIMARY KEY,
-    merged_at TEXT NOT NULL,
+    merged_at TEXT NOT NULL,   -- the merge wallclock, NOT an observation time
     task_count INTEGER NOT NULL,
     inserted INTEGER NOT NULL,
-    updated INTEGER NOT NULL
+    updated INTEGER NOT NULL,
+    skipped_stale INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE run_sites (
     run_id TEXT NOT NULL REFERENCES runs(run_id),
@@ -173,7 +209,11 @@ CREATE INDEX idx_tasks_last_seen_run_id ON tasks(last_seen_run_id);
 CREATE INDEX idx_tasks_pay_amount ON tasks(pay_amount);
 ```
 
-Seeing a task again refreshes every contract column plus `last_seen_at` and `last_seen_run_id`; `first_seen_at` and `first_seen_run_id` are written once by the insert that creates the row and are never overwritten. Both timestamps take the run's `merged_at`. There is no per-run task-membership table and no append-per-sighting history: one row per `(site, task_id)` is the whole model.
+**Seen timestamps are observation times, not merge times.** A task's `first_seen_at`/`last_seen_at` come from its envelope's `fetched_at` -- when that site's CLI actually answered. Only `runs.merged_at` is the merge wallclock. Binding both to the merge clock is wrong twice over: two sightings months apart would get identical timestamps, and merges do not have to run in observation order.
+
+**A stale sighting cannot overwrite fresher data.** The upsert compares `excluded.last_seen_at` against the stored `last_seen_at` per column, so merging January's run after September's cannot rewrite September's title, price or slot count; `first_seen_at` is a `min()`, so the older sighting still widens the row backwards and `first_seen_run_id` follows it. `first_seen_at` can therefore never end up after `last_seen_at`. An equally fresh sighting (same `fetched_at`) is applied, which is what keeps re-merging a run id idempotent.
+
+There is no per-run task-membership table and no append-per-sighting history: one row per `(site, task_id)` is the whole model.
 
 `microworker_cli/db.py` is the only module that opens the database, and `paths.db_path()` is the only place that names it. `PRAGMA journal_mode=WAL` and `PRAGMA foreign_keys=ON` are set on every write connection.
 
@@ -216,13 +256,15 @@ microworker sites list --limit 1
 
 Every task an adapter produces has exactly: `site`, `task_id`, `title`, `url`, `pay_amount`, `pay_currency`, `est_minutes`, `slots_open`, `expires_at`, `raw`. Unknown values are `null`; `raw` is the untouched site record. `tasks list` and `tasks get` return those ten fields plus the four the database adds: `first_seen_at`, `last_seen_at`, `first_seen_run_id`, `last_seen_run_id`.
 
+`task_id` must come from a JSON string or integer in the site's record (`adapters/ids.py`), stripped, non-empty, and at most 200 characters. Every number in the record -- `raw` included -- must be finite.
+
 ## Exit Codes
 
 | Code | Meaning |
 |------|---------|
 | 0 | Success (including every recorded envelope status from `discover`) |
 | 1 | Unexpected error |
-| 2 | Config error (`config.json` shape, unknown site) or contract error (schema validation, missing envelopes, adapter failure, missing database, unknown task or run) |
+| 2 | Config error (`config.json` shape or JSON syntax, unknown site) or contract error (schema validation, non-finite number, missing/stray envelopes, duplicate task id in a run, invalid run id or site name, adapter failure, unreadable or missing database, unknown task or run, unknown `--filter`/`--properties` field) |
 | 130 | User interrupted (Ctrl+C) |
 
 ## Options Reference
@@ -233,7 +275,7 @@ Every task an adapter produces has exactly: `site`, `task_id`, `title`, `url`, `
 | `--limit` | `-l` | Maximum number of results |
 | `--filter` | `-f` | Filter results using `field:op:value` syntax |
 | `--properties` | `-p` | Restrict output to selected fields |
-| `--run-id` |  | Discovery run identifier (`discover`) |
+| `--run-id` |  | Discovery run identifier, `YYYYMMDDTHHMMSSZ` (`discover`) |
 | `--timeout` |  | Seconds allowed per site CLI command (`discover`, default 300) |
 | `--version` | `-v` | Show version and exit |
 
@@ -249,4 +291,4 @@ uv run --with pytest python -m pytest tests
 <cli-tools-root>/_repo/skills/cli-tool/scripts/test-cli-tool.sh --cli-name microworker
 ```
 
-The unit suite never touches the real project or the real database: every test sets `MICROWORKER_ROOT` to a temp directory with a fixture `config.json`, so `data/tasks.db` is created under that temp root too. `discover` runs against a scripted fake of `runner.run`, and `envelope.utc_now()` is put under test control by the `clock` fixture so first-seen and last-seen timestamps are distinguishable.
+The unit suite never touches the real project or the real database: every test sets `MICROWORKER_ROOT` to a temp directory with a fixture `config.json`, so `data/tasks.db` is created under that temp root too. `discover` runs against a scripted fake of `runner.run`, and `envelope.utc_now()` is put under test control by the `clock` fixture so first-seen and last-seen timestamps are distinguishable -- `tests/test_seen_timestamps.py` drives the envelope clock and the merge clock apart to prove they are separate facts.

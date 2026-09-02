@@ -3,6 +3,12 @@
 Every site entry must carry exactly `cli` (str|null), `account` (bool),
 `lastpass_item` (str|null) and `auth_command` (str|null). A missing key, an
 unexpected key or a wrong type is a `ConfigError`; nothing is defaulted.
+
+A config.json that is not parseable JSON is a `ConfigError` too, naming the path
+and the decode position. Left unwrapped, the `json.JSONDecodeError` escapes the
+CLI's contract-error handler and exits 1 with a message that names no file at
+all -- and the discovery agent's recovery branch keys on exit 2 meaning "your
+inputs are wrong", so a truncated config would read to it as an internal crash.
 """
 
 from __future__ import annotations
@@ -12,7 +18,7 @@ from dataclasses import asdict, dataclass
 
 from cli_tools_shared.exceptions import ConfigError
 
-from . import paths
+from . import jsonio, paths
 
 
 @dataclass(frozen=True)
@@ -38,7 +44,12 @@ def load_sites() -> dict[str, SiteConfig]:
     path = paths.config_path()
     if not path.is_file():
         raise ConfigError(f"config.json not found at {path}")
-    data = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        data = jsonio.read_file(path)
+    except json.JSONDecodeError as exc:
+        raise ConfigError(
+            f"{path} is not valid JSON: {exc.msg} "
+            f"(line {exc.lineno}, column {exc.colno})") from exc
     if not isinstance(data, dict) or "sites" not in data:
         raise ConfigError(f"{path} must be an object with a top-level 'sites' key")
     entries = data["sites"]

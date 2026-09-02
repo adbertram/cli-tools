@@ -8,10 +8,24 @@ Every `list` command carries `--table/-t`, `--filter/-f`, `--limit/-l` and
 `--properties/-p`; every `get` command carries `--table/-t` and
 `--properties/-p`. `_emit_rows` and `_emit_row` own that shared tail so the
 option handling cannot drift between the six of them.
+
+FIELD NAMES ARE CHECKED AGAINST THE REAL COLUMNS. Each command declares the
+fields its rows actually carry, and the shared tail rejects any `--filter` or
+`--properties` naming something else. Without that, both options fail silently
+in opposite directions: a misspelled filter field matches nothing and returns
+`[]` with exit 0, so "that field does not exist" is indistinguishable from "no
+task matched"; and a misspelled property is emitted as a `null` on every row, so
+a typo reads as "the field exists and is empty".
+
+TRUNCATION IS ANNOUNCED. `--limit` defaults to 100, and a ledger with more rows
+than that would otherwise return exactly 100 with nothing anywhere saying so.
+When the limit cuts the result, the pre-limit total goes to STDERR -- stdout
+stays data only, so piping into `jq` is unaffected.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import functools
 from pathlib import Path
 from typing import List, Optional
@@ -20,10 +34,10 @@ import typer
 from cli_tools_shared import create_app, run_app
 from cli_tools_shared.exceptions import ClientError, ConfigError
 from cli_tools_shared.filters import (
+    FilterValidationError,
     apply_filters,
     apply_limit,
     apply_properties_filter,
-    validate_filters,
 )
 from cli_tools_shared.output import command, print_error, print_info, print_json, print_table
 
@@ -50,34 +64,77 @@ tasks_app = typer.Typer(help="Tasks merged into the task database",
 runs_app = typer.Typer(help="Merges recorded in the task database",
                        no_args_is_help=True)
 
+# The exact fields each command's rows carry, used as the allowlist for
+# `--filter` and `--properties`. They are derived from the row builders --
+# `sites.SiteConfig` and the database's own column tuples -- so a schema change
+# cannot leave the allowlist behind. `runs get` adds `sites`, the per-site
+# summary object it alone returns.
+SITE_FIELDS = tuple(field.name for field in dataclasses.fields(sites.SiteConfig))
+TASK_FIELDS = db.TASK_COLUMNS
+RUN_FIELDS = db.RUN_COLUMNS
+RUN_GET_FIELDS = RUN_FIELDS + ("sites",)
+
 
 def exit_2_on_contract_errors(fn):
     """Config and schema/contract errors are exit 2, not the generic 1.
 
     The shared `@command` decorator maps everything but `CredentialError` to
     exit 1; this sits beneath it so `ClientError` and `ConfigError` reach the
-    documented exit code instead.
+    documented exit code instead. `FilterValidationError` joins them: a
+    malformed `--filter`, or one naming a field these rows do not have, is the
+    caller's input being wrong -- the same class of failure as a bad
+    `--properties`, which raises `ClientError` -- not an unexpected error.
     """
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
         try:
             return fn(*args, **kwargs)
-        except (ClientError, ConfigError) as exc:
+        except (ClientError, ConfigError, FilterValidationError) as exc:
             print_error(str(exc))
             raise typer.Exit(2)
     return wrapper
 
 
-def _emit_rows(rows, *, filter, limit, properties, table, empty, drop=()):
+def _check_properties(properties, fields):
+    """Reject a `--properties` name that is not a real field.
+
+    Only the first dotted segment is checked: the top-level names are this
+    command's fixed columns, while anything below one (a `runs get` row's
+    `sites.<site>`) is data whose keys are not knowable here.
+    """
+    if not properties:
+        return
+    named = {part.strip().split(".")[0]
+             for part in properties.split(",") if part.strip()}
+    unknown = sorted(named - set(fields))
+    if unknown:
+        raise ClientError(
+            f"--properties names no such field: {', '.join(unknown)}; "
+            f"available fields: {', '.join(fields)}")
+
+
+def _emit_rows(rows, *, filter, limit, properties, table, empty, noun,
+               fields, drop=()):
     """The shared `list` tail: filter, limit, properties, then JSON or a table.
+
+    `fields` is the exact set of columns these rows carry; it is the allowlist
+    for both `--filter` and `--properties`, so a typo in either is an exit-2
+    error naming the real fields instead of a silently empty or null-filled
+    result.
 
     `drop` names columns a table cannot usefully show -- a task's `raw` site
     record is a whole nested object -- and applies to table output only, so the
     JSON form stays complete.
     """
+    _check_properties(properties, fields)
     if filter:
-        rows = apply_filters(rows, filter)
+        rows = apply_filters(rows, filter, allowed_fields=fields)
+    total = len(rows)
     rows = apply_limit(rows, limit)
+    if len(rows) < total:
+        print_info(
+            f"Showing {len(rows)} of {total} {noun} (--limit {limit}); "
+            "raise --limit for the rest.")
     rows = apply_properties_filter(rows, properties)
     if not table:
         print_json(rows)
@@ -91,8 +148,9 @@ def _emit_rows(rows, *, filter, limit, properties, table, empty, drop=()):
     print_table(rows, columns, [column.replace("_", " ").title() for column in columns])
 
 
-def _emit_row(row, *, properties, table):
+def _emit_row(row, *, properties, table, fields):
     """The shared `get` tail: properties, then JSON or a field/value table."""
+    _check_properties(properties, fields)
     row = apply_properties_filter([row], properties)[0]
     if not table:
         print_json(row)
@@ -147,11 +205,10 @@ def sites_list(
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
     """List the sites in config.json."""
-    if filter:
-        validate_filters(filter)
     rows = [sites.site_row(site) for site in sites.load_sites().values()]
     _emit_rows(rows, filter=filter, limit=limit, properties=properties,
-               table=table, empty="No sites found.")
+               table=table, empty="No sites found.", noun="sites",
+               fields=SITE_FIELDS)
 
 
 @sites_app.command("get")
@@ -163,7 +220,8 @@ def sites_get(
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
     """Get one site's config.json entry."""
-    _emit_row(sites.site_row(sites.get_site(name)), properties=properties, table=table)
+    _emit_row(sites.site_row(sites.get_site(name)), properties=properties,
+              table=table, fields=SITE_FIELDS)
 
 
 @tasks_app.command("list")
@@ -176,10 +234,9 @@ def tasks_list(
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
     """List merged tasks, most recently seen first."""
-    if filter:
-        validate_filters(filter)
     _emit_rows(db.list_tasks(), filter=filter, limit=limit, properties=properties,
-               table=table, empty="No tasks found.", drop=("raw",))
+               table=table, empty="No tasks found.", noun="tasks",
+               fields=TASK_FIELDS, drop=("raw",))
 
 
 @tasks_app.command("get")
@@ -192,7 +249,8 @@ def tasks_get(
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
     """Get one merged task by site and task id."""
-    _emit_row(db.get_task(site, task_id), properties=properties, table=table)
+    _emit_row(db.get_task(site, task_id), properties=properties, table=table,
+              fields=TASK_FIELDS)
 
 
 @runs_app.command("list")
@@ -205,10 +263,9 @@ def runs_list(
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
     """List recorded merges, most recent first."""
-    if filter:
-        validate_filters(filter)
     _emit_rows(db.list_runs(), filter=filter, limit=limit, properties=properties,
-               table=table, empty="No runs found.")
+               table=table, empty="No runs found.", noun="runs",
+               fields=RUN_FIELDS)
 
 
 @runs_app.command("get")
@@ -220,7 +277,8 @@ def runs_get(
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
     """Get one merge with its per-site summaries."""
-    _emit_row(db.get_run(run_id), properties=properties, table=table)
+    _emit_row(db.get_run(run_id), properties=properties, table=table,
+              fields=RUN_GET_FIELDS)
 
 
 app.add_typer(sites_app, name="sites")

@@ -81,10 +81,21 @@ def test_slots_open_table(done, total, expected):
     assert microworkers.slots_open(done, total) == expected
 
 
-@pytest.mark.parametrize("campaign_id", [None, ""])
+@pytest.mark.parametrize("campaign_id", [None, "", "   "])
 def test_missing_or_empty_campaign_id_is_client_error(campaign_id):
     with pytest.raises(ClientError, match="campaign_id"):
         microworkers.to_task(raw(campaign_id=campaign_id))
+
+
+@pytest.mark.parametrize("campaign_id", [True, {"oops": 1}, ["a"], 1.5])
+def test_non_scalar_campaign_id_is_client_error(campaign_id):
+    with pytest.raises(ClientError, match="must be a string or an integer"):
+        microworkers.to_task(raw(campaign_id=campaign_id))
+
+
+def test_overlong_campaign_id_is_client_error():
+    with pytest.raises(ClientError, match="characters"):
+        microworkers.to_task(raw(campaign_id="x" * 5000))
 
 
 def test_absent_raw_key_is_client_error():
@@ -100,11 +111,19 @@ def test_integer_campaign_id_becomes_string():
 
 def test_adapter_registry():
     assert adapter_for("microworkers") is microworkers.to_task
-    with pytest.raises(ClientError, match="no adapter for site 'oneforma'"):
-        adapter_for("oneforma")
+    # mercor is a config.json site that has no account, no CLI and no
+    # observed record shape, so it is the standing example of a site the
+    # registry must refuse rather than map by guesswork.
+    with pytest.raises(ClientError, match="no adapter for site 'mercor'"):
+        adapter_for("mercor")
 
 
 @pytest.mark.parametrize("site", ["taskerdata"])
-def test_unimplemented_adapters_raise(site):
-    with pytest.raises(NotImplementedError, match=site):
+def test_unimplemented_adapters_raise_client_error(site):
+    """A ClientError, so the CLI's exit-2 contract handler sees it.
+
+    A `NotImplementedError` escapes that handler and exits 1, which the
+    discovery agent reads as an unexpected crash rather than bad input.
+    """
+    with pytest.raises(ClientError, match=site):
         adapter_for(site)({"id": 1})

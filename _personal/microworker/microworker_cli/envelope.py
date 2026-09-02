@@ -3,15 +3,23 @@
 An envelope records what happened when the site's CLI was run -- `ok` with the
 raw task list, or one of the four failure statuses with a reason. Every write
 and read passes through the envelope schema.
+
+Serialization goes through `jsonio`, never `json` directly, so an envelope file
+is always strict JSON: a non-finite number inside a site's raw record fails the
+write rather than producing a file that `microworker validate` calls valid and
+`JSON.parse` rejects.
+
+`fetched_at` is the OBSERVATION time -- when this site's CLI answered -- and it
+is what `merge` records as the task's first/last seen time. It is not the merge
+time; those two can be months apart when an old run is merged late.
 """
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import schema
+from . import jsonio, schema
 
 OK = "ok"
 AUTH_FAILED = "auth_failed"
@@ -38,11 +46,11 @@ def build(site: str, status: str, error: str | None, tasks: list) -> dict:
 def write(path: Path, data: dict) -> None:
     schema.validate_envelope(data)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+    path.write_text(jsonio.dumps(data, indent=2, ensure_ascii=False) + "\n",
                     encoding="utf-8")
 
 
 def read(path: Path) -> dict:
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = jsonio.read_file(path)
     schema.validate_envelope(data, label=str(path))
     return data

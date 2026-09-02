@@ -12,6 +12,8 @@ import re
 
 from cli_tools_shared.exceptions import ClientError
 
+from .ids import task_id
+
 SITE = "microworkers"
 RAW_KEYS = ("campaign_id", "title", "url", "payment", "ttf_minutes",
             "positions_done", "positions_total")
@@ -24,14 +26,11 @@ def to_task(raw: dict) -> dict:
     if missing:
         raise ClientError(
             f"{SITE} record is missing keys: {', '.join(missing)}")
-    campaign_id = raw["campaign_id"]
-    if campaign_id is None or str(campaign_id) == "":
-        raise ClientError(
-            f"{SITE} record has no campaign_id (url={raw['url']!r})")
     pay_amount, pay_currency = parse_payment(raw["payment"])
     return {
         "site": SITE,
-        "task_id": str(campaign_id),
+        "task_id": task_id(SITE, raw["campaign_id"], field="campaign_id",
+                           locator=f"url={raw['url']!r}"),
         "title": raw["title"],
         "url": raw["url"],
         "pay_amount": pay_amount,

@@ -135,17 +135,20 @@ def test_tasks_get_unknown_exits_2(runner, two_runs):
 def test_runs_list_newest_first(runner, two_runs):
     rows = run_json(runner, ["runs", "list"])
     assert [row["run_id"] for row in rows] == [LATER_RUN, RUN]
-    assert list(rows[0]) == ["run_id", "merged_at", "task_count", "inserted", "updated"]
+    assert list(rows[0]) == ["run_id", "merged_at", "task_count", "inserted",
+                             "updated", "skipped_stale"]
     assert rows[0] == {"run_id": LATER_RUN, "merged_at": "2026-09-03T00:00:00Z",
-                       "task_count": 1, "inserted": 1, "updated": 0}
+                       "task_count": 1, "inserted": 1, "updated": 0,
+                       "skipped_stale": 0}
 
 
-def test_runs_list_filter_limit_properties_and_table(runner, two_runs):
+def test_runs_list_filter_limit_properties_and_table(runner, two_runs, monkeypatch):
     rows = run_json(runner, ["runs", "list", "--filter", f"run_id:eq:{RUN}",
                              "--limit", "5", "--properties", "run_id,task_count"])
     assert rows == [{"run_id": RUN, "task_count": 1}]
     assert len(run_json(runner, ["runs", "list", "--limit", "1"])) == 1
 
+    monkeypatch.setenv("COLUMNS", "300")
     outcome = runner.invoke(app, ["runs", "list", "--table"])
     assert outcome.exit_code == 0, outcome.output
     assert "Merged At" in outcome.stdout and LATER_RUN in outcome.stdout
