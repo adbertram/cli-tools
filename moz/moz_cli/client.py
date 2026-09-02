@@ -36,6 +36,18 @@ class ClientError(Exception):
     pass
 
 
+class NoDataError(ClientError):
+    """Moz has no data for the requested query.
+
+    Raised only when the Moz JSON-RPC envelope itself reports ``status: 404``
+    (e.g. "No keyword metrics found for the provided query"). That is an answer
+    about the query, not a transport or account failure: an unknown keyword is
+    simply absent from Moz's index. Quota (403), auth (401), and malformed
+    requests (400) stay :class:`ClientError` and must keep failing loudly.
+    """
+    pass
+
+
 class MozClient:
     """Client for interacting with Moz API (JSON-RPC 2.0) with retry."""
 
@@ -122,6 +134,20 @@ class MozClient:
 
         return False
 
+    @staticmethod
+    def _error_object(response: requests.Response) -> Dict[str, Any]:
+        """Return the JSON-RPC ``error`` object from a failed response body.
+
+        Returns an empty dict when the body is not a JSON-RPC envelope (e.g. an
+        HTML error page from a proxy or gateway), so the caller reports the raw
+        body instead of misreading an infrastructure failure as an API answer.
+        A body that claims to be JSON but cannot be parsed raises.
+        """
+        if "application/json" not in response.headers.get("Content-Type", ""):
+            return {}
+        error = response.json().get("error")
+        return error if isinstance(error, dict) else {}
+
     def _get_retry_after(self, response: requests.Response) -> Optional[float]:
         """Extract Retry-After header value from response."""
         retry_after = response.headers.get("Retry-After")
@@ -200,11 +226,14 @@ class MozClient:
             raise ClientError("Request failed: no response received")
 
         if not last_response.ok:
-            try:
-                error_data = last_response.json()
-                error_msg = error_data.get("error", {}).get("message") or last_response.text
-            except Exception:
-                error_msg = last_response.text
+            error = self._error_object(last_response)
+            error_msg = error.get("message") or last_response.text
+            # A well-formed JSON-RPC error envelope reporting 404 means Moz has
+            # no data for this query. That is an answer about the query, not a
+            # transport, quota, or auth failure, so callers can record the
+            # absence per query instead of losing the whole batch.
+            if error and 404 in (error.get("status"), last_response.status_code):
+                raise NoDataError(error_msg)
             raise ClientError(f"API request failed ({last_response.status_code}): {error_msg}")
 
         # Parse JSON-RPC response
@@ -217,6 +246,8 @@ class MozClient:
         if "error" in response_data and response_data["error"] is not None:
             error = response_data["error"]
             error_msg = error.get("message", str(error))
+            if error.get("status") == 404:
+                raise NoDataError(error_msg)
             raise ClientError(f"API error: {error_msg}")
 
         # Return the result

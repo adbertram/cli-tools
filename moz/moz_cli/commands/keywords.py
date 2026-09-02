@@ -7,19 +7,24 @@ from typing import Optional, List
 
 from rich.console import Console
 
-from ..client import get_client, ClientError
-from cli_tools_shared.output import print_json, print_table, handle_error, print_success, print_error
+from ..client import get_client, NoDataError
+from cli_tools_shared.filters import apply_filters
+from cli_tools_shared.output import command, print_json, print_table, print_warning, print_error
 
 
 # Note displayed above tables with volume data
 VOLUME_NOTE = "[dim]Note: Volume is avg monthly searches over the last 12 months.[/dim]"
 _console = Console()
 
+METRIC_FIELDS = ["keyword", "volume", "difficulty", "ctr", "priority"]
+METRIC_HEADERS = ["Keyword", "Volume", "Difficulty", "CTR", "Priority"]
+
 
 app = typer.Typer(help="Keyword research and analysis", no_args_is_help=True)
 
 
 @app.command("list")
+@command
 def keywords_list(
     keywords: Optional[str] = typer.Argument(
         None,
@@ -33,11 +38,14 @@ def keywords_list(
     ),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum keywords to return"),
-    filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)"),
+    filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., volume:gt:1000, keyword:contains:azure)"),
     properties: Optional[str] = typer.Option(None, "--properties", "-P", help="Comma-separated fields to display"),
 ):
     """
     Get metrics for multiple keywords.
+
+    Keywords Moz has no data for are named on stderr and omitted from the
+    result; the keywords Moz did resolve are still returned.
 
     Examples:
         moz keywords list -k "seo,python,machine learning"
@@ -45,68 +53,64 @@ def keywords_list(
         moz keywords list -k "seo,python" --filter "volume:gt:1000"
         moz keywords list -k "seo,python" --properties "keyword,volume,difficulty"
     """
-    try:
-        if keywords and keyword_option and keywords != keyword_option:
-            print_error("Pass keywords either positionally or with --keyword, not both")
-            raise typer.Exit(1)
+    if keywords and keyword_option and keywords != keyword_option:
+        print_error("Pass keywords either positionally or with --keyword, not both")
+        raise typer.Exit(1)
 
-        keywords_value = keyword_option or keywords
-        if not keywords_value:
-            print_error("At least one keyword is required")
-            raise typer.Exit(1)
+    keywords_value = keyword_option or keywords
+    if not keywords_value:
+        print_error("At least one keyword is required")
+        raise typer.Exit(1)
 
-        # Parse comma-separated keywords
-        keyword_list = [kw.strip() for kw in keywords_value.split(",") if kw.strip()]
-        if not keyword_list:
-            print_error("At least one keyword is required")
-            raise typer.Exit(1)
+    # Parse comma-separated keywords
+    keyword_list = [kw.strip() for kw in keywords_value.split(",") if kw.strip()][:limit]
+    if not keyword_list:
+        print_error("At least one keyword is required")
+        raise typer.Exit(1)
 
-        client = get_client()
+    client = get_client()
 
-        # Get metrics for each keyword
-        results = []
-        for kw in keyword_list[:limit]:
-            metrics = client.get_keyword_metrics(kw)
-            results.append(metrics)
+    # Moz has no bulk keyword-metrics action (probing
+    # data.keyword.metrics.bulk.fetch returns "Action not found"), so each
+    # keyword is resolved on its own request. A keyword Moz has no data for
+    # answers with a 404 envelope; record that keyword as unresolved and keep
+    # the metrics the other keywords returned. Every other failure (quota,
+    # auth, transport) still aborts the command.
+    results = []
+    keywords_without_metrics = []
+    for kw in keyword_list:
+        try:
+            results.append(client.get_keyword_metrics(kw).model_dump())
+        except NoDataError:
+            keywords_without_metrics.append(kw)
 
-        # Apply client-side filtering if specified
-        if filter:
-            from cli_tools_shared.filters import apply_filters
-            results = apply_filters(results, filter)
+    if keywords_without_metrics:
+        print_warning(
+            f"Moz returned no metrics for {len(keywords_without_metrics)} of "
+            f"{len(keyword_list)} keywords: "
+            + ", ".join(f'"{kw}"' for kw in keywords_without_metrics)
+        )
 
-        # Extract specific properties if requested
-        if properties:
-            fields = [f.strip() for f in properties.split(",")]
-            results_dicts = [r.model_dump() for r in results]
-            filtered_results = []
-            for item in results_dicts:
-                filtered_item = {k: item.get(k) for k in fields}
-                filtered_results.append(filtered_item)
+    results = apply_filters(results, filter, allowed_fields=METRIC_FIELDS)
 
-            if table:
-                # Show note if volume is in the selected fields
-                if "volume" in fields:
-                    _console.print(VOLUME_NOTE)
-                print_table(filtered_results, fields, fields)
-            else:
-                print_json(filtered_results)
-        else:
-            if table:
-                _console.print(VOLUME_NOTE)
-                data = [r.model_dump() for r in results]
-                fields = ["keyword", "volume", "difficulty", "ctr", "priority"]
-                headers = ["Keyword", "Volume", "Difficulty", "CTR", "Priority"]
-                print_table(data, fields, headers)
-            else:
-                print_json([r.model_dump() for r in results])
+    if properties:
+        fields = [f.strip() for f in properties.split(",")]
+        results = [{k: item.get(k) for k in fields} for item in results]
+        headers = fields
+    else:
+        fields = METRIC_FIELDS
+        headers = METRIC_HEADERS
 
-    except ClientError as e:
-        raise typer.Exit(handle_error(e))
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    if table:
+        if "volume" in fields:
+            _console.print(VOLUME_NOTE)
+        print_table(results, fields, headers)
+    else:
+        print_json(results)
 
 
 @app.command("get")
+@command
 def keywords_get(
     keyword: str = typer.Argument(..., help="Keyword to look up"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -118,26 +122,24 @@ def keywords_get(
         moz keywords get "machine learning"
         moz keywords get "python tutorial" --table
     """
+    client = get_client()
     try:
-        client = get_client()
         metrics = client.get_keyword_metrics(keyword)
+    except NoDataError:
+        # A single-keyword lookup that resolves to nothing has no result to
+        # return, so it exits non-zero like any other not-found lookup.
+        print_error(f'Moz has no metrics for keyword "{keyword}"')
+        raise typer.Exit(1)
 
-        if table:
-            _console.print(VOLUME_NOTE)
-            data = [metrics.model_dump()]
-            fields = ["keyword", "volume", "difficulty", "ctr", "priority"]
-            headers = ["Keyword", "Volume", "Difficulty", "CTR", "Priority"]
-            print_table(data, fields, headers)
-        else:
-            print_json(metrics)
-
-    except ClientError as e:
-        raise typer.Exit(handle_error(e))
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    if table:
+        _console.print(VOLUME_NOTE)
+        print_table([metrics.model_dump()], METRIC_FIELDS, METRIC_HEADERS)
+    else:
+        print_json(metrics)
 
 
 @app.command("suggestions")
+@command
 def keywords_suggestions(
     keyword: str = typer.Argument(..., help="Base keyword for suggestions"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -150,30 +152,22 @@ def keywords_suggestions(
         moz keywords suggestions "machine learning"
         moz keywords suggestions "python tutorial" --table --limit 20
     """
-    try:
-        client = get_client()
-        suggestions = client.get_keyword_suggestions(keyword)
+    client = get_client()
+    suggestions = [s.model_dump() for s in client.get_keyword_suggestions(keyword)[:limit]]
 
-        # Limit results
-        suggestions = suggestions[:limit]
-
-        if table:
-            _console.print(VOLUME_NOTE)
-            data = [s.model_dump() for s in suggestions]
-            fields = ["keyword", "volume", "difficulty"]
-            headers = ["Keyword", "Volume", "Difficulty"]
-            print_table(data, fields, headers)
-        else:
-            # Return as list of dicts for JSON
-            print_json([s.model_dump() for s in suggestions])
-
-    except ClientError as e:
-        raise typer.Exit(handle_error(e))
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    if table:
+        _console.print(VOLUME_NOTE)
+        print_table(
+            suggestions,
+            ["keyword", "volume", "difficulty"],
+            ["Keyword", "Volume", "Difficulty"],
+        )
+    else:
+        print_json(suggestions)
 
 
 @app.command("intent")
+@command
 def keywords_intent(
     keyword: str = typer.Argument(..., help="Keyword to analyze"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -187,25 +181,21 @@ def keywords_intent(
         moz keywords intent "how to learn python"
         moz keywords intent "buy laptop" --table
     """
-    try:
-        client = get_client()
-        intent = client.get_search_intent(keyword)
+    client = get_client()
+    intent = client.get_search_intent(keyword)
 
-        if table:
-            data = [intent.model_dump()]
-            fields = ["keyword", "intent_type", "confidence"]
-            headers = ["Keyword", "Intent Type", "Confidence"]
-            print_table(data, fields, headers)
-        else:
-            print_json(intent)
-
-    except ClientError as e:
-        raise typer.Exit(handle_error(e))
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    if table:
+        print_table(
+            [intent.model_dump()],
+            ["keyword", "intent_type", "confidence"],
+            ["Keyword", "Intent Type", "Confidence"],
+        )
+    else:
+        print_json(intent)
 
 
 @app.command("ranking")
+@command
 def keywords_ranking(
     url: str = typer.Argument(..., help="URL to analyze"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -218,26 +208,18 @@ def keywords_ranking(
         moz keywords ranking "https://example.com/blog/python"
         moz keywords ranking "https://example.com" --table --limit 20
     """
-    try:
-        client = get_client()
-        keywords = client.get_ranking_keywords(url)
+    client = get_client()
+    keywords = [k.model_dump() for k in client.get_ranking_keywords(url)[:limit]]
 
-        # Limit results
-        keywords = keywords[:limit]
-
-        if table:
-            _console.print(VOLUME_NOTE)
-            data = [k.model_dump() for k in keywords]
-            fields = ["keyword", "position", "volume", "difficulty"]
-            headers = ["Keyword", "Position", "Volume", "Difficulty"]
-            print_table(data, fields, headers)
-        else:
-            print_json([k.model_dump() for k in keywords])
-
-    except ClientError as e:
-        raise typer.Exit(handle_error(e))
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    if table:
+        _console.print(VOLUME_NOTE)
+        print_table(
+            keywords,
+            ["keyword", "position", "volume", "difficulty"],
+            ["Keyword", "Position", "Volume", "Difficulty"],
+        )
+    else:
+        print_json(keywords)
 
 
 COMMAND_CREDENTIALS = {

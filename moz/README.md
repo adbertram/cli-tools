@@ -75,6 +75,33 @@ moz keywords ranking "https://example.com/blog/python"
 moz keywords ranking "https://example.com" --limit 20
 ```
 
+#### Keywords with no Moz data
+
+Moz has no bulk keyword-metrics action, so `keywords list` resolves each keyword
+on its own request. When Moz has no data for a keyword it answers with a 404
+envelope; that is an answer about the keyword, not a failure. `keywords list`
+returns the metrics for every keyword Moz did resolve, names the unresolved ones
+on stderr, and exits 0:
+
+```bash
+$ moz keywords list -k "azure sql database,query performance insight"
+Warning: Moz returned no metrics for 1 of 2 keywords: "query performance insight"
+[
+  {
+    "keyword": "azure sql database",
+    "volume": 1450,
+    "difficulty": 70.0,
+    "ctr": 80.0,
+    "priority": 59.0
+  }
+]
+```
+
+stdout stays a clean JSON array, so `| jq` pipelines are unaffected. Quota (403),
+auth, and transport errors still abort the whole command with a non-zero exit
+code. `keywords get` is a single-keyword lookup, so an unresolved keyword there
+exits 1 with no result.
+
 ## Output Formats
 
 All commands support two output formats:
