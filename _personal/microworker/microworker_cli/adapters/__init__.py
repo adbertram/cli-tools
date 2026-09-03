@@ -12,14 +12,26 @@ from __future__ import annotations
 
 from cli_tools_shared.exceptions import ClientError
 
-from . import humanrail, microworkers, oneforma, outlier, taskerdata
+from . import (
+    atlas_capture,
+    crowdgen,
+    humanrail,
+    mercor,
+    microworkers,
+    oneforma,
+    outlier,
+    trainee_digital,
+)
 
 ADAPTERS = {
-    "microworkers": microworkers.to_task,
-    "taskerdata": taskerdata.to_task,
+    "atlas-capture": atlas_capture.to_task,
+    "crowdgen": crowdgen.to_task,
     "humanrail": humanrail.to_task,
+    "mercor": mercor.to_task,
+    "microworkers": microworkers.to_task,
     "oneforma": oneforma.to_task,
     "outlier": outlier.to_task,
+    "trainee-digital": trainee_digital.to_task,
 }
 
 
