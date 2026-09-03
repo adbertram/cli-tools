@@ -1246,7 +1246,46 @@ def test_list_flows_navigates_directly_per_app_using_tree_item_id(monkeypatch):
     assert result[0].workspace_name == "Marketing"
     assert result[0].org_name == "Acme Org"
     assert result[0].enabled is True
+    assert result[0].app_id == "30529466"
     assert state.visited_paths == ["/flows.php", "/flows.php?app=30529466"]
+
+
+def test_list_flows_carries_app_id_so_it_can_be_filtered(monkeypatch):
+    """Each listed flow must carry the app id resolved from the tree, so
+    `flows list --filter app_id:eq:<id>` can select one app's flows."""
+    from globiflow_cli.commands.flows import _apply_filters
+
+    tree_items = [
+        _TreeItemFake("Acme Org", "1"),
+        _TreeItemFake("Marketing", "2"),
+        _TreeItemFake("Content (1) 5", "3", item_id="app-30529466_anchor"),
+        _TreeItemFake("Blogs (1) 5", "3", item_id="app-30529455_anchor"),
+    ]
+    flows_by_app = {
+        "30529466": [("Flow A", "111", "/images/icons/small/transmit.png")],
+        "30529455": [("Flow B", "222", "/images/icons/small/transmit.png")],
+    }
+    client, state, page = _list_flows_client(monkeypatch, tree_items, flows_by_app)
+
+    items = [f.model_dump() for f in client.list_flows()]
+
+    assert [i["id"] for i in _apply_filters(items, ["app_id:eq:30529455"])] == ["222"]
+
+
+def test_apply_filters_rejects_a_field_the_records_do_not_have():
+    """Filtering on an absent field must fail loudly: silently matching
+    nothing is indistinguishable from 'no such records exist'."""
+    import typer
+
+    from globiflow_cli.commands.flows import _apply_filters
+
+    items = [{"id": "111", "name": "Flow A", "app_id": "30529466"}]
+
+    try:
+        _apply_filters(items, ["appid:eq:30529466"])
+        raise AssertionError("Expected an exit for an unknown filter field")
+    except typer.Exit as e:
+        assert e.exit_code == 1
 
 
 def test_list_flows_raises_when_app_tree_item_has_no_resolvable_id(monkeypatch):
@@ -1265,3 +1304,388 @@ def test_list_flows_raises_when_app_tree_item_has_no_resolvable_id(monkeypatch):
         raise AssertionError("Expected ClientError when app id cannot be resolved from the tree")
     except client_module.ClientError as e:
         assert "Could not resolve app id" in str(e)
+
+
+# ---- Update Item / Create Item "fields" fill logic --------------------------
+#
+# Globiflow's own UpdateItemStep/CreateItemStep models declare a `fields`
+# dict, but the browser-automation fill logic had no selector for it at all:
+# `_fill_step_field`'s per-field selector map covered variable_name, code,
+# url, etc., but nothing named "fields", so every `fields` value silently hit
+# the "Field not found, skip silently" fallback and the step saved with an
+# empty value set. Confirmed live (2026-09-03) via a disposable Podio app:
+# export -> base64-decode a step's PHP-serialized `stepDetails` showed
+# `values` as an empty array after using the old code path.
+#
+# The fix -- `_fill_item_fields`/`_fill_item_field_value` -- was built by
+# inspecting the real configureflow.php DOM for "Update Item" and "Create
+# Item" steps against that disposable app, not from guesswork:
+#   * Each field renders as its own AJAX-loaded row
+#     (`div[id^='stepsubcup']`), holding a field picker
+#     (`select[name^='fields']`, options keyed by Podio field label) and a
+#     type-specific value control Globiflow injects only after the field is
+#     chosen.
+#   * Scalar fields (text, number, and similar) render a gMention-enabled
+#     textarea (`textarea[name^='gmvalue']`) -- the same control this CLI
+#     already fills for HTTP/comment/etc. steps via `_fill_mention_field`.
+#   * Category/status fields render a plain `<select name^='value']>` of
+#     option labels.
+#   * Podio app/relationship fields also render a `<select name^='value']>`,
+#     but its options are a handful of fixed variable references (e.g.
+#     "Current Item"), not a literal search box -- the real search-and-select
+#     widget lives behind a "Search" function this CLI does not select, since
+#     the disposable single-app fixture (a field referencing its own app)
+#     rendered an empty target-app picker for it and never produced that
+#     widget live to validate a parser against.
+#   * "Update Item" steps start with row 1 already rendered; "Create Item"
+#     steps render no rows -- and no target-app picker options until an app
+#     is chosen -- until "add field" is clicked once per field.
+#
+# All of the above was round-tripped for real: `globiflow flows steps add`
+# with `--fields '{"SpikeText": "...", "SpikeNumber": "...", "SpikeCategory":
+# "..."}'`, then `flows export` + base64-decode, showed the values present in
+# Globiflow's saved `stepDetails` for both Update Item and Create Item steps.
+
+
+class _FakeElement:
+    """Generic locator/element stand-in covering the surface the fields-fill
+    code calls: count(), first, all(), locator(), evaluate(), get_attribute(),
+    select_option(), fill(). `evaluate_result` may be a plain value or a
+    callable(arg) -- these fakes model what the real JS would have returned
+    for a given DOM state, they do not execute the JS string itself."""
+
+    def __init__(self, *, count=1, children=None, evaluate_result=None,
+                 attribute=None, all_items=None):
+        self._count = count
+        self._children = children or {}
+        self._evaluate_result = evaluate_result
+        self._attribute = attribute
+        self._all_items = all_items if all_items is not None else []
+        self.select_option_calls = []
+        self.fill_calls = []
+
+    def count(self):
+        return self._count
+
+    @property
+    def first(self):
+        return self
+
+    def all(self):
+        return self._all_items
+
+    def locator(self, selector):
+        return self._children.get(selector, _FakeElement(count=0))
+
+    def evaluate(self, expression, arg=None):
+        if callable(self._evaluate_result):
+            return self._evaluate_result(arg)
+        return self._evaluate_result
+
+    def get_attribute(self, name):
+        return self._attribute
+
+    def select_option(self, value=None, label=None):
+        self.select_option_calls.append({"value": value, "label": label})
+
+    def fill(self, value):
+        self.fill_calls.append(value)
+
+
+class _FieldFillPage:
+    """Records wait_for_timeout calls; the fills under test don't otherwise
+    touch the page directly."""
+
+    def __init__(self):
+        self.waits = []
+
+    def wait_for_timeout(self, ms):
+        self.waits.append(ms)
+
+
+def _make_scalar_row(field_type, gmention_id):
+    return _FakeElement(children={
+        "input[name^='fieldTypes']": _FakeElement(count=1, attribute=field_type),
+        "select[name^='value']": _FakeElement(count=0),
+        "textarea[name^='gmvalue']": _FakeElement(count=1, attribute=gmention_id),
+    })
+
+
+def test_fill_item_field_value_uses_gmention_for_scalar_fields(monkeypatch):
+    """Text/number fields render a gMention textarea; filling must go
+    through _fill_mention_field so variable references keep working, the
+    same as every other gmvalue-style field this CLI already fills."""
+    gmention_textarea = _FakeElement(count=1, attribute="gmvalue1_1")
+    row = _FakeElement(children={
+        "input[name^='fieldTypes']": _FakeElement(count=1, attribute="text"),
+        "select[name^='value']": _FakeElement(count=0),
+        "textarea[name^='gmvalue']": gmention_textarea,
+    })
+    client = GlobiflowClient()
+    calls = []
+    monkeypatch.setattr(
+        client, "_fill_mention_field",
+        lambda page, element_id, value: calls.append((element_id, value)) or True,
+    )
+
+    client._fill_item_field_value(None, row, "SpikeText", "hello")
+
+    assert calls == [("gmvalue1_1", "hello")]
+    assert gmention_textarea.fill_calls == []
+
+
+def test_fill_item_field_value_falls_back_to_plain_fill_when_gmention_unavailable(monkeypatch):
+    """When gMention has no control for the textarea, fill it directly
+    instead of silently dropping the value."""
+    gmention_textarea = _FakeElement(count=1, attribute="gmvalue1_2")
+    row = _FakeElement(children={
+        "input[name^='fieldTypes']": _FakeElement(count=1, attribute="number"),
+        "select[name^='value']": _FakeElement(count=0),
+        "textarea[name^='gmvalue']": gmention_textarea,
+    })
+    client = GlobiflowClient()
+    monkeypatch.setattr(client, "_fill_mention_field", lambda page, element_id, value: False)
+
+    client._fill_item_field_value(None, row, "SpikeNumber", "42")
+
+    assert gmention_textarea.fill_calls == ["42"]
+
+
+def test_fill_item_field_value_selects_category_option_by_label():
+    """Category/status fields render a plain select of option labels."""
+    value_select = _FakeElement(count=1)
+    row = _FakeElement(children={
+        "input[name^='fieldTypes']": _FakeElement(count=1, attribute="category"),
+        "select[name^='value']": value_select,
+    })
+    client = GlobiflowClient()
+
+    client._fill_item_field_value(None, row, "SpikeCategory", "Beta")
+
+    assert value_select.select_option_calls == [{"value": None, "label": "Beta"}]
+
+
+def test_fill_item_field_value_raises_when_value_is_not_a_valid_option():
+    """A category value that isn't one of the field's options must fail
+    loudly, not silently leave the field unset."""
+    class _RaisingSelect(_FakeElement):
+        def select_option(self, value=None, label=None):
+            raise client_module.BrowserHarnessError("No select option matched label: Gamma")
+
+    row = _FakeElement(children={
+        "input[name^='fieldTypes']": _FakeElement(count=1, attribute="category"),
+        "select[name^='value']": _RaisingSelect(count=1),
+    })
+    client = GlobiflowClient()
+
+    try:
+        client._fill_item_field_value(None, row, "SpikeCategory", "Gamma")
+        raise AssertionError("Expected ClientError for an invalid category option")
+    except client_module.ClientError as e:
+        assert "not a valid option" in str(e)
+
+
+def test_fill_item_field_value_raises_for_app_relationship_fields():
+    """App/relationship fields' "value" select only offers fixed variable
+    references (e.g. "Current Item"), not a literal search -- this must
+    fail loudly with a clear reason instead of guessing at the unverified
+    search widget or silently mismatching a literal value against those
+    options."""
+    row = _FakeElement(children={
+        "input[name^='fieldTypes']": _FakeElement(count=1, attribute="app"),
+        "select[name^='value']": _FakeElement(count=1),
+    })
+    client = GlobiflowClient()
+
+    try:
+        client._fill_item_field_value(None, row, "SpikeRelation", "Some Item")
+        raise AssertionError("Expected ClientError for an app/relationship field")
+    except client_module.ClientError as e:
+        assert "app/relationship field" in str(e)
+
+
+def test_fill_item_field_value_raises_for_unsupported_control_types():
+    """A field type with neither a select nor a gMention textarea value
+    control must fail loudly, not skip silently like the original bug."""
+    row = _FakeElement(children={
+        "input[name^='fieldTypes']": _FakeElement(count=1, attribute="contact"),
+        "select[name^='value']": _FakeElement(count=0),
+        "textarea[name^='gmvalue']": _FakeElement(count=0),
+    })
+    client = GlobiflowClient()
+
+    try:
+        client._fill_item_field_value(None, row, "SpikeContact", "Someone")
+        raise AssertionError("Expected ClientError for an unsupported field type")
+    except client_module.ClientError as e:
+        assert "not yet supported" in str(e)
+        assert "contact" in str(e)
+
+
+class _DelayedFieldsContainer:
+    """A field-picker locator whose options only appear after a few polls,
+    modelling Globiflow's async field-list AJAX call."""
+
+    def __init__(self, empty_attempts, option_labels):
+        self.calls = 0
+        self.empty_attempts = empty_attempts
+        self.final_element = _FakeElement(count=1, evaluate_result=list(option_labels))
+
+    def locator(self, selector):
+        assert selector == "select[name^='fields']"
+        self.calls += 1
+        if self.calls <= self.empty_attempts:
+            return _FakeElement(count=0)
+        return _FakeElement(count=1, all_items=[self.final_element])
+
+
+def test_wait_for_field_option_polls_until_ajax_populates_the_picker():
+    """The field list can briefly show only its row's initial placeholder
+    options before Globiflow's AJAX call resolves; this must poll rather
+    than fail on the first empty read."""
+    page = _FieldFillPage()
+    container = _DelayedFieldsContainer(empty_attempts=2, option_labels=["Select Field", "SpikeText", "Tag(s)"])
+    client = GlobiflowClient()
+
+    result = client._wait_for_field_option(page, container, 1, "SpikeText", timeout=5000)
+
+    assert result is container.final_element
+    assert len(page.waits) == 2
+
+
+def test_wait_for_field_option_raises_when_label_never_appears():
+    """A field label absent from the app must fail loudly instead of
+    polling forever or silently picking nothing."""
+    page = _FieldFillPage()
+    container = _DelayedFieldsContainer(empty_attempts=0, option_labels=["Select Field", "Tag(s)"])
+    client = GlobiflowClient()
+
+    try:
+        client._wait_for_field_option(page, container, 1, "Missing", timeout=1000)
+        raise AssertionError("Expected ClientError when the field label never appears")
+    except client_module.ClientError as e:
+        assert "Missing" in str(e)
+
+
+class _AddFieldLink:
+    """The "add field" link; clicking it appends a new row + field picker to
+    its owning container, modelling Globiflow rendering a fresh row."""
+
+    def __init__(self, container):
+        self._container = container
+
+    def count(self):
+        return 1
+
+    @property
+    def first(self):
+        return self
+
+    def evaluate(self, expression, arg=None):
+        self._container.add_field_clicks += 1
+        next_index = len(self._container.rows) + 1
+        self._container.rows.append(_make_scalar_row("number", f"gmvalue1_{next_index}"))
+        self._container.field_selects.append(
+            _FakeElement(count=1, evaluate_result=list(self._container.option_labels))
+        )
+
+
+class _FillItemFieldsContainer:
+    """Stateful stand-in for a step's container across `_fill_item_fields`'s
+    add-field / select-field / read-value-control call sequence."""
+
+    def __init__(self, rows, field_selects, option_labels):
+        self.rows = rows
+        self.field_selects = field_selects
+        self.option_labels = option_labels
+        self.add_field_clicks = 0
+
+    def locator(self, selector):
+        if selector == "div[id^='stepsubcup']":
+            return _FakeElement(count=len(self.rows), all_items=list(self.rows))
+        if selector == "a:has-text('add field')":
+            return _AddFieldLink(self)
+        if selector == "select[name^='fields']":
+            return _FakeElement(count=len(self.field_selects), all_items=list(self.field_selects))
+        if selector == "div[id^='stepsubcup'], a:has-text('add field')":
+            # _wait_for_item_fields_ui's existence probe: an "add field"
+            # control is always present once the step type is selected,
+            # even before any row has been added (Create Item's case).
+            return _FakeElement(count=1)
+        raise AssertionError(f"Unexpected selector on item-fields container: {selector!r}")
+
+
+def test_fill_item_fields_adds_rows_and_fills_each_field_in_order(monkeypatch):
+    """Update Item's first row exists already; a second field must trigger
+    exactly one 'add field' click before it can be selected and filled."""
+    row1 = _make_scalar_row("text", "gmvalue1_1")
+    option_labels = ["Select Field", "SpikeText", "SpikeNumber", "Tag(s)"]
+    field_select1 = _FakeElement(count=1, evaluate_result=list(option_labels))
+    container = _FillItemFieldsContainer(
+        rows=[row1], field_selects=[field_select1], option_labels=option_labels,
+    )
+    page = _FieldFillPage()
+    client = GlobiflowClient()
+    mention_calls = []
+    monkeypatch.setattr(
+        client, "_fill_mention_field",
+        lambda page, element_id, value: mention_calls.append((element_id, value)) or True,
+    )
+
+    client._fill_item_fields(page, container, {"SpikeText": "hello", "SpikeNumber": "42"})
+
+    assert container.add_field_clicks == 1, "Second field must add exactly one new row"
+    assert field_select1.select_option_calls == [{"value": None, "label": "SpikeText"}]
+    assert container.field_selects[1].select_option_calls == [{"value": None, "label": "SpikeNumber"}]
+    assert mention_calls == [("gmvalue1_1", "hello"), ("gmvalue1_2", "42")]
+
+
+def test_fill_item_fields_adds_first_row_for_create_item_steps(monkeypatch):
+    """Create Item renders no field row at all until 'add field' is
+    clicked, unlike Update Item which starts with row 1 already present."""
+    container = _FillItemFieldsContainer(
+        rows=[], field_selects=[], option_labels=["Select Field", "SpikeText"],
+    )
+    page = _FieldFillPage()
+    client = GlobiflowClient()
+    monkeypatch.setattr(client, "_fill_mention_field", lambda page, element_id, value: True)
+
+    client._fill_item_fields(page, container, {"SpikeText": "created"})
+
+    assert container.add_field_clicks == 1
+
+
+def test_select_create_item_app_matches_trailing_app_name_segment():
+    """The picker labels options with the full "Org > Space > App" path;
+    selecting must match on the app-name leaf so callers can pass just the
+    app name, matching every other label-keyed selector in this CLI."""
+    app_select = _FakeElement(evaluate_result=lambda arg: "30821467" if arg == "test" else None)
+    container = _FakeElement(children={"select[name^='createAppId']": app_select})
+    client = GlobiflowClient()
+
+    client._select_create_item_app(container, "test")
+
+    assert app_select.select_option_calls == [{"value": "30821467", "label": None}]
+
+
+def test_select_create_item_app_raises_when_app_not_found():
+    app_select = _FakeElement(evaluate_result=lambda arg: None)
+    container = _FakeElement(children={"select[name^='createAppId']": app_select})
+    client = GlobiflowClient()
+
+    try:
+        client._select_create_item_app(container, "nope")
+        raise AssertionError("Expected ClientError for an unmatched app label")
+    except client_module.ClientError as e:
+        assert "nope" in str(e)
+
+
+def test_select_create_item_app_raises_when_picker_missing():
+    container = _FakeElement(children={})
+    client = GlobiflowClient()
+
+    try:
+        client._select_create_item_app(container, "test")
+        raise AssertionError("Expected ClientError when the app picker is missing")
+    except client_module.ClientError as e:
+        assert "target-app picker" in str(e)
