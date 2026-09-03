@@ -111,14 +111,19 @@ def test_integer_campaign_id_becomes_string():
 
 def test_adapter_registry():
     assert adapter_for("microworkers") is microworkers.to_task
-    # mercor is a config.json site that has no account, no CLI and no
-    # observed record shape, so it is the standing example of a site the
-    # registry must refuse rather than map by guesswork.
-    with pytest.raises(ClientError, match="no adapter for site 'mercor'"):
-        adapter_for("mercor")
+    # Every config.json site now has a registered adapter (2026-09-03 added
+    # mercor + the atlas-capture/trainee-digital/crowdgen refusal adapters),
+    # so the roster-wide contract is: every site resolves to a callable.
+    for site in ("atlas-capture", "crowdgen", "humanrail", "mercor",
+                 "microworkers", "oneforma", "outlier",
+                 "trainee-digital"):
+        assert callable(adapter_for(site))
+    # A site outside the roster must still be refused, never mapped by guesswork.
+    with pytest.raises(ClientError, match="no adapter for site 'nosuchsite'"):
+        adapter_for("nosuchsite")
 
 
-@pytest.mark.parametrize("site", ["taskerdata"])
+@pytest.mark.parametrize("site", ["crowdgen", "atlas-capture"])
 def test_unimplemented_adapters_raise_client_error(site):
     """A ClientError, so the CLI's exit-2 contract handler sees it.
 
