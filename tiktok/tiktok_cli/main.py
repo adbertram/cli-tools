@@ -14,8 +14,9 @@ app = create_app(
 )
 
 # Register command modules
-from . import commands
-register_commands(app, get_config, commands, name="transcripts", help="Download TikTok video transcripts")
+from .commands import transcripts, favorites
+register_commands(app, get_config, transcripts, name="transcripts", help="Download TikTok video transcripts")
+register_commands(app, get_config, favorites, name="favorites", help="Manage saved (favorited) TikTok videos")
 app.add_typer(create_auth_app(get_config, tool_name="tiktok"), name="auth")
 
 

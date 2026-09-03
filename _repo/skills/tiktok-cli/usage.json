@@ -1,8 +1,8 @@
 {
   "tool": "tiktok",
   "description": "TikTok transcript downloader using yt-dlp",
-  "discovered_at": "2026-06-20T19:56:00Z",
-  "total_commands": 11,
+  "discovered_at": "2026-09-03T13:38:02Z",
+  "total_commands": 14,
   "global_options": [
     {
       "name": "--version",
@@ -35,13 +35,21 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
-              "short": "-F"
+              "help": "Clear existing ephemeral auth state and re-authenticate",
+              "short": "-F",
+              "takes_value": false
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'custom', 'browser_session')",
+              "short": "-c"
             }
           ]
         },
         "logout": {
-          "help": "Clear stored credentials.",
+          "help": "Clear stored credentials and browser sessions.",
           "usage_instructions": "Use `tiktok auth logout` to clear stored auth/profile data for this wrapper. Key options: --profile/-p.",
           "arguments": [],
           "options": [
@@ -90,7 +98,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -111,12 +120,13 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "Use `tiktok auth profiles list` to list available shared auth profiles and show which one is default. Key options: --table/-t, --limit/-l, --filter/-f, --properties/-p.",
               "arguments": [],
               "options": [
@@ -125,7 +135,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -166,7 +177,42 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -185,7 +231,7 @@
           }
         },
         "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
           "usage_instructions": "Use `tiktok auth status` to run live readiness checks for the upstream yt-dlp dependency across profiles. Key options: --profile/-p, --table/-t.",
           "arguments": [],
           "options": [
@@ -201,7 +247,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -215,14 +262,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--verbose",
               "type": "bool",
               "required": false,
               "help": "Show detailed checks",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -230,6 +279,96 @@
               "required": false,
               "help": "Profile name (defaults to all profiles)",
               "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "favorites": {
+      "help": "Manage saved (favorited) TikTok videos",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get one saved video's details by id or URL.",
+          "arguments": [
+            {
+              "name": "item",
+              "type": "TEXT",
+              "required": true,
+              "help": "Video id or tiktok.com video URL"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display result as a table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List all of the logged-in account's saved (favorited) TikTok videos.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display results as a table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., author:eq:someuser)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         }
@@ -256,7 +395,7 @@
               "name": "urls",
               "type": "TEXT",
               "required": true,
-              "help": "URLS...  TikTok video URL(s)"
+              "help": "TikTok video URL(s)"
             }
           ],
           "options": [
@@ -289,20 +428,24 @@
               "type": "bool",
               "required": false,
               "help": "Download auto-generated subtitles",
+              "takes_value": false,
+              "secondary": "--no-auto-sub",
               "default": "auto-sub"
             },
             {
               "name": "--manual-sub",
               "type": "bool",
               "required": false,
-              "help": "Prefer manual subtitles over auto-generated"
+              "help": "Prefer manual subtitles over auto-generated",
+              "takes_value": false
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Display results as a table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
