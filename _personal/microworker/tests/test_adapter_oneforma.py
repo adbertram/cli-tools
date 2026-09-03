@@ -44,7 +44,7 @@ def raw(**overrides):
 
 
 def test_full_mapping():
-    task = oneforma.to_task(raw())
+    task = oneforma.to_task(raw()).task
     schema.validate_task(task)
     assert task == {
         "site": "oneforma",
@@ -93,14 +93,14 @@ def test_parse_currency_table(symbol, expected):
 
 def test_currency_is_none_when_rate_is_unknown():
     """A currency without an amount is not a payment fact — both stay unset."""
-    task = oneforma.to_task(raw(rate=None))
+    task = oneforma.to_task(raw(rate=None)).task
     assert task["pay_amount"] is None
     assert task["pay_currency"] is None
     schema.validate_task(task)
 
 
 def test_unknown_symbol_keeps_amount_but_not_currency():
-    task = oneforma.to_task(raw(rate_currency_symbol="€"))
+    task = oneforma.to_task(raw(rate_currency_symbol="€")).task
     assert task["pay_amount"] == 100.0
     assert task["pay_currency"] is None
     schema.validate_task(task)
@@ -123,12 +123,12 @@ def test_unusable_id_is_a_client_error(bad_id):
 
 
 def test_integer_id_is_stringified():
-    task = oneforma.to_task(raw(id=14201))
+    task = oneforma.to_task(raw(id=14201)).task
     assert task["task_id"] == "14201"
     schema.validate_task(task)
 
 
 def test_null_deadline_maps_to_null_expiry():
-    task = oneforma.to_task(raw(deadline=None))
+    task = oneforma.to_task(raw(deadline=None)).task
     assert task["expires_at"] is None
     schema.validate_task(task)

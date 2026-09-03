@@ -29,6 +29,15 @@ comparison is counted as `skipped_stale`, not `updated`: the row was matched and
 deliberately left alone, which is neither an insert nor a write, and reporting
 it as `updated` would claim a change that never happened.
 
+WHAT A RUN COULD NOT READ IS STORED, NOT ONLY PRINTED. `run_sites` carries
+`unparsed_payments`: how many of that site's tasks in that run published a
+price its adapter could not parse (see `adapters/mapped.py`). It lives here
+rather than in the merge's stdout alone because the failure it describes is
+slow -- a site changes its price format and every later run stores nulls while
+still exiting 0 -- and a number nobody stored cannot answer "when did this
+start?" months later. `runs get` reads it back per site; a NULL means the run
+was merged under schema version 2, before anything counted.
+
 THIS MODULE IS THE ONLY PLACE THAT OPENS THE DATABASE. `paths.db_path()` is the
 only place that names it. Writes go through a write-capable connection under
 `BEGIN IMMEDIATE` with an explicit COMMIT/ROLLBACK, so a crashed merge leaves
@@ -54,7 +63,7 @@ from cli_tools_shared.exceptions import ClientError
 
 from . import jsonio, paths
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 READONLY_TIMEOUT_SECONDS = 1.0
 
 # The task contract's columns, in contract order. `raw` is stored as JSON text
@@ -70,7 +79,8 @@ SEEN_COLUMNS = (
 TASK_COLUMNS = CONTRACT_COLUMNS + SEEN_COLUMNS
 RUN_COLUMNS = ("run_id", "merged_at", "task_count", "inserted", "updated",
                "skipped_stale")
-RUN_SITE_COLUMNS = ("status", "error", "fetched_at", "task_count")
+RUN_SITE_COLUMNS = ("status", "error", "fetched_at", "task_count",
+                    "unparsed_payments")
 
 # Columns a fresher sighting refreshes. `first_seen_at`/`first_seen_run_id` are
 # excluded because they move by their own rule (oldest wins, in either
@@ -115,6 +125,7 @@ CREATE TABLE IF NOT EXISTS run_sites (
     error TEXT,
     fetched_at TEXT NOT NULL,
     task_count INTEGER NOT NULL,
+    unparsed_payments INTEGER,
     PRIMARY KEY (run_id, site)
 );
 CREATE TABLE IF NOT EXISTS meta (
@@ -130,9 +141,18 @@ CREATE INDEX IF NOT EXISTS idx_tasks_pay_amount ON tasks(pay_amount);
 # EXISTS` will not add a column to a table that already exists, so the column is
 # added here. The backfilled 0 is a fact, not a default: under version 1 every
 # sighting was applied unconditionally, so no version-1 run skipped anything.
+#
+# Schema-version 2 databases predate `run_sites.unparsed_payments`. That column
+# is added NULLABLE with NO default, and the NULL left on every version-2 row is
+# the same kind of fact: under version 2 nothing counted unreadable prices, so
+# those runs' counts are UNKNOWN. A backfilled 0 would assert that no old run
+# ever hit an unparseable price, which is exactly the claim this column exists
+# to stop the tool from making.
 MIGRATIONS = (
     ("runs", "skipped_stale",
      "ALTER TABLE runs ADD COLUMN skipped_stale INTEGER NOT NULL DEFAULT 0"),
+    ("run_sites", "unparsed_payments",
+     "ALTER TABLE run_sites ADD COLUMN unparsed_payments INTEGER"),
 )
 
 _UPSERT_TASK = """
@@ -243,9 +263,10 @@ def write_run(run_id: str, merged_at: str, site_summaries: dict[str, dict],
                  counts["updated"], counts["skipped_stale"]))
             conn.executemany(
                 "INSERT INTO run_sites (run_id, site, status, error, fetched_at, "
-                "task_count) VALUES (?, ?, ?, ?, ?, ?)",
+                "task_count, unparsed_payments) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 [(run_id, site, summary["status"], summary["error"],
-                  summary["fetched_at"], summary["task_count"])
+                  summary["fetched_at"], summary["task_count"],
+                  summary["unparsed_payments"])
                  for site, summary in site_summaries.items()])
             conn.execute("COMMIT")
         except BaseException:

@@ -28,7 +28,7 @@ def raw(**overrides):
 
 
 def test_real_record_maps_and_validates(microworkers_record):
-    task = microworkers.to_task(microworkers_record)
+    task = microworkers.to_task(microworkers_record).task
     schema.validate_task(task)
     assert task["site"] == "microworkers"
     assert task["task_id"] == str(microworkers_record["campaign_id"])
@@ -37,7 +37,7 @@ def test_real_record_maps_and_validates(microworkers_record):
 
 
 def test_full_mapping():
-    task = microworkers.to_task(raw())
+    task = microworkers.to_task(raw()).task
     schema.validate_task(task)
     assert task == {
         "site": "microworkers",
@@ -106,7 +106,7 @@ def test_absent_raw_key_is_client_error():
 
 
 def test_integer_campaign_id_becomes_string():
-    assert microworkers.to_task(raw(campaign_id=42))["task_id"] == "42"
+    assert microworkers.to_task(raw(campaign_id=42)).task["task_id"] == "42"
 
 
 def test_adapter_registry():

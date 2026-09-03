@@ -15,10 +15,12 @@ from __future__ import annotations
 
 from cli_tools_shared.exceptions import ClientError
 
+from .mapped import MappedTask
+
 SITE = "taskerdata"
 
 
-def to_task(raw: dict) -> dict:
+def to_task(raw: dict) -> MappedTask:
     raise ClientError(
         f"{SITE} adapter is not implemented; no verified raw record shape yet "
         f"(record keys: {', '.join(sorted(raw))})")

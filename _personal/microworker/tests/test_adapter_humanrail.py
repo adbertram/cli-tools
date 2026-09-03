@@ -33,7 +33,7 @@ def raw(**overrides):
 
 
 def test_full_mapping():
-    task = humanrail.to_task(raw())
+    task = humanrail.to_task(raw()).task
     schema.validate_task(task)
     assert task == {
         "site": "humanrail",
@@ -62,7 +62,7 @@ def test_title_for_table(task_type, expected):
 
 
 def test_payout_sats_none_means_currency_none():
-    task = humanrail.to_task(raw(payout_sats=None))
+    task = humanrail.to_task(raw(payout_sats=None)).task
     assert task["pay_amount"] is None
     assert task["pay_currency"] is None
 
@@ -90,7 +90,7 @@ def test_overlong_id_is_client_error():
 
 
 def test_padded_id_is_stripped():
-    assert humanrail.to_task(raw(id="  42  "))["task_id"] == "42"
+    assert humanrail.to_task(raw(id="  42  ")).task["task_id"] == "42"
 
 
 def test_absent_raw_key_is_client_error():
@@ -101,11 +101,11 @@ def test_absent_raw_key_is_client_error():
 
 
 def test_integer_id_becomes_string():
-    assert humanrail.to_task(raw(id=42))["task_id"] == "42"
+    assert humanrail.to_task(raw(id=42)).task["task_id"] == "42"
 
 
 def test_slots_open_is_always_none():
-    assert humanrail.to_task(raw())["slots_open"] is None
+    assert humanrail.to_task(raw()).task["slots_open"] is None
 
 
 def test_adapter_registry():

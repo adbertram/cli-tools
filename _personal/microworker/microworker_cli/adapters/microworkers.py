@@ -4,6 +4,11 @@ Raw keys (microworkers_cli/parsers.py `normalize_task_row`): `id` (= url),
 `campaign_id`, `title`, `provider`, `url`, `payment` (raw string),
 `success_rate_required`, `ttr_days`, `ttf_minutes`, `positions_done`,
 `positions_total`.
+
+`payment` is a display string, so it is the one field here that can be present,
+non-empty, and still unreadable. `to_task` returns that fact alongside the task
+(see `mapped.py`) instead of leaving an unreadable price indistinguishable from
+an unpriced one.
 """
 
 from __future__ import annotations
@@ -13,6 +18,7 @@ import re
 from cli_tools_shared.exceptions import ClientError
 
 from .ids import task_id
+from .mapped import MappedTask, is_unparsed_payment
 
 SITE = "microworkers"
 RAW_KEYS = ("campaign_id", "title", "url", "payment", "ttf_minutes",
@@ -21,13 +27,13 @@ RAW_KEYS = ("campaign_id", "title", "url", "payment", "ttf_minutes",
 PAYMENT_RE = re.compile(r"^\$(\d+\.\d{2})$")
 
 
-def to_task(raw: dict) -> dict:
+def to_task(raw: dict) -> MappedTask:
     missing = [key for key in RAW_KEYS if key not in raw]
     if missing:
         raise ClientError(
             f"{SITE} record is missing keys: {', '.join(missing)}")
     pay_amount, pay_currency = parse_payment(raw["payment"])
-    return {
+    task = {
         "site": SITE,
         "task_id": task_id(SITE, raw["campaign_id"], field="campaign_id",
                            locator=f"url={raw['url']!r}"),
@@ -40,6 +46,9 @@ def to_task(raw: dict) -> dict:
         "expires_at": None,
         "raw": raw,
     }
+    return MappedTask(
+        task=task,
+        unparsed_payment=is_unparsed_payment(raw["payment"], pay_amount))
 
 
 def parse_payment(payment) -> tuple[float | None, str | None]:

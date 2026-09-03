@@ -15,6 +15,16 @@ RUN = "20260902T000000Z"
 LATER_RUN = "20260903T000000Z"
 
 
+def mapped_with(raw: dict, **overrides):
+    """A real microworkers mapping with contract fields overridden.
+
+    Adapters return a `MappedTask`, so a test that wants a deliberately broken
+    task has to override inside `.task` and leave the seam's own field alone.
+    """
+    mapped = adapters.microworkers.to_task(raw)
+    return mapped._replace(task=dict(mapped.task, **overrides))
+
+
 def write_all_envelopes(ok_sites: dict[str, list] | None = None, run_id: str = RUN):
     """One envelope per configured site: `ok` with the given tasks, else no_account."""
     ok_sites = ok_sites if ok_sites is not None else {}
@@ -75,7 +85,7 @@ def test_schema_invalid_task_aborts_write_before_the_database_exists(
         project, monkeypatch, microworkers_record):
     monkeypatch.setitem(
         adapters.ADAPTERS, "microworkers",
-        lambda raw: dict(adapters.microworkers.to_task(raw), pay_amount="free"))
+        lambda raw: mapped_with(raw, pay_amount="free"))
     write_all_envelopes({"microworkers": [microworkers_record]})
     with pytest.raises(schema.SchemaError, match="tasks\\[0\\]"):
         merge.merge(RUN)
@@ -92,7 +102,7 @@ def test_schema_invalid_task_leaves_an_existing_database_untouched(
     write_all_envelopes({"microworkers": [microworkers_record]}, run_id=LATER_RUN)
     monkeypatch.setitem(
         adapters.ADAPTERS, "microworkers",
-        lambda raw: dict(adapters.microworkers.to_task(raw), task_id=""))
+        lambda raw: mapped_with(raw, task_id=""))
     with pytest.raises(schema.SchemaError):
         merge.merge(LATER_RUN)
 
@@ -110,6 +120,7 @@ def test_first_merge_inserts_rows_and_run_summary(project, clock, microworkers_r
         "db_path": str(paths.db_path()),
         "sites": {name: ("ok" if name == "microworkers" else "no_account")
                   for name in SITES},
+        "unparsed_payments": {name: 0 for name in SITES},
         "task_count": 1,
         "inserted": 1,
         "updated": 0,
@@ -138,7 +149,8 @@ def test_first_merge_inserts_rows_and_run_summary(project, clock, microworkers_r
     assert set(run["sites"]) == set(SITES)
     assert run["sites"]["microworkers"] == {
         "status": "ok", "error": None,
-        "fetched_at": "2026-09-02T00:00:00Z", "task_count": 1}
+        "fetched_at": "2026-09-02T00:00:00Z", "task_count": 1,
+        "unparsed_payments": 0}
     assert run["sites"]["mercor"]["error"] == "fixture"
 
 

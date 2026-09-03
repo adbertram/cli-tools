@@ -164,10 +164,12 @@ def test_runs_get_carries_every_site_summary(runner, two_runs):
     assert set(row["sites"]) == set(SITES)
     assert row["sites"]["microworkers"] == {
         "status": "ok", "error": None,
-        "fetched_at": "2026-09-02T00:00:00Z", "task_count": 1}
+        "fetched_at": "2026-09-02T00:00:00Z", "task_count": 1,
+        "unparsed_payments": 0}
     assert row["sites"]["mercor"] == {
         "status": "no_account", "error": "fixture",
-        "fetched_at": "2026-09-02T00:00:00Z", "task_count": 0}
+        "fetched_at": "2026-09-02T00:00:00Z", "task_count": 0,
+        "unparsed_payments": 0}
 
 
 def test_runs_get_properties_and_table(runner, two_runs):

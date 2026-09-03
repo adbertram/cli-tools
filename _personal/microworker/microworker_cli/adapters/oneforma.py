@@ -21,6 +21,12 @@ Mapping notes (OneForma has no analog for some contract fields):
     reporting applicants as openings.
   - `expires_at`: `deadline` is the site's hiring deadline for the job post,
     the one real expiry timestamp it publishes.
+  - `unparsed_payment` (the `mapped.py` seam) reports a `rate` OneForma
+    published that `parse_rate` could not read, so a rate format this adapter
+    does not understand is not stored as the same null a rate-less job gets.
+    It tracks the AMOUNT only: an unrecognised `rate_currency_symbol` leaves a
+    parsed `pay_amount` beside a null `pay_currency`, which a reader can
+    already see, whereas an unread amount is invisible on its own.
 """
 
 from __future__ import annotations
@@ -28,6 +34,7 @@ from __future__ import annotations
 from cli_tools_shared.exceptions import ClientError
 
 from .ids import task_id
+from .mapped import MappedTask, is_unparsed_payment
 
 SITE = "oneforma"
 RAW_KEYS = ("id", "url", "title", "rate", "rate_currency_symbol", "deadline")
@@ -35,13 +42,13 @@ RAW_KEYS = ("id", "url", "title", "rate", "rate_currency_symbol", "deadline")
 CURRENCY_BY_SYMBOL = {"$": "USD"}
 
 
-def to_task(raw: dict) -> dict:
+def to_task(raw: dict) -> MappedTask:
     missing = [key for key in RAW_KEYS if key not in raw]
     if missing:
         raise ClientError(
             f"{SITE} record is missing keys: {', '.join(missing)}")
     pay_amount = parse_rate(raw["rate"])
-    return {
+    task = {
         "site": SITE,
         "task_id": task_id(SITE, raw["id"], field="id",
                            locator=f"title={raw['title']!r}"),
@@ -55,6 +62,9 @@ def to_task(raw: dict) -> dict:
         "expires_at": raw["deadline"],
         "raw": raw,
     }
+    return MappedTask(
+        task=task,
+        unparsed_payment=is_unparsed_payment(raw["rate"], pay_amount))
 
 
 def parse_rate(rate) -> float | None:

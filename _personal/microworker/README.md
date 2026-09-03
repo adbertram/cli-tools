@@ -82,7 +82,7 @@ Prints `{"site", "status", "path", "task_count"}` and exits 0 for every recorded
 microworker merge 20260902T120000Z
 ```
 
-Prints `{"run_id", "db_path", "sites": {"<site>": "<status>"}, "task_count", "inserted", "updated", "skipped_stale"}`. `task_count` counts the tasks the run merged, and the other three partition exactly those tasks:
+Prints `{"run_id", "db_path", "sites": {"<site>": "<status>"}, "unparsed_payments": {"<site>": <count>}, "task_count", "inserted", "updated", "skipped_stale"}`. `task_count` counts the tasks the run merged, and the other three partition exactly those tasks:
 
 | Count | Meaning |
 |-------|---------|
@@ -93,6 +93,22 @@ Prints `{"run_id", "db_path", "sites": {"<site>": "<status>"}, "task_count", "in
 `skipped_stale` exists because reporting a skipped sighting as `updated` would claim a change that never happened, and reporting it as `inserted` would be plainly false. The three always sum to `task_count`, because a run's tasks are unique by `(site, task_id)`.
 
 Re-running `merge` for the same run id is idempotent: its `runs` and `run_sites` rows are replaced rather than duplicated, and its tasks upsert again (the observation is exactly as fresh, so it counts as `updated`).
+
+#### Prices the adapter could not read
+
+`unparsed_payments` is keyed by every configured site and counts that site's tasks in this run whose published price its adapter could not parse. `pay_amount`/`pay_currency` stay `null` for those tasks -- a price is never invented, and no regex is widened to swallow a format nobody has seen live -- but "the site published no price" and "the site published a price I could not read" are different facts, and they must not both read as an unpriced task.
+
+Without this count, a site changing its price format (`$1.50` to `$1.5`, or `USD 1.00`) stores every price as `null`, exits 0, and quietly drops those tasks out of `microworker tasks list --filter "pay_amount:gte:0"` -- a gap that can sit there for months.
+
+A site whose payment field is absent from a record is a hard error (every adapter lists it in `RAW_KEYS`); an explicit `null` or a blank string is the site publishing nothing, and is not counted. When any site has a nonzero count, `merge` also prints a `Warning:` line naming those sites to stderr; stdout stays data only.
+
+```bash
+microworker merge 20260902T120000Z
+# {"run_id": "...", "unparsed_payments": {"microworkers": 2, "oneforma": 0, ...}, ...}
+# Warning: Unparsed payments (price published, adapter could not read it): microworkers=2. ...
+```
+
+The counts are also stored on the run: `microworker runs get <run_id>` reads them back per site, so "when did this start?" is answerable months later rather than only from the stdout of the run that first hit it.
 
 ### Validate
 
@@ -145,7 +161,7 @@ microworker runs get 20260902T120000Z
 microworker runs get 20260902T120000Z --table
 ```
 
-One row per recorded merge, newest `merged_at` first. `runs get` adds a `sites` object keyed by site, each carrying `{status, error, fetched_at, task_count}` from that run's envelope. An unknown run id exits 2.
+One row per recorded merge, newest `merged_at` first. `runs get` adds a `sites` object keyed by site, each carrying `{status, error, fetched_at, task_count, unparsed_payments}` from that run's envelope and mapping. An unknown run id exits 2. A `null` `unparsed_payments` means the run was merged under schema version 2, before unreadable prices were counted at all.
 
 Every query command reads through a `mode=ro` SQLite connection, so no read can write. A query against a database that does not exist yet exits 2 naming the path and telling you to run a merge; it never returns an empty list, because "nothing has been merged" and "no tasks are open" are different facts. A database the SQLite engine itself refuses -- a file that is not a database, or a stale `-wal` beside a read-only `data/` -- is also exit 2 naming the path, rather than an unwrapped `sqlite3` error at exit 1.
 
@@ -166,7 +182,10 @@ Only the first dotted segment of a `--properties` name is checked, so `runs get 
 
 ## The Task Database
 
-`<project_root>/data/tasks.db` (`data/` is created on first merge). Schema version 2, recorded in `meta`. A version-1 database is migrated in place on the next write connection: `runs.skipped_stale` is added with a backfill of 0, which is a fact rather than a default -- under version 1 every sighting was applied unconditionally, so no version-1 run skipped anything.
+`<project_root>/data/tasks.db` (`data/` is created on first merge). Schema version 3, recorded in `meta`. Older databases are migrated in place on the next write connection, and each migration backfills only what is factually known:
+
+- version 1 -> 2: `runs.skipped_stale` is added with a backfill of 0, a fact rather than a default -- under version 1 every sighting was applied unconditionally, so no version-1 run skipped anything.
+- version 2 -> 3: `run_sites.unparsed_payments` is added NULLABLE with no default. The `NULL` left on every version-2 row is the same kind of fact: nothing counted unreadable prices back then, so those counts are unknown. A backfilled 0 would assert that no old run ever hit an unparseable price, which is exactly the claim this column exists to stop the tool from making.
 
 ```sql
 CREATE TABLE tasks (
@@ -201,6 +220,7 @@ CREATE TABLE run_sites (
     error TEXT,
     fetched_at TEXT NOT NULL,
     task_count INTEGER NOT NULL,
+    unparsed_payments INTEGER,     -- NULL only on rows merged before version 3
     PRIMARY KEY (run_id, site)
 );
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -257,6 +277,8 @@ microworker sites list --limit 1
 Every task an adapter produces has exactly: `site`, `task_id`, `title`, `url`, `pay_amount`, `pay_currency`, `est_minutes`, `slots_open`, `expires_at`, `raw`. Unknown values are `null`; `raw` is the untouched site record. `tasks list` and `tasks get` return those ten fields plus the four the database adds: `first_seen_at`, `last_seen_at`, `first_seen_run_id`, `last_seen_run_id`.
 
 `task_id` must come from a JSON string or integer in the site's record (`adapters/ids.py`), stripped, non-empty, and at most 200 characters. Every number in the record -- `raw` included -- must be finite.
+
+An adapter returns that record inside a `MappedTask` (`adapters/mapped.py`): the task, plus whether the site published a price the adapter could not read. That second fact is an observation about the mapping, not a property of the task, so it is not a contract field, not a `tasks` column, and never smuggled through `raw` -- `merge` sums it per site into `unparsed_payments`.
 
 ## Exit Codes
 

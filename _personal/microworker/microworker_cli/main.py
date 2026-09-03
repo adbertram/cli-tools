@@ -17,6 +17,12 @@ in opposite directions: a misspelled filter field matches nothing and returns
 task matched"; and a misspelled property is emitted as a `null` on every row, so
 a typo reads as "the field exists and is empty".
 
+AN UNREADABLE PRICE IS ANNOUNCED. `merge` returns a per-site
+`unparsed_payments` count -- tasks whose site published a price its adapter
+could not parse. The count is part of the JSON summary on stdout; when any site
+has one, a line naming those sites also goes to STDERR, so a price format that
+changed under the parser is visible in a run that otherwise looks clean.
+
 TRUNCATION IS ANNOUNCED. `--limit` defaults to 100, and a ledger with more rows
 than that would otherwise return exactly 100 with nothing anywhere saying so.
 When the limit cuts the result, the pre-limit total goes to STDERR -- stdout
@@ -39,7 +45,14 @@ from cli_tools_shared.filters import (
     apply_limit,
     apply_properties_filter,
 )
-from cli_tools_shared.output import command, print_error, print_info, print_json, print_table
+from cli_tools_shared.output import (
+    command,
+    print_error,
+    print_info,
+    print_json,
+    print_table,
+    print_warning,
+)
 
 from . import (
     __version__,
@@ -181,7 +194,26 @@ def merge(
     run_id: str = typer.Argument(..., help="Discovery run identifier whose envelopes to merge"),
 ):
     """Merge every site envelope of a run into the task database."""
-    print_json(merge_module.merge(run_id))
+    summary = merge_module.merge(run_id)
+    print_json(summary)
+    _warn_unparsed_payments(summary["unparsed_payments"])
+
+
+def _warn_unparsed_payments(counts: dict) -> None:
+    """Name the sites whose published prices this run could not read.
+
+    stdout already carries the counts as data; this is the human-visible half,
+    on stderr, so an unattended run does not need someone reading its JSON to
+    notice that a site's price format has moved out from under its adapter.
+    """
+    affected = {site: count for site, count in counts.items() if count}
+    if not affected:
+        return
+    print_warning(
+        "Unparsed payments (price published, adapter could not read it): "
+        + ", ".join(f"{site}={count}" for site, count in sorted(affected.items()))
+        + ". Those tasks stored pay_amount null; check the site's price format "
+          "against its adapter before trusting a price filter on this run.")
 
 
 @app.command("validate")

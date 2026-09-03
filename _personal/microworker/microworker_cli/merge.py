@@ -24,6 +24,15 @@ listing claiming the same identity (a site printing `100` and `"100"` for the
 same campaign, say). It is raised here, before the transaction opens, because
 this is where the envelope path and the record indexes are still known.
 
+AN UNREADABLE PRICE IS COUNTED, NOT SWALLOWED. An adapter returns a
+`MappedTask`, so each mapped record says whether the site published a payment
+its adapter could not parse (see `adapters/mapped.py`). Those are summed per
+site into `unparsed_payments`, which goes out in this function's summary and
+onto the run's `run_sites` rows. Without that count, a site changing its price
+format is indistinguishable from a site publishing no prices: both store
+`pay_amount: null`, both exit 0, and `--filter pay_amount:gte:0` quietly stops
+returning tasks that do have a price.
+
 A task's seen timestamps come from its envelope's `fetched_at`, not from this
 process's clock; only `runs.merged_at` is the merge wallclock. See `db.py`.
 
@@ -63,15 +72,20 @@ def merge(run_id: str) -> dict:
             "error": data["error"],
             "fetched_at": data["fetched_at"],
             "task_count": len(data["tasks"]),
+            # A site with no `ok` envelope merged no tasks, so it published no
+            # unreadable price in this run. That 0 is a fact, not a placeholder.
+            "unparsed_payments": 0,
         }
         if data["status"] != envelope.OK:
             continue
         adapter = adapters.adapter_for(name)
         for index, raw in enumerate(data["tasks"]):
-            task = adapter(raw)
-            schema.validate_task(task, label=f"{path} tasks[{index}]")
-            _claim_key(origins, task, path, index)
-            tasks.append(task)
+            mapped = adapter(raw)
+            schema.validate_task(mapped.task, label=f"{path} tasks[{index}]")
+            _claim_key(origins, mapped.task, path, index)
+            tasks.append(mapped.task)
+            if mapped.unparsed_payment:
+                site_summaries[name]["unparsed_payments"] += 1
 
     # The merge wallclock stamps the run row only. Every task's first/last seen
     # timestamps are its own site envelope's `fetched_at`, which `db.write_run`
@@ -81,6 +95,10 @@ def merge(run_id: str) -> dict:
         "run_id": run_id,
         "db_path": str(paths.db_path()),
         "sites": {name: summary["status"] for name, summary in site_summaries.items()},
+        # Keyed by every configured site, like `sites`, so a healthy run reads
+        # as an explicit 0 per site rather than as an absent key.
+        "unparsed_payments": {name: summary["unparsed_payments"]
+                              for name, summary in site_summaries.items()},
         **counts,
     }
 
