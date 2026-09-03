@@ -108,6 +108,11 @@ globiflow flows create --app-id 30560419 --trigger C --name "My Flow"
 globiflow flows create --app-id 30560419 --trigger U --name "Update Handler" --disabled
 globiflow flows create --app-id 30560419 --trigger C --name "With Steps" --steps '[{"action_type": "Custom Variable", "variable_name": "test", "code": "1+1"}]'
 
+# Create a flow with an Update Item / Create Item step that sets Podio
+# field values, keyed by field label (not the raw Podio field id)
+globiflow flows create --app-id 30560419 --trigger U --name "Set Status" --steps '[{"action_type": "Update Item", "fields": {"Status": "Approved"}}]'
+globiflow flows create --app-id 30560419 --trigger C --name "Create Related" --steps '[{"action_type": "Create Item", "app": "Invoices", "fields": {"Amount": "150", "Status": "Draft"}}]'
+
 # Delete a flow
 globiflow flows delete FLOW_ID
 globiflow flows delete FLOW_ID --force
@@ -119,13 +124,35 @@ globiflow flows export FLOW_ID --output /tmp/my-flow.xml
 # Import a flow XML into an app
 globiflow flows import --app-id 30529466 --file flow-4321944.xml
 globiflow flows import --app-id 30529466 --file flow-4321944.xml --table
+# An imported flow keeps the source app's field references. Globiflow re-binds
+# only the ones it can match in the target app, and its editor refuses to save
+# while any reference is unmatched, so import succeeds only into an app whose
+# Podio fields cover every field the flow uses. The command names each
+# unmatched step and control when the save is refused.
+
+# List one app's flows
+globiflow flows list --filter app_id:eq:30529466 --table
 
 # Manage flow steps
 globiflow flows steps list FLOW_ID
 globiflow flows steps get FLOW_ID STEP_NUMBER
 globiflow flows steps add FLOW_ID --action "Add Comment" --comment "Hello world"
 globiflow flows steps update FLOW_ID STEP_NUMBER --variable-name "new_name" --code "'expr'"
+
+# Set Podio field values on an Update Item / Create Item step with --fields
+# (a JSON object of Podio field label -> value), on both `steps add` and
+# `steps update`
+globiflow flows steps add FLOW_ID --action "Update Item" --fields '{"Status": "Approved"}'
+globiflow flows steps update FLOW_ID STEP_NUMBER --fields '{"Status": "Approved", "Notes": "Reviewed"}'
 ```
+
+**Supported field types for `fields`:** text, number, and other scalar fields
+whose value renders as free text; category/status fields (set by option
+label, e.g. `"Status": "Approved"`). Podio app/relationship fields are not
+yet supported -- Globiflow's search-and-select widget for them renders
+behind a separate function this CLI does not select, so setting one raises a
+clear error instead of silently doing nothing. Set relationship fields
+manually in the Globiflow UI.
 
 ### Triggers (`globiflow triggers`)
 
