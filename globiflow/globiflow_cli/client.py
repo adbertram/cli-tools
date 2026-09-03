@@ -1251,30 +1251,46 @@ class GlobiflowClient:
         Verified live against a disposable Podio app (2026-09-03): scalar
         fields (text, number) render a gMention-enabled textarea
         (``textarea[name^='gmvalue']``), and category/status fields render a
-        plain ``<select name^='value']`` of option labels. Podio app/
-        relationship fields render a "value" select too, but its options are
-        a handful of fixed variable references (e.g. "Current Item"), not a
-        search box -- Globiflow's search-and-select widget for that type
-        renders behind a "Search" function this CLI does not select, since
-        the disposable single-app fixture couldn't produce it live to
-        validate against.
+        plain ``<select name^='value']`` of option labels. A ``null`` value
+        selects the row's "Unset" function instead of filling a value -- see
+        ``_unset_item_field``.
+
+        Verified live again (2026-09-03) against both the disposable app and
+        the real "Topics" app (30831883, read-only exploration, never saved):
+        Podio app/relationship fields are filled via Globiflow's "Search"
+        function -- see ``_fill_relationship_field_value``. A relationship
+        field's value may be a plain label (the target item's title) or a
+        list of labels, which this method expands into one row per label so
+        a multi-value ("multiple") relationship field can be set to more than
+        one item -- confirmed live that Globiflow's field picker does not
+        prevent selecting the same field in more than one row.
 
         Args:
             page: Playwright-style page object.
             container: Locator scoped to the step (its ``<li>`` when adding a
                 new step, or its content div when updating an existing one).
             fields: Dict of Podio field label -> value to set, applied in
-                order starting at row 1.
+                order starting at row 1. A list value expands into one row
+                per item (for multi-value relationship fields); a ``null``
+                value unsets the field instead of setting one.
 
         Raises:
             ClientError: If a field label doesn't resolve on the step's app,
                 if a value isn't a valid option for a select-backed field, or
                 if the field's value control is a type this CLI does not yet
-                fill (e.g. an app/relationship field's search widget).
+                fill.
         """
         self._wait_for_item_fields_ui(page, container)
 
-        for index, (field_label, value) in enumerate(fields.items(), start=1):
+        row_specs = []
+        for field_label, value in fields.items():
+            if isinstance(value, list):
+                for item in value:
+                    row_specs.append((field_label, item))
+            else:
+                row_specs.append((field_label, value))
+
+        for index, (field_label, value) in enumerate(row_specs, start=1):
             existing_rows = container.locator("div[id^='stepsubcup']")
             if index > existing_rows.count():
                 add_field_link = container.locator("a:has-text('add field')").first
@@ -1334,7 +1350,9 @@ class GlobiflowClient:
 
         Raises:
             ClientError: If the value isn't a valid option for a select-backed
-                field, or the field's value control is an unsupported type.
+                field, if a relationship field's target app/search field is
+                missing or ambiguous, or the field's value control is an
+                unsupported type.
         """
         field_type_input = row.locator("input[name^='fieldTypes']").first
         field_type = (
@@ -1343,13 +1361,13 @@ class GlobiflowClient:
             else None
         )
 
+        if value is None:
+            self._unset_item_field(page, row, field_label)
+            return
+
         if field_type == "app":
-            raise ClientError(
-                f"Field '{field_label}' is a Podio app/relationship field. "
-                f"Setting it via search-and-select is not yet supported by this "
-                f"CLI's 'fields' fill logic. Set this field manually in the "
-                f"Globiflow UI."
-            )
+            self._fill_relationship_field_value(page, row, field_label, value)
+            return
 
         value_select = row.locator("select[name^='value']").first
         if value_select.count() > 0:
@@ -1375,6 +1393,236 @@ class GlobiflowClient:
             f"a plain select nor a gMention text field. Set this field manually in "
             f"the Globiflow UI."
         )
+
+    def _unset_item_field(self, page: "Page", row: "Locator", field_label: str) -> None:
+        """Clear a Podio item field via Globiflow's "Unset" function.
+
+        A ``null`` in the caller's ``fields`` dict means "clear this field"
+        rather than "set this field to some value". Globiflow exposes that
+        as an "Unset" option in the row's function picker
+        (``select[name^='funcs']``) -- confirmed live (2026-09-03) for both a
+        category field and a Podio app/relationship field: selecting it
+        replaces the row's entire value control with nothing (an empty
+        ``stepCloser`` cell), because "Unset" needs no value.
+
+        Args:
+            page: Playwright-style page object.
+            row: Locator for the field's row (``div[id^='stepsubcup...']``).
+            field_label: The Podio field label, for error messages.
+
+        Raises:
+            ClientError: If the row has no function picker, or the picker
+                does not offer an "Unset" option (this CLI has not verified
+                every Podio field type exposes one; fail loudly rather than
+                silently leaving the field set).
+        """
+        funcs_select = row.locator("select[name^='funcs']").first
+        if funcs_select.count() == 0:
+            raise ClientError(
+                f"Cannot unset field '{field_label}': no function picker found "
+                f"on this row."
+            )
+
+        options = funcs_select.evaluate(
+            "el => Array.from(el.options).map(o => o.value)"
+        )
+        if "unset" not in options:
+            raise ClientError(
+                f"Field '{field_label}' does not offer an 'Unset' function in "
+                f"Globiflow's UI (available functions: {options}), so a null "
+                f"value cannot clear it via this CLI's 'fields' fill logic."
+            )
+
+        funcs_select.select_option(value="unset")
+        page.wait_for_timeout(1500)
+
+    def _fill_relationship_field_value(
+        self, page: "Page", row: "Locator", field_label: str, value
+    ) -> None:
+        """Set a Podio app/relationship field via Globiflow's "Search" function.
+
+        Globiflow has no "type a title, we resolve the item" control for
+        relationship fields. Instead, selecting the row's function picker to
+        "Search" (``select[name^='funcs']`` -> ``find``) replaces the value
+        control with a search *criterion* Globiflow evaluates at flow RUNTIME
+        (App + Field + Condition + Value) -- confirmed live (2026-09-03) by
+        capturing the same widget on both a disposable app and, read-only
+        (an unsaved new-flow draft, never submitted), the real "Topics" app
+        (30831883): there is no live preview: Globiflow's own UI cannot show
+        how many items a criterion would match while you configure it, and
+        neither can this CLI. Zero-match / multiple-match handling at flow
+        execution time is therefore Globiflow's own runtime behavior, not
+        something this fill logic can pre-validate.
+
+        The widget renders in three steps, each an AJAX reload of the row:
+          1. ``select[name*='related']`` -- which target app to search in.
+          2. ``select[name*='[field]']`` -- which field of that app to match
+             against (only text-like fields the app itself considers
+             searchable are offered).
+          3. ``select[name*='searchcond']`` ("Equal to" / "Contains") plus a
+             gMention-enabled ``textarea[name^='gmvalues']`` for the search
+             value.
+
+        The ``related`` app picker is the surprising part: confirmed live by
+        calling Globiflow's ``/inc/ajaxItemsSub.php`` directly with two
+        different field ids on the same app and getting byte-identical
+        responses -- it is NOT scoped to the field you picked. It lists every
+        app that ANY app-type field on the CURRENT Podio app is known to
+        relate to, aggregated, so an app with several relationship fields
+        pointing at different targets (e.g. Topics, which lists 6) makes this
+        picker ambiguous for any one field. This method auto-selects the
+        target app only when the picker offers exactly one real option;
+        otherwise the caller must disambiguate (see ``value`` below) -- this
+        CLI will not guess.
+
+        Args:
+            page: Playwright-style page object.
+            row: Locator for the field's row (``div[id^='stepsubcup...']``).
+            field_label: The Podio field label, for error messages.
+            value: Either the target item's title/label (``str``/``int``), or
+                a dict ``{"app": "<Target App Name>", "value": "<title>"}``
+                naming which candidate app to search in when the picker
+                lists more than one -- ``app`` is matched the same way
+                ``_select_create_item_app`` matches Globiflow's "Org > Space
+                > App" picker labels, against the trailing app-name segment.
+
+        Raises:
+            ClientError: If the row is missing an expected control; if the
+                target-app picker has no real options (Globiflow's per-app
+                field/relationship cache is refreshed only by that app's
+                "Refresh from Podio" action on its flows.php page -- a field
+                just added or repointed in Podio can be invisible here until
+                that runs); if it has more than one option and ``value``
+                didn't disambiguate, or named an app that isn't a candidate;
+                or if the target app's searchable-field picker is empty or
+                offers more than one field (this CLI cannot yet disambiguate
+                a search field the way it disambiguates the target app).
+        """
+        if isinstance(value, dict):
+            target_app_label = value.get("app")
+            search_value = value.get("value")
+            if not target_app_label or search_value is None:
+                raise ClientError(
+                    f"Field '{field_label}': a dict value for an app/relationship "
+                    f"field must have both 'app' and 'value' keys, e.g. "
+                    f'{{"app": "Content Formats", "value": "Blog Post"}}.'
+                )
+        else:
+            target_app_label = None
+            search_value = value
+
+        funcs_select = row.locator("select[name^='funcs']").first
+        if funcs_select.count() == 0:
+            raise ClientError(
+                f"Cannot search field '{field_label}': no function picker "
+                f"found on this row."
+            )
+        funcs_select.select_option(value="find")
+        page.wait_for_timeout(2000)
+
+        related_select = row.locator("select[name*='related']").first
+        if related_select.count() == 0:
+            raise ClientError(
+                f"Field '{field_label}': Globiflow did not render a target-app "
+                f"picker after selecting the Search function."
+            )
+        related_options = related_select.evaluate(
+            "el => Array.from(el.options).map(o => ({value: o.value, text: (o.textContent || '').trim()}))"
+        )
+        candidates = [o for o in related_options if o["value"] != "0"]
+
+        if not candidates:
+            raise ClientError(
+                f"Field '{field_label}': Globiflow's Search widget lists no "
+                f"target app to search in. This app's cached field/"
+                f"relationship info is refreshed only by that app's "
+                f"'Refresh from Podio' action on its Globiflow flows.php "
+                f"page (a field created or repointed in Podio moments ago "
+                f"can be invisible here until that runs) -- refresh it, then "
+                f"retry this command."
+            )
+
+        if target_app_label:
+            target = target_app_label.strip().lower()
+            matched = next(
+                (
+                    c for c in candidates
+                    if c["text"].split(">")[-1].strip().lower() == target
+                ),
+                None,
+            )
+            if matched is None:
+                candidate_names = [c["text"].split(">")[-1].strip() for c in candidates]
+                raise ClientError(
+                    f"Field '{field_label}': app '{target_app_label}' is not one "
+                    f"of the candidate target apps Globiflow offers for this "
+                    f"field: {candidate_names}."
+                )
+        elif len(candidates) == 1:
+            matched = candidates[0]
+        else:
+            candidate_names = [c["text"].split(">")[-1].strip() for c in candidates]
+            raise ClientError(
+                f"Field '{field_label}' is ambiguous: Globiflow's Search widget "
+                f"lists {len(candidates)} candidate target apps for this Podio "
+                f"app ({candidate_names}), and this CLI cannot tell which one "
+                f"'{field_label}' actually references (Globiflow's own picker "
+                f"isn't scoped per field). Pass a dict value instead to "
+                f'disambiguate, e.g. {{"app": "{candidate_names[0]}", "value": '
+                f'"{search_value}"}}.'
+            )
+
+        related_select.select_option(value=matched["value"])
+        page.wait_for_timeout(2000)
+
+        search_field_select = row.locator("select[name*='[field]']").first
+        if search_field_select.count() == 0:
+            raise ClientError(
+                f"Field '{field_label}': Globiflow did not render a "
+                f"searchable-field picker for target app "
+                f"'{matched['text'].split('>')[-1].strip()}' after selecting it."
+            )
+        search_field_options = search_field_select.evaluate(
+            "el => Array.from(el.options).map(o => ({value: o.value, text: (o.textContent || '').trim()}))"
+        )
+        search_field_candidates = [o for o in search_field_options if o["value"] != "0"]
+
+        if not search_field_candidates:
+            raise ClientError(
+                f"Field '{field_label}': target app "
+                f"'{matched['text'].split('>')[-1].strip()}' has no field "
+                f"Globiflow considers searchable, so a search criterion "
+                f"cannot be configured."
+            )
+        if len(search_field_candidates) > 1:
+            names = [c["text"] for c in search_field_candidates]
+            raise ClientError(
+                f"Field '{field_label}': target app "
+                f"'{matched['text'].split('>')[-1].strip()}' offers "
+                f"{len(search_field_candidates)} searchable fields ({names}), "
+                f"and this CLI cannot yet tell which one to match the label "
+                f"against. Not supported."
+            )
+
+        search_field_select.select_option(value=search_field_candidates[0]["value"])
+        page.wait_for_timeout(2000)
+
+        searchcond_select = row.locator("select[name*='searchcond']").first
+        if searchcond_select.count() > 0:
+            searchcond_select.select_option(value="eq")
+
+        gmention_textarea = row.locator("textarea[name^='gmvalues']").first
+        if gmention_textarea.count() == 0:
+            raise ClientError(
+                f"Field '{field_label}': Globiflow did not render a search-value "
+                f"input after selecting the searchable field."
+            )
+        element_id = gmention_textarea.get_attribute("id")
+        if not (
+            element_id
+            and self._fill_mention_field(page, element_id, str(search_value))
+        ):
+            gmention_textarea.fill(str(search_value))
 
     def get_flow(self, flow_id: str, include_steps: bool = False) -> FlowDetail:
         """Get detailed information about a specific flow.

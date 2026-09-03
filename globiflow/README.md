@@ -144,15 +144,69 @@ globiflow flows steps update FLOW_ID STEP_NUMBER --variable-name "new_name" --co
 # `steps update`
 globiflow flows steps add FLOW_ID --action "Update Item" --fields '{"Status": "Approved"}'
 globiflow flows steps update FLOW_ID STEP_NUMBER --fields '{"Status": "Approved", "Notes": "Reviewed"}'
+
+# Set a Podio app/relationship field by the target item's title -- Globiflow
+# searches for it at flow runtime (see below)
+globiflow flows steps update FLOW_ID STEP_NUMBER --fields '{"Format": "Blog Post"}'
+
+# Disambiguate which target app to search in, when a Podio app has more than
+# one relationship field (Globiflow's target-app picker isn't scoped per
+# field -- see below)
+globiflow flows steps update FLOW_ID STEP_NUMBER --fields '{"Format": {"app": "Content Formats", "value": "Blog Post"}}'
+
+# Set a multi-value ("multiple") relationship field to more than one item
+# with a list of labels -- each becomes its own search row
+globiflow flows steps update FLOW_ID STEP_NUMBER --fields '{"Related Content": ["Blog Post", "Whitepaper"]}'
+
+# Clear (unset) any field -- category/status or app/relationship -- with a
+# JSON null instead of a value
+globiflow flows steps update FLOW_ID STEP_NUMBER --fields '{"Status": null}'
 ```
 
 **Supported field types for `fields`:** text, number, and other scalar fields
 whose value renders as free text; category/status fields (set by option
-label, e.g. `"Status": "Approved"`). Podio app/relationship fields are not
-yet supported -- Globiflow's search-and-select widget for them renders
-behind a separate function this CLI does not select, so setting one raises a
-clear error instead of silently doing nothing. Set relationship fields
-manually in the Globiflow UI.
+label, e.g. `"Status": "Approved"`); Podio app/relationship fields (set by
+the target item's title/label -- see below). A `null` value clears
+(unsets) any of these field types instead of setting one, via Globiflow's
+"Unset" function -- fails loudly if a given field type doesn't offer one.
+
+**Relationship fields:** a plain string/number value (e.g.
+`{"Format": "Blog Post"}`) is the target item's title to search for.
+Globiflow has no "resolve a title to an item ID" control -- it configures a
+search *criterion* (target app + field + condition + value) that it
+evaluates at flow **runtime**, not when you save the step, so this CLI
+cannot pre-validate whether that title matches zero, one, or many items;
+that is Globiflow's own runtime behavior. The condition is always set to
+"Equal to" (exact match).
+
+Globiflow's target-app picker for this search is a per-Podio-app cache, not
+scoped to the specific field you're setting -- confirmed live by querying
+its AJAX endpoint directly with two different field ids on the same app and
+getting identical results back. For an app with only one relationship field
+(or where every relationship field points at the same target app) this is
+unambiguous and auto-selected. For an app with several relationship fields
+pointing at *different* target apps (e.g. a "Topics" app with fields for
+Format, Content, Contacts, etc.), the picker lists every one of those target
+apps for any field you pick, and this CLI will not guess which one is
+correct -- pass a dict value instead: `{"app": "<Target App Name>", "value":
+"<title>"}`. A plain-value call on an ambiguous field fails with a
+`ClientError` listing the candidate app names.
+
+If Globiflow's picker offers zero target apps for a field that clearly
+should have one, its per-app field/relationship cache is likely stale (a
+field created or repointed in Podio moments earlier can be invisible until
+that app's "Refresh from Podio" runs on its Globiflow flows.php page) --
+refresh it there and retry.
+
+A relationship field's value may also be a **list** of labels, which expands
+into one search row per item -- confirmed live that Globiflow's field picker
+allows selecting the same field in more than one row, letting a multi-value
+("multiple") Podio app field be set to several items in one call.
+
+Not yet supported: a target app whose searchable-field list (the field
+Globiflow matches your label against) has more than one candidate -- this
+CLI cannot tell which one holds the title, and fails loudly rather than
+guessing.
 
 ### Triggers (`globiflow triggers`)
 

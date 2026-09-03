@@ -1485,23 +1485,344 @@ def test_fill_item_field_value_raises_when_value_is_not_a_valid_option():
         assert "not a valid option" in str(e)
 
 
-def test_fill_item_field_value_raises_for_app_relationship_fields():
-    """App/relationship fields' "value" select only offers fixed variable
-    references (e.g. "Current Item"), not a literal search -- this must
-    fail loudly with a clear reason instead of guessing at the unverified
-    search widget or silently mismatching a literal value against those
-    options."""
+def test_fill_item_field_value_dispatches_app_fields_to_relationship_fill(monkeypatch):
+    """A field typed 'app' must go through the relationship search-fill path,
+    not the old blanket 'not yet supported' rejection."""
     row = _FakeElement(children={
         "input[name^='fieldTypes']": _FakeElement(count=1, attribute="app"),
-        "select[name^='value']": _FakeElement(count=1),
     })
+    client = GlobiflowClient()
+    calls = []
+    monkeypatch.setattr(
+        client, "_fill_relationship_field_value",
+        lambda page, row_, label, value: calls.append((row_, label, value)),
+    )
+
+    client._fill_item_field_value(None, row, "SpikeRelation", "Blog Post")
+
+    assert calls == [(row, "SpikeRelation", "Blog Post")]
+
+
+def test_fill_item_field_value_dispatches_null_value_to_unset(monkeypatch):
+    """A null value in the fields dict means 'clear this field', for any
+    field type -- must go through the Unset path, not the value-fill path."""
+    row = _FakeElement(children={
+        "input[name^='fieldTypes']": _FakeElement(count=1, attribute="category"),
+    })
+    client = GlobiflowClient()
+    calls = []
+    monkeypatch.setattr(
+        client, "_unset_item_field",
+        lambda page, row_, label: calls.append((row_, label)),
+    )
+
+    client._fill_item_field_value(None, row, "SpikeCategory", None)
+
+    assert calls == [(row, "SpikeCategory")]
+
+
+# ---- Unset support ----------------------------------------------------------
+#
+# One of the real flows being rebuilt explicitly clears a category field via
+# Globiflow's "Unset" function rather than setting it to an option. Confirmed
+# live (2026-09-03) against a disposable Podio app: selecting "Unset" in a
+# row's function picker (`select[name^='funcs']`) replaces the entire value
+# control with nothing -- there is no value to fill. Verified for both a
+# category field and a Podio app/relationship field; round-tripped via
+# `flows steps update --fields '{"SpikeCategory": null}'` then `flows export`
+# + base64-decode, which showed `function":"unset"` with no `value` key at
+# all in the saved PHP-serialized stepDetails.
+
+def test_unset_item_field_selects_unset_function():
+    funcs_select = _FakeElement(count=1, evaluate_result=["value", "unset", "calc"])
+    row = _FakeElement(children={"select[name^='funcs']": funcs_select})
+    page = _FieldFillPage()
+    client = GlobiflowClient()
+
+    client._unset_item_field(page, row, "SpikeCategory")
+
+    assert funcs_select.select_option_calls == [{"value": "unset", "label": None}]
+
+
+def test_unset_item_field_raises_when_funcs_picker_missing():
+    row = _FakeElement(children={})
     client = GlobiflowClient()
 
     try:
-        client._fill_item_field_value(None, row, "SpikeRelation", "Some Item")
-        raise AssertionError("Expected ClientError for an app/relationship field")
+        client._unset_item_field(None, row, "SpikeCategory")
+        raise AssertionError("Expected ClientError when no function picker exists")
     except client_module.ClientError as e:
-        assert "app/relationship field" in str(e)
+        assert "no function picker" in str(e)
+
+
+def test_unset_item_field_raises_when_unset_not_offered():
+    funcs_select = _FakeElement(count=1, evaluate_result=["value", "calc"])
+    row = _FakeElement(children={"select[name^='funcs']": funcs_select})
+    client = GlobiflowClient()
+
+    try:
+        client._unset_item_field(None, row, "SpikeText")
+        raise AssertionError("Expected ClientError when Unset isn't an option")
+    except client_module.ClientError as e:
+        assert "does not offer an 'Unset' function" in str(e)
+    assert funcs_select.select_option_calls == []
+
+
+# ---- Relationship (Podio app-type) field fill -------------------------------
+#
+# Confirmed live (2026-09-03) against a disposable Podio app AND (read-only,
+# an unsaved new-flow draft, never submitted) the real "Topics" app
+# (30831883): selecting a relationship field's function picker to "Search"
+# (`find`) replaces its value control with a 3-step widget --
+# `select[name*='related']` (target app), `select[name*='[field]']`
+# (searchable field of that app), and `select[name*='searchcond']` +
+# `textarea[name^='gmvalues']` (condition + search value). The `related`
+# picker is NOT scoped to the field chosen -- confirmed by calling Globiflow's
+# `/inc/ajaxItemsSub.php` directly with two different field ids on the same
+# app and getting byte-identical responses -- so it lists every app any
+# app-type field on the current Podio app relates to, aggregated. With one
+# candidate this is auto-selected; with more than one, a plain label value is
+# ambiguous and this CLI requires a `{"app": ..., "value": ...}` dict instead
+# of guessing. Round-tripped for real via `flows steps update --fields
+# '{"SpikeRelation": "eBook"}'` then `flows export` + base64-decode, which
+# showed the saved criteria (`related`, `field`, `searchcond":"eq"`, `value`)
+# matching exactly.
+
+def _relationship_row(related_options, search_field_options=None, funcs_evaluate_result=None):
+    funcs_select = _FakeElement(evaluate_result=funcs_evaluate_result)
+    related_select = _FakeElement(
+        evaluate_result=lambda arg=None: list(related_options),
+    )
+    children = {
+        "select[name^='funcs']": funcs_select,
+        "select[name*='related']": related_select,
+    }
+    if search_field_options is not None:
+        search_field_select = _FakeElement(
+            evaluate_result=lambda arg=None: list(search_field_options),
+        )
+        children["select[name*='[field]']"] = search_field_select
+        children["select[name*='searchcond']"] = _FakeElement(count=1)
+        children["textarea[name^='gmvalues']"] = _FakeElement(count=1, attribute="gmvalues1_1_value_")
+    row = _FakeElement(children=children)
+    return row, funcs_select, related_select, children.get("select[name*='[field]']")
+
+
+def test_fill_relationship_field_value_auto_selects_single_candidate_app_and_field(monkeypatch):
+    """With exactly one target app and one searchable field, both are
+    auto-selected -- no ambiguity to resolve."""
+    row, funcs_select, related_select, search_field_select = _relationship_row(
+        related_options=[
+            {"value": "0", "text": "Select App"},
+            {"value": "30831889", "text": "Progress Software > PSDX Automation > Content Formats"},
+        ],
+        search_field_options=[
+            {"value": "0", "text": "Select Field"},
+            {"value": "278028167", "text": "Name"},
+        ],
+    )
+    page = _FieldFillPage()
+    client = GlobiflowClient()
+    mention_calls = []
+    monkeypatch.setattr(
+        client, "_fill_mention_field",
+        lambda page, element_id, value: mention_calls.append((element_id, value)) or True,
+    )
+
+    client._fill_relationship_field_value(page, row, "SpikeRelation", "eBook")
+
+    assert funcs_select.select_option_calls == [{"value": "find", "label": None}]
+    assert related_select.select_option_calls == [{"value": "30831889", "label": None}]
+    assert search_field_select.select_option_calls == [{"value": "278028167", "label": None}]
+    assert mention_calls == [("gmvalues1_1_value_", "eBook")]
+
+
+def test_fill_relationship_field_value_raises_when_no_target_app_candidates():
+    """An empty related-app picker means Globiflow's per-app field cache is
+    stale (confirmed live: a field added moments earlier renders this way
+    until that app's 'Refresh from Podio' runs) -- must fail loudly with an
+    actionable message, not silently skip."""
+    row, _, _, _ = _relationship_row(related_options=[{"value": "0", "text": "Select App"}])
+    client = GlobiflowClient()
+
+    try:
+        client._fill_relationship_field_value(_FieldFillPage(), row, "SpikeRelation", "eBook")
+        raise AssertionError("Expected ClientError when no target app is offered")
+    except client_module.ClientError as e:
+        assert "Refresh from Podio" in str(e)
+
+
+def test_fill_relationship_field_value_raises_when_target_app_ambiguous():
+    """More than one candidate target app (Globiflow's picker isn't scoped
+    per field) without a disambiguating dict value must fail loudly rather
+    than guessing which app the field really references."""
+    row, _, _, _ = _relationship_row(
+        related_options=[
+            {"value": "0", "text": "Select App"},
+            {"value": "30831884", "text": "Progress Software > PSDX Automation > Content"},
+            {"value": "30831889", "text": "Progress Software > PSDX Automation > Content Formats"},
+        ],
+    )
+    client = GlobiflowClient()
+
+    try:
+        client._fill_relationship_field_value(_FieldFillPage(), row, "Format", "Blog Post")
+        raise AssertionError("Expected ClientError for an ambiguous target app")
+    except client_module.ClientError as e:
+        assert "ambiguous" in str(e)
+        assert "Content" in str(e) and "Content Formats" in str(e)
+
+
+def test_fill_relationship_field_value_dict_disambiguates_target_app(monkeypatch):
+    """A {"app": ..., "value": ...} dict resolves an otherwise-ambiguous
+    target app by matching Globiflow's picker label the same way
+    _select_create_item_app matches the Create Item app picker: on the
+    trailing app-name segment."""
+    row, funcs_select, related_select, search_field_select = _relationship_row(
+        related_options=[
+            {"value": "0", "text": "Select App"},
+            {"value": "30821467", "text": "Progress Software > PSDX Automation > test"},
+            {"value": "30831889", "text": "Progress Software > PSDX Automation > Content Formats"},
+        ],
+        search_field_options=[
+            {"value": "0", "text": "Select Field"},
+            {"value": "278028167", "text": "Name"},
+        ],
+    )
+    page = _FieldFillPage()
+    client = GlobiflowClient()
+    monkeypatch.setattr(client, "_fill_mention_field", lambda page, element_id, value: True)
+
+    client._fill_relationship_field_value(
+        page, row, "SpikeRelationSelf", {"app": "Content Formats", "value": "eBook"},
+    )
+
+    assert related_select.select_option_calls == [{"value": "30831889", "label": None}]
+
+
+def test_fill_relationship_field_value_raises_when_disambiguating_app_not_a_candidate():
+    row, _, _, _ = _relationship_row(
+        related_options=[
+            {"value": "0", "text": "Select App"},
+            {"value": "30821467", "text": "Progress Software > PSDX Automation > test"},
+        ],
+    )
+    client = GlobiflowClient()
+
+    try:
+        client._fill_relationship_field_value(
+            _FieldFillPage(), row, "SpikeRelationSelf", {"app": "Nope", "value": "eBook"},
+        )
+        raise AssertionError("Expected ClientError for an app not among the candidates")
+    except client_module.ClientError as e:
+        assert "Nope" in str(e)
+
+
+def test_fill_relationship_field_value_raises_for_incomplete_dict_value():
+    row, _, _, _ = _relationship_row(
+        related_options=[{"value": "0", "text": "Select App"}],
+    )
+    client = GlobiflowClient()
+
+    try:
+        client._fill_relationship_field_value(None, row, "SpikeRelation", {"app": "test"})
+        raise AssertionError("Expected ClientError for a dict value missing 'value'")
+    except client_module.ClientError as e:
+        assert "'app' and 'value' keys" in str(e)
+
+
+def test_fill_relationship_field_value_raises_when_search_field_ambiguous():
+    """Content Formats happens to have exactly one searchable field in the
+    live fixture, but a target app with more than one must fail loudly
+    rather than guessing which one holds the title."""
+    row, _, related_select, search_field_select = _relationship_row(
+        related_options=[
+            {"value": "0", "text": "Select App"},
+            {"value": "30821467", "text": "Progress Software > PSDX Automation > test"},
+        ],
+        search_field_options=[
+            {"value": "0", "text": "Select Field"},
+            {"value": "1", "text": "Title"},
+            {"value": "2", "text": "SpikeRefreshTest"},
+        ],
+    )
+    client = GlobiflowClient()
+
+    try:
+        client._fill_relationship_field_value(_FieldFillPage(), row, "SpikeRelationSelf", "eBook")
+        raise AssertionError("Expected ClientError for an ambiguous search field")
+    except client_module.ClientError as e:
+        assert "searchable fields" in str(e)
+
+
+def test_fill_relationship_field_value_raises_when_no_searchable_field():
+    row, _, related_select, search_field_select = _relationship_row(
+        related_options=[
+            {"value": "0", "text": "Select App"},
+            {"value": "30831889", "text": "Progress Software > PSDX Automation > Content Formats"},
+        ],
+        search_field_options=[{"value": "0", "text": "Select Field"}],
+    )
+    client = GlobiflowClient()
+
+    try:
+        client._fill_relationship_field_value(_FieldFillPage(), row, "SpikeRelation", "eBook")
+        raise AssertionError("Expected ClientError when no field is searchable")
+    except client_module.ClientError as e:
+        assert "no field Globiflow considers searchable" in str(e)
+
+
+def test_fill_relationship_field_value_falls_back_to_plain_fill(monkeypatch):
+    """Mirrors the scalar-field gMention fallback: if gMention has no
+    control for the search-value textarea, fill it directly."""
+    row, funcs_select, related_select, search_field_select = _relationship_row(
+        related_options=[
+            {"value": "0", "text": "Select App"},
+            {"value": "30831889", "text": "Progress Software > PSDX Automation > Content Formats"},
+        ],
+        search_field_options=[
+            {"value": "0", "text": "Select Field"},
+            {"value": "278028167", "text": "Name"},
+        ],
+    )
+    gmention_textarea = row.locator("textarea[name^='gmvalues']")
+    client = GlobiflowClient()
+    monkeypatch.setattr(client, "_fill_mention_field", lambda page, element_id, value: False)
+
+    client._fill_relationship_field_value(_FieldFillPage(), row, "SpikeRelation", "eBook")
+
+    assert gmention_textarea.fill_calls == ["eBook"]
+
+
+# ---- Multi-value relationship fields: list expansion into multiple rows ----
+#
+# Confirmed live (2026-09-03): Globiflow's field picker does not prevent
+# selecting the same field in more than one row, and a multi-value
+# ("multiple": true) Podio app field accepted two independent Search rows
+# for itself -- round-tripped via `flows steps update --fields
+# '{"SpikeRelationMulti": ["eBook", "Whitepaper"]}'` then `flows export` +
+# base64-decode, which showed two entries in the step's `values` array, one
+# per label, each with its own `find` criterion.
+
+def test_fill_item_fields_expands_a_list_value_into_one_row_per_item(monkeypatch):
+    row1 = _make_scalar_row("app", "unused")
+    option_labels = ["Select Field", "SpikeRelationMulti", "Tag(s)"]
+    field_select1 = _FakeElement(count=1, evaluate_result=list(option_labels))
+    container = _FillItemFieldsContainer(
+        rows=[row1], field_selects=[field_select1], option_labels=option_labels,
+    )
+    page = _FieldFillPage()
+    client = GlobiflowClient()
+    calls = []
+    monkeypatch.setattr(
+        client, "_fill_item_field_value",
+        lambda page, row, label, value: calls.append((label, value)),
+    )
+
+    client._fill_item_fields(page, container, {"SpikeRelationMulti": ["eBook", "Whitepaper"]})
+
+    assert container.add_field_clicks == 1, "Second list item must add exactly one new row"
+    assert calls == [("SpikeRelationMulti", "eBook"), ("SpikeRelationMulti", "Whitepaper")]
 
 
 def test_fill_item_field_value_raises_for_unsupported_control_types():

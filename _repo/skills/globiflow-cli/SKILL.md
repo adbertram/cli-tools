@@ -41,6 +41,14 @@ This file contains complete command syntax, all arguments, all options, and usag
 `flows import` carries the source app's Podio field references into the target app. Globiflow re-binds only the references it can match there, and its flow editor refuses to save while any reference is unmatched, so an import lands only in an app whose fields cover every field the flow uses -- a schema clone of the source app, in the same org or another one. Importing into an app with a different schema fails with the unmatched step and control named; recreate that flow with `flows create` / `flows steps add` instead.
 </principle>
 
+<principle name="Relationship Fields In --fields Are Runtime Search Criteria, Not IDs">
+A Podio app/relationship field in `--fields` is set by the target item's title (`{"Format": "Blog Post"}`), never a raw Podio item ID. Globiflow has no title-to-item resolver at configure time -- it builds a search criterion (target app + field + "Equal to" + value) that it evaluates when the flow actually runs, so this CLI cannot pre-check whether that title matches zero, one, or many items; that is Globiflow's own runtime behavior.
+
+Globiflow's target-app picker for that search is a per-Podio-app cache, NOT scoped to the field you picked -- an app with several relationship fields pointing at different targets (e.g. one app with Format/Content/Contacts fields) offers every one of those target apps for any of them, and this CLI refuses to guess. If the picker has more than one candidate, pass a dict instead: `{"app": "Content Formats", "value": "Blog Post"}` -- a plain string raises `ClientError` listing the real candidates by name. A picker with zero candidates means that app's Globiflow field cache is stale; refresh it via "Refresh from Podio" on that app's flows.php page and retry.
+
+A list value (`{"Related Content": ["Blog Post", "Whitepaper"]}`) expands into one search row per item, for setting a multi-value relationship field to more than one item. A `null` value unsets any field (relationship or otherwise) via Globiflow's "Unset" function instead of setting one.
+</principle>
+
 <principle name="Command Groups">
 - **auth** -- Browser-based authentication (login, status, test, logout)
 - **search** -- Search and browse Globiflow items (query, item, list)
