@@ -20,5 +20,10 @@ tiktok = "tiktok_cli.main:app"
 where = ["."]
 include = ["tiktok_cli*"]
 
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+]
+
 [tool.uv.sources]
 cli-tools-shared = { path = "../_repo/cli-tools-shared", editable = true }
