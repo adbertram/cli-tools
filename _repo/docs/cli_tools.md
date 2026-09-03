@@ -12,6 +12,7 @@
 | `apple` | The `apple` CLI provides a command-line interface for Apple purchase and subscription history. Use it when you need scriptable reads, exports, or evidence collection without opening the service UI. |
 | `asana` | The `asana` CLI provides a command-line interface for Asana API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `ata-blog` | The `ata-blog` CLI provides a unified command-line interface for managing the Adam The Automator blog post production pipeline. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows to manage Notion-backed post metadata, WordPress publishing, Raptive ad settings, and Rank Math schema markup. |
+| `atlas-capture` | Atlas Capture annotation/audit worker portal (browser automation, worker side) |
 | `atlassian` | The `atlassian` CLI provides a command-line interface for Atlassian (browser automation). Use it when you need repeatable access to atlassian workflows that are only available through a signed-in website. |
 | `auctionzip` | AuctionZip auction search and lot detail via a Cloudflare-cleared browser session (Invaluable-powered) |
 | `awin` | The `awin` CLI provides a command-line interface for Awin API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
@@ -29,6 +30,7 @@
 | `codex-sessions` | The `codex-sessions` CLI lets you query and analyze OpenAI Codex session transcripts from ~/.codex. Use it when you need scriptable reads, exports, or evidence collection without opening the service UI. |
 | `copilot` | The `copilot` CLI provides a command-line interface for Microsoft Copilot Studio agents via Dataverse API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `coursecraft` | CourseCraft CLI manages CourseCraft Airtable records for courses, modules, clips, demos, slides, slide templates, and voice recordings. Use it when course-building workflows need a scriptable way to read or update CourseCraft content without editing Airtable directly. |
+| `crowdgen` | CrowdGen by Appen worker portal (browser automation, worker side) |
 | `cryptocom` | The `cryptocom` CLI provides command-line access to Crypto.com Exchange API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `cvs` | The `cvs` CLI is a command-line interface for CVS Health pharmacy — prescriptions, orders, and refill eligibility across all linked family members. Use it for scriptable, JSON-first access from agents, automation, or terminal workflows. Authentication is a real browser login that the CLI then reuses for read-only commands. |
 | `deepseek-sessions` | The `deepseek-sessions` CLI queries DeepSeek Harness (`dsh`) session transcripts in `~/.dsh`. Use it to audit what a `dsh` run did — sessions, turns, tool calls, subagents, retries, approvals, goals, and token cost — with the same command shape as `claude-code-sessions` and `codex-sessions`. |
@@ -66,6 +68,7 @@
 | `manus` | The `manus` CLI provides a command-line interface for Manus AI API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `medium` | The `medium` CLI lets you create Medium drafts through Medium's web composer. Use it when you need repeatable access to medium workflows that are only available through a signed-in website. |
 | `mercari` | The `mercari` CLI provides read-only access to Mercari US listings by driving the authenticated web app and capturing its internal GraphQL responses. Use it to search other sellers' public listings (`listings search`), read your own listings (`listings list`), and get full item detail (`listings get`). |
+| `mercor` | Mercor AI talent marketplace - browse available roles/projects from the worker app |
 | `microworker` | Runs the per-site gig CLIs for the MicroWorker project, writes site envelopes, and merges them into one task list |
 | `microworkers` | The `microworkers` CLI drives the Microworkers worker portal through an authenticated browser session. Use it to list available worker jobs (`tasks list`), inspect full job requirements (`tasks get`), and preview or (with `--confirm`) submit proof for a job (`tasks apply`, dry-run by default). |
 | `mindmeister` | The `mindmeister` CLI provides a command-line interface for Mindmeister API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
@@ -107,6 +110,7 @@
 | `techsmith` | The `techsmith` CLI provides a command-line interface for Techsmith (browser automation). Use it when you need repeatable access to techsmith workflows that are only available through a signed-in website. |
 | `things` | The `things` CLI provides a command-line interface for Things API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `tiktok` | The `tiktok` CLI provides tikTok transcript downloader using yt-dlp. Use it when you need scriptable reads, exports, or evidence collection without opening the service UI. |
+| `trainee-digital` | trainee.digital data-annotation orders feed (browser automation, worker side) |
 | `twelvelabs` | The `twelvelabs` CLI provides a command-line interface for Twelvelabs API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `udemy` | The `udemy` CLI provides a command-line interface for Udemy API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `ups` | UPS Pickup API - schedule package pickups |
