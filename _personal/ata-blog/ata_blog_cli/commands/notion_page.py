@@ -192,8 +192,13 @@ def articles_publish(
     no_duplicate_check: bool = typer.Option(False, "--no-duplicate-check", help="Skip duplicate slug check"),
     featured_image: Optional[str] = typer.Option(None, "--featured-image", help="Path to featured image file to upload and attach"),
     force: bool = typer.Option(False, "--force", "-F", help="Force republish even if already published"),
+    static_only: bool = typer.Option(
+        False,
+        "--static-only",
+        help="Run only the static-site transaction; restores WordPress-owned Notion state afterward",
+    ),
 ):
-    """Publish a Notion article through the journaled static-site transaction."""
+    """Publish a Notion article to WordPress and, when the static cutover artifacts exist, also through the journaled static-site transaction."""
     client = get_client()
 
     print_info(f"Publishing article {page_id}...")
@@ -206,6 +211,7 @@ def articles_publish(
         check_duplicates=not no_duplicate_check,
         featured_image=featured_image,
         force=force,
+        static_only=static_only,
     )
 
     if result.get("scheduled_date"):
@@ -231,6 +237,8 @@ def articles_publish(
 
     if "wordpress_post" in result:
         print_info(f"WordPress URL: {result.get('wordpress_url', 'N/A')}")
+        if "static_url" in result:
+            print_info(f"Static URL: {result['static_url']}")
     else:
         print_info(f"Static URL: {result['static_url']}")
     print_json(result)
