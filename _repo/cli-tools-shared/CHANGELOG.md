@@ -3,6 +3,18 @@
 ## Unreleased
 
 ### Fixes
+- `press()` no longer double-types every printable character.
+  `browser_harness.helpers.press_key` dispatched `text` on BOTH the `keyDown`
+  event and a separate `char` event; Chrome inserts the character once for each,
+  so `locator.press("4")` on an empty input left it holding `"44"` and
+  `fill_input()` (which types char-by-char via `press_key`) doubled every field.
+  `text` now rides on the `keyDown` event only — Chrome still synthesizes the
+  `keypress` from it, so `Enter` keeps its `\r` payload and listeners checking
+  `e.key`/`e.keyCode` are unaffected. Non-printable keys (Enter, Tab, Backspace,
+  arrows) were never affected. This reaches every CLI through
+  `BrowserHarnessService.keyboard_press` and the `_ServiceLocator.press` /
+  `_ServiceElement.press` wrappers. Tests:
+  `tests/test_browser_harness_helpers.py`, `tests/test_browser_driver.py`.
 - browser-harness daemon startup no longer fails on a transient CDP WS
   opening-handshake timeout. A just-spawned Chrome can accept the TCP
   connection but be too busy (profile load, host load) to complete the

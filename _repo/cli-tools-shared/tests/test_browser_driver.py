@@ -10,6 +10,7 @@ from cli_tools_shared.browser.driver import BrowserHarnessService
 from cli_tools_shared.browser._elements import _ServiceElement, _ServiceLocator, _scoped_css_js
 from cli_tools_shared.browser._js_fragments import _check_js, _fill_js
 from cli_tools_shared.browser.processes import ProcessCommand, ProcessTableUnavailableError
+import browser_harness.helpers as bh_helpers
 import cli_tools_shared.browser.driver as driver
 
 
@@ -1731,3 +1732,49 @@ def test_set_input_files_releases_object_even_when_upload_fails(tmp_path):
         service.set_input_files('input[name="ScreenshotFile"]', str(proof))
 
     assert calls == ["Runtime.evaluate", "DOM.setFileInputFiles", "Runtime.releaseObject"]
+
+
+class _FakeTextInput:
+    """Models Chrome's text-insertion rule for ``Input.dispatchKeyEvent``.
+
+    Chrome inserts a character once for every keyDown or char event that carries
+    a non-empty ``text`` field. Events without ``text`` (keyUp, rawKeyDown,
+    non-printable keys) insert nothing. Dispatching BOTH a text-carrying keyDown
+    and a char event for the same key therefore double-types it.
+    """
+
+    def __init__(self):
+        self.value = ""
+
+    def dispatch(self, method, **params):
+        if method != "Input.dispatchKeyEvent":
+            raise AssertionError(f"unexpected CDP method: {method}")
+        if params.get("type") in ("keyDown", "char") and params.get("text"):
+            self.value += params["text"]
+        return {}
+
+
+def test_locator_press_types_each_printable_character_exactly_once(monkeypatch):
+    service = BrowserHarnessService("test-session")
+    monkeypatch.setattr(service, "_require_open", lambda: None)
+    focus_calls: list[str] = []
+
+    def _evaluate(js, arg=None):
+        focus_calls.append(js)
+        return None
+
+    monkeypatch.setattr(service, "evaluate", _evaluate)
+
+    field = _FakeTextInput()
+    monkeypatch.setattr(bh_helpers, "cdp", field.dispatch)
+    service._bh = type("_BH", (), {"h": bh_helpers})()
+
+    locator = _ServiceLocator(service, "input[type='text']")
+    typed = "Ada42"
+    for character in typed:
+        locator.press(character)
+
+    # Regression: press_key used to dispatch text on BOTH keyDown and a separate
+    # char event, so this landed as "AAddaa4422".
+    assert field.value == typed
+    assert len(focus_calls) == len(typed)
