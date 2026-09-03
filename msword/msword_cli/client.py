@@ -11,6 +11,8 @@ from docx.opc.packuri import PackURI
 from docx.opc.part import Part
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
+from docx.table import Table
+from docx.text.paragraph import Paragraph
 from lxml import etree as LET
 
 from .models import (
@@ -87,8 +89,8 @@ class MswordClient:
         doc = docx.Document(path)
 
         paragraphs = []
-        for para in doc.paragraphs:
-            text = para.text.strip()
+        for text in self._iter_body_text(doc):
+            text = text.strip()
             if text:
                 paragraphs.append(text)
 
@@ -97,6 +99,28 @@ class MswordClient:
             paragraphs=len(paragraphs),
             content="\n\n".join(paragraphs),
         )
+
+    def _iter_body_text(self, doc):
+        """Yield paragraph text and table-row text, in document order.
+
+        ``doc.paragraphs`` (python-docx's high-level accessor) returns only
+        the body's direct ``w:p`` children and silently skips every
+        paragraph nested inside a ``w:tbl`` cell, so a document's table
+        content never reached ``read_document`` callers. Walk the body's
+        direct children instead: a paragraph yields its own text; a table
+        yields one entry per row, with that row's cells joined by " | ",
+        in the table's original position among the surrounding paragraphs.
+        Any other direct-child element (e.g. ``w:sectPr``, a bookmark) is
+        skipped, matching ``doc.paragraphs``' existing behavior for those.
+        """
+        for child in doc.element.body:
+            tag = _local_tag(child)
+            if tag == "p":
+                yield Paragraph(child, doc).text
+            elif tag == "tbl":
+                table = Table(child, doc)
+                for row in table.rows:
+                    yield " | ".join(cell.text.strip() for cell in row.cells)
 
     def convert_to_markdown(self, file_path: str) -> ConvertedDocument:
         """Convert a Word document to Markdown.
@@ -276,8 +300,8 @@ class MswordClient:
             start_el, end_el = self._find_reference_text(doc, old_text, occurrence)
             run_range = self._collect_run_range(start_el, end_el)
 
-            del_id, ins_id = next_id, next_id + 1
-            next_id += 2
+            del_id = next_id
+            next_id += 1
 
             del_el = self._build_change_element("del", del_id, author, date)
             start_el.addprevious(del_el)
@@ -285,9 +309,35 @@ class MswordClient:
                 self._convert_run_to_del_text(run_el)
                 del_el.append(run_el)
 
-            ins_el = self._build_change_element("ins", ins_id, author, date)
-            ins_el.append(self._build_ins_run(run_range[0], new_text))
-            del_el.addnext(ins_el)
+            source_run = run_range[0]
+            paragraph_chunks = new_text.split("\n\n")
+            cur_p = del_el.getparent()
+            anchor = del_el
+            ins_ids = []
+
+            for chunk_index, chunk in enumerate(paragraph_chunks):
+                ins_id = next_id
+                next_id += 1
+                ins_ids.append(ins_id)
+
+                ins_el = self._build_change_element("ins", ins_id, author, date)
+                ins_el.append(self._build_ins_run(source_run, chunk))
+                if anchor is None:
+                    cur_p.insert(0, ins_el)
+                else:
+                    anchor.addnext(ins_el)
+                anchor = ins_el
+
+                if chunk_index < len(paragraph_chunks) - 1:
+                    # new_text carries another paragraph break here: split the
+                    # host paragraph so the next chunk becomes its own w:p,
+                    # with an inserted (tracked) paragraph mark closing this one.
+                    mark_id = next_id
+                    next_id += 1
+                    ins_ids.append(mark_id)
+                    cur_p, anchor = self._split_paragraph_for_inserted_break(
+                        cur_p, anchor, author, date, mark_id
+                    )
 
             applied.append(
                 TrackedEditApplied(
@@ -295,7 +345,8 @@ class MswordClient:
                     new_text=new_text,
                     occurrence=occurrence,
                     del_id=str(del_id),
-                    ins_id=str(ins_id),
+                    ins_id=str(ins_ids[0]),
+                    extra_ins_ids=[str(i) for i in ins_ids[1:]],
                 )
             )
 
@@ -310,13 +361,26 @@ class MswordClient:
             edits=applied,
         )
 
+    # Elements that wrap one or more w:r runs as their own children rather
+    # than exposing them as direct paragraph-level siblings. A run inside one
+    # of these is still plain matchable/deletable text; it just needs to be
+    # promoted to a paragraph-level sibling before the sibling-only walk in
+    # _collect_run_range can reach it.
+    _RUN_WRAPPER_TAGS = ("hyperlink",)
+
     def _collect_run_range(self, start_el, end_el) -> list:
         """Collect the sibling w:r run elements from start_el to end_el inclusive.
 
         Fails loudly rather than silently skipping over a non-run sibling
         (such as an existing comment marker) that falls inside the range,
-        since blindly wrapping it in w:del/w:ins would corrupt it.
+        since blindly wrapping it in w:del/w:ins would corrupt it. Runs
+        nested inside a wrapper element (e.g. w:hyperlink) are promoted to
+        paragraph-level siblings first (see _promote_wrapped_runs) so a match
+        that starts or ends outside a hyperlink but crosses through it is not
+        mistaken for overlapping a real comment or tracked-change marker.
         """
+        self._promote_wrapped_runs(start_el, end_el)
+
         runs = []
         current = start_el
         while True:
@@ -332,6 +396,61 @@ class MswordClient:
             current = current.getnext()
             if current is None:
                 raise ClientError("Failed to collect run range for tracked-change edit")
+
+    def _promote_wrapped_runs(self, start_el, end_el):
+        """Promote w:r runs inside a wrapper element (e.g. w:hyperlink) within
+        [start_el, end_el] to direct paragraph-level siblings, in place of the
+        wrapper, so the sibling-only walk in _collect_run_range can reach them.
+
+        The overall match range is contiguous in document order, and a
+        wrapper's own children are contiguous too, so the in-range subset of
+        any one wrapper's children is always a contiguous prefix, a suffix,
+        the whole set, or (when the match starts and ends inside the same
+        wrapper without touching either of its own edges) a self-contained
+        interior slice that the plain sibling walk already handles without
+        promotion — that last case is left untouched here.
+        """
+        para_el = start_el.getparent()
+        while para_el is not None and _local_tag(para_el) != "p":
+            para_el = para_el.getparent()
+        if para_el is None:
+            raise ClientError("Failed to locate enclosing paragraph for tracked-change edit")
+
+        run_els = list(para_el.iter(qn("w:r")))
+        try:
+            start_idx = run_els.index(start_el)
+            end_idx = run_els.index(end_el)
+        except ValueError:
+            raise ClientError("Failed to collect run range for tracked-change edit")
+
+        matched_ids = {id(r) for r in run_els[start_idx:end_idx + 1]}
+
+        wrappers = []
+        for run_el in run_els[start_idx:end_idx + 1]:
+            parent = run_el.getparent()
+            if (
+                parent is not None
+                and _local_tag(parent) in self._RUN_WRAPPER_TAGS
+                and parent not in wrappers
+            ):
+                wrappers.append(parent)
+
+        for wrapper in wrappers:
+            wrapper_runs = [r for r in wrapper if _local_tag(r) == "r"]
+            in_range = [i for i, r in enumerate(wrapper_runs) if id(r) in matched_ids]
+            lo, hi = in_range[0], in_range[-1]
+            if lo != 0 and hi != len(wrapper_runs) - 1:
+                # Self-contained interior match: no boundary crossed, no
+                # promotion needed for this wrapper.
+                continue
+            if lo == 0:
+                for i in range(lo, hi + 1):
+                    wrapper.addprevious(wrapper_runs[i])
+            else:
+                for i in range(hi, lo - 1, -1):
+                    wrapper.addnext(wrapper_runs[i])
+            if wrapper.find(qn("w:r")) is None:
+                wrapper.getparent().remove(wrapper)
 
     def _build_change_element(self, tag: str, change_id: int, author: str, date: str):
         """Build an empty w:ins or w:del element with id/author/date attributes."""
@@ -363,6 +482,68 @@ class MswordClient:
             t_el.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
         new_run.append(t_el)
         return new_run
+
+    def _split_paragraph_for_inserted_break(self, cur_p, after_el, author: str, date: str, mark_id: int):
+        """Split cur_p into two adjacent w:p elements right after after_el.
+
+        A "\\n\\n" inside new_text means the replacement content spans more
+        than one Word paragraph, which OOXML represents as separate w:p
+        elements -- not literal newline characters inside a single w:t
+        (Word never treats an embedded newline in w:t as a paragraph break).
+
+        Everything that follows after_el in cur_p (any untouched trailing
+        content from the original paragraph) moves into a new sibling w:p,
+        cloning cur_p's own w:pPr so the trailing paragraph keeps the same
+        style/list formatting. cur_p's own paragraph mark is then flagged as
+        a tracked insertion (w:pPr/w:rPr/w:ins) since this break did not
+        exist in the original document -- the OOXML convention for a newly
+        inserted paragraph mark. Any revision marker the ORIGINAL paragraph
+        mark already carried (ins/del/moveFrom/moveTo) describes that
+        original mark, which now belongs to the new trailing paragraph, not
+        to this freshly created break, so it is left on the clone and
+        stripped from cur_p's copy.
+
+        Returns (new_p, insertion_anchor), where insertion_anchor is the
+        element the next chunk's w:ins should be inserted after via
+        addnext(), or None when new_p has no w:pPr to anchor on (the next
+        chunk must then be inserted with new_p.insert(0, ...)).
+        """
+        new_p = OxmlElement("w:p")
+        cur_pPr = cur_p.find(qn("w:pPr"))
+        new_pPr = None
+        if cur_pPr is not None:
+            new_pPr = copy.deepcopy(cur_pPr)
+            new_p.append(new_pPr)
+
+        moving = []
+        sib = after_el.getnext()
+        while sib is not None:
+            moving.append(sib)
+            sib = sib.getnext()
+        for el in moving:
+            new_p.append(el)
+
+        cur_p.addnext(new_p)
+
+        if cur_pPr is None:
+            cur_pPr = OxmlElement("w:pPr")
+            cur_p.insert(0, cur_pPr)
+        cur_rPr = cur_pPr.find(qn("w:rPr"))
+        if cur_rPr is None:
+            cur_rPr = OxmlElement("w:rPr")
+            cur_pPr.append(cur_rPr)
+        else:
+            for prior_tag in ("ins", "del", "moveFrom", "moveTo"):
+                prior = cur_rPr.find(qn(f"w:{prior_tag}"))
+                if prior is not None:
+                    cur_rPr.remove(prior)
+        mark_ins = OxmlElement("w:ins")
+        mark_ins.set(qn("w:id"), str(mark_id))
+        mark_ins.set(qn("w:author"), author)
+        mark_ins.set(qn("w:date"), date)
+        cur_rPr.insert(0, mark_ins)
+
+        return new_p, new_pPr
 
     def _comment_ids(self, comments_part) -> set:
         """Return the set of w:id values from every w:comment in comments.xml."""

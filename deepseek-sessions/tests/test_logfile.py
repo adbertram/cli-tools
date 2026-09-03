@@ -106,15 +106,30 @@ def test_missing_header_raises(sessions_root: Path):
         load_log(session_dir / "session.jsonl")
 
 
-def test_invalid_json_line_raises(sessions_root: Path):
+def test_invalid_json_line_is_skipped_not_raised(sessions_root: Path):
+    """One corrupt line must not hide every other event in the same file.
+
+    dsh can flush a structurally valid Zstandard frame that carries an
+    incomplete JSON payload (e.g. a tool result cut short mid-write). That one
+    line is unreadable, but every other line in the file is still good data
+    and must survive the read.
+    """
     session_dir = sessions_root / PROJECT_KEY / "session-torn"
     session_dir.mkdir(parents=True)
     (session_dir / "session.jsonl").write_text(
-        json.dumps(header("session-torn", PROJECT_CWD)) + "\nnot json\n"
+        json.dumps(header("session-torn", PROJECT_CWD))
+        + "\nnot json\n"
+        + json.dumps({"type": "turn/start", "seq": 1, "time": 1, "data": {"turn": 1}})
+        + "\n"
     )
 
-    with pytest.raises(SessionLogError, match="line 2 is not valid JSON"):
-        load_log(session_dir / "session.jsonl")
+    log = load_log(session_dir / "session.jsonl")
+
+    assert log.session_id == "session-torn"
+    assert log.skipped_lines == [2]
+    # The good line after the corrupt one still decodes.
+    assert len(log.events) == 1
+    assert log.events[0]["type"] == "turn/start"
 
 
 def test_read_log_text_returns_raw_jsonl(simple_log: Path):

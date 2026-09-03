@@ -43,13 +43,22 @@ class AddCommentResult(CLIModel):
 
 
 class TrackedEditApplied(CLIModel):
-    """One batch edit applied as a w:ins/w:del tracked-change pair."""
+    """One batch edit applied as a w:del plus one or more w:ins elements.
+
+    ``ins_id`` is the first inserted-content wrapper's id. When ``new_text``
+    contains a paragraph break ("\\n\\n"), the replacement spans more than
+    one ``w:p`` and additional w:ins ids are allocated: one more
+    inserted-content wrapper per extra paragraph, plus one inserted
+    paragraph-mark per new break. Those extra ids are listed in
+    ``extra_ins_ids``, empty for a single-paragraph replacement.
+    """
 
     old_text: str
     new_text: str
     occurrence: int
     del_id: str = Field(frozen=True)
     ins_id: str = Field(frozen=True)
+    extra_ins_ids: List[str] = Field(default_factory=list, frozen=True)
 
 
 class EditTrackedChangesResult(CLIModel):

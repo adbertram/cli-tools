@@ -144,15 +144,155 @@ globiflow flows steps update FLOW_ID STEP_NUMBER --variable-name "new_name" --co
 # `steps update`
 globiflow flows steps add FLOW_ID --action "Update Item" --fields '{"Status": "Approved"}'
 globiflow flows steps update FLOW_ID STEP_NUMBER --fields '{"Status": "Approved", "Notes": "Reviewed"}'
+
+# Set a Podio app/relationship field by the target item's title -- Globiflow
+# searches for it at flow runtime (see below)
+globiflow flows steps update FLOW_ID STEP_NUMBER --fields '{"Format": "Blog Post"}'
+
+# Disambiguate which target app to search in, when a Podio app has more than
+# one relationship field (Globiflow's target-app picker isn't scoped per
+# field -- see below)
+globiflow flows steps update FLOW_ID STEP_NUMBER --fields '{"Format": {"app": "Content Formats", "value": "Blog Post"}}'
+
+# Set a multi-value ("multiple") relationship field to more than one item
+# with a list of labels -- each becomes its own search row
+globiflow flows steps update FLOW_ID STEP_NUMBER --fields '{"Related Content": ["Blog Post", "Whitepaper"]}'
+
+# Clear (unset) any field -- category/status or app/relationship -- with a
+# JSON null instead of a value
+globiflow flows steps update FLOW_ID STEP_NUMBER --fields '{"Status": null}'
+
+# Chain 2+ steps in one `flows create --steps` call, including one step
+# referencing a variable an earlier step in the same call creates
+globiflow flows create --app-id 30560419 --trigger C --name "Chained" --steps '[{"action_type": "Custom Variable", "variable_name": "myvar1", "code": "1+1"}, {"action_type": "Custom Variable", "variable_name": "myvar2", "code": "[(Variable) myvar1] + 1"}]'
+
+# Field-less logic steps -- End If (closes an If (Sanity Check) block) and
+# Continue (ends a For Each loop early) -- take no other options
+globiflow flows steps add FLOW_ID --action "If (Sanity Check)" --code "[*status*] == 'new'"
+globiflow flows steps add FLOW_ID --action "End If"
+globiflow flows steps add FLOW_ID --action "For Each"
+globiflow flows steps add FLOW_ID --action "Continue"
+
+# "Get Referenced Item(s)" collector step: target app, relationship
+# direction, and (optionally) the specific relationship field to follow, via
+# --params. `using_field` is the field's full option label as Globiflow
+# renders it, "(ItemName) FieldLabel" -- ItemName is the CURRENT app's
+# singular item-name config, not its app name (see `flows steps list` output
+# for an existing such step to get the exact string)
+globiflow flows steps add FLOW_ID --action "Get Referenced Item(s)" --params '{"app": "Topics", "direction": "FORWARD"}'
+globiflow flows steps add FLOW_ID --action "Get Referenced Item(s)" --params '{"app": "Topics", "direction": "FORWARD", "using_field": "(test1) Topic"}'
+
+# Trigger-condition filter steps -- gate the whole flow before any action
+# runs. "Field Changed" (only continue if a field's value changed on this
+# update) requires an Item Updated (U) trigger; "Custom Filter" (a PHP
+# eval) works with any trigger. Both take --params/--code, not --fields
+globiflow flows steps add FLOW_ID --action "Field Changed" --params '{"field": "Status"}'
+globiflow flows steps add FLOW_ID --action "Custom Filter" --code '[*item_value_approve-to-write*] != ""'
+
+# A leading filter + action combo in one `flows create --steps` call --
+# common for "only act when a specific field changes" flows
+globiflow flows create --app-id 30560419 --trigger U --name "Gated Update" --steps '[{"action_type": "Field Changed", "field": "Status"}, {"action_type": "Update Item", "fields": {"Notes": "Status changed"}}]'
 ```
 
 **Supported field types for `fields`:** text, number, and other scalar fields
 whose value renders as free text; category/status fields (set by option
-label, e.g. `"Status": "Approved"`). Podio app/relationship fields are not
-yet supported -- Globiflow's search-and-select widget for them renders
-behind a separate function this CLI does not select, so setting one raises a
-clear error instead of silently doing nothing. Set relationship fields
-manually in the Globiflow UI.
+label, e.g. `"Status": "Approved"`); Podio app/relationship fields (set by
+the target item's title/label -- see below). A `null` value clears
+(unsets) any of these field types instead of setting one, via Globiflow's
+"Unset" function -- fails loudly if a given field type doesn't offer one.
+
+**Relationship fields:** a plain string/number value (e.g.
+`{"Format": "Blog Post"}`) is the target item's title to search for.
+Globiflow has no "resolve a title to an item ID" control -- it configures a
+search *criterion* (target app + field + condition + value) that it
+evaluates at flow **runtime**, not when you save the step, so this CLI
+cannot pre-validate whether that title matches zero, one, or many items;
+that is Globiflow's own runtime behavior. The condition is always set to
+"Equal to" (exact match).
+
+Globiflow's target-app picker for this search is a per-Podio-app cache, not
+scoped to the specific field you're setting -- confirmed live by querying
+its AJAX endpoint directly with two different field ids on the same app and
+getting identical results back. For an app with only one relationship field
+(or where every relationship field points at the same target app) this is
+unambiguous and auto-selected. For an app with several relationship fields
+pointing at *different* target apps (e.g. a "Topics" app with fields for
+Format, Content, Contacts, etc.), the picker lists every one of those target
+apps for any field you pick, and this CLI will not guess which one is
+correct -- pass a dict value instead: `{"app": "<Target App Name>", "value":
+"<title>"}`. A plain-value call on an ambiguous field fails with a
+`ClientError` listing the candidate app names.
+
+If Globiflow's picker offers zero target apps for a field that clearly
+should have one, its per-app field/relationship cache is likely stale (a
+field created or repointed in Podio moments earlier can be invisible until
+that app's "Refresh from Podio" runs on its Globiflow flows.php page) --
+refresh it there and retry.
+
+A relationship field's value may also be a **list** of labels, which expands
+into one search row per item -- confirmed live that Globiflow's field picker
+allows selecting the same field in more than one row, letting a multi-value
+("multiple") Podio app field be set to several items in one call.
+
+Not yet supported: a target app whose searchable-field list (the field
+Globiflow matches your label against) has more than one candidate -- this
+CLI cannot tell which one holds the title, and fails loudly rather than
+guessing.
+
+**Multi-step `--steps` chains:** `flows create --steps` with 2+ steps adds
+only the first step in-page, saves, then adds every remaining step via a
+fresh `flows steps add`-equivalent call against the now-saved flow. This
+matters because Globiflow's variable/token registry (what makes
+`[(Variable) myvar1]` resolve) is only populated for steps that existed when
+the page was last loaded/saved -- a step referencing a variable an earlier
+step in the *same unsaved* page just created would otherwise fail with
+`Token '(Variable) myvar1' does not exist in this flow`.
+
+**Field-less step types:** "End If" (closes an "If (Sanity Check)" block)
+and "Continue" (ends a "For Each" loop early) render no configurable fields
+in Globiflow's UI at all -- pass no other options for these.
+
+**`--params` (steps add):** a JSON escape hatch for step parameters that
+don't have a dedicated flag, following the same "JSON object, merged into
+the step" convention as `--fields`:
+- **"Get Referenced Item(s)" collector** -- `app` (required, matched like
+  Create Item's target-app picker: the trailing segment of Globiflow's "Org
+  \> Space > App" label), `direction` (`FORWARD`/`REVERSE`/`BOTH`,
+  case-insensitive), `using_field` (optional, requires `direction` to also
+  be set -- Globiflow doesn't render this picker until then). `using_field`'s
+  value is the picker's full option text, `"(ItemName) FieldLabel"`, where
+  `ItemName` is the *current* app's singular item-name config (Podio app
+  settings -> "What is a single item called?"), not its app/display name --
+  e.g. an app named "Content Submissions" with item-name "Submission" and a
+  "Topic" relationship field offers `"(Submission) Topic"`. Only one field
+  and direction combination is supported per call; "Follow references to
+  another App" (a second hop) is not yet exposed.
+- **Filter steps' target field** -- `{"field": "<Podio field label>"}` for
+  "Field Changed" (and other field-based filters this CLI's `action_type_map`
+  now recognizes: "Field Value Match", "Date Match", "Creator / Editor",
+  "Comment Match" -- but only "Field Changed" and "Custom Filter" have their
+  fields fully wired up end to end; the others add successfully as a step
+  type but this CLI does not yet fill their extra controls, such as an
+  operator or match value, so an add call for one of those fails loudly with
+  a `ClientError` naming the unfilled control instead of silently reporting
+  success).
+
+**Trigger-condition filter steps:** Field Changed, Custom Filter, and other
+condition steps that gate the whole flow live in a separate section of
+Globiflow's editor from action/logic/collector steps, added via a different
+picker than the Actions "+" button. "Field Changed" is only valid on an Item
+Updated (`U`) trigger -- Globiflow's own client-side validation rejects it
+(and, only for that specific reason, blocks the entire save) on any other
+trigger type. Because Globiflow pre-seeds every *new* Update-triggered
+flow's Filters section with an unconfigured "Field Changed" filter as a
+suggested starting point, `flows create --trigger U` deletes any such
+pre-existing, unconfigured filter/action step before adding the steps you
+asked for -- otherwise even a plain `flows create --trigger U` with no
+`--steps` at all would fail to save. "Custom Filter" (PHP eval) uses
+`--code`, the same option/field as "Custom Variable" and "If (Sanity
+Check)". `flows steps list`/`flows steps get` do not yet surface filter
+steps (a known, separate gap) -- use `flows export` and inspect the raw XML
+to confirm a filter step's saved configuration.
 
 ### Triggers (`globiflow triggers`)
 

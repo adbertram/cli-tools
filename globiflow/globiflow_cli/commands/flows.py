@@ -621,7 +621,21 @@ def add_step(
 
     # Update Item / Create Item fields
     fields: Optional[str] = typer.Option(None, "--fields",
-        help='JSON object of Podio field label -> value to set (Update Item / Create Item steps), e.g. \'{"Status": "Approved"}\''),
+        help='JSON object of Podio field label -> value to set (Update Item / Create Item steps). '
+             'Scalar/category: {"Status": "Approved"}. Relationship field (searches for the item '
+             'by title at flow runtime): {"Format": "Blog Post"}, or {"app": "Content Formats", '
+             '"value": "Blog Post"} to disambiguate when a Podio app has more than one relationship '
+             'field. A list value expands into multiple rows for a multi-value relationship field. '
+             'A null value unsets the field.'),
+
+    # Escape hatch for step params with no dedicated flag (collector app/direction/using_field,
+    # filter target field, etc.)
+    params: Optional[str] = typer.Option(None, "--params",
+        help='JSON object of additional step parameters not covered by a dedicated flag. '
+             'Used for "Get Referenced Item(s)" collector steps: '
+             '{"app": "Topics", "direction": "FORWARD", "using_field": "(Topics) Topic"} '
+             '(direction is FORWARD/REVERSE/BOTH; using_field is optional and needs direction set). '
+             'Also used for filter steps\' target field, e.g. "Field Changed": {"field": "Status"}.'),
 
     # Output format
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -636,6 +650,12 @@ def add_step(
         globiflow flows steps add 4314927 --action "Custom Variable" --variable-name "myvar" --code "'value'"
         globiflow flows steps add 4314927 --action "Remote HTTP Call" --url "https://api.example.com" --method POST
         globiflow flows steps add 4314927 --action "Update Item" --fields '{"Status": "Approved"}'
+        globiflow flows steps add 4314927 --action "Update Item" --fields '{"Format": "Blog Post"}'
+        globiflow flows steps add 4314927 --action "Update Item" --fields '{"Format": {"app": "Content Formats", "value": "Blog Post"}}'
+        globiflow flows steps add 4314927 --action "End If"
+        globiflow flows steps add 4314927 --action "Get Referenced Item(s)" --params '{"app": "Topics", "direction": "FORWARD", "using_field": "(Topics) Topic"}'
+        globiflow flows steps add 4314927 --action "Field Changed" --params '{"field": "Status"}'
+        globiflow flows steps add 4314927 --action "Custom Filter" --code '[*status*] != ""'
     """
     # Build step config from action_type and non-None options
     step_config = {"action_type": action_type}
@@ -662,6 +682,17 @@ def add_step(
             raise typer.Exit(1)
         step_config["fields"] = parsed_fields
 
+    if params is not None:
+        try:
+            parsed_params = json.loads(params)
+        except json.JSONDecodeError as e:
+            print_error(f"Invalid JSON in --params: {e}")
+            raise typer.Exit(1)
+        if not isinstance(parsed_params, dict):
+            print_error("--params must be a JSON object of parameter name -> value")
+            raise typer.Exit(1)
+        step_config.update(parsed_params)
+
     client = get_client()
     try:
         new_step = client.add_flow_step(flow_id, step_config)
@@ -673,7 +704,8 @@ def add_step(
                 {"field": "Action Type", "value": new_step.action_type},
             ]
             # Add any configured fields
-            for field_name in field_names + ["fields"]:
+            extra_keys = list((params and json.loads(params) or {}).keys()) if params else []
+            for field_name in field_names + ["fields"] + extra_keys:
                 value = getattr(new_step, field_name, None)
                 if value is not None:
                     rows.append({"field": field_name, "value": str(value)})
@@ -747,7 +779,12 @@ def update_step(
 
     # Update Item / Create Item fields
     fields: Optional[str] = typer.Option(None, "--fields",
-        help='JSON object of Podio field label -> value to set (Update Item / Create Item steps), e.g. \'{"Status": "Approved"}\''),
+        help='JSON object of Podio field label -> value to set (Update Item / Create Item steps). '
+             'Scalar/category: {"Status": "Approved"}. Relationship field (searches for the item '
+             'by title at flow runtime): {"Format": "Blog Post"}, or {"app": "Content Formats", '
+             '"value": "Blog Post"} to disambiguate when a Podio app has more than one relationship '
+             'field. A list value expands into multiple rows for a multi-value relationship field. '
+             'A null value unsets the field.'),
 
     # Output format
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -763,6 +800,9 @@ def update_step(
         globiflow flows steps update 4314927 3 --url "https://api.example.com" --method POST
         globiflow flows steps update 4314927 5 --to "email@example.com" --subject "Subject"
         globiflow flows steps update 4314927 2 --fields '{"Status": "Approved"}'
+        globiflow flows steps update 4314927 2 --fields '{"Format": "Blog Post"}'
+        globiflow flows steps update 4314927 2 --fields '{"Related Content": ["Blog Post", "Whitepaper"]}'
+        globiflow flows steps update 4314927 2 --fields '{"Status": null}'
     """
     # Build updates dict from non-None options
     updates = {}

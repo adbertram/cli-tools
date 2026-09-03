@@ -458,6 +458,12 @@ class _CreateFlowPage:
     def get_by_role(self, role, name=None):
         return _NoopLocator()
 
+    def evaluate(self, expression, arg=None):
+        # _require_save_ok -> _flow_validation_errors reads this; an empty
+        # list means "no validation errors," the success path these
+        # existing enabled/disabled tests exercise.
+        return []
+
 
 def _create_flow_client(monkeypatch, url, disable_calls, get_flow_calls):
     """Build a GlobiflowClient wired to a minimal fake create-flow page, with
@@ -1485,23 +1491,344 @@ def test_fill_item_field_value_raises_when_value_is_not_a_valid_option():
         assert "not a valid option" in str(e)
 
 
-def test_fill_item_field_value_raises_for_app_relationship_fields():
-    """App/relationship fields' "value" select only offers fixed variable
-    references (e.g. "Current Item"), not a literal search -- this must
-    fail loudly with a clear reason instead of guessing at the unverified
-    search widget or silently mismatching a literal value against those
-    options."""
+def test_fill_item_field_value_dispatches_app_fields_to_relationship_fill(monkeypatch):
+    """A field typed 'app' must go through the relationship search-fill path,
+    not the old blanket 'not yet supported' rejection."""
     row = _FakeElement(children={
         "input[name^='fieldTypes']": _FakeElement(count=1, attribute="app"),
-        "select[name^='value']": _FakeElement(count=1),
     })
+    client = GlobiflowClient()
+    calls = []
+    monkeypatch.setattr(
+        client, "_fill_relationship_field_value",
+        lambda page, row_, label, value: calls.append((row_, label, value)),
+    )
+
+    client._fill_item_field_value(None, row, "SpikeRelation", "Blog Post")
+
+    assert calls == [(row, "SpikeRelation", "Blog Post")]
+
+
+def test_fill_item_field_value_dispatches_null_value_to_unset(monkeypatch):
+    """A null value in the fields dict means 'clear this field', for any
+    field type -- must go through the Unset path, not the value-fill path."""
+    row = _FakeElement(children={
+        "input[name^='fieldTypes']": _FakeElement(count=1, attribute="category"),
+    })
+    client = GlobiflowClient()
+    calls = []
+    monkeypatch.setattr(
+        client, "_unset_item_field",
+        lambda page, row_, label: calls.append((row_, label)),
+    )
+
+    client._fill_item_field_value(None, row, "SpikeCategory", None)
+
+    assert calls == [(row, "SpikeCategory")]
+
+
+# ---- Unset support ----------------------------------------------------------
+#
+# One of the real flows being rebuilt explicitly clears a category field via
+# Globiflow's "Unset" function rather than setting it to an option. Confirmed
+# live (2026-09-03) against a disposable Podio app: selecting "Unset" in a
+# row's function picker (`select[name^='funcs']`) replaces the entire value
+# control with nothing -- there is no value to fill. Verified for both a
+# category field and a Podio app/relationship field; round-tripped via
+# `flows steps update --fields '{"SpikeCategory": null}'` then `flows export`
+# + base64-decode, which showed `function":"unset"` with no `value` key at
+# all in the saved PHP-serialized stepDetails.
+
+def test_unset_item_field_selects_unset_function():
+    funcs_select = _FakeElement(count=1, evaluate_result=["value", "unset", "calc"])
+    row = _FakeElement(children={"select[name^='funcs']": funcs_select})
+    page = _FieldFillPage()
+    client = GlobiflowClient()
+
+    client._unset_item_field(page, row, "SpikeCategory")
+
+    assert funcs_select.select_option_calls == [{"value": "unset", "label": None}]
+
+
+def test_unset_item_field_raises_when_funcs_picker_missing():
+    row = _FakeElement(children={})
     client = GlobiflowClient()
 
     try:
-        client._fill_item_field_value(None, row, "SpikeRelation", "Some Item")
-        raise AssertionError("Expected ClientError for an app/relationship field")
+        client._unset_item_field(None, row, "SpikeCategory")
+        raise AssertionError("Expected ClientError when no function picker exists")
     except client_module.ClientError as e:
-        assert "app/relationship field" in str(e)
+        assert "no function picker" in str(e)
+
+
+def test_unset_item_field_raises_when_unset_not_offered():
+    funcs_select = _FakeElement(count=1, evaluate_result=["value", "calc"])
+    row = _FakeElement(children={"select[name^='funcs']": funcs_select})
+    client = GlobiflowClient()
+
+    try:
+        client._unset_item_field(None, row, "SpikeText")
+        raise AssertionError("Expected ClientError when Unset isn't an option")
+    except client_module.ClientError as e:
+        assert "does not offer an 'Unset' function" in str(e)
+    assert funcs_select.select_option_calls == []
+
+
+# ---- Relationship (Podio app-type) field fill -------------------------------
+#
+# Confirmed live (2026-09-03) against a disposable Podio app AND (read-only,
+# an unsaved new-flow draft, never submitted) the real "Topics" app
+# (30831883): selecting a relationship field's function picker to "Search"
+# (`find`) replaces its value control with a 3-step widget --
+# `select[name*='related']` (target app), `select[name*='[field]']`
+# (searchable field of that app), and `select[name*='searchcond']` +
+# `textarea[name^='gmvalues']` (condition + search value). The `related`
+# picker is NOT scoped to the field chosen -- confirmed by calling Globiflow's
+# `/inc/ajaxItemsSub.php` directly with two different field ids on the same
+# app and getting byte-identical responses -- so it lists every app any
+# app-type field on the current Podio app relates to, aggregated. With one
+# candidate this is auto-selected; with more than one, a plain label value is
+# ambiguous and this CLI requires a `{"app": ..., "value": ...}` dict instead
+# of guessing. Round-tripped for real via `flows steps update --fields
+# '{"SpikeRelation": "eBook"}'` then `flows export` + base64-decode, which
+# showed the saved criteria (`related`, `field`, `searchcond":"eq"`, `value`)
+# matching exactly.
+
+def _relationship_row(related_options, search_field_options=None, funcs_evaluate_result=None):
+    funcs_select = _FakeElement(evaluate_result=funcs_evaluate_result)
+    related_select = _FakeElement(
+        evaluate_result=lambda arg=None: list(related_options),
+    )
+    children = {
+        "select[name^='funcs']": funcs_select,
+        "select[name*='related']": related_select,
+    }
+    if search_field_options is not None:
+        search_field_select = _FakeElement(
+            evaluate_result=lambda arg=None: list(search_field_options),
+        )
+        children["select[name*='[field]']"] = search_field_select
+        children["select[name*='searchcond']"] = _FakeElement(count=1)
+        children["textarea[name^='gmvalues']"] = _FakeElement(count=1, attribute="gmvalues1_1_value_")
+    row = _FakeElement(children=children)
+    return row, funcs_select, related_select, children.get("select[name*='[field]']")
+
+
+def test_fill_relationship_field_value_auto_selects_single_candidate_app_and_field(monkeypatch):
+    """With exactly one target app and one searchable field, both are
+    auto-selected -- no ambiguity to resolve."""
+    row, funcs_select, related_select, search_field_select = _relationship_row(
+        related_options=[
+            {"value": "0", "text": "Select App"},
+            {"value": "30831889", "text": "Progress Software > PSDX Automation > Content Formats"},
+        ],
+        search_field_options=[
+            {"value": "0", "text": "Select Field"},
+            {"value": "278028167", "text": "Name"},
+        ],
+    )
+    page = _FieldFillPage()
+    client = GlobiflowClient()
+    mention_calls = []
+    monkeypatch.setattr(
+        client, "_fill_mention_field",
+        lambda page, element_id, value: mention_calls.append((element_id, value)) or True,
+    )
+
+    client._fill_relationship_field_value(page, row, "SpikeRelation", "eBook")
+
+    assert funcs_select.select_option_calls == [{"value": "find", "label": None}]
+    assert related_select.select_option_calls == [{"value": "30831889", "label": None}]
+    assert search_field_select.select_option_calls == [{"value": "278028167", "label": None}]
+    assert mention_calls == [("gmvalues1_1_value_", "eBook")]
+
+
+def test_fill_relationship_field_value_raises_when_no_target_app_candidates():
+    """An empty related-app picker means Globiflow's per-app field cache is
+    stale (confirmed live: a field added moments earlier renders this way
+    until that app's 'Refresh from Podio' runs) -- must fail loudly with an
+    actionable message, not silently skip."""
+    row, _, _, _ = _relationship_row(related_options=[{"value": "0", "text": "Select App"}])
+    client = GlobiflowClient()
+
+    try:
+        client._fill_relationship_field_value(_FieldFillPage(), row, "SpikeRelation", "eBook")
+        raise AssertionError("Expected ClientError when no target app is offered")
+    except client_module.ClientError as e:
+        assert "Refresh from Podio" in str(e)
+
+
+def test_fill_relationship_field_value_raises_when_target_app_ambiguous():
+    """More than one candidate target app (Globiflow's picker isn't scoped
+    per field) without a disambiguating dict value must fail loudly rather
+    than guessing which app the field really references."""
+    row, _, _, _ = _relationship_row(
+        related_options=[
+            {"value": "0", "text": "Select App"},
+            {"value": "30831884", "text": "Progress Software > PSDX Automation > Content"},
+            {"value": "30831889", "text": "Progress Software > PSDX Automation > Content Formats"},
+        ],
+    )
+    client = GlobiflowClient()
+
+    try:
+        client._fill_relationship_field_value(_FieldFillPage(), row, "Format", "Blog Post")
+        raise AssertionError("Expected ClientError for an ambiguous target app")
+    except client_module.ClientError as e:
+        assert "ambiguous" in str(e)
+        assert "Content" in str(e) and "Content Formats" in str(e)
+
+
+def test_fill_relationship_field_value_dict_disambiguates_target_app(monkeypatch):
+    """A {"app": ..., "value": ...} dict resolves an otherwise-ambiguous
+    target app by matching Globiflow's picker label the same way
+    _select_create_item_app matches the Create Item app picker: on the
+    trailing app-name segment."""
+    row, funcs_select, related_select, search_field_select = _relationship_row(
+        related_options=[
+            {"value": "0", "text": "Select App"},
+            {"value": "30821467", "text": "Progress Software > PSDX Automation > test"},
+            {"value": "30831889", "text": "Progress Software > PSDX Automation > Content Formats"},
+        ],
+        search_field_options=[
+            {"value": "0", "text": "Select Field"},
+            {"value": "278028167", "text": "Name"},
+        ],
+    )
+    page = _FieldFillPage()
+    client = GlobiflowClient()
+    monkeypatch.setattr(client, "_fill_mention_field", lambda page, element_id, value: True)
+
+    client._fill_relationship_field_value(
+        page, row, "SpikeRelationSelf", {"app": "Content Formats", "value": "eBook"},
+    )
+
+    assert related_select.select_option_calls == [{"value": "30831889", "label": None}]
+
+
+def test_fill_relationship_field_value_raises_when_disambiguating_app_not_a_candidate():
+    row, _, _, _ = _relationship_row(
+        related_options=[
+            {"value": "0", "text": "Select App"},
+            {"value": "30821467", "text": "Progress Software > PSDX Automation > test"},
+        ],
+    )
+    client = GlobiflowClient()
+
+    try:
+        client._fill_relationship_field_value(
+            _FieldFillPage(), row, "SpikeRelationSelf", {"app": "Nope", "value": "eBook"},
+        )
+        raise AssertionError("Expected ClientError for an app not among the candidates")
+    except client_module.ClientError as e:
+        assert "Nope" in str(e)
+
+
+def test_fill_relationship_field_value_raises_for_incomplete_dict_value():
+    row, _, _, _ = _relationship_row(
+        related_options=[{"value": "0", "text": "Select App"}],
+    )
+    client = GlobiflowClient()
+
+    try:
+        client._fill_relationship_field_value(None, row, "SpikeRelation", {"app": "test"})
+        raise AssertionError("Expected ClientError for a dict value missing 'value'")
+    except client_module.ClientError as e:
+        assert "'app' and 'value' keys" in str(e)
+
+
+def test_fill_relationship_field_value_raises_when_search_field_ambiguous():
+    """Content Formats happens to have exactly one searchable field in the
+    live fixture, but a target app with more than one must fail loudly
+    rather than guessing which one holds the title."""
+    row, _, related_select, search_field_select = _relationship_row(
+        related_options=[
+            {"value": "0", "text": "Select App"},
+            {"value": "30821467", "text": "Progress Software > PSDX Automation > test"},
+        ],
+        search_field_options=[
+            {"value": "0", "text": "Select Field"},
+            {"value": "1", "text": "Title"},
+            {"value": "2", "text": "SpikeRefreshTest"},
+        ],
+    )
+    client = GlobiflowClient()
+
+    try:
+        client._fill_relationship_field_value(_FieldFillPage(), row, "SpikeRelationSelf", "eBook")
+        raise AssertionError("Expected ClientError for an ambiguous search field")
+    except client_module.ClientError as e:
+        assert "searchable fields" in str(e)
+
+
+def test_fill_relationship_field_value_raises_when_no_searchable_field():
+    row, _, related_select, search_field_select = _relationship_row(
+        related_options=[
+            {"value": "0", "text": "Select App"},
+            {"value": "30831889", "text": "Progress Software > PSDX Automation > Content Formats"},
+        ],
+        search_field_options=[{"value": "0", "text": "Select Field"}],
+    )
+    client = GlobiflowClient()
+
+    try:
+        client._fill_relationship_field_value(_FieldFillPage(), row, "SpikeRelation", "eBook")
+        raise AssertionError("Expected ClientError when no field is searchable")
+    except client_module.ClientError as e:
+        assert "no field Globiflow considers searchable" in str(e)
+
+
+def test_fill_relationship_field_value_falls_back_to_plain_fill(monkeypatch):
+    """Mirrors the scalar-field gMention fallback: if gMention has no
+    control for the search-value textarea, fill it directly."""
+    row, funcs_select, related_select, search_field_select = _relationship_row(
+        related_options=[
+            {"value": "0", "text": "Select App"},
+            {"value": "30831889", "text": "Progress Software > PSDX Automation > Content Formats"},
+        ],
+        search_field_options=[
+            {"value": "0", "text": "Select Field"},
+            {"value": "278028167", "text": "Name"},
+        ],
+    )
+    gmention_textarea = row.locator("textarea[name^='gmvalues']")
+    client = GlobiflowClient()
+    monkeypatch.setattr(client, "_fill_mention_field", lambda page, element_id, value: False)
+
+    client._fill_relationship_field_value(_FieldFillPage(), row, "SpikeRelation", "eBook")
+
+    assert gmention_textarea.fill_calls == ["eBook"]
+
+
+# ---- Multi-value relationship fields: list expansion into multiple rows ----
+#
+# Confirmed live (2026-09-03): Globiflow's field picker does not prevent
+# selecting the same field in more than one row, and a multi-value
+# ("multiple": true) Podio app field accepted two independent Search rows
+# for itself -- round-tripped via `flows steps update --fields
+# '{"SpikeRelationMulti": ["eBook", "Whitepaper"]}'` then `flows export` +
+# base64-decode, which showed two entries in the step's `values` array, one
+# per label, each with its own `find` criterion.
+
+def test_fill_item_fields_expands_a_list_value_into_one_row_per_item(monkeypatch):
+    row1 = _make_scalar_row("app", "unused")
+    option_labels = ["Select Field", "SpikeRelationMulti", "Tag(s)"]
+    field_select1 = _FakeElement(count=1, evaluate_result=list(option_labels))
+    container = _FillItemFieldsContainer(
+        rows=[row1], field_selects=[field_select1], option_labels=option_labels,
+    )
+    page = _FieldFillPage()
+    client = GlobiflowClient()
+    calls = []
+    monkeypatch.setattr(
+        client, "_fill_item_field_value",
+        lambda page, row, label, value: calls.append((label, value)),
+    )
+
+    client._fill_item_fields(page, container, {"SpikeRelationMulti": ["eBook", "Whitepaper"]})
+
+    assert container.add_field_clicks == 1, "Second list item must add exactly one new row"
+    assert calls == [("SpikeRelationMulti", "eBook"), ("SpikeRelationMulti", "Whitepaper")]
 
 
 def test_fill_item_field_value_raises_for_unsupported_control_types():
@@ -1689,3 +2016,657 @@ def test_select_create_item_app_raises_when_picker_missing():
         raise AssertionError("Expected ClientError when the app picker is missing")
     except client_module.ClientError as e:
         assert "target-app picker" in str(e)
+
+
+# ---- Gap 1: create_flow's multi-step loop must not lose cross-step token refs ----
+
+
+class _MultiStepCreateFlowPage:
+    """create_flow page fake carrying no pre-seeded filter/action steps, so
+    the purge-before-add loop (see gap 4's pre-seed test) no-ops."""
+
+    def __init__(self, url):
+        self.url = url
+
+    def wait_for_selector(self, selector, timeout=0):
+        return None
+
+    def wait_for_timeout(self, ms):
+        return None
+
+    def locator(self, selector):
+        return _NoopLocator()
+
+    def get_by_role(self, role, name=None):
+        return _NoopLocator()
+
+    def evaluate(self, expression, arg=None):
+        return None
+
+
+def test_create_flow_adds_only_first_step_inline_then_reloads_for_the_rest(monkeypatch):
+    """A multi-step --steps list must not be added in a single in-page loop.
+
+    Regression for: create_flow's variable/token registry is only populated
+    for steps that existed when the page was loaded/last saved, so a second
+    in-page _add_step_to_flow call referencing a variable the first step
+    just created failed with "Token ... does not exist in this flow" even
+    though the reference is valid once saved. The fix adds only steps[0]
+    in-page, saves, then adds every remaining step via add_flow_step (which
+    reloads configureflow.php fresh, seeing all previously-saved steps'
+    tokens) instead of continuing the in-page loop.
+    """
+    page = _MultiStepCreateFlowPage(
+        "https://workflow-automation.podio.com/flows.php?node=4404960"
+    )
+    client = GlobiflowClient()
+    monkeypatch.setattr(client, "ensure_authenticated", lambda path="/": None)
+
+    class _FakeBrowser:
+        def get_page(self, url=None):
+            return page
+
+    monkeypatch.setattr(GlobiflowClient, "browser", property(lambda self: _FakeBrowser()))
+    monkeypatch.setattr(client, "_save_flow", lambda page, timeout=2500: None)
+    monkeypatch.setattr(client, "_require_save_ok", lambda page, context: None)
+    monkeypatch.setattr(client, "get_flow", lambda flow_id, include_steps=False: FlowDetail(
+        id=flow_id, name="stub", enabled=True
+    ))
+
+    add_step_to_flow_calls = []
+    monkeypatch.setattr(
+        client, "_add_step_to_flow",
+        lambda page, step_config: add_step_to_flow_calls.append(step_config),
+    )
+
+    add_flow_step_calls = []
+
+    def _fake_add_flow_step(flow_id, step_config):
+        add_flow_step_calls.append((flow_id, step_config))
+        return None
+
+    monkeypatch.setattr(client, "add_flow_step", _fake_add_flow_step)
+
+    steps = [
+        {"action_type": "Custom Variable", "variable_name": "v1", "code": "1+1"},
+        {"action_type": "Custom Variable", "variable_name": "v2", "code": "[(Variable) v1] + 1"},
+        {"action_type": "Custom Variable", "variable_name": "v3", "code": "[(Variable) v2] + 1"},
+    ]
+
+    client.create_flow(app_id="30821467", trigger_code="C", name="chain", steps=steps)
+
+    assert add_step_to_flow_calls == [steps[0]], (
+        "Only the first step may be added via the in-page _add_step_to_flow "
+        "loop; every other step must go through add_flow_step's reload path."
+    )
+    assert add_flow_step_calls == [("4404960", steps[1]), ("4404960", steps[2])], (
+        "Remaining steps must be added, in order, via add_flow_step against "
+        "the newly created flow_id -- each such call reloads the flow fresh "
+        "so its token registry includes every step saved so far."
+    )
+
+
+def test_create_flow_with_a_single_step_never_calls_add_flow_step(monkeypatch):
+    """A single-step create must not take the reload path at all."""
+    page = _MultiStepCreateFlowPage(
+        "https://workflow-automation.podio.com/flows.php?node=4404961"
+    )
+    client = GlobiflowClient()
+    monkeypatch.setattr(client, "ensure_authenticated", lambda path="/": None)
+
+    class _FakeBrowser:
+        def get_page(self, url=None):
+            return page
+
+    monkeypatch.setattr(GlobiflowClient, "browser", property(lambda self: _FakeBrowser()))
+    monkeypatch.setattr(client, "_save_flow", lambda page, timeout=2500: None)
+    monkeypatch.setattr(client, "_require_save_ok", lambda page, context: None)
+    monkeypatch.setattr(client, "get_flow", lambda flow_id, include_steps=False: FlowDetail(
+        id=flow_id, name="stub", enabled=True
+    ))
+    monkeypatch.setattr(client, "_add_step_to_flow", lambda page, step_config: None)
+
+    add_flow_step_calls = []
+    monkeypatch.setattr(
+        client, "add_flow_step",
+        lambda flow_id, step_config: add_flow_step_calls.append((flow_id, step_config)),
+    )
+
+    client.create_flow(
+        app_id="30821467", trigger_code="C", name="single",
+        steps=[{"action_type": "Custom Variable", "variable_name": "v1", "code": "1+1"}],
+    )
+
+    assert add_flow_step_calls == []
+
+
+# ---- Gap 2: field-less step types (End If, Continue) must not wait for a field ----
+
+
+def test_wait_for_step_selection_routes_zero_field_types_to_function_registered_wait(monkeypatch):
+    """"End If"/"Continue" render no config field at all, so waiting for one
+    (what every other step type needs) always times out. Regression for:
+    'Step type fields did not render within 8000ms' when adding "End If" --
+    confirmed live the step never renders any input/textarea/select, only a
+    hidden stepFunction input and a plain-text summary div.
+    """
+    client = GlobiflowClient()
+    calls = []
+    monkeypatch.setattr(
+        client, "_wait_for_step_function_registered",
+        lambda page, timeout=8000, container_selector="#actions": calls.append(
+            ("function_registered", container_selector)
+        ),
+    )
+    monkeypatch.setattr(
+        client, "_wait_for_step_fields_rendered",
+        lambda page, timeout=8000, container_selector="#actions": calls.append(
+            ("fields_rendered", container_selector)
+        ),
+    )
+
+    client._wait_for_step_selection(page=None, ui_action_type="End If")
+    client._wait_for_step_selection(page=None, ui_action_type="Continue")
+
+    assert calls == [
+        ("function_registered", "#actions"),
+        ("function_registered", "#actions"),
+    ], "End If/Continue must use the fields-less readiness wait, not the field wait."
+
+
+def test_wait_for_step_selection_routes_normal_types_to_fields_rendered_wait(monkeypatch):
+    """Every other step type keeps waiting for its config field to render."""
+    client = GlobiflowClient()
+    calls = []
+    monkeypatch.setattr(
+        client, "_wait_for_step_function_registered",
+        lambda page, timeout=8000, container_selector="#actions": calls.append("function_registered"),
+    )
+    monkeypatch.setattr(
+        client, "_wait_for_step_fields_rendered",
+        lambda page, timeout=8000, container_selector="#actions": calls.append(
+            ("fields_rendered", container_selector)
+        ),
+    )
+
+    client._wait_for_step_selection(page=None, ui_action_type="Remote HTTP Call")
+    client._wait_for_step_selection(
+        page=None, ui_action_type="Field Changed", container_selector="#flowfilters",
+    )
+
+    assert calls == [
+        ("fields_rendered", "#actions"),
+        ("fields_rendered", "#flowfilters"),
+    ]
+
+
+class _StepFunctionPage:
+    """Fake page for _wait_for_step_function_registered: returns a queued
+    value from evaluate() each poll, simulating the hidden input's value
+    settling after N polls."""
+
+    def __init__(self, values):
+        self._values = list(values)
+        self.waits = []
+
+    def evaluate(self, expression, arg=None):
+        return self._values.pop(0) if self._values else None
+
+    def wait_for_timeout(self, ms):
+        self.waits.append(ms)
+
+
+def test_wait_for_step_function_registered_polls_until_hidden_input_has_a_value():
+    page = _StepFunctionPage([None, None, "endIf"])
+    client = GlobiflowClient()
+
+    client._wait_for_step_function_registered(page, timeout=2000)
+
+    assert page.waits == [250, 250]
+
+
+def test_wait_for_step_function_registered_raises_when_value_never_appears():
+    page = _StepFunctionPage([None, None, None, None])
+    client = GlobiflowClient()
+
+    try:
+        client._wait_for_step_function_registered(page, timeout=500)
+        raise AssertionError("Expected ClientError when the hidden input never registers")
+    except client_module.ClientError as e:
+        assert "did not register" in str(e)
+
+
+# ---- Gap 3: "Get Referenced Item(s)" collector app/direction/using_field ----
+
+
+def _make_app_select(matched_value):
+    return _FakeElement(evaluate_result=lambda arg: matched_value)
+
+
+def test_fill_get_referenced_item_collector_selects_app_direction_and_field():
+    """Happy path: all three chained selects get filled in order, with
+    direction lowercased to match Globiflow's option values (forward/
+    reverse/both) even though RelationshipDirection's enum values are
+    uppercase.
+    """
+    app_select = _make_app_select("30831883")
+    direction_select = _FakeElement(evaluate_result=["forward", "reverse", "both", ""])
+    field_select = _FakeElement()
+    container = _FakeElement(children={
+        "select[name^='gotoApp']": app_select,
+        "select[name^='direction']": direction_select,
+        "select[name^='field']:not([name^='fields'])": field_select,
+    })
+    page = _FieldFillPage()
+    client = GlobiflowClient()
+
+    client._fill_get_referenced_item_collector(
+        page, container, "Topics", "FORWARD", "(test1) Topic",
+    )
+
+    assert app_select.select_option_calls == [{"value": "30831883", "label": None}]
+    assert direction_select.select_option_calls == [{"value": "forward", "label": None}]
+    assert field_select.select_option_calls == [{"value": None, "label": "(test1) Topic"}]
+
+
+def test_fill_get_referenced_item_collector_requires_app():
+    client = GlobiflowClient()
+    try:
+        client._fill_get_referenced_item_collector(
+            _FieldFillPage(), _FakeElement(), None, "FORWARD", None,
+        )
+        raise AssertionError("Expected ClientError when app is missing")
+    except client_module.ClientError as e:
+        assert "requires 'app'" in str(e)
+
+
+def test_fill_get_referenced_item_collector_raises_when_app_not_found():
+    app_select = _make_app_select(None)
+    container = _FakeElement(children={"select[name^='gotoApp']": app_select})
+    client = GlobiflowClient()
+
+    try:
+        client._fill_get_referenced_item_collector(
+            _FieldFillPage(), container, "Nope", None, None,
+        )
+        raise AssertionError("Expected ClientError when the app is not a picker option")
+    except client_module.ClientError as e:
+        assert "Nope" in str(e)
+
+
+def test_fill_get_referenced_item_collector_stops_after_app_when_no_direction_given():
+    """Direction/using_field are optional -- filling only 'app' must not
+    require or touch the other two pickers."""
+    app_select = _make_app_select("30831883")
+    container = _FakeElement(children={"select[name^='gotoApp']": app_select})
+    client = GlobiflowClient()
+
+    client._fill_get_referenced_item_collector(_FieldFillPage(), container, "Topics", None, None)
+
+    assert app_select.select_option_calls == [{"value": "30831883", "label": None}]
+
+
+def test_fill_get_referenced_item_collector_raises_for_invalid_direction():
+    app_select = _make_app_select("30831883")
+    direction_select = _FakeElement(evaluate_result=["forward", "reverse", "both", ""])
+    container = _FakeElement(children={
+        "select[name^='gotoApp']": app_select,
+        "select[name^='direction']": direction_select,
+    })
+    client = GlobiflowClient()
+
+    try:
+        client._fill_get_referenced_item_collector(
+            _FieldFillPage(), container, "Topics", "SIDEWAYS", None,
+        )
+        raise AssertionError("Expected ClientError for an invalid direction")
+    except client_module.ClientError as e:
+        assert "SIDEWAYS" in str(e)
+
+
+def test_fill_get_referenced_item_collector_requires_direction_before_using_field():
+    """Globiflow does not render the Using Field picker until a direction is
+    chosen, so requesting using_field without direction must fail clearly
+    rather than silently no-op."""
+    app_select = _make_app_select("30831883")
+    container = _FakeElement(children={"select[name^='gotoApp']": app_select})
+    client = GlobiflowClient()
+
+    try:
+        client._fill_get_referenced_item_collector(
+            _FieldFillPage(), container, "Topics", None, "(test1) Topic",
+        )
+    except client_module.ClientError:
+        raise AssertionError(
+            "using_field without direction must be silently skipped (return "
+            "early), not raise -- direction is what's actually required first."
+        )
+
+
+# ---- Gap 3/4 wiring: _add_step_to_flow must route to the right add/fill helpers ----
+
+
+def test_add_step_to_flow_routes_filter_types_to_add_filter_step(monkeypatch):
+    """Field Changed/Custom Filter/etc. must go through _add_filter_step
+    (the Filters-section "+" and its .selectbrick picker), never
+    _add_action_step (the Actions-section "+" and its .sidebarblock picker).
+    """
+    client = GlobiflowClient()
+    calls = []
+    monkeypatch.setattr(
+        client, "_add_filter_step",
+        lambda page, ui_action_type: calls.append(("filter", ui_action_type)) or _FakeElement(),
+    )
+    monkeypatch.setattr(
+        client, "_add_action_step",
+        lambda page, ui_action_type: calls.append(("action", ui_action_type)) or _FakeElement(),
+    )
+
+    client._add_step_to_flow(None, {"action_type": "Field Changed", "field": "Title"})
+    client._add_step_to_flow(None, {"action_type": "Custom Filter", "code": "1==1"})
+    client._add_step_to_flow(None, {"action_type": "Remote HTTP Call"})
+
+    assert calls == [
+        ("filter", "Field Changed"),
+        ("filter", "Custom (Calc)"),
+        ("action", "Remote HTTP Call"),
+    ], "Filter action_types (including the 'Custom Filter' alias for Custom (Calc)) must route to _add_filter_step; everything else to _add_action_step."
+
+
+def test_add_step_to_flow_requires_action_type():
+    client = GlobiflowClient()
+    try:
+        client._add_step_to_flow(None, {})
+        raise AssertionError("Expected ClientError when action_type is missing")
+    except client_module.ClientError as e:
+        assert "action_type" in str(e)
+
+
+class _MousedownBrick(_FakeElement):
+    """Records how it was 'clicked' -- via JS .click() or a dispatched
+    mousedown -- without actually running the JS string, since a
+    .selectbrick's onmousedown handler (unlike a .sidebarblock's onclick)
+    never fires from this harness's element.click() (a synthetic 'click'
+    event only; see _CLICK_JS)."""
+
+    def evaluate(self, expression, arg=None):
+        self._evaluate_calls = getattr(self, "_evaluate_calls", [])
+        self._evaluate_calls.append(expression)
+        return None
+
+
+class _ClickableButton:
+    """Minimal '+' link stand-in: count()/click()."""
+
+    def __init__(self, count=1):
+        self._count = count
+        self.click_calls = 0
+
+    def count(self):
+        return self._count
+
+    def click(self):
+        self.click_calls += 1
+
+
+class _FiltersSectionLocator:
+    """`page.locator('#filters')` stand-in exposing get_by_role('link', '+')."""
+
+    def __init__(self, button):
+        self._button = button
+
+    def get_by_role(self, role, name=None):
+        return self._button
+
+
+class _LastOnly:
+    """`page.locator('#flowfilters li')` stand-in: only `.last` is used, by
+    _add_filter_step's brick lookup and its own return value."""
+
+    def __init__(self, brick):
+        self._brick = brick
+
+    @property
+    def last(self):
+        return _FakeElement(children={
+            ".selectbrick:has-text('Field Changed')": self._brick,
+        })
+
+
+class _FilterPickerPage:
+    def __init__(self, brick):
+        self._brick = brick
+        self._button = _ClickableButton()
+        self.waits = []
+
+    def locator(self, selector):
+        if selector == "#filters":
+            return _FiltersSectionLocator(self._button)
+        if selector == "#flowfilters li":
+            return _LastOnly(self._brick)
+        return _FakeElement(count=0)
+
+    def wait_for_timeout(self, ms):
+        self.waits.append(ms)
+
+
+def test_add_filter_step_dispatches_mousedown_not_a_synthetic_click(monkeypatch):
+    """Regression for: filter bricks (.selectbrick, wired to onmousedown)
+    never got selected because the code originally used the same JS
+    `el.click()` pattern the Actions section's .sidebarblock (onclick)
+    items need -- a synthetic 'click' event never fires an onmousedown
+    listener. Confirmed live (2026-09-03): dispatching a MouseEvent
+    ('mousedown') directly does select the brick.
+    """
+    brick = _MousedownBrick(count=1)
+    page = _FilterPickerPage(brick)
+    client = GlobiflowClient()
+    monkeypatch.setattr(client, "_wait_for_step_selection", lambda *a, **k: None)
+
+    client._add_filter_step(page, "Field Changed")
+
+    assert brick._evaluate_calls, "Expected the brick to be selected via evaluate()"
+    assert "mousedown" in brick._evaluate_calls[0], (
+        "Filter bricks must be selected via a dispatched 'mousedown' event, "
+        "not a JS .click() (which only fires onclick listeners)."
+    )
+    assert "click()" not in brick._evaluate_calls[0]
+
+
+# ---- Gap 4: add_flow_step must classify filter vs action steps correctly ----
+
+
+class _StepCountPage:
+    """Page fake for add_flow_step: reports distinct #actions/#flowfilters
+    counts so the test can tell which section the code actually counted."""
+
+    def __init__(self, actions_count, filters_count):
+        self._counts = {"#actions li": actions_count, "#flowfilters li": filters_count}
+
+    def locator(self, selector):
+        return _FakeElement(count=self._counts.get(selector, 0))
+
+
+def test_add_flow_step_counts_flowfilters_for_a_filter_step(monkeypatch):
+    """Regression for: add_flow_step always counted #actions li to compute
+    the new step's number, so adding a filter step (which lands in
+    #flowfilters, not #actions) crashed downstream with 'Step N not found'
+    -- N was an action-step count that had nothing to do with where the
+    filter step actually landed.
+    """
+    page = _StepCountPage(actions_count=3, filters_count=1)
+    client = GlobiflowClient()
+    monkeypatch.setattr(client, "ensure_authenticated", lambda path="/": None)
+
+    class _FakeBrowser:
+        def get_page(self, url=None):
+            return page
+
+    monkeypatch.setattr(GlobiflowClient, "browser", property(lambda self: _FakeBrowser()))
+    monkeypatch.setattr(client, "_add_step_to_flow", lambda page, step_config: None)
+    monkeypatch.setattr(client, "_save_flow", lambda page, timeout=2500: None)
+    monkeypatch.setattr(client, "_require_save_ok", lambda page, context: None)
+
+    get_flow_step_calls = []
+    monkeypatch.setattr(
+        client, "get_flow_step",
+        lambda flow_id, step_number: get_flow_step_calls.append(step_number),
+    )
+
+    result = client.add_flow_step("4314927", {"action_type": "Field Changed", "field": "Title"})
+
+    assert get_flow_step_calls == [], (
+        "A filter step must not be looked up via get_flow_step -- it only "
+        "reads #flowactions, which never contains filter steps."
+    )
+    assert result.step_number == 2, (
+        "The filter step's number must come from the pre-add #flowfilters "
+        "count (1) + 1, not the #actions count (3) + 1."
+    )
+    assert result.field == "Title"
+
+
+def test_add_flow_step_counts_actions_for_a_non_filter_step(monkeypatch):
+    page = _StepCountPage(actions_count=3, filters_count=1)
+    client = GlobiflowClient()
+    monkeypatch.setattr(client, "ensure_authenticated", lambda path="/": None)
+
+    class _FakeBrowser:
+        def get_page(self, url=None):
+            return page
+
+    monkeypatch.setattr(GlobiflowClient, "browser", property(lambda self: _FakeBrowser()))
+    monkeypatch.setattr(client, "_add_step_to_flow", lambda page, step_config: None)
+    monkeypatch.setattr(client, "_save_flow", lambda page, timeout=2500: None)
+    monkeypatch.setattr(client, "_require_save_ok", lambda page, context: None)
+
+    get_flow_step_calls = []
+
+    def _fake_get_flow_step(flow_id, step_number):
+        get_flow_step_calls.append(step_number)
+        return "stub-step"
+
+    monkeypatch.setattr(client, "get_flow_step", _fake_get_flow_step)
+
+    result = client.add_flow_step("4314927", {"action_type": "Add Comment", "comment_body": "hi"})
+
+    assert get_flow_step_calls == [4], "Action steps keep using the #actions count + 1."
+    assert result == "stub-step"
+
+
+# ---- Gap 4: create_flow must purge Globiflow's pre-seeded, unconfigured steps ----
+
+
+class _PurgeCountingPage(_MultiStepCreateFlowPage):
+    """Reports a shrinking #flowfilters/#actions count each time
+    deleteStep is invoked via evaluate(), simulating the DOM losing the
+    deleted <li> -- so the purge loop's `while count() > 0` terminates."""
+
+    def __init__(self, url, filters_seed, actions_seed):
+        super().__init__(url)
+        self._filters = list(filters_seed)
+        self._actions = list(actions_seed)
+        self.deleted_slot_ids = []
+
+    def locator(self, selector):
+        if selector == "#flowfilters li":
+            return _CountAndFirst(self._filters)
+        if selector == "#actions li":
+            return _CountAndFirst(self._actions)
+        return _NoopLocator()
+
+    def evaluate(self, expression, arg=None):
+        # window.deleteStep(id) -- pop the matching pre-seeded slot. The
+        # real call site does `int(slot_id)` before passing `arg` here, so
+        # compare as strings to match regardless of the seeded id's type.
+        self.deleted_slot_ids.append(arg)
+        if self._filters and str(arg) == str(self._filters[0]):
+            self._filters.pop(0)
+        elif self._actions and str(arg) == str(self._actions[0]):
+            self._actions.pop(0)
+        return None
+
+
+class _CountAndFirst:
+    def __init__(self, slot_ids):
+        self._slot_ids = slot_ids
+
+    def count(self):
+        return len(self._slot_ids)
+
+    @property
+    def first(self):
+        return _FakeElement(attribute=self._slot_ids[0] if self._slot_ids else None)
+
+
+def test_create_flow_purges_pre_seeded_steps_before_adding_callers_steps(monkeypatch):
+    """Regression for: Globiflow pre-seeds a new Update-triggered flow's
+    Filters section with an unconfigured "Field Changed" filter (field
+    picker left at "Select Field") as a suggested starting point. Its own
+    client-side validate() flags *any* fieldChanged step with an unselected
+    field as an error regardless of whether the caller asked for that step,
+    so even `flows create --trigger U` with zero --steps failed with
+    "Could not extract flow ID from redirect URL". create_flow must delete
+    every pre-existing filter/action step before adding the caller's own.
+    """
+    page = _PurgeCountingPage(
+        "https://workflow-automation.podio.com/flows.php?node=4404962",
+        filters_seed=["1"],
+        actions_seed=[],
+    )
+    client = GlobiflowClient()
+    monkeypatch.setattr(client, "ensure_authenticated", lambda path="/": None)
+
+    class _FakeBrowser:
+        def get_page(self, url=None):
+            return page
+
+    monkeypatch.setattr(GlobiflowClient, "browser", property(lambda self: _FakeBrowser()))
+    monkeypatch.setattr(client, "_save_flow", lambda page, timeout=2500: None)
+    monkeypatch.setattr(client, "_require_save_ok", lambda page, context: None)
+    monkeypatch.setattr(client, "get_flow", lambda flow_id, include_steps=False: FlowDetail(
+        id=flow_id, name="stub", enabled=True
+    ))
+    monkeypatch.setattr(client, "_add_step_to_flow", lambda page, step_config: None)
+
+    client.create_flow(app_id="30821467", trigger_code="U", name="no-stub")
+
+    assert page.deleted_slot_ids == [1], (
+        "The pre-seeded filter's slot id must be deleted before create_flow "
+        "adds/saves anything else."
+    )
+    assert page._filters == [], "The pre-seeded filter must be fully purged."
+
+
+# ---- Gap 4: _require_save_ok must not report success for a rejected save ----
+
+
+def test_require_save_ok_raises_when_validation_errors_present(monkeypatch):
+    """Regression for: Globiflow's validate() silently blocks Save (no
+    navigation, no JS exception) whenever a step still has an unfilled
+    required control, so a caller that only checks 'did the browser error'
+    can report success for a step that was never actually persisted.
+    Confirmed live (2026-09-03): a 'Field Value Match' filter added with
+    only its target field filled (this CLI does not yet fill its
+    operator/value) reported success before this check existed, but never
+    appeared in the saved flow's exported XML.
+    """
+    client = GlobiflowClient()
+    monkeypatch.setattr(
+        client, "_flow_validation_errors",
+        lambda page: [{"control": "input4", "step": "4", "action": "fieldValueMatch"}],
+    )
+
+    try:
+        client._require_save_ok(None, "adding step 'Field Value Match' to flow 123")
+        raise AssertionError("Expected ClientError when validation errors are present")
+    except client_module.ClientError as e:
+        assert "input4" in str(e)
+        assert "fieldValueMatch" in str(e)
+
+
+def test_require_save_ok_passes_when_no_validation_errors(monkeypatch):
+    client = GlobiflowClient()
+    monkeypatch.setattr(client, "_flow_validation_errors", lambda page: [])
+
+    client._require_save_ok(None, "adding step 'Add Comment' to flow 123")  # must not raise

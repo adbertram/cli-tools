@@ -20,6 +20,7 @@ from cli_tools_shared.exceptions import ClientError
 from msword_cli.client import NSMAP, MswordClient
 
 FIXTURE = Path(__file__).parent / "fixtures" / "tracked-changes-sample.docx"
+HYPERLINK_FIXTURE = Path(__file__).parent / "fixtures" / "hyperlink-sample.docx"
 W = NSMAP["w"]
 
 
@@ -221,3 +222,184 @@ def test_multiple_occurrences_target_correct_instance(tmp_path):
     # "widget two" (the untouched middle occurrence) is still plain, unedited text.
     full_text = "".join(t.text or "" for t in _find_all(root, "t"))
     assert "widget two" in full_text
+
+
+# ---------------------------------------------------------------------------
+# 5. old_text spanning a w:hyperlink must not be mistaken for a comment or
+#    tracked-change overlap (regression for the false-positive refusal).
+# ---------------------------------------------------------------------------
+
+
+def test_old_text_spanning_hyperlink_is_not_a_false_positive(tmp_path):
+    path = tmp_path / "hyperlink.docx"
+    shutil.copyfile(HYPERLINK_FIXTURE, path)
+
+    client = MswordClient()
+    before_comments = client.extract_comments(str(path))
+    assert {c.id for c in before_comments} == {"99", "77"}
+
+    # old_text starts in a plain run, crosses entirely through the
+    # w:hyperlink's own nested w:r, and ends in a trailing plain run -- no
+    # comment or tracked change is anywhere near this paragraph.
+    result = client.apply_tracked_edits(
+        str(path),
+        [
+            {
+                "old_text": "Before text link anchor text after text.",
+                "new_text": "Replacement text.",
+            }
+        ],
+        author="Adam Bertram",
+    )
+    assert result.edits_applied == 1
+
+    # The unrelated comment (99) and the genuinely-overlapping one (77, on a
+    # different paragraph this edit never touched) both survive untouched.
+    after_comments = client.extract_comments(str(path))
+    assert after_comments == before_comments
+
+    root = ET.fromstring(_document_xml(path))
+    del_el = _find_all(root, "del")[0]
+    ins_el = _find_all(root, "ins")[0]
+    del_text = "".join(t.text or "" for t in del_el.findall(f".//{{{W}}}delText"))
+    assert del_text == "Before text link anchor text after text."
+    ins_text = "".join(t.text or "" for t in ins_el.findall(f".//{{{W}}}t"))
+    assert ins_text == "Replacement text."
+
+    # The now-fully-consumed w:hyperlink wrapper must not remain as a dangling
+    # empty element inside the w:del.
+    assert del_el.findall(f".//{{{W}}}hyperlink") == []
+
+    reopened = docx.Document(str(path))
+    assert reopened.paragraphs
+
+
+# ---------------------------------------------------------------------------
+# 6. A genuine comment overlap must still be refused (the hyperlink fix must
+#    not weaken the real protection this error exists for).
+# ---------------------------------------------------------------------------
+
+
+def test_true_comment_overlap_still_raises(tmp_path):
+    path = tmp_path / "hyperlink.docx"
+    shutil.copyfile(HYPERLINK_FIXTURE, path)
+    original_bytes = path.read_bytes()
+
+    client = MswordClient()
+    with pytest.raises(
+        ClientError,
+        match="an existing comment or tracked-change marker sits inside the matched text",
+    ):
+        client.apply_tracked_edits(
+            str(path),
+            [{"old_text": "alpha beta gamma.", "new_text": "x"}],
+            author="Adam Bertram",
+        )
+
+    assert path.read_bytes() == original_bytes
+
+
+# ---------------------------------------------------------------------------
+# 7. new_text containing paragraph breaks ("\n\n") must produce real w:p
+#    elements per paragraph, not literal newlines inside one w:t (regression
+#    for the multi-paragraph collapse bug).
+# ---------------------------------------------------------------------------
+
+
+def _pPr_mark_ins_id(p_el):
+    """Return the w:id of p_el's own inserted-paragraph-mark w:ins, or None."""
+    ins_el = p_el.find(f"{{{W}}}pPr/{{{W}}}rPr/{{{W}}}ins")
+    return ins_el.get(f"{{{W}}}id") if ins_el is not None else None
+
+
+def test_multi_paragraph_new_text_splits_into_separate_paragraphs(tmp_path):
+    path = _make_doc(
+        tmp_path,
+        "multipara.docx",
+        "Old placeholder text that will be replaced entirely.",
+    )
+
+    client = MswordClient()
+    result = client.apply_tracked_edits(
+        str(path),
+        [
+            {
+                "old_text": "Old placeholder text that will be replaced entirely.",
+                "new_text": "Summary\n\nBody paragraph one.\n\nBody paragraph two.",
+            }
+        ],
+        author="Adam Bertram",
+    )
+    assert result.edits_applied == 1
+    assert result.edits[0].del_id
+    assert result.edits[0].ins_id
+    # 2 extra content w:ins (paragraphs 2 and 3) + 2 paragraph-mark w:ins
+    # (closing paragraphs 1 and 2) = 4 extra ids beyond the first ins_id.
+    assert len(result.edits[0].extra_ins_ids) == 4
+    all_ids = [result.edits[0].del_id, result.edits[0].ins_id] + result.edits[0].extra_ins_ids
+    assert len(all_ids) == len(set(all_ids))
+
+    root = ET.fromstring(_document_xml(path))
+    p_els = _find_all(root, "p")
+    assert len(p_els) == 3
+
+    # Every w:t (not w:delText) across the three paragraphs, in document order.
+    ins_texts = [
+        "".join(t.text or "" for t in p.findall(f".//{{{W}}}ins//{{{W}}}t"))
+        for p in p_els
+    ]
+    assert ins_texts == ["Summary", "Body paragraph one.", "Body paragraph two."]
+
+    # The del element (old text) lives in the first paragraph only.
+    assert _find_all(p_els[0], "del") != []
+    assert _find_all(p_els[1], "del") == []
+    assert _find_all(p_els[2], "del") == []
+
+    # Paragraphs 1 and 2 (all but the last) carry a tracked paragraph-mark
+    # insertion; the last paragraph keeps its own (unflagged) mark.
+    assert _pPr_mark_ins_id(p_els[0]) is not None
+    assert _pPr_mark_ins_id(p_els[1]) is not None
+    assert _pPr_mark_ins_id(p_els[2]) is None
+
+    # No literal "\n\n" survives anywhere in the saved document.
+    assert "\n\n" not in _document_xml(path)
+
+    reopened = docx.Document(str(path))
+    assert len(reopened.paragraphs) == 3
+
+
+def test_multi_paragraph_new_text_preserves_trailing_original_text(tmp_path):
+    path = _make_doc(
+        tmp_path,
+        "multipara-trailing.docx",
+        "Keep before. MATCH ME suffix stays after.",
+    )
+
+    client = MswordClient()
+    client.apply_tracked_edits(
+        str(path),
+        [{"old_text": "MATCH ME", "new_text": "Chunk one.\n\nChunk two."}],
+        author="Adam Bertram",
+    )
+
+    root = ET.fromstring(_document_xml(path))
+    p_els = _find_all(root, "p")
+    assert len(p_els) == 2
+
+    # Untouched text before the match stays plain, in the first paragraph.
+    first_plain = "".join(
+        t.text or "" for t in p_els[0].findall(f"{{{W}}}r/{{{W}}}t")
+    )
+    assert first_plain == "Keep before. "
+
+    # Untouched trailing text moves into the final paragraph (the one that
+    # keeps the original, unflagged paragraph mark), after the last inserted
+    # chunk -- not lost, and not left behind in the first paragraph.
+    assert _pPr_mark_ins_id(p_els[1]) is None
+    last_plain = "".join(
+        t.text or "" for t in p_els[1].findall(f"{{{W}}}r/{{{W}}}t")
+    )
+    assert last_plain == " suffix stays after."
+
+    reopened = docx.Document(str(path))
+    assert len(reopened.paragraphs) == 2
