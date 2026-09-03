@@ -158,15 +158,15 @@ def test_a_database_the_engine_refuses_exits_2_naming_the_path(
 
 
 def test_ok_envelope_for_an_unimplemented_adapter_exits_2(project, runner):
-    """`taskerdata` has no verified record shape; that is exit 2, not exit 1."""
+    """`crowdgen`'s refusal adapter has no verified record shape; exit 2, not exit 1."""
     for name in SITES:
         data = (envelope.build(name, envelope.OK, None, [{"id": 1}])
-                if name == "taskerdata"
+                if name == "crowdgen"
                 else envelope.build(name, envelope.NO_ACCOUNT, "fixture", []))
         envelope.write(paths.envelope_path(RUN, name), data)
     outcome = runner.invoke(app, ["merge", RUN])
     assert outcome.exit_code == 2, outcome.output
-    assert "taskerdata adapter is not implemented" in outcome.output
+    assert "crowdgen record shape has not been validated" in outcome.output
     assert not paths.db_path().exists()
 
 
@@ -178,7 +178,7 @@ def test_task_and_run_field_lists_track_the_database_columns():
     assert main.RUN_FIELDS == db.RUN_COLUMNS
     assert main.RUN_GET_FIELDS == db.RUN_COLUMNS + ("sites",)
     assert set(main.SITE_FIELDS) == {"name", "cli", "account", "lastpass_item",
-                                     "auth_command"}
+                                     "auth_command", "disabled"}
 
 
 def test_unconfigured_envelope_in_the_run_directory_fails_the_merge(project, runner):

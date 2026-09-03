@@ -1,8 +1,16 @@
 """The site registry: `config.json` in the MicroWorker project.
 
 Every site entry must carry exactly `cli` (str|null), `account` (bool),
-`lastpass_item` (str|null) and `auth_command` (str|null). A missing key, an
-unexpected key or a wrong type is a `ConfigError`; nothing is defaulted.
+`lastpass_item` (str|null), `auth_command` (str|null) and `disabled` (bool).
+A missing key, an unexpected key or a wrong type is a `ConfigError`; nothing
+is defaulted.
+
+`disabled: true` is the deterministic off-switch for a site's worker. Discovery
+runs skip disabled sites entirely: `discover` refuses them (exit 2, no
+envelope), `merge` neither expects nor accepts their envelopes, and the
+discovery agent fetches the roster with `--filter disabled:eq:false` so it
+never spawns their workers. Re-enabling is editing config.json back to
+`disabled: false` -- no agent, skill or code change.
 
 A config.json that is not parseable JSON is a `ConfigError` too, naming the path
 and the decode position. Left unwrapped, the `json.JSONDecodeError` escapes the
@@ -28,6 +36,7 @@ class SiteConfig:
     account: bool
     lastpass_item: str | None
     auth_command: str | None
+    disabled: bool
 
 
 # key -> accepted Python types
@@ -36,6 +45,7 @@ SITE_KEYS = {
     "account": (bool,),
     "lastpass_item": (str, type(None)),
     "auth_command": (str, type(None)),
+    "disabled": (bool,),
 }
 
 

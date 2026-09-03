@@ -7,7 +7,7 @@ Runs the per-site gig CLIs registered in the MicroWorker project's `config.json`
 ## Prerequisites
 
 - The MicroWorker project at `/Users/adam/Dropbox/GitRepos/Agents/MicroWorker` (override with `MICROWORKER_ROOT`), holding `config.json`.
-- The site CLIs named in `config.json` installed on `PATH` (`microworkers`, `taskerdata`). Each owns its own authentication; this CLI only runs `<cli> auth status`, the configured `auth_command`, and `<cli> tasks list`.
+- The site CLIs named in `config.json` installed on `PATH` (`microworkers`, `oneforma`, `humanrail`, `outlier`, `mercor`, `trainee-digital`, `atlas-capture`, `crowdgen`). Each owns its own authentication; this CLI only runs `<cli> auth status`, the configured `auth_command`, and `<cli> tasks list`.
 
 ## Installation
 
@@ -32,7 +32,9 @@ microworker tasks list --filter "pay_amount:gte:0.50" --table
 
 ## How It Works
 
-`config.json` has a `sites` object; every entry carries exactly `cli` (string or null), `account` (bool), `lastpass_item` (string or null) and `auth_command` (string or null). A missing, extra or mistyped key is a `ConfigError` (exit 2); nothing is defaulted, and a `config.json` that is not parseable JSON is a `ConfigError` naming the path and the decode position.
+`config.json` has a `sites` object; every entry carries exactly `cli` (string or null), `account` (bool), `lastpass_item` (string or null), `auth_command` (string or null) and `disabled` (bool). A missing, extra or mistyped key is a `ConfigError` (exit 2); nothing is defaulted, and a `config.json` that is not parseable JSON is a `ConfigError` naming the path and the decode position.
+
+`disabled: true` is the deterministic off-switch for a site's worker. A discovery run skips disabled sites entirely: `discover` refuses them (exit 2, no envelope), `merge` neither expects nor accepts their envelopes, and the roster query the discovery agent drives is `microworker sites list --filter disabled:eq:false --properties name` so no disabled worker is ever spawned. Re-enabling is editing `config.json` back to `disabled: false` -- no agent or code change.
 
 A **run id** is a UTC timestamp of the form `20260902T140000Z` -- exactly what `date -u +%Y%m%dT%H%M%SZ` produces -- and a **site name** is one lowercase segment matching `^[a-z0-9][a-z0-9-]*$`. Both are interpolated into filesystem paths, so both are validated in `paths.py` and every constructed path is asserted to resolve under the project root. Anything else exits 2 and writes nothing.
 
@@ -41,6 +43,7 @@ A **run id** is a UTC timestamp of the form `20260902T140000Z` -- exactly what `
 | Step | Condition | Envelope status |
 |------|-----------|-----------------|
 | 1 | site not in `config.json` | `ConfigError`, exit 2, no envelope written |
+| 1b | `disabled: true` | `ConfigError`, exit 2, no envelope written |
 | 2 | `account: false` | `no_account` |
 | 3 | `cli: null` | `no_cli` |
 | 4 | `<cli> auth status` exits 0 | continue |
@@ -53,9 +56,9 @@ A **run id** is a UTC timestamp of the form `20260902T140000Z` -- exactly what `
 
 Every JSON boundary is strict. Python's `json` accepts and emits `NaN`, `Infinity` and `-Infinity`, none of which are JSON, and silently turns an overflowing literal such as `1e999` into infinity. A site CLI that prints any of them gets an `error` envelope naming the literal; envelope files and the stored `raw` column are written with `allow_nan=False`; and `validate_task` rejects a non-finite number anywhere in the record, `raw` included. Without that, a NaN price binds to SQLite as SQL NULL, so a task the site priced reads back as `pay_amount: null` with its currency still attached, and an Infinity in the ledger makes `tasks list` emit output that strict JSON parsers reject.
 
-`merge <run_id>` requires the run directory to hold an envelope for every site in `config.json` **and no `*.json` for anything else**, validates each, maps `ok` tasks through the site adapter (`microworker_cli/adapters/<site>.py`) into the task contract (`schemas/task.schema.json`), validates every task, checks the run's tasks are unique by `(site, task_id)`, and only then writes -- the run row, its per-site summaries and every task upsert commit in one SQLite transaction. It is all-or-nothing: one bad envelope or task fails the whole merge and the database is left exactly as it was.
+`merge <run_id>` requires the run directory to hold an envelope for every ENABLED site in `config.json` (disabled sites are skipped: no envelope exists or is expected) **and no `*.json` for anything else**, validates each, maps `ok` tasks through the site adapter (`microworker_cli/adapters/<site>.py`) into the task contract (`schemas/task.schema.json`), validates every task, checks the run's tasks are unique by `(site, task_id)`, and only then writes -- the run row, its per-site summaries and every task upsert commit in one SQLite transaction. It is all-or-nothing: one bad envelope or task fails the whole merge and the database is left exactly as it was.
 
-The envelope set is checked in both directions on purpose. Requiring one per configured site catches a worker that never ran; rejecting a stray or misnamed `<site>.json` (e.g. `microworkers2.json`) catches the opposite mistake, which would otherwise contribute nothing, get no `run_sites` row and let the run exit 0 as though it had been complete.
+The envelope set is checked in both directions on purpose. Requiring one per enabled site catches a worker that never ran; rejecting a stray or misnamed `<site>.json` (e.g. `microworkers2.json`, or a disabled site's leftover envelope) catches the opposite mistake, which would otherwise contribute nothing, get no `run_sites` row and let the run exit 0 as though it had been complete.
 
 Two records mapping to the same `(site, task_id)` inside ONE run is a contradiction, not a re-sighting, and is rejected before the transaction opens -- naming the envelope and both record indexes. Left alone, the upsert would let the later record silently overwrite the earlier one and report more tasks than rows.
 
@@ -63,7 +66,11 @@ A task id must be a JSON string or integer. `str(value)` accepts everything, so 
 
 Envelopes are per-run and disposable. The database is the durable store.
 
-Adapters exist for `microworkers` and `humanrail` (implemented) and `taskerdata` (a `ClientError` until a real `ok` record shape is observed -- a contract failure of the merge, so exit 2, not the exit 1 a bare `NotImplementedError` would produce). An `ok` envelope for a site without an adapter fails the merge.
+Adapters exist for every `config.json` site: `microworkers`, `oneforma`, `humanrail`,
+`outlier`, `mercor` and `trainee-digital` implement real mappings; `atlas-capture` and
+`crowdgen` raise a `ClientError` until a real `ok` record shape is observed for them
+(a contract failure of the merge, so exit 2, not the exit 1 a bare `NotImplementedError`
+would produce). An `ok` envelope for a site without an adapter fails the merge.
 
 ## Commands
 
@@ -71,7 +78,7 @@ Adapters exist for `microworkers` and `humanrail` (implemented) and `taskerdata`
 
 ```bash
 microworker discover microworkers --run-id 20260902T120000Z
-microworker discover taskerdata --run-id 20260902T120000Z --timeout 120
+microworker discover outlier --run-id 20260902T120000Z --timeout 120
 ```
 
 Prints `{"site", "status", "path", "task_count"}` and exits 0 for every recorded status; only a config error exits non-zero.
@@ -130,7 +137,7 @@ microworker sites get microworkers --table
 microworker sites get microworkers --properties "cli,lastpass_item"
 ```
 
-Rows are `{name, cli, account, lastpass_item, auth_command}` straight from `config.json`.
+Rows are `{name, cli, account, lastpass_item, auth_command, disabled}` straight from `config.json`. Filter for the runnable roster with `--filter disabled:eq:false`.
 
 ### Tasks
 
@@ -255,7 +262,8 @@ microworker sites list --limit 1
     "cli": "microworkers",
     "account": true,
     "lastpass_item": "Microworkers",
-    "auth_command": "microworkers auth login --credential-type browser_session"
+    "auth_command": "microworkers auth login --credential-type browser_session",
+    "disabled": false
   }
 ]
 ```
@@ -264,10 +272,10 @@ microworker sites list --limit 1
 
 ```json
 {
-  "site": "taskerdata",
-  "status": "auth_failed",
+  "site": "crowdgen",
+  "status": "no_account",
   "fetched_at": "2026-09-02T12:00:00Z",
-  "error": "`taskerdata auth login --credential-type browser_session` exited 1 and `taskerdata auth status` still exits 2: ...",
+  "error": "config.json marks this site account=false",
   "tasks": []
 }
 ```

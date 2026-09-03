@@ -2,8 +2,10 @@
 
 Every test points `MICROWORKER_ROOT` at a temp directory, so nothing here can
 read or write the real project -- including `data/tasks.db`, which merge creates
-under that same root. `SITES` mirrors the real config.json shape: ten sites,
-each with exactly `cli`, `account`, `lastpass_item` and `auth_command`.
+under that same root. `SITES` mirrors the real config.json shape: eight sites,
+each with exactly `cli`, `account`, `lastpass_item`, `auth_command` and
+`disabled` (testpapas and taskerdata were cut from the roster 2026-09-03 per
+Adam; the fixture tracks it).
 """
 
 from __future__ import annotations
@@ -19,18 +21,23 @@ from microworker_cli import envelope
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 SITES = {
-    "taskerdata": {"cli": "taskerdata", "account": True, "lastpass_item": "TaskerData",
-                   "auth_command": "taskerdata auth login --credential-type browser_session"},
     "microworkers": {"cli": "microworkers", "account": True, "lastpass_item": "Microworkers",
-                     "auth_command": "microworkers auth login --credential-type browser_session"},
-    "oneforma": {"cli": None, "account": True, "lastpass_item": "OneForma", "auth_command": None},
-    "humanrail": {"cli": None, "account": False, "lastpass_item": None, "auth_command": None},
-    "mercor": {"cli": None, "account": False, "lastpass_item": None, "auth_command": None},
-    "trainee-digital": {"cli": None, "account": False, "lastpass_item": None, "auth_command": None},
-    "atlas-capture": {"cli": None, "account": False, "lastpass_item": None, "auth_command": None},
-    "outlier": {"cli": None, "account": True, "lastpass_item": "Outlier", "auth_command": None},
-    "crowdgen": {"cli": None, "account": False, "lastpass_item": None, "auth_command": None},
-    "testpapas": {"cli": None, "account": False, "lastpass_item": None, "auth_command": None},
+                     "auth_command": "microworkers auth login --credential-type browser_session",
+                     "disabled": False},
+    "oneforma": {"cli": None, "account": True, "lastpass_item": "OneForma", "auth_command": None,
+                 "disabled": False},
+    "humanrail": {"cli": None, "account": False, "lastpass_item": None, "auth_command": None,
+                  "disabled": False},
+    "mercor": {"cli": None, "account": False, "lastpass_item": None, "auth_command": None,
+               "disabled": False},
+    "trainee-digital": {"cli": None, "account": False, "lastpass_item": None, "auth_command": None,
+                        "disabled": False},
+    "atlas-capture": {"cli": None, "account": False, "lastpass_item": None, "auth_command": None,
+                      "disabled": False},
+    "outlier": {"cli": None, "account": True, "lastpass_item": "Outlier", "auth_command": None,
+                "disabled": False},
+    "crowdgen": {"cli": None, "account": False, "lastpass_item": None, "auth_command": None,
+                 "disabled": False},
 }
 
 

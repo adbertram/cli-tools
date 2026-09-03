@@ -1,19 +1,22 @@
 """`merge <run_id>`: every site envelope of a run -> the SQLite task store.
 
 All-or-nothing, in this order: the run directory must hold an envelope for every
-site in config.json and no envelope for anything else, every envelope must
-validate, every `ok` task must map through its site adapter and validate against
-the task contract, and the run's mapped tasks must be unique by
-`(site, task_id)`. Only then does anything reach the database, and it lands in
-one transaction (see `db.write_run`). A single bad envelope or task fails the
-whole merge and leaves the store exactly as it was.
+ENABLED site in config.json (sites with `disabled: true` are skipped -- their
+workers are not spawned, so no envelope exists or is expected) and no envelope
+for anything else, every envelope must validate, every `ok` task must map
+through its site adapter and validate against the task contract, and the run's
+mapped tasks must be unique by `(site, task_id)`. Only then does anything reach
+the database, and it lands in one transaction (see `db.write_run`). A single
+bad envelope or task fails the whole merge and leaves the store exactly as it
+was.
 
 THE ENVELOPE SET IS CHECKED IN BOTH DIRECTIONS. Requiring an envelope per
-configured site catches a worker that never ran. Rejecting an envelope for a
-site config.json does not define catches the opposite mistake -- a stray or
-misnamed `<site>.json`, e.g. `microworkers2.json` -- which would otherwise be
-skipped in silence: its tasks would never merge, it would get no `run_sites`
-row, and the run would exit 0 as though it had been complete.
+enabled site catches a worker that never ran. Rejecting an envelope for a site
+that is not an enabled config.json site catches the opposite mistake -- a stray
+or misnamed `<site>.json`, e.g. `microworkers2.json` or a disabled site's
+leftover envelope -- which would otherwise be skipped in silence: its tasks
+would never merge, it would get no `run_sites` row, and the run would exit 0
+as though it had been complete.
 
 DUPLICATE KEYS ARE REJECTED, NOT COLLAPSED. `db.write_run` writes the run's
 tasks with `executemany` over an upsert, so two records mapping to the same
@@ -50,18 +53,21 @@ from . import adapters, db, envelope, paths, schema, sites
 
 def merge(run_id: str) -> dict:
     site_configs = sites.load_sites()
+    # Disabled sites are skipped deterministically: no envelope is expected of
+    # them, none is accepted for them, and they get no run_sites row.
+    active = {name: cfg for name, cfg in site_configs.items() if not cfg.disabled}
     run = paths.run_dir(run_id)
-    missing = [name for name in site_configs
+    missing = [name for name in active
                if not paths.envelope_path(run_id, name).is_file()]
     if missing:
         raise ClientError(
             f"run {run_id} under {run} has no envelope for: {', '.join(missing)}")
-    _reject_unconfigured_envelopes(run, site_configs)
+    _reject_unconfigured_envelopes(run, active)
 
     site_summaries = {}
     tasks = []
     origins: dict[tuple[str, str], str] = {}
-    for name in site_configs:
+    for name in active:
         path = paths.envelope_path(run_id, name)
         data = envelope.read(path)
         if data["site"] != name:
@@ -95,7 +101,7 @@ def merge(run_id: str) -> dict:
         "run_id": run_id,
         "db_path": str(paths.db_path()),
         "sites": {name: summary["status"] for name, summary in site_summaries.items()},
-        # Keyed by every configured site, like `sites`, so a healthy run reads
+        # Keyed by every enabled site, like `sites`, so a healthy run reads
         # as an explicit 0 per site rather than as an absent key.
         "unparsed_payments": {name: summary["unparsed_payments"]
                               for name, summary in site_summaries.items()},
@@ -103,15 +109,15 @@ def merge(run_id: str) -> dict:
     }
 
 
-def _reject_unconfigured_envelopes(run, site_configs) -> None:
-    """Every `*.json` in the run directory must be a configured site."""
+def _reject_unconfigured_envelopes(run, active) -> None:
+    """Every `*.json` in the run directory must be an enabled site."""
     extra = sorted(path.stem for path in run.glob("*.json")
-                   if path.stem not in site_configs)
+                   if path.stem not in active)
     if extra:
         raise ClientError(
-            f"run directory {run} holds envelopes for sites config.json does not "
-            f"define: {', '.join(extra)}; config.json defines: "
-            f"{', '.join(site_configs)}")
+            f"run directory {run} holds envelopes for sites that are not "
+            f"enabled in config.json: {', '.join(extra)}; enabled sites: "
+            f"{', '.join(active)}")
 
 
 def _claim_key(origins: dict[tuple[str, str], str], task: dict,

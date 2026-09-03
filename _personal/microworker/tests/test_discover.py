@@ -78,6 +78,19 @@ def test_unknown_site_is_config_error_and_writes_nothing(project, fake):
     assert not paths.run_dir(RUN).exists()
 
 
+def test_disabled_site_is_config_error_and_writes_nothing(project, tmp_path, fake):
+    """`disabled: true` is an operator off-switch: exit 2, no envelope, no CLI run."""
+    from conftest import SITES, write_config
+    fake_runner = fake({})
+    sites = dict(SITES)
+    sites["outlier"] = dict(sites["outlier"], disabled=True)
+    write_config(tmp_path, sites)
+    with pytest.raises(ConfigError, match="site 'outlier' is disabled"):
+        run_discover("outlier")
+    assert not paths.run_dir(RUN).exists()
+    assert fake_runner.calls == []
+
+
 def test_no_account(project, fake):
     fake_runner = fake({})
     summary = run_discover("humanrail")

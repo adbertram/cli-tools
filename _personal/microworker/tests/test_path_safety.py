@@ -66,7 +66,8 @@ def test_discover_cannot_write_outside_the_project_root(project, tmp_path, monke
     escape = tmp_path.parent / "mw-escape"
     sites = dict(SITES)
     sites[f"../../../../../../{escape.name}"] = {
-        "cli": None, "account": False, "lastpass_item": None, "auth_command": None}
+        "cli": None, "account": False, "lastpass_item": None, "auth_command": None,
+        "disabled": False}
     write_config(project, sites)
     monkeypatch.setattr(runner_module, "run",
                         lambda argv, timeout: pytest.fail("no site CLI may run"))

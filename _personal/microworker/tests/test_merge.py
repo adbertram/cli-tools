@@ -45,9 +45,14 @@ def test_missing_envelopes_listed_and_no_database_created(project):
     assert not paths.db_path().exists()
 
 
-def test_ok_envelope_without_adapter_fails(project):
-    write_all_envelopes({"mercor": [{"id": 1}]})
-    with pytest.raises(ClientError, match="no adapter for site 'mercor'"):
+def test_ok_envelope_without_adapter_fails(project, monkeypatch):
+    # Every roster site has an adapter now, so simulate the failure state by
+    # dropping one registration: an ok envelope with tasks whose site lacks
+    # an adapter must still fail the merge with a ClientError and no DB.
+    from microworker_cli import adapters
+    write_all_envelopes({"outlier": [{"id": 1}]})
+    monkeypatch.delitem(adapters.ADAPTERS, "outlier")
+    with pytest.raises(ClientError, match="no adapter for site 'outlier'"):
         merge.merge(RUN)
     assert not paths.db_path().exists()
 
@@ -231,3 +236,34 @@ def test_cli_merge_missing_run_exits_2(project, runner):
     outcome = runner.invoke(app, ["merge", "20990101T000000Z"])
     assert outcome.exit_code == 2, outcome.output
     assert "no envelope for" in outcome.output
+
+
+def test_disabled_site_needs_no_envelope_and_gets_no_run_site(project):
+    """`disabled: true` sites are skipped: no envelope expected, no run row."""
+    from conftest import write_config
+    sites = dict(SITES)
+    sites["crowdgen"] = dict(sites["crowdgen"], disabled=True)
+    write_config(project, sites)
+    for name in SITES:
+        if name == "crowdgen":
+            continue
+        envelope.write(paths.envelope_path(RUN, name),
+                       envelope.build(name, envelope.NO_ACCOUNT, "fixture", []))
+    summary = merge.merge(RUN)
+    assert "crowdgen" not in summary["sites"]
+    assert "crowdgen" not in summary["unparsed_payments"]
+    run = db.get_run(RUN)
+    assert "crowdgen" not in run["sites"]
+
+
+def test_envelope_for_a_disabled_site_fails_the_merge(project):
+    """A stray envelope for a disabled site is rejected, never silently skipped."""
+    from conftest import write_config
+    sites = dict(SITES)
+    sites["crowdgen"] = dict(sites["crowdgen"], disabled=True)
+    write_config(project, sites)
+    write_all_envelopes()
+    with pytest.raises(ClientError,
+                       match="not enabled in config.json: crowdgen"):
+        merge.merge(RUN)
+    assert not paths.db_path().exists()

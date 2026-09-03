@@ -4,6 +4,7 @@ The decision table, in order. No step involves judgment; every outcome is a
 fixed function of config.json and the site CLI's exit codes:
 
 1. unknown site                              -> ConfigError (no envelope)
+1b. disabled: true                            -> ConfigError (no envelope)
 2. account: false                            -> no_account
 3. cli: null                                 -> no_cli
 4. `<cli> auth status` exit 0                -> continue
@@ -30,6 +31,8 @@ from __future__ import annotations
 import json
 import shlex
 
+from cli_tools_shared.exceptions import ConfigError
+
 from . import envelope, jsonio, paths, runner, sites
 from .runner import RunnerError
 from .sites import SiteConfig
@@ -37,6 +40,10 @@ from .sites import SiteConfig
 
 def discover(site_name: str, run_id: str, timeout: int) -> dict:
     site = sites.get_site(site_name)
+    if site.disabled:
+        raise ConfigError(
+            f"site '{site_name}' is disabled in config.json (disabled: true); "
+            "discovery skips disabled sites -- no envelope is written")
     data = _discover(site, timeout)
     path = paths.envelope_path(run_id, site_name)
     envelope.write(path, data)

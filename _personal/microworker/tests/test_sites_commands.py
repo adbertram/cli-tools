@@ -13,7 +13,7 @@ def test_list_rows_mirror_config(project, runner):
     assert outcome.exit_code == 0, outcome.output
     rows = json.loads(outcome.stdout)
     assert [row["name"] for row in rows] == list(SITES)
-    assert rows[0] == {"name": "taskerdata", **SITES["taskerdata"]}
+    assert rows[0] == {"name": "microworkers", **SITES["microworkers"]}
 
 
 def test_list_filter_limit_properties(project, runner):
@@ -21,15 +21,16 @@ def test_list_filter_limit_properties(project, runner):
                                   "--limit", "2", "--properties", "name,cli"])
     assert outcome.exit_code == 0, outcome.output
     assert json.loads(outcome.stdout) == [
-        {"name": "taskerdata", "cli": "taskerdata"},
         {"name": "microworkers", "cli": "microworkers"},
+        {"name": "oneforma", "cli": None},
     ]
 
 
 def test_list_table(project, runner):
     outcome = runner.invoke(app, ["sites", "list", "--table", "--limit", "1"])
     assert outcome.exit_code == 0, outcome.output
-    assert "taskerdata" in outcome.stdout and "Lastpass Item" in outcome.stdout
+    assert "microworkers" in outcome.stdout and "Lastpass" in outcome.stdout \
+        and "Disabled" in outcome.stdout
 
 
 def test_list_bad_filter_exits_nonzero(project, runner):
@@ -78,3 +79,33 @@ def test_missing_config_file_is_config_error(tmp_path, monkeypatch, runner):
     outcome = runner.invoke(app, ["sites", "list"])
     assert outcome.exit_code == 2, outcome.output
     assert "config.json not found" in outcome.output
+
+
+def test_missing_disabled_key_is_config_error(project, runner, tmp_path):
+    sites = {name: {k: v for k, v in entry.items() if k != "disabled"}
+             for name, entry in SITES.items()}
+    write_config(tmp_path, sites)
+    outcome = runner.invoke(app, ["sites", "list"])
+    assert outcome.exit_code == 2, outcome.output
+    assert "missing keys: disabled" in outcome.output
+
+
+def test_disabled_wrong_type_is_config_error(project, runner, tmp_path):
+    sites = dict(SITES)
+    sites["mercor"] = dict(sites["mercor"], disabled="yes")
+    write_config(tmp_path, sites)
+    outcome = runner.invoke(app, ["sites", "list"])
+    assert outcome.exit_code == 2, outcome.output
+    assert "'disabled' must be bool" in outcome.output
+
+
+def test_list_filter_disabled_eq_false_returns_enabled_only(project, runner, tmp_path):
+    sites = dict(SITES)
+    sites["crowdgen"] = dict(sites["crowdgen"], disabled=True)
+    write_config(tmp_path, sites)
+    outcome = runner.invoke(app, ["sites", "list", "--filter", "disabled:eq:false",
+                                  "--properties", "name"])
+    assert outcome.exit_code == 0, outcome.output
+    names = [row["name"] for row in json.loads(outcome.stdout)]
+    assert "crowdgen" not in names
+    assert len(names) == len(SITES) - 1
