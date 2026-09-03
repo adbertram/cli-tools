@@ -36,6 +36,7 @@ from cli_tools_shared.auth import BrowserAutomation, BrowserAutomationError
 
 GOOGLE_BUTTON_NAME = "Continue with Google"
 DASHBOARD_URL = "https://my.oneforma.com/contributor/dashboard"
+AUTH_CHECK_URL = "https://my.oneforma.com/contributor/dashboard"
 
 # Google's own rejection page for automated browsers, and the sign-in states
 # that mean the persisted Google session is gone.
@@ -100,7 +101,6 @@ class OneformaBrowser(BrowserAutomation):
 
     SESSION_NAME = "oneforma"
     LOGIN_URL = "https://my.oneforma.com/center/login"
-    AUTH_CHECK_URL = DASHBOARD_URL
     # Validated 2026-09-02: an unauthenticated session loading any /contributor/*
     # URL is redirected to the login flow at /center/login.
     AUTH_URL_PATTERN = r"/center/login"
