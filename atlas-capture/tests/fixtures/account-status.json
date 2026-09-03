@@ -1,0 +1,16 @@
+{
+  "bucket": "labeler",
+  "unitLabel": "Episodes labeled",
+  "episodesThisPeriod": 0,
+  "lastActivityAt": null,
+  "daysSinceLastActivity": null,
+  "isStale": true,
+  "staleDays": 7,
+  "activityRuleExempt": false,
+  "scorePercent": null,
+  "penaltyThresholdPercent": 70,
+  "scoreAtRisk": false,
+  "atRisk": true,
+  "periodStart": "2026-09-01T00:00:00.000Z",
+  "periodEnd": "2026-09-15T23:59:59.999Z"
+}

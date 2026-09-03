@@ -1,0 +1,11 @@
+{
+  "path": "/api/me/vetting",
+  "status": 200,
+  "body": {
+    "status": "pending",
+    "score": 0,
+    "passingScore": 70,
+    "reward": 5,
+    "issuedAt": "2026-08-30"
+  }
+}

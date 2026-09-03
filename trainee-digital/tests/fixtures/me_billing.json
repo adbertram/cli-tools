@@ -1,0 +1,19 @@
+{
+  "path": "/api/me/billing",
+  "status": 200,
+  "body": {
+    "balance": 5,
+    "vetted": false,
+    "canWithdraw": false,
+    "minWithdrawal": 100,
+    "transactions": [
+      {
+        "id": "user_3IekPcwogQY67WO5CCBXbzNXKzx:promo_register",
+        "amount": 5,
+        "kind": "promo_register",
+        "note": "Welcome bonus",
+        "createdAt": "2026-08-30T23:29:39.000Z"
+      }
+    ]
+  }
+}

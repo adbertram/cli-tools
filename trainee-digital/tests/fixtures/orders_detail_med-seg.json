@@ -1,0 +1,24 @@
+{
+  "path": "/api/orders/med-seg",
+  "status": 200,
+  "body": {
+    "id": "med-seg",
+    "title": "Medical Image Segmentation Labels",
+    "category": "Medical Imaging",
+    "pay": "$0.40",
+    "unit": "per page",
+    "volume": "1,200 pages",
+    "deadline": "5 days",
+    "posted": "1d ago",
+    "totalPay": "\u2248 $480 total",
+    "dataset": "DICOM exports",
+    "scope": "Pixel-level segmentation of anatomical structures across a set of anonymized scans. Each page contains one image; mark the required regions per the guideline rubric and flag any low-quality scans for review.",
+    "guidelines": [
+      "Use the provided label set only; do not invent new classes.",
+      "Boundaries must follow the structure edge within 2px tolerance.",
+      "Ambiguous cases: add a note rather than guessing.",
+      "Minimum accepted quality score: 70%."
+    ],
+    "createdAt": "2026-06-25T07:49:06.000Z"
+  }
+}

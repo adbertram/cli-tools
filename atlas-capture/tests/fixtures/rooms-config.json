@@ -1,0 +1,53 @@
+{
+  "roomConfig": {
+    "defaultRoomId": "normal",
+    "rooms": {
+      "normal": {
+        "label": "Standard Label Room",
+        "description": "Standard annotation workflow.",
+        "enabled": true,
+        "guardrails": {
+          "enabledRules": [
+            "segment_duration_range"
+          ],
+          "rules": {
+            "segment_duration_range": {
+              "kind": "segment_duration_range",
+              "severity": "BLOCK",
+              "maxSec": 10
+            }
+          }
+        },
+        "theme": null,
+        "instructions": null,
+        "quickGuide": null,
+        "dashboardAnnouncement": null
+      }
+    }
+  },
+  "featureFlags": {
+    "roomPortalEnabled": false,
+    "roomInstructionsEnabled": true,
+    "roomGuardrailsEnabled": false,
+    "volumeBonusEnabled": false
+  },
+  "normalRoomAccess": {
+    "adminOnly": false,
+    "hasAccess": true,
+    "lockReason": null,
+    "disputeQuota": {
+      "enabled": false,
+      "appliesToUser": false,
+      "weeklyQuota": 0,
+      "resolvedThisWeek": 0,
+      "remaining": 0,
+      "met": true,
+      "locked": false,
+      "weekStart": "2026-08-31T00:00:00.000Z",
+      "weekEnd": "2026-09-06T23:59:59.999Z"
+    },
+    "disputerWeeklyQuotaEnabled": false,
+    "disputerWeeklyQuotaTarget": 0
+  },
+  "roomInstructionAcknowledgedAt": {}
+}
