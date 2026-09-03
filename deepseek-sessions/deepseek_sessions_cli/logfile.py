@@ -19,6 +19,17 @@ process killed mid-append leaves a trailing partial frame. dsh itself performs
 truncation repair on read. This reader does the same and reports it — the
 returned `truncated` flag is surfaced on `SessionSummary.truncated` so a caller
 never mistakes a clipped log for a complete one.
+
+A single event line can also be corrupt in the middle of an otherwise intact
+file: dsh writes one Zstandard frame per append batch, and a batch can be
+flushed with an incomplete JSON payload (e.g. a tool result whose content was
+still being assembled when the writer was interrupted) while the frame itself
+remains a structurally valid, fully-decodable Zstandard frame. That is
+invisible to the trailing-frame truncation check above, since it can occur
+anywhere in the file, not just at the tail. Such a line is skipped rather than
+aborting the whole file — one bad row must never hide every other session
+event, or every other session, from a caller. Skipped line numbers are
+reported on `SessionLog.skipped_lines` so callers can warn about them.
 """
 import json
 from compression import zstd
@@ -42,6 +53,7 @@ class SessionLog:
     header: Dict[str, Any]
     events: List[Dict[str, Any]] = field(default_factory=list)
     truncated: bool = False
+    skipped_lines: List[int] = field(default_factory=list)
 
     @property
     def session_id(self) -> str:
@@ -155,9 +167,14 @@ def load_log_header(path: Path) -> Dict[str, Any]:
 def load_log(path: Path) -> SessionLog:
     """Decode a session log into its header and event rows.
 
+    A line that is not valid JSON is skipped rather than aborting the whole
+    file: its number is recorded on the returned `SessionLog.skipped_lines` so
+    the caller can warn about it, and every other event still decodes.
+
     Raises:
-        SessionLogError: the file is empty, its first line is not a session
-            header, or a line is not valid JSON.
+        SessionLogError: the file is empty, or its first line is not a valid
+            session header. The header must decode; there is no per-file
+            identity to recover it from otherwise.
     """
     text, truncated = _read_text(path)
     lines = [line for line in text.splitlines() if line.strip()]
@@ -167,14 +184,20 @@ def load_log(path: Path) -> SessionLog:
     header = _parse_header(lines[0], path)
 
     events: List[Dict[str, Any]] = []
+    skipped_lines: List[int] = []
     for number, line in enumerate(lines[1:], start=2):
         try:
             record = json.loads(line)
-        except json.JSONDecodeError as exc:
-            raise SessionLogError(
-                f"session log line {number} is not valid JSON: {path}"
-            ) from exc
+        except json.JSONDecodeError:
+            skipped_lines.append(number)
+            continue
         if isinstance(record, dict):
             events.append(record)
 
-    return SessionLog(path=path, header=header, events=events, truncated=truncated)
+    return SessionLog(
+        path=path,
+        header=header,
+        events=events,
+        truncated=truncated,
+        skipped_lines=skipped_lines,
+    )

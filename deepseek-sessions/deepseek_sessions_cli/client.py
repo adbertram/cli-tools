@@ -18,6 +18,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from cli_tools_shared.output import print_warning
+
 from .config import get_config
 from .logfile import (
     SessionLog,
@@ -112,15 +114,40 @@ class DeepSeekSessionsClient:
         """
         return sorted(path for path in project_dir.iterdir() if path.is_dir())
 
-    def _load(self, session_dir: Path) -> Optional[SessionLog]:
-        """Decode one session log, or return None when the directory holds none."""
+    def _load(self, session_dir: Path, *, strict: bool = False) -> Optional[SessionLog]:
+        """Decode one session log, or return None when it holds none or is unreadable.
+
+        A corrupt or malformed log (an unreadable header, a truncated header
+        frame, an empty file) must never abort a command that is walking many
+        sessions: one bad file is skipped with a warning to stderr, and every
+        other session is still returned. A line that fails to parse inside an
+        otherwise-good log is handled the same way by `load_log` itself and
+        reported here too.
+
+        `strict=True` is for a caller resolving one specific, explicitly
+        requested session id (`sessions get`, `subagent-activity get`, ...):
+        there is no "other session" to fall back to, so the real parse error
+        is raised instead of being silently swallowed into a confusing
+        "not found".
+        """
         log_path = find_log_path(session_dir)
         if log_path is None:
             return None
         try:
-            return load_log(log_path)
+            log = load_log(log_path)
         except SessionLogError as exc:
-            raise ClientError(str(exc)) from exc
+            if strict:
+                raise ClientError(str(exc)) from exc
+            print_warning(f"skipping unreadable session log: {exc}")
+            return None
+
+        if log.skipped_lines:
+            lines = ", ".join(str(number) for number in log.skipped_lines)
+            print_warning(
+                f"skipped {len(log.skipped_lines)} malformed line(s) "
+                f"({lines}) in {log_path}"
+            )
+        return log
 
     def _iter_logs(self, project_dir: Path) -> List[SessionLog]:
         logs = []
@@ -199,7 +226,7 @@ class DeepSeekSessionsClient:
                 try:
                     headers.append(load_log_header(log_path))
                 except SessionLogError as exc:
-                    raise ClientError(str(exc)) from exc
+                    print_warning(f"skipping unreadable session log: {exc}")
 
             cwd = next((header.get("cwd") for header in headers if header.get("cwd")), "")
             subagents = sum(1 for header in headers if header.get("origin") == "subagent")
@@ -302,7 +329,7 @@ class DeepSeekSessionsClient:
     def load_session_log(self, session_id: str) -> Tuple[SessionLog, str]:
         """Load one session log and its project name."""
         project_dir, session_dir = self._find_session_dir(session_id)
-        log = self._load(session_dir)
+        log = self._load(session_dir, strict=True)
         if log is None:
             raise ClientError(f"Session directory holds no log: {session_dir}")
         return log, self._project_name(project_dir, log)
@@ -310,7 +337,7 @@ class DeepSeekSessionsClient:
     def get_session_project(self, session_id: str) -> str:
         """Return the project name that owns a session."""
         project_dir, session_dir = self._find_session_dir(session_id)
-        return self._project_name(project_dir, self._load(session_dir))
+        return self._project_name(project_dir, self._load(session_dir, strict=True))
 
     def _collect_summaries(
         self,
@@ -375,7 +402,7 @@ class DeepSeekSessionsClient:
     def get_session(self, session_id: str) -> Session:
         """Get one full session, with its subagent child sessions attached."""
         project_dir, session_dir = self._find_session_dir(session_id)
-        log = self._load(session_dir)
+        log = self._load(session_dir, strict=True)
         if log is None:
             raise ClientError(f"Session directory holds no log: {session_dir}")
 
@@ -731,7 +758,7 @@ class DeepSeekSessionsClient:
         as `subagent_tool` rows so one view covers the whole delegation tree.
         """
         project_dir, session_dir = self._find_session_dir(session_id)
-        log = self._load(session_dir)
+        log = self._load(session_dir, strict=True)
         if log is None:
             raise ClientError(f"Session directory holds no log: {session_dir}")
         project_name = self._project_name(project_dir, log)
