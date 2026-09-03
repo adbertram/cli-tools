@@ -113,6 +113,45 @@ def read_log_text(path: Path) -> str:
     return text
 
 
+def _parse_header(line: str, path: Path) -> Dict[str, Any]:
+    """Parse and validate one session-header line."""
+    if not line.strip():
+        raise SessionLogError(f"empty session log: {path}")
+
+    try:
+        header = json.loads(line)
+    except json.JSONDecodeError as exc:
+        raise SessionLogError(f"session log header is not valid JSON: {path}") from exc
+
+    if not isinstance(header, dict) or header.get("type") != "session":
+        raise SessionLogError(f"first line is not a session header: {path}")
+    if not isinstance(header.get("id"), str):
+        raise SessionLogError(f"session header has no id: {path}")
+    return header
+
+
+def load_log_header(path: Path) -> Dict[str, Any]:
+    """Read only the validated first record of a session log.
+
+    Project discovery needs the session identity, cwd, and origin but not the
+    transcript. Reading one line avoids decoding and parsing every event in
+    every log just to render the project list.
+    """
+    if path.suffix == ZSTD_SUFFIX:
+        try:
+            decompressor = zstd.ZstdDecompressor()
+            first_frame = decompressor.decompress(path.read_bytes())
+            line = first_frame.decode("utf-8", errors="replace").splitlines()[0]
+        except (OSError, zstd.ZstdError) as exc:
+            raise SessionLogError(f"session log header cannot be decoded: {path}") from exc
+        except IndexError as exc:
+            raise SessionLogError(f"empty session log: {path}") from exc
+    else:
+        with path.open(encoding="utf-8", errors="replace") as stream:
+            line = stream.readline()
+    return _parse_header(line, path)
+
+
 def load_log(path: Path) -> SessionLog:
     """Decode a session log into its header and event rows.
 
@@ -125,15 +164,7 @@ def load_log(path: Path) -> SessionLog:
     if not lines:
         raise SessionLogError(f"empty session log: {path}")
 
-    try:
-        header = json.loads(lines[0])
-    except json.JSONDecodeError as exc:
-        raise SessionLogError(f"session log header is not valid JSON: {path}") from exc
-
-    if not isinstance(header, dict) or header.get("type") != "session":
-        raise SessionLogError(f"first line is not a session header: {path}")
-    if not isinstance(header.get("id"), str):
-        raise SessionLogError(f"session header has no id: {path}")
+    header = _parse_header(lines[0], path)
 
     events: List[Dict[str, Any]] = []
     for number, line in enumerate(lines[1:], start=2):

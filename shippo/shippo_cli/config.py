@@ -30,6 +30,11 @@ class Config(BaseConfig):
         return self._get("FROM_NAME")
 
     @property
+    def from_company(self) -> Optional[str]:
+        """Get default sender company name."""
+        return self._get("FROM_COMPANY")
+
+    @property
     def from_street1(self) -> Optional[str]:
         """Get default sender street address."""
         return self._get("FROM_STREET1")

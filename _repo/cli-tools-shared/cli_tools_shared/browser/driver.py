@@ -969,6 +969,65 @@ class BrowserHarnessService:
         from ._elements import _ServiceElement
         _ServiceElement(self, css=selector).fill(text)
 
+    def set_input_files(self, selector: str, file_path: str) -> None:
+        """Set a ``<input type="file">`` element's files to a local file.
+
+        Playwright-compatible page-level shim: callers written against the
+        Playwright ``page.set_input_files(selector, file_path)`` API expect
+        this method on the page object. File inputs cannot be populated via
+        scripted assignment to ``input.files`` -- browsers block that for
+        security -- so this cannot reuse the ``evaluate()``-based approach
+        that ``fill()``/``select_option()`` use. Instead it resolves
+        ``selector`` to a live CDP remote object via ``Runtime.evaluate``
+        and calls ``DOM.setFileInputFiles`` directly against that object,
+        the same mechanism Playwright's ``set_input_files`` uses internally.
+
+        Args:
+            selector: CSS selector for the ``<input type="file">`` element.
+            file_path: Local filesystem path to upload. Must exist.
+
+        Raises:
+            BrowserHarnessError: If ``file_path`` does not exist, no element
+                matches ``selector``, or the CDP call fails.
+        """
+        self._require_open()
+        path = Path(file_path).expanduser()
+        if not path.is_file():
+            raise BrowserHarnessError(f"set_input_files: file not found: {file_path}")
+
+        expression = f"document.querySelector({json.dumps(selector)})"
+        payload = self._bh.h.cdp(
+            "Runtime.evaluate",
+            expression=expression,
+            returnByValue=False,
+        )
+        if not isinstance(payload, dict):
+            raise BrowserHarnessError(
+                f"set_input_files: unexpected Runtime.evaluate payload: {payload!r}"
+            )
+        if payload.get("exceptionDetails"):
+            details = payload["exceptionDetails"]
+            text = details.get("text") or "JavaScript evaluation failed"
+            raise BrowserHarnessError(f"set_input_files: {text}; selector: {selector!r}")
+
+        result = payload.get("result") or {}
+        object_id = result.get("objectId")
+        if not object_id:
+            raise BrowserHarnessError(
+                f"set_input_files: no element matched selector {selector!r}"
+            )
+        try:
+            self._bh.h.cdp(
+                "DOM.setFileInputFiles",
+                files=[str(path.resolve())],
+                objectId=object_id,
+            )
+        finally:
+            try:
+                self._bh.h.cdp("Runtime.releaseObject", objectId=object_id)
+            except Exception:
+                pass
+
     def title(self) -> str:
         """Return the current page title.
 

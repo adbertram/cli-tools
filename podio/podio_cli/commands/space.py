@@ -48,7 +48,7 @@ def get_space(
 
         if url:
             # Look up by URL
-            result = client.Space.find_by_url(url=url)
+            result = client.Space.find_by_url(space_url=url, id_only=False)
         elif space_id:
             # Look up by space ID
             result = client.Space.find(space_id=space_id)

@@ -56,6 +56,13 @@ points at `~/.local/share/uv/tools/<pkg-name>/bin/<tool>`.
 shadowing problem, not a CLI bug. Inspect every entry `which -a`
 returns before changing any code.
 
+This section covers a stale/duplicate install of the *same* cli-tools-managed
+CLI shadowing its own uv symlink. When the collision is instead between a
+cli-tools wrapper and an unrelated upstream/vendor CLI that legitimately keeps
+existing (e.g. a custom `gemini`, `kick`, or `n8n` wrapper vs. the vendor's own
+binary), see `references/wrapper-name-collisions.md` — the fix there is to use
+the explicit wrapper path, not to delete the other binary.
+
 ---
 
 ## CLI Won't Install / Command Not Found

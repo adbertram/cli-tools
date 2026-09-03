@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:microworker:envelope",
+  "title": "MicroWorker site discovery envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["site", "status", "fetched_at", "error", "tasks"],
+  "properties": {
+    "site": {"type": "string", "minLength": 1},
+    "status": {"enum": ["ok", "auth_failed", "no_cli", "no_account", "error"]},
+    "fetched_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "error": {"type": ["string", "null"]},
+    "tasks": {"type": "array", "items": {"type": "object"}}
+  },
+  "if": {"properties": {"status": {"const": "ok"}}},
+  "then": {"properties": {"error": {"type": "null"}}},
+  "else": {
+    "properties": {
+      "error": {"type": "string", "minLength": 1},
+      "tasks": {"maxItems": 0}
+    }
+  }
+}

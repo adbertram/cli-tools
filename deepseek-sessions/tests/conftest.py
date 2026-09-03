@@ -211,3 +211,34 @@ def compacted_log(sessions_root: Path) -> str:
     ]
     write_log(sessions_root / PROJECT_KEY / session_id, records)
     return session_id
+
+
+@pytest.fixture
+def compacted_block_summary_log(sessions_root: Path) -> str:
+    """A compacted session whose summary is a content-block array, not a string.
+
+    dsh records `compaction/summary` either as plain text or as the same
+    provider-native content-block list it uses for message content.
+    """
+    session_id = "session-55555555-5555-4555-8555-555555555555"
+    records = [
+        header(session_id, PROJECT_CWD, created_at=1_787_000_300_000),
+        event("user/message", 1, 1_787_000_300_100,
+              content=[{"type": "text", "text": "before compaction"}],
+              source={"kind": "user"}, role="user", id="u1"),
+        event("turn/start", 2, 1_787_000_300_200, turn=1),
+        event("turn/end", 3, 1_787_000_300_300, turn=1, reason={"kind": "completed"}),
+        event("compaction/start", 4, 1_787_000_300_400),
+        event("compaction/summary", 5, 1_787_000_300_450, summary=[
+            {"type": "text", "text": "## Primary Request and Intent"},
+            {"type": "text", "text": "Spawn `debugger` on failures."},
+        ]),
+        event("compaction/end", 6, 1_787_000_300_500),
+        event("user/message", 7, 1_787_000_300_600,
+              content=[{"type": "text", "text": "after compaction"}],
+              source={"kind": "user"}, role="user", id="u2"),
+        event("turn/start", 8, 1_787_000_300_700, turn=2),
+        event("turn/end", 9, 1_787_000_300_800, turn=2, reason={"kind": "completed"}),
+    ]
+    write_log(sessions_root / PROJECT_KEY / session_id, records)
+    return session_id

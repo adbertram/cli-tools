@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 from ..client import get_client
 from ..config import get_config
-from cli_tools_shared.output import print_json, print_table, print_success, handle_error
+from cli_tools_shared.output import command, print_json, print_table, print_info
 from cli_tools_shared.filters import apply_filters
 
 
@@ -58,6 +58,7 @@ def extract_fields(items: list, fields: list) -> list:
 
 
 @app.command("list")
+@command
 def shipments_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of shipments to return"),
@@ -73,44 +74,41 @@ def shipments_list(
         shippo shipments list --limit 10
         shippo shipments list --properties "object_id,status,address_to.city"
     """
-    try:
-        client = get_client()
-        shipments = client.list_shipments(limit=limit, filters=filter)
+    client = get_client()
+    shipments = client.list_shipments(limit=limit, filters=filter)
 
-        # Apply properties field selection
+    # Apply properties field selection
+    if properties:
+        fields = [f.strip() for f in properties.split(",")]
+        shipments = extract_fields(shipments, fields)
+
+    if table:
         if properties:
             fields = [f.strip() for f in properties.split(",")]
-            shipments = extract_fields(shipments, fields)
-
-        if table:
-            if properties:
-                fields = [f.strip() for f in properties.split(",")]
-                print_table(shipments, fields, fields)
-            else:
-                # Flatten for table display
-                rows = []
-                for s in shipments:
-                    d = model_to_dict(s)
-                    rows.append({
-                        "object_id": d.get("object_id", ""),
-                        "status": d.get("status", ""),
-                        "to_city": d.get("address_to", {}).get("city", "") if d.get("address_to") else "",
-                        "to_state": d.get("address_to", {}).get("state", "") if d.get("address_to") else "",
-                        "rates_count": len(d.get("rates", [])),
-                    })
-                print_table(
-                    rows,
-                    ["object_id", "status", "to_city", "to_state", "rates_count"],
-                    ["ID", "Status", "To City", "To State", "# Rates"],
-                )
+            print_table(shipments, fields, fields)
         else:
-            print_json(shipments)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+            # Flatten for table display
+            rows = []
+            for s in shipments:
+                d = model_to_dict(s)
+                rows.append({
+                    "object_id": d.get("object_id", ""),
+                    "status": d.get("status", ""),
+                    "to_city": d.get("address_to", {}).get("city", "") if d.get("address_to") else "",
+                    "to_state": d.get("address_to", {}).get("state", "") if d.get("address_to") else "",
+                    "rates_count": len(d.get("rates", [])),
+                })
+            print_table(
+                rows,
+                ["object_id", "status", "to_city", "to_state", "rates_count"],
+                ["ID", "Status", "To City", "To State", "# Rates"],
+            )
+    else:
+        print_json(shipments)
 
 
 @app.command("get")
+@command
 def shipments_get(
     shipment_id: str = typer.Argument(..., help="The shipment object ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -123,31 +121,28 @@ def shipments_get(
         shippo shipments get SHIPMENT_ID
         shippo shipments get SHIPMENT_ID --table
     """
-    try:
-        client = get_client()
-        shipment = client.get_shipment(shipment_id)
+    client = get_client()
+    shipment = client.get_shipment(shipment_id)
 
-        # Apply properties field selection
+    # Apply properties field selection
+    if properties:
+        fields = [f.strip() for f in properties.split(",")]
+        shipment = extract_fields([shipment], fields)[0]
+
+    if table:
         if properties:
             fields = [f.strip() for f in properties.split(",")]
-            shipment = extract_fields([shipment], fields)[0]
-
-        if table:
-            if properties:
-                fields = [f.strip() for f in properties.split(",")]
-                print_table([shipment], fields, fields)
-            else:
-                item_dict = model_to_dict(shipment)
-                rows = [{"field": k, "value": str(v)[:80]} for k, v in item_dict.items() if v is not None]
-                print_table(rows, ["field", "value"], ["Field", "Value"])
+            print_table([shipment], fields, fields)
         else:
-            print_json(shipment)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+            item_dict = model_to_dict(shipment)
+            rows = [{"field": k, "value": str(v)[:80]} for k, v in item_dict.items() if v is not None]
+            print_table(rows, ["field", "value"], ["Field", "Value"])
+    else:
+        print_json(shipment)
 
 
 @app.command("create")
+@command
 def shipments_create(
     # From address (optional - defaults from .env)
     from_name: Optional[str] = typer.Option(None, "--from-name", help="Sender full name (default: FROM_NAME env)"),
@@ -212,107 +207,102 @@ def shipments_create(
             --customs-tax-id IOSS_NUMBER --customs-tax-id-type IOSS \\
             --customs-vat-collected --customs-invoice 32005565
     """
-    try:
-        client = get_client()
-        config = get_config()
+    client = get_client()
+    config = get_config()
 
-        # Use defaults from config if not provided
-        actual_from_name = from_name or config.from_name
-        actual_from_street1 = from_street1 or config.from_street1
-        actual_from_city = from_city or config.from_city
-        actual_from_state = from_state or config.from_state
-        actual_from_zip = from_zip or config.from_zip
-        actual_from_country = from_country or config.from_country
-        actual_from_phone = from_phone or config.from_phone
-        actual_from_email = from_email or getattr(config, 'from_email', None)
+    # Use defaults from config if not provided
+    actual_from_name = from_name or config.from_name
+    actual_from_street1 = from_street1 or config.from_street1
+    actual_from_city = from_city or config.from_city
+    actual_from_state = from_state or config.from_state
+    actual_from_zip = from_zip or config.from_zip
+    actual_from_country = from_country or config.from_country
+    actual_from_phone = from_phone or config.from_phone
+    actual_from_email = from_email or config.from_email
 
-        # Validate required from-address fields
-        missing = []
-        if not actual_from_name:
-            missing.append("FROM_NAME")
-        if not actual_from_street1:
-            missing.append("FROM_STREET1")
-        if not actual_from_city:
-            missing.append("FROM_CITY")
-        if not actual_from_state:
-            missing.append("FROM_STATE")
-        if not actual_from_zip:
-            missing.append("FROM_ZIP")
+    # Validate required from-address fields
+    missing = []
+    if not actual_from_name:
+        missing.append("FROM_NAME")
+    if not actual_from_street1:
+        missing.append("FROM_STREET1")
+    if not actual_from_city:
+        missing.append("FROM_CITY")
+    if not actual_from_state:
+        missing.append("FROM_STATE")
+    if not actual_from_zip:
+        missing.append("FROM_ZIP")
 
-        if missing:
-            raise typer.BadParameter(
-                f"Missing from-address fields. Set in .env or pass as options: {', '.join(missing)}"
-            )
-
-        is_international = to_country.upper() != actual_from_country.upper()
-        has_partial_customs = any([
-            customs_description,
-            customs_value is not None,
-            customs_tax_id,
-            customs_vat_collected,
-            customs_invoice,
-        ])
-        if is_international and has_partial_customs and not (customs_description and customs_value is not None):
-            raise typer.BadParameter(
-                "International customs requires both --customs-description and --customs-value"
-            )
-
-        shipment = client.create_shipment(
-            from_name=actual_from_name,
-            from_street1=actual_from_street1,
-            from_city=actual_from_city,
-            from_state=actual_from_state,
-            from_zip=actual_from_zip,
-            from_country=actual_from_country,
-            from_phone=actual_from_phone,
-            from_email=actual_from_email,
-            to_name=to_name,
-            to_street1=to_street1,
-            to_street2=to_street2,
-            to_city=to_city,
-            to_state=to_state,
-            to_zip=to_zip,
-            to_country=to_country,
-            to_phone=to_phone,
-            to_email=to_email,
-            length=length,
-            width=width,
-            height=height,
-            weight=weight,
-            customs_item_description=customs_description,
-            customs_item_value=customs_value,
-            customs_item_quantity=customs_quantity,
-            customs_signer=customs_signer,
-            customs_tax_id_number=customs_tax_id,
-            customs_tax_id_type=customs_tax_id_type,
-            customs_is_vat_collected=customs_vat_collected if customs_vat_collected else None,
-            customs_invoice=customs_invoice,
+    if missing:
+        raise typer.BadParameter(
+            f"Missing from-address fields. Set in .env or pass as options: {', '.join(missing)}"
         )
 
-        if table:
-            # Show rates in table format
-            rates = shipment.rates
-            if rates:
-                rows = []
-                for r in rates:
-                    d = model_to_dict(r)
-                    rows.append({
-                        "rate_id": d.get("object_id", "")[:20],
-                        "provider": d.get("provider", ""),
-                        "service": d.get("servicelevel", {}).get("name", "") if d.get("servicelevel") else "",
-                        "amount": f"${d.get('amount', '')} {d.get('currency', '')}",
-                        "days": d.get("estimated_days", ""),
-                    })
-                print_table(
-                    rows,
-                    ["rate_id", "provider", "service", "amount", "days"],
-                    ["Rate ID", "Provider", "Service", "Price", "Est. Days"],
-                )
-            else:
-                from cli_tools_shared.output import print_info
-                print_info("No rates available for this shipment.")
-        else:
-            print_json(shipment)
+    is_international = to_country.upper() != actual_from_country.upper()
+    has_partial_customs = any([
+        customs_description,
+        customs_value is not None,
+        customs_tax_id,
+        customs_vat_collected,
+        customs_invoice,
+    ])
+    if is_international and has_partial_customs and not (customs_description and customs_value is not None):
+        raise typer.BadParameter(
+            "International customs requires both --customs-description and --customs-value"
+        )
 
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    shipment = client.create_shipment(
+        from_name=actual_from_name,
+        from_street1=actual_from_street1,
+        from_city=actual_from_city,
+        from_state=actual_from_state,
+        from_zip=actual_from_zip,
+        from_country=actual_from_country,
+        from_phone=actual_from_phone,
+        from_email=actual_from_email,
+        to_name=to_name,
+        to_street1=to_street1,
+        to_street2=to_street2,
+        to_city=to_city,
+        to_state=to_state,
+        to_zip=to_zip,
+        to_country=to_country,
+        to_phone=to_phone,
+        to_email=to_email,
+        length=length,
+        width=width,
+        height=height,
+        weight=weight,
+        customs_item_description=customs_description,
+        customs_item_value=customs_value,
+        customs_item_quantity=customs_quantity,
+        customs_signer=customs_signer,
+        customs_tax_id_number=customs_tax_id,
+        customs_tax_id_type=customs_tax_id_type,
+        customs_is_vat_collected=customs_vat_collected if customs_vat_collected else None,
+        customs_invoice=customs_invoice,
+    )
+
+    if table:
+        # Show rates in table format
+        rates = shipment.rates
+        if rates:
+            rows = []
+            for r in rates:
+                d = model_to_dict(r)
+                rows.append({
+                    "rate_id": d.get("object_id", ""),
+                    "provider": d.get("provider", ""),
+                    "service": d.get("servicelevel", {}).get("name", "") if d.get("servicelevel") else "",
+                    "amount": f"${d.get('amount', '')} {d.get('currency', '')}",
+                    "days": d.get("estimated_days", ""),
+                })
+            print_table(
+                rows,
+                ["rate_id", "provider", "service", "amount", "days"],
+                ["Rate ID", "Provider", "Service", "Price", "Est. Days"],
+            )
+        else:
+            print_info("No rates available for this shipment.")
+    else:
+        print_json(shipment)

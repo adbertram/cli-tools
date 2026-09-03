@@ -4,7 +4,7 @@ import pytest
 from cli_tools_shared.exceptions import ClientError
 from typer.testing import CliRunner
 
-from brickstore_cli.client import validate_set_numbers
+from brickstore_cli.client import validate_item_numbers
 from brickstore_cli.main import app
 
 
@@ -31,6 +31,36 @@ SET_CONTENTS = [
         ],
     },
     {"set_id": "75313-1", "items": []},
+]
+
+MINIFIG_CONTENTS = [
+    {
+        "minifig_id": "sw0001a",
+        "items": [
+            {
+                "item": {"no": "3626bp01", "type": "PART"},
+                "color_id": 3,
+                "match_no": 0,
+                "quantity": 1,
+            }
+        ],
+    },
+    {"minifig_id": "sw0036", "items": []},
+]
+
+PART_CONTENTS = [
+    {
+        "part_id": "70501",
+        "items": [
+            {
+                "item": {"no": "70501a", "type": "PART"},
+                "color_id": 5,
+                "match_no": 0,
+                "quantity": 1,
+            }
+        ],
+    },
+    {"part_id": "3001", "items": []},
 ]
 
 QUERY_RESULT = {
@@ -70,6 +100,8 @@ class Client:
         self.set_args = None
         self.set_batch_args = None
         self.set_contents_args = None
+        self.minifig_contents_args = None
+        self.part_contents_args = None
         self.query_kwargs = None
 
     def part(self, item_number, color, leave_open):
@@ -85,13 +117,30 @@ class Client:
         return PRICE_GUIDE
 
     def set_batch(self, set_numbers, leave_open):
-        validate_set_numbers(set_numbers, "set-batch")
+        validate_item_numbers(set_numbers, "set-batch", "set")
         self.set_batch_args = (tuple(set_numbers), leave_open)
         return {"results": [PRICE_GUIDE]}
 
-    def set_contents(self, set_numbers):
-        self.set_contents_args = tuple(set_numbers)
-        return [record for record in SET_CONTENTS if record["set_id"] in set_numbers]
+    @staticmethod
+    def _contents_result(records, item_numbers, id_key):
+        known_ids = {record[id_key] for record in records}
+        return records, [item_number for item_number in item_numbers if item_number not in known_ids]
+
+    def set_contents(self, set_numbers, skip_unknown):
+        self.set_contents_args = (tuple(set_numbers), skip_unknown)
+        records = [record for record in SET_CONTENTS if record["set_id"] in set_numbers]
+        return self._contents_result(records, set_numbers, "set_id")
+
+    def minifig_contents(self, minifig_numbers, skip_unknown):
+        self.minifig_contents_args = (tuple(minifig_numbers), skip_unknown)
+        records = [record for record in MINIFIG_CONTENTS if record["minifig_id"] in minifig_numbers]
+        return self._contents_result(records, minifig_numbers, "minifig_id")
+
+    def part_contents(self, part_numbers, skip_unknown):
+        validate_item_numbers(part_numbers, "part-contents", "part")
+        self.part_contents_args = (tuple(part_numbers), skip_unknown)
+        records = [record for record in PART_CONTENTS if record["part_id"] in part_numbers]
+        return self._contents_result(records, part_numbers, "part_id")
 
     def query(self, **kwargs):
         self.query_kwargs = kwargs
@@ -181,7 +230,7 @@ def test_set_contents_prints_a_root_array_with_nested_items_and_forwards_every_i
 
     assert result.exit_code == 0
     assert json.loads(result.stdout) == SET_CONTENTS
-    assert client.set_contents_args == ("30670-1", "75313-1")
+    assert client.set_contents_args == (("30670-1", "75313-1"), False)
 
 
 def test_set_contents_prints_one_set_record_with_nested_items(monkeypatch):
@@ -192,7 +241,93 @@ def test_set_contents_prints_one_set_record_with_nested_items(monkeypatch):
 
     assert result.exit_code == 0
     assert json.loads(result.stdout) == [SET_CONTENTS[0]]
-    assert client.set_contents_args == ("30670-1",)
+    assert client.set_contents_args == (("30670-1",), False)
+
+
+def test_minifig_contents_prints_a_root_array_with_nested_items_and_forwards_every_id(monkeypatch):
+    client = Client()
+    monkeypatch.setattr("brickstore_cli.main.get_client", lambda: client)
+
+    result = CliRunner().invoke(app, ["minifig-contents", "sw0001a", "sw0036"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout) == MINIFIG_CONTENTS
+    assert client.minifig_contents_args == (("sw0001a", "sw0036"), False)
+
+
+def test_minifig_contents_prints_one_minifig_record_with_nested_items(monkeypatch):
+    client = Client()
+    monkeypatch.setattr("brickstore_cli.main.get_client", lambda: client)
+
+    result = CliRunner().invoke(app, ["minifig-contents", "sw0001a"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout) == [MINIFIG_CONTENTS[0]]
+    assert client.minifig_contents_args == (("sw0001a",), False)
+
+
+def test_part_contents_prints_a_root_array_with_nested_items_and_forwards_every_id(monkeypatch):
+    client = Client()
+    monkeypatch.setattr("brickstore_cli.main.get_client", lambda: client)
+
+    result = CliRunner().invoke(app, ["part-contents", "70501", "3001"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout) == PART_CONTENTS
+    assert client.part_contents_args == (("70501", "3001"), False)
+
+
+def test_part_contents_accepts_twenty_five_ids_and_rejects_too_many_ids(monkeypatch):
+    client = Client()
+    monkeypatch.setattr("brickstore_cli.main.get_client", lambda: client)
+    part_numbers = ["part-{}".format(index) for index in range(25)]
+    runner = CliRunner()
+
+    accepted = runner.invoke(app, ["part-contents", *part_numbers])
+    rejected = runner.invoke(app, ["part-contents", *part_numbers, "part-25"])
+
+    assert accepted.exit_code == 0
+    assert client.part_contents_args == (tuple(part_numbers), False)
+    assert rejected.exit_code != 0
+    assert "at most 25 part IDs" in rejected.output
+
+
+def test_minifig_contents_skip_unknown_prints_known_records_and_warns_per_unknown_id(monkeypatch):
+    client = Client()
+    monkeypatch.setattr("brickstore_cli.main.get_client", lambda: client)
+
+    result = CliRunner().invoke(app, ["minifig-contents", "sw0001a", "nope1", "nope2", "--skip-unknown"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout) == [MINIFIG_CONTENTS[0]]
+    assert client.minifig_contents_args == (("sw0001a", "nope1", "nope2"), True)
+    assert "Warning: skipped unknown minifig ID nope1" in result.output
+    assert "Warning: skipped unknown minifig ID nope2" in result.output
+
+
+def test_part_contents_skip_unknown_prints_known_records_and_warns_per_unknown_id(monkeypatch):
+    client = Client()
+    monkeypatch.setattr("brickstore_cli.main.get_client", lambda: client)
+
+    result = CliRunner().invoke(app, ["part-contents", "70501", "nope1", "nope2", "--skip-unknown"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout) == [PART_CONTENTS[0]]
+    assert client.part_contents_args == (("70501", "nope1", "nope2"), True)
+    assert "Warning: skipped unknown part ID nope1" in result.output
+    assert "Warning: skipped unknown part ID nope2" in result.output
+
+
+def test_set_contents_skip_unknown_prints_known_records_and_warns_per_unknown_id(monkeypatch):
+    client = Client()
+    monkeypatch.setattr("brickstore_cli.main.get_client", lambda: client)
+
+    result = CliRunner().invoke(app, ["set-contents", "30670-1", "99999-1", "--skip-unknown"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout) == [SET_CONTENTS[0]]
+    assert client.set_contents_args == (("30670-1", "99999-1"), True)
+    assert "Warning: skipped unknown set ID 99999-1" in result.output
 
 
 def test_set_batch_requires_at_least_one_id_before_calling_the_client(monkeypatch):
@@ -247,7 +382,7 @@ def test_set_batch_reports_client_errors_without_json_output(monkeypatch):
 
 def test_set_contents_reports_client_errors_without_json_output(monkeypatch):
     class FailingClient:
-        def set_contents(self, set_numbers):
+        def set_contents(self, set_numbers, skip_unknown):
             raise ClientError("BrickLink set contents command failed for 30670-1 with exit 1")
 
     monkeypatch.setattr("brickstore_cli.main.get_client", FailingClient)
@@ -257,6 +392,34 @@ def test_set_contents_reports_client_errors_without_json_output(monkeypatch):
     assert result.exit_code == 1
     assert result.stdout == ""
     assert "Error: BrickLink set contents command failed for 30670-1 with exit 1" in result.output
+
+
+def test_minifig_contents_reports_client_errors_without_json_output(monkeypatch):
+    class FailingClient:
+        def minifig_contents(self, minifig_numbers, skip_unknown):
+            raise ClientError("BrickStore database /tmp/database-v12 holds no minifig with the ID sw9999")
+
+    monkeypatch.setattr("brickstore_cli.main.get_client", FailingClient)
+
+    result = CliRunner().invoke(app, ["minifig-contents", "sw9999"])
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "Error: BrickStore database /tmp/database-v12 holds no minifig with the ID sw9999" in result.output
+
+
+def test_part_contents_reports_client_errors_without_json_output(monkeypatch):
+    class FailingClient:
+        def part_contents(self, part_numbers, skip_unknown):
+            raise ClientError("BrickStore database /tmp/database-v12 holds no part with the ID 70501")
+
+    monkeypatch.setattr("brickstore_cli.main.get_client", FailingClient)
+
+    result = CliRunner().invoke(app, ["part-contents", "70501"])
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "Error: BrickStore database /tmp/database-v12 holds no part with the ID 70501" in result.output
 
 
 def test_query_prints_unmodified_source_json_and_defaults_unset_filters_to_none(monkeypatch):
@@ -357,6 +520,15 @@ def test_help_exposes_the_requested_commands():
     set_contents_help = runner.invoke(app, ["set-contents", "--help"])
     assert set_contents_help.exit_code == 0
     assert "--leave-open" not in set_contents_help.stdout
+    assert "--skip-unknown" in set_contents_help.stdout
+    minifig_contents_help = runner.invoke(app, ["minifig-contents", "--help"])
+    assert minifig_contents_help.exit_code == 0
+    assert "--leave-open" not in minifig_contents_help.stdout
+    assert "--skip-unknown" in minifig_contents_help.stdout
+    part_contents_help = runner.invoke(app, ["part-contents", "--help"])
+    assert part_contents_help.exit_code == 0
+    assert "--leave-open" not in part_contents_help.stdout
+    assert "--skip-unknown" in part_contents_help.stdout
     query_help = runner.invoke(app, ["query", "--help"])
     assert query_help.exit_code == 0
     for option in (

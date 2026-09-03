@@ -275,21 +275,49 @@ def canonical_hash(slug: str, persisted: Any) -> str:
 
 @lru_cache(maxsize=1)
 def _artifact_owning_reference_index() -> Dict[str, str]:
-    """artifact_reference -> slug, for every non-review work-phase artifact.
+    """slug -> the ``artifact_reference`` that content slug owns.
 
     Used to resolve a review artifact's implicit target when its
     course-pipeline.json work-phase entry carries ``review_ai`` but omits an
     explicit ``review_target`` (today: module-review, powerpoint-deck-review). Such an entry shares its
     ``artifact_reference`` with exactly one content-producing artifact whose
     ``skill`` IS the slug.
+
+    Keyed by SLUG, matching the sole caller
+    (:func:`_paired_review_targets`, which looks the index up by the slug it
+    is resolving). A previous revision keyed this the other way round --
+    ``artifact_reference -> slug`` -- so that lookup could never hit and the
+    implicit-target branch was unreachable: ``module-review``'s
+    ``Plan Review (AI)`` silently stopped clearing when ``module.plan``'s
+    content changed, contradicting ``commands/modules.py``'s own documented
+    behaviour.
+
+    ``review_report``-kind entries are excluded. A review artifact carries the
+    SAME ``artifact_reference`` as the content artifact it reviews and is
+    itself a coverage-map slug, so indexing it would let the later work phase
+    overwrite the content owner (``module-review`` displacing ``module.plan``
+    for ``.agents/skills/module/artifacts/plan/``) and resolve every implicit
+    target to the review report rather than the content it reviews. Only
+    content-producing artifacts own a reference.
     """
     index: Dict[str, str] = {}
     for phase in _pipeline_router().get("work_phases", []):
         for artifact in phase.get("artifacts", []):
             skill = artifact.get("skill")
             ref = artifact.get("artifact_reference")
-            if isinstance(skill, str) and skill in coverage_map() and isinstance(ref, str):
-                index[ref] = skill
+            if not (isinstance(skill, str) and isinstance(ref, str)):
+                continue
+            entry = coverage_map().get(skill)
+            if not isinstance(entry, dict) or entry.get("kind") == "review_report":
+                continue
+            existing = index.get(skill)
+            if existing is not None and existing != ref:
+                raise VersioningError(
+                    f"course-pipeline.json content artifact {skill!r} claims two "
+                    f"artifact_reference values ({existing!r}, {ref!r}); an implicit "
+                    "review target cannot be resolved from an ambiguous owner."
+                )
+            index[skill] = ref
     return index
 
 
@@ -352,6 +380,161 @@ def _paired_review_targets(slug: str) -> List[str]:
         if field in same_table_fields and field not in fields:
             fields.append(field)
     return fields
+
+
+def checkbox_is_true(value: Any) -> bool:
+    """Airtable checkbox truthiness for API reads and CLI typecast strings.
+
+    One home for the convention; ``client.CourseCraftClient._truthy_checkbox``
+    delegates here rather than keeping a second copy. ``client.py`` imports
+    this module, so the dependency only runs in this direction.
+    """
+    if value is True:
+        return True
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "1", "yes"}
+    return False
+
+
+def _cleared_gate_value(field: str) -> Any:
+    """The value that clears one paired review/gate field.
+
+    A ``… Human Verified`` field is an Airtable checkbox, so it clears to
+    ``False``; every other paired target is long text and clears to ``""``.
+    Writing ``""`` into a checkbox is not a valid clear.
+    """
+    return False if field.endswith("Human Verified") else ""
+
+
+def _human_verified_gates(table: str, slug: str) -> List[str]:
+    """Airtable ``… Human Verified`` fields whose live stamp makes ``slug`` read-only.
+
+    Two data sources, both already owned by course-pipeline.json and read
+    fresh from the cached router -- neither is duplicated here:
+
+    (a) ``human_verified_pairs[slug]`` (the same map
+        :func:`_paired_review_targets` reads).
+    (b) ``artifact_lifecycle.instances[*].readiness_gates`` entries of kind
+        ``field_truthy`` that name this slug -- today
+        ``course.outline_draft``'s ``Outline Draft Human Verified``. A gate
+        with no ``slug`` (``PowerPoint Deck Human Verified``) is a
+        cross-record composite gate and is deliberately excluded, same V1
+        scope boundary :func:`_paired_review_targets` documents.
+
+    Only fields ending in ``Human Verified`` are returned: those record
+    Adam's approval, given directly or delegated. Machine-owned completion
+    gates (``Module Plan Complete``, ``Module Review Complete``) are not
+    approval stamps and keep the ordinary clear-on-change behaviour. Same-table filtered against
+    ``FIELD_MAPPINGS`` for the reason :func:`_paired_review_targets`
+    documents: a cross-table field is never a valid write on this record's
+    own PATCH.
+    """
+    router = _pipeline_router()
+    slug_table = _RESOURCE_TABLE.get(coverage_map().get(slug, {}).get("table"))
+    if slug_table != table:
+        return []
+    same_table_fields = frozenset(FIELD_MAPPINGS.get(table, {}).values())
+
+    fields: List[str] = []
+
+    def _add(field: Any) -> None:
+        if (
+            isinstance(field, str)
+            and field.endswith("Human Verified")
+            and field in same_table_fields
+            and field not in fields
+        ):
+            fields.append(field)
+
+    for field in router.get("human_verified_pairs", {}).get(slug, []):
+        _add(field)
+
+    lifecycle = router.get("artifact_lifecycle")
+    if not isinstance(lifecycle, dict):
+        raise VersioningError("course-pipeline.json has no artifact_lifecycle object.")
+    instances = lifecycle.get("instances")
+    if not isinstance(instances, dict):
+        raise VersioningError(
+            "course-pipeline.json artifact_lifecycle has no instances object."
+        )
+    for instance in instances.values():
+        if not isinstance(instance, dict) or instance.get("table") != table:
+            continue
+        for gate in instance.get("readiness_gates", []) or []:
+            if isinstance(gate, dict) and gate.get("slug") == slug:
+                _add(gate.get("field"))
+    return fields
+
+
+def _reopen_command(table: str, field: str) -> str:
+    """The exact command that reopens one human-verified artifact.
+
+    Derived from ``_RESOURCE_TABLE`` and ``FIELD_MAPPINGS`` -- the CLI option
+    name for an Airtable field is already modelled there (Slides'
+    ``Script Human Verified`` is ``--script-human-verified``; Demos'
+    identically-named field is ``--script-review-human``), so the reopen
+    instruction is read from the same mapping the write itself uses rather
+    than guessed or hardcoded per table.
+    """
+    group = next((key for key, name in _RESOURCE_TABLE.items() if name == table), None)
+    options = sorted(
+        f"--no-{cli_field.replace('_', '-')}"
+        for cli_field, airtable_field in FIELD_MAPPINGS.get(table, {}).items()
+        if airtable_field == field
+    )
+    if group is None or not options:
+        raise VersioningError(
+            f"{table}.{field!r} is a human-verified gate with no CLI option in "
+            "FIELD_MAPPINGS; add one before writing tracked content."
+        )
+    return f"coursecraft {group} update <record-id> {options[0]}"
+
+
+def _require_human_verified_reopen(
+    table: str, changed_slugs: List[str], current_fields: Dict[str, Any]
+) -> None:
+    """Refuse a content write to an artifact whose human-verified stamp is set.
+
+    A live ``... Human Verified`` stamp makes the artifact read-only. Before
+    this guard, a content write to a stamped artifact fell straight through to
+    the ordinary clear-on-change consequence engine --
+    :func:`_readiness_gate_invalidations` and :func:`plan_record_update`'s
+    ``_paired_review_targets`` loop -- which silently un-stamped the record and
+    let the mutation land. The write is REFUSED instead: one path, no
+    warn-and-continue, no bypass by bundling the reopen flag into the same call
+    (the check reads the PERSISTED value, so reopening has to be its own
+    committed write).
+
+    The refusal sequences the work; it is not a wait-on-Adam gate. The caller
+    reopens the stamp itself with the named ``--no-<field>`` flag (allowed
+    under autonomous mode or Adam's explicit in-chat approval -- see
+    ``course-pipeline/references/field-assignment.md``, Reviews), then re-runs
+    the content write.
+
+    ``changed_slugs`` is every slug this write actually changes PLUS the
+    same-record dependents it makes stale: a dependency change bumps a
+    dependent's version and clears its paired stamp, which is exactly the
+    silent mutation of a human-verified artifact this guard exists to stop.
+    """
+    blocked: List[str] = []
+    for slug in changed_slugs:
+        for field in _human_verified_gates(table, slug):
+            if checkbox_is_true(current_fields.get(field)):
+                blocked.append(
+                    f"{slug} (stamped by {field!r}; reopen with: "
+                    f"{_reopen_command(table, field)})"
+                )
+    if not blocked:
+        return
+    raise VersioningError(
+        f"{table}: refusing this write. It would change human-verified content, "
+        "and a live stamp makes the artifact read-only: "
+        + "; ".join(blocked)
+        + ". Run the reopen command above as its own write first (autonomous "
+        "mode or Adam's explicit approval required -- see "
+        "course-pipeline/references/field-assignment.md, Reviews), then re-run "
+        "this write."
+    )
 
 
 def check_write_conflict(
@@ -635,13 +818,58 @@ def _same_record_lifecycle_invalidation(
     return consequences
 
 
-def _same_record_dependents(table: str, changed_slugs: List[str]) -> List[str]:
-    """Return same-record Airtable artifacts invalidated by changed dependencies."""
+ARTIFACT_DEPENDENCY_METADATA_KEY = "_comment"
+
+
+def _artifact_dependency_catalog() -> Dict[str, Any]:
+    """course-pipeline.json's ``artifact_dependencies`` map, minus its ``_comment``.
+
+    course-pipeline.json's established convention is that a ``_comment`` key
+    sitting directly inside a map is a note ABOUT that map, not a member of it
+    -- ``artifact_dependencies._comment``, ``human_verified_pairs._comment``,
+    ``update_inheritance._comment`` and five more. The convention is already
+    implemented in the CourseCraft checkout: ``check_validation_coverage.py``'s
+    ``declared_human_verified_fields`` skips this exact literal while iterating
+    the structurally identical ``human_verified_pairs`` map. A CLI reader that
+    iterates ``artifact_dependencies`` must honour it too, or it mistakes the
+    note for an artifact slug.
+
+    Exactly one reserved literal is dropped -- deliberately not every
+    ``_``-prefixed key. A blanket prefix rule would silently swallow a typo'd
+    real slug such as ``_demo.overview``, turning a loud contract error into a
+    missing dependency edge. Every surviving key is treated as a real slug
+    whose declaration the callers below still validate strictly: a malformed
+    declaration is a pipeline bug that must surface as a VersioningError, never
+    a silently skipped entry. That strictness is exactly why this does not call
+    the checkout's ``dependency_graph.dependency_entries`` -- see
+    :func:`_rebuilt_from_dependencies`.
+    """
     catalog = _pipeline_router().get("artifact_dependencies")
     if not isinstance(catalog, dict):
         raise VersioningError(
             "course-pipeline.json has no artifact_dependencies object."
         )
+    return {
+        slug: declaration
+        for slug, declaration in catalog.items()
+        if slug != ARTIFACT_DEPENDENCY_METADATA_KEY
+    }
+
+
+def _same_record_dependents(table: str, changed_slugs: List[str]) -> List[str]:
+    """Return same-record Airtable artifacts made STALE by changed dependencies.
+
+    "Stale" never means "destroyed". A dependent artifact's own content is
+    authored work that this write did not touch and must not touch: the caller
+    passed one field on the command line, and every other field on that record
+    keeps its live value. Staleness is expressed by the three signals the
+    caller of this function applies to the returned slugs -- a Version Control
+    version bump (which invalidates the exact ``Reviewed-Version:
+    <slug>@vN sha256:<hash>`` trailer a stored review carries), a clear of the
+    slug's paired AI-review / human-verified fields, and the external-review
+    lifecycle reset in :func:`_same_record_lifecycle_invalidation`.
+    """
+    catalog = _artifact_dependency_catalog()
     changed = set(changed_slugs)
     dependents: List[str] = []
     while True:
@@ -679,6 +907,50 @@ def _same_record_dependents(table: str, changed_slugs: List[str]) -> List[str]:
             return dependents
 
 
+def _rebuilt_from_dependencies(slug: str) -> bool:
+    """Is ``slug`` a mechanical rebuild of its dependencies rather than authored work?
+
+    Read from course-pipeline.json's ``artifact_dependencies[slug]`` key
+    ``rebuilt_from_dependencies``. An artifact that declares ``true`` carries
+    no content of its own -- ``course.outline`` is the copy of the approved
+    ``course.outline_draft`` that the Build Outline step writes -- so clearing
+    its content when a dependency changes destroys nothing and is what returns
+    the Course Status formula to its ``outline_missing`` (Build Outline) state.
+
+    Every other dependent holds authored content that only its own author
+    writes. Clearing it on a dependency change is silent data loss: it is what
+    made ``clips update <id> --learning-objectives ...`` (clip.plan) wipe the
+    record's Story (clip.story) and stamp clip.story with the sha256 of the
+    empty string. Absent key means ``false``; the version bump, paired review
+    clears, readiness-gate clears, and external-review lifecycle reset express
+    that dependent's staleness without deleting anything.
+
+    Reads the same metadata-free catalog :func:`_same_record_dependents`
+    iterates, so the map's own ``_comment`` note can never be mistaken for a
+    slug here either. The checkout's ``dependency_graph.dependency_entries``
+    now applies the same rules -- it skips exactly ``_comment`` and raises on
+    any other non-dict declaration rather than coercing it to ``{}`` -- so the
+    two readers no longer disagree about what a malformed declaration means.
+    This function keeps its own local check anyway: the strictness it needs is
+    part of its contract, not something to inherit from a module it loads
+    dynamically out of the CourseCraft checkout.
+    """
+    catalog = _artifact_dependency_catalog()
+    declaration = catalog.get(slug)
+    if not isinstance(declaration, dict):
+        raise VersioningError(
+            f"course-pipeline.json artifact dependency {slug!r} must be an object."
+        )
+    declared = declaration.get("rebuilt_from_dependencies", False)
+    if not isinstance(declared, bool):
+        raise VersioningError(
+            f"course-pipeline.json artifact dependency {slug!r} key "
+            f"'rebuilt_from_dependencies' must be a boolean, got "
+            f"{type(declared).__name__}."
+        )
+    return declared
+
+
 def _readiness_gate_invalidations(
     table: str, changed_slugs: List[str]
 ) -> Dict[str, Any]:
@@ -713,7 +985,7 @@ def _readiness_gate_invalidations(
                 raise VersioningError(
                     f"Lifecycle instance {instance_name!r} readiness gate field must be a string."
                 )
-            invalidations[field] = False if field.endswith("Human Verified") else ""
+            invalidations[field] = _cleared_gate_value(field)
     return invalidations
 
 
@@ -729,6 +1001,14 @@ def plan_record_update(
     The caller supplies a fresh owner-record read plus exact Airtable field
     metadata. This function performs no writes. Identical resubmissions remain
     no-ops for Version Control and review consequences.
+
+    The planned PATCH writes content the caller itself proposed, plus the
+    content of any dependent artifact that explicitly declares
+    ``rebuilt_from_dependencies`` (see :func:`_rebuilt_from_dependencies`).
+    Every other content field on the record -- including a sibling artifact
+    made stale by this write -- keeps its live persisted value, and its
+    version stamp is computed from that live value, never from a substituted
+    empty string.
     """
     if table not in _RESOURCE_TABLE.values():
         return dict(proposed_fields)
@@ -772,7 +1052,19 @@ def plan_record_update(
 
     planned = dict(proposed_fields)
     dependent_slugs = _same_record_dependents(table, changed_slugs)
+
+    # A live human-verified stamp is read-only. Refuse before anything is
+    # planned -- including before the rebuilt-from-dependencies blanking loop
+    # below.
+    _require_human_verified_reopen(
+        table, changed_slugs + dependent_slugs, current_fields
+    )
+
     for slug in dependent_slugs:
+        if not _rebuilt_from_dependencies(slug):
+            # Authored content. A dependency change makes it STALE, never
+            # empty -- see _same_record_dependents' docstring.
+            continue
         content_fields = coverage_map()[slug].get("content_fields") or []
         if not content_fields or not all(
             isinstance(field, str) for field in content_fields
@@ -791,6 +1083,19 @@ def plan_record_update(
                 raise VersioningError(
                     f"Missing canonicalization metadata for {table}.{field}."
                 )
+            # Only derived free-text prose may be blanked on dependency
+            # invalidation. Link/attachment fields would unlink records
+            # (destroying the roster), and identity scalars such as
+            # "number" carry approved budget data that is not derived
+            # from the dependency — clearing either destroys work instead
+            # of marking staleness. Version bump + review/gate clears
+            # below already express staleness for the dependent slug.
+            if (
+                metadata.get("type")
+                in {"multipleRecordLinks", "multipleAttachments"}
+                or metadata.get("type") in _IDENTITY_STORAGE_TYPES
+            ):
+                continue
             planned[field] = ""
             predicted_fields[field] = _canonicalize_storage_value(
                 field, "", metadata
@@ -816,7 +1121,7 @@ def plan_record_update(
             "at": stamped_at,
         }
         for review_field in _paired_review_targets(slug):
-            planned[review_field] = ""
+            planned[review_field] = _cleared_gate_value(review_field)
 
     planned.update(_readiness_gate_invalidations(table, changed_slugs))
 

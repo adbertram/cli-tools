@@ -1,7 +1,8 @@
 """Msword client for reading, converting, and extracting comments from Word documents."""
+import copy
 import os
 from datetime import datetime, timezone
-from typing import List
+from typing import Dict, List
 from xml.etree import ElementTree as ET
 
 import docx
@@ -10,8 +11,16 @@ from docx.opc.packuri import PackURI
 from docx.opc.part import Part
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
+from lxml import etree as LET
 
-from .models import Comment, DocumentContent, ConvertedDocument, AddCommentResult
+from .models import (
+    Comment,
+    DocumentContent,
+    ConvertedDocument,
+    AddCommentResult,
+    TrackedEditApplied,
+    EditTrackedChangesResult,
+)
 
 from cli_tools_shared.exceptions import ClientError
 
@@ -55,6 +64,11 @@ def _validate_file(file_path: str) -> str:
     if not path.lower().endswith(".docx"):
         raise ClientError(f"Not a Word document (.docx): {path}")
     return path
+
+
+def _local_tag(el) -> str:
+    """Return an element's tag without its namespace prefix."""
+    return el.tag.split("}")[-1] if "}" in el.tag else el.tag
 
 
 class MswordClient:
@@ -210,6 +224,228 @@ class MswordClient:
             reference_text=reference_text,
         )
 
+    def apply_tracked_edits(
+        self, file_path: str, edits: List[dict], author: str
+    ) -> EditTrackedChangesResult:
+        """Apply a batch of text edits as Word tracked changes (w:ins/w:del).
+
+        Each edit locates ``old_text`` (via ``_find_reference_text``, reusing
+        the same run-splitting logic as ``add_comment``), wraps the isolated
+        run(s) in a ``w:del`` (converting ``w:t`` to ``w:delText``), and
+        inserts a sibling ``w:ins`` containing ``new_text``, attributed to
+        ``author``. Every pre-existing comment and tracked change is verified
+        byte-for-byte unchanged before the file is saved; if anything from the
+        original document is missing or altered, the file is left untouched
+        and a ``ClientError`` is raised.
+
+        Edits are applied in list order against the document as it stands
+        after prior edits in the same batch. ``occurrence`` is resolved
+        against that current state, so if two edits share the same
+        ``old_text``, order edits from the highest occurrence to the lowest
+        to avoid occurrence numbers shifting after an earlier match in the
+        same text is replaced.
+        """
+        if not author.strip():
+            raise ClientError("Author cannot be empty")
+        if not edits:
+            raise ClientError("edits cannot be empty")
+        for index, edit in enumerate(edits):
+            if not edit.get("old_text", "").strip():
+                raise ClientError(f"edits[{index}].old_text cannot be empty")
+            if not isinstance(edit.get("new_text"), str):
+                raise ClientError(f"edits[{index}].new_text is required")
+            if edit.get("occurrence", 1) < 1:
+                raise ClientError(f"edits[{index}].occurrence must be a positive integer")
+
+        path = _validate_file(file_path)
+        doc = docx.Document(path)
+
+        baseline = self._capture_markup_baseline(doc)
+
+        comments_part = _find_comments_part(doc)
+        next_id = self._get_next_change_id(doc, comments_part)
+
+        date = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        applied: List[TrackedEditApplied] = []
+
+        for edit in edits:
+            old_text = edit["old_text"]
+            new_text = edit["new_text"]
+            occurrence = edit.get("occurrence", 1)
+
+            start_el, end_el = self._find_reference_text(doc, old_text, occurrence)
+            run_range = self._collect_run_range(start_el, end_el)
+
+            del_id, ins_id = next_id, next_id + 1
+            next_id += 2
+
+            del_el = self._build_change_element("del", del_id, author, date)
+            start_el.addprevious(del_el)
+            for run_el in run_range:
+                self._convert_run_to_del_text(run_el)
+                del_el.append(run_el)
+
+            ins_el = self._build_change_element("ins", ins_id, author, date)
+            ins_el.append(self._build_ins_run(run_range[0], new_text))
+            del_el.addnext(ins_el)
+
+            applied.append(
+                TrackedEditApplied(
+                    old_text=old_text,
+                    new_text=new_text,
+                    occurrence=occurrence,
+                    del_id=str(del_id),
+                    ins_id=str(ins_id),
+                )
+            )
+
+        self._verify_markup_baseline(doc, baseline)
+
+        doc.save(path)
+
+        return EditTrackedChangesResult(
+            file=path,
+            author=author,
+            edits_applied=len(applied),
+            edits=applied,
+        )
+
+    def _collect_run_range(self, start_el, end_el) -> list:
+        """Collect the sibling w:r run elements from start_el to end_el inclusive.
+
+        Fails loudly rather than silently skipping over a non-run sibling
+        (such as an existing comment marker) that falls inside the range,
+        since blindly wrapping it in w:del/w:ins would corrupt it.
+        """
+        runs = []
+        current = start_el
+        while True:
+            tag = _local_tag(current)
+            if tag != "r":
+                raise ClientError(
+                    "Cannot apply tracked-change edit: an existing comment or "
+                    "tracked-change marker sits inside the matched text"
+                )
+            runs.append(current)
+            if current is end_el:
+                return runs
+            current = current.getnext()
+            if current is None:
+                raise ClientError("Failed to collect run range for tracked-change edit")
+
+    def _build_change_element(self, tag: str, change_id: int, author: str, date: str):
+        """Build an empty w:ins or w:del element with id/author/date attributes."""
+        el = OxmlElement(f"w:{tag}")
+        el.set(qn("w:id"), str(change_id))
+        el.set(qn("w:author"), author)
+        el.set(qn("w:date"), date)
+        return el
+
+    def _convert_run_to_del_text(self, run_el):
+        """Convert a run's w:t children to w:delText in place (OOXML tracked-deletion convention)."""
+        for t_el in list(run_el.findall(qn("w:t"))):
+            del_text_el = OxmlElement("w:delText")
+            del_text_el.text = t_el.text
+            space = t_el.get("{http://www.w3.org/XML/1998/namespace}space")
+            if space:
+                del_text_el.set("{http://www.w3.org/XML/1998/namespace}space", space)
+            run_el.replace(t_el, del_text_el)
+
+    def _build_ins_run(self, source_run_el, new_text: str):
+        """Build a new w:r/w:t run for a w:ins, cloning rPr from source_run_el when present."""
+        new_run = OxmlElement("w:r")
+        rPr = source_run_el.find(qn("w:rPr"))
+        if rPr is not None:
+            new_run.append(copy.deepcopy(rPr))
+        t_el = OxmlElement("w:t")
+        t_el.text = new_text
+        if new_text and (new_text[0] == " " or new_text[-1] == " "):
+            t_el.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
+        new_run.append(t_el)
+        return new_run
+
+    def _comment_ids(self, comments_part) -> set:
+        """Return the set of w:id values from every w:comment in comments.xml."""
+        ids = set()
+        if comments_part is not None:
+            for comment_el in comments_part.element.findall(qn("w:comment")):
+                cid = comment_el.get(qn("w:id"))
+                if cid is not None:
+                    ids.add(cid)
+        return ids
+
+    def _max_markup_id(self, doc, comments_part, extra_tags: tuple = ()) -> int:
+        """Return the highest existing w:id across comments.xml and matching
+        body markers, so a newly allocated id never collides with one already
+        in use. extra_tags adds body element tags beyond the comment markers
+        (e.g. "ins"/"del" for tracked-change id allocation)."""
+        max_id = max((int(cid) for cid in self._comment_ids(comments_part)), default=0)
+
+        tags = ("commentRangeStart", "commentRangeEnd", "commentReference") + extra_tags
+        for el in doc.element.body.iter():
+            if _local_tag(el) in tags:
+                cid = el.get(qn("w:id"))
+                if cid is not None:
+                    max_id = max(max_id, int(cid))
+
+        return max_id
+
+    def _get_next_change_id(self, doc, comments_part) -> int:
+        """Get the next available w:id, scanning comments.xml, body comment
+        markers, and existing w:ins/w:del elements so new tracked-change ids
+        never collide with existing comment or tracked-change ids."""
+        return self._max_markup_id(doc, comments_part, extra_tags=("ins", "del")) + 1
+
+    def _capture_markup_baseline(self, doc) -> Dict:
+        """Snapshot every pre-existing comment id and tracked-change element.
+
+        Captured immediately after opening the document, before any edit is
+        applied, so it reflects the original file on disk exactly.
+        """
+        comments_part = _find_comments_part(doc)
+        return {"comment_ids": self._comment_ids(comments_part), "changes": self._snapshot_changes(doc)}
+
+    def _snapshot_changes(self, doc) -> Dict:
+        """Map (tag, w:id) -> exact serialized XML for every existing w:ins/w:del element."""
+        changes = {}
+        for el in doc.element.body.iter():
+            tag = _local_tag(el)
+            if tag in ("ins", "del"):
+                cid = el.get(qn("w:id"))
+                if cid is not None:
+                    changes[(tag, cid)] = LET.tostring(el, encoding="unicode")
+        return changes
+
+    def _verify_markup_baseline(self, doc, baseline: Dict):
+        """Confirm every pre-existing comment and tracked change is still
+        present and byte-for-byte unchanged after applying edits.
+
+        Runs after all edits are applied but before the document is saved.
+        Raises ClientError without saving if anything from the original
+        document is missing or altered.
+        """
+        comments_part = _find_comments_part(doc)
+        missing_comments = baseline["comment_ids"] - self._comment_ids(comments_part)
+        if missing_comments:
+            raise ClientError(
+                "Verification failed: existing comment(s) missing after edit: "
+                f"{sorted(missing_comments)}"
+            )
+
+        current_changes = self._snapshot_changes(doc)
+        for key, original_xml in baseline["changes"].items():
+            current_xml = current_changes.get(key)
+            if current_xml is None:
+                raise ClientError(
+                    f"Verification failed: existing tracked change {key[0]}#{key[1]} "
+                    "is missing after edit"
+                )
+            if current_xml != original_xml:
+                raise ClientError(
+                    f"Verification failed: existing tracked change {key[0]}#{key[1]} "
+                    "was altered by this edit"
+                )
+
     def _find_reference_text(self, doc, reference_text: str, occurrence: int):
         """Find and isolate the run elements containing the target text.
 
@@ -352,21 +588,7 @@ class MswordClient:
 
     def _get_next_comment_id(self, doc, comments_part) -> int:
         """Get the next available comment ID by checking comments.xml and body markers."""
-        max_id = 0
-
-        for comment_el in comments_part.element.findall(qn("w:comment")):
-            cid = comment_el.get(qn("w:id"))
-            if cid is not None:
-                max_id = max(max_id, int(cid))
-
-        for el in doc.element.body.iter():
-            tag = el.tag.split("}")[-1] if "}" in el.tag else el.tag
-            if tag in ("commentRangeStart", "commentRangeEnd", "commentReference"):
-                cid = el.get(qn("w:id"))
-                if cid is not None:
-                    max_id = max(max_id, int(cid))
-
-        return max_id + 1
+        return self._max_markup_id(doc, comments_part) + 1
 
     def _add_comment_xml(self, comments_part, comment_id: int, text: str, author: str):
         """Add a comment element to the comments XML part's element tree."""
@@ -417,7 +639,7 @@ class MswordClient:
             prev = insert_before.getprevious()
             if prev is None:
                 break
-            tag = prev.tag.split("}")[-1] if "}" in prev.tag else prev.tag
+            tag = _local_tag(prev)
             if tag != "commentRangeStart":
                 break
             insert_before = prev
@@ -428,7 +650,7 @@ class MswordClient:
             nxt = insert_after.getnext()
             if nxt is None:
                 break
-            tag = nxt.tag.split("}")[-1] if "}" in nxt.tag else nxt.tag
+            tag = _local_tag(nxt)
             if tag not in ("commentRangeEnd", "r"):
                 break
             if tag == "r":
@@ -456,7 +678,7 @@ class MswordClient:
         range_ends = {}
 
         for i, el in enumerate(all_elements):
-            tag = el.tag.split("}")[-1] if "}" in el.tag else el.tag
+            tag = _local_tag(el)
             if tag == "commentRangeStart":
                 cid = el.get(f'{{{NSMAP["w"]}}}id')
                 if cid:
@@ -475,7 +697,7 @@ class MswordClient:
 
             texts = []
             for el in all_elements[start_idx:end_idx + 1]:
-                tag = el.tag.split("}")[-1] if "}" in el.tag else el.tag
+                tag = _local_tag(el)
                 if tag == "t" and el.text:
                     texts.append(el.text)
 

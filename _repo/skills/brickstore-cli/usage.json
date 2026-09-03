@@ -1,8 +1,8 @@
 {
   "tool": "brickstore",
   "description": "CLI interface for brickstore",
-  "discovered_at": "2026-08-18T14:56:11Z",
-  "total_commands": 8,
+  "discovered_at": "2026-09-01T12:14:48Z",
+  "total_commands": 10,
   "global_options": [],
   "commands": {
     "database": {
@@ -19,7 +19,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -32,7 +33,8 @@
               "type": "bool",
               "required": false,
               "help": "Redownload even if the local copy is current",
-              "short": "-f"
+              "short": "-f",
+              "takes_value": false
             }
           ]
         }
@@ -54,13 +56,35 @@
           "type": "bool",
           "required": false,
           "help": "Display as table",
-          "short": "-t"
+          "short": "-t",
+          "takes_value": false
         },
         {
           "name": "--leave-open",
           "type": "bool",
           "required": false,
-          "help": "Leave a BrickStore app started by this command open"
+          "help": "Leave a BrickStore app started by this command open",
+          "takes_value": false
+        }
+      ]
+    },
+    "minifig-contents": {
+      "help": "Return direct component records for one or more minifigs.",
+      "arguments": [
+        {
+          "name": "minifig_numbers",
+          "type": "TEXT",
+          "required": true,
+          "help": "One through 25 unique BrickLink minifig item IDs"
+        }
+      ],
+      "options": [
+        {
+          "name": "--skip-unknown",
+          "type": "bool",
+          "required": false,
+          "help": "Skip minifig IDs the local database does not hold instead of failing",
+          "takes_value": false
         }
       ]
     },
@@ -86,13 +110,35 @@
           "type": "bool",
           "required": false,
           "help": "Display as table",
-          "short": "-t"
+          "short": "-t",
+          "takes_value": false
         },
         {
           "name": "--leave-open",
           "type": "bool",
           "required": false,
-          "help": "Leave a BrickStore app started by this command open"
+          "help": "Leave a BrickStore app started by this command open",
+          "takes_value": false
+        }
+      ]
+    },
+    "part-contents": {
+      "help": "Return direct component records for one or more parts.",
+      "arguments": [
+        {
+          "name": "part_numbers",
+          "type": "TEXT",
+          "required": true,
+          "help": "One through 25 unique BrickLink part item IDs"
+        }
+      ],
+      "options": [
+        {
+          "name": "--skip-unknown",
+          "type": "bool",
+          "required": false,
+          "help": "Skip part IDs the local database does not hold instead of failing",
+          "takes_value": false
         }
       ]
     },
@@ -165,13 +211,15 @@
           "type": "bool",
           "required": false,
           "help": "Display as table",
-          "short": "-t"
+          "short": "-t",
+          "takes_value": false
         },
         {
           "name": "--leave-open",
           "type": "bool",
           "required": false,
-          "help": "Leave a BrickStore app started by this command open"
+          "help": "Leave a BrickStore app started by this command open",
+          "takes_value": false
         }
       ]
     },
@@ -191,13 +239,15 @@
           "type": "bool",
           "required": false,
           "help": "Display as table",
-          "short": "-t"
+          "short": "-t",
+          "takes_value": false
         },
         {
           "name": "--leave-open",
           "type": "bool",
           "required": false,
-          "help": "Leave a BrickStore app started by this command open"
+          "help": "Leave a BrickStore app started by this command open",
+          "takes_value": false
         }
       ]
     },
@@ -216,7 +266,8 @@
           "name": "--leave-open",
           "type": "bool",
           "required": false,
-          "help": "Leave a BrickStore app started by this command open"
+          "help": "Leave a BrickStore app started by this command open",
+          "takes_value": false
         }
       ]
     },
@@ -230,7 +281,15 @@
           "help": "One through 25 unique BrickLink set item IDs"
         }
       ],
-      "options": []
+      "options": [
+        {
+          "name": "--skip-unknown",
+          "type": "bool",
+          "required": false,
+          "help": "Skip set IDs the local database does not hold instead of failing",
+          "takes_value": false
+        }
+      ]
     }
   },
   "usage_instructions": "Use the `brickstore` CLI. Run `brickstore --help` to discover command groups and `--help` on any subcommand for its options."

@@ -37,6 +37,10 @@ globiflow <command-group> <action> [arguments] [options]
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 
+<principle name="Flow Import Requires A Field-Compatible Target App">
+`flows import` carries the source app's Podio field references into the target app. Globiflow re-binds only the references it can match there, and its flow editor refuses to save while any reference is unmatched, so an import lands only in an app whose fields cover every field the flow uses -- a schema clone of the source app, in the same org or another one. Importing into an app with a different schema fails with the unmatched step and control named; recreate that flow with `flows create` / `flows steps add` instead.
+</principle>
+
 <principle name="Command Groups">
 - **auth** -- Browser-based authentication (login, status, test, logout)
 - **search** -- Search and browse Globiflow items (query, item, list)

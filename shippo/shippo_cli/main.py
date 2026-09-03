@@ -19,7 +19,7 @@ app.add_typer(create_auth_app(get_config, tool_name="shippo"), name="auth", help
 app.add_typer(create_cache_app(get_config), name="cache", help="Manage CLI cache")
 
 # Register command modules
-from .commands import addresses, shipments, rates, labels, tracking, carriers
+from .commands import addresses, shipments, rates, labels, tracking, carriers, pickups
 
 register_commands(app, get_config, addresses, name="addresses", help="Manage saved addresses")
 register_commands(app, get_config, shipments, name="shipments", help="Create shipments, view rates")
@@ -27,6 +27,9 @@ register_commands(app, get_config, rates, name="rates", help="View and compare s
 register_commands(app, get_config, labels, name="labels", help="Purchase and manage shipping labels")
 register_commands(app, get_config, tracking, name="tracking", help="Track shipments")
 register_commands(app, get_config, carriers, name="carriers", help="Manage carrier accounts")
+register_commands(app, get_config, pickups, name="pickups", help="Schedule USPS and DHL Express pickups")
+
+
 def main():
     """Main entry point."""
     run_app(app)

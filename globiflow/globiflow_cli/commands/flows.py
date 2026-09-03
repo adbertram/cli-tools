@@ -64,6 +64,17 @@ def _apply_filters(items: List[dict], filters: Optional[List[str]]) -> List[dict
 
         field, op, value = parts
 
+        # A filter on a field the records do not carry would silently match
+        # nothing, which reads exactly like "no such records exist". Reject it
+        # instead so a typo or a renamed field can never be mistaken for an
+        # empty result.
+        if filtered and field not in filtered[0]:
+            print_error(
+                f"Unknown filter field: {field}. "
+                f"Available fields: {', '.join(sorted(filtered[0]))}"
+            )
+            raise typer.Exit(1)
+
         # Apply filter
         if op == "eq":
             filtered = [item for item in filtered if str(item.get(field, "")).lower() == value.lower()]
@@ -608,6 +619,10 @@ def add_step(
     due_date: Optional[str] = typer.Option(None, "--due-date",
         help="Task due date"),
 
+    # Update Item / Create Item fields
+    fields: Optional[str] = typer.Option(None, "--fields",
+        help='JSON object of Podio field label -> value to set (Update Item / Create Item steps), e.g. \'{"Status": "Approved"}\''),
+
     # Output format
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
 ):
@@ -620,6 +635,7 @@ def add_step(
         globiflow flows steps add 4314927 --action "Add Comment" --comment "Hello world"
         globiflow flows steps add 4314927 --action "Custom Variable" --variable-name "myvar" --code "'value'"
         globiflow flows steps add 4314927 --action "Remote HTTP Call" --url "https://api.example.com" --method POST
+        globiflow flows steps add 4314927 --action "Update Item" --fields '{"Status": "Approved"}'
     """
     # Build step config from action_type and non-None options
     step_config = {"action_type": action_type}
@@ -635,6 +651,17 @@ def add_step(
         if value is not None:
             step_config[field] = value
 
+    if fields is not None:
+        try:
+            parsed_fields = json.loads(fields)
+        except json.JSONDecodeError as e:
+            print_error(f"Invalid JSON in --fields: {e}")
+            raise typer.Exit(1)
+        if not isinstance(parsed_fields, dict):
+            print_error("--fields must be a JSON object of field label -> value")
+            raise typer.Exit(1)
+        step_config["fields"] = parsed_fields
+
     client = get_client()
     try:
         new_step = client.add_flow_step(flow_id, step_config)
@@ -646,7 +673,7 @@ def add_step(
                 {"field": "Action Type", "value": new_step.action_type},
             ]
             # Add any configured fields
-            for field_name in field_names:
+            for field_name in field_names + ["fields"]:
                 value = getattr(new_step, field_name, None)
                 if value is not None:
                     rows.append({"field": field_name, "value": str(value)})
@@ -718,6 +745,10 @@ def update_step(
     due_date: Optional[str] = typer.Option(None, "--due-date",
         help="Task due date"),
 
+    # Update Item / Create Item fields
+    fields: Optional[str] = typer.Option(None, "--fields",
+        help='JSON object of Podio field label -> value to set (Update Item / Create Item steps), e.g. \'{"Status": "Approved"}\''),
+
     # Output format
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
 ):
@@ -731,6 +762,7 @@ def update_step(
         globiflow flows steps update 4314927 1 --variable-name "new_name" --code "'expr'"
         globiflow flows steps update 4314927 3 --url "https://api.example.com" --method POST
         globiflow flows steps update 4314927 5 --to "email@example.com" --subject "Subject"
+        globiflow flows steps update 4314927 2 --fields '{"Status": "Approved"}'
     """
     # Build updates dict from non-None options
     updates = {}
@@ -745,6 +777,17 @@ def update_step(
         value = local_vars.get(field)
         if value is not None:
             updates[field] = value
+
+    if fields is not None:
+        try:
+            parsed_fields = json.loads(fields)
+        except json.JSONDecodeError as e:
+            print_error(f"Invalid JSON in --fields: {e}")
+            raise typer.Exit(1)
+        if not isinstance(parsed_fields, dict):
+            print_error("--fields must be a JSON object of field label -> value")
+            raise typer.Exit(1)
+        updates["fields"] = parsed_fields
 
     # Validate at least one field provided
     if not updates:

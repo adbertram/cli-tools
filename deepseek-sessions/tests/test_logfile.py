@@ -1,5 +1,6 @@
 """Tests for the physical session-log reader."""
 import json
+from compression import zstd
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,7 @@ from deepseek_sessions_cli.logfile import (
     SessionLogError,
     find_log_path,
     load_log,
+    load_log_header,
     read_log_text,
 )
 
@@ -22,6 +24,20 @@ def test_reads_concatenated_zstd_frames(simple_log: Path):
     assert log.truncated is False
     # 15 event rows follow the header.
     assert len(log.events) == 15
+
+
+def test_load_log_header_does_not_decode_later_frames(simple_log: Path):
+    """Metadata discovery must not pay the cost of decoding the transcript."""
+    raw = simple_log.read_bytes()
+    decompressor = zstd.ZstdDecompressor()
+    decompressor.decompress(raw)
+    first_frame_end = len(raw) - len(decompressor.unused_data)
+    simple_log.write_bytes(raw[:first_frame_end] + b"not-zstd")
+
+    header_row = load_log_header(simple_log)
+
+    assert header_row["id"] == "session-11111111-1111-4111-8111-111111111111"
+    assert header_row["cwd"] == PROJECT_CWD
 
 
 def test_reads_plaintext_encoding(sessions_root: Path):
@@ -39,6 +55,7 @@ def test_reads_plaintext_encoding(sessions_root: Path):
     log = load_log(path)
     assert log.session_id == session_id
     assert len(log.events) == 1
+    assert load_log_header(path)["id"] == session_id
 
 
 def test_find_log_path_prefers_compressed(sessions_root: Path):

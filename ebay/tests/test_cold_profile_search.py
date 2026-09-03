@@ -117,7 +117,10 @@ def test_should_stop_before_search_when_homepage_challenge_persists():
     client = EbayBrowserClient(config=object())
     client._browser = browser
 
-    with pytest.raises(BrowserError, match="CAPTCHA/security-verification"):
+    # Still a hard stop -- but reported as eBay's transient browser check,
+    # not as a CAPTCHA. See test_browser_error_interstitial.py for the live
+    # evidence that /splashui/challenge self-clears.
+    with pytest.raises(BrowserError, match="browser-check interstitial"):
         client.search_active("lego", limit=1)
 
     assert browser.events == [

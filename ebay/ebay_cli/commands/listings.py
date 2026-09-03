@@ -23,9 +23,11 @@ COMMAND_CREDENTIALS = {
     "list": ["oauth_authorization_code"],
     "preview": ["oauth_authorization_code"],
     "publish": ["oauth_authorization_code"],
-    # Top-level `ebay listings search` is registered from search.py under the
-    # shared `listings` group name, so metadata consumers still expect this key.
+    # Top-level `ebay listings search` and `ebay listings status` are
+    # registered from search.py under the shared `listings` group name, so
+    # metadata consumers still expect these keys here.
     "search": ["no_auth"],
+    "status": ["no_auth"],
     "unpublish": ["oauth_authorization_code"],
     "update": ["oauth_authorization_code"],
 }
@@ -1393,6 +1395,7 @@ def listings_create(
     quantity: Optional[int] = typer.Option(None, "--quantity", "-q", help="Available quantity"),
     category_id: Optional[str] = typer.Option(None, "--category", "-c", help="eBay category ID"),
     condition: Optional[str] = typer.Option(None, "--condition", help="Item condition (NEW, USED_GOOD, etc.)"),
+    condition_description: Optional[str] = typer.Option(None, "--condition-description", help="Condition description text (overrides template default)"),
     condition_descriptors: Optional[str] = typer.Option(None, "--condition-descriptors", help="Condition descriptors JSON for trading cards (e.g., '[{\"name\":\"40001\",\"values\":[\"400010\"]}]')"),
     format_type: Optional[str] = typer.Option(None, "--format", "-f", help="FIXED_PRICE or AUCTION"),
     weight: Optional[float] = typer.Option(None, "--weight", "-w", help="Package weight in pounds"),
@@ -1755,7 +1758,7 @@ def listings_create(
         if product:
             inventory_payload["product"] = product
 
-        # Condition: CLI option > template conditionEnum > template conditionId mapping
+        # Condition enum: CLI option > template conditionEnum > template conditionId mapping
         if condition:
             inventory_payload["condition"] = condition.upper()
         elif raw_template:
@@ -1767,8 +1770,16 @@ def listings_create(
                 elif "conditionId" in template_condition:
                     cond_id = template_condition.get("conditionId")
                     inventory_payload["condition"] = CONDITION_ID_TO_ENUM.get(str(cond_id), "USED_GOOD")
-                if "conditionDescription" in template_condition:
-                    inventory_payload["conditionDescription"] = template_condition["conditionDescription"]
+
+        # conditionDescription: CLI --condition-description > template default.
+        # Independent of the --condition enum override above — a caller can set
+        # --condition without losing the template's default conditionDescription.
+        if condition_description:
+            inventory_payload["conditionDescription"] = condition_description
+        elif raw_template:
+            template_condition = raw_template.get("condition", {})
+            if isinstance(template_condition, dict) and "conditionDescription" in template_condition:
+                inventory_payload["conditionDescription"] = template_condition["conditionDescription"]
 
         # Condition Descriptors - required for trading cards categories (261328, 183050, 183454)
         # These are separate from item specifics and use numeric IDs

@@ -186,6 +186,59 @@ def is_real_page(t):
     return t["type"] == "page" and not t.get("url", "").startswith(INTERNAL)
 
 
+# The WS opening handshake to a just-spawned Chrome can time out while Chrome
+# is busy bringing up its profile (websockets raises TimeoutError("timed out
+# during opening handshake") after its 10s open_timeout). The endpoint itself
+# is good — the parent resolved it from a live /json/version moments earlier —
+# so this is a lost race under host load, not a dead browser. Retry the SAME
+# handshake a bounded number of times with growing backoff before failing.
+HANDSHAKE_ATTEMPTS = 3
+
+
+def _is_transient_handshake_timeout(e):
+    """True only for the timeout class of handshake failure.
+
+    Non-timeout handshake failures (HTTP 403 = Chrome needs the Allow flow,
+    invalid/expired WS URL, connection refused) are a different class and must
+    fail immediately — retrying them cannot succeed.
+    """
+    if isinstance(e, (asyncio.TimeoutError, TimeoutError)):
+        return True
+    msg = str(e).lower()
+    return "timed out" in msg or "timeout" in msg
+
+
+async def connect_cdp(url):
+    """Connect a CDPClient to ``url`` with a bounded transient-timeout retry.
+
+    Returns the started client. Raises RuntimeError with the established
+    "CDP WS handshake failed" message shapes on final failure (admin.py's
+    failure classifiers match on that text — keep it stable).
+    """
+    for attempt in range(1, HANDSHAKE_ATTEMPTS + 1):
+        cdp = CDPClient(url)
+        try:
+            await cdp.start()
+            return cdp
+        except Exception as e:
+            await _silent(cdp.stop())
+            if attempt < HANDSHAKE_ATTEMPTS and _is_transient_handshake_timeout(e):
+                delay = attempt  # 1s, 2s growing backoff
+                log(
+                    f"CDP WS handshake timed out (attempt {attempt}/{HANDSHAKE_ATTEMPTS}) "
+                    f"-- retrying in {delay}s: {e}"
+                )
+                await asyncio.sleep(delay)
+                continue
+            if os.environ.get("BU_CDP_WS"):
+                raise RuntimeError(
+                    f"CDP WS handshake failed: {e} -- remote browser WebSocket connection failed. "
+                    "This can happen when network policy blocks the connection, the WS URL is wrong or expired, or the remote endpoint is down. "
+                    "If you use Browser Use cloud, verify BROWSER_USE_API_KEY and get a fresh URL via start_remote_daemon()."
+                )
+            raise RuntimeError(f"CDP WS handshake failed: {e} -- click Allow in Chrome if prompted, then retry")
+
+
 class Daemon:
     def __init__(self):
         self.cdp = None
@@ -240,17 +293,7 @@ class Daemon:
         self.stop = asyncio.Event()
         url = get_ws_url()
         log(f"connecting to {url}")
-        self.cdp = CDPClient(url)
-        try:
-            await self.cdp.start()
-        except Exception as e:
-            if os.environ.get("BU_CDP_WS"):
-                raise RuntimeError(
-                    f"CDP WS handshake failed: {e} -- remote browser WebSocket connection failed. "
-                    "This can happen when network policy blocks the connection, the WS URL is wrong or expired, or the remote endpoint is down. "
-                    "If you use Browser Use cloud, verify BROWSER_USE_API_KEY and get a fresh URL via start_remote_daemon()."
-                )
-            raise RuntimeError(f"CDP WS handshake failed: {e} -- click Allow in Chrome if prompted, then retry")
+        self.cdp = await connect_cdp(url)
         await self.attach_first_page()
         orig = self.cdp._event_registry.handle_event
         mark_js = "if(!document.title.startsWith('\U0001F434'))document.title='\U0001F434 '+document.title"

@@ -127,6 +127,36 @@ Set template `pricing.allowOffers` to `true` to enable Best Offer.
 **`usage.json`** — Complete command tree with arguments, options, defaults, and usage instructions for every command.
 </reference_index>
 
+## Known Issues
+
+### 1. `ebay listings search` Fails with `eBay search results container was not found on the page` and title `🐴 Error Page | eBay`
+
+**Symptom:** A browser-backed command (e.g. `ebay listings search "<q>" --sold --us-only`) intermittently exits 1 with `Error: eBay search results container was not found on the page -- the page did not load as expected. url=https://www.ebay.com/sch/i.html?... title='🐴 Error Page | eBay'`.
+
+**Cause (corrected 2026-08-28):** eBay fronts the SAME url with **three** distinct walls, and the original fix recognized only one of them. The retry loop was gated on a one-string title blocklist (`ERROR_PAGE_TITLE_MARKERS = ("Error Page",)`), so the second wall — `/splashui/challenge`, titled **"🐴 Pardon Our Interruption..."** — was classified as a healthy page. `get_page` returned that interstitial to the caller, whose `wait_for_selector` then timed out and reported the misleading container-not-found error. An instrumented run of the real loop caught it directly: one detection probe, `detected: false`, and `get_page` returning a page still parked on `/splashui/challenge`. That is why the failure printed `attempt 1/4` and then died immediately instead of exhausting its attempts — it was not a loop that gave up early, it was a loop whose exit condition was wrong.
+
+This is **not** a stale-session symptom. It reproduces with `ebay auth status` reporting `browser_session.authenticated: true` and the live results page rendering "Hi Adam!".
+
+The three walls, all captured live:
+
+| Wall | Signature | Behavior | Handling |
+|------|-----------|----------|----------|
+| `error` | title `🐴 Error Page \| eBay`, body `SORRY Something went wrong on our end <ref>` | eBay's **request-rate** wall. Sticky — held 8s+ without re-navigation and survived re-navigation at ~9.5s spacing | Jittered exponential backoff, then re-navigate |
+| `challenge` | `/splashui/challenge`, title `🐴 Pardon Our Interruption...` | **Self-clearing** JS check ("your browser will redirect ... shortly") — resolved to real results on the next sample | **Waited out in place.** Re-navigating abandons the redirect eBay just issued and spends another request against the rate budget |
+| `captcha` | `/splashui/captcha`, hcaptcha/recaptcha, "verify you are human" | Real human verification | **Hard stop** — never solved, clicked through, or reloaded around |
+
+**Fix:** The handling moved into the shared engine as a declarative hook, so `EbayBrowser` stays a declarative subclass (`test_lean_cli_architecture.py::test_browser_automation_subclasses_are_declarative`). `cli_tools_shared.auth` now provides the `Interstitial` rule dataclass, `classify_interstitial()`, and the `settle`/`reload`/`abort` strategies; `BrowserAutomation.get_page` navigates via `_navigate_page` and then resolves the walls declared in `INTERSTITIALS`, returning **only** once the page holds real content. eBay declares its three rules in `EBAY_INTERSTITIALS` (most-severe first, so a captcha can never be masked by a retryable rule). `_raise_for_search_blocker` classifies against the same rules, so each wall gets its own accurate message instead of the generic container-missing one — including a distinct "expired or unauthenticated session" message for a sign-in redirect. Sources: `_repo/cli-tools-shared/cli_tools_shared/auth.py`, `ebay/ebay_cli/browser.py`, `ebay/ebay_cli/browser_client.py`. Tests: `cli-tools-shared/tests/test_browser_interstitials.py`, `ebay/tests/test_browser_error_interstitial.py`, `ebay/tests/test_search_blocker_diagnosis.py`.
+
+**Verification:** Run `ebay listings search "LEGO 7097" --sold --us-only --limit 40 --table`. When the walls are hit, stderr shows the retry working through them, e.g.:
+```
+Warning: error ('Error Page') interstitial detected (attempt 1/4) -- retrying <url> in 4.4s
+Warning: error ('Error Page') interstitial detected (attempt 2/4) -- retrying <url> in 11.6s
+Warning: browser-check ('Pardon Our Interruption') interstitial detected -- waiting for it to clear (0s/20s)
+```
+followed by real sold comps on stdout.
+
+**Recurrence Prevention:** Resolution is central to `BrowserAutomation.get_page`, so every browser-backed operation in every browser CLI inherits it; a tool that declares no `INTERSTITIALS` is unaffected. If eBay adds or rotates a wall, add/adjust an `Interstitial` rule in `EBAY_INTERSTITIALS` — do not reintroduce a bare title check, and do not treat "the title isn't the one bad string" as proof the page is good. Match on the narrowest reliable signal (URL path first, then title); broad body markers such as "something went wrong" legitimately appear inside real listing content. If the rate wall starts outlasting the backoff, raise `INTERSTITIAL_MAX_ATTEMPTS`/`INTERSTITIAL_BASE_DELAY_MS` rather than shortening the waits — tight reloads measurably deepen the throttle.
+
 <success_criteria>
 - Command executes without error
 - Output is displayed in requested format

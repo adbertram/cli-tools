@@ -49,6 +49,7 @@
 | `google-lighthouse` | The `google-lighthouse` CLI wraps lighthouse with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
 | `grammarly` | The `grammarly` CLI provides a command-line interface for Grammarly API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `harmony` | The `harmony` CLI lets you manage Logitech Harmony hubs, activities, devices, and commands. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `humanrail` | CLI interface for HumanRail (browser automation, worker side) |
 | `hyvor` | The `hyvor` CLI provides a command-line interface for Hyvor API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `imessage` | The `imessage` CLI provides command-line access for iMessage on macOS. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `impact` | The `impact` CLI provides command-line access to Impact.com Publisher API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
@@ -65,6 +66,8 @@
 | `manus` | The `manus` CLI provides a command-line interface for Manus AI API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `medium` | The `medium` CLI lets you create Medium drafts through Medium's web composer. Use it when you need repeatable access to medium workflows that are only available through a signed-in website. |
 | `mercari` | The `mercari` CLI provides read-only access to Mercari US listings by driving the authenticated web app and capturing its internal GraphQL responses. Use it to search other sellers' public listings (`listings search`), read your own listings (`listings list`), and get full item detail (`listings get`). |
+| `microworker` | Runs the per-site gig CLIs for the MicroWorker project, writes site envelopes, and merges them into one task list |
+| `microworkers` | The `microworkers` CLI drives the Microworkers worker portal through an authenticated browser session. Use it to list available worker jobs (`tasks list`), inspect full job requirements (`tasks get`), and preview or (with `--confirm`) submit proof for a job (`tasks apply`, dry-run by default). |
 | `mindmeister` | The `mindmeister` CLI provides a command-line interface for Mindmeister API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `monarch` | The `monarch` CLI provides a command-line interface for Monarch API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `moz` | The `moz` CLI provides a command-line interface for Moz API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
@@ -76,7 +79,9 @@
 | `notion` | The `notion` CLI provides a command-line interface for Notion API with database query filtering. Use it when you need scriptable reads, exports, or evidence collection without opening the service UI. |
 | `offerup` | Search and read OfferUp local marketplace listings |
 | `onedrive` | The `onedrive` CLI provides a command-line interface for Onedrive API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `oneforma` | CLI interface for OneForma (browser automation, worker side) |
 | `openai-whisper` | The `openai-whisper` CLI wraps OpenAI Whisper with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
+| `outlier` | Outlier AI worker portal - discover queued gig tasks |
 | `partnerstack` | The `partnerstack` CLI provides a command-line interface for Partnerstack API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `paypal` | The `paypal` CLI provides a command-line interface for PayPal API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `photos-app` | The `photos-app` CLI wraps sqlite3 with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
@@ -98,6 +103,7 @@
 | `snagit` | The `snagit` CLI provides a command-line interface for Snagit API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `stockx` | Search and read StockX sneaker and streetwear market data |
 | `target` | A command-line interface for [Target](https://www.target.com) using browser automation. Target consumer CLI for searching products, adding to cart, and checking out. Use this CLI when you need repeatable access to Target workflows that are only available through the website. |
+| `taskerdata` | TaskerData gig worker portal automation |
 | `techsmith` | The `techsmith` CLI provides a command-line interface for Techsmith (browser automation). Use it when you need repeatable access to techsmith workflows that are only available through a signed-in website. |
 | `things` | The `things` CLI provides a command-line interface for Things API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `tiktok` | The `tiktok` CLI provides tikTok transcript downloader using yt-dlp. Use it when you need scriptable reads, exports, or evidence collection without opening the service UI. |

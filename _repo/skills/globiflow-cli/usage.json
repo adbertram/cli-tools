@@ -1,7 +1,7 @@
 {
   "tool": "globiflow",
   "description": "CLI interface for Globiflow (browser automation)",
-  "discovered_at": "2026-08-19T17:21:27Z",
+  "discovered_at": "2026-09-03T13:19:27Z",
   "total_commands": 30,
   "global_options": [
     {
@@ -42,7 +42,8 @@
               "type": "bool",
               "required": false,
               "help": "Clear existing ephemeral auth state and re-authenticate",
-              "short": "-F"
+              "short": "-F",
+              "takes_value": false
             }
           ]
         },
@@ -95,7 +96,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -116,7 +118,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
@@ -130,7 +133,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -171,7 +175,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -196,14 +201,16 @@
                   "name": "--keep-old",
                   "type": "bool",
                   "required": false,
-                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
                 },
                 {
                   "name": "--force",
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -238,7 +245,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -252,14 +260,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--verbose",
               "type": "bool",
               "required": false,
               "help": "Show detailed checks",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -351,6 +361,8 @@
               "type": "bool",
               "required": false,
               "help": "Enable or disable the flow",
+              "takes_value": false,
+              "secondary": "--disabled",
               "default": "enabled"
             },
             {
@@ -358,7 +370,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -385,7 +398,8 @@
               "type": "bool",
               "required": false,
               "help": "Skip confirmation prompt",
-              "short": "-F"
+              "short": "-F",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -438,14 +452,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--include-steps",
               "type": "bool",
               "required": false,
               "help": "Include step details",
-              "short": "-s"
+              "short": "-s",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -478,7 +494,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -498,7 +515,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -547,7 +565,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -564,7 +583,7 @@
           "options": [],
           "commands": {
             "add": {
-              "help": "Add a new step to an existing flow. Adds a step of the specified action type with the given parameters. Example: globiflow flows steps add 4314927 --action \"Add Comment\" --comment \"Hello world\" globiflow flows steps add 4314927 --action \"Custom Variable\" --variable-name \"myvar\" --code \"'value'\" globiflow flows steps add 4314927 --action \"Remote HTTP Call\" --url \"https://api.example.com\" --method POST",
+              "help": "Add a new step to an existing flow. Adds a step of the specified action type with the given parameters. Example: globiflow flows steps add 4314927 --action \"Add Comment\" --comment \"Hello world\" globiflow flows steps add 4314927 --action \"Custom Variable\" --variable-name \"myvar\" --code \"'value'\" globiflow flows steps add 4314927 --action \"Remote HTTP Call\" --url \"https://api.example.com\" --method POST globiflow flows steps add 4314927 --action \"Update Item\" --fields '{\"Status\": \"Approved\"}'",
               "usage_instructions": "Add a step to a flow. FLOW_ID is required (positional). --action/-a is required (e.g., 'Add Comment', 'Custom Variable', 'Remote HTTP Call'). Other options depend on the action type: use --variable-name/-v and --code/-c for Custom Variable steps, --url/--method/-m for HTTP calls, --to/--subject/--body for email steps, --comment for Add Comment steps.",
               "arguments": [
                 {
@@ -631,7 +650,9 @@
                   "name": "--follow-redirect",
                   "type": "bool",
                   "required": false,
-                  "help": "Follow HTTP redirects"
+                  "help": "Follow HTTP redirects",
+                  "takes_value": false,
+                  "secondary": "--no-follow-redirect"
                 },
                 {
                   "name": "--to",
@@ -685,7 +706,9 @@
                   "name": "--silent",
                   "type": "bool",
                   "required": false,
-                  "help": "Silent mode (no notifications)"
+                  "help": "Silent mode (no notifications)",
+                  "takes_value": false,
+                  "secondary": "--no-silent"
                 },
                 {
                   "name": "--message",
@@ -712,11 +735,18 @@
                   "help": "Task due date"
                 },
                 {
+                  "name": "--fields",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "JSON object of Podio field label -> value to set (Update Item / Create Item steps), e.g. '{\"Status\": \"Approved\"}'"
+                },
+                {
                   "name": "--table",
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -748,7 +778,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation prompt",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -781,7 +812,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -807,7 +839,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -867,7 +900,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -878,7 +912,7 @@
               ]
             },
             "update": {
-              "help": "Update fields of a specific step in a flow. Auto-detects the step type and validates that only appropriate fields are updated. Supports all step types. Example: globiflow flows steps update 4314927 1 --variable-name \"new_name\" --code \"'expr'\" globiflow flows steps update 4314927 3 --url \"https://api.example.com\" --method POST globiflow flows steps update 4314927 5 --to \"email@example.com\" --subject \"Subject\"",
+              "help": "Update fields of a specific step in a flow. Auto-detects the step type and validates that only appropriate fields are updated. Supports all step types. Example: globiflow flows steps update 4314927 1 --variable-name \"new_name\" --code \"'expr'\" globiflow flows steps update 4314927 3 --url \"https://api.example.com\" --method POST globiflow flows steps update 4314927 5 --to \"email@example.com\" --subject \"Subject\" globiflow flows steps update 4314927 2 --fields '{\"Status\": \"Approved\"}'",
               "usage_instructions": "Modify an existing step's parameters. FLOW_ID and STEP_NUMBER (1-based) are required (positional). Auto-detects step type and validates fields. Same options as `steps add` for the specific action type.",
               "arguments": [
                 {
@@ -944,7 +978,9 @@
                   "name": "--follow-redirect",
                   "type": "bool",
                   "required": false,
-                  "help": "Follow HTTP redirects"
+                  "help": "Follow HTTP redirects",
+                  "takes_value": false,
+                  "secondary": "--no-follow-redirect"
                 },
                 {
                   "name": "--to",
@@ -998,7 +1034,9 @@
                   "name": "--silent",
                   "type": "bool",
                   "required": false,
-                  "help": "Silent mode (no notifications)"
+                  "help": "Silent mode (no notifications)",
+                  "takes_value": false,
+                  "secondary": "--no-silent"
                 },
                 {
                   "name": "--message",
@@ -1025,11 +1063,18 @@
                   "help": "Task due date"
                 },
                 {
+                  "name": "--fields",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "JSON object of Podio field label -> value to set (Update Item / Create Item steps), e.g. '{\"Status\": \"Approved\"}'"
+                },
+                {
                   "name": "--table",
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -1073,7 +1118,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--output",
@@ -1115,7 +1161,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -1164,7 +1211,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -1213,7 +1261,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1232,7 +1281,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",

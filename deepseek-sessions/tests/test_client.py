@@ -44,6 +44,17 @@ def test_list_projects_reads_path_from_the_header(client):
     assert project.subagent_session_count == 1
 
 
+def test_list_projects_does_not_decode_full_transcripts(client, monkeypatch):
+    """Project metadata reads headers and file mtimes, not every event row."""
+    monkeypatch.setattr(
+        client,
+        "_load",
+        lambda _session_dir: (_ for _ in ()).throw(AssertionError("full log decoded")),
+    )
+
+    assert client.list_projects(limit=1)[0].name == "demo"
+
+
 def test_get_project_by_name_key_and_path(client):
     assert client.get_project("demo").name == "demo"
     assert client.get_project("--work-demo--").name == "demo"

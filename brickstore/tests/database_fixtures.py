@@ -36,6 +36,11 @@ def _pack_array(records: list) -> bytes:
     return _UINT32.pack(len(records)) + b"".join(records)
 
 
+def pack_appears_in(color_index: int, entries: list[tuple[int, int]]) -> list[bytes]:
+    header = _UINT32.pack((color_index & 0xFFF) | (len(entries) << 12))
+    return [header, *[_UINT32.pack((quantity & 0xFFF) | (item_index << 12)) for quantity, item_index in entries]]
+
+
 def build_chunk(chunk_id: bytes, payload: bytes, version: int = VERSION) -> bytes:
     """Encode one length-prefixed, footer-verified BSDB chunk."""
     size = len(payload)
@@ -104,7 +109,7 @@ def items_chunk(items: list) -> bytes:
                 _pack_text(item["name"]),
                 _UINT16.pack(item["type_index"]),
                 b"\x00" * ITEM_SCALAR_SKIP_SIZE,
-                _pack_array([]),  # appears_in
+                _pack_array(item.get("appears_in", [])),
                 _pack_array(item.get("consists_of", [])),
                 _pack_array([]),  # unused index array
                 _pack_array(category_records),
@@ -139,17 +144,18 @@ def build_database(
     return build_chunk(MAGIC, payload)
 
 
-def set_database(set_numbers, generated_at=None) -> bytes:
-    """Build a database whose sets contain 3 of one part (2 regular + 1 extra)."""
+def _contents_database(item_numbers, item_types, holder_type_id, holder_name, generated_at=None) -> bytes:
+    """Build a database whose holder items contain 3 of one part (2 regular + 1 extra)."""
+    holder_type_index = [type_id for type_id, _ in item_types].index(holder_type_id)
     items = [
         {"no": "3001", "name": "Brick 2 x 4", "type_index": 0, "category_index": 0},
     ]
-    for set_number in set_numbers:
+    for item_number in item_numbers:
         items.append(
             {
-                "no": set_number,
-                "name": "Santa's Sleigh Ride polybag",
-                "type_index": 1,
+                "no": item_number,
+                "name": holder_name,
+                "type_index": holder_type_index,
                 "consists_of": [
                     pack_consists_of(quantity=2, item_index=0, color_index=0),
                     pack_consists_of(quantity=1, item_index=0, color_index=0, is_extra=True),
@@ -159,8 +165,30 @@ def set_database(set_numbers, generated_at=None) -> bytes:
     return build_database(
         colors=[(5, "Red")],
         categories=[(5, "Basic")],
-        item_types=[("P", "Part"), ("S", "Set")],
+        item_types=item_types,
         items=items,
+        generated_at=generated_at,
+    )
+
+
+def set_database(set_numbers, generated_at=None) -> bytes:
+    """Build a database whose sets contain 3 of one part (2 regular + 1 extra)."""
+    return _contents_database(
+        set_numbers,
+        item_types=[("P", "Part"), ("S", "Set")],
+        holder_type_id="S",
+        holder_name="Santa's Sleigh Ride polybag",
+        generated_at=generated_at,
+    )
+
+
+def minifig_database(minifig_numbers, generated_at=None) -> bytes:
+    """Build a database whose minifigs contain 3 of one part (2 regular + 1 extra)."""
+    return _contents_database(
+        minifig_numbers,
+        item_types=[("P", "Part"), ("S", "Set"), ("M", "Minifig")],
+        holder_type_id="M",
+        holder_name="Luke Skywalker (Pilot)",
         generated_at=generated_at,
     )
 
@@ -168,6 +196,32 @@ def set_database(set_numbers, generated_at=None) -> bytes:
 def one_set_one_part_database(generated_at=None) -> bytes:
     """A minimal database with one set."""
     return set_database(["30670-1"], generated_at)
+
+
+def one_parent_part_one_child_part_database(generated_at=None) -> bytes:
+    """A parent PART assembly containing one child PART, like BrickLink 70501."""
+    return build_database(
+        colors=[(5, "Red")],
+        categories=[(5, "Basic")],
+        item_types=[("P", "Part")],
+        items=[
+            {
+                "no": "3001",
+                "name": "Brick 2 x 4",
+                "type_index": 0,
+                "category_index": 0,
+                "appears_in": pack_appears_in(0, [(2, 1)]),
+            },
+            {
+                "no": "70501",
+                "name": "Parent Part Assembly",
+                "type_index": 0,
+                "category_index": 0,
+                "consists_of": [pack_consists_of(quantity=2, item_index=0, color_index=0)],
+            },
+        ],
+        generated_at=generated_at,
+    )
 
 
 def two_sets_one_part_database(generated_at=None) -> bytes:

@@ -75,6 +75,7 @@ class FakeDraftsResource:
         self.send_payload = send_payload or {"id": "sent-draft-1", "threadId": "thread-1"}
         self.get_calls = []
         self.send_calls = []
+        self.delete_calls = []
 
     def get(self, **kwargs):
         self.get_calls.append(kwargs)
@@ -83,6 +84,10 @@ class FakeDraftsResource:
     def send(self, **kwargs):
         self.send_calls.append(kwargs)
         return FakeExecute(self.send_payload)
+
+    def delete(self, **kwargs):
+        self.delete_calls.append(kwargs)
+        return FakeExecute("")
 
 
 class FakeLabelsResource:
@@ -534,6 +539,41 @@ def test_gmail_draft_get_uses_drafts_api_and_decodes_body(monkeypatch):
         "body": "Draft body",
     }
     assert resource.get_calls == [{"userId": "me", "id": "draft-1", "format": "full"}]
+
+
+def test_gmail_draft_delete_uses_drafts_delete_and_never_touches_messages(monkeypatch):
+    drafts_resource = FakeDraftsResource()
+    messages_resource = FakeMessagesResource()
+    service = FakeGmailService(
+        messages_resource=messages_resource,
+        drafts_resource=drafts_resource,
+    )
+    monkeypatch.setattr(
+        gmail_commands, "get_client", lambda profile=None: FakeClient(service)
+    )
+
+    result = CliRunner().invoke(
+        app, ["gmail", "draft-delete", "r8183610024399865309", "--confirm"]
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "draft_id": "r8183610024399865309",
+        "deleted": True,
+    }
+    assert drafts_resource.delete_calls == [
+        {"userId": "me", "id": "r8183610024399865309"}
+    ]
+    assert messages_resource.modify_calls == []
+
+
+def test_gmail_draft_delete_without_confirm_aborts_on_declined_prompt(monkeypatch):
+    resource = _patch_drafts_client(monkeypatch, FakeDraftsResource())
+
+    result = CliRunner().invoke(app, ["gmail", "draft-delete", "draft-1"], input="n\n")
+
+    assert result.exit_code != 0
+    assert resource.delete_calls == []
 
 
 def test_gmail_reply_confirm_sends_from_noninteractive_session(monkeypatch):

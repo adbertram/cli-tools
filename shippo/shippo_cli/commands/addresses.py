@@ -20,7 +20,7 @@ from typing import Optional, List
 from pydantic import BaseModel
 
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_table, print_success, handle_error
+from cli_tools_shared.output import command, print_json, print_table
 from cli_tools_shared.filters import apply_filters
 
 
@@ -60,6 +60,7 @@ def extract_fields(items: list, fields: list) -> list:
 
 
 @app.command("list")
+@command
 def addresses_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of addresses to return"),
@@ -75,33 +76,30 @@ def addresses_list(
         shippo addresses list --limit 10
         shippo addresses list --properties "object_id,name,city,state"
     """
-    try:
-        client = get_client()
-        addresses = client.list_addresses(limit=limit, filters=filter)
+    client = get_client()
+    addresses = client.list_addresses(limit=limit, filters=filter)
 
-        # Apply properties field selection
+    # Apply properties field selection
+    if properties:
+        fields = [f.strip() for f in properties.split(",")]
+        addresses = extract_fields(addresses, fields)
+
+    if table:
         if properties:
             fields = [f.strip() for f in properties.split(",")]
-            addresses = extract_fields(addresses, fields)
-
-        if table:
-            if properties:
-                fields = [f.strip() for f in properties.split(",")]
-                print_table(addresses, fields, fields)
-            else:
-                print_table(
-                    addresses,
-                    ["object_id", "name", "street1", "city", "state", "zip"],
-                    ["ID", "Name", "Street", "City", "State", "ZIP"],
-                )
+            print_table(addresses, fields, fields)
         else:
-            print_json(addresses)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+            print_table(
+                addresses,
+                ["object_id", "name", "street1", "city", "state", "zip"],
+                ["ID", "Name", "Street", "City", "State", "ZIP"],
+            )
+    else:
+        print_json(addresses)
 
 
 @app.command("get")
+@command
 def addresses_get(
     address_id: str = typer.Argument(..., help="The address object ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -114,31 +112,28 @@ def addresses_get(
         shippo addresses get ADDRESS_ID
         shippo addresses get ADDRESS_ID --table
     """
-    try:
-        client = get_client()
-        address = client.get_address(address_id)
+    client = get_client()
+    address = client.get_address(address_id)
 
-        # Apply properties field selection
+    # Apply properties field selection
+    if properties:
+        fields = [f.strip() for f in properties.split(",")]
+        address = extract_fields([address], fields)[0]
+
+    if table:
         if properties:
             fields = [f.strip() for f in properties.split(",")]
-            address = extract_fields([address], fields)[0]
-
-        if table:
-            if properties:
-                fields = [f.strip() for f in properties.split(",")]
-                print_table([address], fields, fields)
-            else:
-                item_dict = model_to_dict(address)
-                rows = [{"field": k, "value": str(v)} for k, v in item_dict.items() if v is not None]
-                print_table(rows, ["field", "value"], ["Field", "Value"])
+            print_table([address], fields, fields)
         else:
-            print_json(address)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+            item_dict = model_to_dict(address)
+            rows = [{"field": k, "value": str(v)} for k, v in item_dict.items() if v is not None]
+            print_table(rows, ["field", "value"], ["Field", "Value"])
+    else:
+        print_json(address)
 
 
 @app.command("create")
+@command
 def addresses_create(
     name: str = typer.Option(..., "-n", "--name", help="Full name"),
     street1: str = typer.Option(..., "-a", "--address", "--street1", help="Street address line 1"),
@@ -162,35 +157,32 @@ def addresses_create(
         shippo addresses create -n "Jane Doe" -a "456 Oak Ave" -c "Los Angeles" -s CA -z 90001 --validate
         shippo addresses create -n "ACME Inc" -a "789 Business Dr" -c "Chicago" -s IL -z 60601 --company "ACME Inc"
     """
-    try:
-        client = get_client()
-        address = client.create_address(
-            name=name,
-            street1=street1,
-            city=city,
-            state=state,
-            zip_code=zip_code,
-            country=country,
-            company=company,
-            street2=street2,
-            phone=phone,
-            email=email,
-            is_residential=residential,
-            validate=validate,
-        )
+    client = get_client()
+    address = client.create_address(
+        name=name,
+        street1=street1,
+        city=city,
+        state=state,
+        zip_code=zip_code,
+        country=country,
+        company=company,
+        street2=street2,
+        phone=phone,
+        email=email,
+        is_residential=residential,
+        validate=validate,
+    )
 
-        if table:
-            item_dict = model_to_dict(address)
-            rows = [{"field": k, "value": str(v)} for k, v in item_dict.items() if v is not None]
-            print_table(rows, ["field", "value"], ["Field", "Value"])
-        else:
-            print_json(address)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    if table:
+        item_dict = model_to_dict(address)
+        rows = [{"field": k, "value": str(v)} for k, v in item_dict.items() if v is not None]
+        print_table(rows, ["field", "value"], ["Field", "Value"])
+    else:
+        print_json(address)
 
 
 @app.command("validate")
+@command
 def addresses_validate(
     address_id: str = typer.Argument(..., help="The address object ID to validate"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -202,16 +194,12 @@ def addresses_validate(
         shippo addresses validate ADDRESS_ID
         shippo addresses validate ADDRESS_ID --table
     """
-    try:
-        client = get_client()
-        address = client.validate_address(address_id)
+    client = get_client()
+    address = client.validate_address(address_id)
 
-        if table:
-            item_dict = model_to_dict(address)
-            rows = [{"field": k, "value": str(v)} for k, v in item_dict.items() if v is not None]
-            print_table(rows, ["field", "value"], ["Field", "Value"])
-        else:
-            print_json(address)
-
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    if table:
+        item_dict = model_to_dict(address)
+        rows = [{"field": k, "value": str(v)} for k, v in item_dict.items() if v is not None]
+        print_table(rows, ["field", "value"], ["Field", "Value"])
+    else:
+        print_json(address)

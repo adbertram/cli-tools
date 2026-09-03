@@ -1,7 +1,7 @@
 {
   "tool": "cloudflare",
   "description": "CLI interface for Cloudflare API",
-  "discovered_at": "2026-08-25T23:41:25Z",
+  "discovered_at": "2026-08-26T16:18:16Z",
   "total_commands": 65,
   "global_options": [
     {
@@ -1164,7 +1164,7 @@
           "options": [],
           "commands": {
             "create": {
-              "help": "Start a new deployment. Git-connected projects: pass --branch to build the branch HEAD. Direct-upload projects: pass --directory to ship a local folder in one command — files are hashed (blake3), missing assets are uploaded via the Pages asset endpoints, and the deployment goes live once every hash lands. Pass --branch to target a preview branch; production deploys need no flag. Advanced/manual use only: --manifest creates a deployment from an existing manifest without uploading anything.",
+              "help": "Start a new deployment. Git-connected projects: pass --branch to build the branch HEAD. Direct-upload projects: pass --directory to ship a local folder in one command — files are hashed (blake3), missing assets are uploaded via the Pages asset endpoints, and the deployment goes live once every hash lands. Pass --branch to target a preview branch; production deploys need no flag. Advanced/manual use only: --manifest creates a deployment from an existing manifest without uploading anything. Cloudflare Pages Advanced Mode: a root-level _worker.js in --directory is uploaded as the deployment's Worker (Cloudflare then routes every request to it and stops applying _headers/_redirects directly). Only a single self-contained _worker.js file is supported — it must not import another module, since this command does not bundle it (mirrors wrangler's --no-bundle behavior). A _worker.js/ directory or a functions/ directory with no _worker.js both require wrangler's esbuild bundling step and are rejected with an error; use `npx wrangler pages deploy` for those.",
               "examples": [
                 "cloudflare pages deployments create my-site --branch main",
                 "cloudflare pages deployments create my-site --directory ./dist",

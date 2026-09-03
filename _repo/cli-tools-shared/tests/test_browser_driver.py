@@ -10,6 +10,7 @@ from cli_tools_shared.browser.driver import BrowserHarnessService
 from cli_tools_shared.browser._elements import _ServiceElement, _ServiceLocator, _scoped_css_js
 from cli_tools_shared.browser._js_fragments import _check_js, _fill_js
 from cli_tools_shared.browser.processes import ProcessCommand, ProcessTableUnavailableError
+import browser_harness.helpers as bh_helpers
 import cli_tools_shared.browser.driver as driver
 
 
@@ -1598,3 +1599,182 @@ def test_helper_bind_threads_service_timeout_into_ipc_budget(monkeypatch):
 
     assert os.environ["BH_IPC_TIMEOUT"] == "90.0"
     assert helpers._ipc_timeout() == 90.0
+
+
+# =====================================================================
+# Regression/coverage tests for `set_input_files()` -- the shared
+# file-input-upload primitive. Scripted assignment to `input.files` is
+# blocked by browsers for security, so this cannot reuse the
+# `evaluate()`-based approach `fill()`/`select_option()` use. It resolves
+# the selector to a live CDP remote object via `Runtime.evaluate` and
+# calls `DOM.setFileInputFiles` directly against that object.
+# =====================================================================
+
+def test_set_input_files_requires_open():
+    service = BrowserHarnessService("test-session")
+    assert service._opened is False
+    with pytest.raises(BrowserHarnessError, match="No browser open"):
+        service.set_input_files('input[type="file"]', "/nonexistent/proof.txt")
+
+
+def test_set_input_files_raises_when_file_missing(tmp_path):
+    service = BrowserHarnessService("test-session")
+    service._opened = True
+
+    class _Helpers:
+        def cdp(self, *_args, **_kwargs):
+            raise AssertionError("cdp() must not be called when the file is missing")
+
+    service._bh = type("_BH", (), {"h": _Helpers()})()
+
+    missing = tmp_path / "does-not-exist.txt"
+    with pytest.raises(BrowserHarnessError, match="file not found"):
+        service.set_input_files('input[type="file"]', str(missing))
+
+
+def test_set_input_files_resolves_object_id_and_calls_dom_set_file_input_files(tmp_path):
+    proof = tmp_path / "proof.txt"
+    proof.write_text("proof of work")
+
+    service = BrowserHarnessService("test-session")
+    service._opened = True
+    calls: list[tuple[str, dict]] = []
+
+    class _Helpers:
+        def cdp(self, method, **kwargs):
+            calls.append((method, kwargs))
+            if method == "Runtime.evaluate":
+                assert kwargs["returnByValue"] is False
+                assert "ScreenshotFile" in kwargs["expression"]
+                assert kwargs["expression"].startswith("document.querySelector(")
+                return {"result": {"objectId": "obj-1"}}
+            if method == "DOM.setFileInputFiles":
+                return {}
+            if method == "Runtime.releaseObject":
+                return {}
+            raise AssertionError(f"unexpected CDP method: {method}")
+
+    service._bh = type("_BH", (), {"h": _Helpers()})()
+
+    service.set_input_files('input[name="ScreenshotFile"]', str(proof))
+
+    methods = [m for m, _ in calls]
+    assert methods == ["Runtime.evaluate", "DOM.setFileInputFiles", "Runtime.releaseObject"]
+
+    upload_kwargs = calls[1][1]
+    assert upload_kwargs["objectId"] == "obj-1"
+    assert upload_kwargs["files"] == [str(proof.resolve())]
+
+    release_kwargs = calls[2][1]
+    assert release_kwargs["objectId"] == "obj-1"
+
+
+def test_set_input_files_raises_when_selector_matches_nothing(tmp_path):
+    proof = tmp_path / "proof.txt"
+    proof.write_text("proof of work")
+
+    service = BrowserHarnessService("test-session")
+    service._opened = True
+
+    class _Helpers:
+        def cdp(self, method, **_kwargs):
+            if method == "Runtime.evaluate":
+                return {"result": {}}
+            raise AssertionError(f"unexpected CDP method: {method}")
+
+    service._bh = type("_BH", (), {"h": _Helpers()})()
+
+    with pytest.raises(BrowserHarnessError, match="no element matched selector"):
+        service.set_input_files('input[name="missing"]', str(proof))
+
+
+def test_set_input_files_propagates_runtime_evaluate_exception_details(tmp_path):
+    proof = tmp_path / "proof.txt"
+    proof.write_text("proof of work")
+
+    service = BrowserHarnessService("test-session")
+    service._opened = True
+
+    class _Helpers:
+        def cdp(self, method, **_kwargs):
+            if method == "Runtime.evaluate":
+                return {"exceptionDetails": {"text": "SyntaxError: bad selector"}}
+            raise AssertionError(f"unexpected CDP method: {method}")
+
+    service._bh = type("_BH", (), {"h": _Helpers()})()
+
+    with pytest.raises(BrowserHarnessError, match="SyntaxError: bad selector"):
+        service.set_input_files('input[name="bad"]', str(proof))
+
+
+def test_set_input_files_releases_object_even_when_upload_fails(tmp_path):
+    proof = tmp_path / "proof.txt"
+    proof.write_text("proof of work")
+
+    service = BrowserHarnessService("test-session")
+    service._opened = True
+    calls: list[str] = []
+
+    class _Helpers:
+        def cdp(self, method, **_kwargs):
+            calls.append(method)
+            if method == "Runtime.evaluate":
+                return {"result": {"objectId": "obj-1"}}
+            if method == "DOM.setFileInputFiles":
+                raise RuntimeError("daemon socket closed")
+            if method == "Runtime.releaseObject":
+                return {}
+            raise AssertionError(f"unexpected CDP method: {method}")
+
+    service._bh = type("_BH", (), {"h": _Helpers()})()
+
+    with pytest.raises(RuntimeError, match="daemon socket closed"):
+        service.set_input_files('input[name="ScreenshotFile"]', str(proof))
+
+    assert calls == ["Runtime.evaluate", "DOM.setFileInputFiles", "Runtime.releaseObject"]
+
+
+class _FakeTextInput:
+    """Models Chrome's text-insertion rule for ``Input.dispatchKeyEvent``.
+
+    Chrome inserts a character once for every keyDown or char event that carries
+    a non-empty ``text`` field. Events without ``text`` (keyUp, rawKeyDown,
+    non-printable keys) insert nothing. Dispatching BOTH a text-carrying keyDown
+    and a char event for the same key therefore double-types it.
+    """
+
+    def __init__(self):
+        self.value = ""
+
+    def dispatch(self, method, **params):
+        if method != "Input.dispatchKeyEvent":
+            raise AssertionError(f"unexpected CDP method: {method}")
+        if params.get("type") in ("keyDown", "char") and params.get("text"):
+            self.value += params["text"]
+        return {}
+
+
+def test_locator_press_types_each_printable_character_exactly_once(monkeypatch):
+    service = BrowserHarnessService("test-session")
+    monkeypatch.setattr(service, "_require_open", lambda: None)
+    focus_calls: list[str] = []
+
+    def _evaluate(js, arg=None):
+        focus_calls.append(js)
+        return None
+
+    monkeypatch.setattr(service, "evaluate", _evaluate)
+
+    field = _FakeTextInput()
+    monkeypatch.setattr(bh_helpers, "cdp", field.dispatch)
+    service._bh = type("_BH", (), {"h": bh_helpers})()
+
+    locator = _ServiceLocator(service, "input[type='text']")
+    typed = "Ada42"
+    for character in typed:
+        locator.press(character)
+
+    # Regression: press_key used to dispatch text on BOTH keyDown and a separate
+    # char event, so this landed as "AAddaa4422".
+    assert field.value == typed
+    assert len(focus_calls) == len(typed)

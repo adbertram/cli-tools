@@ -14,9 +14,22 @@ from typing import Optional, List
 from googleapiclient.errors import HttpError
 from ..client import get_client
 from ..config import get_config
+from cli_tools_shared.filters import apply_filters
 from cli_tools_shared.output import command, print_json, print_table, handle_error, print_error
 
 app = typer.Typer(help="Access Google Analytics data")
+
+# Fields carried by every flattened GA4 account/property record. Doubles as the
+# filterable field set so a typo like `propertyName:contains:x` raises instead of
+# silently returning an empty list.
+ACCOUNT_PROPERTY_FIELDS = ["account_name", "account_id", "property_name", "property_id"]
+
+ACCOUNT_PROPERTY_HEADERS = {
+    "account_name": "Account",
+    "account_id": "Account ID",
+    "property_name": "Property",
+    "property_id": "Property ID",
+}
 
 
 def _get_property_id(property_opt: Optional[str], profile=None) -> str:
@@ -105,23 +118,40 @@ def _format_report_rows(response: dict) -> list[dict]:
     return results
 
 
-def _format_account_properties(account_summaries: list[dict], properties: Optional[List[str]] = None) -> list[dict]:
-    """Flatten GA4 account summaries into property records."""
+def _format_account_properties(account_summaries: list[dict]) -> list[dict]:
+    """Flatten GA4 account summaries into full property records.
+
+    Always returns every field in ``ACCOUNT_PROPERTY_FIELDS`` so callers can
+    filter on fields they do not intend to display. Narrow the output with
+    :func:`_project_properties` after filtering.
+    """
     formatted = []
     for account in account_summaries:
         account_name = account.get("displayName", "")
         account_id = account.get("account", "").replace("accounts/", "")
         for prop in account.get("propertySummaries", []):
-            record = {
-                "account_name": account_name,
-                "account_id": account_id,
-                "property_name": prop.get("displayName", ""),
-                "property_id": prop.get("property", "").replace("properties/", ""),
-            }
-            if properties:
-                record = {k: v for k, v in record.items() if k in properties}
-            formatted.append(record)
+            formatted.append(
+                {
+                    "account_name": account_name,
+                    "account_id": account_id,
+                    "property_name": prop.get("displayName", ""),
+                    "property_id": prop.get("property", "").replace("properties/", ""),
+                }
+            )
     return formatted
+
+
+def _project_properties(records: list[dict], properties: Optional[List[str]]) -> list[dict]:
+    """Narrow each record to the requested output fields."""
+    if not properties:
+        return records
+    return [{k: v for k, v in record.items() if k in properties} for record in records]
+
+
+def _account_property_columns(properties: Optional[List[str]]) -> tuple[list[str], list[str]]:
+    """Return (columns, headers) for account/property table output."""
+    cols = [c for c in ACCOUNT_PROPERTY_FIELDS if c in (properties or ACCOUNT_PROPERTY_FIELDS)]
+    return cols, [ACCOUNT_PROPERTY_HEADERS[c] for c in cols]
 
 
 @app.command("accounts")
@@ -145,20 +175,17 @@ def analytics_accounts(
             print_error("No GA4 accounts found")
             raise typer.Exit(1)
 
-        formatted = _format_account_properties(account_summaries, properties)
+        formatted = _format_account_properties(account_summaries)
+        # Filter on the full records, before --properties narrows them, so a
+        # filter field the caller does not display still works.
+        formatted = apply_filters(formatted, filter, allowed_fields=ACCOUNT_PROPERTY_FIELDS)
+        formatted = _project_properties(formatted, properties)[:limit]
 
         if table:
-            default_cols = ["account_name", "account_id", "property_name", "property_id"]
-            cols = [c for c in default_cols if c in (properties or default_cols)]
-            headers = {
-                "account_name": "Account",
-                "account_id": "Account ID",
-                "property_name": "Property",
-                "property_id": "Property ID",
-            }
-            print_table(formatted[:limit], cols, [headers.get(c, c) for c in cols])
+            cols, headers = _account_property_columns(properties)
+            print_table(formatted, cols, headers)
         else:
-            print_json(formatted[:limit])
+            print_json(formatted)
 
     except HttpError as e:
         print_error(f"HTTP error: {e}")
@@ -181,24 +208,19 @@ def analytics_properties(
         service = client.get_analytics_admin_service()
 
         result = service.accountSummaries().list(pageSize=limit).execute()
-        formatted = _format_account_properties(result.get("accountSummaries", []), properties)
+        formatted = _format_account_properties(result.get("accountSummaries", []))
 
         if not formatted:
             print_error("No GA4 properties found")
             raise typer.Exit(1)
 
+        formatted = _project_properties(formatted, properties)[:limit]
+
         if table:
-            default_cols = ["account_name", "account_id", "property_name", "property_id"]
-            cols = [c for c in default_cols if c in (properties or default_cols)]
-            headers = {
-                "account_name": "Account",
-                "account_id": "Account ID",
-                "property_name": "Property",
-                "property_id": "Property ID",
-            }
-            print_table(formatted[:limit], cols, [headers.get(c, c) for c in cols])
+            cols, headers = _account_property_columns(properties)
+            print_table(formatted, cols, headers)
         else:
-            print_json(formatted[:limit])
+            print_json(formatted)
 
     except HttpError as e:
         print_error(f"HTTP error: {e}")

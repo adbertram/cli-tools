@@ -1,12 +1,15 @@
 """Document commands for Msword CLI."""
 
+import json
+import os
 from typing import List, Optional
 
 import typer
 from pydantic import BaseModel
 
+from cli_tools_shared.exceptions import ClientError
 from cli_tools_shared.filters import FilterValidationError, apply_filters, validate_filters
-from cli_tools_shared.output import handle_error, print_json, print_table
+from cli_tools_shared.output import command, print_json, print_success, print_table
 
 from .client import get_client
 
@@ -15,6 +18,7 @@ COMMAND_CREDENTIALS = {
     "read": ["no_auth"],
     "convert": ["no_auth"],
     "comments": ["no_auth"],
+    "edit-tracked": ["no_auth"],
 }
 
 
@@ -49,40 +53,52 @@ def extract_fields(items: list, fields: list) -> list:
 
 
 @app.command("read")
+@command
 def doc_read(
     file: str = typer.Argument(..., help="Path to the .docx file"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
 ):
     """Read text content from a Word document."""
-    try:
-        result = get_client().read_document(file)
-        if table:
-            rows = [{"field": key, "value": str(value)[:100]} for key, value in model_to_dict(result).items() if value is not None]
-            print_table(rows, ["field", "value"], ["Field", "Value"])
-        else:
-            print_json(result)
-    except Exception as error:
-        raise typer.Exit(handle_error(error))
+    result = get_client().read_document(file)
+    if table:
+        rows = [{"field": key, "value": str(value)[:100]} for key, value in model_to_dict(result).items() if value is not None]
+        print_table(rows, ["field", "value"], ["Field", "Value"])
+    else:
+        print_json(result)
 
 
 @app.command("convert")
+@command
 def doc_convert(
     file: str = typer.Argument(..., help="Path to the .docx file"),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file path (default: stdout)"),
 ):
     """Convert a Word document to Markdown."""
-    try:
-        result = get_client().convert_to_markdown(file)
-        if output:
-            with open(output, "w", encoding="utf-8") as handle:
-                handle.write(result.markdown)
-            from cli_tools_shared.output import print_success
+    result = get_client().convert_to_markdown(file)
+    if output:
+        with open(output, "w", encoding="utf-8") as handle:
+            handle.write(result.markdown)
+        print_success(f"Written to {output}")
+        return
+    print_json(result)
 
-            print_success(f"Written to {output}")
-            return
-        print_json(result)
-    except Exception as error:
-        raise typer.Exit(handle_error(error))
+
+@app.command("edit-tracked")
+@command
+def docs_edit_tracked(
+    file: str = typer.Argument(..., help="Path to the .docx file"),
+    edits: str = typer.Option(..., "--edits", help="Path to a JSON file with a list of {old_text, new_text, occurrence} edit objects"),
+    author: str = typer.Option(..., "--author", help="Name attributed to every inserted tracked change"),
+):
+    """Apply a batch of text edits as Word tracked changes (w:ins/w:del), leaving existing comments and tracked changes untouched."""
+    edits_path = os.path.expanduser(edits)
+    if not os.path.isfile(edits_path):
+        raise ClientError(f"Edits file not found: {edits_path}")
+    with open(edits_path, "r", encoding="utf-8") as handle:
+        edit_list = json.load(handle)
+    if not isinstance(edit_list, list):
+        raise ClientError("Edits file must contain a JSON array of edit objects")
+    print_json(get_client().apply_tracked_edits(file, edit_list, author))
 
 
 comments_app = typer.Typer(help="Manage document comments", no_args_is_help=True)
@@ -90,6 +106,7 @@ app.add_typer(comments_app, name="comments")
 
 
 @comments_app.command("list")
+@command
 def comments_list(
     file: str = typer.Argument(..., help="Path to the .docx file"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -98,56 +115,50 @@ def comments_list(
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
     """List comments from a Word document."""
-    try:
-        comments = get_client().extract_comments(file)[:limit]
-        if filter:
-            try:
-                validate_filters(filter)
-                dicts = [model_to_dict(comment) for comment in comments]
-                comments = apply_filters(dicts, filter)
-            except FilterValidationError as error:
-                from cli_tools_shared.exceptions import ClientError
+    comments = get_client().extract_comments(file)[:limit]
+    if filter:
+        try:
+            validate_filters(filter)
+            dicts = [model_to_dict(comment) for comment in comments]
+            comments = apply_filters(dicts, filter)
+        except FilterValidationError as error:
+            raise ClientError(f"Invalid filter: {error}") from error
 
-                raise ClientError(f"Invalid filter: {error}") from error
+    if properties:
+        fields = [field.strip() for field in properties.split(",")]
+        comments = extract_fields(comments, fields)
 
+    if table:
         if properties:
             fields = [field.strip() for field in properties.split(",")]
-            comments = extract_fields(comments, fields)
-
-        if table:
-            if properties:
-                fields = [field.strip() for field in properties.split(",")]
-                print_table(comments, fields, fields)
-            else:
-                print_table(comments, ["author", "text", "context"], ["Author", "Comment", "Context"])
+            print_table(comments, fields, fields)
         else:
-            print_json(comments)
-    except Exception as error:
-        raise typer.Exit(handle_error(error))
+            print_table(comments, ["author", "text", "context"], ["Author", "Comment", "Context"])
+    else:
+        print_json(comments)
 
 
 @comments_app.command("get")
+@command
 def comments_get(
     file: str = typer.Argument(..., help="Path to the .docx file"),
     comment_id: str = typer.Argument(..., help="Comment ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
 ):
     """Get a single comment from a Word document."""
-    try:
-        comment = get_client().get_comment(file, comment_id)
-        if table:
-            rows = [
-                {"field": key, "value": value}
-                for key, value in model_to_dict(comment).items()
-            ]
-            print_table(rows, ["field", "value"], ["Field", "Value"])
-            return
-        print_json(comment)
-    except Exception as error:
-        raise typer.Exit(handle_error(error))
+    comment = get_client().get_comment(file, comment_id)
+    if table:
+        rows = [
+            {"field": key, "value": value}
+            for key, value in model_to_dict(comment).items()
+        ]
+        print_table(rows, ["field", "value"], ["Field", "Value"])
+        return
+    print_json(comment)
 
 
 @comments_app.command("add")
+@command
 def comments_add(
     file: str = typer.Argument(..., help="Path to the .docx file"),
     text: str = typer.Option(..., "--text", help="Comment text"),
@@ -156,7 +167,4 @@ def comments_add(
     occurrence: int = typer.Option(1, "--occurrence", help="Which occurrence of reference-text to target"),
 ):
     """Add an inline comment to a Word document."""
-    try:
-        print_json(get_client().add_comment(file, text, author, reference_text, occurrence))
-    except Exception as error:
-        raise typer.Exit(handle_error(error))
+    print_json(get_client().add_comment(file, text, author, reference_text, occurrence))

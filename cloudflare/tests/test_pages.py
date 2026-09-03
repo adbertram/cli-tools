@@ -202,6 +202,10 @@ class _FakePagesClient:
         self.calls.append(("create_pages_deployment", kwargs))
         return dict(self.deployment_result)
 
+    def build_worker_bundle(self, worker_script):
+        self.calls.append(("build_worker_bundle", worker_script))
+        return b"FAKE-WORKER-BUNDLE:" + worker_script["filename"].encode("utf-8")
+
     def retry_pages_deployment(self, account_id, project_name, deployment_id):
         self.calls.append(("retry_pages_deployment", account_id, project_name, deployment_id))
         return dict(self.deployment_result)
@@ -1222,5 +1226,234 @@ def test_deployments_create_rejects_missing_directory(fake_client):
     assert result.exit_code == 1
     assert "does not exist or is not a directory" in result.output
     assert all(c[0] != "create_pages_upload_token" and c[0] != "get_pages_upload_token" for c in fake_client.calls)
+
+
+# --------------------------------------------------------------------------
+# Cloudflare Pages Advanced Mode (_worker.js upload).
+# Multipart shape verified byte-for-byte against wrangler 4.125.0's actual
+# undici FormData/File/Response output for a config-less, no-bindings,
+# single-module deploy before this was implemented: metadata is exactly
+# {"main_module": "<filename>"}, the module part carries
+# Content-Type: application/javascript+module, and the outer
+# "_worker.bundle" field itself carries Content-Type: application/octet-stream
+# (the File() constructor does not inherit the inner Blob's multipart type).
+# --------------------------------------------------------------------------
+
+
+def _decode_multipart(body: bytes):
+    """Parse a multipart/form-data body into {part_name: (headers, content)}."""
+    import email
+    from email.message import Message
+
+    first_line = body.split(b"\r\n", 1)[0]
+    boundary = first_line[2:]  # strip leading "--"
+    header_bytes = b'Content-Type: multipart/form-data; boundary="' + boundary + b'"\r\n\r\n'
+    msg = email.message_from_bytes(header_bytes + body)
+    parts = {}
+    for part in msg.get_payload():
+        assert isinstance(part, Message)
+        name = part.get_param("name", header="Content-Disposition")
+        parts[name] = (dict(part.items()), part.get_payload(decode=True))
+    return parts
+
+
+def test_read_worker_script_returns_none_without_worker_js(tmp_path):
+    from cloudflare_cli.pages_assets import read_worker_script
+
+    (tmp_path / "index.html").write_text("<h1>hi</h1>")
+
+    assert read_worker_script(tmp_path) is None
+
+
+def test_read_worker_script_reads_file_and_routes_json(tmp_path):
+    from cloudflare_cli.pages_assets import read_worker_script
+
+    (tmp_path / "_worker.js").write_text("export default { fetch() { return new Response('hi'); } };\n")
+    (tmp_path / "_routes.json").write_text('{"version": 1, "include": ["/*"]}')
+
+    result = read_worker_script(tmp_path)
+
+    assert result["filename"] == "_worker.js"
+    assert result["content"] == b"export default { fetch() { return new Response('hi'); } };\n"
+    assert result["routes_json"] == '{"version": 1, "include": ["/*"]}'
+
+
+def test_read_worker_script_omits_routes_json_when_absent(tmp_path):
+    from cloudflare_cli.pages_assets import read_worker_script
+
+    (tmp_path / "_worker.js").write_text("export default { fetch() { return new Response('hi'); } };\n")
+
+    result = read_worker_script(tmp_path)
+
+    assert result["routes_json"] is None
+
+
+def test_read_worker_script_rejects_worker_js_directory(tmp_path):
+    from cloudflare_cli.pages_assets import read_worker_script
+
+    worker_dir = tmp_path / "_worker.js"
+    worker_dir.mkdir()
+    (worker_dir / "index.js").write_text("export default {};")
+
+    with pytest.raises(ClientError, match="multi-file Cloudflare Pages Advanced Mode"):
+        read_worker_script(tmp_path)
+
+
+def test_read_worker_script_rejects_functions_dir_without_worker_js(tmp_path):
+    from cloudflare_cli.pages_assets import read_worker_script
+
+    functions_dir = tmp_path / "functions"
+    functions_dir.mkdir()
+    (functions_dir / "hello.js").write_text("export function onRequest() {}")
+
+    with pytest.raises(ClientError, match="Cloudflare Pages Functions require"):
+        read_worker_script(tmp_path)
+
+
+def test_read_worker_script_ignores_functions_dir_when_worker_js_present(tmp_path):
+    from cloudflare_cli.pages_assets import read_worker_script
+
+    (tmp_path / "_worker.js").write_text("export default { fetch() { return new Response('hi'); } };\n")
+    functions_dir = tmp_path / "functions"
+    functions_dir.mkdir()
+    (functions_dir / "hello.js").write_text("export function onRequest() {}")
+
+    # Advanced Mode ignores functions/ entirely (matches wrangler); no error.
+    result = read_worker_script(tmp_path)
+    assert result["filename"] == "_worker.js"
+
+
+def test_read_worker_script_rejects_unbundleable_import(tmp_path):
+    from cloudflare_cli.pages_assets import read_worker_script
+
+    (tmp_path / "_worker.js").write_text(
+        "import helper from './helper.js';\nexport default { fetch() { return helper(); } };\n"
+    )
+
+    with pytest.raises(ClientError, match="importing from './helper.js'"):
+        read_worker_script(tmp_path)
+
+
+def test_read_worker_script_allows_node_and_cloudflare_builtins(tmp_path):
+    from cloudflare_cli.pages_assets import read_worker_script
+
+    (tmp_path / "_worker.js").write_text(
+        "import { Buffer } from 'node:buffer';\n"
+        "import { WorkerEntrypoint } from 'cloudflare:workers';\n"
+        "export default { fetch() { return new Response(String(Buffer)); } };\n"
+    )
+
+    result = read_worker_script(tmp_path)
+    assert result["filename"] == "_worker.js"
+
+
+def test_build_worker_bundle_matches_wrangler_shape(monkeypatch):
+    client, _ = _build_client(monkeypatch, [])
+
+    bundle = client.build_worker_bundle(
+        {"filename": "_worker.js", "content": b"export default { fetch() {} };\n"}
+    )
+
+    parts = _decode_multipart(bundle)
+    assert set(parts) == {"metadata", "_worker.js"}
+
+    metadata_headers, metadata_content = parts["metadata"]
+    assert json.loads(metadata_content) == {"main_module": "_worker.js"}
+    assert "Content-Type" not in metadata_headers  # plain field, no explicit type
+
+    module_headers, module_content = parts["_worker.js"]
+    assert module_headers["Content-Type"] == "application/javascript+module"
+    assert module_content == b"export default { fetch() {} };\n"
+
+
+def test_create_pages_deployment_sends_worker_bundle_and_routes_json(monkeypatch):
+    client, transport = _build_client(monkeypatch, [_ok(dict(_deployment(9)))])
+
+    client.create_pages_deployment(
+        account_id=ACCOUNT_ID,
+        project_name=PROJECT_NAME,
+        manifest='{"/index.html": "h1"}',
+        worker_bundle=b"RAW-BUNDLE-BYTES",
+        routes_json_text='{"version": 1}',
+    )
+
+    files = transport.calls[0]["files"]
+    assert files["_worker.bundle"] == ("_worker.bundle", b"RAW-BUNDLE-BYTES", "application/octet-stream")
+    assert files["_routes.json"] == ("_routes.json", '{"version": 1}')
+
+
+def test_create_pages_deployment_omits_worker_bundle_by_default(monkeypatch):
+    client, transport = _build_client(monkeypatch, [_ok(dict(_deployment(9)))])
+
+    client.create_pages_deployment(
+        account_id=ACCOUNT_ID,
+        project_name=PROJECT_NAME,
+        manifest='{"/index.html": "h1"}',
+    )
+
+    files = transport.calls[0]["files"]
+    assert "_worker.bundle" not in files
+    assert "_routes.json" not in files
+
+
+def test_deployments_create_directory_uploads_worker_bundle(fake_client, tmp_path):
+    (tmp_path / "index.html").write_text("<h1>hi</h1>")
+    (tmp_path / "_worker.js").write_text(
+        "export default { fetch(request, env) { return env.ASSETS.fetch(request); } };\n"
+    )
+    from cloudflare_cli.pages_assets import collect_files
+
+    fake_client.missing_hashes = [a["hash"] for a in collect_files(tmp_path)]
+
+    result = runner.invoke(
+        pages_module.deployments_app,
+        ["create", PROJECT_NAME, "--directory", str(tmp_path)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Advanced Mode worker" in result.output
+
+    build_call = next(c for c in fake_client.calls if c[0] == "build_worker_bundle")
+    assert build_call[1]["filename"] == "_worker.js"
+
+    create_kwargs = dict(next(c for c in fake_client.calls if c[0] == "create_pages_deployment")[1])
+    assert create_kwargs["worker_bundle"] == b"FAKE-WORKER-BUNDLE:_worker.js"
+    assert create_kwargs["routes_json_text"] is None
+
+    # _worker.js itself must never appear in the static asset manifest.
+    manifest = json.loads(create_kwargs["manifest"])
+    assert "/_worker.js" not in manifest
+
+
+def test_deployments_create_directory_rejects_worker_js_directory(fake_client, tmp_path):
+    (tmp_path / "index.html").write_text("<h1>hi</h1>")
+    worker_dir = tmp_path / "_worker.js"
+    worker_dir.mkdir()
+    (worker_dir / "index.js").write_text("export default {};")
+
+    result = runner.invoke(
+        pages_module.deployments_app,
+        ["create", PROJECT_NAME, "--directory", str(tmp_path)],
+    )
+
+    assert result.exit_code == 1
+    assert "multi-file Cloudflare Pages Advanced Mode" in result.output
+    assert all(c[0] != "create_pages_deployment" for c in fake_client.calls)
+
+
+def test_deployments_create_directory_rejects_functions_without_worker_js(fake_client, tmp_path):
+    (tmp_path / "index.html").write_text("<h1>hi</h1>")
+    functions_dir = tmp_path / "functions"
+    functions_dir.mkdir()
+    (functions_dir / "hello.js").write_text("export function onRequest() {}")
+
+    result = runner.invoke(
+        pages_module.deployments_app,
+        ["create", PROJECT_NAME, "--directory", str(tmp_path)],
+    )
+
+    assert result.exit_code == 1
+    assert "Cloudflare Pages Functions require" in result.output
+    assert all(c[0] != "create_pages_deployment" for c in fake_client.calls)
 
 

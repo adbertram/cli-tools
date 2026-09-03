@@ -388,6 +388,7 @@ class GlobiflowClient:
                         flows.append(Flow(
                             id=flow_id,
                             name=flow_name,
+                            app_id=app_info["app_id"],
                             app_name=app_info["app_name"],
                             workspace_name=app_info["workspace_name"],
                             org_name=app_info["org_name"],
@@ -587,6 +588,91 @@ class GlobiflowClient:
         except zipfile.BadZipFile as e:
             raise ClientError(f"Export of flow {flow_id} was not a valid ZIP: {e}")
 
+    def _flow_validation_errors(self, page: "Page") -> List[dict]:
+        """Collect the flow editor's client-side validation failures.
+
+        ``configureflow.php``'s form is gated by an inline ``validate()`` that
+        marks every rejected control with ``conferr`` (selects and inputs) or
+        ``tinymcerr`` (rich-text fields), shows an "Please correct the
+        indicated errors." overlay, and returns ``false`` -- which cancels the
+        submit without navigating anywhere. Control ids are suffixed with their
+        1-based step number (``fields1``, ``gmurl5``), and ``stepFunction<n>``
+        holds that step's action name.
+
+        Returns:
+            One dict per flagged control with ``control``, ``step``, and
+            ``action`` keys; empty when the editor reported no errors.
+        """
+        return page.evaluate("""
+            () => Array.from(document.querySelectorAll('.conferr, .tinymcerr')).map(el => {
+              const m = (el.id || '').match(/(\\d+)$/);
+              const step = m ? m[1] : null;
+              const fn = step ? document.querySelector('#stepFunction' + step) : null;
+              return {
+                control: el.id || el.getAttribute('name') || el.tagName.toLowerCase(),
+                step: step,
+                action: fn ? fn.value : null,
+              };
+            })
+        """)
+
+    def _tree_has_app(self, page: "Page", app_id: str) -> bool:
+        """Report whether Globiflow's rendered Podio tree contains ``app_id``.
+
+        The tree is a jstree whose app nodes render as ``li#app-<app_id>``.
+        Waits for the jstree container list so the check never races the
+        tree's own initialization.
+        """
+        page.wait_for_selector("#ptree ul.jstree-container-ul", timeout=15000)
+        return bool(
+            page.evaluate("(id) => !!document.getElementById('app-' + id)", app_id)
+        )
+
+    def _open_app_flows_page(self, app_id: str) -> "Page":
+        """Open ``/flows.php?app=<app_id>`` and return the page."""
+        self.ensure_authenticated(f"/flows.php?app={app_id}")
+        return self.browser.get_page()
+
+    def _ensure_app_in_tree(self, app_id: str) -> "Page":
+        """Guarantee Globiflow knows ``app_id``, rebuilding its tree if not.
+
+        Globiflow does not read Podio's org/space/app graph live. It serves a
+        per-account tree cached server-side and rebuilt only by the UI's
+        "Refresh from Podio" control, which is a plain navigation to
+        ``/buildtree.php``. Any app created in Podio after the last rebuild --
+        including every app in an organization the account gained later -- is
+        absent from that cache, so ``flows.php?app=<id>`` renders the empty
+        "Select an App" panel and app-scoped POSTs such as the import form's
+        ``copy_to`` are discarded server-side, producing a flow-less editor.
+        Rebuild the tree once when the app is missing, then re-check.
+
+        Args:
+            app_id: The Podio app ID the caller is about to act on.
+
+        Returns:
+            The page left on ``/flows.php?app=<app_id>``.
+
+        Raises:
+            ClientError: If the app is still absent after a tree rebuild.
+        """
+        page = self._open_app_flows_page(app_id)
+        if self._tree_has_app(page, app_id):
+            return page
+
+        self.ensure_authenticated("/buildtree.php")
+        self.browser.get_page().wait_for_url("**/flows.php*", timeout=120000)
+
+        page = self._open_app_flows_page(app_id)
+        if self._tree_has_app(page, app_id):
+            return page
+
+        raise ClientError(
+            f"Podio app {app_id} is not in this Globiflow account's app tree, "
+            f"even after a 'Refresh from Podio' rebuild. Confirm the app exists "
+            f"and that its Podio organization has Workflow Automation enabled "
+            f"for this account."
+        )
+
     def import_flow(self, app_id: str, xml_content: str) -> str:
         """Import a flow XML definition into an app.
 
@@ -600,6 +686,10 @@ class GlobiflowClient:
         The browser harness has no ``set_input_files`` primitive, so the file
         input is populated via a ``DataTransfer`` before the form's native
         submit.
+
+        The import form's ``copy_to`` is only honoured for an app present in
+        Globiflow's server-cached Podio tree, so ``_ensure_app_in_tree``
+        rebuilds that cache first when the target app is missing.
 
         Args:
             app_id: The Podio app ID to import the flow into.
@@ -616,8 +706,7 @@ class GlobiflowClient:
         import re
         import time
 
-        self.ensure_authenticated(f"/flows.php?app={app_id}")
-        page = self.browser.get_page()
+        page = self._ensure_app_in_tree(app_id)
 
         page.evaluate(f"""
             () => {{
@@ -665,6 +754,24 @@ class GlobiflowClient:
             id_match = re.search(r"\(ID:(\d+)\)", heading_text)
             if id_match:
                 return id_match.group(1)
+
+        errors = self._flow_validation_errors(page)
+        if errors:
+            detail = "; ".join(
+                f"step {e['step']} ({e['action']}) control '{e['control']}'"
+                if e["step"]
+                else f"control '{e['control']}'"
+                for e in errors
+            )
+            raise ClientError(
+                f"Globiflow's flow editor refused to save the flow imported into "
+                f"app {app_id}: {len(errors)} control(s) still hold no valid value "
+                f"-- {detail}. An imported flow keeps its source app's field "
+                f"references, and Globiflow only re-binds the ones it can match in "
+                f"the target app, so every unmatched reference must be re-pointed "
+                f"at a field of app {app_id} before the flow can be saved. No flow "
+                f"was created."
+            )
 
         raise ClientError(
             f"Could not extract imported flow ID from URL {current_url!r}"
@@ -983,8 +1090,19 @@ class GlobiflowClient:
         # Remove action_type from config since we've handled it
         params = {k: v for k, v in step_config.items() if k != "action_type"}
 
+        # "Create Item" renders no field-row UI at all until its target app
+        # is chosen (Update Item's rows exist immediately for the current
+        # app), so resolve "app" first regardless of the caller's dict order.
+        if ui_action_type == "Create Item" and "app" in params:
+            last_step = page.locator("#actions li").last
+            self._select_create_item_app(last_step, params.pop("app"))
+
         for field_name, value in params.items():
-            self._fill_step_field(page, field_name, value)
+            if field_name == "fields" and isinstance(value, dict):
+                last_step = page.locator("#actions li").last
+                self._fill_item_fields(page, last_step, value)
+            else:
+                self._fill_step_field(page, field_name, value)
 
     def _fill_step_field(self, page: "Page", field_name: str, value: str):
         """Fill a field in the step configuration form.
@@ -1058,6 +1176,205 @@ class GlobiflowClient:
                     field.fill(str(value))
         elif tag_name == "input":
             field.fill(str(value))
+
+    def _select_create_item_app(self, container: "Locator", app_label: str):
+        """Select the target app for a "Create Item" step.
+
+        The picker (``select[name^='createAppId']``) lists every app the
+        account can see, labelled by its full "Org > Space > App" hierarchy
+        path -- not the bare app name -- so this matches on the trailing
+        segment to keep the CLI's "select by label" convention working with
+        just the app name.
+
+        Raises:
+            ClientError: If the picker isn't present, or no option's app-name
+                segment matches ``app_label``.
+        """
+        select_locator = container.locator("select[name^='createAppId']").first
+        if select_locator.count() == 0:
+            raise ClientError("Could not find the Create Item target-app picker.")
+
+        matched_value = select_locator.evaluate(
+            """(el, wanted) => {
+                const target = wanted.trim().toLowerCase();
+                const option = Array.from(el.options).find(o => {
+                    const segments = (o.textContent || '').split('>');
+                    const leaf = (segments[segments.length - 1] || '').trim().toLowerCase();
+                    return leaf === target;
+                });
+                return option ? option.value : null;
+            }""",
+            app_label,
+        )
+        if not matched_value:
+            raise ClientError(
+                f"App '{app_label}' was not found in the Create Item target-app "
+                f"picker."
+            )
+        select_locator.select_option(value=matched_value)
+
+    def _wait_for_item_fields_ui(self, page: "Page", container: "Locator", timeout: int = 8000):
+        """Wait for the Update/Create Item field-row UI to finish loading.
+
+        Selecting the step type renders the "Options"/"Authentication"
+        controls immediately, but the field-row area (``div[id^='stepsubcup']``
+        for "Update Item", or the initial "add field" link for "Create Item")
+        loads asynchronously via a follow-up AJAX call. Filling fields before
+        that call resolves races an empty container.
+
+        Raises:
+            ClientError: If neither a field row nor an "add field" control
+                appears within ``timeout``.
+        """
+        selector = "div[id^='stepsubcup'], a:has-text('add field')"
+        deadline_attempts = max(1, timeout // 500)
+        for _ in range(deadline_attempts):
+            if container.locator(selector).count() > 0:
+                return
+            page.wait_for_timeout(500)
+        raise ClientError(
+            f"Item-field row UI did not render within {timeout}ms."
+        )
+
+    def _fill_item_fields(self, page: "Page", container: "Locator", fields: dict):
+        """Set Podio item-field values on an "Update Item" / "Create Item" step.
+
+        Globiflow renders each field this step will set as its own
+        dynamically-loaded row (``div[id^='stepsubcup']``) inside the step's
+        container: a field picker (``select[name^='fields']``, options keyed
+        by Podio field label), a function picker (``select[name^='funcs']``,
+        left at its default "Value"), and a value control that Globiflow
+        injects via AJAX only after the field is chosen. "Update Item" steps
+        start with one empty row already rendered; "Create Item" steps render
+        none until "add field" is clicked once per field.
+
+        Verified live against a disposable Podio app (2026-09-03): scalar
+        fields (text, number) render a gMention-enabled textarea
+        (``textarea[name^='gmvalue']``), and category/status fields render a
+        plain ``<select name^='value']`` of option labels. Podio app/
+        relationship fields render a "value" select too, but its options are
+        a handful of fixed variable references (e.g. "Current Item"), not a
+        search box -- Globiflow's search-and-select widget for that type
+        renders behind a "Search" function this CLI does not select, since
+        the disposable single-app fixture couldn't produce it live to
+        validate against.
+
+        Args:
+            page: Playwright-style page object.
+            container: Locator scoped to the step (its ``<li>`` when adding a
+                new step, or its content div when updating an existing one).
+            fields: Dict of Podio field label -> value to set, applied in
+                order starting at row 1.
+
+        Raises:
+            ClientError: If a field label doesn't resolve on the step's app,
+                if a value isn't a valid option for a select-backed field, or
+                if the field's value control is a type this CLI does not yet
+                fill (e.g. an app/relationship field's search widget).
+        """
+        self._wait_for_item_fields_ui(page, container)
+
+        for index, (field_label, value) in enumerate(fields.items(), start=1):
+            existing_rows = container.locator("div[id^='stepsubcup']")
+            if index > existing_rows.count():
+                add_field_link = container.locator("a:has-text('add field')").first
+                if add_field_link.count() == 0:
+                    raise ClientError(
+                        f"Cannot add a row for field '{field_label}': no 'add field' "
+                        f"control found on this step."
+                    )
+                add_field_link.evaluate("el => el.click()")
+                page.wait_for_timeout(800)
+
+            field_select = self._wait_for_field_option(page, container, index, field_label)
+            field_select.select_option(label=field_label)
+            page.wait_for_timeout(1500)
+
+            row = container.locator("div[id^='stepsubcup']").all()[index - 1]
+            self._fill_item_field_value(page, row, field_label, value)
+
+    def _wait_for_field_option(
+        self, page: "Page", container: "Locator", row_index: int, field_label: str,
+        timeout: int = 8000,
+    ) -> "Locator":
+        """Wait for row ``row_index``'s field picker to list ``field_label``.
+
+        The picker (``select[name^='fields']``) exists in the DOM as soon as
+        its row div does, but Globiflow populates its options via a follow-up
+        AJAX call keyed off the current app's live Podio field list -- so a
+        freshly added field can briefly render with only the row's initial
+        placeholder options.
+
+        Raises:
+            ClientError: If the row's field picker never appears, or never
+                lists ``field_label``, within ``timeout``.
+        """
+        deadline_attempts = max(1, timeout // 500)
+        for _ in range(deadline_attempts):
+            field_selects = container.locator("select[name^='fields']").all()
+            if row_index <= len(field_selects):
+                candidate = field_selects[row_index - 1]
+                option_labels = candidate.evaluate(
+                    "el => Array.from(el.options).map(o => (o.textContent || '').trim())"
+                )
+                if field_label in option_labels:
+                    return candidate
+            page.wait_for_timeout(500)
+        raise ClientError(
+            f"Podio field '{field_label}' did not appear in row {row_index}'s field "
+            f"picker within {timeout}ms. Confirm '{field_label}' exists on this "
+            f"step's app."
+        )
+
+    def _fill_item_field_value(self, page: "Page", row: "Locator", field_label: str, value):
+        """Fill the value control for one Podio item-field row.
+
+        See ``_fill_item_fields`` for the row structure and which Podio field
+        types this has been verified against.
+
+        Raises:
+            ClientError: If the value isn't a valid option for a select-backed
+                field, or the field's value control is an unsupported type.
+        """
+        field_type_input = row.locator("input[name^='fieldTypes']").first
+        field_type = (
+            field_type_input.get_attribute("value")
+            if field_type_input.count() > 0
+            else None
+        )
+
+        if field_type == "app":
+            raise ClientError(
+                f"Field '{field_label}' is a Podio app/relationship field. "
+                f"Setting it via search-and-select is not yet supported by this "
+                f"CLI's 'fields' fill logic. Set this field manually in the "
+                f"Globiflow UI."
+            )
+
+        value_select = row.locator("select[name^='value']").first
+        if value_select.count() > 0:
+            try:
+                value_select.select_option(label=str(value))
+            except BrowserHarnessError as e:
+                raise ClientError(
+                    f"Value '{value}' is not a valid option for field "
+                    f"'{field_label}': {e}"
+                )
+            return
+
+        gmention_textarea = row.locator("textarea[name^='gmvalue']").first
+        if gmention_textarea.count() > 0:
+            element_id = gmention_textarea.get_attribute("id")
+            if not (element_id and self._fill_mention_field(page, element_id, str(value))):
+                gmention_textarea.fill(str(value))
+            return
+
+        raise ClientError(
+            f"Field '{field_label}' (Podio type '{field_type or 'unknown'}') is not "
+            f"yet supported by 'fields' fill logic -- its value control is neither "
+            f"a plain select nor a gMention text field. Set this field manually in "
+            f"the Globiflow UI."
+        )
 
     def get_flow(self, flow_id: str, include_steps: bool = False) -> FlowDetail:
         """Get detailed information about a specific flow.
@@ -1978,6 +2295,11 @@ class GlobiflowClient:
         skipped_fields = []
         updated_fields = []
         for field_name, new_value in updates.items():
+            if field_name == "fields" and isinstance(new_value, dict):
+                self._fill_item_fields(page, action_div, new_value)
+                updated_fields.append(field_name)
+                continue
+
             try:
                 selector = self._get_field_selector(action_div, field_name)
             except ClientError:

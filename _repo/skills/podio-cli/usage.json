@@ -1,7 +1,7 @@
 {
   "tool": "podio",
   "description": "CLI interface for Podio API - Manage apps, items, tasks, and more",
-  "discovered_at": "2026-07-22T23:44:05Z",
+  "discovered_at": "2026-09-02T18:50:44Z",
   "total_commands": 93,
   "global_options": [
     {
@@ -52,7 +52,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -91,7 +92,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -122,7 +124,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -176,7 +179,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -228,7 +232,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Whether field is required",
-                  "short": "-r"
+                  "short": "-r",
+                  "takes_value": false
                 },
                 {
                   "name": "--json-file",
@@ -249,7 +254,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Output as formatted table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -288,21 +294,24 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation prompt",
-                  "short": "-f"
+                  "short": "-f",
+                  "takes_value": false
                 },
                 {
                   "name": "--delete-values",
                   "type": "bool",
                   "required": false,
                   "help": "Also delete field values from existing items",
-                  "short": "-d"
+                  "short": "-d",
+                  "takes_value": false
                 },
                 {
                   "name": "--table",
                   "type": "bool",
                   "required": false,
                   "help": "Output as formatted table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -339,7 +348,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Output as formatted table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -373,7 +383,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Include deleted fields",
-                  "short": "-d"
+                  "short": "-d",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -402,7 +413,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Output as formatted table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -446,7 +458,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Output as formatted table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -482,20 +495,23 @@
               "type": "bool",
               "required": false,
               "help": "Return only the field schema",
-              "short": "-f"
+              "short": "-f",
+              "takes_value": false
             },
             {
               "name": "--include-deleted",
               "type": "bool",
               "required": false,
-              "help": "Include deleted fields in the response"
+              "help": "Include deleted fields in the response",
+              "takes_value": false
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -541,7 +557,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -598,7 +615,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -666,44 +684,57 @@
               "name": "--allow-edit",
               "type": "bool",
               "required": false,
-              "help": "Allow editing items"
+              "help": "Allow editing items",
+              "takes_value": false,
+              "secondary": "--no-allow-edit"
             },
             {
               "name": "--allow-attachments",
               "type": "bool",
               "required": false,
-              "help": "Allow file attachments"
+              "help": "Allow file attachments",
+              "takes_value": false,
+              "secondary": "--no-allow-attachments"
             },
             {
               "name": "--allow-comments",
               "type": "bool",
               "required": false,
-              "help": "Allow comments on items"
+              "help": "Allow comments on items",
+              "takes_value": false,
+              "secondary": "--no-allow-comments"
             },
             {
               "name": "--disable-notifications",
               "type": "bool",
               "required": false,
-              "help": "Disable notifications for this app"
+              "help": "Disable notifications for this app",
+              "takes_value": false,
+              "secondary": "--enable-notifications"
             },
             {
               "name": "--silent-creates",
               "type": "bool",
               "required": false,
-              "help": "Silent mode for item creation"
+              "help": "Silent mode for item creation",
+              "takes_value": false,
+              "secondary": "--no-silent-creates"
             },
             {
               "name": "--silent-edits",
               "type": "bool",
               "required": false,
-              "help": "Silent mode for item edits"
+              "help": "Silent mode for item edits",
+              "takes_value": false,
+              "secondary": "--no-silent-edits"
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -738,7 +769,8 @@
               "type": "bool",
               "required": false,
               "help": "Clear existing ephemeral auth state and re-authenticate",
-              "short": "-F"
+              "short": "-F",
+              "takes_value": false
             }
           ]
         },
@@ -792,7 +824,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -813,7 +846,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
@@ -827,7 +861,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -868,7 +903,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -893,14 +929,16 @@
                   "name": "--keep-old",
                   "type": "bool",
                   "required": false,
-                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
                 },
                 {
                   "name": "--force",
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -935,7 +973,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -956,7 +995,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -970,14 +1010,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--verbose",
               "type": "bool",
               "required": false,
               "help": "Show detailed checks",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1064,26 +1106,30 @@
               "name": "--silent",
               "type": "bool",
               "required": false,
-              "help": "Suppress notifications"
+              "help": "Suppress notifications",
+              "takes_value": false
             },
             {
               "name": "--no-hook",
               "type": "bool",
               "required": false,
-              "help": "Skip webhook execution"
+              "help": "Skip webhook execution",
+              "takes_value": false
             },
             {
               "name": "--alert-invite",
               "type": "bool",
               "required": false,
-              "help": "Auto-invite mentioned users"
+              "help": "Auto-invite mentioned users",
+              "takes_value": false
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1114,14 +1160,16 @@
               "name": "--no-hook",
               "type": "bool",
               "required": false,
-              "help": "Skip webhook execution"
+              "help": "Skip webhook execution",
+              "takes_value": false
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1152,7 +1200,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1167,7 +1216,7 @@
           "examples": [
             "podio comment list item 12345",
             "podio comment list item 12345 --limit 50",
-            "podio comment list item 12345 --filter \"created_by.name:Adam\"",
+            "podio comment list item 12345 --filter \"created_by.name:Example User\"",
             "podio comment list item 12345 --properties \"comment_id,value\"",
             "podio comment list item 12345 --table"
           ],
@@ -1221,7 +1270,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1265,7 +1315,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1341,7 +1392,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1387,7 +1439,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1418,7 +1471,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1449,7 +1503,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1505,7 +1560,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1536,7 +1592,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1567,7 +1624,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1605,7 +1663,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1649,7 +1708,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Output as formatted table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -1695,7 +1755,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1741,7 +1802,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1772,7 +1834,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1803,7 +1866,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1863,7 +1927,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1894,7 +1959,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1933,7 +1999,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1964,7 +2031,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2027,7 +2095,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2065,7 +2134,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2116,20 +2186,24 @@
               "type": "bool",
               "required": false,
               "help": "Suppress Podio notifications (default: silent)",
+              "takes_value": false,
+              "secondary": "--notify",
               "default": "silent"
             },
             {
               "name": "--no-hook",
               "type": "bool",
               "required": false,
-              "help": "Skip webhook execution"
+              "help": "Skip webhook execution",
+              "takes_value": false
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2160,20 +2234,23 @@
               "name": "--silent",
               "type": "bool",
               "required": false,
-              "help": "Suppress Podio notifications"
+              "help": "Suppress Podio notifications",
+              "takes_value": false
             },
             {
               "name": "--no-hook",
               "type": "bool",
               "required": false,
-              "help": "Skip webhook execution"
+              "help": "Skip webhook execution",
+              "takes_value": false
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2211,7 +2288,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2257,14 +2335,16 @@
               "name": "--basic",
               "type": "bool",
               "required": false,
-              "help": "Get basic item info only"
+              "help": "Get basic item info only",
+              "takes_value": false
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2333,14 +2413,16 @@
               "name": "--desc",
               "type": "bool",
               "required": false,
-              "help": "Sort in descending order"
+              "help": "Sort in descending order",
+              "takes_value": false
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2376,20 +2458,23 @@
               "name": "--silent",
               "type": "bool",
               "required": false,
-              "help": "Suppress Podio notifications"
+              "help": "Suppress Podio notifications",
+              "takes_value": false
             },
             {
               "name": "--no-hook",
               "type": "bool",
               "required": false,
-              "help": "Skip webhook execution"
+              "help": "Skip webhook execution",
+              "takes_value": false
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2420,7 +2505,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2466,7 +2552,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2481,7 +2568,7 @@
           "examples": [
             "podio org list",
             "podio org list --limit 10",
-            "podio org list --filter \"name:ATA\"",
+            "podio org list --filter \"name:Example\"",
             "podio org list --properties \"org_id,name\"",
             "podio org list --table"
           ],
@@ -2515,7 +2602,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2570,7 +2658,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2627,7 +2716,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2673,7 +2763,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2726,14 +2817,16 @@
               "name": "--private",
               "type": "bool",
               "required": false,
-              "help": "Make task private"
+              "help": "Make task private",
+              "takes_value": false
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2764,7 +2857,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2795,7 +2889,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2840,7 +2935,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Output as formatted table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -2870,7 +2966,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Output as formatted table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -2901,7 +2998,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Output as formatted table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -2949,7 +3047,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Output as formatted table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -2987,7 +3086,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Output as formatted table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -3007,6 +3107,12 @@
             "podio task list --completed false",
             "podio task list --grouping due_date",
             "podio task list --space 12345 --sort created_on",
+            "podio task list --reference item:12345",
+            "podio task list --created-by user:77109345",
+            "podio task list --external-id my-external-ref",
+            "podio task list --org 56789",
+            "podio task list --app 24681012",
+            "podio task list --responsible 77109345",
             "podio task list --filter \"status:active\" --properties \"task_id,text,due_date\"",
             "podio task list --table"
           ],
@@ -3101,7 +3207,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -3150,7 +3257,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -3202,7 +3310,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Output as formatted table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -3233,7 +3342,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Output as formatted table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -3264,7 +3374,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Output as formatted table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -3310,7 +3421,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Output as formatted table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -3348,7 +3460,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Output as formatted table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -3403,7 +3516,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Output as formatted table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -3441,7 +3555,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Output as formatted table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -3474,7 +3589,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -3530,7 +3646,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -3576,7 +3693,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -3643,7 +3761,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -3674,7 +3793,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -3725,7 +3845,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Output as formatted table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -3756,7 +3877,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Output as formatted table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -3811,7 +3933,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Output as formatted table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -3848,7 +3971,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Output as formatted table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -3881,7 +4005,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -3944,7 +4069,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -3983,7 +4109,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -4020,7 +4147,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -4051,7 +4179,8 @@
               "type": "bool",
               "required": false,
               "help": "Output as formatted table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",

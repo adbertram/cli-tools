@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:microworker:task",
+  "title": "MicroWorker task contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "site", "task_id", "title", "url", "pay_amount", "pay_currency",
+    "est_minutes", "slots_open", "expires_at", "raw"
+  ],
+  "properties": {
+    "site": {"type": "string", "minLength": 1},
+    "task_id": {"type": "string", "minLength": 1},
+    "title": {"type": ["string", "null"]},
+    "url": {"type": ["string", "null"]},
+    "pay_amount": {"type": ["number", "null"]},
+    "pay_currency": {"type": ["string", "null"]},
+    "est_minutes": {"type": ["integer", "null"]},
+    "slots_open": {"type": ["integer", "null"]},
+    "expires_at": {"type": ["string", "null"]},
+    "raw": {"type": "object"}
+  }
+}

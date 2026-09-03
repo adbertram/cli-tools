@@ -13,13 +13,20 @@ real path always comes from each log's header `cwd` field, never from decoding
 the directory name.
 """
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .config import get_config
-from .logfile import SessionLog, SessionLogError, find_log_path, load_log, read_log_text
+from .logfile import (
+    SessionLog,
+    SessionLogError,
+    find_log_path,
+    load_log,
+    load_log_header,
+    read_log_text,
+)
 from .models import (
     ApprovalSummary,
     ConversationDetail,
@@ -179,25 +186,37 @@ class DeepSeekSessionsClient:
         projects: List[Project] = []
 
         for project_dir in self._project_dirs():
-            logs = self._iter_logs(project_dir)
-            if not logs:
+            log_paths = [
+                log_path
+                for session_dir in self._session_dirs(project_dir)
+                if (log_path := find_log_path(session_dir)) is not None
+            ]
+            if not log_paths:
                 continue
 
-            cwd = next((log.cwd for log in logs if log.cwd), "")
-            subagents = sum(1 for log in logs if log.header.get("origin") == "subagent")
-            last_activity = max(
-                (parse_session_summary(log, "").last_activity for log in logs),
-                default=None,
-            )
+            headers = []
+            for log_path in log_paths:
+                try:
+                    headers.append(load_log_header(log_path))
+                except SessionLogError as exc:
+                    raise ClientError(str(exc)) from exc
+
+            cwd = next((header.get("cwd") for header in headers if header.get("cwd")), "")
+            subagents = sum(1 for header in headers if header.get("origin") == "subagent")
+            newest_mtime = max(log_path.stat().st_mtime for log_path in log_paths)
+            last_activity = datetime.fromtimestamp(
+                newest_mtime,
+                tz=timezone.utc,
+            ).isoformat().replace("+00:00", "Z")
 
             projects.append(
                 Project(
                     name=project_name_from_cwd(cwd) if cwd else project_dir.name,
                     full_path=cwd or "",
                     encoded_path=project_dir.name,
-                    session_count=len(logs),
+                    session_count=len(headers),
                     subagent_session_count=subagents,
-                    last_activity=last_activity or None,
+                    last_activity=last_activity,
                 )
             )
 

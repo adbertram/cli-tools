@@ -148,6 +148,14 @@ def test_decode_token_claims_rejects_non_jwt():
     assert "not a JWT" in str(excinfo.value)
 
 
+def test_assert_drive_permissions_skips_local_check_for_opaque_tokens():
+    """Some account types (e.g. Microsoft personal/MSA accounts via device code
+    flow) are legitimately issued opaque, non-JWT Graph access tokens. Their
+    claims cannot be decoded client-side, so the local scope pre-check must be
+    skipped and the live Graph API call becomes the sole permission check."""
+    msal_auth._assert_drive_permissions("opaque-non-jwt-access-token")
+
+
 def test_verify_drive_access_checks_permissions_before_calling_graph(monkeypatch):
     def fail_get(*args, **kwargs):
         raise AssertionError("permission-less tokens must be rejected before the Graph call")

@@ -10,6 +10,7 @@ COMMAND_CREDENTIALS = {
     "download-attachment": ["custom"],
     "draft": ["custom"],
     "draft-get": ["custom"],
+    "draft-delete": ["custom"],
     "send-draft": ["custom"],
     "reply": ["custom"],
     "reply-all": ["custom"],
@@ -1001,6 +1002,41 @@ def gmail_draft_get(
             print_table([result], table_cols, table_headers)
         else:
             print_json(result)
+
+    except HttpError as e:
+        print_error(f"HTTP error: {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+@app.command("draft-delete")
+@command
+def gmail_draft_delete(
+    draft_id: str = typer.Argument(..., help="Gmail draft ID (returned by `gmail draft`)"),
+    confirm: bool = typer.Option(False, "--confirm", "-y", help="Skip confirmation prompt"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+):
+    """Permanently delete a Gmail draft by draft ID.
+
+    Uses Gmail's drafts.delete method keyed by the draft ID (for example,
+    `r123...`). Do not use `gmail trash` with a draft's message ID; a draft's
+    underlying message ID is not stable across reads and trashing it does not
+    remove the draft.
+    """
+    if not confirm:
+        typer.confirm(f"Are you sure you want to delete draft '{draft_id}'?", abort=True)
+
+    try:
+        client = get_client(profile=profile)
+        service = client.get_gmail_service()
+
+        service.users().drafts().delete(
+            userId='me',
+            id=draft_id,
+        ).execute()
+
+        print_json({'draft_id': draft_id, 'deleted': True})
 
     except HttpError as e:
         print_error(f"HTTP error: {e}")

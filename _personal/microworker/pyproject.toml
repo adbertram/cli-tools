@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "microworker-cli"
+version = "0.1.0"
+description = "Runs the per-site gig CLIs for the MicroWorker project, writes site envelopes, and merges them into one task list"
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.9.0",
+    "python-dotenv>=1.0.0",
+    "cli-tools-shared",
+    "jsonschema>=4",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+]
+
+[project.scripts]
+"microworker" = "microworker_cli.main:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["microworker_cli*"]
+
+[tool.setuptools.package-data]
+microworker_cli = [
+    "schemas/*.schema.json",
+]
+
+[tool.uv.sources]
+cli-tools-shared = { path = "../../_repo/cli-tools-shared", editable = true }

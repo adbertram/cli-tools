@@ -262,10 +262,11 @@ def fill_input(selector, text, clear_first=True, timeout=0.0):
     if not focused:
         raise RuntimeError(f"fill_input: element not found: {selector!r}")
     if clear_first:
-        # Dispatch select-all directly — NOT via press_key, which always emits a
-        # `char` event for single-char keys. With Ctrl/Cmd held, that `char`
-        # makes Chrome treat the input as a printable "a" instead of firing the
-        # select-all shortcut, leaving the field uncleared.
+        # Dispatch select-all directly — NOT via press_key, which puts `text` on
+        # the keyDown for single-char keys. With Ctrl/Cmd held, that `text` makes
+        # Chrome treat the input as a printable "a" instead of firing the
+        # select-all shortcut, leaving the field uncleared. rawKeyDown carries no
+        # text, so the shortcut fires.
         mods = 4 if sys.platform == "darwin" else 2  # Cmd on macOS, Ctrl elsewhere
         select_all = {"key": "a", "code": "KeyA", "modifiers": mods,
                       "windowsVirtualKeyCode": 65, "nativeVirtualKeyCode": 65}
@@ -292,12 +293,16 @@ _KEYS = {  # key → (windowsVirtualKeyCode, code, text)
 def press_key(key, modifiers=0):
     """Modifiers bitfield: 1=Alt, 2=Ctrl, 4=Meta(Cmd), 8=Shift.
     Special keys (Enter, Tab, Arrow*, Backspace, etc.) carry their virtual key codes
-    so listeners checking e.keyCode / e.key all fire."""
+    so listeners checking e.keyCode / e.key all fire.
+
+    ``text`` rides on the keyDown event ONLY. Chrome inserts the character once
+    for a keyDown that carries text (and synthesizes the keypress from it), and
+    once more for a separate ``char`` event, so dispatching both double-typed
+    every printable character.
+    """
     vk, code, text = _KEYS.get(key, (ord(key[0]) if len(key) == 1 else 0, key, key if len(key) == 1 else ""))
     base = {"key": key, "code": code, "modifiers": modifiers, "windowsVirtualKeyCode": vk, "nativeVirtualKeyCode": vk}
     cdp("Input.dispatchKeyEvent", type="keyDown", **base, **({"text": text} if text else {}))
-    if text and len(text) == 1:
-        cdp("Input.dispatchKeyEvent", type="char", text=text, **{k: v for k, v in base.items() if k != "text"})
     cdp("Input.dispatchKeyEvent", type="keyUp", **base)
 
 def scroll(x, y, dy=-300, dx=0):

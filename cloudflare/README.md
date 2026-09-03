@@ -345,13 +345,28 @@ flow mirrors wrangler 4.125.0 exactly: per-file content hash
 (`blake3(base64(content) + extension)`, first 32 hex chars), a check-missing
 call against the project upload token, batched uploads (≤40 MiB / ≤2000 files
 per POST), hash upsert, then the multipart deployment create with the
-manifest plus `_headers`/`_redirects` from the directory root. Ignored like
-wrangler: `_worker.js`, `_redirects`, `_headers`, `_routes.json`, `functions`,
-`.wrangler` at the directory root; `.DS_Store`, `node_modules`, and `.git` at
-any depth; symlinks are skipped. Files over the Pages 25 MiB per-file cap are
-rejected before any upload. `--manifest` remains available for advanced/manual
-creates when assets were already uploaded out-of-band (manifest keys use
-"/path" form).
+manifest plus `_headers`/`_redirects` from the directory root. Excluded from
+the static asset manifest like wrangler: `_worker.js`, `_redirects`,
+`_headers`, `_routes.json`, `functions`, `.wrangler` at the directory root;
+`.DS_Store`, `node_modules`, and `.git` at any depth; symlinks are skipped.
+Files over the Pages 25 MiB per-file cap are rejected before any upload.
+`--manifest` remains available for advanced/manual creates when assets were
+already uploaded out-of-band (manifest keys use "/path" form).
+
+**Advanced Mode (`_worker.js`):** when `--directory` contains a root-level
+`_worker.js` file, it is uploaded as the deployment's Worker (the
+`"_worker.bundle"` multipart part Cloudflare's API expects), activating
+Cloudflare Pages Advanced Mode — every request is then routed to the worker,
+and Cloudflare stops applying `_headers`/`_redirects` directly (the worker
+must reproduce any rules it still needs). Only a single self-contained
+`_worker.js` file is supported: it must not `import` another module, because
+this command does not bundle it (mirrors wrangler's `--no-bundle` behavior —
+no esbuild step is implemented). A `_worker.js/` directory (multi-file
+Advanced Mode) or a `functions/` directory with no `_worker.js` (Pages
+Functions) both require wrangler's esbuild bundling and are rejected with a
+clear error instead of being silently ignored; use `npx wrangler pages
+deploy` for those. A root `_routes.json` is uploaded alongside the worker
+when present.
 
 #### Pages Domains
 

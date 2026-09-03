@@ -83,17 +83,33 @@ def _save_cache(cache: msal.SerializableTokenCache, config=None) -> None:
         cache_path.chmod(0o600)
 
 
+def _get_authority(config=None) -> str:
+    """Resolve the MSAL authority for the active (or given) profile.
+
+    Uses the profile's TENANT_ID for a tenant-scoped authority
+    (``https://login.microsoftonline.com/<tenant_id>``) when set. Every
+    profile that omits TENANT_ID keeps using the multi-tenant ``/common``
+    endpoint exactly as before.
+    """
+    active_config = config or get_config()
+    tenant_id = active_config.tenant_id
+    if tenant_id:
+        return f"https://login.microsoftonline.com/{tenant_id}"
+    return "https://login.microsoftonline.com/common"
+
+
 def _get_app(
     config=None,
     cache: Optional[msal.SerializableTokenCache] = None,
 ) -> msal.PublicClientApplication:
     """Get MSAL public client application."""
+    active_config = config or get_config()
     if cache is None:
-        cache = _load_cache(config)
+        cache = _load_cache(active_config)
 
     return msal.PublicClientApplication(
         client_id=CLIENT_ID,
-        authority="https://login.microsoftonline.com/common",
+        authority=_get_authority(active_config),
         token_cache=cache,
     )
 
@@ -176,16 +192,27 @@ def _token_graph_permissions(token: str) -> List[str]:
 
 
 def _assert_drive_permissions(token: str) -> None:
-    """Fail loudly when a token cannot read drives.
+    """Fail loudly when a JWT token cannot read drives.
 
     Microsoft Graph answers ``/me/drives`` and ``/drives`` with an empty ``200``
     collection when the caller holds no Files/Sites permission, which is
     indistinguishable from "this account owns no drives". Reject the token here
     so no command can report an empty result for a permission problem.
 
+    This local scope check requires a JWT-shaped access token, since only a
+    JWT's claims can be decoded client-side. Some account types (Microsoft
+    personal/MSA accounts acquired via device code flow, in particular) are
+    legitimately issued opaque, non-JWT Graph access tokens by design -- see
+    Microsoft's guidance to treat access tokens as opaque strings. For those
+    tokens this local pre-check is skipped, and the live Graph API call in
+    ``_verify_drive_access`` is the sole and authoritative permission check.
+
     Raises:
-        RuntimeError: If the token carries no Files.* or Sites.* permission
+        RuntimeError: If a JWT token carries no Files.* or Sites.* permission
     """
+    if len(token.split(".")) != 3:
+        return
+
     permissions = _token_graph_permissions(token)
     if any(p.startswith(DRIVE_PERMISSION_PREFIXES) for p in permissions):
         return

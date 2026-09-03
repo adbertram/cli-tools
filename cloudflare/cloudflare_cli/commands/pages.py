@@ -6,7 +6,9 @@ Account-level Cloudflare Pages management:
   domains      - Manage custom domains attached to a project
 
 Endpoints verified against https://developers.cloudflare.com/api/resources/pages/
-Direct-upload asset flow mirrored from wrangler 4.125.0 (see pages_assets.py).
+Direct-upload asset flow mirrored from wrangler 4.125.0 (see pages_assets.py),
+including Cloudflare Pages Advanced Mode (_worker.js upload; see
+pages_assets.read_worker_script and client.build_worker_bundle).
 """
 import json
 from datetime import datetime
@@ -431,21 +433,29 @@ def _upload_directory_assets(
     project_name: str,
     site_dir: Path,
     skip_caching: bool,
-) -> Tuple[str, int, int, Optional[str], Optional[str]]:
+) -> Tuple[str, int, int, Optional[str], Optional[str], Optional[bytes], Optional[str]]:
     """
     Run the direct-upload asset flow for one local directory.
 
     Mirrors wrangler's pages deploy sequence: hash every file, fetch the
     project upload token, check which hashes Cloudflare is missing, upload
-    the rest in bounded batches, record all hashes, and read _headers /
-    _redirects from the directory root for the deployment create call.
+    the rest in bounded batches, record all hashes, read _headers /
+    _redirects from the directory root, and build the "_worker.bundle" part
+    (Cloudflare Pages Advanced Mode) when a root _worker.js is present.
 
     Returns:
-        (manifest_json, uploaded_count, total_files, headers_text, redirects_text)
+        (manifest_json, uploaded_count, total_files, headers_text,
+        redirects_text, worker_bundle, routes_json_text)
     """
     assets = pages_assets.collect_files(site_dir)
     hashes = [asset["hash"] for asset in assets]
     typer.echo(f"Hashed {len(assets)} files in {site_dir}", err=True)
+
+    # Validate the worker script locally before any network calls: an
+    # unsupported _worker.js/ or functions/ layout, or a disallowed import,
+    # should fail fast rather than after uploading assets that would then be
+    # wasted work.
+    worker_script = pages_assets.read_worker_script(site_dir)
 
     token_result = client.get_pages_upload_token(account_id=account_id, project_name=project_name)
     jwt = token_result.get("jwt") if isinstance(token_result, dict) else None
@@ -484,7 +494,22 @@ def _upload_directory_assets(
     headers_text = headers_path.read_text(encoding="utf-8") if headers_path.is_file() else None
     redirects_text = redirects_path.read_text(encoding="utf-8") if redirects_path.is_file() else None
 
-    return json.dumps(pages_assets.build_manifest(assets)), uploaded, len(assets), headers_text, redirects_text
+    worker_bundle: Optional[bytes] = None
+    routes_json_text: Optional[str] = None
+    if worker_script is not None:
+        worker_bundle = client.build_worker_bundle(worker_script)
+        routes_json_text = worker_script["routes_json"]
+        typer.echo(f"✨ Uploading Worker bundle ({worker_script['filename']}, Advanced Mode)", err=True)
+
+    return (
+        json.dumps(pages_assets.build_manifest(assets)),
+        uploaded,
+        len(assets),
+        headers_text,
+        redirects_text,
+        worker_bundle,
+        routes_json_text,
+    )
 
 
 @deployments_app.command("create")
@@ -511,6 +536,15 @@ def create_deployment(
     Advanced/manual use only: --manifest creates a deployment from an existing
     manifest without uploading anything.
 
+    Cloudflare Pages Advanced Mode: a root-level _worker.js in --directory is
+    uploaded as the deployment's Worker (Cloudflare then routes every request
+    to it and stops applying _headers/_redirects directly). Only a single
+    self-contained _worker.js file is supported — it must not import another
+    module, since this command does not bundle it (mirrors wrangler's
+    --no-bundle behavior). A _worker.js/ directory or a functions/ directory
+    with no _worker.js both require wrangler's esbuild bundling step and are
+    rejected with an error; use `npx wrangler pages deploy` for those.
+
     Examples:
         cloudflare pages deployments create my-site --branch main
         cloudflare pages deployments create my-site --directory ./dist
@@ -527,15 +561,25 @@ def create_deployment(
     manifest_str = json.dumps(manifest_json) if manifest_json is not None else None
     headers_text: Optional[str] = None
     redirects_text: Optional[str] = None
+    worker_bundle: Optional[bytes] = None
+    routes_json_text: Optional[str] = None
     upload_note = ""
     if directory is not None:
         site_dir = Path(directory).expanduser()
         if not site_dir.is_dir():
             raise ClientError(f"Deployment directory does not exist or is not a directory: {site_dir}")
-        manifest_str, uploaded, total, headers_text, redirects_text = _upload_directory_assets(
-            client, account_id, project, site_dir, skip_caching=skip_caching
-        )
+        (
+            manifest_str,
+            uploaded,
+            total,
+            headers_text,
+            redirects_text,
+            worker_bundle,
+            routes_json_text,
+        ) = _upload_directory_assets(client, account_id, project, site_dir, skip_caching=skip_caching)
         upload_note = f" (uploaded {uploaded}/{total} assets)"
+        if worker_bundle is not None:
+            upload_note += ", Advanced Mode worker"
 
     result = client.create_pages_deployment(
         account_id=account_id,
@@ -547,6 +591,8 @@ def create_deployment(
         manifest=manifest_str,
         headers_text=headers_text,
         redirects_text=redirects_text,
+        worker_bundle=worker_bundle,
+        routes_json_text=routes_json_text,
     )
 
     print_json(result)

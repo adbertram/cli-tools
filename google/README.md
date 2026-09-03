@@ -414,6 +414,13 @@ For screenshots, declare one `- Screenshots: \`path/to/folder/\`` line in the li
 google analytics accounts
 google analytics accounts --table
 
+# Resolve one property by name (filterable fields: account_name, account_id,
+# property_name, property_id). Filtering runs before --properties narrows the
+# output, and an unknown filter field is rejected instead of silently matching
+# nothing.
+google analytics accounts --filter "property_name:contains:adamtheautomator"
+google analytics accounts --filter "property_name:contains:adamtheautomator" | jq -r '.[0].property_id'
+
 # List GA4 properties
 google analytics properties
 google analytics properties --table

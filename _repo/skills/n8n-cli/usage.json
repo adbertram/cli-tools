@@ -1,8 +1,8 @@
 {
   "tool": "n8n",
   "description": "Manage n8n server - workflows, nodes, executions, credentials, data tables, and logs",
-  "discovered_at": "2026-06-20T19:51:45Z",
-  "total_commands": 61,
+  "discovered_at": "2026-08-26T14:36:38Z",
+  "total_commands": 64,
   "global_options": [
     {
       "name": "--version",
@@ -21,7 +21,6 @@
   "commands": {
     "auth": {
       "help": "Manage n8n authentication",
-      "usage_instructions": "Authentication lifecycle: login to store credentials, check status, test that they work, refresh OAuth tokens, or logout. Runs per-profile when --profile is used.",
       "arguments": [],
       "options": [],
       "commands": {
@@ -41,14 +40,14 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
-              "short": "-F"
+              "help": "Clear existing ephemeral auth state and re-authenticate",
+              "short": "-F",
+              "takes_value": false
             }
           ]
         },
         "logout": {
           "help": "Clear stored credentials.",
-          "usage_instructions": "Clear stored credentials and any browser session for the current or named profile. Use --force/-F to skip confirmation.",
           "arguments": [],
           "options": [
             {
@@ -62,13 +61,11 @@
         },
         "profiles": {
           "help": "Manage authentication profiles",
-          "usage_instructions": "Manage multiple named authentication profiles. Useful for working against multiple n8n instances (dev/staging/prod). The default profile is used when --profile is omitted.",
           "arguments": [],
           "options": [],
           "commands": {
             "create": {
               "help": "Create a new profile from .env.example template.",
-              "usage_instructions": "Create a new profile from .env.example template. Prompts for each required field. Follow up with `auth login --profile <name>` to populate credentials.",
               "arguments": [
                 {
                   "name": "name",
@@ -96,7 +93,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -117,12 +115,13 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "List all authentication profiles and show which one is the default. Use --table/-t for a human-readable view.",
               "arguments": [],
               "options": [
@@ -131,7 +130,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -172,7 +172,42 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -207,7 +242,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -221,14 +257,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--verbose",
               "type": "bool",
               "required": false,
               "help": "Show detailed checks",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -251,7 +289,14 @@
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "usage_instructions": "Remove all cached responses from the local cache directory. Use when you want a guaranteed-fresh fetch from the n8n API.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
@@ -338,7 +383,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -358,7 +404,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -391,7 +438,7 @@
           ]
         },
         "rename": {
-          "help": "Rename a credential on the n8n server. Example: n8n credentials rename tTBhVO3JjWS6PhOH \"Susan Slack Bot\"",
+          "help": "Rename a credential on the n8n server. Example: n8n credentials rename tTBhVO3JjWS6PhOH \"Example Slack Bot\"",
           "usage_instructions": "Rename a credential without changing its data or ID.",
           "arguments": [
             {
@@ -451,6 +498,44 @@
         }
       ],
       "commands": {
+        "add-column": {
+          "help": "Add a column to an existing data table. Column types: string, number, boolean, date Example: n8n data-tables add-column L13pmzZlnNh5hPw7 status string n8n data-tables add-column L13pmzZlnNh5hPw7 priority number --index 2",
+          "arguments": [
+            {
+              "name": "table_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Data table ID"
+            },
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Column name"
+            },
+            {
+              "name": "column_type",
+              "type": "TEXT",
+              "required": true,
+              "help": "Column type: string, number, boolean, date"
+            }
+          ],
+          "options": [
+            {
+              "name": "--index",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Column position index",
+              "short": "-i"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "columns": {
           "help": "Show columns for a data table. Example: n8n data-tables columns L13pmzZlnNh5hPw7 n8n data-tables columns L13pmzZlnNh5hPw7 --table",
           "usage_instructions": "Show column definitions for a data table. Use before `insert` or `update-rows` to verify the schema.",
@@ -468,7 +553,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -525,6 +611,39 @@
             }
           ]
         },
+        "delete-column": {
+          "help": "Delete a column from a data table. This permanently removes the column and its data from every row. Example: n8n data-tables delete-column L13pmzZlnNh5hPw7 col456 n8n data-tables delete-column L13pmzZlnNh5hPw7 col456 --yes",
+          "arguments": [
+            {
+              "name": "table_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Data table ID"
+            },
+            {
+              "name": "column_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Column ID to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation prompt",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "delete-rows": {
           "help": "Delete specific rows from a data table. Example: n8n data-tables delete-rows L13pmzZlnNh5hPw7 --row-id row123 n8n data-tables delete-rows L13pmzZlnNh5hPw7 --row-id row1 --row-id row2",
           "usage_instructions": "Delete specific rows from a data table by row ID. Example: `n8n data-tables delete-rows <table_id> <row_id>`.",
@@ -569,7 +688,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -615,7 +735,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -664,7 +785,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -790,7 +912,8 @@
               "name": "--table",
               "type": "bool",
               "required": false,
-              "help": "Display as table"
+              "help": "Display as table",
+              "takes_value": false
             },
             {
               "name": "--data-dir",
@@ -824,14 +947,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--include-data",
               "type": "bool",
               "required": false,
               "help": "Include full execution data",
-              "short": "-d"
+              "short": "-d",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -842,7 +967,7 @@
           ]
         },
         "list": {
-          "help": "Query execution history by timeframe via the n8n API. Filters by startedAt client-side (the API has no date filter parameter) and merges currently-running executions into the default list (the API omits them unless status=running is requested).",
+          "help": "Query execution history by timeframe via the n8n API. Paginates through all executions and filters by startedAt client-side (the API has no date filter parameter; running executions have no stoppedAt). The n8n public API omits currently-running executions unless status=running is requested, so when no --status is given the command also fetches running executions and merges them in.",
           "examples": [
             "n8n executions list --from 2026-02-12 --status error",
             "n8n executions list --from \"2026-02-12T08:00\" --to \"2026-02-12T09:00\" --table",
@@ -882,7 +1007,8 @@
               "type": "bool",
               "required": false,
               "help": "Include full execution data (large output)",
-              "short": "-d"
+              "short": "-d",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -911,7 +1037,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -959,7 +1086,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -979,7 +1107,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -1037,7 +1166,8 @@
               "type": "bool",
               "required": false,
               "help": "Overwrite existing package",
-              "short": "-F"
+              "short": "-F",
+              "takes_value": false
             },
             {
               "name": "--name",
@@ -1062,7 +1192,7 @@
           ]
         },
         "deploy": {
-          "help": "Deploy an n8n node package to the n8n server (adam-server). Performs the full pipeline: build TypeScript, rsync to server, npm install into community nodes dir (~/.n8n/nodes/), install bundled CLI venv, create n8n credentials from CLI .env, restart n8n, and verify the node loads. Example: n8n nodes deploy shippo n8n nodes deploy ~/Dropbox/GitRepos/n8n-nodes/brickowl n8n nodes deploy ~/Dropbox/GitRepos/n8n-nodes-claudecode n8n nodes deploy ~/Dropbox/GitRepos/n8n-nodes/brickowl --skip-build",
+          "help": "Deploy an n8n node package to the configured n8n server. Performs the full pipeline: build TypeScript, rsync to server, npm install into community nodes dir (~/.n8n/nodes/), install bundled CLI venv, create n8n credentials from CLI .env, restart n8n, and verify the node loads. Example: n8n nodes deploy shippo n8n nodes deploy /path/to/n8n-nodes/brickowl n8n nodes deploy /path/to/n8n-nodes-claudecode n8n nodes deploy /path/to/n8n-nodes/brickowl --skip-build",
           "usage_instructions": "Deploy a generated/modified n8n node package to the n8n server (adam-server). Builds, uploads, and restarts n8n to pick it up.",
           "arguments": [
             {
@@ -1077,25 +1207,29 @@
               "name": "--skip-build",
               "type": "bool",
               "required": false,
-              "help": "Skip npm install and build"
+              "help": "Skip npm install and build",
+              "takes_value": false
             },
             {
               "name": "--skip-restart",
               "type": "bool",
               "required": false,
-              "help": "Skip n8n server restart"
+              "help": "Skip n8n server restart",
+              "takes_value": false
             },
             {
               "name": "--skip-verify",
               "type": "bool",
               "required": false,
-              "help": "Skip node verification"
+              "help": "Skip node verification",
+              "takes_value": false
             },
             {
               "name": "--skip-auth-check",
               "type": "bool",
               "required": false,
-              "help": "Skip browser session auth check"
+              "help": "Skip browser session auth check",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1119,16 +1253,17 @@
           "options": [
             {
               "name": "--type",
-              "type": "bool",
+              "type": "DEFAULT|COMMUNITY|CUSTOM",
               "required": false,
-              "help": "[default|community|custom]  Node source: 'default' (built-in) or 'community'"
+              "help": "Node source: 'default' (built-in) or 'community'"
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1160,19 +1295,22 @@
               "name": "--verify-vetted",
               "type": "bool",
               "required": false,
-              "help": "Require n8n vetted-package verification"
+              "help": "Require n8n vetted-package verification",
+              "takes_value": false
             },
             {
               "name": "--skip-restart",
               "type": "bool",
               "required": false,
-              "help": "Deprecated; n8n REST installs load packages without restart"
+              "help": "Deprecated; n8n REST installs load packages without restart",
+              "takes_value": false
             },
             {
               "name": "--skip-verify",
               "type": "bool",
               "required": false,
-              "help": "Skip node verification after install"
+              "help": "Skip node verification after install",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1189,22 +1327,24 @@
           "options": [
             {
               "name": "--type",
-              "type": "bool",
+              "type": "DEFAULT|COMMUNITY|CUSTOM",
               "required": false,
-              "help": "[default|community|custom]  Node source: 'default', 'community' (third-party), or 'custom' (generated)"
+              "help": "Node source: 'default', 'community' (third-party), or 'custom' (generated)"
             },
             {
               "name": "--include-tools",
               "type": "bool",
               "required": false,
-              "help": "Include auto-generated AI tool variants"
+              "help": "Include auto-generated AI tool variants",
+              "takes_value": false
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -1237,7 +1377,7 @@
           ]
         },
         "remove": {
-          "help": "Remove a node package from the n8n server. Third-party community packages are uninstalled through the running n8n instance; custom/generated packages are removed from the community nodes directory and n8n is restarted. Example: n8n nodes remove brickowl n8n nodes remove @scope/n8n-nodes-example n8n nodes remove airtable --keep-credentials n8n nodes remove ebay --skip-restart",
+          "help": "Remove a node package from the n8n server. Third-party community packages are uninstalled through the running n8n instance. Custom/generated packages are removed from the community nodes directory and n8n is restarted. Example: n8n nodes remove brickowl n8n nodes remove @scope/n8n-nodes-example n8n nodes remove airtable --keep-credentials n8n nodes remove ebay --skip-restart",
           "usage_instructions": "Remove a node package from the n8n server by package name. Pass scoped packages exactly, for example @scope/n8n-nodes-example.",
           "arguments": [
             {
@@ -1252,13 +1392,15 @@
               "name": "--skip-restart",
               "type": "bool",
               "required": false,
-              "help": "Skip n8n server restart"
+              "help": "Skip n8n server restart",
+              "takes_value": false
             },
             {
               "name": "--keep-credentials",
               "type": "bool",
               "required": false,
-              "help": "Keep associated credentials"
+              "help": "Keep associated credentials",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1269,7 +1411,7 @@
           ]
         },
         "test": {
-          "help": "Test an n8n node, or run static health checks on an existing workflow. Two modes: 1. PACKAGE MODE (default): Provide NODE_NAME to test a node package. Creates a temporary workflow with a Webhook trigger -> node, activates, triggers, polls for completion, and verifies success. Before activation, runs the static health-check engine on the temp workflow — config bugs surface immediately instead of failing at runtime. 2. WORKFLOW MODE (--workflow <id>): Runs static health checks on an EXISTING workflow. No execution. Validates loadOptions, required params, credentials, typeVersion, sub-workflow refs, webhook uniqueness, expression node refs, connectivity, and pinData orphans. Requires: - n8n API credentials in /Users/adam/Dropbox/GitRepos/Agents/skills/n8n/.env - For package mode: the node package must already be installed on the n8n server Example: n8n nodes test claudecode -p '{\"prompt\":\"What is 2+2?\",\"model\":\"haiku\",\"outputFormat\":\"text\"}' n8n nodes test brickowl --resource order --operation list --timeout 120 n8n nodes test --workflow U7cK5XlQqmgG9CWlrB6wM n8n nodes test --workflow U7cK5XlQqmgG9CWlrB6wM --node \"Incoming Slack Message\" --strict --json",
+          "help": "Test an n8n node, or run static health checks on an existing workflow. Two modes: 1. PACKAGE MODE (default): Provide NODE_NAME to test a node package. Creates a temporary workflow with a Webhook trigger -> node, activates, triggers, polls for completion, and verifies success. Before activation, runs the static health-check engine on the temp workflow — config bugs surface immediately instead of failing at runtime. 2. WORKFLOW MODE (--workflow <id>): Runs static health checks on an EXISTING workflow. No execution. Validates loadOptions, required params, credentials, typeVersion, sub-workflow refs, webhook uniqueness, expression node refs, connectivity, and pinData orphans. Requires: - n8n API credentials configured with `n8n auth login` - For package mode: the node package must already be installed on the n8n server Example: n8n nodes test claudecode -p '{\"prompt\":\"What is 2+2?\",\"model\":\"haiku\",\"outputFormat\":\"text\"}' n8n nodes test brickowl --resource order --operation list --timeout 120 n8n nodes test --workflow U7cK5XlQqmgG9CWlrB6wM n8n nodes test --workflow U7cK5XlQqmgG9CWlrB6wM --node \"Incoming Slack Message\" --strict --json",
           "usage_instructions": "Test n8n nodes in two modes. PACKAGE MODE (default): pass NODE_NAME to spin up a temporary Webhook -> node workflow that exercises a freshly installed node package end-to-end (activate, trigger via webhook, poll for completion, verify success); before activation, the static health-check engine runs on the temp workflow so config bugs surface immediately. Use during node development to validate behavior. WORKFLOW MODE: pass --workflow <id> to run static health checks against an EXISTING workflow without executing it — validates loadOptions, required params, credentials, typeVersion, sub-workflow refs, webhook uniqueness, expression node refs, connectivity, and pinData orphans. Combine with --node \"<name>\" to scope checks to a single node, --strict to promote warnings to failures (non-zero exit on any warning), and --json to emit findings as JSON instead of a table.",
           "arguments": [
             {
@@ -1306,7 +1448,8 @@
               "name": "--no-cleanup",
               "type": "bool",
               "required": false,
-              "help": "Keep workflow after test (don't delete)"
+              "help": "Keep workflow after test (don't delete)",
+              "takes_value": false
             },
             {
               "name": "--params",
@@ -1357,13 +1500,15 @@
               "name": "--strict",
               "type": "bool",
               "required": false,
-              "help": "In --workflow mode, promote warn-level findings to fail and exit non-zero on any warning"
+              "help": "In --workflow mode, promote warn-level findings to fail and exit non-zero on any warning",
+              "takes_value": false
             },
             {
               "name": "--json",
               "type": "bool",
               "required": false,
-              "help": "Emit health findings as JSON (instead of a table)"
+              "help": "Emit health findings as JSON (instead of a table)",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1421,6 +1566,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Restart n8n after changing config",
+                  "takes_value": false,
+                  "secondary": "--no-restart",
                   "default": "restart"
                 },
                 {
@@ -1630,13 +1777,16 @@
                   "name": "--db-logging",
                   "type": "bool",
                   "required": false,
-                  "help": "Enable/disable database query logging"
+                  "help": "Enable/disable database query logging",
+                  "takes_value": false
                 },
                 {
                   "name": "--restart",
                   "type": "bool",
                   "required": false,
                   "help": "Restart n8n after changing config",
+                  "takes_value": false,
+                  "secondary": "--no-restart",
                   "default": "restart"
                 },
                 {
@@ -1690,7 +1840,8 @@
               "name": "--skip-restart",
               "type": "bool",
               "required": false,
-              "help": "Skip n8n server restart"
+              "help": "Skip n8n server restart",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1769,7 +1920,8 @@
               "name": "--all",
               "type": "bool",
               "required": false,
-              "help": "Assign to all workflows"
+              "help": "Assign to all workflows",
+              "takes_value": false
             },
             {
               "name": "--error-workflow-id",
@@ -1809,7 +1961,8 @@
               "name": "--activate",
               "type": "bool",
               "required": false,
-              "help": "Activate the workflow after creation"
+              "help": "Activate the workflow after creation",
+              "takes_value": false
             },
             {
               "name": "--error-workflow",
@@ -1863,7 +2016,8 @@
               "type": "bool",
               "required": false,
               "help": "Skip confirmation prompt",
-              "short": "-y"
+              "short": "-y",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1941,7 +2095,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1960,7 +2115,6 @@
             "n8n workflows list --filter \"name:contains:backup\"",
             "n8n workflows list --properties \"id,name,active\""
           ],
-          "usage_instructions": "List all workflows on the server. Default stdout is JSON; --table/-t switches to human-readable table output. There is no --json option. Supports --filter/-f for client-side filtering (e.g., `active:eq:true`, `name:contains:sync`), --limit/-l, --properties/-p to select fields.",
           "arguments": [],
           "options": [
             {
@@ -1968,7 +2122,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -1996,7 +2151,8 @@
               "name": "--active",
               "type": "bool",
               "required": false,
-              "help": "Filter by active status (true/false)"
+              "help": "Filter by active status (true/false)",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2018,7 +2174,7 @@
                 "n8n workflows node add WF_ID slack -r message -o post --after \"Manual Trigger\"",
                 "n8n workflows node add WF_ID slack --between \"HTTP Request,Set Fields\"",
                 "n8n workflows node add WF_ID airtable --name \"Read Records\" --params '{\"baseId\":\"app123\"}'",
-                "n8n workflows node add WF_ID emailReadImap --credential \"Susan IMAP - DreamHost\""
+                "n8n workflows node add WF_ID emailReadImap --credential \"Example IMAP\""
               ],
               "usage_instructions": "Add a node to an existing workflow. Resolves the node type from the server, auto-positions it, and optionally connects it to existing nodes. Required arguments: workflow_id, node_type. Notable options: --resource/-r, --operation/-o, --after, --between, --name/-n, --params, --position, --credential/-c. Example: `n8n workflows node add WF_ID slack -r message -o post --after \"Manual Trigger\"`.",
               "arguments": [
@@ -2158,7 +2314,7 @@
             "update": {
               "help": "Update an existing node's parameters, name, or credentials. Merges provided parameters into the node's existing parameters (deep merge).",
               "examples": [
-                "n8n workflows node update WF_ID \"Susan\" --params '{\"options\": {\"systemMessage\": \"new prompt\"}}'",
+                "n8n workflows node update WF_ID \"Assistant\" --params '{\"options\": {\"systemMessage\": \"new prompt\"}}'",
                 "n8n workflows node update WF_ID \"My Node\" --name \"Renamed Node\"",
                 "n8n workflows node update WF_ID \"My Node\" --credential \"New API Key\""
               ],
@@ -2239,7 +2395,9 @@
               "name": "--activate",
               "type": "bool",
               "required": false,
-              "help": "Activate or deactivate the workflow"
+              "help": "Activate or deactivate the workflow",
+              "takes_value": false,
+              "secondary": "--deactivate"
             },
             {
               "name": "--profile",

@@ -1,8 +1,8 @@
 {
   "tool": "shippo",
   "description": "CLI interface for Shippo shipping API - Create USPS labels, compare rates, track packages",
-  "discovered_at": "2026-06-20T19:55:00Z",
-  "total_commands": 32,
+  "discovered_at": "2026-08-28T22:58:51Z",
+  "total_commands": 33,
   "global_options": [
     {
       "name": "--version",
@@ -113,6 +113,8 @@
               "type": "bool",
               "required": false,
               "help": "Residential address (default: True)",
+              "takes_value": false,
+              "secondary": "--commercial",
               "default": "residential"
             },
             {
@@ -120,14 +122,16 @@
               "type": "bool",
               "required": false,
               "help": "Validate the address",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -158,7 +162,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -191,7 +196,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -244,7 +250,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -278,13 +285,14 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
-              "short": "-F"
+              "help": "Clear existing ephemeral auth state and re-authenticate",
+              "short": "-F",
+              "takes_value": false
             }
           ]
         },
         "logout": {
-          "help": "Clear stored credentials and browser sessions.",
+          "help": "Clear stored credentials.",
           "usage_instructions": "Use to clear credentials.",
           "arguments": [],
           "options": [
@@ -333,7 +341,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -354,12 +363,13 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "Use to list profiles.",
               "arguments": [],
               "options": [
@@ -368,7 +378,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -409,7 +420,42 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -428,7 +474,7 @@
           }
         },
         "status": {
-          "help": "Check authentication status across profiles.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
           "usage_instructions": "Use to check auth status.",
           "arguments": [],
           "options": [
@@ -444,7 +490,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -458,14 +505,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--verbose",
               "type": "bool",
               "required": false,
               "help": "Show detailed checks",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -488,7 +537,14 @@
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "usage_instructions": "Run `shippo cache clear --help` for exact arguments and options.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
@@ -526,7 +582,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -560,7 +617,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -582,7 +640,8 @@
               "type": "bool",
               "required": false,
               "help": "Include service levels for each carrier",
-              "short": "-s"
+              "short": "-s",
+              "takes_value": false
             },
             {
               "name": "--filter",
@@ -658,7 +717,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -720,7 +780,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -754,7 +815,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -849,7 +911,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -878,7 +941,6 @@
           "help": "Estimate shipping rates without creating a label. Creates a temporary shipment to retrieve available rates. Uses FROM address from environment variables (FROM_NAME, FROM_STREET1, FROM_CITY, FROM_STATE, FROM_ZIP, FROM_COUNTRY). For international destinations (non-US), customs information is automatically generated. You can override the defaults with --description and --value. Weight is in OUNCES (oz). Common conversions: 4oz = 0.25 lbs, 8oz = 0.5 lbs, 16oz = 1 lb Dimensions are in INCHES. Defaults: 7\" x 4\" x 1\"",
           "examples": [
             "shippo rates estimate --weight 8 --to-country US --to-zip 90210",
-            "shippo rates estimate --weight 32 --to-country US --to-zip 90210 \\",
             "shippo rates estimate --weight 4 --to-country FR",
             "shippo rates estimate --weight 8 --to-country FR --value 50",
             "shippo rates estimate --weight 4 --to-country FR --filter \"provider:usps\""
@@ -960,14 +1022,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--json",
               "type": "bool",
               "required": false,
               "help": "Output as JSON",
-              "short": "-j"
+              "short": "-j",
+              "takes_value": false
             },
             {
               "name": "--filter",
@@ -1005,7 +1069,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -1046,7 +1111,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -1095,10 +1161,6 @@
       "commands": {
         "create": {
           "help": "Create a shipment and get rates. Returns a shipment object containing available rates from all carriers.",
-          "examples": [
-            "shippo shipments create \\",
-            "shippo shipments create \\"
-          ],
           "usage_instructions": "Use to create a new shipment with from/to addresses and parcel dimensions. Returns rates.",
           "arguments": [],
           "options": [
@@ -1235,11 +1297,63 @@
               "default": "8.0"
             },
             {
+              "name": "--customs-description",
+              "type": "TEXT",
+              "required": false,
+              "help": "Customs item description, e.g. 'LEGO building blocks'"
+            },
+            {
+              "name": "--customs-value",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Customs item value in USD"
+            },
+            {
+              "name": "--customs-quantity",
+              "type": "INTEGER",
+              "required": false,
+              "help": "RANGE [x>=1]  Customs item quantity",
+              "default": "1"
+            },
+            {
+              "name": "--customs-signer",
+              "type": "TEXT",
+              "required": false,
+              "help": "Name certifying the customs declaration"
+            },
+            {
+              "name": "--customs-tax-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Tax/VAT/IOSS number to transmit in customs data"
+            },
+            {
+              "name": "--customs-tax-id-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Tax ID type: EIN, VAT, IOSS, or ARN",
+              "default": "IOSS"
+            },
+            {
+              "name": "--customs-vat-collected",
+              "type": "bool",
+              "required": false,
+              "help": "Set when VAT was collected by the marketplace",
+              "takes_value": false
+            },
+            {
+              "name": "--customs-invoice",
+              "type": "TEXT",
+              "required": false,
+              "help": "Invoice or order reference for customs"
+            },
+            {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1270,7 +1384,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -1303,7 +1418,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -1380,7 +1496,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -1413,7 +1530,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -1482,7 +1600,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",

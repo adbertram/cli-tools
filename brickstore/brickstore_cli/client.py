@@ -20,7 +20,7 @@ from cli_tools_shared.http_session import (
 
 from . import __version__
 from .config import get_config
-from .database import CatalogDatabase, download
+from .database import MINIFIG_TYPE_ID, PART_TYPE_ID, SET_TYPE_ID, CatalogDatabase, download
 
 
 MCP_PROTOCOL_VERSION = "2025-03-26"
@@ -31,11 +31,8 @@ SERVER_READINESS_POLL_SECONDS = 1
 SERVER_STOP_TIMEOUT_SECONDS = 10
 CATALOG_QUERY_TOOL = "catalog_query"
 CATALOG_PRICE_GUIDE_TOOL = "catalog_price_guide"
-PART_ITEM_TYPE = "P"
-MINIFIG_ITEM_TYPE = "M"
-SET_ITEM_TYPE = "S"
 REQUIRED_TOOL_NAMES = {CATALOG_QUERY_TOOL, CATALOG_PRICE_GUIDE_TOOL}
-MAX_SET_BATCH_SIZE = 25
+MAX_BATCH_SIZE = 25
 
 activity = get_activity_logger("brickstore")
 
@@ -44,18 +41,20 @@ class BrickStoreServerUnavailableError(ClientError):
     """Report a connection failure before an MCP session starts."""
 
 
-def validate_set_numbers(set_numbers: list[str], command_name: str) -> None:
-    """Validate the shared multi-set input contract."""
-    if not set_numbers:
-        raise ClientError("{} requires from 1 through {} unique set IDs".format(command_name, MAX_SET_BATCH_SIZE))
-    if len(set_numbers) > MAX_SET_BATCH_SIZE:
-        raise ClientError("{} accepts at most {} set IDs".format(command_name, MAX_SET_BATCH_SIZE))
+def validate_item_numbers(item_numbers: list[str], command_name: str, noun: str) -> None:
+    """Validate the shared multi-item input contract."""
+    if not item_numbers:
+        raise ClientError(
+            "{} requires from 1 through {} unique {} IDs".format(command_name, MAX_BATCH_SIZE, noun)
+        )
+    if len(item_numbers) > MAX_BATCH_SIZE:
+        raise ClientError("{} accepts at most {} {} IDs".format(command_name, MAX_BATCH_SIZE, noun))
 
     seen = set()
-    for set_number in set_numbers:
-        if set_number in seen:
-            raise ClientError("{} set IDs must be unique: {}".format(command_name, set_number))
-        seen.add(set_number)
+    for item_number in item_numbers:
+        if item_number in seen:
+            raise ClientError("{} {} IDs must be unique: {}".format(command_name, noun, item_number))
+        seen.add(item_number)
 
 
 class BrickStoreClient:
@@ -317,7 +316,7 @@ class BrickStoreClient:
 
     def part(self, item_number: str, color: str | None, leave_open: bool = False) -> dict:
         """Return the price guide for one part."""
-        item = {"item_id": item_number, "item_type": PART_ITEM_TYPE}
+        item = {"item_id": item_number, "item_type": PART_TYPE_ID}
         if color is not None:
             item["color"] = color
         return self._item_price_guide(item, leave_open)
@@ -325,19 +324,19 @@ class BrickStoreClient:
     def minifig(self, item_number: str, leave_open: bool = False) -> dict:
         """Return the price guide for one minifigure."""
         # A minifigure carries no color, and the source rejects a color argument for one.
-        return self._item_price_guide({"item_id": item_number, "item_type": MINIFIG_ITEM_TYPE}, leave_open)
+        return self._item_price_guide({"item_id": item_number, "item_type": MINIFIG_TYPE_ID}, leave_open)
 
     def set(self, set_number: str, leave_open: bool = False) -> dict:
         """Return the price guide for one set."""
         with self._price_guide_session(leave_open=leave_open):
-            query = self._call_tool(CATALOG_QUERY_TOOL, {"item_id": set_number, "item_type": SET_ITEM_TYPE})
+            query = self._call_tool(CATALOG_QUERY_TOOL, {"item_id": set_number, "item_type": SET_TYPE_ID})
             items = query.get("items")
             if not isinstance(items, list):
                 raise ClientError("JSON_CONTRACT_MISMATCH: catalog_query items must be an array")
             matches = [
                 item
                 for item in items
-                if isinstance(item, dict) and item.get("id") == set_number and item.get("type_id") == SET_ITEM_TYPE
+                if isinstance(item, dict) and item.get("id") == set_number and item.get("type_id") == SET_TYPE_ID
             ]
             if len(matches) != 1:
                 raise ClientError(
@@ -354,11 +353,36 @@ class BrickStoreClient:
     def _load_database(self) -> CatalogDatabase:
         return CatalogDatabase.load(self.config.database_path)
 
-    def set_contents(self, set_numbers: list[str]) -> list:
-        """Return direct item records for each requested set from the local database."""
-        validate_set_numbers(set_numbers, "set-contents")
+    def _collect_contents(self, item_numbers: list[str], type_id: str, skip_unknown: bool) -> tuple[list, list]:
+        """Return (records, unknown IDs), both in input order.
+
+        Without skip_unknown, an unknown ID raises from the database read
+        instead of landing in the unknown list.
+        """
         database = self._load_database()
-        return [database.set_contents(set_number) for set_number in set_numbers]
+        records: list = []
+        unknown: list = []
+        for item_number in item_numbers:
+            if skip_unknown and not database.has_item(type_id, item_number):
+                unknown.append(item_number)
+                continue
+            records.append(database.contents(type_id, item_number))
+        return records, unknown
+
+    def set_contents(self, set_numbers: list[str], skip_unknown: bool = False) -> tuple[list, list]:
+        """Return direct item records for each requested set from the local database."""
+        validate_item_numbers(set_numbers, "set-contents", "set")
+        return self._collect_contents(set_numbers, SET_TYPE_ID, skip_unknown)
+
+    def minifig_contents(self, minifig_numbers: list[str], skip_unknown: bool = False) -> tuple[list, list]:
+        """Return direct component records for each requested minifig from the local database."""
+        validate_item_numbers(minifig_numbers, "minifig-contents", "minifig")
+        return self._collect_contents(minifig_numbers, MINIFIG_TYPE_ID, skip_unknown)
+
+    def part_contents(self, part_numbers: list[str], skip_unknown: bool = False) -> tuple[list, list]:
+        """Return direct component records for each requested part from the local database."""
+        validate_item_numbers(part_numbers, "part-contents", "part")
+        return self._collect_contents(part_numbers, PART_TYPE_ID, skip_unknown)
 
     def database_status(self) -> dict:
         """Return the local BrickStore catalog database's metadata."""
@@ -410,6 +434,13 @@ class BrickStoreClient:
         leave_open: bool = False,
     ) -> dict:
         """Return catalog_query results for the given filters."""
+        if related_to_item_id is not None:
+            if related_to_item_type is None:
+                raise ClientError("--related-to-item-type is required with --related-to-item-id")
+            items = self._load_database().related_items(
+                related_to_item_type, related_to_item_id, relationship=relationship
+            )
+            return {"items": items, "returned_count": len(items), "total_count": len(items)}
         arguments = {
             key: value
             for key, value in {
@@ -431,11 +462,11 @@ class BrickStoreClient:
 
     def set_batch(self, set_numbers: list[str], leave_open: bool = False) -> dict:
         """Return price guides for known BrickLink set IDs."""
-        validate_set_numbers(set_numbers, "set-batch")
+        validate_item_numbers(set_numbers, "set-batch", "set")
         with self._price_guide_session({CATALOG_PRICE_GUIDE_TOOL}, leave_open=leave_open):
             payload = self._call_tool(
                 CATALOG_PRICE_GUIDE_TOOL,
-                {"items": [{"item_id": set_number, "item_type": SET_ITEM_TYPE} for set_number in set_numbers]},
+                {"items": [{"item_id": set_number, "item_type": SET_TYPE_ID} for set_number in set_numbers]},
             )
             results = payload.get("results")
             if not isinstance(results, list):
@@ -453,13 +484,13 @@ class BrickStoreClient:
                         "BrickStore source error: catalog_price_guide returned unexpected result for {}".format(set_number)
                     )
                 for field_name in ("item_type", "type_id"):
-                    if field_name in result and result[field_name] != SET_ITEM_TYPE:
+                    if field_name in result and result[field_name] != SET_TYPE_ID:
                         raise ClientError(
                             "BrickStore source error: catalog_price_guide returned {} {} for {}, expected {}".format(
                                 field_name,
                                 result[field_name],
                                 set_number,
-                                SET_ITEM_TYPE,
+                                SET_TYPE_ID,
                             )
                         )
                 if set_number in returned_set_numbers:

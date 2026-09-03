@@ -1,5 +1,37 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+- `press()` no longer double-types every printable character.
+  `browser_harness.helpers.press_key` dispatched `text` on BOTH the `keyDown`
+  event and a separate `char` event; Chrome inserts the character once for each,
+  so `locator.press("4")` on an empty input left it holding `"44"` and
+  `fill_input()` (which types char-by-char via `press_key`) doubled every field.
+  `text` now rides on the `keyDown` event only — Chrome still synthesizes the
+  `keypress` from it, so `Enter` keeps its `\r` payload and listeners checking
+  `e.key`/`e.keyCode` are unaffected. Non-printable keys (Enter, Tab, Backspace,
+  arrows) were never affected. This reaches every CLI through
+  `BrowserHarnessService.keyboard_press` and the `_ServiceLocator.press` /
+  `_ServiceElement.press` wrappers. Tests:
+  `tests/test_browser_harness_helpers.py`, `tests/test_browser_driver.py`.
+- browser-harness daemon startup no longer fails on a transient CDP WS
+  opening-handshake timeout. A just-spawned Chrome can accept the TCP
+  connection but be too busy (profile load, host load) to complete the
+  WebSocket upgrade before websockets' 10s open_timeout, so the daemon died
+  with `fatal: CDP WS handshake failed: timed out during opening handshake`
+  even though the parent had proven the endpoint live via `/json/version`
+  moments earlier — an immediate identical CLI rerun succeeded. Neither
+  `_spawn_daemon` retry classifier covered this class: the transient one only
+  matches `BU_CDP_URL=... unreachable`, and the chrome://inspect prompt branch
+  is gated to local-discovery mode (BU_CDP_WS unset). `browser_harness.daemon`
+  now retries the SAME handshake up to `HANDSHAKE_ATTEMPTS` (3) times with
+  growing backoff (`connect_cdp`), retrying only the timeout class
+  (`_is_transient_handshake_timeout`) — 403/bad-URL handshake failures still
+  fail immediately, and the final error text is unchanged so admin.py's
+  failure classifiers keep matching. Tests:
+  `tests/test_browser_harness_daemon_handshake.py`.
+
 ## 0.2.0 — 2026-05-16
 
 ### Breaking changes

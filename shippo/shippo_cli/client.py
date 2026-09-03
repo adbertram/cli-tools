@@ -6,8 +6,10 @@ This client wraps the Shippo SDK to provide:
 - Consistent error handling
 - Exponential retry with jitter for transient API failures
 """
+import json
 import random
 import time
+from datetime import datetime
 from typing import Callable, Dict, List, Optional, Any, TypeVar
 
 import shippo
@@ -20,6 +22,9 @@ T = TypeVar("T")
 
 # HTTP status codes worth retrying
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+
+# Bound on how much of a non-JSON error body gets echoed back to the user.
+_ERROR_BODY_SNIPPET_LIMIT = 200
 
 
 def _is_retryable(exc: Exception) -> bool:
@@ -34,6 +39,45 @@ def _is_retryable(exc: Exception) -> bool:
         return True
     return False
 
+
+def _describe_error_body(body: Optional[str]) -> str:
+    """Turn a raw HTTP error body into a short, clean detail string.
+
+    The Shippo SDK's ``SDKError`` normally carries a small JSON error payload,
+    but a request that misses the API layer entirely (e.g. a stale, truncated,
+    or otherwise nonexistent object ID hitting a 404 from the edge/CDN in
+    front of the API) can come back as a full HTML document with an embedded
+    JS bundle instead. That body must never be echoed verbatim -- callers only
+    need a short, clean summary.
+    """
+    if not body:
+        return "empty response body"
+    try:
+        parsed = json.loads(body)
+    except (TypeError, ValueError):
+        snippet = " ".join(body.split())[:_ERROR_BODY_SNIPPET_LIMIT]
+        return f"non-JSON error response ({len(body)} bytes): {snippet}..."
+    if isinstance(parsed, dict):
+        for key in ("detail", "message", "error"):
+            value = parsed.get(key)
+            if value:
+                return str(value)
+    return str(parsed)[:_ERROR_BODY_SNIPPET_LIMIT]
+
+
+def _format_sdk_error(operation: str, exc: Exception) -> str:
+    """Build the clean, bounded error message reported for a failed *operation*.
+
+    Falls back to the exception's own ``str()`` for anything that isn't a
+    Shippo SDK ``SDKError`` (i.e. doesn't carry ``status_code``/``body``).
+    """
+    status_code = getattr(exc, "status_code", None)
+    body = getattr(exc, "body", None)
+    if status_code is None:
+        return f"Failed to {operation}: {exc}"
+    detail = _describe_error_body(body)
+    return f"Failed to {operation}: API error occurred: Status {status_code}: {detail}"
+
 from .config import get_config
 from cli_tools_shared.filters import validate_filters, apply_filters, FilterValidationError
 from .models import (
@@ -45,6 +89,7 @@ from .models import (
     TrackingInfo,
     Refund,
     CarrierAccount,
+    Pickup,
     create_address,
     create_parcel,
     create_rate,
@@ -53,6 +98,7 @@ from .models import (
     create_tracking_info,
     create_refund,
     create_carrier_account,
+    create_pickup,
 )
 
 
@@ -131,7 +177,7 @@ class ShippoClient:
                     time.sleep(delay)
                     continue
                 break
-        raise ClientError(f"Failed to {operation}: {last_exc}")
+        raise ClientError(_format_sdk_error(operation, last_exc))
 
     # ==================== Address Methods ====================
 
@@ -768,6 +814,80 @@ class ShippoClient:
             "get carrier account",
         )
         return create_carrier_account(response)
+
+    # ==================== Pickup Methods ====================
+
+    def create_pickup(
+        self,
+        carrier_account: str,
+        transactions: List[str],
+        requested_start_time: datetime,
+        requested_end_time: datetime,
+        address: Dict[str, Any],
+        building_location_type: str,
+        building_type: Optional[str] = None,
+        instructions: Optional[str] = None,
+        metadata: Optional[str] = None,
+    ) -> Pickup:
+        """
+        Schedule a carrier pickup (USPS or DHL Express).
+
+        Shippo's Pickups API is create-only: there is no endpoint to retrieve or
+        cancel a pickup afterwards, so the returned Pickup is the only record.
+
+        Args:
+            carrier_account: USPS or DHL Express carrier account object ID
+            transactions: Transaction (label) object IDs to be collected
+            requested_start_time: Start of the requested pickup window (tz-aware)
+            requested_end_time: End of the requested pickup window (tz-aware)
+            address: Pickup address fields (name, company, street1, street2,
+                city, state, zip, country, phone, email)
+            building_location_type: Where at the address the carrier collects
+            building_type: Optional building type (apartment, suite, ...)
+            instructions: Free-text instructions; required by Shippo when
+                building_location_type is "Other"
+            metadata: Optional metadata string
+
+        Returns:
+            Pickup model. A ``status`` of ``ERROR`` means Shippo rejected the
+            request; the reasons are in ``messages``.
+        """
+        pickup_address = components.AddressCompleteCreateRequest(
+            name=address["name"],
+            company=address["company"],
+            street1=address["street1"],
+            street2=address["street2"],
+            city=address["city"],
+            state=address["state"],
+            zip=address["zip"],
+            country=address["country"],
+            phone=address["phone"],
+            email=address["email"],
+        )
+
+        location = components.Location(
+            address=pickup_address,
+            building_location_type=components.BuildingLocationType(building_location_type),
+            building_type=(
+                components.BuildingType(building_type) if building_type is not None else None
+            ),
+            instructions=instructions,
+        )
+
+        request = components.PickupBase(
+            carrier_account=carrier_account,
+            location=location,
+            requested_start_time=requested_start_time,
+            requested_end_time=requested_end_time,
+            transactions=transactions,
+            metadata=metadata,
+        )
+
+        response = self._retry(
+            lambda: self.sdk.pickups.create(request=request),
+            "create pickup",
+        )
+        return create_pickup(response)
 
 
 # Module-level client instance - singleton pattern
