@@ -805,8 +805,6 @@ class GlobiflowClient:
         Raises:
             ClientError: If flow creation fails
         """
-        import re
-
         # Navigate to the flow creation page with app_id and trigger type
         self.ensure_authenticated(f"/configureflow.php?i={app_id}&t={trigger_code}")
         page = self.browser.get_page()
@@ -834,32 +832,57 @@ class GlobiflowClient:
         # flows.php bulk action -- see the enabled-state handling below,
         # after the flow_id is known.
 
-        # Add steps if provided
+        # For an "Item Updated" (U) trigger, Globiflow pre-seeds the new
+        # flow's Filters section with an unconfigured "Field Changed" filter
+        # row as a suggested starting point -- confirmed live (2026-09-03):
+        # navigating to a fresh configureflow.php?i=<app>&t=U (even with no
+        # prior activity on that app/trigger) already shows one
+        # `stepFunction=fieldChanged` filter with its field picker at "Select
+        # Field" (value "0"). Globiflow's own client-side validate() flags
+        # *any* fieldChanged step whose field picker is still "0" as an
+        # error regardless of whether the caller asked for that step, so
+        # this blocks saving entirely -- even a plain
+        # ``flows create --trigger U`` with no --steps at all fails with
+        # "Could not extract flow ID from redirect URL". Remove every
+        # pre-seeded, unconfigured step before adding the caller's own, so
+        # the caller's --steps list is the complete, authoritative set of
+        # steps on the new flow.
+        for pre_seeded_selector in ("#flowfilters li", "#actions li"):
+            while page.locator(pre_seeded_selector).count() > 0:
+                pre_seeded_step = page.locator(pre_seeded_selector).first
+                slot_id = pre_seeded_step.get_attribute("step")
+                if not slot_id:
+                    break
+                page.evaluate("(id) => window.deleteStep(id)", int(slot_id))
+                page.wait_for_timeout(500)
+
+        # Add at most the first step in-page. Globiflow's variable/token
+        # registry (read by _fill_mention_field from onclick handlers already
+        # present in the DOM) is only populated for steps that exist when the
+        # page was loaded/last saved -- it is never refreshed as steps are
+        # added to the live, unsaved page. Adding two or more steps in a
+        # single in-page loop therefore makes any step N>1 that references a
+        # variable created by step N-1 fail with "Token ... does not exist in
+        # this flow", even though the reference is valid once the flow is
+        # saved. Confirmed live (2026-09-03): the same two-step config that
+        # fails in-page succeeds when step 2 is instead added via a fresh
+        # 'flows steps add' call against the already-saved flow.
         if steps:
-            for step_config in steps:
-                self._add_step_to_flow(page, step_config)
+            self._add_step_to_flow(page, steps[0])
 
         # Click Save
         self._save_flow(page, timeout=3000)  # Wait for save and redirect
+        self._require_save_ok(page, f"creating flow {name!r} in app {app_id}")
 
-        # Extract flow_id from the redirect URL
-        # After save, URL becomes /flows.php?node={flow_id}
-        current_url = page.url
-        flow_id_match = re.search(r"node=(\d+)", current_url)
-        if not flow_id_match:
-            # Try extracting from heading if we're on the flow page
-            heading = page.locator("h4").filter(has_text="Flow:").first
-            if heading.count() > 0:
-                heading_text = heading.text_content()
-                id_match = re.search(r"\(ID:(\d+)\)", heading_text)
-                if id_match:
-                    flow_id = id_match.group(1)
-                else:
-                    raise ClientError("Could not extract flow ID after creation")
-            else:
-                raise ClientError("Could not extract flow ID from redirect URL")
-        else:
-            flow_id = flow_id_match.group(1)
+        flow_id = self._extract_created_flow_id(page)
+
+        # Add any remaining steps the same way add_flow_step does: each call
+        # reloads configureflow.php fresh, so its token registry reflects
+        # every step saved so far -- including ones this same loop just
+        # added -- before the next step is filled in.
+        if steps:
+            for step_config in steps[1:]:
+                self.add_flow_step(flow_id, step_config)
 
         # Flows are always created enabled (see note above). Deactivate now
         # if the caller asked for a disabled flow.
@@ -868,6 +891,34 @@ class GlobiflowClient:
 
         # Return the created flow details
         return self.get_flow(flow_id)
+
+    def _extract_created_flow_id(self, page: "Page") -> str:
+        """Resolve the flow ID after a fresh flow's Save click.
+
+        After save, URL becomes ``/flows.php?node={flow_id}``. Falls back to
+        parsing the "Flow: {name} (ID:{flow_id})" heading when the URL was
+        not the redirect-with-node-id form.
+
+        Raises:
+            ClientError: If the flow ID cannot be resolved from either the
+                URL or the heading.
+        """
+        import re
+
+        current_url = page.url
+        flow_id_match = re.search(r"node=(\d+)", current_url)
+        if flow_id_match:
+            return flow_id_match.group(1)
+
+        heading = page.locator("h4").filter(has_text="Flow:").first
+        if heading.count() > 0:
+            heading_text = heading.text_content()
+            id_match = re.search(r"\(ID:(\d+)\)", heading_text)
+            if id_match:
+                return id_match.group(1)
+            raise ClientError("Could not extract flow ID after creation")
+
+        raise ClientError("Could not extract flow ID from redirect URL")
 
     def _disable_flow(self, flow_id: str, app_id: str) -> None:
         """Disable a flow via the flows.php bulk "Deactivate" action.
@@ -960,10 +1011,107 @@ class GlobiflowClient:
             f"'globiflow flows get {flow_id}' shortly to check."
         )
 
-    def _wait_for_step_fields_rendered(self, page: "Page", timeout: int = 8000):
+    # Step types Globiflow's UI renders with zero configurable fields --
+    # confirmed live (2026-09-03) via their `<li>` outerHTML after selection:
+    # both render only a hidden `stepFunction<n>` input (value "endIf" /
+    # "continue") and a plain-text `#stepbucket<n>` summary div, no
+    # input/textarea/select of any kind. Waiting for a config field to
+    # appear (what every other step type needs) always times out for these.
+    ZERO_FIELD_STEP_TYPES = frozenset({"End If", "Continue"})
+
+    # Globiflow renders filter/trigger-condition steps in a section separate
+    # from action steps -- ``#filters`` / ``ul#flowfilters`` here, vs
+    # ``#actions`` / ``ul#flowactions`` for action/logic/collector steps (see
+    # ``FLOW_ACTIONS_SELECTOR``). This is the set of Filters-section step
+    # type labels (its picker's ``.selectbrick`` text), confirmed live
+    # (2026-09-03) from the palette rendered by that section's own "+".
+    FILTER_UI_ACTION_TYPES = frozenset({
+        "Date Match",
+        "Field Changed",
+        "Field Value Match",
+        "Field Previous Value Match",
+        "Creator / Editor",
+        "Comment Match",
+        "Task Title Match",
+        "Email Subject Match",
+        "Custom (Calc)",
+    })
+
+    def _wait_for_step_selection(
+        self, page: "Page", ui_action_type: str, timeout: int = 8000,
+        container_selector: str = "#actions",
+    ):
+        """Wait for a just-clicked step-type selection to finish registering.
+
+        Dispatches to whichever readiness signal actually exists for
+        ``ui_action_type``: most step types render config fields
+        asynchronously (see ``_wait_for_step_fields_rendered``), but a few
+        (``ZERO_FIELD_STEP_TYPES``) never render any field at all, so this
+        waits for their hidden ``stepFunction`` input to register instead
+        (see ``_wait_for_step_function_registered``).
+
+        Args:
+            page: Playwright page object
+            ui_action_type: The Globiflow UI label just selected (e.g.
+                "End If", "Remote HTTP Call")
+            timeout: Maximum time to wait, in milliseconds
+            container_selector: The section's step-list container --
+                ``#actions`` (default) for action/logic/collector steps, or
+                ``#flowfilters`` for filter steps (see
+                ``FILTER_UI_ACTION_TYPES``)
+
+        Raises:
+            ClientError: If the selection does not register within the
+                timeout
+        """
+        if ui_action_type in self.ZERO_FIELD_STEP_TYPES:
+            self._wait_for_step_function_registered(page, timeout, container_selector)
+        else:
+            self._wait_for_step_fields_rendered(page, timeout, container_selector)
+
+    def _wait_for_step_function_registered(
+        self, page: "Page", timeout: int = 8000, container_selector: str = "#actions",
+    ):
+        """Wait for a fields-less step type's selection to register.
+
+        Step types in ``ZERO_FIELD_STEP_TYPES`` render no input, textarea,
+        or select once selected -- only a hidden ``stepFunction<n>`` input
+        (holding the step's internal action name) and a plain-text summary
+        div. Poll that hidden input for a non-empty value instead of waiting
+        for a visible field that will never appear.
+
+        Args:
+            page: Playwright page object
+            timeout: Maximum time to wait, in milliseconds
+            container_selector: The section's step-list container (see
+                ``_wait_for_step_selection``)
+
+        Raises:
+            ClientError: If the hidden field never registers a value within
+                the timeout
+        """
+        deadline_attempts = max(1, timeout // 250)
+        probe = f"{container_selector} li:last-child input[id^='stepFunction']"
+        for _ in range(deadline_attempts):
+            value = page.evaluate(
+                "(sel) => { const el = document.querySelector(sel); "
+                "return el ? el.value : null; }",
+                probe,
+            )
+            if value:
+                return
+            page.wait_for_timeout(250)
+        raise ClientError(
+            f"Step type selection did not register within {timeout}ms."
+        )
+
+    def _wait_for_step_fields_rendered(
+        self, page: "Page", timeout: int = 8000, container_selector: str = "#actions",
+    ):
         """Wait for the newly selected step type's config fields to render.
 
-        After clicking a step-type selector (``.sidebarblock``), Globiflow
+        After clicking a step-type selector (``.sidebarblock`` in the
+        Actions section, ``.selectbrick`` in the Filters section), Globiflow
         replaces the step's search box (``.actionsearchinput``) with that
         type's field form asynchronously. A fixed sleep races this render,
         and waiting for any input/textarea/select is not specific enough:
@@ -974,17 +1122,23 @@ class GlobiflowClient:
         textarea/select -- so a later ``field.evaluate()`` on a
         not-yet-rendered field cannot raise ``Element not found``.
 
+        Only call this for step types known to actually render a config
+        field -- i.e. not in ``ZERO_FIELD_STEP_TYPES``; prefer
+        ``_wait_for_step_selection``, which routes there automatically.
+
         Args:
             page: Playwright page object
             timeout: Maximum time to wait, in milliseconds
+            container_selector: The section's step-list container (see
+                ``_wait_for_step_selection``)
 
         Raises:
             ClientError: If no field renders within the timeout
         """
         selector = (
-            '#actions li:last-child input:not(.actionsearchinput):not([type="hidden"]), '
-            "#actions li:last-child textarea, "
-            "#actions li:last-child select"
+            f'{container_selector} li:last-child input:not(.actionsearchinput):not([type="hidden"]), '
+            f"{container_selector} li:last-child textarea, "
+            f"{container_selector} li:last-child select"
         )
         try:
             page.wait_for_selector(selector, state="attached", timeout=timeout)
@@ -992,6 +1146,86 @@ class GlobiflowClient:
             raise ClientError(
                 f"Step type fields did not render within {timeout}ms: {e}"
             )
+
+    # Maps a caller-facing action_type (either the Globiflow UI label or a
+    # model class name, e.g. "Field Changed" or "FieldChangedFilter") to the
+    # exact UI label _add_action_step/_add_filter_step click through to
+    # select the step type. Shared by _add_step_to_flow (to add a step) and
+    # add_flow_step (to classify a step as filter vs action for its
+    # step-count/read-back bookkeeping) via _resolve_ui_action_type.
+    ACTION_TYPE_MAP = {
+        # Logic steps
+        "Create a new Variable": "Custom Variable / Calc",
+        "Custom Variable": "Custom Variable / Calc",
+        "VariableCalcStep": "Custom Variable / Calc",
+        "If (Sanity Check)": "If (Sanity Check)",
+        "IfSanityCheckStep": "If (Sanity Check)",
+        "End If": "End If",
+        "For Each": "For Each",
+        "ForEachStep": "For Each",
+        "Continue": "Continue",
+        "Wait": "Wait (Delay)",
+        "Sort Collected": "Sort Collected",
+        "Clear Collected": "Clear Collected Item(s)",
+
+        # Actions
+        "Remote HTTP Call": "Remote HTTP Call",
+        "HttpCallStep": "Remote HTTP Call",
+        "Capture Result of a Remote HTTP Call": "Remote HTTP Call",
+        "Send Email": "Send Email",
+        "SendEmailStep": "Send Email",
+        "Send SMS": "Send SMS Text",
+        "SendSmsStep": "Send SMS Text",
+        "Send Message": "Send Message",
+        "SendMessageStep": "Send Message",
+        "Add Comment": "Add Comment",
+        "AddCommentStep": "Add Comment",
+        "Assign Task": "Assign Task",
+        "AssignTaskStep": "Assign Task",
+        "Update Item": "Update Item",
+        "UpdateItemStep": "Update Item",
+        "Create Item": "Create Item",
+        "CreateItemStep": "Create Item",
+        "Make a PDF": "Make a PDF",
+        "MakePdfStep": "Make a PDF",
+        "Trigger Flow": "Trigger Flow",
+        "TriggerFlowStep": "Trigger Flow",
+        "Delete Item": "Delete Item",
+
+        # Collectors
+        "Get Referenced Item": "Get Referenced Item(s)",
+        "GetReferencedItemsCollector": "Get Referenced Item(s)",
+        "Search for Item": "Search for Item(s)",
+        "SearchForItemsCollector": "Search for Item(s)",
+        "Get Podio View": "Get Podio View",
+        "GetPodioViewCollector": "Get Podio View",
+
+        # Filters (trigger-condition steps -- see FILTER_UI_ACTION_TYPES;
+        # these live in a separate section of the flow editor and are
+        # added via _add_filter_step, not _add_action_step)
+        "Date Match": "Date Match",
+        "DateMatchFilter": "Date Match",
+        "Field Changed": "Field Changed",
+        "FieldChangedFilter": "Field Changed",
+        "Field Value Match": "Field Value Match",
+        "FieldValueMatchFilter": "Field Value Match",
+        "Field Previous Value Match": "Field Previous Value Match",
+        "Creator / Editor": "Creator / Editor",
+        "CreatorEditorFilter": "Creator / Editor",
+        "Comment Match": "Comment Match",
+        "CommentMatchFilter": "Comment Match",
+        "Custom Filter": "Custom (Calc)",
+        "CustomCalcFilter": "Custom (Calc)",
+        "Custom (Calc)": "Custom (Calc)",
+    }
+
+    def _resolve_ui_action_type(self, action_type: str) -> str:
+        """Map a caller-facing action_type to its Globiflow UI label.
+
+        Falls back to ``action_type`` unchanged when it isn't in
+        ``ACTION_TYPE_MAP`` -- callers may already pass the exact UI label.
+        """
+        return self.ACTION_TYPE_MAP.get(action_type, action_type)
 
     def _add_step_to_flow(self, page: "Page", step_config: dict):
         """Add a step to a flow being configured.
@@ -1004,58 +1238,59 @@ class GlobiflowClient:
         if not action_type:
             raise ClientError("Step configuration must include 'action_type'")
 
-        # Map action_type to UI text
-        action_type_map = {
-            # Logic steps
-            "Create a new Variable": "Custom Variable / Calc",
-            "Custom Variable": "Custom Variable / Calc",
-            "VariableCalcStep": "Custom Variable / Calc",
-            "If (Sanity Check)": "If (Sanity Check)",
-            "IfSanityCheckStep": "If (Sanity Check)",
-            "End If": "End If",
-            "For Each": "For Each",
-            "ForEachStep": "For Each",
-            "Continue": "Continue",
-            "Wait": "Wait (Delay)",
-            "Sort Collected": "Sort Collected",
-            "Clear Collected": "Clear Collected Item(s)",
+        ui_action_type = self._resolve_ui_action_type(action_type)
 
-            # Actions
-            "Remote HTTP Call": "Remote HTTP Call",
-            "HttpCallStep": "Remote HTTP Call",
-            "Capture Result of a Remote HTTP Call": "Remote HTTP Call",
-            "Send Email": "Send Email",
-            "SendEmailStep": "Send Email",
-            "Send SMS": "Send SMS Text",
-            "SendSmsStep": "Send SMS Text",
-            "Send Message": "Send Message",
-            "SendMessageStep": "Send Message",
-            "Add Comment": "Add Comment",
-            "AddCommentStep": "Add Comment",
-            "Assign Task": "Assign Task",
-            "AssignTaskStep": "Assign Task",
-            "Update Item": "Update Item",
-            "UpdateItemStep": "Update Item",
-            "Create Item": "Create Item",
-            "CreateItemStep": "Create Item",
-            "Make a PDF": "Make a PDF",
-            "MakePdfStep": "Make a PDF",
-            "Trigger Flow": "Trigger Flow",
-            "TriggerFlowStep": "Trigger Flow",
-            "Delete Item": "Delete Item",
+        if ui_action_type in self.FILTER_UI_ACTION_TYPES:
+            last_step = self._add_filter_step(page, ui_action_type)
+        else:
+            last_step = self._add_action_step(page, ui_action_type)
 
-            # Collectors
-            "Get Referenced Item": "Get Referenced Item(s)",
-            "GetReferencedItemsCollector": "Get Referenced Item(s)",
-            "Search for Item": "Search for Item(s)",
-            "SearchForItemsCollector": "Search for Item(s)",
-            "Get Podio View": "Get Podio View",
-            "GetPodioViewCollector": "Get Podio View",
-        }
+        # Fill in step-specific fields based on step_config
+        # Remove action_type from config since we've handled it
+        params = {k: v for k, v in step_config.items() if k != "action_type"}
 
-        ui_action_type = action_type_map.get(action_type, action_type)
+        # "Create Item" renders no field-row UI at all until its target app
+        # is chosen (Update Item's rows exist immediately for the current
+        # app), so resolve "app" first regardless of the caller's dict order.
+        if ui_action_type == "Create Item" and "app" in params:
+            self._select_create_item_app(last_step, params.pop("app"))
 
-        # Click the "+" button in the Actions section
+        # "Get Referenced Item(s)" configures its target app, direction, and
+        # source field through a single chained sequence of selects (see
+        # _fill_get_referenced_item_collector), not independent field lookups.
+        if ui_action_type == "Get Referenced Item(s)" and (
+            "app" in params or "direction" in params or "using_field" in params
+        ):
+            self._fill_get_referenced_item_collector(
+                page,
+                last_step,
+                params.pop("app", None),
+                params.pop("direction", None),
+                params.pop("using_field", None),
+            )
+
+        for field_name, value in params.items():
+            if field_name == "fields" and isinstance(value, dict):
+                self._fill_item_fields(page, last_step, value)
+            else:
+                self._fill_step_field(page, last_step, field_name, value)
+
+    def _add_action_step(self, page: "Page", ui_action_type: str) -> "Locator":
+        """Add an action/logic/collector step and return its new ``<li>``.
+
+        The Actions section (``#actions`` / ``ul#flowactions``, see
+        ``FLOW_ACTIONS_SELECTOR``) covers every step type except the
+        Filters-section ones in ``FILTER_UI_ACTION_TYPES`` -- see
+        ``_add_filter_step`` for those. After clicking "+", a search/select
+        box appears; its matching ``.sidebarblock`` option is selected via a
+        JS ``.click()`` (bypasses viewport/scroll restrictions -- these
+        blocks use ``onclick``, unlike the Filters section's ``.selectbrick``
+        items, which need a dispatched ``mousedown`` instead).
+
+        Raises:
+            ClientError: If the add-action control or the requested type
+                cannot be found.
+        """
         add_action_btn = page.locator("#actions").get_by_role("link", name="+")
         if add_action_btn.count() == 0:
             raise ClientError("Could not find add action button")
@@ -1075,7 +1310,7 @@ class GlobiflowClient:
             if dropdown_option.count() > 0:
                 # Use JavaScript click to bypass viewport restrictions
                 dropdown_option.evaluate("el => el.click()")
-                self._wait_for_step_fields_rendered(page)
+                self._wait_for_step_selection(page, ui_action_type)
             else:
                 raise ClientError(f"Could not find action type in dropdown: {ui_action_type}")
         else:
@@ -1084,31 +1319,181 @@ class GlobiflowClient:
             if action_option.count() == 0:
                 raise ClientError(f"Could not find action type: {ui_action_type}")
             action_option.evaluate("el => el.click()")
-            self._wait_for_step_fields_rendered(page)
+            self._wait_for_step_selection(page, ui_action_type)
 
-        # Fill in step-specific fields based on step_config
-        # Remove action_type from config since we've handled it
-        params = {k: v for k, v in step_config.items() if k != "action_type"}
+        return page.locator("#actions li").last
 
-        # "Create Item" renders no field-row UI at all until its target app
-        # is chosen (Update Item's rows exist immediately for the current
-        # app), so resolve "app" first regardless of the caller's dict order.
-        if ui_action_type == "Create Item" and "app" in params:
-            last_step = page.locator("#actions li").last
-            self._select_create_item_app(last_step, params.pop("app"))
+    def _add_filter_step(self, page: "Page", ui_action_type: str) -> "Locator":
+        """Add a filter/trigger-condition step and return its new ``<li>``.
 
-        for field_name, value in params.items():
-            if field_name == "fields" and isinstance(value, dict):
-                last_step = page.locator("#actions li").last
-                self._fill_item_fields(page, last_step, value)
-            else:
-                self._fill_step_field(page, field_name, value)
+        Filter steps (``FILTER_UI_ACTION_TYPES``: Field Changed, Custom
+        (Calc)/Custom Filter, etc.) live in their own section of the flow
+        editor -- ``#filters`` / ``ul#flowfilters`` -- separate from action
+        steps (``#actions`` / ``ul#flowactions``). Its "+" opens the same
+        kind of inline search box as the Actions section, but the resulting
+        step-type picker items are ``.selectbrick`` elements wired to
+        ``onmousedown`` (not ``onclick`` like the Actions section's
+        ``.sidebarblock`` items) -- confirmed live (2026-09-03) via their
+        outerHTML. This harness's element ``.click()`` only ever dispatches a
+        synthetic ``'click'`` event (see ``_CLICK_JS``), which never fires an
+        ``onmousedown`` handler, so selecting a brick instead dispatches a
+        ``mousedown`` ``MouseEvent`` directly.
 
-    def _fill_step_field(self, page: "Page", field_name: str, value: str):
+        Raises:
+            ClientError: If the Filters section's "+" control or the
+                requested filter type cannot be found.
+        """
+        add_filter_btn = page.locator("#filters").get_by_role("link", name="+")
+        if add_filter_btn.count() == 0:
+            raise ClientError("Could not find add filter button")
+
+        add_filter_btn.click()
+        page.wait_for_timeout(500)
+
+        brick = page.locator("#flowfilters li").last.locator(
+            f".selectbrick:has-text('{ui_action_type}')"
+        ).first
+        if brick.count() == 0:
+            raise ClientError(f"Could not find filter type: {ui_action_type}")
+        brick.evaluate(
+            "el => el.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}))"
+        )
+        self._wait_for_step_selection(page, ui_action_type, container_selector="#flowfilters")
+
+        return page.locator("#flowfilters li").last
+
+    def _fill_get_referenced_item_collector(
+        self, page: "Page", container: "Locator",
+        app_label: Optional[str], direction: Optional[str], using_field: Optional[str],
+    ) -> None:
+        """Configure a "Get Referenced Item(s)" collector step.
+
+        Globiflow renders this step's config as a chain of three selects,
+        each an AJAX reload keyed off the previous one's choice -- confirmed
+        live (2026-09-03) against the disposable test app with a Podio
+        app-relationship field pointing at the real "Topics" app:
+
+          1. ``select[name^='gotoApp']`` -- target app to follow references
+             into, labelled by the same "Org > Space > App" hierarchy path
+             ``_select_create_item_app`` already matches (trailing segment).
+          2. ``select[name^='direction']`` -- appears only after the app is
+             chosen. Values are lowercase (``forward``/``reverse``/``both``),
+             unlike ``RelationshipDirection``'s uppercase enum values, so the
+             caller's direction string is lowercased before matching.
+          3. ``select[name^='field']`` (excluding ``select[name^='fields']``,
+             the unrelated Update/Create Item field-row picker) -- appears
+             only after a direction is chosen. Options are "Any Field" (the
+             default, value "0") plus one per app-relationship field on the
+             CURRENT (starting) app that could plausibly point at the target
+             app, labelled "(ItemName) FieldLabel" where ItemName is the
+             starting app's singular item-name config (e.g. this flow's app
+             "test" has item_name "test1", so its "Topic" relationship field
+             is offered as "(test1) Topic") -- matching how
+             ``list_flow_steps``/``get_flow_step`` read this same value back
+             via ``using_field``.
+
+        Args:
+            page: Playwright-style page object.
+            container: Locator for the step's ``<li>``.
+            app_label: Target app name (matched like
+                ``_select_create_item_app``). Required.
+            direction: "FORWARD" / "REVERSE" / "BOTH" (case-insensitive).
+                Optional -- Globiflow requires it before the step can be
+                saved, but this method only fills what it's given.
+            using_field: The source relationship field's full option label,
+                "(ItemName) FieldLabel" (e.g. "(test1) Topic" -- see above).
+                Requires ``direction`` to already be set, since Globiflow
+                does not render this picker until then.
+
+        Raises:
+            ClientError: If ``app_label`` is missing; if a picker this needs
+                is not present (including "Get Referenced Item(s)" not
+                rendering the target-app picker at all, or ``using_field``
+                being requested without ``direction``); or if a value does
+                not match any of a picker's options.
+        """
+        if not app_label:
+            raise ClientError(
+                "'Get Referenced Item(s)' requires 'app' (the target app to "
+                "follow references into)."
+            )
+
+        app_select = container.locator("select[name^='gotoApp']").first
+        if app_select.count() == 0:
+            raise ClientError(
+                "Could not find the Get Referenced Item(s) target-app picker."
+            )
+        matched_value = app_select.evaluate(
+            """(el, wanted) => {
+                const target = wanted.trim().toLowerCase();
+                const option = Array.from(el.options).find(o => {
+                    const segments = (o.textContent || '').split('>');
+                    const leaf = (segments[segments.length - 1] || '').trim().toLowerCase();
+                    return leaf === target;
+                });
+                return option ? option.value : null;
+            }""",
+            app_label,
+        )
+        if not matched_value:
+            raise ClientError(
+                f"App '{app_label}' was not found in the Get Referenced "
+                f"Item(s) target-app picker. This app's cached Podio "
+                f"relationship info is refreshed only by that app's "
+                f"'Refresh from Podio' action on its Globiflow flows.php "
+                f"page -- refresh it, then retry this command."
+            )
+        app_select.select_option(value=matched_value)
+        page.wait_for_timeout(2000)
+
+        if not direction:
+            return
+
+        direction_select = container.locator("select[name^='direction']").first
+        if direction_select.count() == 0:
+            raise ClientError(
+                "Globiflow did not render a Direction picker after "
+                "selecting the target app."
+            )
+        direction_value = str(direction).strip().lower()
+        available = direction_select.evaluate(
+            "el => Array.from(el.options).map(o => o.value)"
+        )
+        if direction_value not in available:
+            raise ClientError(
+                f"Direction '{direction}' is not a valid option (available: "
+                f"{[o for o in available if o]})."
+            )
+        direction_select.select_option(value=direction_value)
+        page.wait_for_timeout(2000)
+
+        if not using_field:
+            return
+
+        field_select = container.locator(
+            "select[name^='field']:not([name^='fields'])"
+        ).first
+        if field_select.count() == 0:
+            raise ClientError(
+                "Globiflow did not render a Using Field picker after "
+                "selecting a Direction."
+            )
+        try:
+            field_select.select_option(label=str(using_field))
+        except BrowserHarnessError as e:
+            raise ClientError(
+                f"Using Field '{using_field}' is not a valid option for "
+                f"this collector step: {e}"
+            )
+        page.wait_for_timeout(1000)
+
+    def _fill_step_field(self, page: "Page", container: "Locator", field_name: str, value: str):
         """Fill a field in the step configuration form.
 
         Args:
             page: Playwright page object
+            container: Locator for the step's ``<li>`` (from
+                ``_add_action_step``/``_add_filter_step``)
             field_name: Field name (e.g., 'variable_name', 'code', 'url')
             value: Value to fill
         """
@@ -1116,6 +1501,7 @@ class GlobiflowClient:
         field_selector_map = {
             "variable_name": "input[placeholder='Variable Name']",
             "code": "textarea[name*='gmvalue']",
+            "field": "select[name^='fields']",  # Filter steps' target-field picker (e.g. Field Changed)
             "url": "textarea[id^='gmurl']",
             "method": "select[name*='method']",
             "headers": "textarea[name*='gmheaders']",
@@ -1133,9 +1519,8 @@ class GlobiflowClient:
             # Try generic approach - look for input/textarea with matching name or placeholder
             selector = f"input[name*='{field_name}'], textarea[name*='{field_name}'], input[placeholder*='{field_name}']"
 
-        # Find the field - look in the last step added (most recent li)
-        last_step = page.locator("#actions li").last
-        field = last_step.locator(selector).first
+        # Find the field within the step's own container
+        field = container.locator(selector).first
 
         if field.count() == 0:
             # Field not found, skip silently (may not be applicable to this step type)
@@ -1145,6 +1530,16 @@ class GlobiflowClient:
         tag_name = field.evaluate("el => el.tagName.toLowerCase()")
         if tag_name == "select":
             field.select_option(label=str(value))
+            # Some selects (e.g. a filter step's target-field picker) settle
+            # asynchronously after a selection -- confirmed live (2026-09-03):
+            # a "Field Changed" step's field select read back as correctly
+            # selected immediately after select_option(), but had reverted to
+            # unselected by the time an immediate Save was clicked, failing
+            # flow-editor validation. A brief wait here (mirroring the same
+            # settle-then-continue pattern already used after every other
+            # select in this file, e.g. _fill_item_fields, _select_create_item_app)
+            # lets that settle before the caller can save.
+            page.wait_for_timeout(1000)
         elif tag_name == "textarea":
             element_id = field.get_attribute("id")
             # For textareas, try gMention handling first (for fields with variable references)
@@ -2449,6 +2844,44 @@ class GlobiflowClient:
         save_link.click()
         page.wait_for_timeout(timeout)
 
+    def _require_save_ok(self, page: "Page", context: str) -> None:
+        """Raise if the flow editor's last Save left validation errors.
+
+        ``_save_flow`` clicks Save and waits, but Globiflow's client-side
+        ``validate()`` blocks the actual persist -- without navigating away
+        or raising any error this harness can see -- whenever a step still
+        has a ``.conferr``/``.tinymcerr`` control. A caller that doesn't
+        check for this can report success for a step that was silently
+        rejected. Confirmed live (2026-09-03): adding a "Field Value Match"
+        filter with only its target field filled (not the also-required
+        operator/value, which this CLI does not yet fill for that step
+        type) produced no browser-level error at all, and a naive success
+        response built from the caller's own input never actually appeared
+        in the flow's saved, exported XML.
+
+        Args:
+            page: Playwright page object
+            context: Short description of the save being checked, used in
+                the error message (e.g. "adding step 'Field Value Match'")
+
+        Raises:
+            ClientError: If the editor still shows validation errors after
+                the Save click.
+        """
+        errors = self._flow_validation_errors(page)
+        if errors:
+            detail = "; ".join(
+                f"step {e['step']} ({e['action']}) control '{e['control']}'"
+                if e["step"]
+                else f"control '{e['control']}'"
+                for e in errors
+            )
+            raise ClientError(
+                f"Globiflow's flow editor refused to save while {context}: "
+                f"{len(errors)} control(s) still hold no valid value -- "
+                f"{detail}."
+            )
+
     def get_flow_step(self, flow_id: str, step_number: int) -> AnyStep:
         """Get detailed information about a specific step in a flow.
 
@@ -2614,17 +3047,44 @@ class GlobiflowClient:
         self.ensure_authenticated(f"/configureflow.php?id={flow_id}")
         page = self.browser.get_page()
 
+        # Filter/trigger-condition steps (see FILTER_UI_ACTION_TYPES) live in
+        # a separate section (#flowfilters) from action/logic/collector
+        # steps (#actions, read by get_flow_step/list_flow_steps via
+        # FLOW_ACTIONS_SELECTOR) -- count and read back from whichever
+        # section this step actually lands in.
+        action_type = step_config.get("action_type", "")
+        is_filter = self._resolve_ui_action_type(action_type) in self.FILTER_UI_ACTION_TYPES
+
         # Get current step count before adding
-        steps_before = page.locator("#actions li").count()
+        section_selector = "#flowfilters li" if is_filter else "#actions li"
+        steps_before = page.locator(section_selector).count()
 
         # Add the step using existing method
         self._add_step_to_flow(page, step_config)
 
         # Save the flow
         self._save_flow(page, timeout=3000)
+        self._require_save_ok(page, f"adding step {action_type!r} to flow {flow_id}")
+
+        new_step_number = steps_before + 1
+
+        if is_filter:
+            # get_flow_step/list_flow_steps don't read the Filters section
+            # (Adam's confirmed read-side gap -- steps list only ever
+            # reports #flowactions steps), so there is no DOM-based
+            # "get this filter step back" path yet. Build the returned model
+            # directly from what the caller asked for and this method has
+            # already confirmed was saved without a validation error --
+            # exactly what get_flow_step would report if it could see this
+            # section.
+            return create_step(
+                step_number=new_step_number,
+                action_type=action_type,
+                parameters={k: v for k, v in step_config.items() if k != "action_type"},
+                flow_id=flow_id,
+            )
 
         # Return the newly added step (last step)
-        new_step_number = steps_before + 1
         return self.get_flow_step(flow_id, new_step_number)
 
     def move_flow_step(self, flow_id: str, step_number: int, to_position: int) -> AnyStep:

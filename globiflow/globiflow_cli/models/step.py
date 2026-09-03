@@ -428,6 +428,7 @@ _STEP_TYPE_MAPPINGS: List[tuple] = [
     ("Field Previous Value Match", FieldValueMatchFilter, StepCategory.FILTER),
     ("Creator / Editor", CreatorEditorFilter, StepCategory.FILTER),
     ("Custom (Calc)", CustomCalcFilter, StepCategory.FILTER),
+    ("Custom Filter", CustomCalcFilter, StepCategory.FILTER),
     ("Date Match", DateMatchFilter, StepCategory.FILTER),
     ("Comment Match", CommentMatchFilter, StepCategory.FILTER),
     ("Email Subject Match", CommentMatchFilter, StepCategory.FILTER),

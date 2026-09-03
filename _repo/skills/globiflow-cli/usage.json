@@ -1,7 +1,7 @@
 {
   "tool": "globiflow",
   "description": "CLI interface for Globiflow (browser automation)",
-  "discovered_at": "2026-09-03T14:36:31Z",
+  "discovered_at": "2026-09-03T15:55:32Z",
   "total_commands": 30,
   "global_options": [
     {
@@ -583,7 +583,7 @@
           "options": [],
           "commands": {
             "add": {
-              "help": "Add a new step to an existing flow. Adds a step of the specified action type with the given parameters. Example: globiflow flows steps add 4314927 --action \"Add Comment\" --comment \"Hello world\" globiflow flows steps add 4314927 --action \"Custom Variable\" --variable-name \"myvar\" --code \"'value'\" globiflow flows steps add 4314927 --action \"Remote HTTP Call\" --url \"https://api.example.com\" --method POST globiflow flows steps add 4314927 --action \"Update Item\" --fields '{\"Status\": \"Approved\"}' globiflow flows steps add 4314927 --action \"Update Item\" --fields '{\"Format\": \"Blog Post\"}' globiflow flows steps add 4314927 --action \"Update Item\" --fields '{\"Format\": {\"app\": \"Content Formats\", \"value\": \"Blog Post\"}}'",
+              "help": "Add a new step to an existing flow. Adds a step of the specified action type with the given parameters. Example: globiflow flows steps add 4314927 --action \"Add Comment\" --comment \"Hello world\" globiflow flows steps add 4314927 --action \"Custom Variable\" --variable-name \"myvar\" --code \"'value'\" globiflow flows steps add 4314927 --action \"Remote HTTP Call\" --url \"https://api.example.com\" --method POST globiflow flows steps add 4314927 --action \"Update Item\" --fields '{\"Status\": \"Approved\"}' globiflow flows steps add 4314927 --action \"Update Item\" --fields '{\"Format\": \"Blog Post\"}' globiflow flows steps add 4314927 --action \"Update Item\" --fields '{\"Format\": {\"app\": \"Content Formats\", \"value\": \"Blog Post\"}}' globiflow flows steps add 4314927 --action \"End If\" globiflow flows steps add 4314927 --action \"Get Referenced Item(s)\" --params '{\"app\": \"Topics\", \"direction\": \"FORWARD\", \"using_field\": \"(Topics) Topic\"}' globiflow flows steps add 4314927 --action \"Field Changed\" --params '{\"field\": \"Status\"}' globiflow flows steps add 4314927 --action \"Custom Filter\" --code '[*status*] != \"\"'",
               "usage_instructions": "Add a step to a flow. FLOW_ID is required (positional). --action/-a is required (e.g., 'Add Comment', 'Custom Variable', 'Remote HTTP Call'). Other options depend on the action type: use --variable-name/-v and --code/-c for Custom Variable steps, --url/--method/-m for HTTP calls, --to/--subject/--body for email steps, --comment for Add Comment steps.",
               "arguments": [
                 {
@@ -739,6 +739,12 @@
                   "type": "TEXT",
                   "required": false,
                   "help": "JSON object of Podio field label -> value to set (Update Item / Create Item steps). Scalar/category: {\"Status\": \"Approved\"}. Relationship field (searches for the item by title at flow runtime): {\"Format\": \"Blog Post\"}, or {\"app\": \"Content Formats\", \"value\": \"Blog Post\"} to disambiguate when a Podio app has more than one relationship field. A list value expands into multiple rows for a multi-value relationship field. A null value unsets the field"
+                },
+                {
+                  "name": "--params",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "JSON object of additional step parameters not covered by a dedicated flag. Used for \"Get Referenced Item(s)\" collector steps: {\"app\": \"Topics\", \"direction\": \"FORWARD\", \"using_field\": \"(Topics) Topic\"} (direction is FORWARD/REVERSE/BOTH; using_field is optional and needs direction set). Also used for filter steps' target field, e.g. \"Field Changed\": {\"field\": \"Status\"}"
                 },
                 {
                   "name": "--table",

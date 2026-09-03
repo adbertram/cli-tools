@@ -161,6 +161,37 @@ globiflow flows steps update FLOW_ID STEP_NUMBER --fields '{"Related Content": [
 # Clear (unset) any field -- category/status or app/relationship -- with a
 # JSON null instead of a value
 globiflow flows steps update FLOW_ID STEP_NUMBER --fields '{"Status": null}'
+
+# Chain 2+ steps in one `flows create --steps` call, including one step
+# referencing a variable an earlier step in the same call creates
+globiflow flows create --app-id 30560419 --trigger C --name "Chained" --steps '[{"action_type": "Custom Variable", "variable_name": "myvar1", "code": "1+1"}, {"action_type": "Custom Variable", "variable_name": "myvar2", "code": "[(Variable) myvar1] + 1"}]'
+
+# Field-less logic steps -- End If (closes an If (Sanity Check) block) and
+# Continue (ends a For Each loop early) -- take no other options
+globiflow flows steps add FLOW_ID --action "If (Sanity Check)" --code "[*status*] == 'new'"
+globiflow flows steps add FLOW_ID --action "End If"
+globiflow flows steps add FLOW_ID --action "For Each"
+globiflow flows steps add FLOW_ID --action "Continue"
+
+# "Get Referenced Item(s)" collector step: target app, relationship
+# direction, and (optionally) the specific relationship field to follow, via
+# --params. `using_field` is the field's full option label as Globiflow
+# renders it, "(ItemName) FieldLabel" -- ItemName is the CURRENT app's
+# singular item-name config, not its app name (see `flows steps list` output
+# for an existing such step to get the exact string)
+globiflow flows steps add FLOW_ID --action "Get Referenced Item(s)" --params '{"app": "Topics", "direction": "FORWARD"}'
+globiflow flows steps add FLOW_ID --action "Get Referenced Item(s)" --params '{"app": "Topics", "direction": "FORWARD", "using_field": "(test1) Topic"}'
+
+# Trigger-condition filter steps -- gate the whole flow before any action
+# runs. "Field Changed" (only continue if a field's value changed on this
+# update) requires an Item Updated (U) trigger; "Custom Filter" (a PHP
+# eval) works with any trigger. Both take --params/--code, not --fields
+globiflow flows steps add FLOW_ID --action "Field Changed" --params '{"field": "Status"}'
+globiflow flows steps add FLOW_ID --action "Custom Filter" --code '[*item_value_approve-to-write*] != ""'
+
+# A leading filter + action combo in one `flows create --steps` call --
+# common for "only act when a specific field changes" flows
+globiflow flows create --app-id 30560419 --trigger U --name "Gated Update" --steps '[{"action_type": "Field Changed", "field": "Status"}, {"action_type": "Update Item", "fields": {"Notes": "Status changed"}}]'
 ```
 
 **Supported field types for `fields`:** text, number, and other scalar fields
@@ -207,6 +238,61 @@ Not yet supported: a target app whose searchable-field list (the field
 Globiflow matches your label against) has more than one candidate -- this
 CLI cannot tell which one holds the title, and fails loudly rather than
 guessing.
+
+**Multi-step `--steps` chains:** `flows create --steps` with 2+ steps adds
+only the first step in-page, saves, then adds every remaining step via a
+fresh `flows steps add`-equivalent call against the now-saved flow. This
+matters because Globiflow's variable/token registry (what makes
+`[(Variable) myvar1]` resolve) is only populated for steps that existed when
+the page was last loaded/saved -- a step referencing a variable an earlier
+step in the *same unsaved* page just created would otherwise fail with
+`Token '(Variable) myvar1' does not exist in this flow`.
+
+**Field-less step types:** "End If" (closes an "If (Sanity Check)" block)
+and "Continue" (ends a "For Each" loop early) render no configurable fields
+in Globiflow's UI at all -- pass no other options for these.
+
+**`--params` (steps add):** a JSON escape hatch for step parameters that
+don't have a dedicated flag, following the same "JSON object, merged into
+the step" convention as `--fields`:
+- **"Get Referenced Item(s)" collector** -- `app` (required, matched like
+  Create Item's target-app picker: the trailing segment of Globiflow's "Org
+  \> Space > App" label), `direction` (`FORWARD`/`REVERSE`/`BOTH`,
+  case-insensitive), `using_field` (optional, requires `direction` to also
+  be set -- Globiflow doesn't render this picker until then). `using_field`'s
+  value is the picker's full option text, `"(ItemName) FieldLabel"`, where
+  `ItemName` is the *current* app's singular item-name config (Podio app
+  settings -> "What is a single item called?"), not its app/display name --
+  e.g. an app named "Content Submissions" with item-name "Submission" and a
+  "Topic" relationship field offers `"(Submission) Topic"`. Only one field
+  and direction combination is supported per call; "Follow references to
+  another App" (a second hop) is not yet exposed.
+- **Filter steps' target field** -- `{"field": "<Podio field label>"}` for
+  "Field Changed" (and other field-based filters this CLI's `action_type_map`
+  now recognizes: "Field Value Match", "Date Match", "Creator / Editor",
+  "Comment Match" -- but only "Field Changed" and "Custom Filter" have their
+  fields fully wired up end to end; the others add successfully as a step
+  type but this CLI does not yet fill their extra controls, such as an
+  operator or match value, so an add call for one of those fails loudly with
+  a `ClientError` naming the unfilled control instead of silently reporting
+  success).
+
+**Trigger-condition filter steps:** Field Changed, Custom Filter, and other
+condition steps that gate the whole flow live in a separate section of
+Globiflow's editor from action/logic/collector steps, added via a different
+picker than the Actions "+" button. "Field Changed" is only valid on an Item
+Updated (`U`) trigger -- Globiflow's own client-side validation rejects it
+(and, only for that specific reason, blocks the entire save) on any other
+trigger type. Because Globiflow pre-seeds every *new* Update-triggered
+flow's Filters section with an unconfigured "Field Changed" filter as a
+suggested starting point, `flows create --trigger U` deletes any such
+pre-existing, unconfigured filter/action step before adding the steps you
+asked for -- otherwise even a plain `flows create --trigger U` with no
+`--steps` at all would fail to save. "Custom Filter" (PHP eval) uses
+`--code`, the same option/field as "Custom Variable" and "If (Sanity
+Check)". `flows steps list`/`flows steps get` do not yet surface filter
+steps (a known, separate gap) -- use `flows export` and inspect the raw XML
+to confirm a filter step's saved configuration.
 
 ### Triggers (`globiflow triggers`)
 
