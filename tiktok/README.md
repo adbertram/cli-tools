@@ -2,7 +2,7 @@
 
 ## DESCRIPTION
 
-The `tiktok` CLI provides tikTok transcript downloader using yt-dlp.
+The `tiktok` CLI provides tikTok transcript downloader using yt-dlp, plus commands to list and look up your saved (favorited) TikTok videos.
 
 Use it when you need scriptable reads, exports, or evidence collection without opening the service UI.
 
@@ -44,6 +44,13 @@ tiktok transcripts download --manual-sub "https://www.tiktok.com/@user/video/123
 # Check wrapper readiness and profile state
 tiktok auth status
 tiktok auth test
+
+# List your saved (favorited) TikTok videos (requires a logged-in browser session)
+tiktok auth login --credential-type browser_session
+tiktok favorites list --table
+
+# Look up one saved video's details by id or URL (no login required)
+tiktok favorites get "https://www.tiktok.com/@user/video/1234567890"
 ```
 
 ## Commands
@@ -90,6 +97,49 @@ tiktok transcripts download --manual-sub "VIDEO_URL"
 tiktok transcripts download --table "VIDEO_URL"
 ```
 
+### Favorites
+
+`favorites list` reads your saved (favorited) TikTok videos — the bookmark
+list, not "Liked" videos. It calls TikTok's own private favorites feed inside
+an authenticated browser session, so it needs a logged-in `browser_session`
+credential first. `favorites get` looks up one video's public details by id
+or URL and needs no login (it reuses the same `yt-dlp` path as `transcripts
+download`).
+
+```bash
+# One-time: log in with a real browser session (opens a browser for Adam to log in)
+tiktok auth login --credential-type browser_session
+
+# List all saved videos (JSON)
+tiktok favorites list
+
+# List as a table, limit results, filter, and select fields
+tiktok favorites list --table --limit 25
+tiktok favorites list --filter "author:eq:someuser"
+tiktok favorites list --properties id,url,caption
+
+# Look up one saved video's id, URL, caption, author (no login required)
+tiktok favorites get "https://www.tiktok.com/@user/video/1234567890"
+tiktok favorites get 1234567890
+tiktok favorites get 1234567890 --table
+```
+
+Each record returned by `favorites list`/`favorites get` has this shape:
+
+```json
+{
+  "id": "1234567890",
+  "url": "https://www.tiktok.com/@user/video/1234567890",
+  "caption": "video description text",
+  "author": "user",
+  "saved_at": null
+}
+```
+
+`saved_at` is populated only if TikTok's API happens to include a
+favorited/bookmarked-at timestamp on a given item; TikTok does not document
+one, so it is commonly `null`.
+
 ## Options Reference
 
 ### Download Command Options
@@ -103,6 +153,22 @@ tiktok transcripts download --table "VIDEO_URL"
 | `--manual-sub` | | Prefer manual subtitles over auto-generated | `False` |
 | `--table` | `-t` | Display results as a table | `False` |
 | `--version` | `-v` | Show version and exit | |
+
+### Favorites List Command Options
+
+| Option | Short | Description | Default |
+|--------|-------|-------------|---------|
+| `--table` | `-t` | Display results as a table | `False` |
+| `--limit` | `-l` | Maximum number of results | `100` |
+| `--filter` | `-f` | Filter: `field:op:value` (repeatable) | None |
+| `--properties` | `-p` | Comma-separated fields to display | None |
+
+### Favorites Get Command Options
+
+| Option | Short | Description | Default |
+|--------|-------|-------------|---------|
+| `--table` | `-t` | Display result as a table | `False` |
+| `--properties` | `-p` | Comma-separated fields to display | None |
 
 ## Output Formats
 
