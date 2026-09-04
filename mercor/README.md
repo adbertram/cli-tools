@@ -90,8 +90,11 @@ context commands) or a normal Chrome window: open https://work.mercor.com/login,
 `mercor auth status` and `mercor tasks *` run headlessly with no visible browser.
 
 `mercor auth login` implements the same magic-link flow and raises an actionable error naming
-this bootstrap when the App Check throttle appears, rather than pretending a password would
-help.
+this bootstrap when the App Check wall blocks a headless attempt, rather than pretending a
+password would help. The wall's markers ("Requests throttled due to 403" / "appCheck/throttled")
+are written to the browser console, not the page, so the CLI also treats a headless submit that
+times out with the login card unchanged as the wall and points at this bootstrap (see
+`mercor_cli/browser.py`).
 
 ## Commands
 

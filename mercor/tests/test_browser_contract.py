@@ -11,7 +11,15 @@ from __future__ import annotations
 import re
 
 from mercor_cli import magic_link
-from mercor_cli.browser import MercorBrowser, _mercor_login_handler
+from mercor_cli.browser import (
+    LOGIN_CARD_MARKERS,
+    MercorBrowser,
+    _bot_wall_error,
+    _generic_timeout_error,
+    _is_headless,
+    _mercor_login_handler,
+    _still_on_login_card,
+)
 
 
 def test_login_page_selectors_are_the_real_ones():
@@ -59,3 +67,97 @@ def test_sender_is_mercor_auth():
     # Validated live: FROM "Mercor <auth@mercor.com>", not no-reply.
     assert magic_link.SENDER == "auth@mercor.com"
     assert "no-reply" not in magic_link.SEARCH_QUERY
+
+
+# ---------------------------------------------------------------------------
+# Bot-wall classification: when a headless submit times out with the login card
+# still on screen, the CLI must raise the actionable CDP-bootstrap error rather
+# than the old generic "did not confirm it sent a sign-in link" message.
+# ---------------------------------------------------------------------------
+
+REAL_LOGIN_CARD_BODY = (
+    "Continue to Mercor\nEmail address\nLogin\nSign up\nOr continue with\n"
+    "Google\nOkta\n\nBy signing in, you agree to our Worker Terms of Service."
+)
+
+
+def test_login_card_markers_match_the_real_card():
+    assert all(marker in REAL_LOGIN_CARD_BODY for marker in LOGIN_CARD_MARKERS)
+    assert "Check your inbox" not in REAL_LOGIN_CARD_BODY
+
+
+def test_still_on_login_card_classifies_captured_bodies():
+    # The real untouched card (headless bot-wall failure) is classified as the
+    # card; a changed page (e.g. an inline error screen) is not.
+    assert _still_on_login_card(REAL_LOGIN_CARD_BODY)
+    assert not _still_on_login_card(
+        "Check your inbox\n\nWe've sent you an activation link."
+    )
+    assert not _still_on_login_card(
+        "Something went wrong on our end. Please try again."
+    )
+    assert not _still_on_login_card("")
+
+
+def test_is_headless_defaults_true_and_reads_config():
+    class HeadedStub:
+        @staticmethod
+        def _headless_enabled():
+            return False
+
+    class MissingStub:
+        pass
+
+    assert _is_headless(HeadedStub()) is False
+    assert _is_headless(MissingStub()) is True
+
+
+def test_bot_wall_error_names_wall_remedy_and_evidence():
+    err = _bot_wall_error(
+        "adbertram@gmail.com",
+        "https://work.mercor.com/login",
+        REAL_LOGIN_CARD_BODY,
+        "/tmp/profile-dir/chromium-profile",
+    )
+    message = str(err)
+    assert isinstance(err, Exception)
+    # Symptom and wall identification.
+    assert "adbertram@gmail.com" in message
+    assert "reCAPTCHA Enterprise" in message
+    assert "exchangeRecaptchaEnterpriseToken" in message
+    # The wall markers live in the console, so the card stays silent.
+    assert "browser console" in message
+    assert "single-use" not in message
+    # Actionable remedy: the exact profile directory for the CDP bootstrap.
+    assert "/tmp/profile-dir/chromium-profile" in message
+    assert "Bot-protection bootstrap" in message
+    # Evidence preserved for diagnosis.
+    assert "https://work.mercor.com/login" in message
+    assert "Continue to Mercor" in message
+
+
+def test_generic_timeout_error_used_when_card_changed_or_headed():
+    changed = str(
+        _generic_timeout_error(
+            "adbertram@gmail.com",
+            "https://work.mercor.com/login",
+            "Something went wrong on our end. Please try again.",
+            headless=True,
+        )
+    )
+    # Not the wall claim: the card changed, so the wall signature is absent.
+    assert "login card never changed" not in changed
+    assert "Something went wrong" in changed
+    assert "ACCOUNT_EMAIL" in changed
+
+    headed = str(
+        _generic_timeout_error(
+            "adbertram@gmail.com",
+            "https://work.mercor.com/login",
+            REAL_LOGIN_CARD_BODY,
+            headless=False,
+        )
+    )
+    assert "(headless=False)" in headed
+    assert "bot wall is the likely cause" in headed
+    assert "Bot-protection bootstrap" in headed
