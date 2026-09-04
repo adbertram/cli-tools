@@ -404,12 +404,6 @@ def register_commands(
     # Resolve CLI name for error messages
     resolved_cli_name = cli_name or (app.info.name if app.info.name else name)
 
-    # Store the original callback if one exists
-    original_callback = sub_app.registered_callback
-    original_callback_fn = None
-    if original_callback and original_callback.callback:
-        original_callback_fn = original_callback.callback
-
     _install_command_wrappers(
         sub_app,
         cred_map=cred_map,
@@ -428,13 +422,8 @@ def register_commands(
 
         invoked = ctx.invoked_subcommand
         if invoked is None:
-            # No subcommand — show help (default Typer behavior)
-            if original_callback_fn:
-                original_callback_fn(ctx)
-            else:
-                typer.echo(ctx.get_help())
-                raise typer.Exit()
-            return
+            typer.echo(ctx.get_help())
+            raise typer.Exit()
 
         if profile is None:
             return

@@ -302,6 +302,39 @@ def test_registered_group_help_exposes_profile_option():
     assert "--profile" in result.output
 
 
+def test_registered_group_without_subcommand_ignores_zero_arg_callback_and_shows_help():
+    callback_calls = []
+    command_app = typer.Typer()
+
+    @command_app.callback()
+    def group_callback():
+        callback_calls.append(True)
+
+    @command_app.command("list")
+    def list_items():
+        typer.echo("ok")
+
+    root = typer.Typer()
+    register_commands(
+        root,
+        lambda profile=None: None,
+        SimpleNamespace(
+            app=command_app,
+            COMMAND_CREDENTIALS={"list": ["api_key"]},
+        ),
+        name="items",
+        help="Manage items",
+        cli_name="tool",
+    )
+
+    result = CliRunner().invoke(root, ["items"])
+
+    assert result.exit_code == 0, result.output
+    assert "Manage items" in result.output
+    assert "list" in result.output
+    assert callback_calls == []
+
+
 def test_registered_root_commands_enforce_credentials_and_expose_profile_option():
     calls = []
     ran = []
