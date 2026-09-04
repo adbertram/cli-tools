@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from ._debug_logging import get_debug_logger
+from .exceptions import ClientError
 from .output import print_info, print_success, print_warning
 from .browser import BrowserHarnessService, BrowserHarnessError
 from .browser.processes import (
@@ -43,8 +44,15 @@ from .browser.processes import (
 logger = get_debug_logger("cli_tools.auth")
 
 
-class BrowserAutomationError(Exception):
-    """Browser automation error."""
+class BrowserAutomationError(ClientError):
+    """Browser automation error.
+
+    Subclasses :class:`~cli_tools_shared.exceptions.ClientError` so the shared
+    ``run_app`` error path (which catches ``ClientError``) prints browser
+    failures -- including HTTP 429/5xx error pages, see
+    :meth:`BrowserAutomation._raise_for_http_error_status` -- as one-line
+    errors instead of tracebacks.
+    """
 
     def __init__(self, message: str, cause: Exception = None):
         self.message = message
@@ -129,6 +137,20 @@ def classify_interstitial(
         if rule.matches(url=url, title=title, body=body):
             return rule
     return None
+
+
+# --- Main-document HTTP status --------------------------------------------
+# Chromium exposes the real HTTP status of the main document via Navigation
+# Timing Level 2. A site answering 429 (rate limit) or >=500 (outage) renders
+# a normal-looking error document at the requested URL, so a scraper that only
+# reads the DOM records the error page as valid (often empty) content --
+# silent data loss. ``HTTP_ERROR_STATUS_JS`` lets the engine read the status
+# after a navigation settles and refuse to hand the error page back as data.
+HTTP_ERROR_STATUS_JS = """() => {
+  const nav = performance.getEntriesByType('navigation');
+  const entry = nav && nav.length ? nav[0] : null;
+  return entry && Number.isFinite(entry.responseStatus) ? entry.responseStatus : null;
+}"""
 
 
 # Daemon-key sanity: ``BU_NAME`` is used as the AF_UNIX socket basename under
@@ -239,6 +261,12 @@ class BrowserAutomation:
     INTERSTITIAL_JITTER_RATIO = 0.5     # Extra 0..N x base, so retries desynchronize
     INTERSTITIAL_SETTLE_TIMEOUT_MS = 20000  # Budget for a self-clearing wall
     INTERSTITIAL_POLL_INTERVAL_MS = 1000    # Poll cadence while it clears
+    # Real HTTP status of the main document (see HTTP_ERROR_STATUS_JS). When
+    # True (default), get_page raises after navigation once the settled page
+    # turns out to be an HTTP 429 or >=500 error document, so the error page
+    # is never scraped as if it were content. Opt out per tool with False;
+    # the check is skipped whenever the status cannot be read.
+    HTTP_ERROR_STATUS_RAISE = True
     # Automation-free login. When True, authenticate() opens a PLAIN browser (no
     # --remote-debugging-port, no CDP, no webdriver patching) for the user to log
     # in by hand — for sites whose login flow blocks automated browsers — then
@@ -980,14 +1008,53 @@ class BrowserAutomation:
 
         raise AssertionError("unreachable: interstitial loop must return or raise")
 
+    def _main_document_http_status(self, page) -> Optional[int]:
+        """The main document's real HTTP status, or None when unreadable."""
+        try:
+            value = page.evaluate(HTTP_ERROR_STATUS_JS)
+        except Exception:
+            logger.debug("_main_document_http_status: evaluate failed", exc_info=True)
+            return None
+        return value if isinstance(value, int) else None
+
+    def _raise_for_http_error_status(self, page) -> None:
+        """Refuse to hand back a 429/5xx error document as if it were content.
+
+        A site answering HTTP 429 (rate limit) or >=500 (outage) renders a
+        normal-looking error page at the requested URL; a scraper that only
+        reads the DOM records that error page as valid (often empty) data.
+        Microworkers.com hit this live on 2026-09-04: /jobs.php answered 429,
+        the task-list extractor found zero rows, and discovery logged an
+        ``ok`` envelope with 0 tasks while ~1600 were actually available.
+        Opt out per tool with ``HTTP_ERROR_STATUS_RAISE = False``.
+        """
+        if not self.HTTP_ERROR_STATUS_RAISE:
+            return
+        status = self._main_document_http_status(page)
+        if status is None or (status < 500 and status != 429):
+            return
+        try:
+            url = page.evaluate("() => location.href")
+        except Exception:
+            url = ""
+        raise BrowserAutomationError(
+            f"The site answered HTTP {status} for the main document at "
+            f"{self._safe_url_for_log(url)} -- likely rate limiting or an "
+            "outage. Refusing to treat the error page as content; retry later."
+        )
+
     def get_page(self, url: str = None) -> BrowserHarnessService:
         """Get a page backed by the persistent profile, past any interstitial.
 
         Navigates via :meth:`_navigate_page`, then resolves any wall declared
-        in ``INTERSTITIALS`` so callers only ever receive real content.
+        in ``INTERSTITIALS`` so callers only ever receive real content, then
+        raises if that real content is actually an HTTP 429/5xx error document
+        (:meth:`_raise_for_http_error_status`).
         """
         page = self._navigate_page(url)
-        return self._resolve_interstitials(page, url)
+        page = self._resolve_interstitials(page, url)
+        self._raise_for_http_error_status(page)
+        return page
 
     def _navigate_page(self, url: str = None) -> BrowserHarnessService:
         """Get a :class:`BrowserHarnessService` backed by the persistent profile.
