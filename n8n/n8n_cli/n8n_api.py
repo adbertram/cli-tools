@@ -691,8 +691,9 @@ class N8nApiClient:
     def get_node_credential_types(self, full_node_type: str) -> List[str]:
         """Get the credential type names required by a node.
 
-        Fetches the full node definition from /types/nodes.json and extracts
-        the credential type names.
+        Fetches the node definition via the internal POST /rest/node-types
+        endpoint (n8n 2.x) and extracts the credential type names. The legacy
+        GET /types/nodes.json bulk endpoint no longer exists in n8n 2.x.
 
         Args:
             full_node_type: Full node type (e.g., "n8n-nodes-claudecode.claudeCode")
@@ -700,26 +701,11 @@ class N8nApiClient:
         Returns:
             List of credential type names (e.g., ["claudeCodeApi"])
         """
-        server_url = self._get_server_url()
-        cookie = self._get_session_cookie()
-
-        try:
-            resp = requests.get(
-                f"{server_url}/types/nodes.json",
-                headers={"cookie": cookie},
-                timeout=30,
-            )
-            resp.raise_for_status()
-            all_nodes = resp.json()
-        except requests.exceptions.RequestException as e:
-            raise N8nApiError(f"Failed to fetch nodes: {e}")
-
-        for node in all_nodes:
-            if node.get("name") == full_node_type:
-                creds = node.get("credentials", [])
-                return [c["name"] for c in creds if isinstance(c, dict) and "name" in c]
-
-        return []
+        node = self.get_node_type(full_node_type)
+        if not node:
+            return []
+        creds = node.get("credentials", [])
+        return [c["name"] for c in creds if isinstance(c, dict) and "name" in c]
 
     def list_credentials(self) -> List[Dict]:
         """List all credentials via the internal REST API.
@@ -882,25 +868,51 @@ class N8nApiClient:
 
         return self._request("GET", f"/executions/{execution_id}", params=params)
 
+    def _fetch_node_types(self, node_infos: List[Dict]) -> List[Dict]:
+        """Fetch full node descriptions by identifier from the server.
+
+        n8n 2.x removed the legacy GET /types/nodes.json static endpoint and
+        now serves node descriptions through the internal REST route
+        POST /rest/node-types (NodeTypesController.getNodeInfo). That endpoint
+        accepts a list of {name, version} identifiers and returns the matching
+        full node descriptions in the same order.
+
+        Args:
+            node_infos: List of dicts, each with "name" (full node type, e.g.
+                "n8n-nodes-base.slack") and an optional "version".
+
+        Returns:
+            List of full node description dicts (one per requested identifier).
+        """
+        data = self._rest_request("POST", "/rest/node-types", json={"nodeInfos": node_infos})
+        if isinstance(data, dict) and "data" in data:
+            return data["data"]
+        if isinstance(data, list):
+            return data
+        return []
+
     def _fetch_all_node_definitions(self) -> List[Dict]:
         """Fetch all node definitions from the server.
 
+        Not supported against n8n 2.x: the legacy GET /types/nodes.json bulk
+        endpoint no longer exists, and POST /rest/node-types only returns
+        descriptions for explicitly named identifiers (no enumerate-every-node
+        route). Callers that need a single node's definition should use
+        get_node_type() instead.
+
         Returns:
             List of full node definition dicts
-        """
-        server_url = self._get_server_url()
-        cookie = self._get_session_cookie()
 
-        try:
-            resp = requests.get(
-                f"{server_url}/types/nodes.json",
-                headers={"cookie": cookie},
-                timeout=30,
-            )
-            resp.raise_for_status()
-            return resp.json()
-        except requests.exceptions.RequestException as e:
-            raise N8nApiError(f"Failed to fetch nodes: {e}")
+        Raises:
+            N8nApiError: Always — bulk enumeration is not available in this
+                n8n server version.
+        """
+        raise N8nApiError(
+            "Bulk node listing is not supported by this n8n server version: the "
+            "legacy /types/nodes.json endpoint was removed in n8n 2.x and there "
+            "is no replacement endpoint that enumerates every node type. Fetch an "
+            "individual node's definition with get_node_type(full_node_type)."
+        )
 
     def get_node_definition(self, name: str) -> Optional[Dict]:
         """Fetch full node definition by fuzzy match on displayName or exact match on type name.
@@ -945,20 +957,24 @@ class N8nApiClient:
 
         return None
 
-    def get_node_type(self, full_node_type: str) -> Optional[Dict]:
+    def get_node_type(self, full_node_type: str, version: Optional[Any] = None) -> Optional[Dict]:
         """Fetch the full node type definition (schema) for a given node type name.
+
+        Uses the internal POST /rest/node-types endpoint (n8n 2.x); the legacy
+        GET /types/nodes.json bulk endpoint no longer exists.
 
         Args:
             full_node_type: Full node type (e.g., "n8n-nodes-base.slackTrigger")
+            version: Optional node typeVersion to fetch a specific version.
 
         Returns:
             Full node definition dict, or None if not found.
         """
-        all_nodes = self._fetch_all_node_definitions()
-        for node in all_nodes:
-            if node.get("name") == full_node_type:
-                return node
-        return None
+        node_info: Dict[str, Any] = {"name": full_node_type}
+        if version is not None:
+            node_info["version"] = version
+        nodes = self._fetch_node_types([node_info])
+        return nodes[0] if nodes else None
 
     def dynamic_options_request(
         self,
