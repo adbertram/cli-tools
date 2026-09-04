@@ -128,7 +128,7 @@ def test_uv_tool_registered(cli_name, cli_dir, command_filter):
     # uv tool list output format: "package-name v0.1.0" per line
     assert cli_name in result.stdout or f"{cli_name}-cli" in result.stdout, (
         f"CLI '{cli_name}' not registered as a uv tool. "
-        f"Fix: uv tool install -e {cli_dir} --force --refresh"
+        f'Fix: uv tool install -e {cli_dir} --force --refresh --python "$(command -v python3)"'
     )
 
 
@@ -166,11 +166,11 @@ def test_cli_installed_in_editable_mode(cli_name, cli_dir, command_filter):
 
     assert result is not None and result.returncode == 0, (
         f"CLI '{cli_name}' not found in uv tool venv. "
-        f"Fix: uv tool install -e {cli_dir} --force --refresh"
+        f'Fix: uv tool install -e {cli_dir} --force --refresh --python "$(command -v python3)"'
     )
     assert "Editable project location:" in result.stdout, (
         f"CLI '{cli_name}' is installed but NOT as an editable install (-e). "
-        f"Fix: uv tool install -e {cli_dir} --force --refresh"
+        f'Fix: uv tool install -e {cli_dir} --force --refresh --python "$(command -v python3)"'
     )
 
 
@@ -191,7 +191,7 @@ def test_cli_tools_shared_installed(cli_name, cli_dir, help_cache, test_config, 
     )
     assert result.returncode == 0, (
         f"cli-tools-shared not installed in {cli_name}'s uv tool venv. "
-        f"Fix: uv tool install -e {cli_dir} --force --refresh"
+        f'Fix: uv tool install -e {cli_dir} --force --refresh --python "$(command -v python3)"'
     )
 
 
@@ -235,7 +235,7 @@ def test_cli_tools_shared_uses_local_editable_repo_when_available(cli_name, cli_
     )
     assert result.returncode == 0, (
         f"cli-tools-shared not installed in {cli_name}'s uv tool venv. "
-        f"Fix: uv tool install -e {cli_dir} --force --refresh"
+        f'Fix: uv tool install -e {cli_dir} --force --refresh --python "$(command -v python3)"'
     )
 
     # uv tool install is not worktree-scoped (see _primary_checkout_root), so
@@ -360,7 +360,7 @@ def test_dependencies_installed(cli_name, cli_dir, command_filter):
         f"{cli_name} has {len(missing)} dependencies declared in pyproject.toml "
         f"but not installed in uv tool venv:\n"
         + "\n".join(f"  - {m}" for m in missing)
-        + f"\nFix: uv tool install -e {cli_dir} --force --refresh"
+        + f'\nFix: uv tool install -e {cli_dir} --force --refresh --python "$(command -v python3)"'
     )
 
 
@@ -402,7 +402,7 @@ def test_launcher_shebang_points_to_uv_tool_python(cli_name, cli_dir, command_fi
     assert first_line.startswith("#!"), (
         f"{cli_name} launcher at {launcher} has no shebang. "
         f"First line: {first_line!r}. "
-        f"Fix: uv tool install -e {cli_dir} --force --refresh"
+        f'Fix: uv tool install -e {cli_dir} --force --refresh --python "$(command -v python3)"'
     )
 
     actual_interpreter = first_line[2:].split()[0] if len(first_line) > 2 else ""
@@ -417,7 +417,7 @@ def test_launcher_shebang_points_to_uv_tool_python(cli_name, cli_dir, command_fi
         f"This means the CLI will start with an interpreter that does NOT have "
         f"its declared dependencies installed, and will fail at import time.\n"
         f"\n"
-        f"Fix: uv tool install -e {cli_dir} --force --refresh\n"
+        f'Fix: uv tool install -e {cli_dir} --force --refresh --python "$(command -v python3)"\n'
         f"\n"
         f"Reminder: when running manual import tests of this CLI, you MUST use "
         f"its own interpreter:\n"
@@ -467,7 +467,7 @@ def test_package_imports_cleanly(cli_name, cli_dir, command_filter):
     assert not failures, (
         f"{cli_name} has {len(failures)} modules that fail to import:\n"
         + "\n".join(f"  - {mod}: {err}" for mod, err in failures)
-        + f"\nFix: uv tool install -e {cli_dir} --force --refresh"
+        + f'\nFix: uv tool install -e {cli_dir} --force --refresh --python "$(command -v python3)"'
     )
 
 

@@ -413,5 +413,5 @@ def test_browser_cli_browser_harness_module_installed(cli_name, cli_dir, test_co
         f"requires the browser_harness module vendored by cli-tools-shared.\n"
         f"stderr: {result.stderr.strip()}\n"
         f"Fix: Ensure {cli_name}/pyproject.toml depends on cli-tools-shared, "
-        f"then run: uv tool install -e {cli_dir} --force --refresh"
+        f'then run: uv tool install -e {cli_dir} --force --refresh --python "$(command -v python3)"'
     )

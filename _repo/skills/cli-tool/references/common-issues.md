@@ -87,32 +87,18 @@ ls -la ~/.local/bin/myservice
 
 # Check if registered as uv tool
 uv tool list | grep myservice
-
-# Check if package is installed
-uv tool install -e <cli-tools-root>/myservice --force --refresh
 ```
 
 ### Fixes
 
-**Reinstall via uv:**
+**Reinstall via the install script (handles the interpreter pin below automatically):**
 ```bash
-uv tool install -e <cli-tools-root>/myservice --force --refresh
-```
-
-For the current checkout:
-
-```bash
-uv tool install --editable . --force
+<cli-tools-root>/_repo/skills/cli-tool/scripts/install-cli-tool.sh --force-refresh myservice
 ```
 
 Do not use Homebrew/system `pip install -e .` or
 `--break-system-packages`. CLI tools are installed as uv tools, and
 `~/.local/bin/<tool>` should point into `~/.local/share/uv/tools/`.
-
-**Or use the install script:**
-```bash
-<cli-tools-root>/_repo/skills/cli-tool/scripts/install-cli-tool.sh myservice
-```
 
 ### Reinstall picks a Python that fails `test_cli_uses_system_python`
 
@@ -168,9 +154,8 @@ PY
 ### Fix
 If package metadata or editable-source details are needed, use
 `importlib.metadata` from the launcher shebang interpreter. If install state
-needs repair, use `uv tool install -e <cli-tools-root>/myservice --force
---refresh` or the repo-owned install script. Do not switch to system,
-Homebrew, or uv-tool-environment `pip`.
+needs repair, use `install-cli-tool.sh --force-refresh <name>`. Do not switch to
+system, Homebrew, or uv-tool-environment `pip`.
 
 ---
 
@@ -259,7 +244,7 @@ app.add_typer(items_app, name="items")
 
 **Reinstall after changes:**
 ```bash
-uv tool install -e <cli-tools-root>/myservice --force --refresh
+<cli-tools-root>/_repo/skills/cli-tool/scripts/install-cli-tool.sh --force-refresh myservice
 ```
 
 ---
@@ -537,7 +522,7 @@ uv run --project <cli-tools-root>/<name> --with pytest python -m pytest <cli-too
 If `test-cli-tool.sh` or `validate-cli-tool.sh` report a shebang mismatch,
 reinstall:
 ```bash
-uv tool install -e <cli-tools-root>/<name> --force --refresh
+<cli-tools-root>/_repo/skills/cli-tool/scripts/install-cli-tool.sh --force-refresh <name>
 ```
 
 ---
@@ -647,7 +632,7 @@ __version__ = "0.1.0"
 
 **Reinstall:**
 ```bash
-uv tool install -e <cli-tools-root>/myservice --force --refresh
+<cli-tools-root>/_repo/skills/cli-tool/scripts/install-cli-tool.sh --force-refresh myservice
 ```
 
 ---

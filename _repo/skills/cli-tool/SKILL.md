@@ -597,7 +597,7 @@ For multi-profile CLIs, direct config probes must also pass an explicit profile:
 
 Do not expect per-tool shell variables such as `JIRA_PROFILE` or a generic `CLI_TOOLS_PROFILE` environment variable to select the profile for an ad-hoc Python probe. The CLI runtime resolves profiles through explicit `--profile` handling and internal runtime overrides, not ambient shell env vars.
 
-`validate-cli-tool.sh` and the pytest `test_launcher_shebang_points_to_uv_tool_python` check enforce this shebang is correct. If they fail, reinstall with `uv tool install -e <cli-dir> --force --refresh`. See `references/common-issues.md` for details (including the CWD / sys.path wrinkle when editing source).
+`validate-cli-tool.sh` and the pytest `test_launcher_shebang_points_to_uv_tool_python` check enforce this shebang is correct. If they fail, reinstall with `install-cli-tool.sh --force-refresh <name>` (a bare `uv tool install ... --force --refresh` can pick a uv-managed Python instead of the system one, which then fails `test_cli_uses_system_python`). See `references/common-issues.md` for details (including the CWD / sys.path wrinkle when editing source).
 </principle>
 
 <principle name="Update cli_tools.md After Creation">
@@ -804,7 +804,7 @@ Omit local models when parsed/API records can flow straight to the documented ou
 <topic name="Typer Dependency Extras">
 **Context:** Use this when creating or updating Python CLI tool `pyproject.toml` dependencies.
 **Key Facts:** Current Typer releases no longer expose the legacy `all` extra, so CLI tools should depend on `typer>=0.9.0` instead of `typer>=0.9.0`. The stale extra produces `uv` warnings during `uv run` and `uv tool install`, even though installation continues.
-**Gotchas:** If the warning appears while installing one CLI, inspect both that CLI and `cli-tools-shared`; transitive package metadata can be the source. After changing shared dependency metadata, refresh the dependent CLI install with `uv tool install -e . --force --refresh` so it resolves the new `cli-tools-shared` commit.
+**Gotchas:** If the warning appears while installing one CLI, inspect both that CLI and `cli-tools-shared`; transitive package metadata can be the source. After changing shared dependency metadata, refresh the dependent CLI install with `install-cli-tool.sh --force-refresh <name>` so it resolves the new `cli-tools-shared` commit.
 </topic>
 
 </domain_knowledge>

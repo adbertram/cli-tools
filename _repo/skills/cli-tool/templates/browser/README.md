@@ -10,8 +10,7 @@ Use this CLI when you need repeatable access to {{Name}} workflows that are only
 ## Installation
 
 ```bash
-cd <cli-tools-root>/{{name}}
-uv tool install -e . --force --refresh
+<cli-tools-root>/_repo/skills/cli-tool/scripts/install-cli-tool.sh --force-refresh {{name}}
 ```
 
 Browser automation is driven by `browser-harness` (CDP), a transitive

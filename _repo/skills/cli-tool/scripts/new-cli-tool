@@ -750,7 +750,8 @@ PASSWORD=secret://{name}-password
     print(f"  5. Test: {name} --help")
     if args.no_install:
         print(f"\nuv install skipped (--no-install).")
-        print(f"  Run 'uv tool install -e {output_dir} --force --refresh' when you want the launcher installed.")
+        install_script = Path(__file__).resolve().parent / "install-cli-tool.sh"
+        print(f"  Run '{install_script} --force-refresh {name}' when you want the launcher installed.")
     else:
         print(f"\nInstalled via uv: ~/.local/bin/{name}")
         print("  (Works immediately - no need to source anything)")

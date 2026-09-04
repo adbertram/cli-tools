@@ -10,8 +10,7 @@ Use this CLI when you need scriptable, JSON-first access to {{Name}} from agents
 ## Installation
 
 ```bash
-cd <cli-tools-root>/{{name}}
-uv tool install -e . --force --refresh
+<cli-tools-root>/_repo/skills/cli-tool/scripts/install-cli-tool.sh --force-refresh {{name}}
 ```
 
 After installation, the `{{name}}` command will be available in your terminal.

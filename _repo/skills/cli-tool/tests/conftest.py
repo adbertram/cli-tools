@@ -337,7 +337,7 @@ def cli_executable(cli_name, cli_dir) -> str:
         else:
             pytest.fail(
                 f"CLI executable not found at {exe_path}. "
-                f"Fix: uv tool install -e {cli_dir} --force --refresh"
+                f'Fix: uv tool install -e {cli_dir} --force --refresh --python "$(command -v python3)"'
             )
     return str(exe_path)
 

@@ -65,7 +65,7 @@ def test_cli_command_available_in_path(cli_name, cli_dir, command_filter):
         cli_executable = cli_executable.with_suffix(".exe")
     assert cli_executable.exists(), (
         f"CLI executable '{cli_name}' not found at {cli_executable}. "
-        f"Fix: uv tool install -e {cli_dir} --force --refresh"
+        f'Fix: uv tool install -e {cli_dir} --force --refresh --python "$(command -v python3)"'
     )
 
     # Create a clean environment without any venv paths
@@ -133,7 +133,7 @@ def test_cli_world_invocable(cli_name, cli_dir, command_filter):
     user_exe = user_symlink.with_suffix(".exe")
     assert user_symlink.exists() or user_symlink.is_symlink() or user_exe.exists(), (
         f"No symlink found for {cli_name} in ~/.local/bin. "
-        f"Fix: uv tool install -e {cli_dir} --force --refresh"
+        f'Fix: uv tool install -e {cli_dir} --force --refresh --python "$(command -v python3)"'
     )
 
     # Verify the symlink points to the right place (Unix only)
