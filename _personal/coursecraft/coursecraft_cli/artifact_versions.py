@@ -98,7 +98,7 @@ def _content_slug_index() -> Dict[Tuple[str, str], Tuple[str, ...]]:
     Derived from coverage-map.json's ``artifacts`` map so this reverse index
     has exactly one home; see the module docstring. Most (table, field) pairs
     resolve to exactly one slug. The Slides table's Script/Build
-    Instructions/Name fields are shared by several slide types and resolve to
+    Instructions fields are shared by several slide types and resolve to
     more than one candidate -- see :func:`_resolve_slide_slug`.
     """
     index: Dict[Tuple[str, str], List[str]] = {}
@@ -124,12 +124,8 @@ def _slide_type_slugs() -> Tuple[str, ...]:
     Used to resolve which slide-type slug a Slides-table write's record
     belongs to, independent of which particular field the write touched.
     This must be the FULL slide-type universe, not just the field-specific
-    candidates from :func:`_content_slug_index` -- a field claimed by only
-    one slug (e.g. ``Name``, unique to ``slide.module_recap``) still needs
-    Template Name cross-checked against every OTHER slide type before that
-    one candidate can be trusted for THIS record (see Finding 1: a single
-    index candidate does not mean the field belongs to that slug for a
-    record whose actual type is different).
+    candidates from :func:`_content_slug_index`, so a field claimed by a
+    strict subset is checked against the record's actual Template Name.
     """
     return tuple(
         slug
@@ -144,8 +140,8 @@ def _resolve_slide_slug(
     """Disambiguate a multi-candidate Slides-table slug set.
 
     Several slide artifacts (course_intro, module_intro, clip_intro,
-    demo_intro, content) share the Slides table's Script/Build
-    Instructions/Name fields, so which slug a write touched cannot be read
+    demo_intro, content) share the Slides table's Script/Build Instructions
+    fields, so which slug a write touched cannot be read
     off the changed field name alone. coverage-map.json's ``slide.*`` entries
     each carry a ``slide_type`` key -- the exact ``Template Name`` string that
     identifies that slide type (``slide.content``'s ``slide_type`` is
@@ -570,24 +566,22 @@ def check_write_conflict(
 
     A field whose candidate slugs cover the FULL slide-type universe (every
     entry in :func:`_slide_type_slugs`) -- ``Script``, shared identically by
-    all six slide types -- is unambiguous regardless of which type the
+    all five slide types -- is unambiguous regardless of which type the
     record actually is: whichever type it turns out to be, that type really
     does track the field as content, and every slide type pairs it to the
     same review field. That combination keeps the original zero-extra-read
     behavior: reject immediately, never call ``fetch_persisted_fields``.
 
     A field whose candidates are a strict SUBSET of the slide-type universe
-    -- e.g. ``Name`` (``slide.module_recap`` only) or ``Build Instructions``
-    (``slide.demo_intro`` / ``slide.content`` / ``slide.module_recap``) --
+    -- currently ``Build Instructions`` (``slide.demo_intro`` /
+    ``slide.content``) --
     could belong to a slide type this record isn't. A write that sets such a
     field alongside one of its candidate slugs' paired review field looks
     like a real conflict from the field names alone even when the record's
     actual type doesn't track that field as content at all -- e.g.
-    ``commands/slides.py`` building ``--name`` + ``--script-human-verified``
-    to rename a Course Intro / Module Intro / Clip Intro slide's title, which
-    touches no tracked content on those types, or ``--build-instructions`` +
-    ``--script-human-verified`` on the same non-demo/content/module_recap
-    types. This is the general form of the same ambiguity: derived
+    ``commands/slides.py`` building ``--build-instructions`` +
+    ``--script-human-verified`` on a Course Intro / Module Intro / Clip Intro
+    record. This is derived
     structurally from ``_content_slug_index()`` vs. ``_slide_type_slugs()``,
     never hardcoded by field name. Resolution is spent at most once total
     per call, cached across every candidate slug and field examined: when

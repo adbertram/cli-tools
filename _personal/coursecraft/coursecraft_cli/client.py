@@ -203,7 +203,19 @@ class CourseCraftClient:
         """
         return _resolve_airtable_binary() is not None
 
-    def _run_airtable_command(self, args: List[str]) -> Dict:
+    def _run_airtable_command(
+        self,
+        args: List[str],
+        *,
+        timeout: int = AIRTABLE_CLI_COMMAND_TIMEOUT_SECONDS,
+        failure_prefix: str = "airtable CLI error",
+        timeout_message: str = (
+            f"airtable CLI command timed out after {AIRTABLE_CLI_COMMAND_TIMEOUT_SECONDS}s"
+        ),
+        parse_failure_prefix: str = "Could not parse airtable CLI output",
+        runtime_failure_prefix: str = "Error running airtable CLI",
+        include_stdout_on_failure: bool = False,
+    ) -> Any:
         """
         Run an airtable CLI command and return parsed output.
 
@@ -224,38 +236,23 @@ class CourseCraftClient:
                 stdin=subprocess.DEVNULL,
                 capture_output=True,
                 text=True,
-                timeout=AIRTABLE_CLI_COMMAND_TIMEOUT_SECONDS,
+                timeout=timeout,
             )
+        except subprocess.TimeoutExpired as error:
+            raise ClientError(timeout_message) from error
+        except Exception as error:
+            raise ClientError(f"{runtime_failure_prefix}: {error}") from error
 
-            if result.returncode != 0:
-                raise ClientError(f"airtable CLI error: {result.stderr.strip()}")
+        if result.returncode != 0:
+            detail = result.stderr.strip()
+            if include_stdout_on_failure and not detail:
+                detail = result.stdout.strip()
+            raise ClientError(f"{failure_prefix}: {detail}")
 
-            # Parse JSON from output (skip any status lines)
-            output_lines = result.stdout.strip().split('\n')
-            json_output = None
-
-            for line in output_lines:
-                line = line.strip()
-                if line.startswith('{') or line.startswith('['):
-                    try:
-                        json_output = json.loads(line)
-                        break
-                    except json.JSONDecodeError:
-                        continue
-
-            if json_output is None:
-                # If no JSON found, try parsing entire output
-                try:
-                    json_output = json.loads(result.stdout.strip())
-                except json.JSONDecodeError:
-                    raise ClientError(f"Could not parse airtable CLI output: {result.stdout}")
-
-            return json_output
-
-        except subprocess.TimeoutExpired:
-            raise ClientError(f"airtable CLI command timed out after {AIRTABLE_CLI_COMMAND_TIMEOUT_SECONDS}s")
-        except Exception as e:
-            raise ClientError(f"Error running airtable CLI: {e}")
+        try:
+            return json.loads(result.stdout)
+        except json.JSONDecodeError as error:
+            raise ClientError(f"{parse_failure_prefix}: {result.stdout}") from error
 
     def list_fields(self, table: str) -> List[Dict]:
         """Read one table's live schema fields as ``{id, name, type}`` rows."""
@@ -1256,25 +1253,14 @@ class CourseCraftClient:
 
         args = ["records", "delete", table, record_id, "--base", self.base_id, "--yes"]
 
-        full_args = ["airtable"] + args
-        try:
-            result = subprocess.run(
-                full_args,
-                stdin=subprocess.DEVNULL,
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
-
-            if result.returncode != 0:
-                raise ClientError(f"Failed to delete record {record_id}: {result.stderr.strip()}")
-
-            return True
-
-        except subprocess.TimeoutExpired:
-            raise ClientError("airtable CLI command timed out")
-        except Exception as e:
-            raise ClientError(f"Error deleting record: {e}")
+        self._run_airtable_command(
+            args,
+            timeout=30,
+            failure_prefix=f"Failed to delete record {record_id}",
+            timeout_message="airtable CLI command timed out",
+            runtime_failure_prefix="Error deleting record",
+        )
+        return True
 
     def upload_attachment(
         self,
@@ -1311,40 +1297,18 @@ class CourseCraftClient:
             self.base_id,
         ]
 
-        full_args = ["airtable"] + args
-        try:
-            result = subprocess.run(
-                full_args,
-                stdin=subprocess.DEVNULL,
-                capture_output=True,
-                text=True,
-                timeout=AIRTABLE_CLI_COMMAND_TIMEOUT_SECONDS,
-            )
-        except subprocess.TimeoutExpired:
-            raise ClientError(
-                f"airtable CLI upload-attachment timed out after {AIRTABLE_CLI_COMMAND_TIMEOUT_SECONDS}s"
-            )
-
-        if result.returncode != 0:
-            raise ClientError(
-                f"Failed to upload attachment to {record_id} field '{field_name}': "
-                f"{result.stderr.strip() or result.stdout.strip()}"
-            )
-
-        # Parse the JSON record from the airtable CLI output (skip status lines).
-        for line in result.stdout.strip().split("\n"):
-            line = line.strip()
-            if line.startswith("{") or line.startswith("["):
-                try:
-                    return json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-        try:
-            return json.loads(result.stdout.strip())
-        except json.JSONDecodeError:
-            raise ClientError(
-                f"Could not parse airtable upload-attachment output: {result.stdout}"
-            )
+        return self._run_airtable_command(
+            args,
+            failure_prefix=(
+                f"Failed to upload attachment to {record_id} field '{field_name}'"
+            ),
+            timeout_message=(
+                "airtable CLI upload-attachment timed out after "
+                f"{AIRTABLE_CLI_COMMAND_TIMEOUT_SECONDS}s"
+            ),
+            parse_failure_prefix="Could not parse airtable upload-attachment output",
+            include_stdout_on_failure=True,
+        )
 
     def get_modules_by_course(self, course_record_id: str) -> List[Dict]:
         """
