@@ -11,7 +11,8 @@ fixed function of config.json and the site CLI's exit codes:
    exit 2                                    -> run auth_command once, re-check;
                                                 still 2 -> auth_failed
    any other exit                            -> error
-5. `<cli> tasks list` exit 0 + JSON list     -> ok (raw list untouched)
+5. `<cli> tasks list --limit <TASKS_LIST_LIMIT>` exit 0 + JSON list -> ok
+   (raw list untouched)
    non-zero exit, non-JSON, non-list         -> error
    non-finite number anywhere in the JSON    -> error
    timeout / missing executable (any step)   -> error
@@ -36,6 +37,15 @@ from cli_tools_shared.exceptions import ConfigError
 from . import envelope, jsonio, paths, runner, sites
 from .runner import RunnerError
 from .sites import SiteConfig
+
+# Every roster site's `tasks list` accepts `--limit` (cli-tools list
+# contract). Discovery always asks for the full catalog up to this cap: the
+# site CLIs default to small first-page limits (microworkers returns 100 rows
+# per /jobs.php page and stops at its default of 100), which silently
+# truncated the envelope to one page. Verified live 2026-09-04: microworkers
+# held ~1600 available tasks while discovery captured exactly 100. 1000 covers
+# every site's observed real queue; raising it later is one constant.
+TASKS_LIST_LIMIT = 1000
 
 
 def discover(site_name: str, run_id: str, timeout: int) -> dict:
@@ -101,7 +111,8 @@ def _ensure_authenticated(site: SiteConfig, timeout: int):
 
 
 def _list_tasks(site: SiteConfig, timeout: int) -> dict:
-    result = runner.run([site.cli, "tasks", "list"], timeout)
+    result = runner.run(
+        [site.cli, "tasks", "list", "--limit", str(TASKS_LIST_LIMIT)], timeout)
     if result.returncode != 0:
         return envelope.build(site.name, envelope.ERROR, _exit_message(result), [])
     try:
