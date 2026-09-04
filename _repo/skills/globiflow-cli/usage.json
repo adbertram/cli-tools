@@ -1,8 +1,8 @@
 {
   "tool": "globiflow",
   "description": "CLI interface for Globiflow (browser automation)",
-  "discovered_at": "2026-09-03T15:55:32Z",
-  "total_commands": 30,
+  "discovered_at": "2026-09-04T01:23:53Z",
+  "total_commands": 31,
   "global_options": [
     {
       "name": "--version",
@@ -1091,6 +1091,42 @@
               ]
             }
           }
+        },
+        "update": {
+          "help": "Enable or disable an existing flow. Toggles the flow through Globiflow's flows.php Activate/Deactivate action and prints the flow's resulting record (same shape as 'flows get'). Example: globiflow flows update 4299675 --enabled globiflow flows update 4299675 --disabled",
+          "usage_instructions": "Enable or disable an existing flow. FLOW_ID is required (positional). Pass exactly one of --enabled or --disabled (neither is an error). Prints the resulting flow record with its live enabled state, the same shape as `flows get`. Use --table/-t for formatted output. No confirmation prompt; the change is reversible.",
+          "arguments": [
+            {
+              "name": "flow_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Flow ID to update"
+            }
+          ],
+          "options": [
+            {
+              "name": "--enabled",
+              "type": "bool",
+              "required": false,
+              "help": "Enable or disable the flow (exactly one is required)",
+              "takes_value": false,
+              "secondary": "--disabled"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       }
     },

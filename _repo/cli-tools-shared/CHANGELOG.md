@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Added
+- `BrowserAutomation.AUTH_LOGIN_FORM_LINK_SELECTOR`: a declarative hook for
+  services whose `LOGIN_URL` lands on a page that only links to the real
+  credential form (e.g. a marketing page whose "LOGIN" link starts an
+  `/oauth/authorize` redirect). `_complete_noninteractive_login` follows
+  that link and waits for the username control before submitting, so
+  subclasses no longer need to override the method for this. Globiflow
+  moved onto it. Tests: `tests/test_auth.py`.
+
 ### Fixes
 - `press()` no longer double-types every printable character.
   `browser_harness.helpers.press_key` dispatched `text` on BOTH the `keyDown`

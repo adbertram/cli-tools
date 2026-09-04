@@ -23,6 +23,9 @@ COMMAND_CREDENTIALS = {
     ],
     "import": [
         "browser_session"
+    ],
+    "update": [
+        "browser_session"
     ]
 }
 
@@ -111,6 +114,17 @@ def _select_properties(items: List[dict], properties: Optional[str]) -> List[dic
 
     fields = [f.strip() for f in properties.split(",")]
     return [{k: v for k, v in item.items() if k in fields} for item in items]
+
+
+def _flow_summary_rows(flow) -> List[dict]:
+    """Key/value table rows shared by the create/get/update flow views."""
+    return [
+        {"field": "ID", "value": flow.id},
+        {"field": "Name", "value": flow.name},
+        {"field": "Enabled", "value": "Yes" if flow.enabled else "No"},
+        {"field": "Time Savings", "value": flow.time_savings or "N/A"},
+        {"field": "Has Logs", "value": "Yes" if flow.has_logs else "No"},
+    ]
 
 
 @app.command("list")
@@ -235,13 +249,7 @@ def create_flow(
         )
 
         if table:
-            rows = [
-                {"field": "ID", "value": flow.id},
-                {"field": "Name", "value": flow.name},
-                {"field": "Enabled", "value": "Yes" if flow.enabled else "No"},
-                {"field": "Time Savings", "value": flow.time_savings or "N/A"},
-                {"field": "Has Logs", "value": "Yes" if flow.has_logs else "No"},
-            ]
+            rows = _flow_summary_rows(flow)
             print_table(rows, ["field", "value"], ["Field", "Value"])
             print_info(f"Flow created successfully with ID: {flow.id}")
         else:
@@ -272,15 +280,8 @@ def get_flow(
         flow = client.get_flow(flow_id, include_steps=include_steps)
 
         if table:
-            # Convert to key-value rows for table display
-            rows = [
-                {"field": "ID", "value": flow.id},
-                {"field": "Name", "value": flow.name},
-                {"field": "Enabled", "value": "Yes" if flow.enabled else "No"},
-                {"field": "Time Savings", "value": flow.time_savings or "N/A"},
-                {"field": "Has Logs", "value": "Yes" if flow.has_logs else "No"},
-                {"field": "Notes", "value": flow.notes or "None"},
-            ]
+            rows = _flow_summary_rows(flow)
+            rows.append({"field": "Notes", "value": flow.notes or "None"})
             if include_steps and flow.steps:
                 rows.append({"field": "Steps", "value": str(len(flow.steps))})
             print_table(rows, ["field", "value"], ["Field", "Value"])
@@ -326,6 +327,42 @@ def list_logs(
                 print_info("No logs found for this flow.")
         else:
             print_json([log.to_dict() for log in logs])
+    finally:
+        client.close()
+
+
+@app.command("update")
+@command
+def update_flow(
+    flow_id: str = typer.Argument(..., help="Flow ID to update"),
+    enabled: Optional[bool] = typer.Option(
+        None, "--enabled/--disabled", help="Enable or disable the flow (exactly one is required)"
+    ),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+):
+    """
+    Enable or disable an existing flow.
+
+    Toggles the flow through Globiflow's flows.php Activate/Deactivate
+    action and prints the flow's resulting record (same shape as 'flows get').
+
+    Example:
+        globiflow flows update 4299675 --enabled
+        globiflow flows update 4299675 --disabled
+    """
+    if enabled is None:
+        print_error("Exactly one of --enabled or --disabled is required.")
+        raise typer.Exit(1)
+
+    client = get_client()
+    try:
+        flow = client.set_flow_enabled(flow_id, enabled)
+
+        if table:
+            rows = _flow_summary_rows(flow)
+            print_table(rows, ["field", "value"], ["Field", "Value"])
+        else:
+            print_json(flow)
     finally:
         client.close()
 

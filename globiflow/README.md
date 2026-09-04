@@ -113,6 +113,12 @@ globiflow flows create --app-id 30560419 --trigger C --name "With Steps" --steps
 globiflow flows create --app-id 30560419 --trigger U --name "Set Status" --steps '[{"action_type": "Update Item", "fields": {"Status": "Approved"}}]'
 globiflow flows create --app-id 30560419 --trigger C --name "Create Related" --steps '[{"action_type": "Create Item", "app": "Invoices", "fields": {"Amount": "150", "Status": "Draft"}}]'
 
+# Enable or disable an existing flow (exactly one of --enabled/--disabled
+# is required); prints the flow's resulting record, same shape as `flows get`
+globiflow flows update FLOW_ID --disabled
+globiflow flows update FLOW_ID --enabled
+globiflow flows update FLOW_ID --enabled --table
+
 # Delete a flow
 globiflow flows delete FLOW_ID
 globiflow flows delete FLOW_ID --force

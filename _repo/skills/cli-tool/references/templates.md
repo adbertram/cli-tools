@@ -247,6 +247,7 @@ class MySiteBrowser(BrowserAutomation):
     AUTH_URL_PATTERN = r"/login|/register"
     AUTH_SUCCESS_SELECTOR = ""  # optional, prefer AUTH_LOGIN_FORM_SELECTOR
     AUTH_LOGIN_FORM_SELECTOR = 'input[type="password"], form[action*="login"]'
+    AUTH_LOGIN_FORM_LINK_SELECTOR = ""  # optional: link on LOGIN_URL to follow when the credential form lives behind it
 
     def __init__(self, config=None):
         config = config or get_config()

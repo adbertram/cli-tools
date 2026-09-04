@@ -316,6 +316,11 @@ max_nested_depth = 4
 "shoutouts list" = { "_pos1" = "post_id" }
 "shoutouts get" = { "_pos1" = "post_id", "--position" = "shoutout_position" }
 
+# Globiflow: `flows list` walks every app with flows via one full-page
+# navigation each (--limit is client-side), measured live at ~45s.
+[cli_specific.globiflow]
+command_timeout = 120
+
 # Facebook: browser automation needs longer timeout; posts commands need group_id
 [cli_specific.facebook]
 command_timeout = 120

@@ -348,6 +348,90 @@ def test_authenticate_without_tty_submits_configured_browser_credentials(tmp_pat
     assert service.url == "https://example.com/dashboard"
 
 
+class _LinkedFormCredentialBrowser(_CredentialBrowser):
+    AUTH_LOGIN_FORM_LINK_SELECTOR = "a[href*='oauth/authorize']"
+
+
+def test_noninteractive_login_follows_form_link_before_submitting(tmp_path, monkeypatch):
+    """AUTH_LOGIN_FORM_LINK_SELECTOR: when LOGIN_URL lands on a page without
+    the credential form, follow the configured link to the form first, then
+    submit credentials there."""
+    browser = _LinkedFormCredentialBrowser(_TestConfig(tmp_path))
+    service = _Service()
+    service.url = "https://example.com/"  # landing page; not AUTH_URL_PATTERN
+    filled = []
+    waited_for = []
+
+    class _Control:
+        def __init__(self, selector):
+            self.selector = selector
+
+        @property
+        def first(self):
+            return self
+
+        def count(self):
+            if self.selector == "a[href*='oauth/authorize']":
+                return 1 if service.url == "https://example.com/" else 0
+            return 1
+
+        def get_attribute(self, name):
+            assert name == "href"
+            return "https://example.com/oauth/authorize?state=abc"
+
+        def is_visible(self):
+            return self.selector != "#login-error"
+
+        def is_enabled(self):
+            return True
+
+        def click(self):
+            service.url = "https://example.com/dashboard"
+
+    def _goto(url):
+        service.goto_calls.append(url)
+        # The OAuth link redirects to the real login form.
+        service.url = "https://example.com/login?return_to=x"
+
+    service.locator = lambda selector: _Control(selector)
+    service.goto = _goto
+    service.wait_for_selector = lambda selector, state=None, timeout=None: waited_for.append((selector, state))
+    service.fill = lambda selector, value: filled.append((selector, value))
+    monkeypatch.setattr(
+        "cli_tools_shared.config.read_cli_tool_secret",
+        lambda name: {
+            "test-browser-username": "user@example.com",
+            "test-browser-password": "test-password",
+        }[name],
+    )
+
+    browser._complete_noninteractive_login(service)
+
+    assert service.goto_calls == ["https://example.com/oauth/authorize?state=abc"]
+    assert waited_for == [("#username", "visible")]
+    assert filled == [("#username", "user@example.com"), ("#password", "test-password")]
+    assert service.url == "https://example.com/dashboard"
+
+
+def test_noninteractive_login_form_link_missing_fails_loudly(tmp_path, monkeypatch):
+    browser = _LinkedFormCredentialBrowser(_TestConfig(tmp_path))
+    service = _Service()
+    service.url = "https://example.com/"
+
+    class _Absent:
+        @property
+        def first(self):
+            return self
+
+        def count(self):
+            return 0
+
+    service.locator = lambda selector: _Absent()
+
+    with pytest.raises(BrowserAutomationError, match="could not find the login-form link"):
+        browser._complete_noninteractive_login(service)
+
+
 def test_generate_totp_code_matches_rfc_6238_vector():
     seed = base64.b32encode(b"12345678901234567890").decode()
 

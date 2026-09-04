@@ -28,33 +28,11 @@ class GlobiflowBrowser(BrowserAutomation):
     AUTH_LOGIN_SUBMIT_SELECTOR = "#loginFormSignInButton"
     AUTH_LOGIN_USERNAME_SECRET = "globiflow-username"
     AUTH_LOGIN_PASSWORD_SECRET = "globiflow-password"
-
-    def _complete_noninteractive_login(self, page) -> None:
-        """Navigate to the Podio login form before submitting credentials.
-
-        ``LOGIN_URL`` opens the Workflow Automation marketing page, which only
-        exposes a "LOGIN" link to a stateful ``/oauth/authorize`` URL. Following
-        that link redirects to ``podio.com/login?return_to=...`` where the
-        ``#email`` / ``#password`` form actually renders. The base
-        implementation submits credentials against whatever page
-        ``authenticate`` opened (the marketing page, which has no form), so
-        navigate to the form first.
-        """
-        if not self._is_login_page(page):
-            login_link = page.locator("a[href*='oauth/authorize']")
-            if login_link.count() == 0:
-                raise BrowserAutomationError(
-                    "Could not find the Podio OAuth login link on the Workflow "
-                    "Automation page."
-                )
-            href = login_link.first.get_attribute("href")
-            if not href:
-                raise BrowserAutomationError("Podio OAuth login link has no href.")
-            page.goto(href)
-            page.wait_for_selector(
-                self.AUTH_LOGIN_USERNAME_SELECTOR, state="visible", timeout=15000
-            )
-        super()._complete_noninteractive_login(page)
+    # LOGIN_URL opens the Workflow Automation marketing page, which only exposes
+    # a "LOGIN" link to a stateful /oauth/authorize URL; following it redirects
+    # to podio.com/login?return_to=... where the #email / #password form
+    # actually renders. The shared engine follows this link before submitting.
+    AUTH_LOGIN_FORM_LINK_SELECTOR = "a[href*='oauth/authorize']"
 
 
 BrowserError = BrowserAutomationError

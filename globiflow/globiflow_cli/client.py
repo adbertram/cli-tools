@@ -277,7 +277,7 @@ class GlobiflowClient:
         flows via a direct ``/flows.php?app={app_id}`` navigation instead
         of clicking through the tree items in turn. Clicking each tree
         item and reading a shared, AJAX-replaced panel is a confirmed live
-        race (see ``_disable_flow``): clicking one item while the previous
+        race (see ``_set_flow_enabled``): clicking one item while the previous
         app's flow list is still being swapped out can make a stale,
         about-to-be-removed checkbox transiently match the wrong app. A
         direct per-app navigation is a full page load with no such
@@ -404,7 +404,7 @@ class GlobiflowClient:
         flow-id-keyed URL that loads only that one flow's own edit page.
         This touches no other app's data and cannot race the AJAX-driven
         per-app panel the way the org/workspace tree-walk can (the same
-        race documented on ``_disable_flow``, confirmed live: clicking one
+        race documented on ``_set_flow_enabled``, confirmed live: clicking one
         tree item while the previous app's flow list is still being
         replaced can make a stale, about-to-be-removed checkbox
         transiently match ``count() > 0`` for the wrong app). The page
@@ -887,7 +887,7 @@ class GlobiflowClient:
         # Flows are always created enabled (see note above). Deactivate now
         # if the caller asked for a disabled flow.
         if not enabled:
-            self._disable_flow(flow_id, app_id)
+            self._set_flow_enabled(flow_id, app_id, False)
 
         # Return the created flow details
         return self.get_flow(flow_id)
@@ -920,14 +920,17 @@ class GlobiflowClient:
 
         raise ClientError("Could not extract flow ID from redirect URL")
 
-    def _disable_flow(self, flow_id: str, app_id: str) -> None:
-        """Disable a flow via the flows.php bulk "Deactivate" action.
+    def _set_flow_enabled(self, flow_id: str, app_id: str, enabled: bool) -> None:
+        """Toggle a flow via the flows.php bulk "Activate"/"Deactivate" action.
 
         Globiflow's flow-creation page (configureflow.php) has no
         enabled/disabled control, so every flow is created enabled. The only
-        way to disable a flow is the "Deactivate" bulk action on flows.php:
-        select the flow's row checkbox, invoke the page's ``bulkDeactivate``
-        JS function for its app, and confirm the resulting dialog.
+        way to toggle a flow's enabled state is the "Activate"/"Deactivate"
+        bulk action on flows.php (confirmed live 2026-09-03: the page defines
+        sibling ``bulkActivate(app)`` and ``bulkDeactivate(app)`` functions,
+        both opening an OK/Cancel confirm dialog with no text input): select
+        the flow's row checkbox, invoke the matching JS function for its
+        app, and confirm the resulting dialog.
 
         Navigates directly to ``/flows.php?app={app_id}`` -- the app is
         already known to the caller (create_flow received it) -- instead of
@@ -942,15 +945,19 @@ class GlobiflowClient:
         such transitional DOM state.
 
         Args:
-            flow_id: The flow ID to disable.
+            flow_id: The flow ID to toggle.
             app_id: The Podio app ID the flow belongs to.
+            enabled: True to activate the flow, False to deactivate it.
 
         Raises:
             ClientError: If the flow's row cannot be found on flows.php, the
-                deactivate confirmation dialog cannot be confirmed, or the
-                flow's status icon does not reflect the disabled state
-                afterward.
+                activate/deactivate confirmation dialog cannot be confirmed,
+                or the flow's status icon does not reflect the requested
+                state afterward.
         """
+        action = "bulkActivate" if enabled else "bulkDeactivate"
+        label = "Activate" if enabled else "Deactivate"
+
         self.ensure_authenticated(f"/flows.php?app={app_id}")
         page = self.browser.get_page()
         page.wait_for_timeout(2000)
@@ -964,16 +971,16 @@ class GlobiflowClient:
         )
         page.wait_for_timeout(500)
 
-        deactivate_link = page.locator('a[onclick*="bulkDeactivate"]').first
-        if deactivate_link.count() == 0:
-            raise ClientError(f"Deactivate action not found for flow {flow_id}")
+        action_link = page.locator(f'a[onclick*="{action}"]').first
+        if action_link.count() == 0:
+            raise ClientError(f"{label} action not found for flow {flow_id}")
 
-        page.evaluate(f"bulkDeactivate({app_id})")
+        page.evaluate(f"{action}({app_id})")
         page.wait_for_timeout(1000)
 
         ok_button = page.get_by_role("button", name="OK")
         if ok_button.count() == 0:
-            raise ClientError("Deactivate confirmation dialog not found")
+            raise ClientError(f"{label} confirmation dialog not found")
         ok_button.click()
         page.wait_for_timeout(3000)
 
@@ -995,21 +1002,46 @@ class GlobiflowClient:
             ).first
             if row.count() == 0:
                 raise ClientError(
-                    f"Could not re-locate flow {flow_id} on flows.php after deactivating"
+                    f"Could not re-locate flow {flow_id} on flows.php after {label.lower()}"
                 )
             img = row.locator("img").first
             src = img.get_attribute("src") if img.count() > 0 else ""
-            if "_off" in (src or "").lower():
+            row_enabled = "_off" not in (src or "").lower()
+            if row_enabled == enabled:
                 return
 
             if attempt < deadline_attempts - 1:
                 page.wait_for_timeout(2000)
 
         raise ClientError(
-            f"Flow {flow_id} was not disabled {deadline_attempts * 4}s after the "
-            f"deactivate action -- it may still be processing server-side; re-run "
-            f"'globiflow flows get {flow_id}' shortly to check."
+            f"Flow {flow_id} was not {'enabled' if enabled else 'disabled'} "
+            f"{deadline_attempts * 4}s after the {label.lower()} action -- it may "
+            f"still be processing server-side; re-run 'globiflow flows get "
+            f"{flow_id}' shortly to check."
         )
+
+    def set_flow_enabled(self, flow_id: str, enabled: bool) -> FlowDetail:
+        """Enable or disable an existing flow and return its resulting record.
+
+        Resolves the flow's owning app directly via ``configureflow.php``
+        (see ``_resolve_flow_app_id``), toggles it through the flows.php
+        bulk Activate/Deactivate action, then re-reads the flow so the
+        returned ``enabled`` reflects the live post-toggle state.
+
+        Args:
+            flow_id: The flow ID to toggle.
+            enabled: True to enable the flow, False to disable it.
+
+        Returns:
+            FlowDetail for the flow after the toggle.
+
+        Raises:
+            ClientError: If the flow is not found or the toggle does not
+                take effect.
+        """
+        app_id = self._resolve_flow_app_id(flow_id)
+        self._set_flow_enabled(flow_id, app_id, enabled)
+        return self.get_flow(flow_id)
 
     # Step types Globiflow's UI renders with zero configurable fields --
     # confirmed live (2026-09-03) via their `<li>` outerHTML after selection:

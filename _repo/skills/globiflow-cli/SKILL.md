@@ -22,6 +22,7 @@ globiflow <command-group> <action> [arguments] [options]
 | List all flows | `globiflow flows list --table` |
 | Get flow details | `globiflow flows get FLOW_ID --table` |
 | Create a flow | `globiflow flows create --app-id ID --trigger C --name "Name"` |
+| Enable / disable a flow | `globiflow flows update FLOW_ID --enabled` / `globiflow flows update FLOW_ID --disabled` |
 | View flow logs | `globiflow flows logs FLOW_ID --table` |
 | List flow steps | `globiflow flows steps list --flow-id FLOW_ID --table` |
 | Add a step to a flow | `globiflow flows steps add FLOW_ID --action "Add Comment" --comment "text"` |
@@ -73,7 +74,7 @@ A list value (`{"Related Content": ["Blog Post", "Whitepaper"]}`) expands into o
 <principle name="Command Groups">
 - **auth** -- Browser-based authentication (login, status, test, logout)
 - **search** -- Search and browse Globiflow items (query, item, list)
-- **flows** -- Manage automation flows (list, create, get, logs, delete, export, import, steps)
+- **flows** -- Manage automation flows (list, create, get, update, logs, delete, export, import, steps)
 - **triggers** -- View available trigger types for flow creation (list, get)
 </principle>
 </essential_principles>

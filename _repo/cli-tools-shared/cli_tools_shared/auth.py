@@ -195,6 +195,7 @@ class BrowserAutomation:
     AUTH_SUCCESS_URL = ""        # URL pattern indicating successful login
     AUTH_SUCCESS_SELECTOR = ""   # CSS/locator selector visible when authenticated
     AUTH_LOGIN_FORM_SELECTOR = ""  # CSS/locator selector for login-form elements; ABSENT → authenticated
+    AUTH_LOGIN_FORM_LINK_SELECTOR = ""  # Link on LOGIN_URL to follow when the credential form lives on a page behind it
     AUTH_LOGIN_USERNAME_SELECTOR = ""  # Selector for an approved non-interactive username field
     AUTH_LOGIN_PASSWORD_SELECTOR = ""  # Selector for an approved non-interactive password field
     AUTH_LOGIN_SUBMIT_SELECTOR = ""  # Selector for an approved non-interactive submit control
@@ -574,6 +575,27 @@ class BrowserAutomation:
             raise BrowserAutomationError(
                 "Non-interactive browser login is partially configured; username/password "
                 "selectors, submit selector, and both secret names are required."
+            )
+
+        # Some services open LOGIN_URL on a landing page that only links to the
+        # real credential form (e.g. a marketing page whose "LOGIN" link starts
+        # a stateful /oauth/authorize redirect). Follow that link first so the
+        # selectors below are matched against the form, not the landing page.
+        if self.AUTH_LOGIN_FORM_LINK_SELECTOR and not self._is_login_page(page):
+            login_link = page.locator(self.AUTH_LOGIN_FORM_LINK_SELECTOR)
+            if login_link.count() == 0:
+                raise BrowserAutomationError(
+                    "Non-interactive browser login could not find the login-form link "
+                    f"{self.AUTH_LOGIN_FORM_LINK_SELECTOR!r} on {page.url}."
+                )
+            href = login_link.first.get_attribute("href")
+            if not href:
+                raise BrowserAutomationError(
+                    f"Login-form link {self.AUTH_LOGIN_FORM_LINK_SELECTOR!r} has no href."
+                )
+            page.goto(href)
+            page.wait_for_selector(
+                self.AUTH_LOGIN_USERNAME_SELECTOR, state="visible", timeout=15000
             )
 
         totp_settings = (
