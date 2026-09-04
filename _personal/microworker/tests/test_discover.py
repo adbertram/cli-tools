@@ -46,7 +46,7 @@ def result(argv, returncode, stdout="", stderr=""):
 
 AUTH = ("microworkers", "auth", "status")
 LOGIN = ("microworkers", "auth", "login", "--credential-type", "browser_session")
-TASKS = ("microworkers", "tasks", "list", "--limit", "1000")
+TASKS = ("microworkers", "tasks", "list", "--limit", "2500")
 RAW_TASKS = [{"campaign_id": "abc", "title": "t", "url": "u", "payment": "$0.10",
               "ttf_minutes": 5, "positions_done": 1, "positions_total": 3}]
 
@@ -127,7 +127,7 @@ def test_ok_keeps_raw_list_untouched(project, fake):
 
 def test_tasks_list_requests_full_catalog_limit_for_every_site(project, fake):
     """Discovery must never fall back to a site CLI's small default limit."""
-    assert discover.TASKS_LIST_LIMIT == 1000
+    assert discover.TASKS_LIST_LIMIT == 2500
     fake_runner = fake({
         AUTH: result(AUTH, 0),
         TASKS: result(TASKS, 0, stdout="[]"),

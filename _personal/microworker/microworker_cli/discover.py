@@ -43,9 +43,10 @@ from .sites import SiteConfig
 # site CLIs default to small first-page limits (microworkers returns 100 rows
 # per /jobs.php page and stops at its default of 100), which silently
 # truncated the envelope to one page. Verified live 2026-09-04: microworkers
-# held ~1600 available tasks while discovery captured exactly 100. 1000 covers
-# every site's observed real queue; raising it later is one constant.
-TASKS_LIST_LIMIT = 1000
+# held ~1600 available tasks while discovery captured exactly 100. 2500 is the
+# microworkers CLI's own page cap (25 pages x 100/page), so discovery can pull
+# that site's entire queue; sites with no cap simply return what they have.
+TASKS_LIST_LIMIT = 2500
 
 
 def discover(site_name: str, run_id: str, timeout: int) -> dict:
