@@ -60,6 +60,7 @@ from cli_tools_shared.output import (
 from . import (
     __version__,
     db,
+    descriptions as descriptions_module,
     discover as discover_module,
     enrich as enrich_module,
     envelope,
@@ -87,6 +88,9 @@ board_app = typer.Typer(help="Kanban board over the task database "
                         no_args_is_help=True)
 evaluate_app = typer.Typer(help="AI-capability evaluation of ledger tasks",
                            no_args_is_help=True)
+descriptions_app = typer.Typer(
+    help="Descriptions on ledger tasks (worker-produced text)",
+    no_args_is_help=True)
 
 # The exact fields each command's rows carry, used as the allowlist for
 # `--filter` and `--properties`. They are derived from the row builders --
@@ -244,6 +248,18 @@ def evaluate_apply(
     """Apply the task-evaluator's verdicts to the ledger's ai_can_handle and
     multimodal_required."""
     print_json(evaluate_module.apply_evaluation(file))
+
+
+@descriptions_app.command("apply")
+@command
+@exit_2_on_contract_errors
+def descriptions_apply(
+    file: Path = typer.Argument(
+        ..., help="JSON file of descriptions: [{site, task_id, description}]"),
+):
+    """Fill empty task descriptions from worker-produced text; never
+    overwrites a stored description."""
+    print_json(descriptions_module.apply_descriptions(file))
 
 
 def _warn_unparsed_payments(counts: dict) -> None:
@@ -406,6 +422,7 @@ app.add_typer(tasks_app, name="tasks")
 app.add_typer(runs_app, name="runs")
 app.add_typer(board_app, name="board")
 app.add_typer(evaluate_app, name="evaluate")
+app.add_typer(descriptions_app, name="descriptions")
 
 
 def main():

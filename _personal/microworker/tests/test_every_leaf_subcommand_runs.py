@@ -47,6 +47,11 @@ def merged(project, microworkers_record):
           "task_id": microworkers_record["campaign_id"],
           "ai_can_handle": True,
           "multimodal_required": False}]))
+    descriptions = paths.project_root() / "data" / "descriptions.json"
+    descriptions.write_text(json.dumps(
+        [{"site": "microworkers",
+          "task_id": microworkers_record["campaign_id"],
+          "description": "Visit the page and answer the questions."}]))
     return microworkers_record
 
 
@@ -64,6 +69,7 @@ def cases(record):
         ("runs", "get"): [RUN],
         ("board", "state"): ["microworkers", record["campaign_id"], "working"],
         ("evaluate", "apply"): [str(paths.project_root() / "data" / "verdicts.json")],
+        ("descriptions", "apply"): [str(paths.project_root() / "data" / "descriptions.json")],
     }
 
 

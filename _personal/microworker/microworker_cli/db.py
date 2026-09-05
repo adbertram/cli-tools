@@ -362,6 +362,49 @@ def update_task_description(site: str, task_id: str, description: str) -> bool:
         conn.close()
 
 
+def update_task_descriptions_many(entries: list[dict]) -> dict:
+    """Bulk-fill empty descriptions from one file, atomically.
+
+    `entries` is `[{"site", "task_id", "description"}]`, already validated by
+    the caller (`descriptions.apply_descriptions`). A row is only updated when
+    it has NO stored description (NULL or empty) -- a real description from a
+    site detail page is never clobbered by a later generated fallback. Every
+    row is counted as updated, skipped (already described), or named missing
+    (no such task). Returns `{"updated": int, "skipped": int,
+    "missing": [f"{site}/{task_id}", ...]}`.
+    """
+    conn = connect()
+    try:
+        conn.isolation_level = None
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            updated = skipped = 0
+            missing: list[str] = []
+            for entry in entries:
+                cursor = conn.execute(
+                    "UPDATE tasks SET description = ? "
+                    "WHERE site = ? AND task_id = ? "
+                    "AND (description IS NULL OR description = '')",
+                    (entry["description"], entry["site"], entry["task_id"]))
+                if cursor.rowcount > 0:
+                    updated += 1
+                    continue
+                found = conn.execute(
+                    "SELECT 1 FROM tasks WHERE site = ? AND task_id = ?",
+                    (entry["site"], entry["task_id"])).fetchone()
+                if found is not None:
+                    skipped += 1
+                else:
+                    missing.append(f"{entry['site']}/{entry['task_id']}")
+            conn.execute("COMMIT")
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise
+    finally:
+        conn.close()
+    return {"updated": updated, "skipped": skipped, "missing": missing}
+
+
 def set_task_ai_can_handle(site: str, task_id: str,
                            value: int | None) -> bool:
     """Set one task's `ai_can_handle` (1, 0, or None to clear). Returns whether
