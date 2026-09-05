@@ -255,8 +255,9 @@ class MySiteBrowser(BrowserAutomation):
 ```
 
 If `browser.py` ever grows methods beyond `__init__`, something is wrong —
-the auth lifecycle is the base class's responsibility. See the
-`cli-tool-browser-expert` skill for the full hook reference.
+the auth lifecycle is the base class's responsibility. See
+`/Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills/cli-tool-browser-expert/SKILL.md`
+for the full hook reference.
 
 **Hybrid auth example** (OAuth API + browser session):
 ```python

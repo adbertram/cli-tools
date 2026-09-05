@@ -1,0 +1,49 @@
+{
+  "exclusions": [
+    {
+      "file": "references/common-issues.md",
+      "reference": "~/.local/bin/myservice",
+      "reason": "illustrative-example: placeholder tool name `myservice` in a diagnosis snippet (`ls -la ~/.local/bin/myservice`)"
+    },
+    {
+      "file": "references/common-issues.md",
+      "reference": "/Users/adam/.local/share/uv/tools/myservice-cli/bin/python3",
+      "reason": "illustrative-example: pasted sample error output for the placeholder tool `myservice-cli`"
+    },
+    {
+      "file": "references/common-issues.md",
+      "reference": "~/.local/share/cli-tools/myservice/authentication_profiles/default/.env",
+      "reason": "illustrative-example: placeholder tool name `myservice` in a `cat` diagnosis snippet"
+    },
+    {
+      "file": "references/common-issues.md",
+      "reference": "~/.cache/uv/git-v0/checkouts",
+      "reason": "illustrative-example: uv git-checkout cache created only after a git-URL install; the line is a bounded `find ... -name '<pkg>' 2>/dev/null` search, no instruction depends on the directory existing"
+    },
+    {
+      "file": "references/infra-standards.md",
+      "reference": "~/Library/Application",
+      "reason": "path-with-space: the real path is `~/Library/Application Support/cli-tools/cli_tool_activity.txt`; the extractor cuts at the space"
+    },
+    {
+      "file": "references/infra-standards.md",
+      "reference": "~/.local/bin/toolname",
+      "reason": "illustrative-example: placeholder `toolname` in `which toolname  # Should show ~/.local/bin/toolname`"
+    },
+    {
+      "file": "references/infra-standards.md",
+      "reference": "~/.zfunc/_toolname",
+      "reason": "illustrative-example: placeholder `toolname` in the shell-completion location table"
+    },
+    {
+      "file": "references/infra-standards.md",
+      "reference": "~/.bash_completions/toolname.sh",
+      "reason": "illustrative-example: placeholder `toolname` in the shell-completion location table"
+    },
+    {
+      "file": ".skill-fix.json",
+      "reference": "*",
+      "reason": "illustrative-example: this ledger is not skill instructions; scan_references.py walks it as a text file and re-reports the very reference strings recorded here, so every row whose file is .skill-fix.json is an artifact of the scanner reading its own exclusions file"
+    }
+  ]
+}
