@@ -90,6 +90,14 @@ STATIC_PAGES_PENDING_STATUSES = frozenset({"idle", "active"})
 STATIC_PAGES_TERMINAL_FAILURE_STATUSES = frozenset({"failure", "canceled"})
 STATIC_MEDIA_BUCKET = "ata-blog-media"
 STATIC_SITE_ORIGIN = "https://adamtheautomator.com"
+# WordPress REST media collection on the same origin the inline media URLs
+# point at. `media_details.sizes` on these records is WordPress's own
+# declaration of which derivative files it generated for one attachment, so it
+# is the authority for what the R2 mirror has to contain.
+STATIC_WORDPRESS_MEDIA_ENDPOINT = f"{STATIC_SITE_ORIGIN}/wp-json/wp/v2/media"
+# A WordPress derivative filename ends in -<width>x<height>; removing that
+# suffix yields the parent attachment's searchable filename stem.
+_WORDPRESS_SIZE_SUFFIX_RE = re.compile(r"-\d+x\d+$")
 EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 EMPTY_UUID = "00000000-0000-4000-8000-000000000000"
 STATIC_BUILD_TOKEN_RELEASE_ID_STALE = "Build token release_id is stale"
@@ -1851,6 +1859,179 @@ class AtaBlogClient:
             found.setdefault(key, f"{STATIC_SITE_ORIGIN}/{key}")
         return [{"key": key, "url": url} for key, url in sorted(found.items())]
 
+    @staticmethod
+    def _same_origin_upload_key(url: Any) -> Optional[str]:
+        """Return the bucket key for a wp-content/uploads URL, else None.
+
+        This is a matching predicate, not a validator: a WordPress media
+        search returns unrelated attachments too, and none of them may make
+        the owner lookup fail. `_static_media_key_from_url` is the strict
+        counterpart used once an attachment has been identified.
+        """
+        if not isinstance(url, str) or not url:
+            return None
+        parsed = urlparse(url)
+        origin = urlparse(STATIC_SITE_ORIGIN)
+        if parsed.scheme != origin.scheme or parsed.netloc != origin.netloc:
+            return None
+        path = unquote(parsed.path.lstrip("/"))
+        return path if path.startswith("wp-content/uploads/") else None
+
+    @staticmethod
+    def _static_media_key_from_url(url: Any) -> str:
+        """Return the bucket key for one same-origin wp-content/uploads URL."""
+        key = AtaBlogClient._same_origin_upload_key(url)
+        if key is None:
+            raise ClientError(
+                "WordPress media URL is not a same-origin wp-content/uploads "
+                f"path: {url!r}"
+            )
+        return key
+
+    def _fetch_wordpress_media_records(self, search: str) -> List[Dict[str, Any]]:
+        """Read the WordPress media library records matching one filename stem."""
+        endpoint = (
+            f"{STATIC_WORDPRESS_MEDIA_ENDPOINT}"
+            f"?search={quote(search, safe='')}"
+            "&per_page=100"
+            "&_fields=id,source_url,media_details"
+        )
+        payload, _ = self._fetch_static_origin_bytes(endpoint)
+        try:
+            records = json.loads(payload)
+        except json.JSONDecodeError as exc:
+            raise ClientError(
+                f"WordPress media search for {search!r} returned invalid JSON: {exc}"
+            ) from exc
+        if not isinstance(records, list) or any(
+            not isinstance(record, dict) for record in records
+        ):
+            raise ClientError(
+                f"WordPress media search for {search!r} did not return an array of objects"
+            )
+        return records
+
+    @staticmethod
+    def _wordpress_media_size_records(record: Dict[str, Any]) -> Dict[str, Any]:
+        """Return one attachment's declared size map.
+
+        WordPress serializes an attachment with no registered derivatives as
+        an empty PHP array, which reaches JSON as `[]` rather than `{}`.
+        """
+        details = record.get("media_details")
+        if not isinstance(details, dict):
+            raise ClientError(
+                f"WordPress media {record.get('id')!r} has no media_details object"
+            )
+        sizes = details.get("sizes")
+        if sizes == []:
+            return {}
+        if not isinstance(sizes, dict):
+            raise ClientError(
+                f"WordPress media {record.get('id')!r} media_details.sizes is not an object"
+            )
+        return sizes
+
+    @classmethod
+    def _wordpress_media_variant_urls(cls, record: Dict[str, Any]) -> List[str]:
+        """Return one attachment's own file plus every declared size variant."""
+        source_url = record.get("source_url")
+        if not source_url:
+            raise ClientError(
+                f"WordPress media {record.get('id')!r} has no source_url"
+            )
+        urls = [source_url]
+        for name, size in sorted(cls._wordpress_media_size_records(record).items()):
+            if not isinstance(size, dict):
+                raise ClientError(
+                    f"WordPress media {record.get('id')!r} size {name!r} is not an object"
+                )
+            size_url = size.get("source_url")
+            if not size_url:
+                raise ClientError(
+                    f"WordPress media {record.get('id')!r} size {name!r} has no source_url"
+                )
+            urls.append(size_url)
+        return urls
+
+    @classmethod
+    def _wordpress_media_record_owns_key(
+        cls,
+        record: Dict[str, Any],
+        key: str,
+    ) -> bool:
+        """Return True when one media record publishes the given bucket key."""
+        candidates: List[Any] = [record.get("source_url")]
+        details = record.get("media_details")
+        if isinstance(details, dict):
+            sizes = details.get("sizes")
+            if isinstance(sizes, dict):
+                candidates.extend(
+                    size.get("source_url")
+                    for size in sizes.values()
+                    if isinstance(size, dict)
+                )
+        return any(cls._same_origin_upload_key(candidate) == key for candidate in candidates)
+
+    def _wordpress_media_keys_for_reference(self, key: str) -> List[str]:
+        """Return every bucket key WordPress generated for the attachment owning `key`.
+
+        The mirroring step used to copy only the exact URL a post body
+        referenced, so the responsive derivatives WordPress generates
+        (thumbnail, medium, medium_large, large, 1536x1536, 2048x2048, plus
+        this theme's featured-small/featured-large) never reached R2 — the
+        2026-09-05 parity audit measured 112 missing derivative keys across 15
+        attachments created since 2026-08-26. The built static site emits those
+        variants in `srcset`, so every one of them has to be mirrored at its
+        identical wp-content/uploads key.
+
+        The reference may itself be a derivative, so the search stem drops a
+        trailing -<width>x<height> before asking WordPress which attachment
+        owns it.
+        """
+        filename = key.rsplit("/", 1)[-1]
+        stem = filename.rsplit(".", 1)[0]
+        search = _WORDPRESS_SIZE_SUFFIX_RE.sub("", stem)
+        records = self._fetch_wordpress_media_records(search)
+        matches = [
+            record
+            for record in records
+            if self._wordpress_media_record_owns_key(record, key)
+        ]
+        if not matches:
+            raise ClientError(
+                f"No WordPress media attachment publishes {key}; searched the "
+                f"media library for {search!r}. The static mirror cannot "
+                "enumerate its size variants."
+            )
+        if len(matches) > 1:
+            raise ClientError(
+                f"{key} is published by {len(matches)} WordPress media attachments"
+            )
+        variant_keys = [
+            self._static_media_key_from_url(url)
+            for url in self._wordpress_media_variant_urls(matches[0])
+        ]
+        if key not in variant_keys:
+            raise ClientError(
+                f"WordPress media {matches[0].get('id')!r} matched {key} but does "
+                "not declare it among its own variant URLs"
+            )
+        return sorted(dict.fromkeys(variant_keys))
+
+    @staticmethod
+    def _r2_put_subcommand(key: str) -> str:
+        """Return the R2 upload subcommand that can represent this key.
+
+        Cloudflare's REST edge WAF answers any object path containing a
+        literal '..' with a 403 HTML challenge before R2 sees the request,
+        even percent-encoded. Those keys have to go through the R2
+        S3-compatible transport instead. Bucket *listing* is unaffected
+        because the key travels as a `prefix` query parameter, not as a path
+        segment, so `_existing_static_inline_media_key` needs no equivalent.
+        """
+        return "put-s3" if ".." in key else "put"
+
     def _existing_static_inline_media_key(self, key: str) -> Optional[Dict[str, Any]]:
         """Return the R2 object for one exact WP-shaped key if it already exists, else None.
 
@@ -1921,63 +2102,82 @@ class AtaBlogClient:
             f"{attempts} attempts: {last_error}"
         )
 
+    def _mirror_static_inline_media_key(self, key: str) -> Dict[str, Any]:
+        """Mirror one WordPress-shaped upload key into R2 and verify it landed.
+
+        Idempotent: an already-present key is recorded as recovered without
+        re-downloading or re-uploading anything.
+        """
+        url = f"{STATIC_SITE_ORIGIN}/{key}"
+        existing = self._existing_static_inline_media_key(key)
+        if existing is not None:
+            return {"key": key, "url": url, "recovered": True, "object": existing}
+        data, origin_content_type = self._fetch_static_origin_bytes(url)
+        content_type = (
+            origin_content_type.split(";")[0].strip()
+            if origin_content_type
+            else mimetypes.guess_type(key)[0]
+        )
+        if not content_type:
+            raise ClientError(f"Could not determine content type for inline media: {url}")
+        handle = tempfile.NamedTemporaryFile(suffix=Path(key).suffix, delete=False)
+        try:
+            handle.write(data)
+            handle.close()
+            temp_path = Path(handle.name)
+            result = self._run_checked_command(
+                [
+                    "cloudflare",
+                    "r2",
+                    "objects",
+                    self._r2_put_subcommand(key),
+                    STATIC_MEDIA_BUCKET,
+                    key,
+                    "--file",
+                    str(temp_path),
+                    "--content-type",
+                    content_type,
+                ],
+                timeout=300,
+                label="Inline static media upload",
+            )
+            receipt = self._parse_checked_command_json(result, "Inline static media upload")
+            if not isinstance(receipt, dict):
+                raise ClientError("Inline static media upload did not return a JSON object")
+        finally:
+            Path(handle.name).unlink(missing_ok=True)
+        verify = self._existing_static_inline_media_key(key)
+        if verify is None or int(verify.get("size", -1)) != len(data):
+            raise ClientError(
+                f"Inline static media upload for {key} did not verify in R2 after upload"
+            )
+        return {"key": key, "url": url, "recovered": False, "object": receipt}
+
     def _upload_static_inline_media(self, markdown_content: str) -> List[Dict[str, Any]]:
         """Mirror every inline WP-uploads image referenced in a post body into R2.
 
-        For each referenced URL not already present in the bucket under its
-        WordPress-shaped key, download the bytes from the live WordPress origin
-        and upload them to R2 under that identical key, then re-verify presence
-        and byte count before recording the receipt. Idempotent: a resumed run
-        re-checks bucket presence per key and skips anything already uploaded.
+        A post body references one URL per image, but WordPress generates a
+        family of resized derivatives for each attachment and the built static
+        site emits those variants in `srcset`. So each reference is expanded
+        through `media_details.sizes` into the attachment's full key family,
+        and every key in it is mirrored at its identical wp-content/uploads
+        path. Mirroring only the referenced URL is the defect the 2026-09-05
+        media parity audit measured as 112 missing derivative keys.
+
+        For each key not already present in the bucket, the bytes are
+        downloaded from the live WordPress origin, uploaded to R2 under that
+        identical key, then re-verified for presence and byte count before the
+        receipt is recorded. Idempotent: a resumed run re-checks bucket
+        presence per key and skips anything already uploaded.
         """
         receipts: List[Dict[str, Any]] = []
+        mirrored: set = set()
         for reference in self._find_inline_static_media_urls(markdown_content):
-            key = reference["key"]
-            url = reference["url"]
-            existing = self._existing_static_inline_media_key(key)
-            if existing is not None:
-                receipts.append({"key": key, "url": url, "recovered": True, "object": existing})
-                continue
-            data, origin_content_type = self._fetch_static_origin_bytes(url)
-            content_type = (
-                origin_content_type.split(";")[0].strip()
-                if origin_content_type
-                else mimetypes.guess_type(key)[0]
-            )
-            if not content_type:
-                raise ClientError(f"Could not determine content type for inline media: {url}")
-            handle = tempfile.NamedTemporaryFile(suffix=Path(key).suffix, delete=False)
-            try:
-                handle.write(data)
-                handle.close()
-                temp_path = Path(handle.name)
-                result = self._run_checked_command(
-                    [
-                        "cloudflare",
-                        "r2",
-                        "objects",
-                        "put",
-                        STATIC_MEDIA_BUCKET,
-                        key,
-                        "--file",
-                        str(temp_path),
-                        "--content-type",
-                        content_type,
-                    ],
-                    timeout=300,
-                    label="Inline static media upload",
-                )
-                receipt = self._parse_checked_command_json(result, "Inline static media upload")
-                if not isinstance(receipt, dict):
-                    raise ClientError("Inline static media upload did not return a JSON object")
-            finally:
-                Path(handle.name).unlink(missing_ok=True)
-            verify = self._existing_static_inline_media_key(key)
-            if verify is None or int(verify.get("size", -1)) != len(data):
-                raise ClientError(
-                    f"Inline static media upload for {key} did not verify in R2 after upload"
-                )
-            receipts.append({"key": key, "url": url, "recovered": False, "object": receipt})
+            for key in self._wordpress_media_keys_for_reference(reference["key"]):
+                if key in mirrored:
+                    continue
+                mirrored.add(key)
+                receipts.append(self._mirror_static_inline_media_key(key))
         return receipts
 
     @staticmethod
@@ -4480,8 +4680,11 @@ class AtaBlogClient:
         """
         warnings = []
 
-        # 0. Validate featured image before doing anything (fail early)
-        image_path = self._validate_featured_image(featured_image)
+        # 0. Resolve the featured image before doing anything (fail early).
+        # Same contract as the static leg: an explicit --featured-image wins,
+        # otherwise the conventional posts/<page_id>/featured_image.* the
+        # image-gen phase writes is used.
+        image_path = self._resolve_featured_image(page_id, featured_image)
 
         # 1. Get article metadata from Notion
         article = self.get_article(page_id)
@@ -4515,6 +4718,16 @@ class AtaBlogClient:
         if missing:
             raise ClientError(f"Missing required Notion fields: {', '.join(missing)}")
 
+        # 2a. WordPress rejects an SEO meta description over 300 characters, so
+        # the excerpt sent to WordPress is shortened here. Notion keeps its own
+        # longer excerpt; the difference is reported as a warning.
+        wordpress_excerpt = self._prepare_wordpress_excerpt(excerpt)
+        if wordpress_excerpt != excerpt:
+            warnings.append(
+                "Excerpt shortened for WordPress SEO meta description: "
+                f"{len(excerpt)} -> {len(wordpress_excerpt)} characters"
+            )
+
         # 2b. Read Schema Type from Notion (already fetched above)
         schema_type_raw = article.get("Schema Type", "")
         # Schema Type may be a comma-separated multi_select value
@@ -4524,16 +4737,7 @@ class AtaBlogClient:
             schema_type_str = "Article"
             warnings.append("Schema Type missing in Notion, defaulting to 'Article'")
 
-        # 3. Upload featured image before creating post (fail early)
-        from .utils.images import upload_to_wordpress
-        try:
-            featured_image_result = upload_to_wordpress(image_path)
-        except RuntimeError as e:
-            raise ClientError(f"Featured image upload failed: {e}")
-        if not featured_image_result.get("id"):
-            raise ClientError("Featured image upload did not return a WordPress media ID")
-
-        # 4. Generate slug (or use custom) and check for duplicates
+        # 3. Generate slug (or use custom) and check for duplicates
         if slug:
             # Use provided custom slug - validate and clean it
             slug = re.sub(r'[^a-z0-9-]', '', slug.lower())[:50].rstrip('-')
@@ -4570,12 +4774,29 @@ class AtaBlogClient:
         if check_duplicates and self.check_duplicate_post(slug):
             raise ClientError(f"WordPress post with slug '{slug}' already exists")
 
-        # 5. Resolve category and tags to IDs
+        # 4. Resolve category and tags to IDs. Tags resolve in bulk so a
+        # readiness failure names every missing WordPress tag at once.
         category_id = self.resolve_category_by_name(category_name)
         tag_names = [t.strip() for t in tags_str.split(",") if t.strip()]
-        tag_ids = [self.resolve_tag_by_name(name) for name in tag_names]
+        tag_ids = self.resolve_tags_by_names(tag_names)
 
-        # 6. Determine schedule date
+        # 5. Get content as markdown and reject unfinished image placeholders.
+        # Every check above this line is read-only, so a readiness failure
+        # leaves no media upload, no schedule reservation, and no WordPress
+        # post behind.
+        markdown_content = self.get_article_markdown(page_id)
+        self._validate_publish_markdown(markdown_content)
+
+        # 6. Upload featured image before creating post (fail early)
+        from .utils.images import upload_to_wordpress
+        try:
+            featured_image_result = upload_to_wordpress(image_path)
+        except RuntimeError as e:
+            raise ClientError(f"Featured image upload failed: {e}")
+        if not featured_image_result.get("id"):
+            raise ClientError("Featured image upload did not return a WordPress media ID")
+
+        # 7. Determine schedule date
         effective_date = None
         effective_status = status
         if auto_schedule:
@@ -4584,9 +4805,6 @@ class AtaBlogClient:
         elif date:
             effective_date = date
             effective_status = "future"
-
-        # 7. Get content as markdown
-        markdown_content = self.get_article_markdown(page_id)
 
         # 8. Process images - download from Notion, upload to WordPress
         from .utils.images import process_images_for_wordpress
@@ -4611,7 +4829,7 @@ class AtaBlogClient:
                 "--status", effective_status,
                 "--categories", str(category_id),
                 "--tags", ",".join(str(t) for t in tag_ids),
-                "--excerpt", excerpt,
+                "--excerpt", wordpress_excerpt,
                 "--meta", f"rank_math_focus_keyword={keywords}",
             ]
             if effective_date:
@@ -4663,14 +4881,26 @@ class AtaBlogClient:
                 fi_status["attached"] = True
                 schema_status["applied"] = True
 
-            # 12. Update Notion with Published status and URL
-            wp_url = post.get("link") or post.get("url", "")
+            # 12. Update Notion with the WordPress publication facts.
+            # Publish Date is written here because unpublish_article clears it
+            # (UNPUBLISH_ARTIFACT_FIELDS); a publish that only wrote Published
+            # URL left the property null forever.
+            wp_publish_date = post.get("date")
+            if not wp_publish_date:
+                raise ClientError(
+                    f"WordPress post {post_id} returned no date; refusing to "
+                    "write an empty Publish Date to Notion"
+                )
+            wp_url = self._resolve_wordpress_permalink(post_id)
             wp_edit_url = f"https://adamtheautomator.com/wp-admin/post.php?post={post_id}&action=edit"
-            self._run_notion([
-                "database", "page", "update", page_id,
-                "--status", "Status:Published",
-                "--url", f"Published URL:{wp_url}"
-            ])
+            self.update_article(
+                page_id,
+                status="Published",
+                properties={
+                    "Published URL": wp_url,
+                    "Publish Date": wp_publish_date,
+                },
+            )
 
             result_dict = {
                 "wordpress_post": post,
@@ -4690,6 +4920,67 @@ class AtaBlogClient:
             return result_dict
         finally:
             Path(temp_path).unlink(missing_ok=True)
+
+    @staticmethod
+    def _is_placeholder_permalink(url: str) -> bool:
+        """Return True for WordPress's slugless `?p=<id>` placeholder link."""
+        return not urlparse(url).path.strip("/")
+
+    def _resolve_wordpress_permalink(self, post_id: Any) -> str:
+        """Return the canonical public permalink for one WordPress post.
+
+        The create response is not trusted. WordPress renders `link` before
+        the post's permalink is settled and hands back the slugless
+        `?p=<id>` placeholder, and storing that verbatim is how four Notion
+        pages ended up with `Published URL:
+        https://adamtheautomator.com/?p=27234` while ten more carried none at
+        all. So the permalink is read back from WordPress after the post is
+        committed.
+
+        The read-back `link` is authoritative rather than reconstructed from
+        the wp/v2 `slug`, because this site runs Permalink Manager and a
+        post's canonical path is not always its slug — post 9234's slug is
+        `recall-email-in-outlook` while its permalink is
+        `/recall-outlook-email/`. Permalink Manager filters `get_permalink()`,
+        so `link` already reflects those overrides and the slug does not.
+
+        A post that is not live yet (draft or future) has no permalink for
+        WordPress to hand out: it reports `?p=<id>` on every read until it
+        publishes. Its canonical path is therefore built from its own slug
+        against this site's `/%postname%/` structure, which is what Permalink
+        Manager itself generates for a newly created post. A post WordPress
+        reports as live that still has no permalink is unresolvable and
+        raises rather than storing the placeholder.
+        """
+        result = self._run_wordpress(["posts", "get", str(post_id)])
+        post = json.loads(result.stdout)
+        if not isinstance(post, dict):
+            raise ClientError(
+                f"WordPress post {post_id} read back as "
+                f"{type(post).__name__}, expected an object"
+            )
+        link = post.get("link")
+        if not link:
+            raise ClientError(
+                f"WordPress post {post_id} returned no link; refusing to "
+                "write an empty Published URL to Notion"
+            )
+        if not self._is_placeholder_permalink(link):
+            return link
+        status = post.get("status")
+        if status == "publish":
+            raise ClientError(
+                f"WordPress post {post_id} is live but reports the placeholder "
+                f"permalink {link}; refusing to write a ?p= URL to Notion"
+            )
+        slug = post.get("slug")
+        if not slug:
+            raise ClientError(
+                f"WordPress post {post_id} (status {status!r}) has neither a "
+                "permalink nor a slug; its Published URL cannot be resolved"
+            )
+        origin = urlparse(link)
+        return f"{origin.scheme}://{origin.netloc}/{slug}/"
 
     @staticmethod
     def _slug_from_url(url: str, required: bool = True) -> Optional[str]:
