@@ -16,10 +16,12 @@ delegation, and only from `review`. No other path can make an agent run an
 apply, so Adam's board click is the single approval mechanism.
 
 The dispatcher is one daemon thread: it claims `pending` delegations, runs
-the configured harness command (a shell template whose `{prompt}` is
-replaced by the rendered, shell-quoted prompt and whose `{site}`/`{task_id}`
-name the card -- by default `claude -p --agent worker-<site>`, so the site's
-own worker agent does the work), streams output to the delegation's log
+the configured harness command — an editable board setting (a shell template
+whose `{prompt}` is replaced by the rendered, shell-quoted prompt and whose
+`{site}`/`{task_id}` name the card). The adam-server deployment default is
+`claude -p --agent worker-<site>`, which launches the site's own Claude worker
+agent; this service executes that command itself, it is not an instruction for
+agents to follow. The dispatcher streams output to the delegation's log
 file, and moves the card on completion. The agent itself moves its own card
 too, via `microworker board state`, on the same schedule: `working` while it
 works, `review` when done. `kill` kills the process group, which the monitor
@@ -54,9 +56,13 @@ LOG_TAIL_LINES = 400
 LOG_TAIL_BYTES = 64 * 1024
 
 DEFAULT_SETTINGS: dict[str, str] = {
-    # The shell command that runs the agent. `{prompt}` is replaced with the
-    # rendered prompt, shell-quoted. `{prompt_file}` (the same text on disk)
-    # is supported for harnesses that want a file argument instead.
+    # The board dispatcher's harness command (editable in Settings): how THIS
+    # service launches the worker agent for a delegated card. `{prompt}` is
+    # replaced with the rendered prompt, shell-quoted. `{prompt_file}` (the
+    # same text on disk) is supported for harnesses that want a file argument
+    # instead. The adam-server default launches the site's own Claude worker
+    # agent via the claude CLI; it is a deployment choice of the board service,
+    # not a rule about how any other agent runtime delegates.
     "harness_command": 'claude -p --agent worker-{site} "{prompt}"',
     "work_prompt": """You are a MicroWorker task agent on adam-server, working in the MicroWorker repo at $root. You were delegated this card by the board as the site's worker.
 
