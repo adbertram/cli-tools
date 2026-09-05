@@ -63,6 +63,7 @@ from . import (
     discover as discover_module,
     enrich as enrich_module,
     envelope,
+    evaluate as evaluate_module,
     merge as merge_module,
     schema,
     sites,
@@ -84,6 +85,8 @@ runs_app = typer.Typer(help="Merges recorded in the task database",
 board_app = typer.Typer(help="Kanban board over the task database "
                               "(serve the UI and its API)",
                         no_args_is_help=True)
+evaluate_app = typer.Typer(help="AI-capability evaluation of ledger tasks",
+                           no_args_is_help=True)
 
 # The exact fields each command's rows carry, used as the allowlist for
 # `--filter` and `--properties`. They are derived from the row builders --
@@ -91,7 +94,7 @@ board_app = typer.Typer(help="Kanban board over the task database "
 # cannot leave the allowlist behind. `runs get` adds `sites`, the per-site
 # summary object it alone returns.
 SITE_FIELDS = tuple(field.name for field in dataclasses.fields(sites.SiteConfig))
-TASK_FIELDS = db.TASK_COLUMNS
+TASK_FIELDS = db.TASK_COLUMNS + db.EVALUATION_COLUMNS
 RUN_FIELDS = db.RUN_COLUMNS
 RUN_GET_FIELDS = RUN_FIELDS + ("sites",)
 
@@ -228,6 +231,18 @@ def enrich(
 def migrate():
     """Apply any pending task-database schema migrations."""
     print_json({"schema_version": db.migrate()})
+
+
+@evaluate_app.command("apply")
+@command
+@exit_2_on_contract_errors
+def evaluate_apply(
+    file: Path = typer.Argument(
+        ..., help="JSON file of evaluator verdicts: "
+                  "[{site, task_id, ai_can_handle}]"),
+):
+    """Apply the task-evaluator's verdicts to the ledger's ai_can_handle."""
+    print_json(evaluate_module.apply_evaluation(file))
 
 
 def _warn_unparsed_payments(counts: dict) -> None:
@@ -389,6 +404,7 @@ app.add_typer(sites_app, name="sites")
 app.add_typer(tasks_app, name="tasks")
 app.add_typer(runs_app, name="runs")
 app.add_typer(board_app, name="board")
+app.add_typer(evaluate_app, name="evaluate")
 
 
 def main():

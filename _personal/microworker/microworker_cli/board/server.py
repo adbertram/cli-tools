@@ -95,6 +95,10 @@ Open your final reply with the line: Board: $site $task_id review
 
 Run the site's CLI apply command for this exact task with its confirm flag -- that approval is given -- and report exactly what happened, quoting the CLI's output. The hard rules still bind you: never drive a browser, evidence only, and apply to no OTHER task.""",
     "refresh_seconds": "15",
+    # The board's default view: show only tasks the task evaluator marked as
+    # AI-capable (`ai_can_handle = 1`). Adam can uncheck the header toggle to
+    # see the full ledger; the toggle persists this key back to board.db.
+    "ai_only_filter": "true",
 }
 
 PROMPT_PLACEHOLDER = "{prompt}"
@@ -188,6 +192,7 @@ def _board_snapshot() -> dict:
             "slots_open": task["slots_open"],
             "expires_at": task["expires_at"],
             "last_seen_at": task["last_seen_at"],
+            "ai_can_handle": task["ai_can_handle"],
             "column": state["column"],
             "approved": state["approved"],
             "delegation": _delegation_summary(latest.get(key)),

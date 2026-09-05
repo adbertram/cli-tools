@@ -174,7 +174,7 @@ def test_task_and_run_field_lists_track_the_database_columns():
     """The allowlists are derived, so a new column cannot be left out of them."""
     from microworker_cli import main
 
-    assert main.TASK_FIELDS == db.TASK_COLUMNS
+    assert main.TASK_FIELDS == db.TASK_COLUMNS + db.EVALUATION_COLUMNS
     assert main.RUN_FIELDS == db.RUN_COLUMNS
     assert main.RUN_GET_FIELDS == db.RUN_COLUMNS + ("sites",)
     assert set(main.SITE_FIELDS) == {"name", "cli", "account", "lastpass_item",

@@ -41,6 +41,11 @@ def merged(project, microworkers_record):
             data = envelope.build(name, envelope.NO_ACCOUNT, "fixture", [])
         envelope.write(paths.envelope_path(RUN, name), data)
     merge.merge(RUN)
+    verdict = paths.project_root() / "data" / "verdicts.json"
+    verdict.write_text(json.dumps(
+        [{"site": "microworkers",
+          "task_id": microworkers_record["campaign_id"],
+          "ai_can_handle": True}]))
     return microworkers_record
 
 
@@ -57,6 +62,7 @@ def cases(record):
         ("runs", "list"): [],
         ("runs", "get"): [RUN],
         ("board", "state"): ["microworkers", record["campaign_id"], "working"],
+        ("evaluate", "apply"): [str(paths.project_root() / "data" / "verdicts.json")],
     }
 
 

@@ -63,7 +63,7 @@ from cli_tools_shared.exceptions import ClientError
 
 from . import jsonio, paths
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 READONLY_TIMEOUT_SECONDS = 1.0
 
 # The task contract's columns, in contract order. `raw` is stored as JSON text
@@ -76,6 +76,11 @@ CONTRACT_COLUMNS = (
 SEEN_COLUMNS = (
     "first_seen_at", "last_seen_at", "first_seen_run_id", "last_seen_run_id",
 )
+# Derived columns written only by the task evaluator's apply path, after the
+# merge. `ai_can_handle` is 1 (an AI agent can do the task), 0 (it cannot),
+# or NULL (not yet evaluated). Never produced by an adapter, never touched by
+# the merge upsert, so it is read but not written through TASK_COLUMNS.
+EVALUATION_COLUMNS = ("ai_can_handle",)
 TASK_COLUMNS = CONTRACT_COLUMNS + SEEN_COLUMNS
 RUN_COLUMNS = ("run_id", "merged_at", "task_count", "inserted", "updated",
                "skipped_stale")
@@ -109,6 +114,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     slots_open INTEGER,
     expires_at TEXT,
     raw TEXT NOT NULL,
+    ai_can_handle INTEGER,
     first_seen_at TEXT NOT NULL,
     last_seen_at TEXT NOT NULL,
     first_seen_run_id TEXT NOT NULL,
@@ -158,6 +164,10 @@ CREATE INDEX IF NOT EXISTS idx_tasks_pay_amount ON tasks(pay_amount);
 # NULLABLE with NO default: NULL means the site never published a description
 # this pipeline could read, and backfilling anything else would assert text
 # nobody stored.
+#
+# Schema-version 4 databases predate `tasks.ai_can_handle`. The column is added
+# NULLABLE with NO default: NULL means the task has not been through the task
+# evaluator yet, and backfilling a 0 or 1 would assert a verdict nobody made.
 MIGRATIONS = (
     ("runs", "skipped_stale",
      "ALTER TABLE runs ADD COLUMN skipped_stale INTEGER NOT NULL DEFAULT 0"),
@@ -165,6 +175,8 @@ MIGRATIONS = (
      "ALTER TABLE run_sites ADD COLUMN unparsed_payments INTEGER"),
     ("tasks", "description",
      "ALTER TABLE tasks ADD COLUMN description TEXT"),
+    ("tasks", "ai_can_handle",
+     "ALTER TABLE tasks ADD COLUMN ai_can_handle INTEGER"),
 )
 
 _UPSERT_TASK = """
@@ -303,7 +315,7 @@ def write_run(run_id: str, merged_at: str, site_summaries: dict[str, dict],
 def list_tasks() -> list[dict]:
     """Every task row, most recently seen first."""
     return _read(
-        f"SELECT {', '.join(TASK_COLUMNS)} FROM tasks "
+        f"SELECT {', '.join(TASK_COLUMNS + EVALUATION_COLUMNS)} FROM tasks "
         "ORDER BY last_seen_at DESC, site, task_id",
         (), _task_row)
 
@@ -311,7 +323,8 @@ def list_tasks() -> list[dict]:
 def get_task(site: str, task_id: str) -> dict:
     """One task row. An unknown `(site, task_id)` is a `ClientError`."""
     rows = _read(
-        f"SELECT {', '.join(TASK_COLUMNS)} FROM tasks WHERE site = ? AND task_id = ?",
+        f"SELECT {', '.join(TASK_COLUMNS + EVALUATION_COLUMNS)} FROM tasks "
+        "WHERE site = ? AND task_id = ?",
         (site, task_id), _task_row)
     if not rows:
         raise ClientError(
@@ -335,6 +348,56 @@ def update_task_description(site: str, task_id: str, description: str) -> bool:
         return cursor.rowcount > 0
     finally:
         conn.close()
+
+
+def set_task_ai_can_handle(site: str, task_id: str,
+                           value: int | None) -> bool:
+    """Set one task's `ai_can_handle` (1, 0, or None to clear). Returns whether
+    a row matched. The `microworker evaluate apply` write path, mirroring
+    `update_task_description` as the other post-merge single-column write.
+    """
+    conn = connect()
+    try:
+        cursor = conn.execute(
+            "UPDATE tasks SET ai_can_handle = ? WHERE site = ? AND task_id = ?",
+            (value, site, task_id))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+def set_task_ai_can_handle_many(entries: list[dict]) -> dict:
+    """Bulk-set `ai_can_handle` from evaluator verdicts, in one transaction.
+
+    `entries` is `[{"site", "task_id", "ai_can_handle": 0|1|None}]`, already
+    validated and coerced by the caller (`evaluate.apply_evaluation`). Every
+    row is updated or named missing; a verdict never creates a task. Returns
+    `{"updated": int, "missing": [f"{site}/{task_id}", ...]}`.
+    """
+    conn = connect()
+    try:
+        conn.isolation_level = None
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            updated = 0
+            missing: list[str] = []
+            for entry in entries:
+                cursor = conn.execute(
+                    "UPDATE tasks SET ai_can_handle = ? "
+                    "WHERE site = ? AND task_id = ?",
+                    (entry["ai_can_handle"], entry["site"], entry["task_id"]))
+                if cursor.rowcount > 0:
+                    updated += 1
+                else:
+                    missing.append(f"{entry['site']}/{entry['task_id']}")
+            conn.execute("COMMIT")
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise
+    finally:
+        conn.close()
+    return {"updated": updated, "missing": missing}
 
 
 def list_runs() -> list[dict]:
