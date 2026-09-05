@@ -78,11 +78,40 @@ class MicroworkersClient:
     def __init__(self):
         self.config = get_config()
         self._browser: Optional[MicroworkersBrowser] = None
+        self._refresh_checked = False
 
     def _get_browser(self) -> MicroworkersBrowser:
         if self._browser is None:
             self._browser = self.config.get_browser()
         return self._browser
+
+    def _ensure_fresh_session(self, browser: MicroworkersBrowser) -> None:
+        """Refresh the saved browser session once per client instance.
+
+        Delegates to the shared engine's ``ensure_fresh_session()`` — headless
+        (no visible browser), no stdin reads, throttled to one refresh attempt
+        per ``AUTH_REFRESH_THROTTLE_SECONDS`` per process. A session that
+        cannot be refreshed automatically fails the command with the
+        structured reason instead of running against an expired session.
+        """
+        if self._refresh_checked:
+            return
+        self._refresh_checked = True
+        result = browser.ensure_fresh_session()
+        if result.authenticated:
+            return
+        if result.needs_human:
+            raise ClientError(
+                "Microworkers session refresh needs a human: "
+                f"{result.reason or 'a CAPTCHA or challenge wall'}. Re-run "
+                "'microworkers auth login' from an interactive terminal and "
+                "complete the challenge in the CLI-owned browser profile."
+            )
+        raise ClientError(
+            "Microworkers session is not authenticated and could not be refreshed "
+            f"automatically: {result.reason or 'unknown reason'}. Re-run "
+            "'microworkers auth login' to log in."
+        )
 
     def close(self):
         if self._browser is not None:
@@ -91,9 +120,17 @@ class MicroworkersClient:
 
     @contextmanager
     def _page(self, url: str):
-        """Open `url` on a fresh browser session, closing it on exit."""
+        """Open `url` on a fresh browser session, closing it on exit.
+
+        Before the first page of this client, the shared engine's headless
+        session refresh runs (see :meth:`_ensure_fresh_session`): a stale or
+        expired saved session is re-authenticated automatically, and a refresh
+        that needs a human fails here with the structured reason instead of
+        running against a dead session or opening a visible browser.
+        """
         browser = self._get_browser()
         try:
+            self._ensure_fresh_session(browser)
             page = browser.get_page(url)
             page.wait_for_timeout(1500)
             yield page
@@ -113,7 +150,22 @@ class MicroworkersClient:
                 break
             rows.extend(page_rows)
             page_num += 1
-        return [normalize_task_row(r) for r in rows[:limit]]
+        # /jobs.php pages overlap at their boundaries -- campaigns posted
+        # while the pages are fetched move the split point, so the same
+        # campaign appears on two consecutive pages (verified live 2026-09-04:
+        # 96 exact duplicates in a 2500-row listing). One row per campaign is
+        # the site's own identity for a job, so exact duplicates (same url)
+        # are dropped, first occurrence kept.
+        unique: List[dict] = []
+        seen: set = set()
+        for row in rows[:limit]:
+            key = row.get("url") or row.get("id")
+            if key is not None and key in seen:
+                continue
+            if key is not None:
+                seen.add(key)
+            unique.append(row)
+        return [normalize_task_row(r) for r in unique]
 
     def get_task(self, task_id: str) -> dict:
         """Fetch full detail for one task.
