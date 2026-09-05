@@ -4,8 +4,9 @@ The `task-evaluator` agent reads ledger tasks, applies the `task-evaluator`
 skill's rules, and returns a JSON array of verdicts. This command is the
 deterministic write half of that loop: it reads the verdict file, validates
 every entry against the evaluator's output contract, coerces each verdict's
-boolean to the ledger's 1/0/NULL, and writes `ai_can_handle` in one
-transaction via `db.set_task_ai_can_handle_many`.
+booleans to the ledger's 1/0/NULL, and writes `ai_can_handle` and
+`multimodal_required` together in one transaction via
+`db.set_task_evaluation_many`.
 
 Nothing else is stored, and no verdict creates or removes a task: a verdict
 whose `(site, task_id)` is not in the ledger is reported as missing, not
@@ -22,7 +23,7 @@ from cli_tools_shared.exceptions import ClientError
 from . import db, jsonio
 
 
-def _coerce(value: Any) -> int | None:
+def _coerce(value: Any, field: str) -> int | None:
     """A verdict boolean to the ledger's 1/0/NULL."""
     if value is None:
         return None
@@ -31,7 +32,7 @@ def _coerce(value: Any) -> int | None:
     if isinstance(value, int) and value in (0, 1):
         return value
     raise ClientError(
-        f"ai_can_handle must be true, false, 1, 0, or null; got {value!r}")
+        f"{field} must be true, false, 1, 0, or null; got {value!r}")
 
 
 def _parse_entry(entry: Any, index: int) -> dict:
@@ -47,21 +48,41 @@ def _parse_entry(entry: Any, index: int) -> dict:
         raise ClientError(
             f"evaluation entry {index} ({site}/{task_id}): "
             "'ai_can_handle' is required")
+    if "multimodal_required" not in entry:
+        raise ClientError(
+            f"evaluation entry {index} ({site}/{task_id}): "
+            "'multimodal_required' is required")
+    ai_can_handle = _coerce(entry["ai_can_handle"], "ai_can_handle")
+    multimodal_required = _coerce(
+        entry["multimodal_required"], "multimodal_required")
+    if ai_can_handle == 1 and multimodal_required is None:
+        raise ClientError(
+            f"evaluation entry {index} ({site}/{task_id}): "
+            "'multimodal_required' must be true or false when "
+            "'ai_can_handle' is true")
+    # `multimodal_required` only answers a question about tasks an agent will
+    # actually do. The evaluator may still write true/false against an
+    # `ai_can_handle: false` verdict (e.g. a human-gated role whose underlying
+    # work is visual); the script normalizes that to NULL deterministically so
+    # the column stays a clean tri-state instead of failing the whole file.
+    if ai_can_handle != 1:
+        multimodal_required = None
     return {
         "site": site,
         "task_id": task_id,
-        "ai_can_handle": _coerce(entry["ai_can_handle"]),
+        "ai_can_handle": ai_can_handle,
+        "multimodal_required": multimodal_required,
     }
 
 
 def apply_evaluation(file: Path) -> dict:
-    """Read a verdict file and write `ai_can_handle` for every entry."""
+    """Read a verdict file and write both evaluator columns per entry."""
     data = jsonio.read_file(file, "evaluation file")
     if not isinstance(data, list):
         raise ClientError(
             "evaluation file must be a JSON array of verdict objects")
     entries = [_parse_entry(entry, index) for index, entry in enumerate(data)]
-    result = db.set_task_ai_can_handle_many(entries)
+    result = db.set_task_evaluation_many(entries)
     return {
         "file": str(file),
         "verdicts": len(entries),

@@ -99,6 +99,11 @@ Run the site's CLI apply command for this exact task with its confirm flag -- th
     # AI-capable (`ai_can_handle = 1`). Adam can uncheck the header toggle to
     # see the full ledger; the toggle persists this key back to board.db.
     "ai_only_filter": "true",
+    # A second header toggle, off by default: when on, only AI-capable tasks
+    # the evaluator marked multimodal (`multimodal_required = 1` -- the agent
+    # must take image, video, or audio input) are shown. Persisted the same
+    # way as `ai_only_filter`.
+    "multimodal_only_filter": "false",
 }
 
 PROMPT_PLACEHOLDER = "{prompt}"
@@ -193,6 +198,7 @@ def _board_snapshot() -> dict:
             "expires_at": task["expires_at"],
             "last_seen_at": task["last_seen_at"],
             "ai_can_handle": task["ai_can_handle"],
+            "multimodal_required": task["multimodal_required"],
             "column": state["column"],
             "approved": state["approved"],
             "delegation": _delegation_summary(latest.get(key)),

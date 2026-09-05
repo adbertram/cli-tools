@@ -65,7 +65,7 @@ def test_tasks_list_newest_last_seen_first_with_parsed_raw(runner, two_runs):
         "site", "task_id", "title", "description", "url", "pay_amount",
         "pay_currency", "est_minutes", "slots_open", "expires_at", "raw",
         "first_seen_at", "last_seen_at", "first_seen_run_id", "last_seen_run_id",
-        "ai_can_handle"]
+        "ai_can_handle", "multimodal_required"]
 
 
 def test_tasks_list_filter_limit_properties(runner, two_runs):

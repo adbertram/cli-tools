@@ -239,9 +239,10 @@ def migrate():
 def evaluate_apply(
     file: Path = typer.Argument(
         ..., help="JSON file of evaluator verdicts: "
-                  "[{site, task_id, ai_can_handle}]"),
+                  "[{site, task_id, ai_can_handle, multimodal_required}]"),
 ):
-    """Apply the task-evaluator's verdicts to the ledger's ai_can_handle."""
+    """Apply the task-evaluator's verdicts to the ledger's ai_can_handle and
+    multimodal_required."""
     print_json(evaluate_module.apply_evaluation(file))
 
 

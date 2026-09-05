@@ -45,7 +45,8 @@ def merged(project, microworkers_record):
     verdict.write_text(json.dumps(
         [{"site": "microworkers",
           "task_id": microworkers_record["campaign_id"],
-          "ai_can_handle": True}]))
+          "ai_can_handle": True,
+          "multimodal_required": False}]))
     return microworkers_record
 
 

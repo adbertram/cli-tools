@@ -63,7 +63,7 @@ from cli_tools_shared.exceptions import ClientError
 
 from . import jsonio, paths
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 READONLY_TIMEOUT_SECONDS = 1.0
 
 # The task contract's columns, in contract order. `raw` is stored as JSON text
@@ -78,9 +78,12 @@ SEEN_COLUMNS = (
 )
 # Derived columns written only by the task evaluator's apply path, after the
 # merge. `ai_can_handle` is 1 (an AI agent can do the task), 0 (it cannot),
-# or NULL (not yet evaluated). Never produced by an adapter, never touched by
-# the merge upsert, so it is read but not written through TASK_COLUMNS.
-EVALUATION_COLUMNS = ("ai_can_handle",)
+# or NULL (not yet evaluated). `multimodal_required` is 1 (the task needs an
+# agent that can take image, video, or audio input), 0 (AI-capable with text-
+# only input), or NULL (task is not AI-capable, so no agent modality applies,
+# or not yet evaluated). Never produced by an adapter, never touched by the
+# merge upsert, so they are read but not written through TASK_COLUMNS.
+EVALUATION_COLUMNS = ("ai_can_handle", "multimodal_required")
 TASK_COLUMNS = CONTRACT_COLUMNS + SEEN_COLUMNS
 RUN_COLUMNS = ("run_id", "merged_at", "task_count", "inserted", "updated",
                "skipped_stale")
@@ -115,6 +118,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     expires_at TEXT,
     raw TEXT NOT NULL,
     ai_can_handle INTEGER,
+    multimodal_required INTEGER,
     first_seen_at TEXT NOT NULL,
     last_seen_at TEXT NOT NULL,
     first_seen_run_id TEXT NOT NULL,
@@ -168,6 +172,12 @@ CREATE INDEX IF NOT EXISTS idx_tasks_pay_amount ON tasks(pay_amount);
 # Schema-version 4 databases predate `tasks.ai_can_handle`. The column is added
 # NULLABLE with NO default: NULL means the task has not been through the task
 # evaluator yet, and backfilling a 0 or 1 would assert a verdict nobody made.
+#
+# Schema-version 5 databases predate `tasks.multimodal_required`. The column is
+# added NULLABLE with NO default: NULL means the task is not AI-capable (no
+# agent modality applies) or has not been re-evaluated under the extended
+# contract, and backfilling a 0 or 1 would assert a modality verdict nobody
+# made.
 MIGRATIONS = (
     ("runs", "skipped_stale",
      "ALTER TABLE runs ADD COLUMN skipped_stale INTEGER NOT NULL DEFAULT 0"),
@@ -177,6 +187,8 @@ MIGRATIONS = (
      "ALTER TABLE tasks ADD COLUMN description TEXT"),
     ("tasks", "ai_can_handle",
      "ALTER TABLE tasks ADD COLUMN ai_can_handle INTEGER"),
+    ("tasks", "multimodal_required",
+     "ALTER TABLE tasks ADD COLUMN multimodal_required INTEGER"),
 )
 
 _UPSERT_TASK = """
@@ -353,8 +365,9 @@ def update_task_description(site: str, task_id: str, description: str) -> bool:
 def set_task_ai_can_handle(site: str, task_id: str,
                            value: int | None) -> bool:
     """Set one task's `ai_can_handle` (1, 0, or None to clear). Returns whether
-    a row matched. The `microworker evaluate apply` write path, mirroring
-    `update_task_description` as the other post-merge single-column write.
+    a row matched. Low-level single-column helper (tests, one-off clears); the
+    evaluator's apply path writes both verdict columns together through
+    `set_task_evaluation_many`.
     """
     conn = connect()
     try:
@@ -367,12 +380,15 @@ def set_task_ai_can_handle(site: str, task_id: str,
         conn.close()
 
 
-def set_task_ai_can_handle_many(entries: list[dict]) -> dict:
-    """Bulk-set `ai_can_handle` from evaluator verdicts, in one transaction.
+def set_task_evaluation_many(entries: list[dict]) -> dict:
+    """Bulk-set evaluator verdict columns from one verdict file, atomically.
 
-    `entries` is `[{"site", "task_id", "ai_can_handle": 0|1|None}]`, already
-    validated and coerced by the caller (`evaluate.apply_evaluation`). Every
-    row is updated or named missing; a verdict never creates a task. Returns
+    `entries` is `[{"site", "task_id", "ai_can_handle": 0|1|None,
+    "multimodal_required": 0|1|None}]`, already validated and coerced by the
+    caller (`evaluate.apply_evaluation`). Both columns are written in one
+    UPDATE per task inside one transaction, so a verdict never lands with one
+    field refreshed and the other stale. Every row is updated or named
+    missing; a verdict never creates a task. Returns
     `{"updated": int, "missing": [f"{site}/{task_id}", ...]}`.
     """
     conn = connect()
@@ -384,9 +400,11 @@ def set_task_ai_can_handle_many(entries: list[dict]) -> dict:
             missing: list[str] = []
             for entry in entries:
                 cursor = conn.execute(
-                    "UPDATE tasks SET ai_can_handle = ? "
+                    "UPDATE tasks SET ai_can_handle = ?, "
+                    "multimodal_required = ? "
                     "WHERE site = ? AND task_id = ?",
-                    (entry["ai_can_handle"], entry["site"], entry["task_id"]))
+                    (entry["ai_can_handle"], entry["multimodal_required"],
+                     entry["site"], entry["task_id"]))
                 if cursor.rowcount > 0:
                     updated += 1
                 else:

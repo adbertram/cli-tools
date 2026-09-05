@@ -145,6 +145,7 @@ def test_first_merge_inserts_rows_and_run_summary(project, clock, microworkers_r
         "expires_at": None,
         "raw": microworkers_record,
         "ai_can_handle": None,
+        "multimodal_required": None,
         "first_seen_at": "2026-09-02T00:00:00Z",
         "last_seen_at": "2026-09-02T00:00:00Z",
         "first_seen_run_id": RUN,
