@@ -32,6 +32,12 @@ P05_RELEASE_CONTRACT = Path(
     "/Users/adam/Dropbox/GitRepos/Agents/ATABlogger/static-site/scripts/"
     "release_manifest.mjs"
 )
+# release_manifest.mjs imports the site's shared route and feed contracts, so
+# the isolated fixture tree has to stage those modules alongside it or the
+# validator cannot resolve its own imports.
+P05_RELEASE_CONTRACT_MODULES = Path(
+    "/Users/adam/Dropbox/GitRepos/Agents/ATABlogger/static-site/src/lib"
+)
 
 
 def _preview_deployment_payload(
@@ -206,6 +212,10 @@ def publisher(tmp_path, monkeypatch):
     release_contract.parent.mkdir(parents=True)
     release_contract.write_bytes(P05_RELEASE_CONTRACT.read_bytes())
     release_contract_sha = hashlib.sha256(release_contract.read_bytes()).hexdigest()
+    release_contract_lib = site / "src" / "lib"
+    release_contract_lib.mkdir(parents=True, exist_ok=True)
+    for module_path in sorted(P05_RELEASE_CONTRACT_MODULES.glob("*.js")):
+        (release_contract_lib / module_path.name).write_bytes(module_path.read_bytes())
 
     release_fixture = site / "tests" / "fixtures" / "release-contract" / "valid-interface-set.json"
     release_fixture.parent.mkdir(parents=True)
