@@ -1,7 +1,7 @@
 """Mutable P11 source bindings consumed by the static publisher."""
 
 P11_RELEASE_MANIFEST_SHA256 = (
-    "6e06d98d0475c61f4e31460fec6d219847d9838b53c44718bbac46c28abe51a7"
+    "977bb2b9050375576b8d194ca7c345e067d94e329ed382e87ee0446ef3440285"
 )
 
 STATIC_SCANNER_SHA256 = (
