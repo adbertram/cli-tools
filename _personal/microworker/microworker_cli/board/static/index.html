@@ -85,6 +85,14 @@
   .badge.ai-no { color: var(--delegated); border-color: #5c4a23; }
   .badge.mm-yes { color: var(--accent); border-color: #23405c; }
   label.ai-only { display: inline-flex; align-items: center; gap: 6px; color: var(--dim); font-size: 12px; cursor: pointer; }
+  .mm-switch { display: inline-flex; align-items: center; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 1px; }
+  .mm-switch button {
+    background: transparent; border: 0; border-radius: 6px; color: var(--dim);
+    font-size: 12px; padding: 3px 9px; cursor: pointer;
+  }
+  .mm-switch button:hover { color: var(--text); }
+  .mm-switch button.active { background: var(--panel-2); color: var(--accent); box-shadow: inset 0 0 0 1px var(--border); }
+  .mm-switch .mm-label { color: var(--dim); font-size: 12px; padding: 0 4px 0 8px; }
   @keyframes pulse { 50% { opacity: .45; } }
   .more-note { color: var(--dim); font-size: 12px; text-align: center; padding: 10px 4px; }
   .hint { color: var(--dim); font-size: 12px; padding: 0 16px 16px; }
@@ -127,7 +135,12 @@
   <div class="spacer"></div>
   <input id="filter" placeholder="filter: site, title, pay…" style="width: 240px">
   <label class="ai-only"><input type="checkbox" id="ai-only" checked> AI-capable only</label>
-  <label class="ai-only" title="Tasks whose evaluator verdict says the agent must take image, video, or audio input"><input type="checkbox" id="mm-only"> Multimodal required</label>
+  <div class="mm-switch" id="mm-switch" title="Filter AI-capable cards by input modality">
+    <span class="mm-label">Modality:</span>
+    <button type="button" data-mode="all">All</button>
+    <button type="button" data-mode="multimodal">Multimodal</button>
+    <button type="button" data-mode="text">Text-only</button>
+  </div>
   <button id="refresh-btn" title="Reload from the ledger snapshot">Refresh</button>
   <button id="settings-btn">Settings</button>
 </header>
@@ -274,12 +287,13 @@ function render() {
   const filter = document.getElementById("filter").value.trim().toLowerCase();
   const buckets = Object.fromEntries(snapshot.columns.map(c => [c, []]));
   const aiOnly = document.getElementById("ai-only").checked;
-  const mmOnly = document.getElementById("mm-only").checked;
+  const mmMode = document.querySelector("#mm-switch .active")?.dataset.mode || "all";
   let hiddenBacklog = 0;
   for (const card of snapshot.cards) {
     if (!matchesFilter(card, filter)) continue;
     if (aiOnly && card.ai_can_handle !== 1) continue;
-    if (mmOnly && card.multimodal_required !== 1) continue;
+    if (mmMode === "multimodal" && card.multimodal_required !== 1) continue;
+    if (mmMode === "text" && card.multimodal_required !== 0) continue;
     const bucket = buckets[card.column] || buckets.backlog;
     if (card.column === "backlog" && bucket.length >= BACKLOG_CAP) { hiddenBacklog++; continue; }
     bucket.push(card);
@@ -362,8 +376,10 @@ async function loadBoard() {
   }
   document.getElementById("ai-only").checked =
     snapshot.meta.settings.ai_only_filter !== "false";
-  document.getElementById("mm-only").checked =
-    snapshot.meta.settings.multimodal_only_filter !== "false";
+  const mmMode = snapshot.meta.settings.multimodal_filter || "all";
+  document.querySelectorAll("#mm-switch button").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.mode === mmMode);
+  });
   const seconds = parseInt(snapshot.meta.settings.refresh_seconds || "15", 10) || 15;
   if (refreshTimer) clearInterval(refreshTimer);
   refreshTimer = setInterval(loadBoard, seconds * 1000);
@@ -569,13 +585,17 @@ document.getElementById("ai-only").addEventListener("change", async () => {
   }
   render();
 });
-document.getElementById("mm-only").addEventListener("change", async () => {
-  const mmOnlyEl = document.getElementById("mm-only");
-  const value = mmOnlyEl.checked ? "true" : "false";
+document.getElementById("mm-switch").addEventListener("click", async event => {
+  const btn = event.target.closest("button[data-mode]");
+  if (!btn || btn.classList.contains("active")) return;
+  const mode = btn.dataset.mode;
+  document.querySelectorAll("#mm-switch button").forEach(b => {
+    b.classList.toggle("active", b === btn);
+  });
   try {
     await api("/api/settings", {
       method: "PUT",
-      body: { settings: { multimodal_only_filter: value } },
+      body: { settings: { multimodal_filter: mode } },
     });
   } catch (error) {
     window.alert(error.message);

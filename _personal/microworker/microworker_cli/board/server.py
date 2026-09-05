@@ -105,11 +105,12 @@ Run the site's CLI apply command for this exact task with its confirm flag -- th
     # AI-capable (`ai_can_handle = 1`). Adam can uncheck the header toggle to
     # see the full ledger; the toggle persists this key back to board.db.
     "ai_only_filter": "true",
-    # A second header toggle, off by default: when on, only AI-capable tasks
-    # the evaluator marked multimodal (`multimodal_required = 1` -- the agent
-    # must take image, video, or audio input) are shown. Persisted the same
-    # way as `ai_only_filter`.
-    "multimodal_only_filter": "false",
+    # Modality filter among the AI-capable cards, off by default: "all" shows
+    # every AI-capable task, "multimodal" only tasks whose evaluator verdict
+    # requires image/video/audio input (`multimodal_required = 1`), "text"
+    # only tasks an agent can do from text alone (`multimodal_required = 0`).
+    # The header switch persists this key back to board.db.
+    "multimodal_filter": "all",
 }
 
 PROMPT_PLACEHOLDER = "{prompt}"
@@ -218,7 +219,15 @@ def _board_snapshot() -> dict:
 
 
 def _settings() -> dict[str, str]:
-    return {**DEFAULT_SETTINGS, **db.board_settings()}
+    merged = {**DEFAULT_SETTINGS, **db.board_settings()}
+    # One-time legacy translation: the pre-switch header used a boolean
+    # `multimodal_only_filter` (true = multimodal only). If that was saved and
+    # the new tri-state key was not, carry its intent forward.
+    stored = db.board_settings()
+    if "multimodal_filter" not in stored \
+            and stored.get("multimodal_only_filter") == "true":
+        merged["multimodal_filter"] = "multimodal"
+    return merged
 
 
 def _prompt_mapping(task: dict) -> dict[str, str]:
