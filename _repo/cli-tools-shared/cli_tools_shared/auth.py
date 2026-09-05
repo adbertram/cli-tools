@@ -62,10 +62,20 @@ class BrowserAutomationError(ClientError):
 
 @dataclass(frozen=True)
 class AuthResult:
-    """Result of an authentication check. Truthy when authenticated."""
+    """Result of an authentication check. Truthy when authenticated.
+
+    ``refreshed`` is True only when this call actively re-authenticated a
+    stale session (never on a fresh-session no-op). ``needs_human`` marks a
+    refresh attempt that stopped at a human-verification gate (CAPTCHA /
+    challenge wall) which automation must never solve; ``reason`` carries the
+    precise machine- and human-readable detail for failures.
+    """
     authenticated: bool
     live_check: bool
     available: bool = True
+    refreshed: bool = False
+    needs_human: bool = False
+    reason: str = ""
 
     def __bool__(self) -> bool:
         return self.authenticated
@@ -286,12 +296,99 @@ class BrowserAutomation:
     AUTH_LOGIN_HANDLER = None
     # Milliseconds to let the login page settle before the handler runs.
     AUTH_LOGIN_SETTLE_MS = 5000
+    # Headless session-refresh throttle for ``ensure_fresh_session``: at most
+    # one refresh attempt per window per process, so per-request callers that
+    # run it before every page cannot re-login in a loop.
+    AUTH_REFRESH_THROTTLE_SECONDS = 60
+    # Challenge signals for ``_detect_login_challenge``. Each rule is a
+    # ``(label, css_selector, text_markers, cookie_markers)`` tuple evaluated
+    # in declaration order; the first rule with a matched selector, a matching
+    # lowercased page title/body substring, or a matching lowercased cookie
+    # substring wins. Keep the most specific vendors first. Labels follow the
+    # browser-automation skill's CAPTCHA/challenge reference list.
+    AUTH_CHALLENGE_RULES: Tuple[Tuple[str, str, Tuple[str, ...], Tuple[str, ...]], ...] = (
+        (
+            "reCAPTCHA",
+            "iframe[src*='recaptcha'], .g-recaptcha, #recaptcha",
+            ("i'm not a robot",),
+            (),
+        ),
+        (
+            "hCaptcha",
+            "iframe[src*='hcaptcha'], .h-captcha",
+            ("i am human",),
+            (),
+        ),
+        (
+            "Cloudflare",
+            "iframe[src*='challenges.cloudflare.com'], #cf-challenge-running, "
+            ".cf-browser-verification",
+            (
+                "just a moment",
+                "checking your browser before accessing",
+                "attention required",
+            ),
+            ("cf_clearance",),
+        ),
+        (
+            "Turnstile",
+            ".cf-turnstile",
+            ("verify you are human",),
+            (),
+        ),
+        (
+            "DataDome",
+            "iframe[src*='captcha-delivery.com'], .datadome, .datadome-iframe",
+            ("verify you are human",),
+            ("datadome",),
+        ),
+        (
+            "PerimeterX/HUMAN",
+            "#px-captcha, .px-captcha, iframe[src*='perimeterx']",
+            ("press & hold to confirm you are a human",),
+            ("_px",),
+        ),
+        (
+            "Arkose/Funcaptcha",
+            "iframe[src*='funcaptcha'], iframe[src*='arkose']",
+            (),
+            (),
+        ),
+        (
+            "generic bot-check",
+            "iframe[src*='captcha'], iframe[src*='turnstile']",
+            (
+                "verify you are human",
+                "pardon our interruption",
+                "access to this page has been denied",
+                "you have been blocked",
+            ),
+            ("_abck",),
+        ),
+    )
+    # Account-block messaging: a distinct, higher-priority rule group from
+    # AUTH_CHALLENGE_RULES, in the same data-driven style. When the site says
+    # the account is banned/blocked, automation must stop immediately (retries
+    # can extend a ban) and surface the site's own wording — reason, unblock
+    # time — to a human. ``_detect_account_block`` matches these markers
+    # case-insensitively against body-text lines and captures the matched line
+    # verbatim, bounded by ``AUTH_ACCOUNT_BLOCK_SNIPPET_CHARS``.
+    AUTH_ACCOUNT_BLOCK_MARKERS: Tuple[str, ...] = (
+        "your account is banned",
+        "account has been suspended",
+        "account is blocked",
+        "account will be unblocked",
+        "your account has been locked",
+    )
+    AUTH_ACCOUNT_BLOCK_SNIPPET_CHARS = 120
 
     def __init__(self, config):
         self.config = config
         self._page: Optional[BrowserHarnessService] = None
         self._service: Optional[BrowserHarnessService] = None
         self._auth_verified_at: float = 0
+        self._auth_refresh_attempted_at: float = 0
+        self._auth_last_refresh_result: Optional[AuthResult] = None
 
     # --- Config accessors ---
 
@@ -450,6 +547,334 @@ class BrowserAutomation:
             ) from e
         finally:
             self.close()
+
+    # ==================== Automatic headless session refresh ==============
+
+    @property
+    def declarative_login_configured(self) -> bool:
+        """True when the non-interactive credential login is fully declared.
+
+        All five pieces must be present: the username, password, and submit
+        selectors AND both CLI-tools secret-manager names. A partial
+        declaration counts as unconfigured so callers fall back to the
+        interactive flow instead of failing halfway through a fill.
+        """
+        return bool(
+            self.AUTH_LOGIN_USERNAME_SELECTOR
+            and self.AUTH_LOGIN_PASSWORD_SELECTOR
+            and self.AUTH_LOGIN_SUBMIT_SELECTOR
+            and self.AUTH_LOGIN_USERNAME_SECRET
+            and self.AUTH_LOGIN_PASSWORD_SECRET
+        )
+
+    def ensure_fresh_session(self) -> AuthResult:
+        """Confirm or headlessly refresh the saved browser session.
+
+        Automatic, non-interactive session refresh for per-command callers.
+        This path NEVER opens a visible browser and NEVER reads stdin:
+
+        1. ``is_authenticated()`` (TTL-cached) reports the session fresh →
+           return ``AuthResult(authenticated=True, refreshed=False)``.
+        2. Stale session + fully declared credential login (see
+           :attr:`declarative_login_configured`) → run the login HEADLESS:
+           ``get_page(LOGIN_URL)`` then ``_complete_noninteractive_login``,
+           verify exactly like ``_authenticate_noninteractive`` (AUTH_CHECK_URL
+           + ``_check_auth_settled``), then confirm persistence with a fresh
+           ``is_authenticated()`` restart probe. Success →
+           ``AuthResult(authenticated=True, refreshed=True)``.
+        3. Failure: inspect the page for a CAPTCHA / challenge gate via
+           ``_detect_login_challenge``. A challenge →
+           ``AuthResult(needs_human=True, reason=...)``; any other failure →
+           ``AuthResult(needs_human=False, reason=...)``.
+
+        :class:`BrowserAutomationError` is raised only for engine-level
+        failures (the browser could not start, or an HTTP-error / abort wall
+        was served instead of the login page). Refresh attempts are throttled
+        to at most one per ``AUTH_REFRESH_THROTTLE_SECONDS`` per process;
+        repeat callers inside the window receive the stored outcome instead
+        of logging in again.
+        """
+        logger.debug("ensure_fresh_session: session=%s", self._session_name())
+
+        result = self.is_authenticated()
+        if result.authenticated:
+            logger.debug("ensure_fresh_session: session already fresh")
+            return AuthResult(
+                authenticated=True,
+                live_check=result.live_check,
+                available=result.available,
+                refreshed=False,
+            )
+
+        now = time.time()
+        if (
+            self._auth_refresh_attempted_at
+            and now - self._auth_refresh_attempted_at < self.AUTH_REFRESH_THROTTLE_SECONDS
+            and self._auth_last_refresh_result is not None
+        ):
+            logger.debug(
+                "ensure_fresh_session: throttled (attempt %.0fs ago, window=%ss); "
+                "reusing the stored outcome",
+                now - self._auth_refresh_attempted_at,
+                self.AUTH_REFRESH_THROTTLE_SECONDS,
+            )
+            return self._auth_last_refresh_result
+
+        if not self.declarative_login_configured:
+            outcome = AuthResult(
+                authenticated=False,
+                live_check=result.live_check,
+                refreshed=False,
+                needs_human=False,
+                reason=(
+                    "declarative non-interactive login is not configured "
+                    "(username/password/submit selectors and both secret names required)"
+                ),
+            )
+            return self._record_refresh_outcome(outcome)
+
+        page = None
+        try:
+            page = self.get_page(self.LOGIN_URL)
+        except BrowserAutomationError:
+            # Engine-level: the browser could not start or a served wall
+            # aborted navigation (HTTP error status / interstitial handling).
+            # Do NOT convert this into an AuthResult — the engine is unusable.
+            raise
+
+        try:
+            page.wait_for_timeout(self.AUTH_LOGIN_SETTLE_MS)
+            # An account-block notice takes priority over any captcha: never
+            # retry a banned account, and surface the site's own wording.
+            blocked = self._detect_account_block(page)
+            if blocked is not None:
+                return self._account_block_outcome(blocked, "login")
+            challenge = self._detect_login_challenge(page)
+            if challenge is not None:
+                return self._challenge_outcome(challenge, "login")
+            self._complete_noninteractive_login(page)
+            if self.AUTH_CHECK_URL:
+                # Verify against the same ground truth ``is_authenticated()``
+                # uses; the flow can land on any post-login page.
+                page.goto(self.AUTH_CHECK_URL)
+                page.wait_for_timeout(2000)
+            # A "banned" interstitial can render on the auth-check page even
+            # when the page still looks authenticated; catch it before any
+            # settle verdict so a banned account is never reported as fresh.
+            blocked = self._detect_account_block(page)
+            if blocked is not None:
+                return self._account_block_outcome(blocked, "auth-check")
+            if not self._check_auth_settled(page):
+                blocked = self._detect_account_block(page)
+                if blocked is not None:
+                    return self._account_block_outcome(blocked, "auth-check")
+                challenge = self._detect_login_challenge(page)
+                if challenge is not None:
+                    return self._challenge_outcome(challenge, "auth-check")
+                outcome = AuthResult(
+                    authenticated=False,
+                    live_check=True,
+                    refreshed=False,
+                    needs_human=False,
+                    reason=(
+                        "headless session refresh did not reach an authenticated "
+                        f"state at {self.AUTH_CHECK_URL or self._safe_url_for_log(page.url)}."
+                    ),
+                )
+                return self._record_refresh_outcome(outcome)
+        except Exception as exc:
+            # Post-navigation failure: credentials rejected, controls missing,
+            # an account block, a login timeout, or a service error while
+            # completing the form. Re-check for an account block and then a
+            # challenge that appeared during the attempt; otherwise report the
+            # underlying failure without raising.
+            if page is not None:
+                blocked = self._detect_account_block(page)
+                if blocked is not None:
+                    page_context = "login" if self._is_login_page(page) else "post-login"
+                    return self._account_block_outcome(blocked, page_context)
+                challenge = self._detect_login_challenge(page)
+                if challenge is not None:
+                    return self._challenge_outcome(challenge, "post-login")
+            outcome = AuthResult(
+                authenticated=False,
+                live_check=True,
+                refreshed=False,
+                needs_human=False,
+                reason=str(exc),
+            )
+            return self._record_refresh_outcome(outcome)
+        finally:
+            self.close()
+
+        # Persistence check — mirror ``_authenticate_noninteractive``: the
+        # session must survive a browser restart before we claim success.
+        self._auth_verified_at = 0
+        persisted = self.is_authenticated()
+        if persisted.authenticated:
+            self._auth_verified_at = time.time()
+            logger.debug("ensure_fresh_session: refreshed and verified")
+            return self._record_refresh_outcome(
+                AuthResult(authenticated=True, live_check=True, refreshed=True)
+            )
+
+        outcome = AuthResult(
+            authenticated=False,
+            live_check=True,
+            refreshed=False,
+            needs_human=False,
+            reason=(
+                "headless session refresh logged in but the session did not "
+                "persist across a browser restart."
+            ),
+        )
+        return self._record_refresh_outcome(outcome)
+
+    def _record_refresh_outcome(self, outcome: AuthResult) -> AuthResult:
+        """Record a completed refresh attempt so the throttle can reuse it."""
+        self._auth_refresh_attempted_at = time.time()
+        self._auth_last_refresh_result = outcome
+        return outcome
+
+    def _challenge_outcome(self, challenge: str, page_context: str) -> AuthResult:
+        """Build the ``needs_human`` result for a detected challenge."""
+        return self._record_refresh_outcome(
+            AuthResult(
+                authenticated=False,
+                live_check=True,
+                refreshed=False,
+                needs_human=True,
+                reason=(
+                    f"{challenge} challenge detected on the {page_context} page; "
+                    "a human must complete it before the session can be refreshed"
+                ),
+            )
+        )
+
+    def _challenge_probe_js(self) -> str:
+        """Return the JS probe used by :meth:`_detect_login_challenge`.
+
+        One round trip: for every rule selector returns whether an element
+        matches, plus the document title, a bounded body excerpt, and the
+        cookie header in original case — everything the Python-side rule
+        matchers need (they lowercase for marker matching and keep the raw
+        body text for verbatim line capture).
+        """
+        encoded = json.dumps([rule[1] for rule in self.AUTH_CHALLENGE_RULES])
+        return (
+            "() => {\n"
+            "  const selectors = " + encoded + ";\n"
+            "  const matched = selectors.map(sel => {\n"
+            "    try { return !!document.querySelector(sel); } catch (e) { return false; }\n"
+            "  });\n"
+            "  let title = '';\n"
+            "  try { title = document.title || ''; } catch (e) {}\n"
+            "  let text = '';\n"
+            "  try { text = document.body ? document.body.innerText : ''; } catch (e) {}\n"
+            "  let cookie = '';\n"
+            "  try { cookie = document.cookie || ''; } catch (e) {}\n"
+            "  return { matched: matched, title: title, text: text.slice(0, 16000), cookie: cookie };\n"
+            "}"
+        )
+
+    def _detect_login_challenge(self, page) -> Optional[str]:
+        """Return the first challenge vendor detected on ``page``, else None.
+
+        Data-driven over :attr:`AUTH_CHALLENGE_RULES` — reCAPTCHA, hCaptcha,
+        Cloudflare, Turnstile, DataDome, PerimeterX/HUMAN, Arkose/Funcaptcha,
+        and a generic bot-check fallback (the browser-automation skill's
+        CAPTCHA reference signal list). The first rule whose selector, page
+        title/body marker, or cookie marker matches wins; a page that cannot
+        be probed reports no challenge rather than raising.
+        """
+        if not self.AUTH_CHALLENGE_RULES:
+            return None
+        try:
+            probe = page.evaluate(self._challenge_probe_js())
+        except Exception as exc:
+            logger.debug("_detect_login_challenge: probe failed: %s", exc)
+            return None
+        if not isinstance(probe, dict):
+            return None
+        matched = probe.get("matched")
+        matched = matched if isinstance(matched, list) else []
+        title = str(probe.get("title") or "").lower()
+        text = str(probe.get("text") or "").lower()
+        cookie = str(probe.get("cookie") or "").lower()
+        for index, (label, _selector, text_markers, cookie_markers) in enumerate(
+            self.AUTH_CHALLENGE_RULES
+        ):
+            if index < len(matched) and matched[index]:
+                logger.debug("_detect_login_challenge: %s via selector", label)
+                return label
+            if any(marker in title or marker in text for marker in text_markers):
+                logger.debug("_detect_login_challenge: %s via title/body text", label)
+                return label
+            if any(marker in cookie for marker in cookie_markers):
+                logger.debug("_detect_login_challenge: %s via cookie", label)
+                return label
+        return None
+
+    def _detect_account_block(self, page) -> Optional[str]:
+        """Return the site's own first banned/blocked body line, else None.
+
+        Data-driven over :attr:`AUTH_ACCOUNT_BLOCK_MARKERS`, matched
+        case-insensitively against body-text lines (not just substrings of the
+        whole page). When a marker matches, the whole matched line is returned
+        verbatim — bounded to ``AUTH_ACCOUNT_BLOCK_SNIPPET_CHARS`` — so the
+        caller can surface the site's exact wording (for example a ban notice
+        with its reason and unblock time) to a human instead of paraphrasing.
+        A page that cannot be probed reports no block rather than raising.
+        """
+        if not self.AUTH_ACCOUNT_BLOCK_MARKERS:
+            return None
+        try:
+            probe = page.evaluate(self._challenge_probe_js())
+        except Exception as exc:
+            logger.debug("_detect_account_block: probe failed: %s", exc)
+            return None
+        if not isinstance(probe, dict):
+            return None
+        text = str(probe.get("text") or "")
+        for line in text.splitlines():
+            lowered = line.lower()
+            if any(marker in lowered for marker in self.AUTH_ACCOUNT_BLOCK_MARKERS):
+                snippet = line.strip()[: self.AUTH_ACCOUNT_BLOCK_SNIPPET_CHARS]
+                logger.debug("_detect_account_block: matched a banned/blocked line")
+                return snippet
+        return None
+
+    def _raise_if_account_blocked(self, page) -> None:
+        """Stop immediately when ``page`` shows an account-block notice.
+
+        Retrying a banned account can extend the ban, so any block messaging
+        found aborts the login right away with the site's own wording.
+        """
+        snippet = self._detect_account_block(page)
+        if snippet is not None:
+            raise BrowserAutomationError(
+                "Account block detected during browser login: " + snippet
+            )
+
+    def _account_block_outcome(self, snippet: str, page_context: str) -> AuthResult:
+        """Build the ``needs_human`` result for an account-block notice.
+
+        A banned account must never be retried by automation; the site's own
+        line is preserved verbatim in ``reason`` so the human sees exactly
+        what the site reported (reason, unblock time, ...).
+        """
+        return self._record_refresh_outcome(
+            AuthResult(
+                authenticated=False,
+                live_check=True,
+                refreshed=False,
+                needs_human=True,
+                reason=(
+                    "Account block detected on the "
+                    f"{page_context} page: {snippet}"
+                ),
+            )
+        )
 
     def authenticate(self, force: bool = False):
         """Interactive login via headed persistent browser."""
@@ -637,6 +1062,10 @@ class BrowserAutomation:
                 "submit selector, and secret name are required."
             )
 
+        # If the login page already shows an account-block notice, stop before
+        # touching the form: submitting could extend a ban.
+        self._raise_if_account_blocked(page)
+
         controls = (
             ("username", page.locator(self.AUTH_LOGIN_USERNAME_SELECTOR)),
             ("password", page.locator(self.AUTH_LOGIN_PASSWORD_SELECTOR)),
@@ -677,8 +1106,14 @@ class BrowserAutomation:
 
         deadline = time.time() + self.AUTH_LOGIN_AUTOMATION_TIMEOUT
         totp_submitted = False
+        # The site can render an account-block notice immediately after the
+        # submit; surface it without waiting out the automation timeout.
+        self._raise_if_account_blocked(page)
         while time.time() < deadline:
             page.wait_for_timeout(1000)
+            # A ban notice is the one state we must never poll past — retries
+            # can extend the ban, so abort as soon as it appears.
+            self._raise_if_account_blocked(page)
             if self.AUTH_LOGIN_ERROR_SELECTOR:
                 error = page.locator(self.AUTH_LOGIN_ERROR_SELECTOR)
                 if error.count() and error.first.is_visible():

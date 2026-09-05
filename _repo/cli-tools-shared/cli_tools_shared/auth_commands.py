@@ -1,6 +1,7 @@
 """Standard auth Typer app: login, logout, status, refresh with --profile support."""
 
 import logging
+import sys
 import typer
 from typing import Callable, Optional
 
@@ -14,7 +15,17 @@ from .credentials import (
 )
 from .exceptions import ConfigError
 from .config import BaseConfig, get_profile_auth_settings, resolve_tool_dir
-from .output import print_json, print_table, print_output, print_success, print_error, print_info, handle_error, command
+from .output import (
+    print_json,
+    print_table,
+    print_output,
+    print_success,
+    print_error,
+    print_info,
+    print_warning,
+    handle_error,
+    command,
+)
 
 logger = get_debug_logger("cli_tools.auth_commands")
 
@@ -175,6 +186,39 @@ def _notify_secret_managed_fields(config, active_types, tool_name: str) -> None:
         )
 
 
+def _browser_declarative_login_ready(browser) -> bool:
+    """True when ``browser`` can refresh its own session headlessly.
+
+    Only real ``BrowserAutomation`` instances with a fully declared
+    non-interactive credential login (username/password/submit selectors AND
+    both secret names — ``declarative_login_configured``) qualify. Any other
+    browser object (adapters, mocks) keeps the interactive headed login flow.
+    """
+    from .auth import BrowserAutomation
+
+    return isinstance(browser, BrowserAutomation) and browser.declarative_login_configured
+
+
+def _interactive_stdio_available() -> bool:
+    """True when this process can interact with a human.
+
+    Checks TTY stdin first, then falls back to opening the controlling
+    terminal ``/dev/tty`` (mirroring ``_prompt_enter_eof_safe``).
+    """
+    try:
+        if sys.stdin is not None and sys.stdin.isatty():
+            return True
+    except Exception:
+        pass
+    try:
+        with open("/dev/tty", "r"):
+            return True
+    except OSError:
+        return False
+    except Exception:
+        return False
+
+
 def _handle_browser_login(config, tool_name: str, force: bool):
     """Handle browser session login if config.get_browser() is configured.
 
@@ -182,8 +226,18 @@ def _handle_browser_login(config, tool_name: str, force: bool):
     cookies on disk can be expired or revoked server-side. The
     short-circuit must be backed by a live round-trip via
     ``browser.is_authenticated()``. If the live check fails we proceed
-    to the interactive login flow even though session files exist on
-    disk, because that is exactly the case the user wants caught.
+    to the login flow even though session files exist on disk, because
+    that is exactly the case the user wants caught.
+
+    When the browser fully declares the non-interactive credential login
+    (see ``BrowserAutomation.declarative_login_configured``) the login is
+    attempted HEADLESS first via ``BrowserAutomation.ensure_fresh_session()``
+    — no visible browser, no stdin — so the same ``auth login`` works from
+    non-interactive automation hosts (the 2026-09-04 microworkers incident:
+    a stale saved session could not be healed without a TTY). The headed
+    interactive flow is preserved as the fallback when a human-verification
+    challenge blocks the headless path, and for CLIs that do not configure
+    the declarative login at all.
     """
     logger.debug("_handle_browser_login: tool=%s force=%s", tool_name, force)
     browser = config.get_browser()
@@ -212,6 +266,40 @@ def _handle_browser_login(config, tool_name: str, force: bool):
                     "Saved session is no longer valid — re-running browser login."
                 )
                 effective_force = True
+
+        # Headless-first automatic refresh for CLIs with a complete
+        # declarative non-interactive login. A successful headless refresh
+        # returns before any browser window is opened. Fall back to the
+        # headed flow only when a human gate blocks the headless attempt
+        # (needs_human) or — for a non-challenge failure on a TTY — so a
+        # human can still complete the login by hand.
+        if _browser_declarative_login_ready(browser):
+            outcome = browser.ensure_fresh_session()
+            if outcome.authenticated:
+                print_success("Browser session authenticated")
+                return
+            if outcome.needs_human:
+                print_warning(
+                    "Automatic browser login needs a human to complete a challenge "
+                    f"({outcome.reason or 'unknown challenge'}); opening the "
+                    "interactive login browser so you can finish it."
+                )
+            elif _interactive_stdio_available():
+                print_info(
+                    "Automatic browser login did not succeed "
+                    f"({outcome.reason or 'unknown reason'}); opening the "
+                    "interactive login browser."
+                )
+            else:
+                # Non-interactive host with a fully declared login whose
+                # headless refresh failed without a human gate (rejected
+                # credentials, missing secret, timeout). Do not open a headed
+                # browser that cannot be completed here.
+                print_error(
+                    "Browser auth failed: "
+                    f"{outcome.reason or 'automatic browser login failed'}"
+                )
+                raise typer.Exit(1)
 
         print_info("Opening browser for login...")
         logger.debug("_handle_browser_login: calling browser.login(force=%s)", effective_force)
