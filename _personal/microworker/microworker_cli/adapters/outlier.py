@@ -48,7 +48,7 @@ from .ids import task_id
 from .mapped import MappedTask
 
 SITE = "outlier"
-RAW_KEYS = ("id", "url", "display_name")
+RAW_KEYS = ("id", "url", "display_name", "description")
 
 
 def to_task(raw: dict) -> MappedTask:
@@ -61,6 +61,7 @@ def to_task(raw: dict) -> MappedTask:
         "task_id": task_id(SITE, raw["id"], field="id",
                            locator=f"url={raw['url']!r}"),
         "title": raw["display_name"],
+        "description": raw["description"],
         "url": raw["url"],
         "pay_amount": None,
         "pay_currency": None,

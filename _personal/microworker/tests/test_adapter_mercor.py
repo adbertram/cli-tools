@@ -41,6 +41,8 @@ def test_real_record_maps_and_validates():
     assert task["site"] == "mercor"
     assert task["task_id"] == "list_AAABoGYcR_Q8k7gMhOdC84s-"
     assert task["title"] == FIXTURE[0]["title"]
+    assert task["description"] == FIXTURE[0]["description"]
+    assert task["description"].startswith("## About the Role")
     assert task["url"] == FIXTURE[0]["url"]
     assert task["pay_amount"] is None  # published as a range (45.0..65.0)
     assert task["pay_currency"] is None

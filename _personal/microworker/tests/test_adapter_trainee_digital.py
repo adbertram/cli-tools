@@ -45,6 +45,7 @@ def test_full_mapping():
         "site": "trainee-digital",
         "task_id": "med-seg",
         "title": "Medical Image Segmentation Labels",
+        "description": None,
         "url": "https://trainee.digital/orders",
         "pay_amount": 0.4,
         "pay_currency": "USD",

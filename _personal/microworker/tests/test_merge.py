@@ -136,6 +136,7 @@ def test_first_merge_inserts_rows_and_run_summary(project, clock, microworkers_r
         "site": "microworkers",
         "task_id": microworkers_record["campaign_id"],
         "title": microworkers_record["title"],
+        "description": None,
         "url": microworkers_record["url"],
         "pay_amount": 0.10,
         "pay_currency": "USD",
@@ -267,3 +268,35 @@ def test_envelope_for_a_disabled_site_fails_the_merge(project):
                        match="not enabled in config.json: crowdgen"):
         merge.merge(RUN)
     assert not paths.db_path().exists()
+
+
+def test_description_survives_descriptionless_resighting(
+        project, clock, microworkers_record):
+    """A later sighting without a description must not wipe an enriched one.
+
+    The description usually arrives AFTER the merge (`microworker enrich`
+    walks the site's detail pages), so the merge upsert's guard keeps the
+    stored text when a fresher sighting carries none.
+    """
+    described = dict(microworkers_record, description="site instructions text")
+    write_all_envelopes({"microworkers": [described]})
+    merge.merge(RUN)
+    task_id = microworkers_record["campaign_id"]
+    assert db.get_task("microworkers", task_id)["description"] == \
+        "site instructions text"
+
+    bare = {key: value for key, value in described.items()
+            if key != "description"}
+    clock.set("2026-09-03T00:00:00Z")  # a fresher observation, no description
+    write_all_envelopes({"microworkers": [bare]}, run_id=LATER_RUN)
+    merge.merge(LATER_RUN)
+    assert db.get_task("microworkers", task_id)["description"] == \
+        "site instructions text"
+
+    # A fresher sighting that DOES carry one still replaces it.
+    changed = dict(described, description="rewritten instructions")
+    clock.set("2026-09-04T00:00:00Z")
+    write_all_envelopes({"microworkers": [changed]}, run_id="20260904T000000Z")
+    merge.merge("20260904T000000Z")
+    assert db.get_task("microworkers", task_id)["description"] == \
+        "rewritten instructions"

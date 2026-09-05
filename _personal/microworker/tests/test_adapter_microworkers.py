@@ -43,6 +43,7 @@ def test_full_mapping():
         "site": "microworkers",
         "task_id": "abc123",
         "title": "Sign up and screenshot",
+        "description": None,
         "url": "https://microworkers.com/jobs.php?id=1",
         "pay_amount": 0.15,
         "pay_currency": "USD",

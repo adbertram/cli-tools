@@ -61,6 +61,21 @@ def db_path() -> Path:
     return project_root() / "data" / "tasks.db"
 
 
+def board_path() -> Path:
+    """The board store: `data/board.db`, beside the ledger but a separate file.
+
+    The ledger's only writer is `merge` on the discovery machine; the board's
+    only writer is the board service on adam-server. Two files, one writer
+    each, so the two never contend for one SQLite file.
+    """
+    return project_root() / "data" / "board.db"
+
+
+def delegation_log_dir() -> Path:
+    """Where each delegation's agent output lands: `data/delegation_logs/`."""
+    return project_root() / "data" / "delegation_logs"
+
+
 def check_run_id(run_id: str) -> str:
     """The run id, or a `ClientError` naming the shape it has to have."""
     if not isinstance(run_id, str) or not RUN_ID_RE.match(run_id):

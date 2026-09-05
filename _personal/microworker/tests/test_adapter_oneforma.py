@@ -50,6 +50,7 @@ def test_full_mapping():
         "site": "oneforma",
         "task_id": "14201",
         "title": "Lab Technician US",
+        "description": None,
         "url": "https://my.oneforma.com/contributor/jobs/apply",
         "pay_amount": 100.0,
         "pay_currency": "USD",

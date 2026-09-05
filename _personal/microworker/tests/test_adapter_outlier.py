@@ -52,6 +52,7 @@ def test_full_mapping():
         "site": "outlier",
         "task_id": "66edda0f65beb7be44e8d0a7",
         "title": "Mail Valley - Intro Course v2",
+        "description": "Mail Valley - Intro Course v2",
         "url": "https://app.outlier.ai/expert/course?id=67c17b368fd2e378fa49d92c",
         "pay_amount": None,
         "pay_currency": None,

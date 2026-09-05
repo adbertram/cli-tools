@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MicroWorker Board</title>
+<script src="/static/sortable.min.js"></script>
+<style>
+  :root {
+    --bg: #101418; --panel: #191e24; --panel-2: #20262e; --border: #2c333c;
+    --text: #d8dee6; --dim: #8b96a3; --accent: #4da3ff;
+    --backlog: #8b96a3; --ready: #4da3ff; --delegated: #ffb454;
+    --working: #2dd4bf; --review: #b58bff; --done: #4ec98a; --fail: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.45 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  header {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 10;
+  }
+  header h1 { font-size: 17px; margin: 0; letter-spacing: .3px; }
+  header h1 small { color: var(--dim); font-weight: normal; font-size: 12px; margin-left: 8px; }
+  .spacer { flex: 1; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; background: var(--dim); }
+  .dot.ok { background: var(--done); }
+  .dot.err { background: var(--fail); }
+  #replica-text { color: var(--dim); font-size: 12px; }
+  input, textarea, button {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 10px; font: inherit;
+  }
+  input:focus, textarea:focus { outline: 1px solid var(--accent); }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #0b1016; font-weight: 600; }
+  button.danger { background: #4a1d1d; border-color: var(--fail); color: #ffd7d7; }
+  #board {
+    display: grid; grid-template-columns: repeat(6, minmax(210px, 1fr));
+    gap: 12px; padding: 16px; align-items: start;
+  }
+  @media (max-width: 1500px) { #board { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 1100px) { #board { grid-template-columns: repeat(2, 1fr); } }
+  .column { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; display: flex; flex-direction: column; max-height: calc(100vh - 130px); }
+  .column-head {
+    display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .column-head .swatch { width: 10px; height: 10px; border-radius: 3px; }
+  .column-head .name { font-weight: 600; }
+  .column-head .count { color: var(--dim); font-size: 12px; margin-left: auto; }
+  .column-list { overflow-y: auto; padding: 8px; flex: 1; min-height: 60px; }
+  .card {
+    background: var(--panel-2); border: 1px solid var(--border); border-left: 3px solid var(--border);
+    border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; cursor: grab;
+  }
+  .card:hover { border-color: var(--accent); }
+  .card.approved { border-left-color: var(--done); }
+  .card-title { font-weight: 600; margin-bottom: 6px; }
+  .card-desc {
+    color: var(--dim); font-size: 12px; margin-bottom: 6px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden; white-space: pre-wrap;
+  }
+  .card-meta { display: flex; flex-wrap: wrap; gap: 5px; }
+  .desc-block {
+    white-space: pre-wrap; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px; max-height: 300px; overflow: auto;
+    margin: 0 0 14px; font-size: 13px;
+  }
+  .badge {
+    font-size: 11px; padding: 1px 7px; border-radius: 20px;
+    background: var(--bg); border: 1px solid var(--border); color: var(--dim);
+  }
+  .badge.site { color: var(--accent); border-color: #23405c; }
+  .badge.pay { color: var(--done); border-color: #234c38; }
+  .badge.delegation-running { color: var(--delegated); border-color: #5c4a23; animation: pulse 1.6s infinite; }
+  .badge.delegation-done { color: var(--done); border-color: #234c38; }
+  .badge.delegation-failed { color: var(--fail); border-color: #5c2323; }
+  .badge.delegation-pending { color: var(--dim); }
+  @keyframes pulse { 50% { opacity: .45; } }
+  .more-note { color: var(--dim); font-size: 12px; text-align: center; padding: 10px 4px; }
+  .hint { color: var(--dim); font-size: 12px; padding: 0 16px 16px; }
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 50;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .modal {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    width: min(760px, 94vw); max-height: 88vh; display: flex; flex-direction: column;
+  }
+  .modal-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .modal-head h2 { font-size: 16px; margin: 0; flex: 1; }
+  .modal-body { overflow-y: auto; padding: 14px 16px; }
+  .modal-actions { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
+  .kv { display: grid; grid-template-columns: 130px 1fr; gap: 6px 12px; margin-bottom: 14px; }
+  .kv dt { color: var(--dim); text-align: right; }
+  .kv dd { margin: 0; word-break: break-word; }
+  .delegation { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
+  .delegation .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .delegation .row .time { color: var(--dim); font-size: 12px; margin-left: auto; }
+  pre.log {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px; overflow: auto; max-height: 260px; font-size: 12px; white-space: pre-wrap;
+  }
+  label.block { display: block; margin-bottom: 10px; }
+  label.block span { display: block; color: var(--dim); margin-bottom: 4px; }
+  textarea { width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  .hidden { display: none !important; }
+  .error-banner {
+    background: #4a1d1d; border: 1px solid var(--fail); color: #ffd7d7;
+    border-radius: 8px; padding: 10px 14px; margin-bottom: 12px;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>MicroWorker <small>kanban over the task ledger</small></h1>
+  <span id="replica-text"></span>
+  <div class="spacer"></div>
+  <input id="filter" placeholder="filter: site, title, pay…" style="width: 240px">
+  <button id="refresh-btn" title="Reload from the ledger snapshot">Refresh</button>
+  <button id="settings-btn">Settings</button>
+</header>
+<div id="board"></div>
+<p class="hint">
+  Dropping a card into <b>Delegated</b> hands it to that site's worker agent, which starts immediately:
+  the card walks Delegated → <b>Working</b> (the agent moves it there while it works) → <b>Review</b>.
+  Agents never apply on their own: only your explicit <b>Approve</b> click on a Review card may run an apply.
+</p>
+
+<div id="card-backdrop" class="modal-backdrop hidden">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="card-title"></h2>
+      <button id="card-close">✕</button>
+    </div>
+    <div class="modal-body" id="card-body"></div>
+    <div class="modal-actions" id="card-actions"></div>
+  </div>
+</div>
+
+<div id="settings-backdrop" class="modal-backdrop hidden">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Settings</h2>
+      <button id="settings-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <label class="block"><span>Harness command — shell template; <code>{prompt}</code> is replaced by the rendered, quoted prompt (<code>{prompt_file}</code> is its path on disk)</span>
+        <textarea id="set-harness" rows="2"></textarea></label>
+      <label class="block"><span>Work prompt template — placeholders: $site $task_id $title $url $pay $currency $est $slots $expires $task_json $root</span>
+        <textarea id="set-work" rows="10"></textarea></label>
+      <label class="block"><span>Apply prompt template — used only after you approve a card</span>
+        <textarea id="set-apply" rows="6"></textarea></label>
+      <label class="block"><span>Board refresh interval (seconds)</span>
+        <input id="set-refresh" type="number" min="3" step="1" style="width: 120px"></label>
+    </div>
+    <div class="modal-actions">
+      <button class="primary" id="settings-save">Save</button>
+      <button id="settings-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+const BACKLOG_CAP = 250;
+const COLUMN_TITLES = {
+  backlog: "Backlog", ready: "Ready", delegated: "Delegated",
+  working: "Working", review: "Review", done: "Done",
+};
+const COLUMN_COLORS = {
+  backlog: "var(--backlog)", ready: "var(--ready)", delegated: "var(--delegated)",
+  working: "var(--working)", review: "var(--review)", done: "var(--done)",
+};
+
+let snapshot = null;
+let refreshTimer = null;
+let logTimer = null;
+let openCard = null;
+
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs)) {
+    if (key === "class") node.className = value;
+    else if (key === "dataset") Object.assign(node.dataset, value);
+    else if (key.startsWith("on")) node.addEventListener(key.slice(2), value);
+    else node.setAttribute(key, value);
+  }
+  for (const child of children) {
+    if (child == null) continue;
+    node.append(child.nodeType ? child : document.createTextNode(String(child)));
+  }
+  return node;
+}
+
+async function api(path, options = {}) {
+  const response = await fetch(path, {
+    headers: { "Content-Type": "application/json" },
+    ...options,
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.detail || `request failed (${response.status})`);
+  }
+  return data;
+}
+
+function fmtPay(card) {
+  if (card.pay_amount == null) return null;
+  return `${card.pay_amount}${card.pay_currency ? " " + card.pay_currency : ""}`;
+}
+
+function matchesFilter(card, filter) {
+  if (!filter) return true;
+  const haystack = [
+    card.site, card.task_id, card.title, fmtPay(card),
+    COLUMN_TITLES[card.column],
+    card.delegation ? `${card.delegation.kind} ${card.delegation.status}` : "",
+  ].filter(Boolean).join(" ").toLowerCase();
+  return filter.split(/\s+/).every(part => haystack.includes(part));
+}
+
+function delegationBadge(delegation) {
+  if (!delegation) return null;
+  return el("span",
+    { class: `badge delegation-${delegation.status}` },
+    `🤖 ${delegation.kind} · ${delegation.status}`);
+}
+
+function cardEl(card) {
+  const badges = [el("span", { class: "badge site" }, card.site)];
+  const pay = fmtPay(card);
+  if (pay) badges.push(el("span", { class: "badge pay" }, pay));
+  if (card.est_minutes != null) badges.push(el("span", { class: "badge" }, `~${card.est_minutes}m`));
+  if (card.slots_open != null) badges.push(el("span", { class: "badge" }, `${card.slots_open} slots`));
+  const dbadge = delegationBadge(card.delegation);
+  if (dbadge) badges.push(dbadge);
+  const children = [el("div", { class: "card-title" }, card.title || card.task_id)];
+  if (card.description && card.description !== card.title) {
+    children.push(el("div", { class: "card-desc" }, card.description));
+  }
+  children.push(el("div", { class: "card-meta" }, ...badges));
+  return el("div",
+    {
+      class: "card" + (card.approved ? " approved" : ""),
+      dataset: { site: card.site, taskId: card.task_id },
+      title: card.task_id,
+    },
+    ...children,
+  );
+}
+
+function render() {
+  const board = document.getElementById("board");
+  board.innerHTML = "";
+  const filter = document.getElementById("filter").value.trim().toLowerCase();
+  const buckets = Object.fromEntries(snapshot.columns.map(c => [c, []]));
+  let hiddenBacklog = 0;
+  for (const card of snapshot.cards) {
+    if (!matchesFilter(card, filter)) continue;
+    const bucket = buckets[card.column] || buckets.backlog;
+    if (card.column === "backlog" && bucket.length >= BACKLOG_CAP) { hiddenBacklog++; continue; }
+    bucket.push(card);
+  }
+  for (const column of snapshot.columns) {
+    const list = el("div", { class: "column-list" });
+    for (const card of buckets[column]) list.appendChild(cardEl(card));
+    if (column === "backlog" && hiddenBacklog > 0) {
+      list.appendChild(el("div", { class: "more-note" },
+        `+${hiddenBacklog} more in the ledger — use the filter to narrow`));
+    }
+    const section = el("section",
+      { class: "column", dataset: { column } },
+      el("div", { class: "column-head" },
+        el("span", { class: "swatch", style: `background:${COLUMN_COLORS[column]}` }),
+        el("span", { class: "name" }, COLUMN_TITLES[column]),
+        el("span", { class: "count" }, String(buckets[column].length))),
+      list,
+    );
+    board.appendChild(section);
+    // eslint-disable-next-line no-undef
+    new Sortable(list, {
+      group: "board",
+      animation: 150,
+      ghostClass: "sortable-ghost",
+      onEnd: evt => onDrop(evt),
+    });
+  }
+}
+
+async function onDrop(evt) {
+  const item = evt.item;
+  if (!item.dataset.site) return;
+  const column = evt.to.closest(".column").dataset.column;
+  const card = snapshot.cards.find(
+    c => c.site === item.dataset.site && c.task_id === item.dataset.taskId);
+  try {
+    if (column === "delegated") {
+      if (!window.confirm(
+        `Delegate "${card && card.title ? card.title : item.dataset.taskId}" to the agent? ` +
+        `It will research and report back to Review — it cannot apply without your approval.`)) {
+        await loadBoard();
+        return;
+      }
+      await api("/api/cards/delegate", {
+        method: "POST",
+        body: { site: item.dataset.site, task_id: item.dataset.taskId },
+      });
+    } else {
+      await api("/api/cards/move", {
+        method: "POST",
+        body: { site: item.dataset.site, task_id: item.dataset.taskId, column },
+      });
+    }
+  } catch (error) {
+    window.alert(error.message);
+  }
+  await loadBoard();
+}
+
+async function loadBoard() {
+  try {
+    snapshot = await api("/api/board");
+  } catch (error) {
+    document.getElementById("replica-text").textContent = `error: ${error.message}`;
+    return;
+  }
+  render();
+  const meta = snapshot.meta;
+  const dot = document.querySelector("#replica-text");
+  let text = `${meta.task_count} tasks`;
+  if (meta.replica_mtime) {
+    const age = Math.round((Date.now() / 1000) - meta.replica_mtime);
+    text += ` · snapshot ${age}s old`;
+  }
+  if (meta.replica_error) {
+    dot.textContent = `⚠️ ${text} — ${meta.replica_error}`;
+  } else {
+    dot.textContent = text;
+  }
+  const seconds = parseInt(snapshot.meta.settings.refresh_seconds || "15", 10) || 15;
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(loadBoard, seconds * 1000);
+}
+
+/* ---------- card modal ---------- */
+
+function badge(kind, status) {
+  return el("span", { class: `badge delegation-${status}` }, `${kind} · ${status}`);
+}
+
+async function openCardModal(card) {
+  openCard = card;
+  document.getElementById("card-backdrop").classList.remove("hidden");
+  document.getElementById("card-title").textContent =
+    card.title || `${card.site} / ${card.task_id}`;
+  await renderCardModal();
+  if (logTimer) clearInterval(logTimer);
+  logTimer = setInterval(refreshDelegations, 2500);
+}
+
+function closeCardModal() {
+  document.getElementById("card-backdrop").classList.add("hidden");
+  openCard = null;
+  if (logTimer) { clearInterval(logTimer); logTimer = null; }
+}
+
+async function renderCardModal() {
+  const card = openCard;
+  const body = document.getElementById("card-body");
+  body.innerHTML = "";
+  const kv = el("dl", { class: "kv" });
+  const rows = [
+    ["Site", card.site],
+    ["Task id", card.task_id],
+    ["Pay", fmtPay(card) || "—"],
+    ["Est. minutes", card.est_minutes != null ? `~${card.est_minutes}` : "—"],
+    ["Slots open", card.slots_open != null ? card.slots_open : "—"],
+    ["Expires", card.expires_at || "—"],
+    ["Last seen", card.last_seen_at || "—"],
+    ["Column", COLUMN_TITLES[card.column]],
+    ["Approved", card.approved ? "yes" : "no"],
+  ];
+  for (const [label, value] of rows) {
+    kv.append(el("dt", {}, label), el("dd", {}, String(value)));
+  }
+  body.append(kv);
+  if (card.description) {
+    body.append(el("h3", {}, "Description"));
+    body.append(el("div", { class: "desc-block" }, card.description));
+  }
+  if (card.url && /^https?:\/\//.test(card.url)) {
+    body.append(el("p", {}, el("a", { href: card.url, target: "_blank", rel: "noopener" }, "open task ↗")));
+  }
+  body.append(el("h3", {}, "Delegations"));
+  const history = await api(
+    `/api/cards/delegations?site=${encodeURIComponent(card.site)}&task_id=${encodeURIComponent(card.task_id)}`)
+    .catch(() => ({ delegations: [] }));
+  const listWrap = el("div", { id: "delegation-list" });
+  if (!history.delegations.length) {
+    listWrap.append(el("p", { class: "more-note" }, "No delegations yet."));
+  }
+  for (const delegation of history.delegations) {
+    const when = delegation.finished_at || delegation.started_at || delegation.created_at;
+    listWrap.append(el("div", { class: "delegation" },
+      el("div", { class: "row" },
+        badge(delegation.kind, delegation.status),
+        el("span", {}, `#${delegation.id}`),
+        delegation.exit_code != null ? el("span", {}, `exit ${delegation.exit_code}`) : null,
+        el("span", { class: "time" }, when || ""))));
+  }
+  body.append(listWrap);
+  const active = history.delegations.find(
+    d => d.status === "running" || d.status === "pending");
+  if (active) {
+    body.append(el("h3", {}, `Log — delegation #${active.id}`));
+    const detail = await api(`/api/delegations/${active.id}`).catch(() => null);
+    const log = el("pre", { class: "log", id: "delegation-log" },
+      detail ? detail.log_tail || "(no output yet)" : "(cannot read log)");
+    body.append(log);
+    const logBox = document.getElementById("delegation-log");
+    if (logBox) logBox.scrollTop = logBox.scrollHeight;
+  }
+  const actions = document.getElementById("card-actions");
+  actions.innerHTML = "";
+  const running = history.delegations.find(
+    d => d.status === "running" || d.status === "pending");
+  if (!running) {
+    actions.append(el("button", { class: "primary", onclick: () => delegateCard(card) },
+      "Delegate to agent"));
+  } else {
+    actions.append(el("button", { class: "danger", onclick: () => killDelegation(running) },
+      "Kill delegation"));
+  }
+  if (card.column === "review" && !card.approved) {
+    actions.append(el("button", { class: "primary", onclick: () => approveCard(card) },
+      "Approve — let the agent APPLY"));
+  }
+  actions.append(el("button", { onclick: closeCardModal }, "Close"));
+}
+
+async function refreshDelegations() {
+  if (!openCard) return;
+  await renderCardModal();
+}
+
+async function delegateCard(card) {
+  if (!window.confirm(
+    `Delegate "${card.title || card.task_id}" to the agent? It may not apply; ` +
+    `the result lands in Review for your approval.`)) return;
+  try {
+    await api("/api/cards/delegate", {
+      method: "POST", body: { site: card.site, task_id: card.task_id },
+    });
+  } catch (error) {
+    window.alert(error.message);
+  }
+  await loadBoard();
+  await refreshDelegations();
+}
+
+async function approveCard(card) {
+  if (!window.confirm(
+    `APPROVE "${card.title || card.task_id}"? This is the one click that lets ` +
+    `the agent run the site CLI's apply command for this exact task.`)) return;
+  try {
+    await api("/api/cards/approve", {
+      method: "POST", body: { site: card.site, task_id: card.task_id },
+    });
+  } catch (error) {
+    window.alert(error.message);
+  }
+  await loadBoard();
+  await refreshDelegations();
+}
+
+async function killDelegation(delegation) {
+  if (!window.confirm(`Kill delegation #${delegation.id}?`)) return;
+  try {
+    await api(`/api/delegations/${delegation.id}/kill`, { method: "POST" });
+  } catch (error) {
+    window.alert(error.message);
+  }
+  await loadBoard();
+  await refreshDelegations();
+}
+
+/* ---------- settings modal ---------- */
+
+async function openSettings() {
+  const settings = await api("/api/settings");
+  document.getElementById("set-harness").value = settings.harness_command;
+  document.getElementById("set-work").value = settings.work_prompt;
+  document.getElementById("set-apply").value = settings.apply_prompt;
+  document.getElementById("set-refresh").value = settings.refresh_seconds;
+  document.getElementById("settings-backdrop").classList.remove("hidden");
+}
+
+function closeSettings() {
+  document.getElementById("settings-backdrop").classList.add("hidden");
+}
+
+async function saveSettings() {
+  const settings = {
+    harness_command: document.getElementById("set-harness").value,
+    work_prompt: document.getElementById("set-work").value,
+    apply_prompt: document.getElementById("set-apply").value,
+    refresh_seconds: document.getElementById("set-refresh").value,
+  };
+  try {
+    await api("/api/settings", { method: "PUT", body: { settings } });
+    closeSettings();
+    await loadBoard();
+  } catch (error) {
+    window.alert(error.message);
+  }
+}
+
+/* ---------- wiring ---------- */
+
+document.addEventListener("click", event => {
+  const card = event.target.closest(".card");
+  if (card && card.dataset.site) {
+    const found = snapshot.cards.find(
+      c => c.site === card.dataset.site && c.task_id === card.dataset.taskId);
+    if (found) openCardModal(found);
+  }
+});
+
+document.getElementById("filter").addEventListener("input", render);
+document.getElementById("refresh-btn").addEventListener("click", loadBoard);
+document.getElementById("settings-btn").addEventListener("click", openSettings);
+document.getElementById("settings-close").addEventListener("click", closeSettings);
+document.getElementById("settings-cancel").addEventListener("click", closeSettings);
+document.getElementById("settings-save").addEventListener("click", saveSettings);
+document.getElementById("card-close").addEventListener("click", closeCardModal);
+document.getElementById("card-backdrop").addEventListener("click", event => {
+  if (event.target === event.currentTarget) closeCardModal();
+});
+document.getElementById("settings-backdrop").addEventListener("click", event => {
+  if (event.target === event.currentTarget) closeSettings();
+});
+
+loadBoard();
+</script>
+</body>
+</html>

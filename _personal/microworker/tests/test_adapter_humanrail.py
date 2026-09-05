@@ -39,6 +39,7 @@ def test_full_mapping():
         "site": "humanrail",
         "task_id": "3f7c1e2a-2b1a-4a3e-9c2d-1a2b3c4d5e6f",
         "title": "Contract Review",
+        "description": None,
         "url": "https://routehuman.com/queue/3f7c1e2a-2b1a-4a3e-9c2d-1a2b3c4d5e6f",
         "pay_amount": 2500,
         "pay_currency": "SATS",

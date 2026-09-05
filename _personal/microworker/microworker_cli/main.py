@@ -1,8 +1,11 @@
 """Main entry point for the Microworker CLI.
 
-Commands: `discover`, `merge`, `validate`, and the `sites`, `tasks` and `runs`
-groups. `discover` writes one site envelope; `merge` folds a run's envelopes
-into the SQLite store; `tasks` and `runs` read that store back.
+Commands: `discover`, `merge`, `enrich`, `validate`, and the `sites`,
+`tasks`, `runs` and `board` groups. `discover` writes one site envelope;
+`merge` folds a run's envelopes into the SQLite store; `enrich` pulls
+detail-page descriptions for a site's ledger tasks; `tasks` and `runs` read
+that store back; `board serve` runs the Kanban UI, its API, and the
+delegation dispatcher.
 
 Every `list` command carries `--table/-t`, `--filter/-f`, `--limit/-l` and
 `--properties/-p`; every `get` command carries `--table/-t` and
@@ -58,6 +61,8 @@ from . import (
     __version__,
     db,
     discover as discover_module,
+    enrich as enrich_module,
+    envelope,
     merge as merge_module,
     schema,
     sites,
@@ -76,6 +81,9 @@ tasks_app = typer.Typer(help="Tasks merged into the task database",
                         no_args_is_help=True)
 runs_app = typer.Typer(help="Merges recorded in the task database",
                        no_args_is_help=True)
+board_app = typer.Typer(help="Kanban board over the task database "
+                              "(serve the UI and its API)",
+                        no_args_is_help=True)
 
 # The exact fields each command's rows carry, used as the allowlist for
 # `--filter` and `--properties`. They are derived from the row builders --
@@ -199,6 +207,29 @@ def merge(
     _warn_unparsed_payments(summary["unparsed_payments"])
 
 
+@app.command("enrich")
+@command
+@exit_2_on_contract_errors
+def enrich(
+    site: str = typer.Argument(..., help="Site whose ledger tasks get descriptions from their detail pages"),
+    timeout: int = typer.Option(120, "--timeout", help="Seconds allowed per site CLI detail fetch"),
+    delay: float = typer.Option(2.0, "--delay", help="Seconds to wait between detail fetches (gentleness; the site flags rapid bursts)"),
+):
+    """Pull descriptions for a site's ledger tasks from its detail pages.
+
+    Bounded by the ledger: only rows with no description yet are fetched,
+    one `<site> tasks get <url>` each. Runs on the discovery machine.
+    """
+    print_json(enrich_module.enrich(site, timeout, delay))
+
+
+@app.command("migrate")
+@command
+def migrate():
+    """Apply any pending task-database schema migrations."""
+    print_json({"schema_version": db.migrate()})
+
+
 def _warn_unparsed_payments(counts: dict) -> None:
     """Name the sites whose published prices this run could not read.
 
@@ -313,9 +344,51 @@ def runs_get(
               fields=RUN_GET_FIELDS)
 
 
+@board_app.command("serve")
+def board_serve(
+    host: str = typer.Option("127.0.0.1", "--host", help="Interface to bind"),
+    port: int = typer.Option(8521, "--port", "-p", help="Port to listen on"),
+):
+    """Serve the Kanban board UI, its API, and the delegation dispatcher.
+
+    On adam-server this runs under launchd bound to 0.0.0.0 so the board is
+    reachable anywhere on the tailnet.
+    """
+    from .board.server import run
+    run(host, port)
+
+
+@board_app.command("state")
+@exit_2_on_contract_errors
+def board_state(
+    site: str = typer.Argument(..., help="Site the task belongs to"),
+    task_id: str = typer.Argument(..., help="Task identifier within that site"),
+    column: Optional[str] = typer.Argument(
+        None, help="Column to move the card to; omit to read its current state"),
+):
+    """Read one card's board state, or move it to another column.
+
+    Board-delegated agents call this on their own card: `working` while they
+    work it, `review` when finished. The approval flag is never changed here.
+    """
+    states = {(row["site"], row["task_id"]): row for row in db.board_task_states()}
+    row = states.get((site, task_id))
+    approved = bool(row["approved"]) if row else False
+    if column is None:
+        current = row["column_id"] if row else "backlog"
+        print_json({"site": site, "task_id": task_id, "column": current,
+                    "approved": approved})
+        return
+    db.board_upsert_task_state(site, task_id, column, approved=approved,
+                               updated_at=envelope.utc_now())
+    print_json({"site": site, "task_id": task_id, "column": column,
+                "approved": approved})
+
+
 app.add_typer(sites_app, name="sites")
 app.add_typer(tasks_app, name="tasks")
 app.add_typer(runs_app, name="runs")
+app.add_typer(board_app, name="board")
 
 
 def main():

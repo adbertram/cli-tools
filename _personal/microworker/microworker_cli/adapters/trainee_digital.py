@@ -49,6 +49,7 @@ def to_task(raw: dict) -> MappedTask:
         "task_id": task_id(SITE, raw["id"], field="id",
                            locator=f"title={raw['title']!r}"),
         "title": raw["title"],
+        "description": raw.get("description"),
         "url": raw["url"],
         "pay_amount": pay_amount,
         "pay_currency": parse_currency(raw["pay"])

@@ -63,14 +63,14 @@ from cli_tools_shared.exceptions import ClientError
 
 from . import jsonio, paths
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 READONLY_TIMEOUT_SECONDS = 1.0
 
 # The task contract's columns, in contract order. `raw` is stored as JSON text
 # and comes back parsed, so a reader never sees the serialization.
 CONTRACT_COLUMNS = (
-    "site", "task_id", "title", "url", "pay_amount", "pay_currency",
-    "est_minutes", "slots_open", "expires_at", "raw",
+    "site", "task_id", "title", "description", "url", "pay_amount",
+    "pay_currency", "est_minutes", "slots_open", "expires_at", "raw",
 )
 # Bookkeeping columns this module owns; adapters never produce them.
 SEEN_COLUMNS = (
@@ -84,10 +84,14 @@ RUN_SITE_COLUMNS = ("status", "error", "fetched_at", "task_count",
 
 # Columns a fresher sighting refreshes. `first_seen_at`/`first_seen_run_id` are
 # excluded because they move by their own rule (oldest wins, in either
-# direction), and `site`/`task_id` are the key.
+# direction), and `site`/`task_id` are the key. `description` is excluded too:
+# it follows its own rule in `_UPSERT_TASK` (a fresher sighting's non-null
+# description wins, but a sighting with no description must NOT wipe one that
+# was enriched after the fact -- see the guard clause there).
 REFRESHED_COLUMNS = tuple(
     column for column in TASK_COLUMNS
-    if column not in ("site", "task_id", "first_seen_at", "first_seen_run_id"))
+    if column not in ("site", "task_id", "first_seen_at", "first_seen_run_id",
+                      "description"))
 
 # `pay_amount` is declared with NO datatype on purpose. A `TEXT` affinity would
 # store 4.5 as '4.5' and break every numeric comparison; BLOB affinity keeps the
@@ -97,6 +101,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     site TEXT NOT NULL,
     task_id TEXT NOT NULL,
     title TEXT,
+    description TEXT,
     url TEXT,
     pay_amount,
     pay_currency TEXT,
@@ -148,11 +153,18 @@ CREATE INDEX IF NOT EXISTS idx_tasks_pay_amount ON tasks(pay_amount);
 # those runs' counts are UNKNOWN. A backfilled 0 would assert that no old run
 # ever hit an unparseable price, which is exactly the claim this column exists
 # to stop the tool from making.
+#
+# Schema-version 3 databases predate `tasks.description`. The column is added
+# NULLABLE with NO default: NULL means the site never published a description
+# this pipeline could read, and backfilling anything else would assert text
+# nobody stored.
 MIGRATIONS = (
     ("runs", "skipped_stale",
      "ALTER TABLE runs ADD COLUMN skipped_stale INTEGER NOT NULL DEFAULT 0"),
     ("run_sites", "unparsed_payments",
      "ALTER TABLE run_sites ADD COLUMN unparsed_payments INTEGER"),
+    ("tasks", "description",
+     "ALTER TABLE tasks ADD COLUMN description TEXT"),
 )
 
 _UPSERT_TASK = """
@@ -166,11 +178,22 @@ ON CONFLICT(site, task_id) DO UPDATE SET {updates}
     # `first_seen_at` backwards, and a statement-level WHERE would skip that too.
     # `>=` so re-merging the same run id still refreshes (its observation is
     # exactly as fresh), while a strictly older observation changes nothing.
+    #
+    # `description` is NOT in REFRESHED_COLUMNS because it follows its own rule:
+    # a fresher sighting's non-empty description replaces the stored one, but a
+    # sighting that carries none (the common case -- most sites publish
+    # descriptions only on detail pages, where `microworker enrich` fetches
+    # them AFTER the merge) leaves an enriched description alone instead of
+    # wiping it back to null on every re-discovery.
     updates=", ".join(
         [f"{column} = CASE WHEN excluded.last_seen_at >= tasks.last_seen_at "
          f"THEN excluded.{column} ELSE tasks.{column} END"
          for column in REFRESHED_COLUMNS]
         + [
+            "description = CASE WHEN excluded.last_seen_at >= tasks.last_seen_at "
+            "AND excluded.description IS NOT NULL "
+            "AND excluded.description != '' THEN excluded.description "
+            "ELSE tasks.description END",
             "first_seen_at = min(tasks.first_seen_at, excluded.first_seen_at)",
             "first_seen_run_id = CASE WHEN excluded.first_seen_at < "
             "tasks.first_seen_at THEN excluded.first_seen_run_id "
@@ -296,6 +319,24 @@ def get_task(site: str, task_id: str) -> dict:
     return rows[0]
 
 
+def update_task_description(site: str, task_id: str, description: str) -> bool:
+    """Set one task's description; the `microworker enrich` write path.
+
+    The text comes from the site's detail page, fetched after the merge that
+    stored the row; the merge upsert's own guard keeps a later description-less
+    sighting from wiping it. Returns whether a row matched.
+    """
+    conn = connect()
+    try:
+        cursor = conn.execute(
+            "UPDATE tasks SET description = ? WHERE site = ? AND task_id = ?",
+            (description, site, task_id))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
 def list_runs() -> list[dict]:
     """Every merge, most recent first."""
     return _read(
@@ -327,6 +368,20 @@ def _migrate(conn: sqlite3.Connection) -> None:
             conn.execute(statement)
 
 
+def migrate() -> str:
+    """Apply any pending schema migrations. Returns the schema version.
+
+    Migrations run on the write connection (`connect`), so a database created
+    by an older tool version stays readable by read-only commands until a
+    write path runs. This is the explicit operator path for that gap: run it
+    after upgrading the tool and before read commands, or let the next merge
+    do the same work.
+    """
+    conn = connect()
+    conn.close()
+    return str(SCHEMA_VERSION)
+
+
 def _read(sql: str, params: tuple, to_record) -> list[dict]:
     conn = connect_readonly()
     try:
@@ -334,9 +389,17 @@ def _read(sql: str, params: tuple, to_record) -> list[dict]:
     except sqlite3.Error as exc:
         # The engine can refuse well after the connection opened: a `mode=ro`
         # open is lazy, and a stale `-wal` needing recovery beside a read-only
-        # directory fails on the first statement, not on connect.
+        # directory fails on the first statement, not on connect. A missing
+        # column is the migration gap: the database predates the current
+        # schema, and only a write path (`merge`, or `microworker migrate`)
+        # can add it.
+        hint = ""
+        if "no such column" in str(exc):
+            hint = "; the database predates the current schema -- run " \
+                   "`microworker migrate` (or any merge) to upgrade it"
         raise ClientError(
-            f"cannot read the task database at {paths.db_path()}: {exc}") from exc
+            f"cannot read the task database at {paths.db_path()}: {exc}{hint}"
+        ) from exc
     finally:
         conn.close()
 
@@ -406,3 +469,218 @@ def _existing_last_seen(conn: sqlite3.Connection,
             ", ".join("(?, ?)" for _ in keys)),
         [value for key in keys for value in key])
     return {(row["site"], row["task_id"]): row["last_seen_at"] for row in rows}
+
+
+# ---------------------------------------------------------------------------
+# The board store: `data/board.db`, beside the ledger and owned by the board
+# service on adam-server. Same rule as the ledger: this module is the only
+# thing that opens it.
+#
+# The ledger (`tasks.db`) is written by `merge` on the discovery machine only;
+# the board service reads a snapshot of it read-only. The board's own state --
+# which column a card sits in, and the delegation jobs that hand cards to an
+# agent -- cannot live in a file it may not write, so it lives here, in a
+# second file with exactly one writer. Two files, one writer each: a synced
+# SQLite file with two writers is how a ledger silently forks (the Dropbox
+# ignore rules carry exactly that warning), and this split makes it
+# impossible by construction.
+#
+# A task with no `task_states` row is on the default `backlog` column; the
+# board materializes that default rather than writing a row for every task a
+# merge ever stores. `delegations` is append-only except for the fields a run
+# may fill in: status, pid, exit code, and the two clocks.
+# ---------------------------------------------------------------------------
+
+BOARD_COLUMNS = ("backlog", "ready", "delegated", "working", "review", "done")
+DELEGATION_KINDS = ("work", "apply")
+DELEGATION_STATUSES = ("pending", "running", "done", "failed")
+DELEGATION_UPDATE_COLUMNS = ("status", "pid", "exit_code", "log_path",
+                             "started_at", "finished_at")
+
+BOARD_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS board_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS task_states (
+    site TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    column_id TEXT NOT NULL,
+    approved INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (site, task_id)
+);
+CREATE TABLE IF NOT EXISTS delegations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    site TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    status TEXT NOT NULL,
+    prompt TEXT,
+    log_path TEXT,
+    pid INTEGER,
+    exit_code INTEGER,
+    created_at TEXT NOT NULL,
+    started_at TEXT,
+    finished_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_delegations_status ON delegations(status);
+CREATE INDEX IF NOT EXISTS idx_delegations_task ON delegations(site, task_id);
+"""
+
+
+def connect_board() -> sqlite3.Connection:
+    """The board store's write-capable connection. Creates the file/schema."""
+    path = paths.board_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(path)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.executescript(BOARD_SCHEMA_SQL)
+    conn.commit()
+    return conn
+
+
+def _board_read(sql: str, params: tuple = ()) -> list[dict]:
+    """Read board rows through a connection this function closes."""
+    conn = connect_board()
+    try:
+        return [dict(row) for row in conn.execute(sql, params)]
+    finally:
+        conn.close()
+
+
+def board_settings() -> dict[str, str]:
+    """Every board setting as `{key: value}`. Empty when nothing was set."""
+    return {row["key"]: row["value"]
+            for row in _board_read("SELECT key, value FROM board_settings")}
+
+
+def board_set_settings(settings: dict[str, str]) -> None:
+    """Upsert the given settings; keys not named are left alone."""
+    conn = connect_board()
+    try:
+        conn.executemany(
+            "INSERT OR REPLACE INTO board_settings (key, value) VALUES (?, ?)",
+            list(settings.items()))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def board_upsert_task_state(site: str, task_id: str, column_id: str, *,
+                            approved: bool, updated_at: str) -> None:
+    """One card's column and approval flag. Unknown columns are `ClientError`."""
+    if column_id not in BOARD_COLUMNS:
+        raise ClientError(
+            f"invalid board column {column_id!r}: a column is one of "
+            + ", ".join(BOARD_COLUMNS))
+    conn = connect_board()
+    try:
+        conn.execute(
+            "INSERT INTO task_states (site, task_id, column_id, approved, "
+            "updated_at) VALUES (?, ?, ?, ?, ?) "
+            "ON CONFLICT(site, task_id) DO UPDATE SET "
+            "column_id = excluded.column_id, approved = excluded.approved, "
+            "updated_at = excluded.updated_at",
+            (site, task_id, column_id, int(bool(approved)), updated_at))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def board_task_states() -> list[dict]:
+    """Every card state row; `approved` comes back as a 0/1 integer."""
+    return _board_read(
+        "SELECT site, task_id, column_id, approved, updated_at "
+        "FROM task_states")
+
+
+def board_create_delegation(site: str, task_id: str, kind: str, prompt: str,
+                            log_path: str, created_at: str) -> int:
+    """Insert a `pending` delegation and return its id."""
+    if kind not in DELEGATION_KINDS:
+        raise ClientError(
+            f"invalid delegation kind {kind!r}: a kind is one of "
+            + ", ".join(DELEGATION_KINDS))
+    conn = connect_board()
+    try:
+        cursor = conn.execute(
+            "INSERT INTO delegations (site, task_id, kind, status, prompt, "
+            "log_path, created_at) VALUES (?, ?, ?, 'pending', ?, ?, ?)",
+            (site, task_id, kind, prompt, log_path, created_at))
+        conn.commit()
+        return cursor.lastrowid
+    finally:
+        conn.close()
+
+
+def board_get_delegation(delegation_id: int) -> dict:
+    """One delegation row; an unknown id is a `ClientError`."""
+    rows = _board_read("SELECT * FROM delegations WHERE id = ?",
+                       (delegation_id,))
+    if not rows:
+        raise ClientError(f"no delegation {delegation_id} in {paths.board_path()}")
+    return rows[0]
+
+
+def board_update_delegation(delegation_id: int, **fields) -> None:
+    """Fill in the run fields of one delegation (status, pid, clocks, exit).
+
+    Only `DELEGATION_UPDATE_COLUMNS` are writable; everything else is fixed
+    at creation, so a typo here is a `ClientError`, not a silent no-op.
+    """
+    unknown = set(fields) - set(DELEGATION_UPDATE_COLUMNS)
+    if unknown:
+        raise ClientError(
+            f"cannot update delegation fields: {', '.join(sorted(unknown))}; "
+            f"writable fields: {', '.join(DELEGATION_UPDATE_COLUMNS)}")
+    if "status" in fields and fields["status"] not in DELEGATION_STATUSES:
+        raise ClientError(
+            f"invalid delegation status {fields['status']!r}: a status is one "
+            f"of {', '.join(DELEGATION_STATUSES)}")
+    if not fields:
+        return
+    assignments = ", ".join(f"{column} = ?" for column in fields)
+    conn = connect_board()
+    try:
+        conn.execute(f"UPDATE delegations SET {assignments} WHERE id = ?",
+                     (*fields.values(), delegation_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def board_delegations(site: str, task_id: str) -> list[dict]:
+    """Every delegation for one card, oldest first."""
+    return _board_read(
+        "SELECT * FROM delegations WHERE site = ? AND task_id = ? ORDER BY id",
+        (site, task_id))
+
+
+def board_pending_delegations() -> list[dict]:
+    """Delegations waiting for the dispatcher, oldest first."""
+    return _board_read(
+        "SELECT * FROM delegations WHERE status = 'pending' ORDER BY id")
+
+
+def board_active_delegation(site: str, task_id: str,
+                            kind: str) -> dict | None:
+    """The card's in-flight delegation of that kind, if any."""
+    rows = _board_read(
+        "SELECT * FROM delegations WHERE site = ? AND task_id = ? "
+        "AND kind = ? AND status IN ('pending', 'running') "
+        "ORDER BY id DESC LIMIT 1",
+        (site, task_id, kind))
+    return rows[0] if rows else None
+
+
+def board_latest_delegations() -> dict[tuple[str, str], dict]:
+    """`(site, task_id) ->` each card's newest delegation row."""
+    rows = _board_read(
+        "SELECT d.* FROM delegations d JOIN "
+        "(SELECT site, task_id, MAX(id) AS max_id FROM delegations "
+        "GROUP BY site, task_id) m "
+        "ON d.site = m.site AND d.task_id = m.task_id AND d.id = m.max_id")
+    return {(row["site"], row["task_id"]): row for row in rows}

@@ -48,6 +48,7 @@ def cases(record):
     return {
         ("discover",): ["humanrail", "--run-id", RUN],
         ("merge",): [RUN],
+        ("migrate",): [],
         ("validate",): [str(paths.envelope_path(RUN, "humanrail"))],
         ("sites", "list"): [],
         ("sites", "get"): ["humanrail"],
@@ -55,10 +56,16 @@ def cases(record):
         ("tasks", "get"): ["microworkers", record["campaign_id"]],
         ("runs", "list"): [],
         ("runs", "get"): [RUN],
+        ("board", "state"): ["microworkers", record["campaign_id"], "working"],
     }
 
 
-SKIPPED: dict[tuple[str, ...], str] = {}
+SKIPPED: dict[tuple[str, ...], str] = {
+    ("board", "serve"): "blocks serving the UI forever; the API and dispatcher "
+                        "are exercised through TestClient in test_board.py",
+    ("enrich",): "runs the site CLI against the live site; the decision table "
+                 "is covered by test_enrich.py with a scripted runner",
+}
 
 
 def test_every_leaf_is_accounted_for(project, microworkers_record):

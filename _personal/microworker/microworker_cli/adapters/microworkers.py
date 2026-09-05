@@ -38,6 +38,7 @@ def to_task(raw: dict) -> MappedTask:
         "task_id": task_id(SITE, raw["campaign_id"], field="campaign_id",
                            locator=f"url={raw['url']!r}"),
         "title": raw["title"],
+        "description": raw.get("description"),
         "url": raw["url"],
         "pay_amount": pay_amount,
         "pay_currency": pay_currency,
@@ -64,3 +65,25 @@ def slots_open(done, total) -> int | None:
     if isinstance(done, int) and isinstance(total, int):
         return total - done
     return None
+
+
+def detail_description(detail: dict) -> str | None:
+    """Description text for a task DETAIL record (`microworkers tasks get`).
+
+    The jobs listing carries no description; the detail page's
+    `instructions_and_proof` and `work_summary` paragraph lists are the
+    site's own text about the job. Instructions come first -- that is the
+    actual description -- followed by the summary. Paragraphs are joined with
+    newlines; when the site published neither, this is None: no text is
+    invented.
+    """
+    paragraphs: list[str] = []
+    for key in ("instructions_and_proof", "work_summary"):
+        value = detail.get(key) or []
+        if not isinstance(value, list):
+            continue
+        paragraphs.extend(
+            str(item).strip() for item in value if str(item).strip())
+    if not paragraphs:
+        return None
+    return "\n".join(paragraphs)

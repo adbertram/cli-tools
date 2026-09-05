@@ -62,8 +62,8 @@ def test_tasks_list_newest_last_seen_first_with_parsed_raw(runner, two_runs):
     assert rows[0]["last_seen_run_id"] == LATER_RUN
     assert rows[1]["first_seen_run_id"] == RUN
     assert list(rows[0]) == [
-        "site", "task_id", "title", "url", "pay_amount", "pay_currency",
-        "est_minutes", "slots_open", "expires_at", "raw",
+        "site", "task_id", "title", "description", "url", "pay_amount",
+        "pay_currency", "est_minutes", "slots_open", "expires_at", "raw",
         "first_seen_at", "last_seen_at", "first_seen_run_id", "last_seen_run_id"]
 
 
@@ -82,11 +82,14 @@ def test_tasks_list_table_drops_raw(runner, two_runs, monkeypatch):
     # The shared table printer shows the first six columns, so `raw` would not
     # reach the terminal by default anyway. `--properties` is what makes the
     # drop observable: ask for it explicitly and it is still not rendered,
-    # because a whole nested site record has no readable table cell.
+    # because a whole nested site record has no readable table cell. With
+    # `description` in the contract the first six columns are site, task_id,
+    # title, description, url, pay_amount.
     monkeypatch.setenv("COLUMNS", "300")
     outcome = runner.invoke(app, ["tasks", "list", "--table"])
     assert outcome.exit_code == 0, outcome.output
-    assert "Task Id" in outcome.stdout and "Pay Currency" in outcome.stdout
+    assert "Task Id" in outcome.stdout and "Description" in outcome.stdout
+    assert "Pay Currency" not in outcome.stdout  # seventh column, cut off
 
     outcome = runner.invoke(app, ["tasks", "list", "--table",
                                   "--properties", "task_id,raw,site"])

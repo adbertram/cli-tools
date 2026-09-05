@@ -44,6 +44,7 @@ def to_task(raw: dict) -> MappedTask:
         "task_id": task_id(SITE, raw["id"], field="id",
                            locator=f"url={raw['url']!r}"),
         "title": title_for(raw.get("type")),
+        "description": raw.get("description"),
         "url": raw["url"],
         "pay_amount": raw["payout_sats"],
         "pay_currency": "SATS" if raw["payout_sats"] is not None else None,

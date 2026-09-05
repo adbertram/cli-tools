@@ -12,6 +12,7 @@
     "site": {"type": "string", "minLength": 1},
     "task_id": {"type": "string", "minLength": 1},
     "title": {"type": ["string", "null"]},
+    "description": {"type": ["string", "null"]},
     "url": {"type": ["string", "null"]},
     "pay_amount": {"type": ["number", "null"]},
     "pay_currency": {"type": ["string", "null"]},

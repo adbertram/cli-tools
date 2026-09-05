@@ -46,7 +46,7 @@ from .ids import task_id
 from .mapped import MappedTask
 
 SITE = "mercor"
-RAW_KEYS = ("listingId", "title", "url")
+RAW_KEYS = ("listingId", "title", "url", "description")
 
 
 def to_task(raw: dict) -> MappedTask:
@@ -59,6 +59,7 @@ def to_task(raw: dict) -> MappedTask:
         "task_id": task_id(SITE, raw["listingId"], field="listingId",
                            locator=f"url={raw['url']!r}"),
         "title": raw["title"],
+        "description": raw["description"],
         "url": raw["url"],
         "pay_amount": pay_amount(raw),
         "pay_currency": None,

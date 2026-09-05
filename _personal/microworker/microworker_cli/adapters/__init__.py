@@ -34,6 +34,15 @@ ADAPTERS = {
     "trainee-digital": trainee_digital.to_task,
 }
 
+# Sites whose task DETAIL records carry a description the listing does not.
+# `microworker enrich` fetches each such site's detail pages after the merge
+# and writes the text back through `db.update_task_description`. A site absent
+# from this map is not enrichable -- its descriptions either arrive with the
+# listing (mapped in `to_task`) or the site publishes none.
+DETAIL_DESCRIPTIONS = {
+    "microworkers": microworkers.detail_description,
+}
+
 
 def adapter_for(site: str):
     if site not in ADAPTERS:
@@ -41,3 +50,8 @@ def adapter_for(site: str):
             f"no adapter for site '{site}'; adapters exist for: "
             f"{', '.join(ADAPTERS)}")
     return ADAPTERS[site]
+
+
+def detail_description_for(site: str):
+    """The detail->description extractor for a site, or None (not enrichable)."""
+    return DETAIL_DESCRIPTIONS.get(site)
