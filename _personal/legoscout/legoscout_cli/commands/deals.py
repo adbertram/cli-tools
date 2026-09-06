@@ -17,7 +17,6 @@ from ..ledger import sweep as sweep_module
 from ..ledger import validate as validate_module
 from ..orchestrator import (
     build_run_manifest,
-    replay_fixtures,
     validate_identification_result,
     write_run_triage,
 )
@@ -365,8 +364,3 @@ def schema(
                  delegate.flag([phase] if phase else [], "--json", json_out))
 
 
-@app.command("replay")
-@command
-def replay():
-    """Replay the stored source-run fixtures through build and validate."""
-    delegate.run(replay_fixtures, [])

@@ -7,9 +7,8 @@ import typer
 from cli_tools_shared.output import command, print_json
 
 from .. import delegate
-from ..pricing import auctionninja_fees, build_pickup_area, fees as fees_module
+from ..pricing import build_pickup_area, fees as fees_module
 from ..pricing import (
-    contact_sheet as contact_sheet_module,
     inbound_shipping,
     listing_images,
     pickup_area as pickup_module,
@@ -319,23 +318,6 @@ def images(
     delegate.run(listing_images, argv)
 
 
-@app.command("contact-sheet")
-@command
-def contact_sheet(
-    images: List[str] = typer.Argument(..., help="Image files to include"),
-    output: str = typer.Option(..., "--output", help="Output PNG or JPEG path"),
-    label: Optional[List[str]] = typer.Option(
-        None, "--label", help="Visible label for each image (repeatable)"),
-    columns: int = typer.Option(3, "--columns", help="Number of tile columns"),
-):
-    """Build a labeled contact sheet for classifier vision review."""
-    argv = [*images, "--output", output, "--columns", str(columns)]
-    if label:
-        for value in label:
-            argv.extend(["--label", value])
-    delegate.run(contact_sheet_module, argv)
-
-
 @app.command("pickup-area")
 @command
 def pickup_area(
@@ -372,21 +354,3 @@ def rebuild_pickup_area(
     delegate.run(build_pickup_area, argv)
 
 
-@app.command("auctionninja-fees")
-@command
-def auctionninja(
-    url: Optional[str] = typer.Option(None, "--url", help="One AuctionNinja lot URL"),
-    batch: Optional[str] = typer.Option(None, "--batch", metavar="FILE",
-                                        help="A file of lot URLs"),
-    weight_lbs: Optional[float] = typer.Option(
-        None, "--weight-lbs", help="Estimate inbound freight at this weight"),
-    register: bool = typer.Option(
-        False, "--register", help="Persist the discovered house record"),
-):
-    """Discover an AuctionNinja house's published premium, tax and origin."""
-    argv = []
-    delegate.option(argv, "--url", url)
-    delegate.option(argv, "--batch", batch)
-    delegate.option(argv, "--weight-lbs", weight_lbs)
-    delegate.flag(argv, "--register", register)
-    delegate.run(auctionninja_fees, argv)

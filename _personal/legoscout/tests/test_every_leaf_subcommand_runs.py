@@ -33,14 +33,12 @@ import sys
 import types
 
 import pytest
-from PIL import Image
 from typer.testing import CliRunner
 
 import legoscout_cli
 from legoscout_cli import paths
 from legoscout_cli.ledger import db as ledger_db
 from legoscout_cli.main import app
-from legoscout_cli.orchestrator import replay_fixtures
 from legoscout_cli.prospector import hypothesis_types
 from legoscout_cli.sources import registry
 
@@ -187,8 +185,6 @@ def ids(ledger):
 def files(tmp_path_factory, ledger):
     """The JSON operands the file-taking commands need, written once."""
     root = tmp_path_factory.mktemp("operands")
-    contact_sheet_image = root / "contact-sheet-input.png"
-    Image.new("RGB", (8, 8), "red").save(contact_sheet_image)
     candidate = {
         "listing_key": "shopgoodwill|999999999",
         "source": "shopgoodwill",
@@ -418,8 +414,6 @@ def files(tmp_path_factory, ledger):
     written["minifig_price_output"] = str(root / "minifig_price_output.json")
     written["minifig_eval_workspace"] = str(minifig_eval_workspace)
     written["minifig_eval_output"] = str(root / "minifig_eval_output.json")
-    written["contact_sheet_image"] = str(contact_sheet_image)
-    written["contact_sheet_output"] = str(root / "contact-sheet-output.png")
     manifest_dir = root / "run-manifest"
     manifest_dir.mkdir()
     for namespace in registry.active_namespaces():
@@ -542,7 +536,6 @@ def cases(ids, files):
         ("deals", "validate"): _case([]),
         ("deals", "status"): _case([ids["listing_key"], "active"]),
         ("deals", "schema"): _case(["crawl", "--json"]),
-        ("deals", "replay"): _case([], TEXT),
 
         ("sellers", "list"): _case(["--limit", "5"]),
         ("sellers", "get"): _case([ids["source"], ids["seller_id"]]),
@@ -569,11 +562,6 @@ def cases(ids, files):
         ("pricing", "profit"): _case(
             ["--avg-price", "100", "--price-detail-count", "5",
              "--estimated-total", "50", "--fee-rate", "0.13"]),
-        ("pricing", "contact-sheet"): _case([
-            files["contact_sheet_image"],
-            "--output", files["contact_sheet_output"],
-        ]),
-
         ("minifig", "detect"): _case([
             "--input", files["minifig_input"],
             "--output", files["minifig_output"],
@@ -636,8 +624,6 @@ SKIPPED: dict[tuple[str, ...], str] = {
         "calls the carrier for a live rate quote",
     ("pricing", "images"):
         "downloads a listing's photos from the live marketplace onto disk",
-    ("pricing", "auctionninja-fees"):
-        "fetches a live AuctionNinja lot page to read the house's published fees",
     ("pricing", "rebuild-pickup-area"):
         "downloads the Census and GeoNames geography dumps and rewrites the "
         "packaged pickup-area table",
@@ -717,22 +703,6 @@ def test_leaf_subcommand_runs(path, request, runner, ids, files, ledger,
                               removable_source):
     if path in SKIPPED:
         pytest.skip(SKIPPED[path])
-    if path == ("deals", "replay"):
-        # `deals replay` replays real crawl fixtures under
-        # `agent_workspaces/source-runs/<timestamp>/`, which AGENTS.md marks
-        # "Per-run source worker artifacts. Disposable." When that run's
-        # directory has been cleaned up there is nothing to replay, and the
-        # command itself refuses to fabricate fixtures. Skipping here keeps the
-        # rest of the suite green without turning replay into a no-op: restore
-        # the run (or re-crawl) and this case runs again automatically.
-        missing = replay_fixtures.missing_fixtures()
-        if missing:
-            pytest.skip(
-                "replay fixtures missing under %s: %s -- the disposable per-run "
-                "source-worker artifacts `deals replay` depends on were deleted; "
-                "restore that run from Dropbox version history / adam-server "
-                "releases or re-crawl, then this case runs again"
-                % (replay_fixtures.FIXTURES, ", ".join(missing)))
     if path in KNOWN_BROKEN:
         # strict: fixing the command turns this into a FAILURE, which is the
         # prompt to delete the entry rather than let it rot into a permanent
