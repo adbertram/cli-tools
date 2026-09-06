@@ -12,12 +12,26 @@ Microworkers lists three distinct worker job systems from /jobs.php:
     submitted via POST /jobs_i_did_it.php)
   - "hire_group": Hire Group jobs (hm_jobs_details.php?Id=<hex>, submitted via
     POST /hm_jobs_i_did_it.php)
-  - "ttv": TTV-branded campaign jobs, whose task-execution flow lives on the
-    separate ttv.microworkers.com subdomain. Per explicit scope, this CLI does
-    not implement get/apply for the "ttv" provider (listing still reports it).
+  - "ttv": TTV-branded campaign jobs, whose read-only detail page lives on the
+    separate ttv.microworkers.com subdomain. The CLI parses those details but
+    deliberately does not implement TTV apply/accept/proof submission.
 """
 import re
 from typing import Any, Dict, Optional
+from urllib.parse import parse_qs, urlsplit
+
+
+APPLY_PATHS = {
+    "/jobs_details.php": ("microworkers", "https://www.microworkers.com/jobs_i_did_it.php"),
+    "/hm_jobs_details.php": ("hire_group", "https://www.microworkers.com/hm_jobs_i_did_it.php"),
+}
+
+PAYMENT_STATUS_BY_HISTORY_STATUS = {
+    "Satisfied & paid": "paid",
+    "Not-Satisfied": "not_paid",
+    "Pending Employer review": "pending",
+    "Revise": "pending",
+}
 
 
 def provider_for_url(url: Optional[str]) -> str:
@@ -31,6 +45,66 @@ def provider_for_url(url: Optional[str]) -> str:
     if "jobs_details.php" in url:
         return "microworkers"
     return "unknown"
+
+
+def parse_apply_target(url: str) -> tuple[str, str, str]:
+    """Return the provider, task ID, and required POST action for a task URL.
+
+    Mutation targets use a stricter parser than listing classification: only
+    HTTPS worker-detail URLs on the exact Microworkers host are accepted.
+    """
+    try:
+        parsed = urlsplit(url)
+        port = parsed.port
+    except (TypeError, ValueError) as exc:
+        raise ValueError("task URL is malformed") from exc
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != "www.microworkers.com"
+        or parsed.username is not None
+        or parsed.password is not None
+        or port is not None
+        or parsed.fragment
+    ):
+        raise ValueError(
+            "task URL must be an HTTPS worker task on www.microworkers.com"
+        )
+    if parsed.path not in APPLY_PATHS:
+        raise ValueError(
+            "task URL path must be /jobs_details.php or /hm_jobs_details.php"
+        )
+    query = parse_qs(parsed.query, keep_blank_values=True)
+    if set(query) != {"Id"} or len(query["Id"]) != 1 or not query["Id"][0]:
+        raise ValueError("task URL must contain exactly one non-empty Id parameter")
+    provider, action = APPLY_PATHS[parsed.path]
+    return provider, query["Id"][0], action
+
+
+def parse_ttv_detail_target(url: str) -> str:
+    """Return the campaign ID from an exact, read-only TTV task-detail URL."""
+    try:
+        parsed = urlsplit(url)
+        port = parsed.port
+    except (TypeError, ValueError) as exc:
+        raise ValueError("TTV task URL is malformed") from exc
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != "ttv.microworkers.com"
+        or parsed.username is not None
+        or parsed.password is not None
+        or port is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError(
+            "TTV task URL must be HTTPS on ttv.microworkers.com without query or fragment"
+        )
+    match = re.fullmatch(r"/dotask/info/([0-9a-f]{12}_(?:B|HG))", parsed.path)
+    if not match:
+        raise ValueError(
+            "TTV task URL path must be /dotask/info/<12_HEX_ID_B_OR_HG>"
+        )
+    return match.group(1)
 
 
 def _parse_int(value: Optional[str]) -> Optional[int]:
@@ -84,7 +158,41 @@ def normalize_task_detail(raw: Dict[str, Any]) -> Dict[str, Any]:
         "country_notice": raw.get("country_notice"),
         "instructions_and_proof": raw.get("instructions_and_proof") or [],
         "apply_action": raw.get("apply_action"),
+        "apply_method": raw.get("apply_method"),
         "apply_id_field": raw.get("apply_id_field"),
+        "apply_hidden_fields": raw.get("apply_hidden_fields") or [],
+        "apply_submit_label": raw.get("apply_submit_label"),
         "proof_file_fields": raw.get("proof_file_fields") or [],
         "proof_text_fields": raw.get("proof_text_fields") or [],
+    }
+
+
+def normalize_history_row(
+    raw: Dict[str, Any], detail: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """Normalize one Basic-task history row and its read-only detail popup."""
+    task_id = raw.get("task_id")
+    title = raw.get("title")
+    detail_matches = bool(
+        task_id
+        and title
+        and detail
+        and detail.get("task_id") == task_id
+        and detail.get("title") == title
+    )
+    matched_detail = detail if detail_matches else {}
+    status = raw.get("status_label")
+    return {
+        "id": task_id,
+        "job_id": matched_detail.get("job_id"),
+        "url": None,
+        "provider": "microworkers",
+        "title": title,
+        "proof_preview": raw.get("proof_preview"),
+        "submitted_at": matched_detail.get("finished"),
+        "submitted_age": raw.get("submitted_age"),
+        "status": status,
+        "status_icon": raw.get("status_icon"),
+        "payment": matched_detail.get("earned") or raw.get("earned"),
+        "payment_status": PAYMENT_STATUS_BY_HISTORY_STATUS.get(status),
     }

@@ -29,12 +29,24 @@ COLUMNS = {
     "positions_done": "Done",
     "positions_total": "Total",
 }
+HISTORY_COLUMNS = {
+    "id": "Task ID",
+    "job_id": "Job ID",
+    "title": "Title",
+    "submitted_at": "Finished",
+    "status": "Status",
+    "payment": "Earned",
+    "payment_status": "Payment State",
+}
 DETAIL_COLUMNS = {
     "title": "Title",
     "provider": "Provider",
     "employer": "Employer",
     "country_notice": "Country/Notice",
     "apply_action": "Apply Action",
+    "apply_method": "Apply Method",
+    "apply_hidden_fields": "Apply Hidden Fields",
+    "apply_submit_label": "Apply Submit Label",
     "proof_text_fields": "Proof Text Fields",
     "proof_file_fields": "Proof File Fields",
 }
@@ -42,11 +54,29 @@ APPLY_COLUMNS = {
     "id": "Task",
     "title": "Title",
     "provider": "Provider",
+    "apply_action": "Apply Action",
+    "apply_method": "Apply Method",
+    "apply_hidden_fields": "Apply Hidden Fields",
+    "apply_submit_label": "Apply Submit Label",
     "proof_text_provided": "Text Provided",
     "proof_file_provided": "File Provided",
     "confirmed": "Confirmed",
     "submitted": "Submitted",
+    "allocated": "Allocated",
+    "state": "State",
+    "mutation_attempted": "Mutation Attempted",
+    "post_verified": "Post-verified",
     "message": "Message",
+}
+WORK_COLUMNS = {
+    "id": "Task",
+    "title": "Title",
+    "adapter": "Adapter",
+    "status": "Status",
+    "proof_text": "Proof Text",
+    "submitted": "Submitted",
+    "task_mutation_attempted": "Task Mutation Attempted",
+    "artifacts": "Artifacts",
 }
 
 
@@ -82,6 +112,30 @@ def tasks_list(
     _emit(rows, table, properties, COLUMNS)
 
 
+@tasks_app.command("history")
+@command
+def tasks_history(
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of submissions"),
+    filter: Optional[List[str]] = typer.Option(
+        None,
+        "--filter",
+        "-f",
+        help="Filter: field:op:value (e.g., status:eq:Pending Employer review)",
+    ),
+    properties: Optional[str] = typer.Option(
+        None, "--properties", "-p", help="Comma-separated properties"
+    ),
+):
+    """List Basic-task submission history and authoritative review/payment state."""
+    if filter:
+        validate_filters(filter)
+    rows = get_client().list_history(limit=limit)
+    if filter:
+        rows = apply_filters(rows, filter)
+    _emit(rows, table, properties, HISTORY_COLUMNS)
+
+
 @tasks_app.command("get")
 @command
 def tasks_get(
@@ -99,11 +153,15 @@ def tasks_apply(
     task_id: str = typer.Argument(..., help="Task URL (from 'tasks list' output's id/url field)"),
     proof_text: Optional[str] = typer.Option(None, "--proof-text", help="Proof text to submit (fills every proof textarea)"),
     proof_file: Optional[str] = typer.Option(None, "--proof-file", help="Path to a proof file to upload"),
-    confirm: bool = typer.Option(False, "--confirm", help="Actually submit proof and apply for the task"),
+    confirm: bool = typer.Option(
+        False,
+        "--confirm",
+        help="Perform the provider action: submit Basic/HG proof or accept/start TTV",
+    ),
     debug_dir: Optional[str] = typer.Option(None, "--debug-dir", help="Directory for failure artifacts (confirm mode)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display result as a table"),
 ):
-    """Apply to (submit proof for) a task. Default is dry-run (no submission)."""
+    """Apply to a task. Default is dry-run; TTV confirm only accepts/starts."""
     result = get_client().apply_task(
         task_id,
         proof_text=proof_text,
@@ -113,6 +171,22 @@ def tasks_apply(
         debug_dir=debug_dir,
     )
     _emit(result, table, None, APPLY_COLUMNS)
+
+
+@tasks_app.command("work")
+@command
+def tasks_work(
+    task_id: str = typer.Argument(..., help="Task URL (from 'tasks list' output's id/url field)"),
+    artifact_dir: str = typer.Option(
+        ...,
+        "--artifact-dir",
+        help="Directory where task-detail, page, evidence, and result artifacts are written",
+    ),
+    table: bool = typer.Option(False, "--table", "-t", help="Display result as a table"),
+):
+    """Complete a supported task's read-only work and collect truthful proof."""
+    result = get_client().work_task(task_id, artifact_dir=artifact_dir)
+    _emit(result, table, None, WORK_COLUMNS)
 
 
 app.add_typer(tasks_app, name="tasks")

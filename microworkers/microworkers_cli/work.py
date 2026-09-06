@@ -21,7 +21,12 @@ one continue link, exactly one IMDb name result, credit normalization) live in
 functions that can be unit-tested without a browser.
 """
 
+import functools
 import json
+import re
+import signal
+import threading
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, urlparse
 
@@ -39,6 +44,11 @@ __all__ = [
     "parse_acting_credits",
     "recognize_bitly_continue",
     "run_imdb_credits_task",
+    "WorkArtifacts",
+    "task_work_timeout",
+    "detail_text",
+    "ImdbCreditsAdapter",
+    "select_work_adapter",
 ]
 
 
@@ -280,3 +290,153 @@ def run_imdb_credits_task(
 
     entries = page.evaluate(IMDB_CREDITS_JS) or []
     return parse_acting_credits(entries)
+
+
+# --- Task-work adapter layer -------------------------------------------------
+#
+# ``MicroworkersClient.work_task`` drives a task through three collaborators
+# defined here: a wall-clock guard (``task_work_timeout``), an evidence writer
+# (``WorkArtifacts``), and a per-task-pattern adapter chosen by
+# ``select_work_adapter``. Adapters are read-only: they visit only pages the
+# task instructions name, and they never touch the Microworkers proof form.
+
+DEFAULT_TASK_WORK_TIMEOUT_SECONDS = 300
+
+
+class WorkArtifacts:
+    """Evidence files written for one task-work run.
+
+    Each run owns a directory; every artifact written is recorded in
+    :attr:`paths` so the caller can report exactly what was produced.
+    """
+
+    def __init__(self, directory: "Path") -> None:
+        self.directory = Path(directory)
+        self.directory.mkdir(parents=True, exist_ok=True)
+        self.paths: List[str] = []
+
+    def json(self, name: str, payload: Any) -> str:
+        """Write ``payload`` as ``<name>.json`` and return its path."""
+        path = self.directory / f"{name}.json"
+        path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        recorded = str(path)
+        if recorded not in self.paths:
+            self.paths.append(recorded)
+        return recorded
+
+    def text(self, name: str, body: str) -> str:
+        """Write ``body`` as ``<name>.txt`` and return its path."""
+        path = self.directory / f"{name}.txt"
+        path.write_text(body, encoding="utf-8")
+        recorded = str(path)
+        if recorded not in self.paths:
+            self.paths.append(recorded)
+        return recorded
+
+
+def task_work_timeout(seconds: int = DEFAULT_TASK_WORK_TIMEOUT_SECONDS):
+    """Fail a task-work call that exceeds ``seconds`` of wall-clock time.
+
+    A worker task drives live third-party pages, so a hung navigation would
+    otherwise block indefinitely. The alarm is only armed on the main thread,
+    where ``signal.setitimer`` is available; off the main thread the call runs
+    without a guard rather than raising an unrelated ``ValueError``.
+    """
+
+    def decorate(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            if threading.current_thread() is not threading.main_thread():
+                return func(*args, **kwargs)
+
+            def on_alarm(signum, frame):
+                raise TaskWorkError(
+                    f"Task work exceeded its {seconds}s limit and was aborted. "
+                    "No proof was submitted."
+                )
+
+            previous = signal.signal(signal.SIGALRM, on_alarm)
+            signal.setitimer(signal.ITIMER_REAL, seconds)
+            try:
+                return func(*args, **kwargs)
+            finally:
+                signal.setitimer(signal.ITIMER_REAL, 0)
+                signal.signal(signal.SIGALRM, previous)
+
+        return wrapper
+
+    return decorate
+
+
+def detail_text(detail: Dict[str, Any]) -> str:
+    """Flatten a task detail's human-readable sections into one lowercase blob."""
+    sections: List[str] = [str(detail.get("title") or "")]
+    for key in ("work_summary", "instructions_and_proof"):
+        value = detail.get(key) or []
+        sections.extend(str(item) for item in value)
+    return _normalize_text(" ".join(sections)).lower()
+
+
+class ImdbCreditsAdapter:
+    """Task pattern: follow a shortened link to a Google search, open the exact
+    IMDb name page, and report that person's acting credits."""
+
+    name = "imdb-credits"
+
+    #: Every term must appear in the task text for this adapter to claim a task.
+    REQUIRED_TERMS = ("imdb",)
+
+    @classmethod
+    def matches(cls, detail: Dict[str, Any]) -> bool:
+        text = detail_text(detail)
+        return all(term in text for term in cls.REQUIRED_TERMS)
+
+    def subject_name(self, detail: Dict[str, Any]) -> str:
+        """Extract the person named by the task instructions."""
+        for line in detail.get("instructions_and_proof") or []:
+            match = re.search(
+                r"(?:search|look\s*up|find)\s+(?:for\s+)?[\"“']?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)",
+                str(line),
+            )
+            if match:
+                return normalize_name(match.group(1))
+        raise TaskWorkError(
+            "The task instructions do not name the person to look up; "
+            "no search was performed."
+        )
+
+    def run(self, page, detail: Dict[str, Any], artifacts: WorkArtifacts) -> Dict[str, Any]:
+        name = self.subject_name(detail)
+        credits = run_imdb_credits_task(page, name=name)
+        if not credits:
+            raise TaskWorkError(
+                f"No acting credits were parsed from the IMDb name page for {name}; "
+                "nothing was recorded."
+            )
+        artifacts.json("credits", {"name": name, "credits": credits})
+        return {
+            "adapter": self.name,
+            "subject": name,
+            "credits": credits,
+            "proof": {"credit_count": len(credits)},
+        }
+
+
+WORK_ADAPTERS: List[Any] = [ImdbCreditsAdapter]
+
+
+def select_work_adapter(detail: Dict[str, Any]) -> Any:
+    """Return the adapter that handles ``detail``'s task pattern.
+
+    Raises when no adapter claims the task: an unrecognized pattern must stop
+    the run, never fall through to a generic best-effort attempt.
+    """
+    for adapter_cls in WORK_ADAPTERS:
+        if adapter_cls.matches(detail):
+            return adapter_cls()
+    raise TaskWorkError(
+        f"No task-work adapter supports this task: {detail.get('title')!r}. "
+        "Supported patterns: "
+        + ", ".join(adapter.name for adapter in WORK_ADAPTERS)
+        + ". No page was visited and no proof was collected."
+    )

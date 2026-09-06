@@ -1,0 +1,24 @@
+{
+  "page": {
+    "rows": [
+      {
+        "task_id": "120525231",
+        "title": "TNW: Visit 2x + Answer 2 Questions",
+        "proof_preview": "1. Service Provider Pro\n2. https://wayfr...",
+        "submitted_age": "38 mins ago",
+        "status_icon": "minus-circle",
+        "status_label": "Pending Employer review",
+        "earned": null
+      }
+    ],
+    "next_url": null
+  },
+  "detail": {
+    "task_id": "120525231",
+    "job_id": "c0e2efb7fbeb",
+    "title": "TNW: Visit 2x + Answer 2 Questions",
+    "earned": "$0.00",
+    "finished": "09/05/2026 18:37:52",
+    "status_text": "Employer has not yet rated this task"
+  }
+}

@@ -6,7 +6,12 @@ A browser-automation command-line interface for Microworkers (worker side). Use 
 
 ## Scope
 
-This CLI is worker-side only. Microworkers also runs a separate campaign-creation tool on `ttv.microworkers.com` for employers, which is out of scope here. Some worker jobs listed by `tasks list` are TTV-branded campaigns whose task-execution page also lives on `ttv.microworkers.com` (reported with `"provider": "ttv"`). `tasks get` still succeeds for these (returning a `note` field explaining the boundary instead of parsed detail), but `tasks apply` refuses them with a clear error, since submitting proof for them requires that separate, out-of-scope system.
+This CLI is worker-side only. Microworkers also runs TTV campaign pages on
+`ttv.microworkers.com`. TTV jobs listed by `tasks list` are reported with
+`"provider": "ttv"`; `tasks get` reads their authenticated pre-accept details
+and exact allocation-form metadata. `tasks apply` dry-runs allocation; only
+explicit `--confirm` accepts/starts that exact TTV task. TTV proof submission
+remains deliberately unsupported.
 
 ## Docs
 
@@ -33,6 +38,9 @@ microworkers auth login
 
 # List available worker jobs
 microworkers tasks list --limit 10 --table
+
+# List submitted Basic-task history and review/payment state
+microworkers tasks history --limit 10 --table
 
 # Get full detail for one job
 microworkers tasks get "https://www.microworkers.com/jobs_details.php?Id=..." --table
@@ -80,7 +88,7 @@ via the `provider` field:
 |----------|-------------|------------------|
 | `microworkers` | `jobs_details.php?Id=...` | `POST /jobs_i_did_it.php` |
 | `hire_group` | `hm_jobs_details.php?Id=...` | `POST /hm_jobs_i_did_it.php` |
-| `ttv` | `ttv.microworkers.com/dotask/info/...` | out of scope for this CLI |
+| `ttv` | `ttv.microworkers.com/dotask/info/...` | `POST /dotask/allocateposition` (accept/start only; no proof submission) |
 
 ```bash
 # List available jobs (paginated live from /jobs.php, 100 rows/page)
@@ -92,12 +100,30 @@ microworkers tasks list --filter "provider:eq:microworkers" --table
 # Select specific fields
 microworkers tasks list --properties "title,payment" --limit 5
 
+# Read Basic-task submission history; default output is a JSON array
+microworkers tasks history --limit 20
+
+# Filter history and select fields
+microworkers tasks history \
+  --filter "status:eq:Pending Employer review" \
+  --properties "id,title,submitted_at,status,payment,payment_status"
+
 # Get full detail for one job (task-id is the URL from tasks list's id/url field)
 microworkers tasks get "https://www.microworkers.com/jobs_details.php?Id=..." --table
+
+# Read a TTV job's pre-accept detail and allocation-form metadata (no mutation)
+microworkers tasks get "https://ttv.microworkers.com/dotask/info/..._HG"
+
+# Complete a supported read-only work pattern and collect evidence/proof
+microworkers tasks work "https://www.microworkers.com/jobs_details.php?Id=..." \
+  --artifact-dir /path/to/task-evidence
 
 # Preview an application (DEFAULT — no --confirm means nothing is submitted)
 microworkers tasks apply "https://www.microworkers.com/jobs_details.php?Id=..." \
   --proof-text "Screenshot attached showing completed task"
+
+# Preflight a TTV allocation (read-only; does not accept/start)
+microworkers tasks apply "https://ttv.microworkers.com/dotask/info/..._HG"
 
 # Actually submit proof and apply for the job
 microworkers tasks apply "https://www.microworkers.com/jobs_details.php?Id=..." \
@@ -111,7 +137,78 @@ microworkers tasks apply "https://www.microworkers.com/jobs_details.php?Id=..." 
 live job detail (a read) and reports exactly what would be submitted —
 `apply_action`, the proof text/file fields the job requires, and whether the
 values you passed satisfy them — without ever POSTing to the site. Only
-`--confirm` performs the actual submission.
+`--confirm` performs the provider action: Basic/Hire Group proof submission or
+TTV accept/start allocation. Before crossing that mutation
+boundary, the CLI binds the request to the exact HTTPS task URL, provider,
+task `Id`, POST action, hidden `Id`, and single submit button. If reopening the
+task returns Microworkers' authoritative `Worker already submitted this task.`
+message or the Basic-task `jobs_user_already_took.php` redirect with `Sorry but
+you already submitted this task.`, the command returns
+`state: "already_submitted"` without clicking anything.
+
+A confirmed Basic/Hire Group run clicks the submit button at most once. It
+never retries a click. Afterward, it reopens the exact task URL and reports
+`state: "submitted"` and `submitted: true` only when one of those authoritative
+states is present. A timeout, unrecognized redirect, missing marker, or other
+failure after the click is reported as an ambiguous outcome with an explicit
+**do not retry automatically** instruction; inspect the exact task on
+Microworkers first.
+
+For TTV, dry-run returns `state: "ready_to_allocate"`, the exact POST action,
+hidden `CampaignId`, and `Accept and Start` label with
+`mutation_attempted: false`. Confirm clicks that exact button at most once and
+never retries. It reports `state: "allocated"` only when the post-click page is
+still on the exact TTV host, the allocation form is gone, and exactly one
+campaign-bound task form plus the instruction panel are present. Otherwise it
+reports an ambiguous outcome and instructs callers not to retry automatically.
+This path allocates work only; it never submits proof.
+
+`tasks history` is read-only. It parses each Basic-history row on `worker.php`,
+binds the row's status icon to the legend on that page, and reads the row's
+safe task-detail popup endpoint to obtain exact `Task ID`, `Job ID`, `Finished`,
+and `Earned` values. The result never exposes or follows the row's remove/delete
+link. The task URL is `null` because this history surface does not expose the
+original task URL. Unknown values remain `null`; submission alone is never
+treated as proof of payment.
+
+### Read-only task work
+
+`tasks work` completes supported public-page instruction patterns without
+accepting or submitting the Microworkers task. It always fetches the live task
+instructions first, selects an adapter from instruction content rather than a
+task ID, and writes page HTML plus structured evidence JSON beneath the
+required `--artifact-dir`.
+
+For a pre-allocation TTV URL, `tasks work` saves the visible task detail and
+then fails clearly that allocation is required; it never clicks `Accept and
+Start`. Post-allocation TTV task/form automation remains fail-closed until its
+live DOM is captured and validated. It does not invent selectors or submit
+external forms from the pre-accept preview.
+
+Supported patterns:
+
+- TNW article section → click the instructed linked word → collect the former
+  product name, final URL, and an exact capability statement from the product
+  page.
+- Wizardly keyword page → perform the Google search → click exactly one
+  organic result for the instructed target host → collect the labeled
+  verification code only when the destination proves a Google referrer.
+- Inc.com expandable article → open the exact article, click the one visible
+  `Expand to continue reading` control, find the instructed Wayfront link in
+  the named section, and collect its adjacent former name plus one capability
+  stated on the linked product page.
+- Bing search-and-visit → issue the exact instructed query, resolve the masked
+  domain from one organic result, and prove that destination stayed visible on
+  the same URL for 60 seconds.
+- Kurt Finney direct page → click its one visible IMDb link, then derive the
+  first acting movie and 2013 acting-movie count from unique title IDs.
+- AI News article → click the exact `AI romance survey` link in the second
+  visible article paragraph, then collect the survey's visible title and its
+  single stated U.S.-adult participant count.
+
+The result includes `proof_text`, `evidence`, `artifacts`, `submitted: false`,
+and `task_mutation_attempted: false`. The command does not call `tasks apply`,
+does not fill Microworkers proof fields, and does not click its submit button.
 
 Microworkers requires phone or payment-method verification on the account
 before it will accept a job application. If that verification is missing,
@@ -126,7 +223,7 @@ each required file-input field using
 `cli_tools_shared.browser.driver.BrowserHarnessService.set_input_files`
 (a CDP `DOM.setFileInputFiles` wrapper). If a job requires a proof file and
 `--proof-file` is omitted, or the path doesn't exist, `--confirm` fails with
-a clear error before any browser navigation or submission is attempted.
+a clear error before any submission is attempted.
 
 ## Cache
 
@@ -155,16 +252,16 @@ This CLI uses `cli_tools_shared.auth.BrowserAutomation` with browser-harness-bac
 
 - **Session Persistence**: Browser context persists between commands (cookies, localStorage)
 - **Non-interactive login**: `browser.py` declares `AUTH_LOGIN_USERNAME_SELECTOR` / `AUTH_LOGIN_PASSWORD_SELECTOR` / `AUTH_LOGIN_SUBMIT_SELECTOR` plus the matching secret-manager names, so `auth login` fills and submits the real login form using stored credentials with no manual browser interaction
-- **Data Extraction**: `client.py` drives `page.evaluate()` against the live DOM (`LIST_JS`, `DETAIL_JS`) to extract job listing rows and job detail fields
+- **Data Extraction**: `client.py` drives `page.evaluate()` against the live DOM (`LIST_JS`, `DETAIL_JS`, `TTV_DETAIL_JS`) to extract job listing rows and job detail fields
 - **Pagination**: `tasks list` walks `/jobs.php?page=N` (100 rows/page) until `--limit` is satisfied
 
 ### Selector/DOM validation
 
-`browser.py` and `client.py`'s `LIST_JS`/`DETAIL_JS` were validated against
+`browser.py` and `client.py`'s detail extractors were validated against
 the live, authenticated `microworkers.com` DOM (login form, `/jobs.php`
-listing rows, `jobs_details.php` and `hm_jobs_details.php` detail pages) —
-see the inline comments dated 2026-09-02 in each file for exactly what was
-captured and where.
+listing rows, `jobs_details.php`, `hm_jobs_details.php`, and six
+`ttv.microworkers.com/dotask/info/...` detail pages). See dated inline comments
+in each file for what was captured and where.
 
 ## Browser Automation Notes
 
@@ -200,9 +297,14 @@ microworkers tasks list --limit 5
 | `ttf_minutes` | Time To Finish, in minutes (list rows only) |
 | `positions_done` / `positions_total` | Positions filled / total positions (list rows only) |
 | `work_summary`, `employer`, `employer_url`, `employer_details`, `country_notice`, `instructions_and_proof` | Detail-page fields (`get` only) |
-| `apply_action`, `apply_id_field`, `proof_file_fields`, `proof_text_fields` | Submission-form fields (`get`/`apply` only) |
+| `apply_action`, `apply_method`, `apply_id_field`, `apply_hidden_fields`, `apply_submit_label`, `proof_file_fields`, `proof_text_fields` | Read-only form metadata (`get`; TTV reports its pre-accept allocation form) and supported Basic/Hire Group submission fields (`apply`) |
+| `proof_text`, `evidence`, `artifacts` | Evidence-backed result fields (`work` only) |
 
-`tasks apply` returns a result record with `confirmed`, `submitted`, and `message`.
+`tasks apply` returns a result record with `confirmed`, `submitted`, `state`,
+`mutation_attempted`, `post_verified`, and `message`. `state` is `ready` for a
+dry run, `already_submitted` for an idempotent preflight result, or `submitted`
+only after authoritative post-verification. Ambiguous post-click outcomes are
+command errors, never successful result records.
 
 ## Requirements
 
