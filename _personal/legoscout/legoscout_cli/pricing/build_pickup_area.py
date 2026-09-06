@@ -32,7 +32,6 @@ The output is committed alongside this script so the runtime path
 (pickup_area.py) never touches the network.
 """
 from .. import paths
-import argparse
 import contextlib
 import csv
 import io
@@ -221,39 +220,28 @@ def add_geonames_places(towns, location, o_lat, o_lon, radius_miles):
         sys.exit("GeoNames returned no populated places inside the radius")
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--radius-miles", type=float, default=30.0)
-    ap.add_argument("--csv", default=ZIP_CSV_URL,
-                    help="local copy of the ZIP centroid CSV")
-    ap.add_argument("--zcta-place", default=ZCTA_PLACE_URL,
-                    help="local copy of the census ZCTA-to-place file")
-    ap.add_argument("--place-gazetteer", default=PLACE_GAZ_URL,
-                    help="local copy of the census place gazetteer")
-    ap.add_argument("--geonames", default=GEONAMES_URL,
-                    help="local copy of the GeoNames US dump")
-    ap.add_argument("--out", default=OUT,
-                    help="output path (default: %(default)s)")
-    a = ap.parse_args()
-
-    recs = read_zip_centroids(a.csv)
+def build(radius_miles=30.0, csv=ZIP_CSV_URL, zcta_place=ZCTA_PLACE_URL,
+          place_gazetteer=PLACE_GAZ_URL, geonames=GEONAMES_URL, out=OUT):
+    """Rebuild the pickup-area table from the public geography sources.
+    Writes `out` and returns the summary line it also prints. Raises
+    ValueError when the origin ZIP is absent from the centroid source."""
+    recs = read_zip_centroids(csv)
     origin = next((x for x in recs if x[0] == ORIGIN_ZIP), None)
     if origin is None:
-        sys.exit("origin ZIP %s not present in the centroid source" % ORIGIN_ZIP)
+        raise ValueError("origin ZIP %s not present in the centroid source" % ORIGIN_ZIP)
     _, o_city, o_state, o_lat, o_lon = origin
 
     zips, towns = {}, {}
     for code, city, state, lat, lon in recs:
         miles = haversine(o_lat, o_lon, lat, lon)
-        if miles > a.radius_miles:
+        if miles > radius_miles:
             continue
         zips[code] = round(miles, 1)
         add_town(towns, city, state, zips[code])
 
-    places = read_place_names(a.place_gazetteer)
-    add_zcta_places(towns, a.zcta_place, zips, places)
-    add_geonames_places(towns, a.geonames, o_lat, o_lon, a.radius_miles)
+    places = read_place_names(place_gazetteer)
+    add_zcta_places(towns, zcta_place, zips, places)
+    add_geonames_places(towns, geonames, o_lat, o_lon, radius_miles)
 
     doc = {
         "_doc": ("ZIPs and towns within radius_miles of Adam's origin ZIP. A "
@@ -266,17 +254,19 @@ def main():
         "origin_zip": ORIGIN_ZIP,
         "origin_city": o_city,
         "origin_state": o_state,
-        "radius_miles": a.radius_miles,
-        "sources": [a.csv, a.zcta_place, a.place_gazetteer, a.geonames],
+        "radius_miles": radius_miles,
+        "sources": [csv, zcta_place, place_gazetteer, geonames],
         "zips": dict(sorted(zips.items())),
         "towns": dict(sorted(towns.items())),
     }
-    with open(a.out, "w", encoding="utf-8") as fh:
+    with open(out, "w", encoding="utf-8") as fh:
         json.dump(doc, fh, indent=1, sort_keys=False)
         fh.write("\n")
-    print("wrote %s: %d ZIPs, %d towns within %.0f mi of %s"
-          % (a.out, len(zips), len(towns), a.radius_miles, ORIGIN_ZIP))
+    summary = ("wrote %s: %d ZIPs, %d towns within %.0f mi of %s"
+              % (out, len(zips), len(towns), radius_miles, ORIGIN_ZIP))
+    print(summary)
+    return summary
 
 
 if __name__ == "__main__":
-    main()
+    build()

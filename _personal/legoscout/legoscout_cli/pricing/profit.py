@@ -13,8 +13,6 @@ zero-comp guard.
 """
 from __future__ import annotations
 
-import argparse
-import json
 from typing import Any
 
 
@@ -106,28 +104,3 @@ def blend_comp_average(
     return {"avg": avg, "count": total_weight, "basis": basis}
 
 
-def parse_args(argv: list[str] | None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Net-of-fees profit from a comp average, landed cost, and fee rate."
-    )
-    parser.add_argument("--avg-price", type=float, default=None,
-                        help="Selected-condition six-month avg sold price; omit for 'no comp'.")
-    parser.add_argument("--price-detail-count", type=int, default=None,
-                        help="How many sold listings backed --avg-price.")
-    parser.add_argument("--estimated-total", type=float, required=True,
-                        help="Landed cost.")
-    parser.add_argument("--fee-rate", type=float, required=True,
-                        help="Resale fee rate, as a decimal.")
-    return parser.parse_args(argv)
-
-
-def main(argv: list[str] | None = None) -> int:
-    args = parse_args(argv)
-    result = compute_potential_profit(
-        args.avg_price, args.price_detail_count, args.estimated_total, args.fee_rate)
-    print(json.dumps(result, indent=2, sort_keys=True))
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main(None))

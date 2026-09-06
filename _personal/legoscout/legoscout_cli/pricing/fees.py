@@ -17,11 +17,8 @@ CLI:
     legoscout pricing landed-cost --source proxibid --hammer 30 --shipping 12
     legoscout pricing landed-cost --source auctionninja --hammer 25 --premium-pct 0.18
 """
-import argparse
-import json
 import math
 import os
-import sys
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 from ..sources import registry  # noqa: E402
@@ -228,38 +225,3 @@ def explain(b):
         bits.append("+ UNKNOWN shipping")
         return " ".join(bits) + " = $%.2f landed FLOOR" % b["landed_total"]
     return " ".join(bits) + " = $%.2f landed" % b["landed_total"]
-
-
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--source", required=True)
-    ap.add_argument("--hammer", type=float, required=True)
-    # No default: a forgotten --shipping used to become $0.00 freight. State the
-    # number or state that it is unknown -- there is no third option.
-    g = ap.add_mutually_exclusive_group(required=True)
-    g.add_argument("--shipping", type=float)
-    g.add_argument("--shipping-unknown", action="store_true",
-                   help="inbound freight is not quotable for this lot")
-    ap.add_argument("--handling", type=float, default=0.0)
-    ap.add_argument("--premium-pct", type=float, default=None)
-    ap.add_argument("--sales-tax-pct", type=float, default=None)
-    ap.add_argument("--buyer-protection-fee", type=float, default=None)
-    a = ap.parse_args()
-    b = landed_cost(a.source, a.hammer,
-                    None if a.shipping_unknown else a.shipping, a.handling,
-                    a.premium_pct, a.sales_tax_pct,
-                    buyer_protection_fee=a.buyer_protection_fee)
-    # allow_nan=False: stdout is contracted to be ONE parseable JSON object, and
-    # Python's default writes `NaN` / `Infinity`, which no other parser reads.
-    # The input validation above is what keeps this from ever firing; this is
-    # the assertion that it did.
-    print(json.dumps(b, indent=2, allow_nan=False))
-    # The one-line explanation goes to STDERR. On stdout it followed the JSON
-    # object, so `legoscout pricing landed-cost ... | json.loads` raised
-    # `Extra data: line 20 column 1`, and every caller that parsed this command
-    # had to strip the last line by hand.
-    print(explain(b), file=sys.stderr)
-
-
-if __name__ == "__main__":
-    main()

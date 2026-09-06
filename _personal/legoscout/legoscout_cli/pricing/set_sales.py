@@ -4,12 +4,10 @@
 from __future__ import annotations
 
 from .. import paths
-import argparse
 import json
 import re
 import shutil
 import subprocess
-import sys
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
@@ -312,73 +310,19 @@ def build_not_found_result(
     }
 
 
-def parse_args(argv: list[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Return BrickLink catalog metadata plus used/new six-month sold summaries for one set."
-    )
-    parser.add_argument("set_no", help="Normalized BrickLink set number, such as 75192-1.")
-    parser.add_argument(
-        "--purchase-price",
-        type=float,
-        default=None,
-        help="Allocated purchase cost for this set. Omit for a comps-only lookup "
-             "with no potential_profit -- pass it together with --fee-rate or not "
-             "at all, never one without the other.",
-    )
-    parser.add_argument(
-        "--condition",
-        choices=["N", "U"],
-        required=True,
-        help="Inferred listing condition: N for sealed/new, U for used/opened.",
-    )
-    parser.add_argument(
-        "--fee-rate",
-        type=float,
-        default=None,
-        help="Active configured fee rate as a decimal, for example 0.13 for 13%%. "
-             "Omit for a comps-only lookup with no potential_profit.",
-    )
-    parser.add_argument(
-        "--no-cache",
-        action="store_true",
-        help="Call BrickLink directly, ignoring and not writing the call cache.",
-    )
-    return parser.parse_args(argv)
-
-
-def main(argv: list[str] | None = None) -> int:
-    """`argv` defaults to the process argv, which is what `delegate.run` sets.
-
-    Every other module behind a `legoscout` command defines `main()` with no
-    required argument, and `delegate.run` calls `module.main()` with none. This
-    one required `argv`, so `legoscout pricing set-sales` raised
-    `main() missing 1 required positional argument: 'argv'` on every single
-    invocation and no appraiser could reach the set-comp helper at all.
-    """
-    args = parse_args(argv)
+def cli_summarize(set_no: str, condition: str, purchase_price: float | None = None,
+                  fee_rate: float | None = None, no_cache: bool = False) -> dict[str, Any]:
+    """`legoscout pricing set-sales`'s exact behavior as a plain function: a
+    LookupNotFound becomes the not-found result shape; a LookupFailed re-raises
+    for the caller to print and exit 1 on."""
     try:
-        result = summarize_set(
-            args.set_no,
-            condition=args.condition,
-            purchase_price=args.purchase_price,
-            fee_rate=args.fee_rate,
-            runner=run_bricklink_json if args.no_cache else cached_bricklink_json,
+        return summarize_set(
+            set_no, condition=condition, purchase_price=purchase_price,
+            fee_rate=fee_rate,
+            runner=run_bricklink_json if no_cache else cached_bricklink_json,
         )
     except LookupNotFound as exc:
-        result = build_not_found_result(
-            args.set_no,
-            condition=args.condition,
-            purchase_price=args.purchase_price,
-            fee_rate=args.fee_rate,
-            message=str(exc),
+        return build_not_found_result(
+            set_no, condition=condition, purchase_price=purchase_price,
+            fee_rate=fee_rate, message=str(exc),
         )
-    except LookupFailed as exc:
-        print(str(exc), file=sys.stderr)
-        return 1
-
-    print(json.dumps(result, indent=2, sort_keys=True))
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))

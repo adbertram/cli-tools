@@ -1,5 +1,4 @@
 import json
-import sys
 from io import BytesIO
 from pathlib import Path
 
@@ -29,13 +28,10 @@ def _run_image_fetch(monkeypatch, capsys, tmp_path, urls, responses,
             Path(dest).write_bytes(body[url] if isinstance(body, dict) else body)
         return code, content_type
 
-    argv = ["listing_images", "--urls", *urls]
-
     monkeypatch.setattr(listing_images, "OUT_ROOT", str(tmp_path))
     monkeypatch.setattr(listing_images, "fetch", fake_fetch)
-    monkeypatch.setattr(sys, "argv", argv)
 
-    assert listing_images.main() == expected_exit
+    assert listing_images.discover_and_fetch(urls=urls) == expected_exit
     return json.loads(capsys.readouterr().out)
 
 
@@ -69,9 +65,8 @@ def test_image_fetch_reports_started_before_first_download(monkeypatch, capsys,
 
     monkeypatch.setattr(listing_images, "OUT_ROOT", str(tmp_path))
     monkeypatch.setattr(listing_images, "fetch", fake_fetch)
-    monkeypatch.setattr(sys, "argv", ["listing_images", "--urls", *urls])
 
-    assert listing_images.main() == 0
+    assert listing_images.discover_and_fetch(urls=urls) == 0
     assert json.loads(capsys.readouterr().out)["count"] == 2
 
 
@@ -149,9 +144,8 @@ def test_fetch_failure_reports_json_and_exits_nonzero(monkeypatch, capsys,
 
     monkeypatch.setattr(listing_images, "OUT_ROOT", str(tmp_path))
     monkeypatch.setattr(listing_images, "fetch", failed_fetch)
-    monkeypatch.setattr(sys, "argv", ["listing_images", "--urls", url])
 
-    assert listing_images.main() == 1
+    assert listing_images.discover_and_fetch(urls=[url]) == 1
     payload = json.loads(capsys.readouterr().out)
     assert payload["count"] == 0
     assert payload["results"] == [{
@@ -171,9 +165,7 @@ def test_joined_urls_are_rejected_before_fetch(monkeypatch, capsys, tmp_path):
         listing_images, "fetch",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(
             AssertionError("a joined URL reached fetch")))
-    monkeypatch.setattr(sys, "argv", [
-        "listing_images", "--urls",
-        "https://images.example.test/a.jpg\thttps://images.example.test/b.jpg"])
-
-    assert listing_images.main() == 1
+    assert listing_images.discover_and_fetch(urls=[
+        "https://images.example.test/a.jpg\thttps://images.example.test/b.jpg"
+    ]) == 1
     assert "one URL with no whitespace" in capsys.readouterr().err

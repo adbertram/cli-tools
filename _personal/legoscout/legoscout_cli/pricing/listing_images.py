@@ -30,7 +30,6 @@ ONE IMAGE CAN HOLD SEVERAL SETS -- a stacked pile or a group shot is common.
 Enumerate every distinct box, don't stop at the first.
 """
 from .. import paths
-import argparse
 import hashlib
 import json
 import os
@@ -214,21 +213,10 @@ def discover(html):
     return [], False
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--url")
-    ap.add_argument("--key")
-    ap.add_argument("--urls", nargs="+", metavar="URL",
-                    help="Image URLs the crawler already captured. Skips the "
-                         "listing page entirely -- use this whenever you have "
-                         "them, because scraping the page does not work on "
-                         "most sources.")
-    ap.add_argument("--max", type=int,
-                    help="Stop after this many images. Listing-page discovery "
-                         "defaults to 12; explicit --urls fetch every URL.")
-    a = ap.parse_args()
-
-    url, key = a.url, a.key
+def discover_and_fetch(url=None, key=None, urls=None, max=None):
+    """Fetch a listing's images for the vision pass. Prints its report as JSON
+    to stdout and progress/guidance to stderr; returns the process exit code
+    (0 if at least one image saved, else 1) exactly as the CLI leaf does."""
     cands, try_sizes = None, False
 
     # Supplied URLs win outright. The crawler read them through that source's
@@ -236,8 +224,8 @@ def main():
     # fetch returns 403 on Shop The Salvation Army, an Incapsula challenge on
     # LiveAuctioneers, and a JS shell on Poshmark, Mercari and Depop. Whenever
     # they are in hand, the listing page is not touched at all.
-    if a.urls:
-        malformed = [u for u in a.urls
+    if urls:
+        malformed = [u for u in urls
                      if not isinstance(u, str) or not u.strip()
                      or any(char.isspace() for char in u)]
         if malformed:
@@ -245,7 +233,7 @@ def main():
                   "repeat --urls for separate values: %r" % malformed[0],
                   file=sys.stderr)
             return 1
-        cands = [(u, str(n)) for n, u in enumerate(a.urls, 1)]
+        cands = [(u, str(n)) for n, u in enumerate(urls, 1)]
 
     if cands is None and key and not url:
         # --key resolves against the LEDGER, so it only works for a listing
@@ -271,7 +259,7 @@ def main():
         # concurrently on different listings. A shared "urls" folder let
         # them overwrite and cross-read each other's photos, so derive a
         # stable per-listing name from the URL set instead.
-        digest = hashlib.sha256("\n".join(sorted(a.urls)).encode()).hexdigest()[:16]
+        digest = hashlib.sha256("\n".join(sorted(urls)).encode()).hexdigest()[:16]
         slug = "urls_%s" % digest
     out = os.path.join(OUT_ROOT, slug)
     os.makedirs(out, exist_ok=True)
@@ -312,7 +300,7 @@ def main():
               file=sys.stderr)
         return 1
 
-    image_limit = a.max if a.max is not None else (None if a.urls else 12)
+    image_limit = max if max is not None else (None if urls else 12)
     saved, seen, results = [], set(), []
     print("fetching %d listing image candidate%s" %
           (len(cands), "" if len(cands) == 1 else "s"),
@@ -389,7 +377,3 @@ def main():
               "and piece count before pricing -- a box number misread by one "
               "digit resolves to a real but wrong set.", file=sys.stderr)
     return 0 if saved else 1
-
-
-if __name__ == "__main__":
-    sys.exit(main())

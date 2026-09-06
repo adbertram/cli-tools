@@ -189,19 +189,21 @@ def test_a_negative_buyer_protection_fee_is_refused():
             "mercari", 120.0, 0.0, buyer_protection_fee=-4.32)
 
 
-def test_landed_cost_cli_writes_only_json_to_stdout(monkeypatch, capsys):
+def test_landed_cost_cli_writes_only_json_to_stdout():
     """The human summary is stderr-only, so stdout is one JSON document."""
-    monkeypatch.setattr(sys, "argv", [
-        "fees",
+    from typer.testing import CliRunner
+
+    from legoscout_cli.main import app
+
+    result = CliRunner().invoke(app, [
+        "pricing", "landed-cost",
         "--source", "poshmark",
         "--hammer", "15",
         "--shipping", "6.49",
     ])
 
-    fees.main()
-
-    captured = capsys.readouterr()
-    breakdown = json.loads(captured.out)
-    assert captured.out == json.dumps(breakdown, indent=2, allow_nan=False) + "\n"
+    assert result.exit_code == 0, result.output
+    breakdown = json.loads(result.stdout)
+    assert result.stdout == json.dumps(breakdown, indent=2, allow_nan=False) + "\n"
     assert breakdown["landed_total"] == 22.54
-    assert captured.err == fees.explain(breakdown) + "\n"
+    assert result.stderr == fees.explain(breakdown) + "\n"

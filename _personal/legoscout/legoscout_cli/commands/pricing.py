@@ -1,6 +1,8 @@
 """`legoscout pricing` -- fees, landed cost, comps, freight, images, pickup area."""
 from __future__ import annotations
 
+import json
+import sys
 from typing import List, Optional
 
 import typer
@@ -59,16 +61,20 @@ def landed_cost(
     An unknown freight cost is NEVER passed as 0.0: the row is marked
     `shipping_unknown` and `landed_is_floor` instead.
     """
-    argv = ["--source", source, "--hammer", str(hammer)]
-    if shipping_unknown:
-        argv.append("--shipping-unknown")
-    else:
-        delegate.option(argv, "--shipping", shipping)
-    delegate.option(argv, "--handling", handling)
-    delegate.option(argv, "--premium-pct", premium_pct)
-    delegate.option(argv, "--sales-tax-pct", sales_tax_pct)
-    delegate.option(argv, "--buyer-protection-fee", buyer_protection_fee)
-    delegate.run(fees_module, argv)
+    if (shipping is not None) == shipping_unknown:
+        raise typer.BadParameter(
+            "pass exactly one of --shipping / --shipping-unknown")
+    b = fees_module.landed_cost(
+        source, hammer, None if shipping_unknown else shipping,
+        handling if handling is not None else 0.0,
+        premium_pct, sales_tax_pct,
+        buyer_protection_fee=buyer_protection_fee)
+    # allow_nan=False: stdout is contracted to be ONE parseable JSON object,
+    # and Python's default writes NaN/Infinity, which no other parser reads.
+    print(json.dumps(b, indent=2, allow_nan=False))
+    # The one-line explanation goes to STDERR, never stdout, so
+    # `legoscout pricing landed-cost ... | json.loads` never sees trailing text.
+    print(fees_module.explain(b), file=sys.stderr)
 
 
 @app.command("set-sales")
@@ -94,11 +100,16 @@ def set_sales_command(
     moves the token to the front of `sys.argv`, so a subcommand of the same
     name never receives it. This one was silently inert until 2026-08-06.
     """
-    argv = [set_no, "--condition", condition]
-    delegate.option(argv, "--purchase-price", purchase_price)
-    delegate.option(argv, "--fee-rate", fee_rate)
-    delegate.flag(argv, "--no-cache", refresh)
-    delegate.run(set_sales, argv)
+    if condition not in ("N", "U"):
+        raise typer.BadParameter("--condition must be 'N' or 'U'")
+    try:
+        result = set_sales.cli_summarize(
+            set_no, condition, purchase_price=purchase_price,
+            fee_rate=fee_rate, no_cache=refresh)
+    except set_sales.LookupFailed as exc:
+        print(str(exc), file=sys.stderr)
+        raise typer.Exit(1) from exc
+    print_json(result)
 
 
 @app.command("ebay-comps")
@@ -124,15 +135,16 @@ def ebay_comps_command(
     "reason": "ebay_auth_required", ...}` instead. Run `ebay auth login
     --credential-type browser_session` to authenticate completed/sold search.
     """
-    argv = []
-    if set_no:
-        argv.append(set_no)
-    delegate.flag(argv, "--bulk", bulk)
-    delegate.option(argv, "--condition", condition)
-    delegate.option(argv, "--description", description)
-    delegate.option(argv, "--dollars-per-lb", dollars_per_lb)
-    delegate.option(argv, "--limit", limit)
-    delegate.run(ebay_comps, argv)
+    if bulk:
+        print_json(ebay_comps.search_bulk_comps(
+            description, dollars_per_lb=dollars_per_lb, limit=limit))
+        return
+    if not set_no or not condition:
+        raise typer.BadParameter("set_no and --condition are required unless --bulk")
+    if condition not in ("N", "U"):
+        raise typer.BadParameter("--condition must be 'N' or 'U'")
+    print_json(ebay_comps.search_set_comps(
+        set_no, condition, description=description, limit=limit))
 
 
 @app.command("comps")
@@ -161,16 +173,19 @@ def comps_command(
     and eBay are independent lookups -- one failing never blocks the other;
     read `bricklink.lookup_status` and `ebay.available` separately per set.
     """
-    argv = []
-    if set_no:
-        for one in set_no:
-            argv.extend(["--set-no", one])
-    delegate.flag(argv, "--bulk", bulk)
-    delegate.option(argv, "--condition", condition)
-    delegate.option(argv, "--description", description)
-    delegate.option(argv, "--dollars-per-lb", dollars_per_lb)
-    delegate.option(argv, "--limit", limit)
-    delegate.run(comps_module, argv)
+    if bulk:
+        if not description:
+            raise typer.BadParameter("--description is required in --bulk mode")
+        print_json(comps_module.bulk_comps(
+            description, dollars_per_lb=dollars_per_lb, limit=limit))
+        return
+    if not set_no or not condition:
+        raise typer.BadParameter(
+            "--set-no (repeatable) and --condition are required unless --bulk")
+    if condition not in ("N", "U"):
+        raise typer.BadParameter("--condition must be 'N' or 'U'")
+    print_json(comps_module.set_comps(
+        set_no, condition, description=description, limit=limit))
 
 
 @app.command("comps-batch")
@@ -198,9 +213,12 @@ def comps_batch_command(
     `timings` object reports wall seconds vs the serial equivalent, so batch
     sizing stays a measurement.
     """
-    delegate.run(comps_batch_module,
-                 ["--input", input, "--output", output,
-                  "--workers", str(workers), "--limit", str(limit)])
+    try:
+        print_json(comps_batch_module.run_comps_batch_cli(
+            input, output, workers=workers, limit=limit))
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        raise typer.Exit(1) from exc
 
 
 @app.command("preflight")
@@ -257,10 +275,8 @@ def profit_command(
     classifier's landed cost plus an appraiser's comp average into
     `potential_profit`, so the two agents' outputs never get hand-merged.
     """
-    argv = ["--estimated-total", str(estimated_total), "--fee-rate", str(fee_rate)]
-    delegate.option(argv, "--avg-price", avg_price)
-    delegate.option(argv, "--price-detail-count", price_detail_count)
-    delegate.run(profit_module, argv)
+    print_json(profit_module.compute_potential_profit(
+        avg_price, price_detail_count, estimated_total, fee_rate))
 
 
 @app.command("shipping")
@@ -287,15 +303,22 @@ def shipping(
     `--no-cache` token to the front of `sys.argv` for its own app-level option,
     so a subcommand flag of that name never arrives.
     """
-    argv = []
-    delegate.option(argv, "--origin-zip", origin_zip)
-    delegate.option(argv, "--origin-city", origin_city)
-    delegate.option(argv, "--origin-state", origin_state)
-    delegate.option(argv, "--house", house)
-    delegate.option(argv, "--hibid-lot", hibid_lot)
-    delegate.option(argv, "--weight-lbs", weight_lbs)
-    delegate.flag(argv, "--no-cache", refresh)
-    delegate.run(inbound_shipping, argv)
+    if weight_lbs is None:
+        raise typer.BadParameter("--weight-lbs is required")
+    try:
+        zip_, city, state = inbound_shipping.resolve_origin(
+            origin_zip, origin_city or "", origin_state or "", house, hibid_lot)
+    except inbound_shipping.OriginError as exc:
+        print(str(exc), file=sys.stderr)
+        raise typer.Exit(1) from exc
+    out = inbound_shipping.quote(zip_, city, state, weight_lbs, refresh)
+    print(json.dumps(out, indent=2))
+    if "error" not in out:
+        # STDERR, so stdout stays one parseable JSON object.
+        print("\n$%.2f %s %s + $%.2f assumed handling = $%.2f estimated inbound"
+              % (out["carrier_rate"], out["carrier"], out["service"],
+                 out["handling_assumed"], out["estimated_total"]),
+              file=sys.stderr)
 
 
 @app.command("images")
@@ -308,14 +331,9 @@ def images(
     max: Optional[int] = typer.Option(None, "--max", help="Stop after this many images"),
 ):
     """Fetch a listing's images for the vision pass."""
-    argv = []
-    delegate.option(argv, "--url", url)
-    delegate.option(argv, "--key", key)
-    if urls:
-        argv.append("--urls")
-        argv.extend(urls)
-    delegate.option(argv, "--max", max)
-    delegate.run(listing_images, argv)
+    code = listing_images.discover_and_fetch(url=url, key=key, urls=urls, max=max)
+    if code:
+        raise typer.Exit(code)
 
 
 @app.command("pickup-area")
@@ -328,7 +346,11 @@ def pickup_area(
     A bare town name raises: Chandler IN is 15 miles away and Chandler AZ is
     1,500.
     """
-    delegate.run(pickup_module, [location])
+    try:
+        print_json(pickup_module.resolve(location))
+    except ValueError as exc:
+        print("pickup_area: %s" % exc, file=sys.stderr)
+        raise typer.Exit(1) from exc
 
 
 @app.command("rebuild-pickup-area")
@@ -344,13 +366,14 @@ def rebuild_pickup_area(
     out: Optional[str] = typer.Option(None, "--out", help="Write the table here"),
 ):
     """Rebuild the pickup-area table from the public geography sources."""
-    argv = []
-    delegate.option(argv, "--radius-miles", radius_miles)
-    delegate.option(argv, "--csv", csv)
-    delegate.option(argv, "--zcta-place", zcta_place)
-    delegate.option(argv, "--place-gazetteer", place_gazetteer)
-    delegate.option(argv, "--geonames", geonames)
-    delegate.option(argv, "--out", out)
-    delegate.run(build_pickup_area, argv)
+    kwargs = {k: v for k, v in {
+        "radius_miles": radius_miles, "csv": csv, "zcta_place": zcta_place,
+        "place_gazetteer": place_gazetteer, "geonames": geonames, "out": out,
+    }.items() if v is not None}
+    try:
+        build_pickup_area.build(**kwargs)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        raise typer.Exit(1) from exc
 
 

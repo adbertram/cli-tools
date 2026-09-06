@@ -21,8 +21,6 @@ detected items.
 """
 from __future__ import annotations
 
-import argparse
-import json
 from typing import Any
 
 from . import ebay_comps
@@ -88,40 +86,3 @@ def excluded_comps(blocker: str) -> dict[str, Any]:
     return {"mode": "excluded", "blocked": True, "blocker": blocker}
 
 
-def parse_args(argv: list[str] | None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="BrickLink + eBay sold comps for a LEGO set (or several, on one listing), "
-                    "eBay-only for a bulk lot.")
-    parser.add_argument("--set-no", action="append", dest="set_numbers", default=None,
-                        help="A LEGO set number. Repeatable -- pass it once per detected set "
-                             "on a multi-set listing. Required unless --bulk.")
-    parser.add_argument("--bulk", action="store_true",
-                        help="Bulk-lot mode: eBay $/lb comps only, no BrickLink.")
-
-    parser.add_argument("--condition", choices=["N", "U"], default=None,
-                        help="N or U. Required unless --bulk.")
-    parser.add_argument("--description", default=None,
-                        help="Extra search keywords -- set name/theme or bulk lot description.")
-    parser.add_argument("--dollars-per-lb", type=float, default=None,
-                        help="Bulk mode only: the target listing's own $/lb, for comparison.")
-    parser.add_argument("--limit", type=int, default=50)
-    return parser.parse_args(argv)
-
-
-def main(argv: list[str] | None = None) -> int | str:
-    args = parse_args(argv)
-    if args.bulk:
-        if not args.description:
-            return "--description is required in --bulk mode"
-        result = bulk_comps(args.description, dollars_per_lb=args.dollars_per_lb, limit=args.limit)
-    else:
-        if not args.set_numbers or not args.condition:
-            return "--set-no (repeatable) and --condition are required unless --bulk"
-        result = set_comps(args.set_numbers, args.condition, description=args.description,
-                           limit=args.limit)
-    print(json.dumps(result, indent=2, sort_keys=True))
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main(None))

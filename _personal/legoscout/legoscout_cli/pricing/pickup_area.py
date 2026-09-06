@@ -15,10 +15,8 @@ Exits 0 with a JSON verdict. An unresolvable location is an ERROR, not a
 real location rather than silently treated as out of range.
 """
 from .. import paths
-import argparse
 import json
 import re
-import sys
 
 AREA = paths.PICKUP_AREA_JSON
 _ZIP = re.compile(r"\b(\d{5})(?:-\d{4})?\b")
@@ -136,16 +134,3 @@ def is_pickup_eligible(location):
     return resolve(location)["eligible"]
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("location", help='"City, ST" or a 5-digit ZIP')
-    a = ap.parse_args()
-    try:
-        print(json.dumps(resolve(a.location), indent=1))
-    except ValueError as exc:
-        sys.exit("pickup_area: %s" % exc)
-
-
-if __name__ == "__main__":
-    main()

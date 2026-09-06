@@ -23,7 +23,6 @@ carries the auction house's city/state/postal code, so no HiBid lot needs a
 hand-curated entry in seller_origins.json to get an estimate.
 """
 from .. import paths
-import argparse
 import json
 import subprocess
 import sys
@@ -146,54 +145,33 @@ def quote(origin_zip, origin_city, origin_state, weight_lbs, no_cache=False):
     return out
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--origin-zip")
-    ap.add_argument("--origin-city", default="")
-    ap.add_argument("--origin-state", default="")
-    ap.add_argument("--house", help="Known auction house from seller_origins.json")
-    ap.add_argument("--hibid-lot", help="HiBid lot id or URL; reads the house's "
-                                        "own city/state/ZIP off the lot page")
-    ap.add_argument("--weight-lbs", type=float, required=True)
-    ap.add_argument("--no-cache", action="store_true")
-    a = ap.parse_args()
+class OriginError(ValueError):
+    """The CLI-ready message for a bad --house/--hibid-lot/--origin-zip combo."""
 
-    zip_, city, state = a.origin_zip, a.origin_city, a.origin_state
-    if a.hibid_lot:
+
+def resolve_origin(origin_zip=None, origin_city="", origin_state="",
+                    house=None, hibid_lot=None):
+    """(zip, city, state) from --hibid-lot, then --house (which overrides it),
+    then explicit --origin-*. Raises OriginError with a CLI-ready message."""
+    zip_, city, state = origin_zip, origin_city, origin_state
+    if hibid_lot:
         try:
-            zip_, city, state, house = hibid_origin(a.hibid_lot)
+            zip_, city, state, house_name = hibid_origin(hibid_lot)
         except (ValueError, OSError) as exc:
-            print("hibid origin: %s" % exc, file=sys.stderr)
-            return 1
-        print("origin: %s -- %s, %s %s" % (house, city, state, zip_),
+            raise OriginError("hibid origin: %s" % exc) from exc
+        print("origin: %s -- %s, %s %s" % (house_name, city, state, zip_),
               file=sys.stderr)
-    if a.house:
+    if house:
         # seller_origins.json is curated data, not a cache. A missing or
         # unparseable file is a broken checkout, so it raises here rather than
         # reading as "no houses known" and reporting every house as unknown.
         with open(ORIGINS) as fh:
             origins = json.load(fh)["houses"]
-        h = origins.get(a.house) or origins.get(a.house.lower())
+        h = origins.get(house) or origins.get(house.lower())
         if not h:
-            print("unknown house %r; known: %s"
-                  % (a.house, ", ".join(sorted(origins))), file=sys.stderr)
-            return 1
+            raise OriginError(
+                "unknown house %r; known: %s" % (house, ", ".join(sorted(origins))))
         zip_, city, state = h["zip"], h.get("city", ""), h.get("state", "")
     if not zip_:
-        print("need --origin-zip or --house", file=sys.stderr)
-        return 1
-
-    out = quote(zip_, city, state, a.weight_lbs, a.no_cache)
-    print(json.dumps(out, indent=2))
-    if "error" not in out:
-        # STDERR, so stdout stays one parseable JSON object. On stdout this
-        # line followed the object and made `json.loads` raise Extra data.
-        print("\n$%.2f %s %s + $%.2f assumed handling = $%.2f estimated inbound"
-              % (out["carrier_rate"], out["carrier"], out["service"],
-                 out["handling_assumed"], out["estimated_total"]),
-              file=sys.stderr)
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+        raise OriginError("need --origin-zip or --house")
+    return zip_, city, state

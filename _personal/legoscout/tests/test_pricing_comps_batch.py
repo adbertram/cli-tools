@@ -237,7 +237,7 @@ def test_batch_timing_aggregates_are_self_consistent(monkeypatch):
 
 
 # --------------------------------------------------------------------------
-# main(): argv -> files, with loud argument errors.
+# run_comps_batch_cli(): input/output files, with loud argument errors.
 # --------------------------------------------------------------------------
 
 def _write_input(tmp_path, entries):
@@ -246,32 +246,28 @@ def _write_input(tmp_path, entries):
     return str(path)
 
 
-def test_main_writes_the_full_report_and_prints_a_summary(fake_comps, tmp_path, capsys):
+def test_run_comps_batch_cli_writes_the_full_report_and_returns_a_summary(
+        fake_comps, tmp_path):
     src = _write_input(tmp_path, _candidates(2))
     out = str(tmp_path / "comps-1.json")
-    rc = comps_batch.main(["--input", src, "--output", out])
-    assert rc == 0
+    summary = comps_batch.run_comps_batch_cli(src, out)
     written = json.loads(open(out, encoding="utf-8").read())
     assert written["mode"] == "batch"
     assert len(written["results"]) == 2
     assert "timings" in written
-    summary = json.loads(capsys.readouterr().out)
     assert summary["candidates"] == 2
     assert summary["output"] == out
 
 
-def test_main_rejects_zero_workers(fake_comps, tmp_path, capsys):
+def test_run_comps_batch_cli_rejects_zero_workers(fake_comps, tmp_path):
     src = _write_input(tmp_path, _candidates(1))
-    rc = comps_batch.main(["--input", src, "--output", str(tmp_path / "o.json"),
-                           "--workers", "0"])
-    assert rc == 1
-    assert "--workers must be >= 1" in capsys.readouterr().err
+    with pytest.raises(ValueError, match="--workers must be >= 1"):
+        comps_batch.run_comps_batch_cli(
+            src, str(tmp_path / "o.json"), workers=0)
 
 
-def test_main_rejects_a_malformed_input_loudly(fake_comps, tmp_path, capsys):
+def test_run_comps_batch_cli_rejects_a_malformed_input_loudly(fake_comps, tmp_path):
     src = tmp_path / "bad.json"
     src.write_text(json.dumps({"candidate_records": []}), encoding="utf-8")
-    rc = comps_batch.main(["--input", str(src),
-                           "--output", str(tmp_path / "o.json")])
-    assert rc == 1
-    assert "root must be an array" in capsys.readouterr().err
+    with pytest.raises(ValueError, match="root must be an array"):
+        comps_batch.run_comps_batch_cli(str(src), str(tmp_path / "o.json"))

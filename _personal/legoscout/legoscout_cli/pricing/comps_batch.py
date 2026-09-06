@@ -18,9 +18,7 @@ through verbatim and returns this command's JSON verbatim.
 """
 from __future__ import annotations
 
-import argparse
 import json
-import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable
@@ -196,50 +194,24 @@ def run_batch(candidates: list[dict[str, Any]], workers: int, limit: int,
     }
 
 
-def parse_args(argv: list[str] | None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Price a whole appraiser batch of classified candidates in one "
-                    "call: BrickLink + eBay sold comps per candidate, concurrent, "
-                    "each result identical to `pricing comps` plus listing_key.")
-    parser.add_argument("--input", required=True,
-                        help="JSON array file of the classifier's comps hand-offs "
-                             "(listing_key/listing_category/set_numbers/condition/"
-                             "description or description/dollars_per_lb)")
-    parser.add_argument("--output", required=True,
-                        help="Write the full batch JSON here")
-    parser.add_argument("--workers", type=int, default=DEFAULT_WORKERS,
-                        help="Concurrent candidates (default %d). Keep narrow: "
-                             "eBay is a browser-session scrape." % DEFAULT_WORKERS)
-    parser.add_argument("--limit", type=int, default=50)
-    return parser.parse_args(argv)
-
-
-def main(argv: list[str] | None = None) -> int:
-    args = parse_args(argv)
-    if args.workers < 1:
-        print("--workers must be >= 1", file=sys.stderr)
-        return 1
-    if args.limit < 1:
-        print("--limit must be >= 1", file=sys.stderr)
-        return 1
-    try:
-        candidates = parse_handoff(args.input, "--input")
-    except ValueError as exc:
-        print(str(exc), file=sys.stderr)
-        return 1
-    report = run_batch(candidates, args.workers, args.limit)
-    with open(args.output, "w", encoding="utf-8") as handle:
+def run_comps_batch_cli(input_path: str, output_path: str,
+                        workers: int = DEFAULT_WORKERS, limit: int = 50) -> dict[str, Any]:
+    """`legoscout pricing comps-batch`'s exact behavior: validate, price the
+    whole hand-off batch, write `output_path`, and return the summary dict
+    the CLI also prints. Raises ValueError on any input/argument problem."""
+    if workers < 1:
+        raise ValueError("--workers must be >= 1")
+    if limit < 1:
+        raise ValueError("--limit must be >= 1")
+    candidates = parse_handoff(input_path, "--input")
+    report = run_batch(candidates, workers, limit)
+    with open(output_path, "w", encoding="utf-8") as handle:
         json.dump(report, handle, indent=2, sort_keys=True)
         handle.write("\n")
-    print(json.dumps({
-        "output": args.output,
+    return {
+        "output": output_path,
         "candidates": report["timings"]["candidates"],
         "blocked": report["timings"]["blocked_count"],
         "wall_seconds": report["timings"]["wall_seconds"],
         "speedup_vs_serial": report["timings"]["speedup_vs_serial"],
-    }, sort_keys=True))
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main(None))
+    }
