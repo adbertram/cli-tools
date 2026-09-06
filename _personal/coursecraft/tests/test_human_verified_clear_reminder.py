@@ -1,10 +1,8 @@
 """A content write to a human-verified artifact lands and un-stamps it.
 
-Policy 2026-09-06 (course-pipeline/SKILL.md rule 4a): a ``… Human Verified``
-stamp is never read-only and never blocks a required fix. The versioning engine
-clears the paired stamp in the same PATCH as the content change, and
-``CourseCraftClient.update_record`` reports that clear on stderr as a
-``⚠ REMINDER [human-verified.cleared]`` -- a reminder, never a refusal.
+The versioning engine clears a paired ``… Human Verified`` stamp in the same
+PATCH as changed content. ``CourseCraftClient.update_record`` reports the clear
+with the stable ``HV_CLEARED`` identifier.
 """
 
 import json
@@ -69,9 +67,9 @@ def test_content_change_to_stamped_demo_lands_and_clears_the_stamp(monkeypatch, 
 
     err = capsys.readouterr().err
     assert "⚠ REMINDER" in err, err
-    assert "[human-verified.cleared]" in err, err
+    assert "[HV_CLEARED]" in err, err
     assert "'Demo Overview Human Verified'" in err, err
-    assert "rule 4a" in err, err
+    assert "rule 4a" not in err, err
 
 
 def test_no_op_resubmission_keeps_the_stamp_and_says_nothing(monkeypatch, capsys):

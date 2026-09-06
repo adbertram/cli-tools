@@ -1,0 +1,215 @@
+[
+  {
+    "artifactIds": [
+      "clip.recording"
+    ],
+    "clearOn": [
+      "content_change"
+    ],
+    "field": "Recording Human Verified",
+    "id": "clips.recording",
+    "owner": "recording-expert",
+    "prerequisites": [],
+    "table": "Clips"
+  },
+  {
+    "artifactIds": [
+      "course.outline_draft"
+    ],
+    "clearOn": [
+      "content_change"
+    ],
+    "field": "Outline Draft Human Verified",
+    "id": "courses.outline_draft",
+    "owner": "instructional-designer",
+    "prerequisites": [
+      {
+        "kind": "check",
+        "ref": "Outline Draft Review (AI)",
+        "required_state": "passed"
+      }
+    ],
+    "table": "Courses"
+  },
+  {
+    "artifactIds": [
+      "demo.action_summary"
+    ],
+    "clearOn": [
+      "content_change"
+    ],
+    "field": "Action Summary Human Verified",
+    "id": "demos.action_summary",
+    "owner": "coursecraft-demo-expert",
+    "prerequisites": [
+      {
+        "kind": "walkthrough",
+        "ref": "automated_walkthrough",
+        "required_state": "passed"
+      }
+    ],
+    "table": "Demos"
+  },
+  {
+    "artifactIds": [
+      "demo.overview"
+    ],
+    "clearOn": [
+      "content_change"
+    ],
+    "field": "Demo Overview Human Verified",
+    "id": "demos.overview",
+    "owner": "coursecraft-demo-expert",
+    "prerequisites": [
+      {
+        "kind": "check",
+        "ref": "Demo Overview Review (AI)",
+        "required_state": "passed"
+      }
+    ],
+    "table": "Demos"
+  },
+  {
+    "artifactIds": [
+      "demo.automated_walkthrough",
+      "demo.manual_walkthrough"
+    ],
+    "clearOn": [
+      "content_change"
+    ],
+    "field": "Recording Human Verified",
+    "id": "demos.recording",
+    "owner": "recording-expert",
+    "prerequisites": [
+      {
+        "kind": "walkthrough",
+        "ref": "automated_walkthrough",
+        "required_state": "passed"
+      }
+    ],
+    "table": "Demos"
+  },
+  {
+    "artifactIds": [
+      "demo.script"
+    ],
+    "clearOn": [
+      "content_change"
+    ],
+    "field": "Script Human Verified",
+    "id": "demos.script",
+    "owner": "coursecraft-demo-expert",
+    "prerequisites": [
+      {
+        "kind": "walkthrough",
+        "ref": "automated_walkthrough",
+        "required_state": "passed"
+      }
+    ],
+    "table": "Demos"
+  },
+  {
+    "artifactIds": [
+      "brainstorming.module"
+    ],
+    "clearOn": [
+      "content_change"
+    ],
+    "field": "Brainstorming Outline Human Verified",
+    "id": "modules.brainstorming_outline",
+    "owner": "content-brainstormer",
+    "prerequisites": [],
+    "table": "Modules"
+  },
+  {
+    "artifactIds": [
+      "module.plan"
+    ],
+    "clearOn": [
+      "content_change"
+    ],
+    "field": "Description Human Verified",
+    "id": "modules.description",
+    "owner": "instructional-designer",
+    "prerequisites": [
+      {
+        "kind": "check",
+        "ref": "Plan Review (AI)",
+        "required_state": "passed"
+      }
+    ],
+    "table": "Modules"
+  },
+  {
+    "artifactIds": [
+      "module.plan"
+    ],
+    "clearOn": [
+      "content_change"
+    ],
+    "field": "Learning Objectives Human Verified",
+    "id": "modules.learning_objectives",
+    "owner": "instructional-designer",
+    "prerequisites": [
+      {
+        "kind": "check",
+        "ref": "Plan Review (AI)",
+        "required_state": "passed"
+      }
+    ],
+    "table": "Modules"
+  },
+  {
+    "artifactIds": [
+      "module.powerpoint_deck"
+    ],
+    "clearOn": [
+      "content_change"
+    ],
+    "field": "PowerPoint Deck Human Verified",
+    "id": "modules.powerpoint_deck",
+    "owner": "powerpoint-expert",
+    "prerequisites": [
+      {
+        "kind": "check",
+        "ref": "PowerPoint Deck Review (AI)",
+        "required_state": "passed"
+      }
+    ],
+    "table": "Modules"
+  },
+  {
+    "artifactIds": [
+      "slide.course_intro",
+      "slide.module_intro",
+      "slide.clip_intro",
+      "slide.demo_intro",
+      "slide.content"
+    ],
+    "clearOn": [
+      "content_change"
+    ],
+    "field": "Script Human Verified",
+    "id": "slides.script",
+    "owner": "slide-design-expert",
+    "prerequisites": [],
+    "table": "Slides"
+  },
+  {
+    "artifactIds": [
+      "slide.course_intro",
+      "slide.module_intro",
+      "slide.clip_intro",
+      "slide.demo_intro",
+      "slide.content"
+    ],
+    "clearOn": [
+      "content_change"
+    ],
+    "field": "Slide Type Human Verified",
+    "id": "slides.slide_type",
+    "owner": "slide-design-expert",
+    "prerequisites": [],
+    "table": "Slides"
+  }
+]

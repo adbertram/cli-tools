@@ -13,11 +13,10 @@ CourseCraft checkout). This module never mirrors that data in a second Python
 table -- every slug/table/field lookup below is derived from the JSON file at
 call time (cached per-process).
 
-Paired review-clear targets (which "... Review (AI)" / human-verified field to
-clear when a slug's content changes) are read from ``course-pipeline.json``'s
-existing ``review_ai``/``review_target`` graph, not duplicated here either. A
-``human_verified_pairs`` key on that same file (``{slug: [field, ...]}``) is
-reserved for a later phase; it contributes nothing until that key exists.
+AI review-clear targets are read from ``course-pipeline.json``'s existing
+``review_ai``/``review_target`` graph. Human-verification clear targets are read
+from the generated package projection derived from that file's sole
+``human_verification`` registry.
 """
 from __future__ import annotations
 
@@ -30,6 +29,10 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .coursecraft_project import COURSES_ROOT, coursecraft_project_root
 from .field_mappings import FIELD_MAPPINGS, validate_field
+from .human_verification import (
+    human_verification_clear_targets,
+    is_human_verification_field,
+)
 
 COVERAGE_MAP_RELATIVE_PATH = ".agents/skills/course-pipeline/tools/data/coverage-map.json"
 COURSE_PIPELINE_ROUTER_RELATIVE_PATH = "course-pipeline.json"
@@ -320,8 +323,7 @@ def _artifact_owning_reference_index() -> Dict[str, str]:
 def _paired_review_targets(slug: str) -> List[str]:
     """Airtable fields to clear (to ``""``) when ``slug``'s content changes.
 
-    Two data sources, read fresh from the cached course-pipeline.json (a) and
-    (b):
+    Two canonical projections contribute targets:
 
     (a) Every work-phase artifact whose ``review_ai`` names an Airtable field
         AND whose target is this slug contributes that field. The target is
@@ -329,14 +331,9 @@ def _paired_review_targets(slug: str) -> List[str]:
         that shares its ``artifact_reference`` (see
         :func:`_artifact_owning_reference_index`) -- course-pipeline.json
         already carries this mapping; it is read here, never duplicated.
-    (b) course-pipeline.json's ``human_verified_pairs`` map:
-        ``{slug: [field, ...]}``. Every field it names is cleared the same
-        way as an AI-review field, in the same PATCH as the content change;
-        :func:`_cleared_gate_value` picks ``False`` for a ``… Human
-        Verified`` checkbox and ``""`` for a long-text field. A live Human
-        Verified stamp is never read-only: it is un-stamped by the write
-        that changes the content it vouched for, so the next review re-earns
-        it (course-pipeline/SKILL.md rule 4a).
+    (b) The packaged active human-verification gate projection. Every gate
+        bound to this slug whose ``clearOn`` includes ``content_change`` is
+        cleared to ``False`` in the same PATCH as the content change.
 
     Both sources can name a field that lives on a DIFFERENT table than
     ``slug``'s own content -- e.g. ``module-slide-build-review``'s
@@ -375,8 +372,8 @@ def _paired_review_targets(slug: str) -> List[str]:
             field = review_ai.get("field")
             if field and field in same_table_fields and field not in fields:
                 fields.append(field)
-    for field in router.get("human_verified_pairs", {}).get(slug, []):
-        if field in same_table_fields and field not in fields:
+    for field in human_verification_clear_targets(slug, slug_table, "content_change"):
+        if field not in fields:
             fields.append(field)
     return fields
 
@@ -395,14 +392,14 @@ def checkbox_is_true(value: Any) -> bool:
     return False
 
 
-def _cleared_gate_value(field: str) -> Any:
+def _cleared_gate_value(table: str, field: str) -> Any:
     """The value that clears one paired review/gate field.
 
-    A ``… Human Verified`` field is an Airtable checkbox, so it clears to
-    ``False``; every other paired target is long text and clears to ``""``.
-    Writing ``""`` into a checkbox is not a valid clear.
+    Registered approval fields are Airtable checkboxes; every other paired
+    target is long text. The generated registry projection decides which is
+    which, so field naming carries no behavior.
     """
-    return False if field.endswith("Human Verified") else ""
+    return False if is_human_verification_field(table, field) else ""
 
 
 def check_write_conflict(
@@ -448,12 +445,11 @@ def check_write_conflict(
     -- currently ``Build Instructions`` (``slide.demo_intro`` /
     ``slide.content``) --
     could belong to a slide type this record isn't. A write that sets such a
-    field alongside one of its candidate slugs' paired review field looks
+    field alongside one of its candidate slugs' paired gate field looks
     like a real conflict from the field names alone even when the record's
     actual type doesn't track that field as content at all -- e.g.
-    ``commands/slides.py`` building ``--build-instructions`` +
-    ``--script-human-verified`` on a Course Intro / Module Intro / Clip Intro
-    record. This is derived
+    a direct client write of ``Build Instructions`` plus ``Script Human
+    Verified`` on a Course Intro / Module Intro / Clip Intro record. This is derived
     structurally from ``_content_slug_index()`` vs. ``_slide_type_slugs()``,
     never hardcoded by field name. Resolution is spent at most once total
     per call, cached across every candidate slug and field examined: when
@@ -690,25 +686,8 @@ ARTIFACT_DEPENDENCY_METADATA_KEY = "_comment"
 def _artifact_dependency_catalog() -> Dict[str, Any]:
     """course-pipeline.json's ``artifact_dependencies`` map, minus its ``_comment``.
 
-    course-pipeline.json's established convention is that a ``_comment`` key
-    sitting directly inside a map is a note ABOUT that map, not a member of it
-    -- ``artifact_dependencies._comment``, ``human_verified_pairs._comment``,
-    ``update_inheritance._comment`` and five more. The convention is already
-    implemented in the CourseCraft checkout: ``check_validation_coverage.py``'s
-    ``declared_human_verified_fields`` skips this exact literal while iterating
-    the structurally identical ``human_verified_pairs`` map. A CLI reader that
-    iterates ``artifact_dependencies`` must honour it too, or it mistakes the
-    note for an artifact slug.
-
-    Exactly one reserved literal is dropped -- deliberately not every
-    ``_``-prefixed key. A blanket prefix rule would silently swallow a typo'd
-    real slug such as ``_demo.overview``, turning a loud contract error into a
-    missing dependency edge. Every surviving key is treated as a real slug
-    whose declaration the callers below still validate strictly: a malformed
-    declaration is a pipeline bug that must surface as a VersioningError, never
-    a silently skipped entry. That strictness is exactly why this does not call
-    the checkout's ``dependency_graph.dependency_entries`` -- see
-    :func:`_rebuilt_from_dependencies`.
+    Exactly the map's reserved metadata entry is dropped. Every surviving key
+    remains a real artifact slug and is validated strictly by the callers.
     """
     catalog = _pipeline_router().get("artifact_dependencies")
     if not isinstance(catalog, dict):
@@ -851,7 +830,7 @@ def _readiness_gate_invalidations(
                 raise VersioningError(
                     f"Lifecycle instance {instance_name!r} readiness gate field must be a string."
                 )
-            invalidations[field] = _cleared_gate_value(field)
+            invalidations[field] = _cleared_gate_value(table, field)
     return invalidations
 
 
@@ -980,7 +959,7 @@ def plan_record_update(
             "at": stamped_at,
         }
         for review_field in _paired_review_targets(slug):
-            planned[review_field] = _cleared_gate_value(review_field)
+            planned[review_field] = _cleared_gate_value(table, review_field)
 
     planned.update(_readiness_gate_invalidations(table, changed_slugs))
 

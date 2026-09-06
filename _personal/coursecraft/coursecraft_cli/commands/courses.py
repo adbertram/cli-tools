@@ -523,7 +523,6 @@ def update_course(
     outline_draft: Optional[str] = typer.Option(None, "--outline-draft", help="Course Outline Draft Markdown content"),
     outline_draft_file: Optional[Path] = typer.Option(None, "--outline-draft-file", help="Path to file containing the Course Outline Draft Markdown"),
     outline_draft_review_ai: Optional[str] = typer.Option(None, "--outline-draft-review-ai", help="AI review verdict for course.outline_draft"),
-    outline_draft_human_verified: Optional[bool] = typer.Option(None, "--outline-draft-human-verified/--no-outline-draft-human-verified", help="Set or clear Adam's approval of the Course Outline Draft"),
     course_outline: Optional[str] = typer.Option(None, "--course-outline", help="Built Course Outline content"),
     course_outline_file: Optional[Path] = typer.Option(None, "--course-outline-file", help="Path to file containing the built Course Outline"),
     notes: Optional[str] = typer.Option(None, "--notes", help="Internal notes"),
@@ -544,7 +543,6 @@ def update_course(
     gap_analysis_file: Optional[Path] = typer.Option(None, "--gap-analysis-file", help="Path to a file containing the gap analysis"),
     carry_forward_plan: Optional[str] = typer.Option(None, "--carry-forward-plan", help="update.carry_forward_plan JSON content"),
     carry_forward_plan_file: Optional[Path] = typer.Option(None, "--carry-forward-plan-file", help="Path to a file containing the carry-forward plan"),
-    carry_forward_plan_human_verified: Optional[bool] = typer.Option(None, "--carry-forward-plan-human-verified/--no-carry-forward-plan-human-verified", help="Set or clear Adam's approval of the carry-forward plan"),
 ):
     """
     Update a course record.
@@ -627,7 +625,6 @@ def update_course(
                 "learning_objectives": learning_objectives,
                 "course_requirements_review_ai": course_requirements_review_ai,
                 "outline_draft_review_ai": outline_draft_review_ai,
-                "outline_draft_human_verified": outline_draft_human_verified,
                 "notes": notes,
                 "skill_path": skill_path,
                 "path_placement": path_placement,
@@ -635,7 +632,6 @@ def update_course(
                 "feedback_requested": feedback_requested,
                 "feedback_requested_at": feedback_requested_at,
                 "version": version,
-                "carry_forward_plan_human_verified": carry_forward_plan_human_verified,
             },
         )
         if research_report_file is not None:

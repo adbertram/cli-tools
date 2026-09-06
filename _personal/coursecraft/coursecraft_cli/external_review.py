@@ -13,6 +13,7 @@ from typing import Any, Dict, Iterator, List, Mapping
 
 from .artifact_versions import coverage_map
 from .coursecraft_project import coursecraft_project_root
+from .human_verification import human_verification_index
 from .objective_override import current_artifact_version
 from .output import warn_policy
 
@@ -246,6 +247,15 @@ def _require_current_pass(review: Any, slug: str, evidence: str, field: str) -> 
         )
 
 
+def _registered_gate_field(gate_id: Any) -> str:
+    if not isinstance(gate_id, str) or not gate_id:
+        raise ExternalReviewError("Registered gate reference must be a non-empty string.")
+    gate = human_verification_index().by_id.get(gate_id)
+    if gate is None:
+        raise ExternalReviewError(f"Unknown registered gate {gate_id!r}.")
+    return gate.field
+
+
 def _require_readiness(
     instance_name: str,
     instance: Mapping[str, Any],
@@ -266,10 +276,11 @@ def _require_readiness(
             _require_current_pass(
                 fields.get(gate["field"]), gate["slug"], evidence, gate["field"]
             )
-        elif kind == "field_truthy":
-            if not _truthy(fields.get(gate["field"])):
-                warn_policy(
-                    "lifecycle.readiness", f"Readiness field {gate['field']!r} is not true."
+        elif kind == "registered_gate":
+            field = _registered_gate_field(gate.get("gate"))
+            if not _truthy(fields.get(field)):
+                raise ExternalReviewError(
+                    f"Registered readiness gate {gate.get('gate')!r} is not satisfied."
                 )
         elif kind == "field_present":
             value = fields.get(gate["field"])
@@ -301,17 +312,17 @@ def _require_readiness(
                     f"Readiness counts do not match: {gate['left']}={left:g}, "
                     f"{gate['right']}={right:g}.",
                 )
-        elif kind == "linked_field_truthy":
+        elif kind == "linked_registered_gate":
             if not linked:
                 warn_policy(
                     "lifecycle.readiness", f"{instance_name} has no linked records."
                 )
                 continue
-            bad = [item.get("id") for item in linked if not _truthy(item["fields"].get(gate["field"]))]
+            field = _registered_gate_field(gate.get("gate"))
+            bad = [item.get("id") for item in linked if not _truthy(item["fields"].get(field))]
             if bad:
-                warn_policy(
-                    "lifecycle.readiness",
-                    f"Linked readiness field {gate['field']!r} is not true for: "
+                raise ExternalReviewError(
+                    f"Linked registered readiness gate {gate.get('gate')!r} is not satisfied for: "
                     + ", ".join(str(item) for item in bad)
                     + ".",
                 )
@@ -522,27 +533,18 @@ def plan_transition(
             f"Transition {instance}.{action} has unknown evidence rule {evidence_action!r}."
         )
     invalidated_fields = list(edge.get("invalidates") or [])
+    invalidated_gates = list(edge.get("invalidates_gates") or [])
     if action == "request_changes":
         invalidated_fields.extend(
             instance_contract.get("request_changes_invalidates") or []
         )
-    for invalidated_field in invalidated_fields:
-        planned[invalidated_field] = (
-            False if invalidated_field.endswith("Human Verified") else ""
+        invalidated_gates.extend(
+            instance_contract.get("request_changes_invalidates_gates") or []
         )
-    if "setting_human_verification_true" in (edge.get("forbids") or []):
-        forbidden = [
-            field
-            for field, value in planned.items()
-            if field.endswith("Human Verified") and value is True
-        ]
-        if forbidden:
-            warn_policy(
-                "lifecycle.human_verification",
-                f"{instance}.{action} is setting human verification true: "
-                + ", ".join(forbidden)
-                + ".",
-            )
+    for invalidated_field in invalidated_fields:
+        planned[invalidated_field] = ""
+    for gate_id in invalidated_gates:
+        planned[_registered_gate_field(gate_id)] = False
     return planned
 
 

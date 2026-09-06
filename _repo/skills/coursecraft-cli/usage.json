@@ -1,8 +1,8 @@
 {
   "tool": "coursecraft",
   "description": "Manage CourseCraft course content in Airtable",
-  "discovered_at": "2026-09-04T03:35:52Z",
-  "total_commands": 80,
+  "discovered_at": "2026-09-06T18:47:17Z",
+  "total_commands": 82,
   "global_options": [
     {
       "name": "--version",
@@ -719,14 +719,6 @@
               "help": "Set or clear the clip content-structure-complete flag",
               "takes_value": false,
               "secondary": "--no-content-done"
-            },
-            {
-              "name": "--recording-review-human",
-              "type": "bool",
-              "required": false,
-              "help": "Set or clear the clip recording human-review flag",
-              "takes_value": false,
-              "secondary": "--no-recording-review-human"
             },
             {
               "name": "--feedback-requested",
@@ -1730,14 +1722,6 @@
               "help": "AI review verdict for course.outline_draft"
             },
             {
-              "name": "--outline-draft-human-verified",
-              "type": "bool",
-              "required": false,
-              "help": "Set or clear Adam's approval of the Course Outline Draft",
-              "takes_value": false,
-              "secondary": "--no-outline-draft-human-verified"
-            },
-            {
               "name": "--course-outline",
               "type": "TEXT",
               "required": false,
@@ -1861,14 +1845,6 @@
               "type": "PATH",
               "required": false,
               "help": "Path to a file containing the carry-forward plan"
-            },
-            {
-              "name": "--carry-forward-plan-human-verified",
-              "type": "bool",
-              "required": false,
-              "help": "Set or clear Adam's approval of the carry-forward plan",
-              "takes_value": false,
-              "secondary": "--no-carry-forward-plan-human-verified"
             },
             {
               "name": "--profile",
@@ -2174,9 +2150,7 @@
             "coursecraft demos update recXXX --demo-overview \"High-level demo plan...\"",
             "coursecraft demos update recXXX --execution-method \"Automated Walkthrough\"",
             "coursecraft demos update recXXX --proof-state \"Walking\"",
-            "coursecraft demos update recXXX --demo-environment \"Linux - Docker\"",
-            "coursecraft demos update recXXX --demo-overview-review-human",
-            "coursecraft demos update recXXX --action-summary-review-human",
+            "coursecraft demos update recXXX --demo-environment \"Local - macOS\"",
             "coursecraft demos update recXXX --walkthrough-test-complete",
             "coursecraft demos update recXXX --dictation-recorded",
             "coursecraft demos update recXXX --script \"Corrected narration\" --preserve-manual-voice-recording",
@@ -2244,14 +2218,6 @@
               "help": "AI review of the demo overview"
             },
             {
-              "name": "--demo-overview-review-human",
-              "type": "bool",
-              "required": false,
-              "help": "Mark demo overview human review as complete",
-              "takes_value": false,
-              "secondary": "--no-demo-overview-review-human"
-            },
-            {
               "name": "--environment-spec",
               "type": "TEXT",
               "required": false,
@@ -2283,9 +2249,9 @@
             },
             {
               "name": "--demo-environment",
-              "type": "Local - macOS|Linux - Docker",
+              "type": "LOCAL - MACOS",
               "required": false,
-              "help": "Compute surface this demo runs on: 'Local - macOS' (the shared macOS demo host) or 'Linux - Docker' (the demo gets its own Linux container). This is the compute surface only -- Azure and other cloud resources are a resource dimension of the Environment Spec, never a value here"
+              "help": "Compute surface this demo runs on: 'Local - macOS' (the shared macOS demo host). This is the compute surface only -- Azure and other cloud resources are a resource dimension of the Environment Spec, never a value here"
             },
             {
               "name": "--recording-dictation-method",
@@ -2305,14 +2271,6 @@
               "type": "TEXT",
               "required": false,
               "help": "AI review of the action summary"
-            },
-            {
-              "name": "--action-summary-review-human",
-              "type": "bool",
-              "required": false,
-              "help": "Mark action summary human review as complete",
-              "takes_value": false,
-              "secondary": "--no-action-summary-review-human"
             },
             {
               "name": "--walkthrough-test-complete",
@@ -2341,22 +2299,6 @@
               "type": "TEXT",
               "required": false,
               "help": "AI review of the demo script"
-            },
-            {
-              "name": "--script-review-human",
-              "type": "bool",
-              "required": false,
-              "help": "Mark script human review as complete",
-              "takes_value": false,
-              "secondary": "--no-script-review-human"
-            },
-            {
-              "name": "--recording-review-human",
-              "type": "bool",
-              "required": false,
-              "help": "Set or clear the demo recording human-review flag",
-              "takes_value": false,
-              "secondary": "--no-recording-review-human"
             },
             {
               "name": "--dictation-recorded",
@@ -2995,6 +2937,106 @@
         }
       }
     },
+    "human-verification": {
+      "help": "Set or clear canonical human-verification gates",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "clear": {
+          "help": "Clear one gate after authorization checks.",
+          "arguments": [
+            {
+              "name": "record_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Airtable record ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--artifact",
+              "type": "TEXT",
+              "required": true,
+              "help": "Canonical artifact slug"
+            },
+            {
+              "name": "--gate",
+              "type": "TEXT",
+              "required": true,
+              "help": "Canonical human-verification gate ID"
+            },
+            {
+              "name": "--actor",
+              "type": "TEXT",
+              "required": true,
+              "help": "Mutation actor: artifact-agent or human-ui"
+            },
+            {
+              "name": "--caller-agent",
+              "type": "TEXT",
+              "required": false,
+              "help": "Required artifact owner for artifact-agent; forbidden for human-ui"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "set": {
+          "help": "Set one gate after authorization and prerequisite checks.",
+          "arguments": [
+            {
+              "name": "record_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Airtable record ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--artifact",
+              "type": "TEXT",
+              "required": true,
+              "help": "Canonical artifact slug"
+            },
+            {
+              "name": "--gate",
+              "type": "TEXT",
+              "required": true,
+              "help": "Canonical human-verification gate ID"
+            },
+            {
+              "name": "--actor",
+              "type": "TEXT",
+              "required": true,
+              "help": "Mutation actor: artifact-agent or human-ui"
+            },
+            {
+              "name": "--caller-agent",
+              "type": "TEXT",
+              "required": false,
+              "help": "Required artifact owner for artifact-agent; forbidden for human-ui"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
     "modules": {
       "help": "Manage module records",
       "arguments": [],
@@ -3330,6 +3372,13 @@
           ],
           "options": [
             {
+              "name": "--check-only",
+              "type": "bool",
+              "required": false,
+              "help": "Validate the transition without writing lifecycle state",
+              "takes_value": false
+            },
+            {
               "name": "--profile",
               "type": "TEXT",
               "required": false,
@@ -3466,22 +3515,6 @@
               "help": "AI review of the slide build"
             },
             {
-              "name": "--powerpoint-deck-human-verified",
-              "type": "bool",
-              "required": false,
-              "help": "Set or clear the PowerPoint deck human-verified gate flag",
-              "takes_value": false,
-              "secondary": "--no-powerpoint-deck-human-verified"
-            },
-            {
-              "name": "--slide-build-review-human-verified",
-              "type": "bool",
-              "required": false,
-              "help": "Set or clear the slide build review human-verified gate flag",
-              "takes_value": false,
-              "secondary": "--no-slide-build-review-human-verified"
-            },
-            {
               "name": "--slide-narration-approved",
               "type": "bool",
               "required": false,
@@ -3518,30 +3551,6 @@
               "type": "TEXT",
               "required": false,
               "help": "ISO 8601 timestamp the feedback gate was requested"
-            },
-            {
-              "name": "--description-human-verified",
-              "type": "bool",
-              "required": false,
-              "help": "Set or clear the module Description human-verification gate",
-              "takes_value": false,
-              "secondary": "--no-description-human-verified"
-            },
-            {
-              "name": "--learning-objectives-human-verified",
-              "type": "bool",
-              "required": false,
-              "help": "Set or clear the module Learning Objectives human-verification gate",
-              "takes_value": false,
-              "secondary": "--no-learning-objectives-human-verified"
-            },
-            {
-              "name": "--brainstorming-outline-human-verified",
-              "type": "bool",
-              "required": false,
-              "help": "Set or clear the module Brainstorming Outline human-verification gate",
-              "takes_value": false,
-              "secondary": "--no-brainstorming-outline-human-verified"
             },
             {
               "name": "--base-record",
@@ -4133,10 +4142,6 @@
             "coursecraft slides update recXXX --no-built",
             "coursecraft slides update recXXX --dictation-recorded",
             "coursecraft slides update recXXX --recorded",
-            "coursecraft slides update recXXX --slide-type-human-verified",
-            "coursecraft slides update recXXX --no-slide-type-human-verified",
-            "coursecraft slides update recXXX --script-human-verified",
-            "coursecraft slides update recXXX --no-script-human-verified",
             "coursecraft slides update recXXX --script-review-ai \"PASS -- no unmet requirements.\"",
             "coursecraft slides update recXXX --demo recDEMOID"
           ],
@@ -4234,22 +4239,6 @@
               "help": "Mark slide as recorded",
               "takes_value": false,
               "secondary": "--no-recorded"
-            },
-            {
-              "name": "--slide-type-human-verified",
-              "type": "bool",
-              "required": false,
-              "help": "Mark the slide's chosen type/template as human-verified",
-              "takes_value": false,
-              "secondary": "--no-slide-type-human-verified"
-            },
-            {
-              "name": "--script-human-verified",
-              "type": "bool",
-              "required": false,
-              "help": "Mark the slide's Script as human-verified",
-              "takes_value": false,
-              "secondary": "--no-script-human-verified"
             },
             {
               "name": "--script-review-ai",
@@ -4462,10 +4451,12 @@
           ]
         },
         "sync": {
-          "help": "Idempotently seed missing content entries and register file artifacts. Walks Course -> Modules -> Clips -> Demos/Slides. For each record, seeds a Version Control entry for any coverage-map airtable_content slug that has non-empty content but no entry yet (never overwrites an existing entry -- the write-time engine owns updates from here on), and registers new or changed files for every file-kind slug this command resolves a path for. Run `coursecraft versions registrars` for that exact set -- it is derived from the same resolver table this command walks, so it cannot drift from what is registered here.",
+          "help": "Idempotently seed missing content entries and register file artifacts. Walks Course -> Modules -> Clips -> Demos/Slides. For each record, seeds a Version Control entry for any coverage-map airtable_content slug that has non-empty content but no entry yet (never overwrites an existing entry -- the write-time engine owns updates from here on), and registers new or changed files for every file-kind slug this command resolves a path for. Run `coursecraft versions registrars` for that exact set -- it is derived from the same resolver table this command walks, so it cannot drift from what is registered here. Any --module/--clip/--demo/--slide record ID restricts the walk to that record's subtree only (the Course record itself is not walked), so parallel workers can each sync their own record without registering a sibling's in-flight files. Every scope ID must exist and belong to the course, or the run aborts before writing anything.",
           "examples": [
             "coursecraft versions sync my-course",
-            "coursecraft versions sync my-course --check"
+            "coursecraft versions sync my-course --check",
+            "coursecraft versions sync my-course --demo recXXXXXXXXXXXXXX --check",
+            "coursecraft versions sync my-course --clip recXXXXXXXXXXXXXX --demo recYYYYYYYYYYYYYY"
           ],
           "arguments": [
             {
@@ -4482,6 +4473,30 @@
               "required": false,
               "help": "Report drift (would-write entries) without writing anything",
               "takes_value": false
+            },
+            {
+              "name": "--module",
+              "type": "TEXT",
+              "required": false,
+              "help": "Restrict the walk to this module record ID's subtree (repeatable)"
+            },
+            {
+              "name": "--clip",
+              "type": "TEXT",
+              "required": false,
+              "help": "Restrict the walk to this clip record ID's subtree (repeatable)"
+            },
+            {
+              "name": "--demo",
+              "type": "TEXT",
+              "required": false,
+              "help": "Restrict the walk to this demo record ID (repeatable)"
+            },
+            {
+              "name": "--slide",
+              "type": "TEXT",
+              "required": false,
+              "help": "Restrict the walk to this slide record ID (repeatable)"
             },
             {
               "name": "--profile",

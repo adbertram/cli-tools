@@ -298,7 +298,6 @@ def update_clip(
     notes: Optional[str] = typer.Option(None, "--notes", help="Internal notes"),
     clip_plan_review_ai: Optional[str] = typer.Option(None, "--clip-plan-review-ai", help="AI review of the clip plan"),
     content_done: Optional[bool] = typer.Option(None, "--content-done/--no-content-done", help="Set or clear the clip content-structure-complete flag"),
-    recording_review_human: Optional[bool] = typer.Option(None, "--recording-review-human/--no-recording-review-human", help="Set or clear the clip recording human-review flag"),
     feedback_requested: Optional[bool] = typer.Option(None, "--feedback-requested/--no-feedback-requested", help="Set or clear the feedback-requested gate flag"),
     feedback_requested_at: Optional[str] = typer.Option(None, "--feedback-requested-at", help="ISO 8601 timestamp the feedback gate was requested"),
     base_record: Optional[str] = typer.Option(None, "--base-record", help="Course-update lineage: the clip in the base course version this record derives from"),
@@ -344,8 +343,6 @@ def update_clip(
             fields["Clip Plan Review (AI)"] = clip_plan_review_ai
         if content_done is not None:
             fields["Clip Structure Confirmed"] = content_done
-        if recording_review_human is not None:
-            fields["Recording Human Verified"] = recording_review_human
         if feedback_requested is not None:
             fields["Feedback Requested"] = feedback_requested
         if feedback_requested_at is not None:

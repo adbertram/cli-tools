@@ -29,7 +29,7 @@ import json
 import re
 import zipfile
 from pathlib import Path
-from typing import Any, Dict, Iterator, Optional, Tuple
+from typing import Any, Dict, Iterator, List, NamedTuple, Optional, Tuple
 
 import typer
 
@@ -47,6 +47,7 @@ from ..external_review import (
     version_evidence,
 )
 from ..objective_override import AUDIT_FIELD, STATE_FIELD, ObjectiveOverrideError
+from ..human_verification import human_verification_index
 
 app = typer.Typer(help="Sync CourseCraft artifact Version Control entries", no_args_is_help=True)
 
@@ -65,12 +66,6 @@ app = typer.Typer(help="Sync CourseCraft artifact Version Control entries", no_a
 # own. coverage-map.json's `version_registration` block is the authority on all
 # three.
 ENV_PREP_SCRIPT_FILENAME = "env_prep.ps1"
-# Same artifact, second surface. A Linux demo's environment prep is a shell
-# script because the macOS body is bound to its own contract -- the macOS
-# hygiene helpers and 1920x1080 screenshot proof, none of which exist inside a
-# container. One slug, one concept, two bodies; never a second prep artifact.
-ENV_PREP_LINUX_FILENAME = "env_prep.sh"
-LINUX_DEMO_ENVIRONMENT = "Linux - Docker"
 # Compiled per-demo declaration for the proof fleet (host class + cask tokens).
 # Authored on disk by an agent and never written through the CLI, so this
 # command is its only registrar -- exactly like the prep script above.
@@ -120,6 +115,11 @@ def _course_preservation_snapshot(
             or "Submitted Revision" in field
             or field.endswith("Submitted Date")
         )
+    )
+    protected.update(
+        gate.field
+        for gate in human_verification_index().by_id.values()
+        if gate.table == "Courses"
     )
     return {field: fields.get(field) for field in sorted(protected)}
 
@@ -396,12 +396,7 @@ def _environment_prep_script_path(
     folder = _demo_folder(fields)
     if folder is None:
         return None
-    filename = (
-        ENV_PREP_LINUX_FILENAME
-        if fields.get("Demo Environment") == LINUX_DEMO_ENVIRONMENT
-        else ENV_PREP_SCRIPT_FILENAME
-    )
-    return folder / filename
+    return folder / ENV_PREP_SCRIPT_FILENAME
 
 
 def _host_requirements_path(
@@ -545,9 +540,10 @@ def versions_registrars():
 
 def _deck_registration_consequences(fields: Dict[str, Any]) -> Dict[str, Any]:
     """Invalidate stale deck review evidence in the same owner-record write."""
+    human_field = human_verification_index().by_id["modules.powerpoint_deck"].field
     updates: Dict[str, Any] = {
         "PowerPoint Deck Review (AI)": "",
-        "PowerPoint Deck Human Verified": False,
+        human_field: False,
     }
     if fields.get("Slide Deck Review State") in {"Submitted", "Approved"}:
         updates["Slide Deck Review State"] = "Not Submitted"
@@ -598,6 +594,7 @@ def accept_approved_module_deck(
         )
 
     with lifecycle_lock(record_id):
+        human_field = human_verification_index().by_id["modules.powerpoint_deck"].field
         before = transition_record(client, "slide_deck", record_id)
         fields = before["fields"]
         path = _validate_approved_module_deck(
@@ -621,7 +618,7 @@ def accept_approved_module_deck(
                 current.get("sha256") == approved_digest
                 and fields.get("Slide Deck Submitted Revision") == current_revision
                 and fields.get("PowerPoint Deck Review (AI)") in (None, "")
-                and fields.get("PowerPoint Deck Human Verified") in (None, False)
+                and fields.get(human_field) in (None, False)
             )
             if not recovery_matches:
                 raise ExternalReviewError(
@@ -668,7 +665,7 @@ def accept_approved_module_deck(
             "Slide Deck Review State",
             "Slide Deck Submitted Revision",
             "PowerPoint Deck Review (AI)",
-            "PowerPoint Deck Human Verified",
+            human_field,
         }
         if not atomic_fields.issubset(updates):
             missing = ", ".join(sorted(atomic_fields - updates.keys()))
@@ -699,9 +696,9 @@ def accept_approved_module_deck(
             raise ExternalReviewError(
                 "PowerPoint Deck Review (AI) was not cleared after approved-deck acceptance."
             )
-        if persisted_fields.get("PowerPoint Deck Human Verified") not in (None, False):
+        if persisted_fields.get(human_field) not in (None, False):
             raise ExternalReviewError(
-                "PowerPoint Deck Human Verified must remain false after approved-deck acceptance."
+                f"{human_field} must remain false after approved-deck acceptance."
             )
 
         return {
@@ -767,26 +764,138 @@ def versions_register_module_deck(
         raise typer.Exit(1)
 
 
-def _walk_course(client, course_record: Dict) -> Iterator[Tuple[str, Dict, Any, Any]]:
+WalkItem = Tuple[str, Dict, Any, Any]
+
+
+def _order(record: Dict) -> Any:
+    return record.get("fields", {}).get("Order")
+
+
+def _walk_clip(client, clip: Dict, module_order: Any) -> Iterator[WalkItem]:
+    """Yield the clip, then its demos and slides."""
+    yield ("Clips", clip, None, None)
+    clip_order = _order(clip)
+    for demo in client.get_demos_by_clip(clip["id"]):
+        yield ("Demos", demo, module_order, clip_order)
+    for slide in client.get_slides_by_clip(clip["id"]):
+        yield ("Slides", slide, None, None)
+
+
+def _walk_module(client, module: Dict) -> Iterator[WalkItem]:
+    """Yield the module, then every clip subtree under it."""
+    yield ("Modules", module, None, None)
+    module_order = _order(module)
+    for clip in client.get_clips_by_module(module["id"]):
+        yield from _walk_clip(client, clip, module_order)
+
+
+def _walk_course(client, course_record: Dict) -> Iterator[WalkItem]:
     """Yield (table, record, module_order, clip_order) for a course's tree.
 
     ``module_order``/``clip_order`` are ``None`` outside the Demos branch,
     where they are needed to derive the promoted-video filename.
     """
     yield ("Courses", course_record, None, None)
-
     for module in client.get_modules_by_course(course_record["id"]):
-        yield ("Modules", module, None, None)
-        module_order = module.get("fields", {}).get("Order")
+        yield from _walk_module(client, module)
 
-        for clip in client.get_clips_by_module(module["id"]):
-            yield ("Clips", clip, None, None)
-            clip_order = clip.get("fields", {}).get("Order")
 
-            for demo in client.get_demos_by_clip(clip["id"]):
-                yield ("Demos", demo, module_order, clip_order)
-            for slide in client.get_slides_by_clip(clip["id"]):
-                yield ("Slides", slide, None, None)
+# Record-scoped walks. One spec per scopable table: the CLI option that names
+# it, the CLI field key of the lookup pointing at its parent (resolved through
+# field_mappings, never a literal Airtable field name), and the parent table
+# (``None`` ends the climb at Modules, whose parent lookup is the course). Each
+# scope root is loaded by ID, climbed to its owning Module, and that Module's
+# course must be the course being synced -- an unknown or out-of-course ID
+# aborts the run before anything is walked or written.
+class _ScopeSpec(NamedTuple):
+    option: str
+    parent_field: str
+    parent_table: Optional[str]
+
+
+_SCOPE: Dict[str, _ScopeSpec] = {
+    "Modules": _ScopeSpec("--module", validate_field("course", "Modules"), None),
+    "Clips": _ScopeSpec("--clip", validate_field("module", "Clips"), "Modules"),
+    "Demos": _ScopeSpec("--demo", validate_field("clip", "Demos"), "Clips"),
+    "Slides": _ScopeSpec("--slide", validate_field("clip", "Slides"), "Clips"),
+}
+
+
+def _parent_record_id(table: str, record: Dict) -> str:
+    field = _SCOPE[table].parent_field
+    value = record.get("fields", {}).get(field)
+    if isinstance(value, list) and len(value) == 1:
+        value = value[0]
+    if not isinstance(value, str) or not value.startswith("rec"):
+        raise ClientError(
+            f"{table} record {record['id']!r} has no usable {field!r} value "
+            f"({value!r}); cannot place it in a course."
+        )
+    return value
+
+
+def _scoped_record(client, table: str, record_id: str) -> Dict:
+    record = client.get_record(table, record_id)
+    if not record:
+        raise ClientError(f"{table} record not found: {record_id}")
+    return record
+
+
+def _scope_roots(values_by_table: Dict[str, Optional[List[str]]]) -> List[Tuple[str, str]]:
+    """(table, record_id) scope roots in ``_SCOPE`` order; ``[]`` when unscoped."""
+    roots: List[Tuple[str, str]] = []
+    for table, spec in _SCOPE.items():
+        values = values_by_table[table]
+        if values is None:
+            continue
+        for value in values:
+            if not value.startswith("rec"):
+                raise ClientError(f"{spec.option} expects a record ID (rec...), got {value!r}.")
+            if (table, value) in roots:
+                raise ClientError(f"{spec.option} {value} was given more than once.")
+            roots.append((table, value))
+    return roots
+
+
+def _resolve_scope(
+    client, course_record_id: str, roots: List[Tuple[str, str]]
+) -> List[WalkItem]:
+    """Load and course-check every scope root BEFORE anything is walked or written.
+
+    Each root comes back as the same (table, record, module_order, clip_order)
+    tuple ``_walk_course`` yields for it, so a later walk needs no re-fetch.
+    """
+    resolved: List[WalkItem] = []
+    for table, record_id in roots:
+        chain: Dict[str, Dict] = {table: _scoped_record(client, table, record_id)}
+        chain_table = table
+        while _SCOPE[chain_table].parent_table is not None:
+            parent_table = _SCOPE[chain_table].parent_table
+            chain[parent_table] = _scoped_record(
+                client, parent_table, _parent_record_id(chain_table, chain[chain_table])
+            )
+            chain_table = parent_table
+        owning_course = _parent_record_id("Modules", chain["Modules"])
+        if owning_course != course_record_id:
+            raise ClientError(
+                f"{table} record {record_id} belongs to course {owning_course}, "
+                f"not {course_record_id}."
+            )
+        module_order = _order(chain["Modules"]) if table in ("Clips", "Demos") else None
+        clip_order = _order(chain["Clips"]) if table == "Demos" else None
+        resolved.append((table, chain[table], module_order, clip_order))
+    return resolved
+
+
+def _walk_scope(client, resolved: List[WalkItem]) -> Iterator[WalkItem]:
+    """Yield each resolved scope root's subtree."""
+    for table, record, module_order, clip_order in resolved:
+        if table == "Modules":
+            yield from _walk_module(client, record)
+        elif table == "Clips":
+            yield from _walk_clip(client, record, module_order)
+        else:
+            yield (table, record, module_order, clip_order)
 
 
 _TABLE_KEY = {
@@ -805,6 +914,18 @@ def versions_sync(
     check: bool = typer.Option(
         False, "--check", help="Report drift (would-write entries) without writing anything"
     ),
+    module: Optional[List[str]] = typer.Option(
+        None, "--module", help="Restrict the walk to this module record ID's subtree (repeatable)"
+    ),
+    clip: Optional[List[str]] = typer.Option(
+        None, "--clip", help="Restrict the walk to this clip record ID's subtree (repeatable)"
+    ),
+    demo: Optional[List[str]] = typer.Option(
+        None, "--demo", help="Restrict the walk to this demo record ID (repeatable)"
+    ),
+    slide: Optional[List[str]] = typer.Option(
+        None, "--slide", help="Restrict the walk to this slide record ID (repeatable)"
+    ),
 ):
     """Idempotently seed missing content entries and register file artifacts.
 
@@ -817,9 +938,17 @@ def versions_sync(
     from the same resolver table this command walks, so it cannot drift from
     what is registered here.
 
+    Any --module/--clip/--demo/--slide record ID restricts the walk to that
+    record's subtree only (the Course record itself is not walked), so
+    parallel workers can each sync their own record without registering a
+    sibling's in-flight files. Every scope ID must exist and belong to the
+    course, or the run aborts before writing anything.
+
     Examples:
         coursecraft versions sync my-course
         coursecraft versions sync my-course --check
+        coursecraft versions sync my-course --demo recXXXXXXXXXXXXXX --check
+        coursecraft versions sync my-course --clip recXXXXXXXXXXXXXX --demo recYYYYYYYYYYYYYY
     """
     try:
         client = get_client()
@@ -829,9 +958,18 @@ def versions_sync(
             print_error(f"Course not found: {course}")
             raise typer.Exit(1)
 
+        roots = _scope_roots(
+            {"Modules": module, "Clips": clip, "Demos": demo, "Slides": slide}
+        )
+        walk = (
+            _walk_scope(client, _resolve_scope(client, course_record_id, roots))
+            if roots
+            else _walk_course(client, course_record)
+        )
+
         report = []
         errors = []
-        for table, record, module_order, clip_order in _walk_course(client, course_record):
+        for table, record, module_order, clip_order in walk:
             record_id = record.get("id")
             try:
                 fields = record.get("fields", {})

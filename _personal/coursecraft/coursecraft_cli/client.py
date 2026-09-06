@@ -11,6 +11,7 @@ from typing import Dict, FrozenSet, List, Optional, Any
 from .artifact_versions import checkbox_is_true, plan_record_update
 from .config import get_config
 from .filter_translator import escape_value
+from .human_verification import is_human_verification_field
 from .output import warn_policy
 
 
@@ -552,31 +553,18 @@ class CourseCraftClient:
         current_fields: Dict[str, Any],
         planned_fields: Dict[str, Any],
     ) -> None:
-        """Report every live ``… Human Verified`` stamp this write un-stamps.
-
-        The versioning engine clears a paired Human Verified checkbox in the
-        same PATCH as the content change it vouched for. A live stamp is never
-        read-only and never blocks a required fix -- the only terminal states
-        are a recorded demo and a Pluralsight-approved slide deck
-        (course-pipeline/SKILL.md rule 4a) -- so the clear is a reminder, not
-        a refusal. A stamp the caller cleared itself (``--no-<field>``) is a
-        deliberate write and gets no reminder.
-        """
+        """Report every live human-verification stamp cleared by this write."""
         for field, value in planned_fields.items():
             if (
-                field.endswith("Human Verified")
+                is_human_verification_field(table, field)
                 and value is False
                 and field not in proposed_fields
                 and checkbox_is_true(current_fields.get(field))
             ):
                 warn_policy(
-                    "human-verified.cleared",
-                    f"{table} {record_id}: this write changes content that "
-                    f"{field!r} vouched for, so the stamp is cleared to False in "
-                    "the same write. A Human Verified stamp is never read-only; "
-                    "the next review re-earns it. Only a recorded demo or a "
-                    "Pluralsight-approved slide deck is done "
-                    "(course-pipeline/SKILL.md rule 4a).",
+                    "HV_CLEARED",
+                    f"{table} {record_id}: cleared {field!r} in the same write "
+                    "as changed content.",
                 )
 
     def _extract_record_id(self, response: Dict) -> str:

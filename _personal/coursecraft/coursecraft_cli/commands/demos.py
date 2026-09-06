@@ -40,7 +40,6 @@ class DemoExecutionMethod(str, Enum):
 class DemoEnvironment(str, Enum):
     """Allowed values for the Demos 'Demo Environment' single-select field."""
     LOCAL_MACOS = "Local - macOS"
-    LINUX_DOCKER = "Linux - Docker"
 
 
 class DemoProofState(str, Enum):
@@ -99,9 +98,8 @@ EXECUTION_METHOD_HELP = (
 
 DEMO_ENVIRONMENT_HELP = (
     "Compute surface this demo runs on: 'Local - macOS' (the shared macOS demo "
-    "host) or 'Linux - Docker' (the demo gets its own Linux container). This is "
-    "the compute surface only -- Azure and other cloud resources are a resource "
-    "dimension of the Environment Spec, never a value here."
+    "host). This is the compute surface only -- Azure and other cloud resources "
+    "are a resource dimension of the Environment Spec, never a value here."
 )
 
 
@@ -669,7 +667,6 @@ def update_demo(
     learner_takeaway_review_ai: Optional[str] = typer.Option(None, "--learner-takeaway-review-ai", help="AI review of the learner takeaway"),
     demo_overview: Optional[str] = typer.Option(None, "--demo-overview", help="High-level instructional overview for the demo"),
     demo_overview_review_ai: Optional[str] = typer.Option(None, "--demo-overview-review-ai", help="AI review of the demo overview"),
-    demo_overview_review_human: Optional[bool] = typer.Option(None, "--demo-overview-review-human/--no-demo-overview-review-human", help="Mark demo overview human review as complete"),
     environment_spec: Optional[str] = typer.Option(None, "--environment-spec", help="Declarative environment spec (WHAT the demo environment must be) for the demo"),
     environment_spec_review_ai: Optional[str] = typer.Option(None, "--environment-spec-review-ai", help="AI review of the environment spec"),
     environment_prep_review_ai: Optional[str] = typer.Option(None, "--environment-prep-review-ai", help="AI review of the environment prep"),
@@ -679,13 +676,10 @@ def update_demo(
     recording_dictation_method: Optional[RecordingDictationMethod] = typer.Option(None, "--recording-dictation-method", help=DICTATION_METHOD_HELP),
     action_summary: Optional[str] = typer.Option(None, "--action-summary", "-a", help="Action summary"),
     action_summary_review_ai: Optional[str] = typer.Option(None, "--action-summary-review-ai", help="AI review of the action summary"),
-    action_summary_review_human: Optional[bool] = typer.Option(None, "--action-summary-review-human/--no-action-summary-review-human", help="Mark action summary human review as complete"),
     walkthrough_test_complete: Optional[bool] = typer.Option(None, "--walkthrough-test-complete/--no-walkthrough-test-complete", help="Mark the demo's walkthrough test complete after a full automated walkthrough is confirmed correct"),
     script: Optional[str] = typer.Option(None, "--script", "-s", help="Demo script"),
     preserve_manual_voice_recording: bool = typer.Option(False, "--preserve-manual-voice-recording", help="Keep a verified registered manual voice take after a changed script"),
     script_review_ai: Optional[str] = typer.Option(None, "--script-review-ai", help="AI review of the demo script"),
-    script_review_human: Optional[bool] = typer.Option(None, "--script-review-human/--no-script-review-human", help="Mark script human review as complete"),
-    recording_review_human: Optional[bool] = typer.Option(None, "--recording-review-human/--no-recording-review-human", help="Set or clear the demo recording human-review flag"),
     dictation_recorded: Optional[bool] = typer.Option(None, "--dictation-recorded/--no-dictation-recorded", help="Mark demo dictation audio as recorded"),
     recorded: Optional[bool] = typer.Option(None, "--recorded/--no-recorded", help="Mark demo as recorded"),
     audio_synced: Optional[bool] = typer.Option(None, "--audio-synced/--no-audio-synced", help="Mark demo narration audio as synced onto the recorded video"),
@@ -710,9 +704,7 @@ def update_demo(
         coursecraft demos update recXXX --demo-overview "High-level demo plan..."
         coursecraft demos update recXXX --execution-method "Automated Walkthrough"
         coursecraft demos update recXXX --proof-state "Walking"
-        coursecraft demos update recXXX --demo-environment "Linux - Docker"
-        coursecraft demos update recXXX --demo-overview-review-human
-        coursecraft demos update recXXX --action-summary-review-human
+        coursecraft demos update recXXX --demo-environment "Local - macOS"
         coursecraft demos update recXXX --walkthrough-test-complete
         coursecraft demos update recXXX --dictation-recorded
         coursecraft demos update recXXX --script "Corrected narration" --preserve-manual-voice-recording
@@ -898,7 +890,6 @@ def update_demo(
                 "learner_takeaway_review_ai": learner_takeaway_review_ai,
                 "demo_overview": demo_overview,
                 "demo_overview_review_ai": demo_overview_review_ai,
-                "demo_overview_review_human": demo_overview_review_human,
                 "environment_spec": environment_spec,
                 "environment_spec_review_ai": environment_spec_review_ai,
                 "environment_prep_review_ai": environment_prep_review_ai,
@@ -912,12 +903,9 @@ def update_demo(
                 ),
                 "action_summary": action_summary,
                 "action_summary_review_ai": action_summary_review_ai,
-                "action_summary_review_human": action_summary_review_human,
                 "walkthrough_test_complete": walkthrough_test_complete_write,
                 "script": script,
                 "script_review_ai": script_review_ai,
-                "script_review_human": script_review_human,
-                "recording_review_human": recording_review_human,
                 "dictation_recorded": dictation_recorded,
                 "recorded": recorded,
                 "audio_synced": audio_synced,
@@ -938,11 +926,8 @@ def update_demo(
         if script is not None:
             if script_narration_changed and not preserve_manual_voice_recording:
                 fields.update(get_demo_voice_recording_invalidation_fields())
-        # Audio Synced/Recorded invalidation stays command-side: it is
-        # recording-state invalidation, not a "... Review (AI)"/human-verified
-        # pair the write-time versioning engine's consequence engine resolves
-        # from course-pipeline.json, so the engine has no data-driven way to
-        # own it.
+        # Audio Synced/Recorded invalidation stays command-side because the
+        # write-time versioning graph does not declare this recording-state pair.
         if script_changed:
             fields["Audio Synced"] = False
             fields["Recorded"] = False
@@ -1047,20 +1032,10 @@ def update_demo(
             if walkthrough_test_complete_write is not None
             else existing_fields.get(WALKTHROUGH_TEST_COMPLETE_FIELD, False)
         )
-        effective_action_summary_reviewed = fields.get(
-            "Action Summary Human Verified",
-            existing_fields.get("Action Summary Human Verified", False),
-        )
-
         if recorded and not effective_walkthrough_test_complete:
             print_info("")
             print_info("⚠️  WARNING: Demo has not been marked as Walkthrough Test Complete.")
             print_info("   Complete and confirm the automated walkthrough before recording.")
-
-        if script_review_human and not effective_action_summary_reviewed:
-            print_info("")
-            print_info("⚠️  WARNING: Action Summary human review is not complete.")
-            print_info("   The Script is derived from the Action Summary - consider reviewing that first.")
 
         # Output the record ID as JSON for machine consumers.
         print_json(record_id)

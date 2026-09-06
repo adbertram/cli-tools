@@ -14,6 +14,8 @@ from ..field_mappings import collect_mapped_updates
 from ..external_review import (
     ExternalReviewError,
     execute_transition,
+    plan_transition,
+    transition_record,
     verified_video_feedback_receipts,
 )
 from ..artifact_versions import VersioningError
@@ -301,16 +303,11 @@ def update_module(
     plan_review_ai: Optional[str] = typer.Option(None, "--plan-review-ai", help="AI review of the module plan"),
     powerpoint_deck_review_ai: Optional[str] = typer.Option(None, "--powerpoint-deck-review-ai", help="AI review of the PowerPoint deck"),
     slide_build_review_ai: Optional[str] = typer.Option(None, "--slide-build-review-ai", help="AI review of the slide build"),
-    powerpoint_deck_human_verified: Optional[bool] = typer.Option(None, "--powerpoint-deck-human-verified/--no-powerpoint-deck-human-verified", help="Set or clear the PowerPoint deck human-verified gate flag"),
-    slide_build_review_human_verified: Optional[bool] = typer.Option(None, "--slide-build-review-human-verified/--no-slide-build-review-human-verified", help="Set or clear the slide build review human-verified gate flag"),
     slide_narration_approved: Optional[bool] = typer.Option(None, "--slide-narration-approved/--no-slide-narration-approved", help="Set or clear the slide-narration-approved flag, the gate that releases the slide-narration phase (Review Slide Narration) to recording"),
     slide_narration_recorded: Optional[bool] = typer.Option(None, "--slide-narration-recorded/--no-slide-narration-recorded", help="Set or clear the slide-narration-recorded flag, marking the module's slide narration take as recorded"),
     slide_narration_complete: Optional[bool] = typer.Option(None, "--slide-narration-complete/--no-slide-narration-complete", help="Set or clear the module slide-narration-complete flag and sync every child clip and slide"),
     feedback_requested: Optional[bool] = typer.Option(None, "--feedback-requested/--no-feedback-requested", help="Set or clear the feedback-requested gate flag"),
     feedback_requested_at: Optional[str] = typer.Option(None, "--feedback-requested-at", help="ISO 8601 timestamp the feedback gate was requested"),
-    description_human_verified: Optional[bool] = typer.Option(None, "--description-human-verified/--no-description-human-verified", help="Set or clear the module Description human-verification gate"),
-    learning_objectives_human_verified: Optional[bool] = typer.Option(None, "--learning-objectives-human-verified/--no-learning-objectives-human-verified", help="Set or clear the module Learning Objectives human-verification gate"),
-    brainstorming_outline_human_verified: Optional[bool] = typer.Option(None, "--brainstorming-outline-human-verified/--no-brainstorming-outline-human-verified", help="Set or clear the module Brainstorming Outline human-verification gate"),
     base_record: Optional[str] = typer.Option(None, "--base-record", help="Course-update lineage: the module in the base course version this record derives from"),
 ):
     """
@@ -354,16 +351,11 @@ def update_module(
                 "plan_review_ai": plan_review_ai,
                 "powerpoint_deck_review_ai": powerpoint_deck_review_ai,
                 "slide_build_review_ai": slide_build_review_ai,
-                "powerpoint_deck_human_verified": powerpoint_deck_human_verified,
-                "slide_build_review_human_verified": slide_build_review_human_verified,
                 "slide_narration_approved": slide_narration_approved,
                 "slide_narration_recorded": slide_narration_recorded,
                 "slide_narration_complete": slide_narration_complete,
                 "feedback_requested": feedback_requested,
                 "feedback_requested_at": feedback_requested_at,
-                "description_human_verified": description_human_verified,
-                "learning_objectives_human_verified": learning_objectives_human_verified,
-                "brainstorming_outline_human_verified": brainstorming_outline_human_verified,
             },
         )
 
@@ -671,9 +663,17 @@ def show_module(
         raise typer.Exit(1)
 
 
-def _run_module_transition(module: str, instance: str, action: str) -> None:
+def _run_module_transition(
+    module: str, instance: str, action: str, *, check_only: bool = False
+) -> None:
     client = get_client()
     record_id = client.resolve_module_id(module)
+    if check_only:
+        record = transition_record(client, instance, record_id)
+        result = plan_transition(instance, action, "operator", record)
+        print_success(f"Checked {instance} action {action!r} for {record_id}")
+        print_json(result)
+        return
     result = execute_transition(client, instance, action, "operator", record_id)
     print_success(f"Applied {instance} action {action!r} to {record_id}")
     print_json(result)
@@ -683,10 +683,15 @@ def _run_module_transition(module: str, instance: str, action: str) -> None:
 @command
 def modules_submit_slide_deck_for_review(
     module: str = typer.Argument(..., help="Module record ID, ID pattern, or name"),
+    check_only: bool = typer.Option(
+        False,
+        "--check-only",
+        help="Validate the transition without writing lifecycle state.",
+    ),
 ):
     """Submit or resubmit the current ready Slide Deck revision."""
     try:
-        _run_module_transition(module, "slide_deck", "submit")
+        _run_module_transition(module, "slide_deck", "submit", check_only=check_only)
     except (ClientError, ExternalReviewError, ObjectiveOverrideError) as exc:
         print_error(str(exc))
         raise typer.Exit(1)

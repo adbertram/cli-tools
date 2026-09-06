@@ -323,8 +323,6 @@ def update_slide(
     built: Optional[bool] = typer.Option(None, "--built/--no-built", help="Slide built checkbox"),
     dictation_recorded: Optional[bool] = typer.Option(None, "--dictation-recorded/--no-dictation-recorded", help="Mark slide dictation audio as recorded"),
     recorded: Optional[bool] = typer.Option(None, "--recorded/--no-recorded", help="Mark slide as recorded"),
-    slide_type_human_verified: Optional[bool] = typer.Option(None, "--slide-type-human-verified/--no-slide-type-human-verified", help="Mark the slide's chosen type/template as human-verified"),
-    script_human_verified: Optional[bool] = typer.Option(None, "--script-human-verified/--no-script-human-verified", help="Mark the slide's Script as human-verified"),
     script_review_ai: Optional[str] = typer.Option(None, "--script-review-ai", help="AI review verdict of the slide Script (artifact-reviewer only)"),
     demo: Optional[str] = typer.Option(None, "--demo", "-d", help="Demo record ID (for demo intro slides)"),
     feedback_requested: Optional[bool] = typer.Option(None, "--feedback-requested/--no-feedback-requested", help="Set or clear the feedback-requested gate flag"),
@@ -349,10 +347,6 @@ def update_slide(
         coursecraft slides update recXXX --no-built
         coursecraft slides update recXXX --dictation-recorded
         coursecraft slides update recXXX --recorded
-        coursecraft slides update recXXX --slide-type-human-verified
-        coursecraft slides update recXXX --no-slide-type-human-verified
-        coursecraft slides update recXXX --script-human-verified
-        coursecraft slides update recXXX --no-script-human-verified
         coursecraft slides update recXXX --script-review-ai "PASS -- no unmet requirements."
         coursecraft slides update recXXX --demo recDEMOID
 
@@ -421,10 +415,6 @@ def update_slide(
             fields["Dictation Recorded"] = dictation_recorded
         if recorded is not None:
             fields["Recorded"] = recorded
-        if slide_type_human_verified is not None:
-            fields["Slide Type Human Verified"] = slide_type_human_verified
-        if script_human_verified is not None:
-            fields["Script Human Verified"] = script_human_verified
         if script_review_ai is not None:
             fields[SCRIPT_REVIEW_AI_FIELD] = script_review_ai
         if demo is not None:

@@ -617,40 +617,6 @@ def test_update_demo_accepts_no_audio_synced(monkeypatch):
     assert fake_client.updated_fields == {"Audio Synced": False}
 
 
-def test_update_demo_accepts_recording_review_human(monkeypatch):
-    fake_client = FakeClient()
-    monkeypatch.setattr(demos, "get_client", lambda: fake_client)
-
-    result = runner.invoke(
-        demos.app,
-        [
-            "update",
-            "recExistingDemo",
-            "--recording-review-human",
-        ],
-    )
-
-    assert result.exit_code == 0
-    assert fake_client.updated_fields == {"Recording Human Verified": True}
-
-
-def test_update_demo_accepts_no_recording_review_human(monkeypatch):
-    fake_client = FakeClient()
-    monkeypatch.setattr(demos, "get_client", lambda: fake_client)
-
-    result = runner.invoke(
-        demos.app,
-        [
-            "update",
-            "recExistingDemo",
-            "--no-recording-review-human",
-        ],
-    )
-
-    assert result.exit_code == 0
-    assert fake_client.updated_fields == {"Recording Human Verified": False}
-
-
 def test_update_demo_has_no_voice_recording_path_option(monkeypatch):
     """A demo's take path is derived from Folder Root, so it is never written."""
     fake_client = FakeClient()
@@ -890,36 +856,6 @@ def test_demo_content_resubmission_no_op_does_not_clear_paired_fields(monkeypatc
     assert fake_client.updated_fields == {"Demo Overview": "Same overview  "}
 
 
-def test_demo_content_change_with_explicit_review_human_reaches_client(monkeypatch):
-    # The mutual-exclusion reject for "content changed + its paired review
-    # field explicitly set in the same call" is now owned by the write-time
-    # versioning engine's stamp_versions, at the real client.update_record
-    # chokepoint -- FakeClient has no such logic, so both values now reach
-    # it together. See coursecraft_cli.artifact_versions.stamp_versions and
-    # its VersioningError for the real (client-level) rejection behavior.
-    fake_client = FakeClient()
-    fake_client.get_record = lambda table_name, record_id: {
-        "id": record_id,
-        "fields": {"Name": "Existing", "Action Summary": "Old summary"},
-    }
-    monkeypatch.setattr(demos, "get_client", lambda: fake_client)
-
-    result = runner.invoke(
-        demos.app,
-        [
-            "update",
-            "recExistingDemo",
-            "--action-summary",
-            "New summary",
-            "--action-summary-review-human",
-        ],
-    )
-
-    assert result.exit_code == 0
-    assert fake_client.updated_fields["Action Summary"] == "New summary"
-    assert fake_client.updated_fields["Action Summary Human Verified"] is True
-
-
 def test_demo_content_change_with_explicit_review_ai_reaches_client(monkeypatch):
     fake_client = FakeClient()
     fake_client.get_record = lambda table_name, record_id: {
@@ -943,35 +879,6 @@ def test_demo_content_change_with_explicit_review_ai_reaches_client(monkeypatch)
     assert result.exit_code == 0
     assert fake_client.updated_fields["Script"] == _demo_script("New script.")
     assert fake_client.updated_fields["Script Review (AI)"] == "Needs work"
-
-
-def test_demo_no_op_content_with_explicit_review_flag_is_respected(monkeypatch):
-    # A no-op resubmission combined with an explicit review flag is fine: the
-    # explicit value is respected, not silently overwritten.
-    fake_client = FakeClient()
-    fake_client.get_record = lambda table_name, record_id: {
-        "id": record_id,
-        "fields": {"Name": "Existing", "Script": "Same script"},
-    }
-    monkeypatch.setattr(demos, "get_client", lambda: fake_client)
-
-    result = runner.invoke(
-        demos.app,
-        [
-            "update",
-            "recExistingDemo",
-            "--script",
-            "Same script",
-            "--script-review-human",
-        ],
-    )
-
-    assert result.exit_code == 0
-    # --script always triggers the (pre-existing, unrelated) voice-recording
-    # invalidation fields regardless of content change; only the paired
-    # review flag behavior is under test here.
-    assert fake_client.updated_fields["Script"] == "Same script"
-    assert fake_client.updated_fields["Script Human Verified"] is True
 
 
 def test_demo_non_design_update_does_not_touch_walkthrough_test_complete(monkeypatch):
@@ -1090,121 +997,6 @@ def test_update_demo_accepts_environment_spec_review_ai(monkeypatch):
     assert fake_client.updated_fields == {
         "Environment Spec Review (AI)": "The environment spec is missing the required CLI version.",
     }
-
-
-def test_update_demo_accepts_demo_overview_review_human(monkeypatch):
-    fake_client = FakeClient()
-    monkeypatch.setattr(demos, "get_client", lambda: fake_client)
-
-    result = runner.invoke(
-        demos.app,
-        [
-            "update",
-            "recExistingDemo",
-            "--demo-overview-review-human",
-        ],
-    )
-
-    assert result.exit_code == 0
-    assert fake_client.updated_fields == {"Demo Overview Human Verified": True}
-
-
-def test_update_demo_accepts_no_demo_overview_review_human(monkeypatch):
-    fake_client = FakeClient()
-    monkeypatch.setattr(demos, "get_client", lambda: fake_client)
-
-    result = runner.invoke(
-        demos.app,
-        [
-            "update",
-            "recExistingDemo",
-            "--no-demo-overview-review-human",
-        ],
-    )
-
-    assert result.exit_code == 0
-    assert fake_client.updated_fields == {"Demo Overview Human Verified": False}
-
-
-def test_update_demo_accepts_action_summary_review_human(monkeypatch):
-    fake_client = FakeClient()
-    monkeypatch.setattr(demos, "get_client", lambda: fake_client)
-
-    result = runner.invoke(
-        demos.app,
-        [
-            "update",
-            "recExistingDemo",
-            "--action-summary-review-human",
-        ],
-    )
-
-    assert result.exit_code == 0
-    assert fake_client.updated_fields == {"Action Summary Human Verified": True}
-
-
-def test_update_demo_accepts_script_review_human(monkeypatch):
-    fake_client = FakeClient()
-    monkeypatch.setattr(demos, "get_client", lambda: fake_client)
-
-    result = runner.invoke(
-        demos.app,
-        [
-            "update",
-            "recExistingDemo",
-            "--script-review-human",
-        ],
-    )
-
-    assert result.exit_code == 0
-    assert fake_client.updated_fields == {"Script Human Verified": True}
-
-
-def test_update_demo_accepts_bulk_human_review_completion_flags(monkeypatch):
-    # Bulk-setting review-completion flags with no accompanying content change
-    # (a content change combined with its own paired review flag is rejected
-    # -- see test_demo_content_change_rejects_explicit_review_human_same_call).
-    fake_client = FakeClient()
-    monkeypatch.setattr(demos, "get_client", lambda: fake_client)
-
-    result = runner.invoke(
-        demos.app,
-        [
-            "update",
-            "recExistingDemo",
-            "--demo-overview-review-human",
-            "--action-summary-review-human",
-            "--script-review-human",
-            "--recorded",
-            "--recording-review-human",
-        ],
-    )
-
-    assert result.exit_code == 0
-    assert fake_client.updated_fields == {
-        "Demo Overview Human Verified": True,
-        "Action Summary Human Verified": True,
-        "Script Human Verified": True,
-        "Recorded": True,
-        "Recording Human Verified": True,
-    }
-
-
-def test_update_demo_accepts_no_action_summary_review_human(monkeypatch):
-    fake_client = FakeClient()
-    monkeypatch.setattr(demos, "get_client", lambda: fake_client)
-
-    result = runner.invoke(
-        demos.app,
-        [
-            "update",
-            "recExistingDemo",
-            "--no-action-summary-review-human",
-        ],
-    )
-
-    assert result.exit_code == 0
-    assert fake_client.updated_fields == {"Action Summary Human Verified": False}
 
 
 def test_update_demo_rejects_old_action_summary_human_review_complete_flag(monkeypatch):
