@@ -103,7 +103,7 @@ BRICKOGNIZE_HEALTH_URL = "https://api.brickognize.com/health/"
 BRICKOGNIZE_TIMEOUT_SECONDS = 10
 DETECTOR_CHECK_TIMEOUT_SECONDS = 120
 MINIFIG_DETECTOR = "grounding-dino-tiny"
-REQUIRED_MINIFIG_LEAVES = ("detect", "eval", "identify", "price")
+REQUIRED_MINIFIG_LEAVES = ("detect", "identify", "price")
 USAGE_PROBE_TIMEOUT_SECONDS = 30
 
 PROJECT_SKILLS = (

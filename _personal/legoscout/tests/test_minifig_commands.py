@@ -62,41 +62,6 @@ def test_should_register_the_offline_detect_leaf():
     assert result.exit_code == 0, result.output
 
 
-def test_should_expose_release_evidence_and_queue_options_on_eval_leaf():
-    result = runner.invoke(app, ["minifig", "eval", "--help"])
-    assert result.exit_code == 0, result.output
-    for option in (
-        "--approval", "--host-report", "--crop-root", "--no-queue", "--stage",
-    ):
-        assert option in result.output
-
-
-def test_should_publicly_block_empty_canonical_labels_without_loading_artifacts(tmp_path):
-    fixture = Path(__file__).parent / "fixtures" / "minifig_eval"
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    output = tmp_path / "report.json"
-
-    result = runner.invoke(app, [
-        "minifig", "eval",
-        "--manifest", str(fixture / "manifest.json"),
-        "--labels", str(fixture / "labels.json"),
-        "--workspace", str(workspace),
-        "--output", str(output),
-        "--no-queue",
-        "--stage", "all",
-    ])
-
-    assert result.exit_code == 2, result.output
-    report = json.loads(result.stdout)
-    assert report["status"] == "blocked"
-    assert report["reason"] == "human labels are incomplete"
-    assert report["human_approval"]["status"] == "not_required"
-    assert report["queue"] == {
-        "status": "skipped", "reason": "queue generation disabled"}
-    assert json.loads(output.read_text()) == report
-
-
 @pytest.mark.parametrize("payload, message", [
     ({}, "array"),
     ([{"listing_key": "source|1", "saved_photo_paths": []}], "exact keys"),

@@ -309,7 +309,7 @@ def test_check_minifig_detector_deadline_expires_to_warning_not_hang():
     assert elapsed < preflight.DETECTOR_CHECK_TIMEOUT_SECONDS + 5
 
 
-REQUIRED_MINIFIG_LEAVES = ("detect", "eval", "identify", "price")
+REQUIRED_MINIFIG_LEAVES = ("detect", "identify", "price")
 
 
 # --- installed CLI / canonical usage map gate --------------------------------
@@ -325,7 +325,7 @@ def test_check_installed_cli_usage_reports_missing_minifig_leaves():
     with mock.patch.object(preflight.subprocess, "run", fake):
         row = preflight._check_installed_cli_usage()
     assert row["leaves"] == ["detect", "identify"]
-    assert set(row["missing"]) == {"eval", "price"}
+    assert set(row["missing"]) == {"price"}
     assert row["error"] is None
 
 
