@@ -446,7 +446,7 @@ def _subprocess_runner(fake, *, unauthed=(), no_json=(), adam="ok",
 def _run_gate(fake=None, *, unauthed=(), no_json=(), missing_binaries=(),
               adam="ok", parity_ok=True, identifier_ok=True, ledger_ok=True,
               brickognize_row=None, detector_row=None,
-              installed_minifig_leaves=None):
+              installed_minifig_leaves=None, vision_provider_row=None):
     fake = fake or FakeRegistry()
     ledger_row = {"path": "/tmp/found_deals.db", "exists": True,
                   "writable": ledger_ok}
@@ -458,10 +458,16 @@ def _run_gate(fake=None, *, unauthed=(), no_json=(), missing_binaries=(),
         "revision": "a2bb814dd30d776dcf7e30523b00659f4f141c71",
         "error": None,
     }
+    vision_provider_row = vision_provider_row or {
+        "binary": "codex", "present": True, "path": "/usr/local/bin/codex",
+        "harness": "codex", "provider": "codex",
+    }
     brickognize_check = mock.Mock(
         name="_check_brickognize", return_value=dict(brickognize_row))
     detector_check = mock.Mock(
         name="_check_minifig_detector", return_value=dict(detector_row))
+    vision_provider_check = mock.Mock(
+        name="_check_vision_provider", return_value=dict(vision_provider_row))
     usage_check = mock.Mock(
         name="_check_installed_cli_usage",
         return_value=({"leaves": ["detect", "eval", "identify", "price"],
@@ -492,6 +498,7 @@ def _run_gate(fake=None, *, unauthed=(), no_json=(), missing_binaries=(),
                              _check_installed_cli_usage=usage_check,
                              _check_brickognize=brickognize_check,
                              _check_minifig_detector=detector_check,
+                             _check_vision_provider=vision_provider_check,
                              _ensure_workspaces=lambda: {
                                  "created": [], "errors": [],
                                  "source_runs": "/runs",

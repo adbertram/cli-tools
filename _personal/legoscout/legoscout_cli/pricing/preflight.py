@@ -70,7 +70,7 @@ import requests
 
 from .. import paths
 from ..deploy import config as deploy_config
-from . import brickognize, minifig_detector
+from . import brickognize, minifig_detector, vision
 
 BRICKLINK_COMMAND = "bricklink"
 EBAY_COMMAND = "ebay"
@@ -133,7 +133,7 @@ GLOBAL_STANDARDS_PATH = (Path("~/.agents/skills/agent-expert/references/"
 AUTH_TIMEOUT_SECONDS = 30
 SSH_TIMEOUT_SECONDS = 45
 PARITY_TIMEOUT_SECONDS = 60
-POOL_WORKERS = 10         # top-level independent checks
+POOL_WORKERS = 11         # top-level independent checks
 INNER_AUTH_WORKERS = 4    # concurrent auth round-trips inside the source scan
 
 
@@ -255,6 +255,16 @@ def _require_on_path(binary_name: str) -> dict[str, Any]:
     if resolved is None:
         row["error"] = ("%s executable was not located on PATH or in ~/.local/bin"
                         % binary_name)
+    return row
+
+
+def _check_vision_provider() -> dict[str, Any]:
+    """The CLI `vision.judge()` will shell into for this process must be on
+    PATH before a run starts -- classification depends on it."""
+    provider = vision.resolve_provider()
+    row = _require_on_path(provider)
+    row["harness"] = vision.detect_harness()
+    row["provider"] = provider
     return row
 
 
@@ -704,6 +714,7 @@ def main(argv: list[str] | None = None) -> int:
             "brickognize": pool.submit(_check_brickognize),
             "minifig_detector": pool.submit(_check_minifig_detector),
             "installed_usage": pool.submit(_check_installed_cli_usage),
+            "vision_provider": pool.submit(_check_vision_provider),
         }
         bricklink = futures["bricklink"].result()
         ebay = futures["ebay"].result()
@@ -716,6 +727,7 @@ def main(argv: list[str] | None = None) -> int:
         brickognize_row = futures["brickognize"].result()
         detector_row = futures["minifig_detector"].result()
         usage_row = futures["installed_usage"].result()
+        vision_provider_row = futures["vision_provider"].result()
 
     # 1. Comps credentials -- BrickLink AND eBay, live-authenticated.
     checks["comps_credentials"] = {"bricklink": bricklink, "ebay": ebay}
@@ -797,6 +809,12 @@ def main(argv: list[str] | None = None) -> int:
             "run will be recorded as an identifier skip; restore the declared "
             "local torch/transformers runtime and pinned model; bulk and set "
             "pricing unaffected" % (detector_row.get("error") or "unknown error"))
+
+    # 8. Vision provider -- the CLI vision.judge() will shell into for this
+    # process must be on PATH. BLOCKER: classification depends on it.
+    checks["vision_provider"] = vision_provider_row
+    if not vision_provider_row["present"]:
+        failures.append(("vision_provider", vision_provider_row["error"]))
 
     ok = not failures
     print(json.dumps({"ok": ok, "checks": checks, "warnings": warnings},
