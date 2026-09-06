@@ -198,6 +198,12 @@ def publisher(tmp_path, monkeypatch):
         + "\n",
         "src/data/redirects.json": "[]\n",
         "src/data/home_featured.json": "[]\n",
+        # src/lib/feed.js imports this at module load, so the release manifest
+        # cannot even be parsed without it.
+        "src/data/post_guids.json": json.dumps({"byWpId": {}}) + "\n",
+        # src/lib/date-archives.js imports this at module load to prove a post's
+        # archive day matches the publish instant its own page advertises.
+        "src/data/post_seo.json": json.dumps({"posts": {}}) + "\n",
     }.items():
         corpus_path = site / relative_path
         corpus_path.parent.mkdir(parents=True, exist_ok=True)
