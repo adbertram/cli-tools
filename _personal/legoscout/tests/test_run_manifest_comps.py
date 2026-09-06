@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import json
 
-from legoscout_cli.orchestrator import build_run_manifest
+from legoscout_cli.orchestrator import build_run_manifest, build_triage_handoff
 
 
 def _write(path, payload):
     path.write_text(json.dumps(payload), encoding="utf-8")
+    if isinstance(payload, dict) and isinstance(payload.get("candidate_records"), list):
+        path.with_name(path.stem + ".triage.json").write_text(
+            json.dumps(build_triage_handoff(
+                path.stem, payload["candidate_records"])), encoding="utf-8")
 
 
 def _source(candidates):

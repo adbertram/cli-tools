@@ -3,6 +3,7 @@ from __future__ import annotations
 import itertools
 import json
 import os
+import shutil
 import subprocess
 import threading
 from contextlib import contextmanager
@@ -16,7 +17,7 @@ from legoscout_cli.ledger import db as ledger_db
 from legoscout_cli.sources import registry
 
 
-PLAYWRIGHT_CLI = Path("/Users/adam/.local/bin/playwright-cli")
+PLAYWRIGHT_CLI = shutil.which("playwright-cli")
 _HASH = "c" * 64
 _SESSION_COUNTER = itertools.count()
 
@@ -164,9 +165,9 @@ def _session() -> str:
 
 
 def _pw(session: str, *args: str):
-    assert PLAYWRIGHT_CLI.is_file()
+    assert PLAYWRIGHT_CLI is not None, "playwright-cli is not on PATH"
     result = subprocess.run(
-        [str(PLAYWRIGHT_CLI), f"-s={session}", *args, "--json"],
+        [PLAYWRIGHT_CLI, f"-s={session}", *args, "--json"],
         check=False,
         capture_output=True,
         text=True,
@@ -192,8 +193,10 @@ def _result(payload) -> Any:
 
 
 def _close(session: str):
+    if PLAYWRIGHT_CLI is None:
+        return
     subprocess.run(
-        [str(PLAYWRIGHT_CLI), f"-s={session}", "close", "--json"],
+        [PLAYWRIGHT_CLI, f"-s={session}", "close", "--json"],
         check=False,
         capture_output=True,
         text=True,

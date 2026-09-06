@@ -219,6 +219,31 @@ legoscout triage candidates.json --min-price 25
 legoscout triage candidates.json --fetch-details --run-key 20260806T120000Z
 ```
 
+### minifig
+
+Run the detector and downstream evidence pipeline against already-saved listing
+photos. Detection creates crops; identification does not claim a verified
+identity until the later validation and pricing boundary accepts its evidence.
+
+```bash
+legoscout minifig detect --input handoff.json --output detections.json
+legoscout minifig identify --input detections.json --output identifications.json
+legoscout minifig price --input identifications.json --output priced.json
+legoscout minifig eval --help
+```
+
+### deploy
+
+Synchronize the canonical ledger and standing deals application with
+adam-server.
+
+```bash
+legoscout deploy pull-db
+legoscout deploy status
+legoscout deploy push
+legoscout deploy rollback --help
+```
+
 ## Output Formats
 
 - JSON is the default output format.

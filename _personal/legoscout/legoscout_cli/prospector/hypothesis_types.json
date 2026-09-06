@@ -7,6 +7,18 @@
   "verified_at": "ISO date the evidence URL was opened and confirmed. null when the evidence string is the `unverified -- ` form."
  },
  "types": {
+  "church_rummage_sale_organizers": {
+   "description": "Churches and ministry groups within 60 miles of 47725 that organize recurring donation-funded rummage sales where household toys are sold in person.",
+   "rationale": "Congregations aggregate donated household goods and price them to clear during short fundraising events; toy bins can reach the sale without appearing on a tracked marketplace.",
+   "evidence": "https://www.owensborotimes.com/features/paid-content/2026/07/giant-rummage-sale-slated-to-benefit-forget-me-not-ministry/",
+   "verified_at": "2026-09-05"
+  },
+  "independent_local_auction_houses": {
+   "description": "Independent auction houses within 60 miles of 47725 that accept household estates, collections, toys, and personal property and run their own online or in-person auctions.",
+   "rationale": "Local auctioneers aggregate estate and collection inventory, including toys, before it reaches the marketplaces already tracked as direct listing sources.",
+   "evidence": "https://www.guessauctioncompany.com/",
+   "verified_at": "2026-09-05"
+  },
   "estate_sale_companies": {
    "description": "Estate sale companies operating within 60 miles of 47725 that clear households with toy/LEGO lots, reachable before or outside their public listings.",
    "rationale": "Liquidators price bulk toys to clear them; a standing ask to call when LEGO shows up beats waiting for a public listing.",

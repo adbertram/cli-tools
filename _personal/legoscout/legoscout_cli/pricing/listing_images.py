@@ -314,6 +314,9 @@ def main():
 
     image_limit = a.max if a.max is not None else (None if a.urls else 12)
     saved, seen, results = [], set(), []
+    print("fetching %d listing image candidate%s" %
+          (len(cands), "" if len(cands) == 1 else "s"),
+          file=sys.stderr, flush=True)
     for u, ident in cands:
         source_url = u
         u = normalize_image_url(u)

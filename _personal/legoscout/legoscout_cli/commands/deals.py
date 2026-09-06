@@ -19,6 +19,7 @@ from ..orchestrator import (
     build_run_manifest,
     replay_fixtures,
     validate_identification_result,
+    write_run_triage,
 )
 from ..sources import listing, readers
 
@@ -277,6 +278,17 @@ def run_manifest(
     print_json(manifest)
     if not manifest["complete"]:
         raise typer.Exit(1)
+
+
+@app.command("write-triage")
+@command
+def write_triage(
+    run_dir: str = typer.Argument(..., help="A source-runs directory"),
+    source: Optional[List[str]] = typer.Option(
+        None, "--source", help="Limit to a source namespace (repeatable)"),
+):
+    """Persist deterministic appraisal selection for every active source."""
+    print_json(write_run_triage(run_dir, active_sources=source))
 
 
 @app.command("validate")

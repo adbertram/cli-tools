@@ -24,9 +24,13 @@ matching rule in the `legoscout-comps` skill:
 """
 from __future__ import annotations
 
+import fcntl
 import re
 import shutil
 import subprocess
+import sys
+import time
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
@@ -35,6 +39,9 @@ from .. import paths  # noqa: E402
 
 EBAY_COMMAND = "ebay"
 CACHE = paths.EBAY_COMP_CALL_CACHE
+EBAY_BROWSER_LOCK = paths.EBAY_BROWSER_LOCK
+EBAY_BROWSER_LOCK_TIMEOUT_SECONDS = 600.0
+EBAY_BROWSER_LOCK_POLL_SECONDS = 0.05
 
 # eBay's own resolved category for "LEGO (R) Complete Sets & Packs"
 # (`ebay categories list "lego"`, 2026-08-20). There is no equivalent bulk-lot
@@ -84,6 +91,34 @@ def _is_auth_failure(combined_output: str) -> bool:
     return "browser session" in lowered or "auth login" in lowered or "not authenticated" in lowered
 
 
+@contextmanager
+def _ebay_browser_slot():
+    """Serialize the one persistent eBay browser profile across appraisers."""
+    lock_file = open(EBAY_BROWSER_LOCK, "a+")
+    deadline = time.monotonic() + EBAY_BROWSER_LOCK_TIMEOUT_SECONDS
+    reported_wait = False
+    try:
+        while True:
+            try:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise LookupFailed(
+                        "timed out after %.0f seconds waiting for the shared eBay "
+                        "browser profile" % EBAY_BROWSER_LOCK_TIMEOUT_SECONDS)
+                if not reported_wait:
+                    print("Waiting for shared eBay browser profile", file=sys.stderr)
+                    reported_wait = True
+                time.sleep(EBAY_BROWSER_LOCK_POLL_SECONDS)
+        yield
+    finally:
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+        finally:
+            lock_file.close()
+
+
 def run_ebay_json(args: list[str]) -> list:
     """One `ebay` subprocess call, parsed as a JSON array.
 
@@ -99,7 +134,9 @@ def run_ebay_json(args: list[str]) -> list:
             f"eBay CLI not on PATH: {EBAY_COMMAND!r}. "
             "Install it from ~/Dropbox/GitRepos/cli-tools/ebay.")
 
-    result = subprocess.run([resolved, *args], text=True, capture_output=True, check=False)
+    with _ebay_browser_slot():
+        result = subprocess.run(
+            [resolved, *args], text=True, capture_output=True, check=False)
     combined = "\n".join(part for part in [result.stdout, result.stderr] if part)
     if result.returncode != 0:
         raise LookupFailed(f"ebay {' '.join(args)} exited {result.returncode}: {_shorten(combined)}")

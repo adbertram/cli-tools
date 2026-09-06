@@ -8,7 +8,12 @@ from cli_tools_shared.output import command, print_json
 
 from .. import delegate
 from ..pricing import auctionninja_fees, build_pickup_area, fees as fees_module
-from ..pricing import inbound_shipping, listing_images, pickup_area as pickup_module
+from ..pricing import (
+    contact_sheet as contact_sheet_module,
+    inbound_shipping,
+    listing_images,
+    pickup_area as pickup_module,
+)
 from ..pricing import set_sales
 from ..pricing import comps as comps_module
 from ..pricing import comps_batch as comps_batch_module
@@ -312,6 +317,23 @@ def images(
         argv.extend(urls)
     delegate.option(argv, "--max", max)
     delegate.run(listing_images, argv)
+
+
+@app.command("contact-sheet")
+@command
+def contact_sheet(
+    images: List[str] = typer.Argument(..., help="Image files to include"),
+    output: str = typer.Option(..., "--output", help="Output PNG or JPEG path"),
+    label: Optional[List[str]] = typer.Option(
+        None, "--label", help="Visible label for each image (repeatable)"),
+    columns: int = typer.Option(3, "--columns", help="Number of tile columns"),
+):
+    """Build a labeled contact sheet for classifier vision review."""
+    argv = [*images, "--output", output, "--columns", str(columns)]
+    if label:
+        for value in label:
+            argv.extend(["--label", value])
+    delegate.run(contact_sheet_module, argv)
 
 
 @app.command("pickup-area")

@@ -2,6 +2,12 @@
 and price bulk lots only where a weight actually parsed."""
 from __future__ import annotations
 
+import json
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
+
 import pytest
 
 from legoscout_cli.pricing import ebay_comps
@@ -111,3 +117,47 @@ def test_bulk_comps_has_no_category_filter():
 
     ebay_comps.search_bulk_comps("mixed bricks", runner=runner)
     assert "--category" not in seen["args"]
+
+
+def test_real_ebay_subprocesses_serialize_on_shared_browser_profile(
+        monkeypatch, tmp_path):
+    active = 0
+    maximum_active = 0
+    state_lock = threading.Lock()
+
+    def fake_run(*_args, **_kwargs):
+        nonlocal active, maximum_active
+        with state_lock:
+            active += 1
+            maximum_active = max(maximum_active, active)
+        time.sleep(0.02)
+        with state_lock:
+            active -= 1
+        return SimpleNamespace(returncode=0, stdout=json.dumps([]), stderr="")
+
+    monkeypatch.setattr(ebay_comps, "EBAY_BROWSER_LOCK", str(tmp_path / "ebay.lock"))
+    monkeypatch.setattr(ebay_comps.shutil, "which", lambda _command: "/fake/ebay")
+    monkeypatch.setattr(ebay_comps.subprocess, "run", fake_run)
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(
+            lambda index: ebay_comps.run_ebay_json(["search", str(index)]),
+            range(4),
+        ))
+
+    assert results == [[], [], [], []]
+    assert maximum_active == 1
+
+
+def test_shared_browser_profile_wait_has_clear_bounded_timeout(
+        monkeypatch, tmp_path):
+    lock_path = tmp_path / "ebay.lock"
+    monkeypatch.setattr(ebay_comps, "EBAY_BROWSER_LOCK", str(lock_path))
+    monkeypatch.setattr(ebay_comps, "EBAY_BROWSER_LOCK_TIMEOUT_SECONDS", 0.0)
+    with open(lock_path, "a+") as held:
+        ebay_comps.fcntl.flock(held.fileno(), ebay_comps.fcntl.LOCK_EX)
+        with pytest.raises(
+                ebay_comps.LookupFailed,
+                match="timed out after 0 seconds waiting for the shared eBay browser profile"):
+            with ebay_comps._ebay_browser_slot():
+                pass

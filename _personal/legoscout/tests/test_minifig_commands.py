@@ -227,6 +227,34 @@ def test_should_consume_every_saved_path_once_and_write_durable_crops(tmp_path):
         artifact["timings"]["total_seconds"] / 3)
 
 
+def test_should_skip_duplicate_photo_content_before_detection(tmp_path):
+    first = _save(tmp_path / "first.jpg", "JPEG")
+    duplicate = tmp_path / "duplicate.jpg"
+    duplicate.write_bytes(first.read_bytes())
+    detector_calls = []
+
+    def detector(name, paths):
+        detector_calls.append((name, list(paths)))
+        return _success_detector(name, paths)
+
+    artifact = _identification().detect_batch(
+        [_row([first, duplicate])],
+        detector_name="grounding-dino-tiny",
+        crop_root=tmp_path / "crops",
+        detector_fn=detector,
+    )
+
+    assert detector_calls == [(
+        "grounding-dino-tiny", [str(first), str(duplicate)])]
+    photos = artifact["listings"][0]["photos"]
+    assert [photo["status"] for photo in photos] == ["success", "skipped"]
+    assert photos[1]["reason"] == "duplicate photo content of photo-0001"
+    assert photos[1]["source_photo_sha256"] == photos[0]["source_photo_sha256"]
+    assert photos[1]["detections"] == []
+    assert artifact["summary"]["detection_count"] == 1
+    assert artifact["summary"]["photo_skipped_count"] == 1
+
+
 def test_should_preserve_empty_detection_as_success_and_isolate_bad_photo(tmp_path):
     good_empty = _save(tmp_path / "empty.jpg", "JPEG")
     bad = tmp_path / "missing.jpg"

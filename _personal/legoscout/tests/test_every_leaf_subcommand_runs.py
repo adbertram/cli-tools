@@ -33,6 +33,7 @@ import sys
 import types
 
 import pytest
+from PIL import Image
 from typer.testing import CliRunner
 
 import legoscout_cli
@@ -186,6 +187,8 @@ def ids(ledger):
 def files(tmp_path_factory, ledger):
     """The JSON operands the file-taking commands need, written once."""
     root = tmp_path_factory.mktemp("operands")
+    contact_sheet_image = root / "contact-sheet-input.png"
+    Image.new("RGB", (8, 8), "red").save(contact_sheet_image)
     candidate = {
         "listing_key": "shopgoodwill|999999999",
         "source": "shopgoodwill",
@@ -415,6 +418,8 @@ def files(tmp_path_factory, ledger):
     written["minifig_price_output"] = str(root / "minifig_price_output.json")
     written["minifig_eval_workspace"] = str(minifig_eval_workspace)
     written["minifig_eval_output"] = str(root / "minifig_eval_output.json")
+    written["contact_sheet_image"] = str(contact_sheet_image)
+    written["contact_sheet_output"] = str(root / "contact-sheet-output.png")
     manifest_dir = root / "run-manifest"
     manifest_dir.mkdir()
     for namespace in registry.active_namespaces():
@@ -533,6 +538,7 @@ def cases(ids, files):
         ("deals", "refresh"): _case(["--list"], TEXT),
         ("deals", "build"): _case([files["candidate"], files["appraisal"]]),
         ("deals", "run-manifest"): _case([files["run_manifest"]]),
+        ("deals", "write-triage"): _case([files["run_manifest"]]),
         ("deals", "validate"): _case([]),
         ("deals", "status"): _case([ids["listing_key"], "active"]),
         ("deals", "schema"): _case(["crawl", "--json"]),
@@ -563,6 +569,10 @@ def cases(ids, files):
         ("pricing", "profit"): _case(
             ["--avg-price", "100", "--price-detail-count", "5",
              "--estimated-total", "50", "--fee-rate", "0.13"]),
+        ("pricing", "contact-sheet"): _case([
+            files["contact_sheet_image"],
+            "--output", files["contact_sheet_output"],
+        ]),
 
         ("minifig", "detect"): _case([
             "--input", files["minifig_input"],

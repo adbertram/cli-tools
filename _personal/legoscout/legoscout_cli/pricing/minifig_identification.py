@@ -264,20 +264,39 @@ def detect_batch(
     photo_items = []
     cursor = 0
     for listing in listings:
+        seen_photo_hashes: dict[str, str] = {}
         for index, path in enumerate(listing["saved_photo_paths"], start=1):
             raw = raw_rows[cursor]
             cursor += 1
             if not isinstance(raw, dict) or raw.get("path") != path:
                 raise DetectionBatchError(
                     "detector result path/order does not match input")
+            photo_relative_id = f"photo-{index:04d}"
+            photo_sha256 = None
+            duplicate_of = None
+            if raw.get("status") == "success":
+                photo_sha256 = _photo_sha256(path)
+                duplicate_of = seen_photo_hashes.get(photo_sha256)
+                if duplicate_of is None:
+                    seen_photo_hashes[photo_sha256] = photo_relative_id
             photo_items.append({
                 "listing_key": listing["listing_key"],
                 "path": path,
                 "raw": raw,
-                "photo_relative_id": f"photo-{index:04d}",
+                "photo_relative_id": photo_relative_id,
+                "photo_sha256": photo_sha256,
+                "duplicate_of": duplicate_of,
             })
 
     def persist_photo(item: dict[str, Any]) -> dict[str, Any]:
+        if item["duplicate_of"] is not None:
+            return {
+                "photo_relative_id": item["photo_relative_id"],
+                "source_photo_sha256": item["photo_sha256"],
+                "status": "skipped",
+                "reason": "duplicate photo content of " + item["duplicate_of"],
+                "detections": [],
+            }
         return _photo_result(
             item["path"],
             item["raw"],

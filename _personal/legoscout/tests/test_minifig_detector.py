@@ -235,6 +235,7 @@ def test_should_ship_only_the_two_host_benchmark_winner():
     pyproject = tomllib.loads(
         (Path(__file__).parents[1] / "pyproject.toml").read_text())
     dependencies = pyproject["project"]["dependencies"]
+    assert "Pillow==12.3.0" in dependencies
     assert "transformers==5.15.1" in dependencies
     assert "torch==2.13.0" in dependencies
     assert not any("ultralytics" in value for value in dependencies)

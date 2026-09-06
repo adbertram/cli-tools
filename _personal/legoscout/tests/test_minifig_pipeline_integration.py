@@ -10,7 +10,9 @@ from legoscout_cli.commands import minifig as minifig_commands
 from legoscout_cli.display import rows as display_rows
 from legoscout_cli.ledger import build_record, db as ledger_db
 from legoscout_cli.main import app
-from legoscout_cli.orchestrator import build_run_manifest, synthesis_coverage
+from legoscout_cli.orchestrator import (
+    build_run_manifest, build_triage_handoff, synthesis_coverage,
+)
 from legoscout_cli.pricing import minifig_detector
 from legoscout_cli.pricing import minifig_identification as identification
 
@@ -237,6 +239,9 @@ def test_public_minifig_pipeline_pairs_builds_persists_and_displays(
     run_dir.mkdir()
     (run_dir / "k-bid.json").write_text(
         json.dumps(_source_artifact()), encoding="utf-8")
+    (run_dir / "k-bid.triage.json").write_text(
+        json.dumps(build_triage_handoff("k-bid", [_candidate()])),
+        encoding="utf-8")
     (run_dir / "k-bid.appraisal-1.json").write_text(
         json.dumps([_appraisal()]), encoding="utf-8")
     (run_dir / "k-bid.identify-1.json").write_text(

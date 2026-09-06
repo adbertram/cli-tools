@@ -4,10 +4,14 @@ from __future__ import annotations
 from collections import Counter
 import json
 import math
+import os
 from pathlib import Path
+import re
+import tempfile
 
 from ..ledger import minifig_analysis
 from ..sources import registry
+from . import triage as run_triage
 
 
 SOURCE_ARTIFACT_FIELDS = (
@@ -16,6 +20,7 @@ SOURCE_ARTIFACT_FIELDS = (
     "actions_requiring_approval", "evidence_summary", "completed_at",
 )
 BATCH_SIZE = 25
+TRIAGE_LIMIT = 100
 SYNTHESIS_VALIDATION_TIMESTAMP = "2000-01-01T00:00:00Z"
 
 
@@ -581,6 +586,80 @@ def _batch_number(path: Path, source: str, kind: str = "appraisal") -> int | Non
     return int(number) if number.isdigit() and int(number) > 0 else None
 
 
+def _terminal_batch_files(root: Path, source: str, kind: str) -> dict[int, Path]:
+    """Return only canonical ``source.kind-N.json`` terminal artifacts."""
+    pattern = re.compile(
+        r"^%s\.%s-([1-9][0-9]*)\.json$"
+        % (re.escape(source), re.escape(kind)))
+    found = {}
+    for path in sorted(root.iterdir() if root.is_dir() else []):
+        match = pattern.fullmatch(path.name)
+        if match and path.is_file():
+            found[int(match.group(1))] = path
+    return found
+
+
+def build_triage_handoff(source: str, candidates: list, limit: int = TRIAGE_LIMIT) -> dict:
+    """Build the persisted candidate universe consumed by run appraisal."""
+    selected, rejected = run_triage.triage(candidates, limit=limit)
+    deferred = run_triage.deferred(candidates, limit=limit)
+    return {
+        "source": source,
+        "limit": limit,
+        "candidate_records": selected,
+        "rejected": [
+            {"listing_key": candidate.get("listing_key"), "reason": reason}
+            for candidate, reason in rejected
+        ],
+        "deferred_listing_keys": [candidate.get("listing_key") for candidate in deferred],
+        "summary": run_triage.summary(candidates, limit=limit),
+    }
+
+
+def write_run_triage(run_dir: str, active_sources: list[str] | None = None) -> dict:
+    """Atomically persist one triage handoff for every valid source artifact."""
+    root = Path(run_dir).expanduser().resolve()
+    planned = sorted(set(active_sources if active_sources is not None
+                         else registry.active_namespaces()))
+    written = []
+    for source in planned:
+        envelope = _read_json(root / (source + ".json"))
+        if not isinstance(envelope, dict):
+            raise ValueError("%s source artifact root must be an object" % source)
+        candidates = envelope.get("candidate_records")
+        if not isinstance(candidates, list):
+            raise ValueError("%s candidate_records must be an array" % source)
+        destination = root / (source + ".triage.json")
+        payload = json.dumps(
+            build_triage_handoff(source, candidates), indent=2,
+            sort_keys=True, allow_nan=False) + "\n"
+        with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=root,
+                prefix=".%s.triage." % source, delete=False) as handle:
+            temporary = Path(handle.name)
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, destination)
+        written.append(str(destination))
+    return {"run_dir": str(root), "triage_limit": TRIAGE_LIMIT,
+            "written": written}
+
+
+def _read_triage_handoff(root: Path, source: str, candidates: list) -> tuple[list, dict]:
+    path = root / (source + ".triage.json")
+    try:
+        artifact = _read_json(path)
+    except ValueError as exc:
+        raise ValueError("%s: %s" % (path.name, exc)) from None
+    expected = build_triage_handoff(source, candidates)
+    if artifact != expected:
+        raise ValueError(
+            "triage artifact does not match deterministic triage of source candidates; "
+            "rebuild it with `legoscout deals write-triage %s`" % root)
+    return artifact["candidate_records"], artifact
+
+
 def build_run_manifest(run_dir: str, active_sources: list[str] | None = None) -> dict:
     """Describe exact active-source and appraisal coverage for one run.
 
@@ -591,7 +670,11 @@ def build_run_manifest(run_dir: str, active_sources: list[str] | None = None) ->
     root = Path(run_dir).expanduser().resolve()
     planned = sorted(set(active_sources if active_sources is not None
                          else registry.active_namespaces()))
-    all_identification_paths = sorted(root.glob("*.identify-*.json"))
+    identification_name = re.compile(r"^.+\.identify-[1-9][0-9]*\.json$")
+    all_identification_paths = [
+        path for path in sorted(root.iterdir() if root.is_dir() else [])
+        if path.is_file() and identification_name.fullmatch(path.name)
+    ]
     orphan_identification_artifacts = [
         str(path) for path in all_identification_paths
         if not any(path.name.startswith(source + ".identify-")
@@ -637,15 +720,15 @@ def build_run_manifest(run_dir: str, active_sources: list[str] | None = None) ->
             problems.append(str(exc))
             source_status = "no_artifact" if not source_path.is_file() else "invalid"
 
-        batch_files = {}
-        for path in sorted(root.glob("%s.appraisal-*.json" % source)):
-            number = _batch_number(path, source, "appraisal")
-            if number is None:
-                problems.append("invalid appraisal artifact name: %s" % path.name)
-            elif number in batch_files:
-                problems.append("duplicate appraisal batch number: %d" % number)
-            else:
-                batch_files[number] = path
+        triage_artifact = None
+        if candidates:
+            try:
+                candidates, triage_artifact = _read_triage_handoff(
+                    root, source, candidates)
+            except ValueError as exc:
+                problems.append(str(exc))
+
+        batch_files = _terminal_batch_files(root, source, "appraisal")
 
         # Comps batches are OPTIONAL at the manifest level: a batch with none
         # still proves every BULK candidate builds (`_apply_comps` only
@@ -655,27 +738,9 @@ def build_run_manifest(run_dir: str, active_sources: list[str] | None = None) ->
         # exactly like any other malformed appraisal. A comps file that IS
         # present is fully validated (key coverage, shape) the same as an
         # appraisal file.
-        comps_files = {}
-        for path in sorted(root.glob("%s.comps-*.json" % source)):
-            number = _batch_number(path, source, "comps")
-            if number is None:
-                problems.append("invalid comps artifact name: %s" % path.name)
-            elif number in comps_files:
-                problems.append("duplicate comps batch number: %d" % number)
-            else:
-                comps_files[number] = path
+        comps_files = _terminal_batch_files(root, source, "comps")
 
-        identification_files = {}
-        for path in sorted(root.glob("%s.identify-*.json" % source)):
-            number = _batch_number(path, source, "identify")
-            if number is None:
-                problems.append(
-                    "invalid identification artifact name: %s" % path.name)
-            elif number in identification_files:
-                problems.append(
-                    "duplicate identification batch number: %d" % number)
-            else:
-                identification_files[number] = path
+        identification_files = _terminal_batch_files(root, source, "identify")
 
         expected_batches = ((len(candidates) + BATCH_SIZE - 1) // BATCH_SIZE
                             if not problems or candidates else 0)
@@ -771,6 +836,9 @@ def build_run_manifest(run_dir: str, active_sources: list[str] | None = None) ->
             "source_status": source_status,
             "terminal": terminal,
             "candidate_count": len(candidates),
+            "triage_artifact": str(root / (source + ".triage.json")),
+            "triage_summary": (triage_artifact.get("summary")
+                               if triage_artifact else None),
             "expected_appraisal_batches": expected_batches,
             "appraisal_batches": batch_reports,
             "coverage_complete": coverage_complete,

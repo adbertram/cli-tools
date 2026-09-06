@@ -53,6 +53,28 @@ def test_explicit_urls_are_not_limited_by_the_default_cap(monkeypatch, capsys,
     assert {result["status"] for result in payload["results"]} == {"saved"}
 
 
+def test_image_fetch_reports_started_before_first_download(monkeypatch, capsys,
+                                                           tmp_path):
+    urls = ["https://images.example.test/one.webp",
+            "https://images.example.test/two.webp"]
+    calls = 0
+
+    def fake_fetch(_url, dest=None):
+        nonlocal calls
+        if calls == 0:
+            assert capsys.readouterr().err == "fetching 2 listing image candidates\n"
+        calls += 1
+        Path(dest).write_bytes(b"x" * 8001)
+        return "200", "image/webp"
+
+    monkeypatch.setattr(listing_images, "OUT_ROOT", str(tmp_path))
+    monkeypatch.setattr(listing_images, "fetch", fake_fetch)
+    monkeypatch.setattr(sys, "argv", ["listing_images", "--urls", *urls])
+
+    assert listing_images.main() == 0
+    assert json.loads(capsys.readouterr().out)["count"] == 2
+
+
 def test_image_results_report_each_url_that_fails(monkeypatch, capsys,
                                                    tmp_path):
     saved = "https://images.example.test/saved.webp"

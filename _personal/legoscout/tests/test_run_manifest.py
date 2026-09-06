@@ -5,13 +5,17 @@ import json
 
 import pytest
 
-from legoscout_cli.orchestrator import build_run_manifest
+from legoscout_cli.orchestrator import build_run_manifest, build_triage_handoff
 from legoscout_cli.ledger import build_record
 from legoscout_cli.sources import registry
 
 
 def _write(path, payload):
     path.write_text(json.dumps(payload), encoding="utf-8")
+    if isinstance(payload, dict) and isinstance(payload.get("candidate_records"), list):
+        path.with_name(path.stem + ".triage.json").write_text(
+            json.dumps(build_triage_handoff(
+                path.stem, payload["candidate_records"])), encoding="utf-8")
 
 
 def _source(candidates, *, blocked=False):
@@ -242,3 +246,55 @@ def test_manifest_build_proof_does_not_open_the_seller_ledger(
     manifest = _run_one(tmp_path, candidate, appraisal)
 
     assert manifest["complete"] is True
+
+
+def test_triage_handoff_persists_cap_rejection_and_selected_order():
+    dead = _candidate(0)
+    dead.update(title="LEGO bulk lot 1 lb", static_price=10.0)
+    weighted = _candidate(1)
+    weighted.update(title="LEGO bulk lot 10 lb", static_price=20.0)
+    sets = []
+    for number in range(2, 103):
+        row = _candidate(number)
+        row["title"] = "LEGO set 75192 number %d" % number
+        sets.append(row)
+
+    artifact = build_triage_handoff("shopgoodwill", sets + [dead, weighted])
+
+    assert artifact["summary"]["candidates"] == 103
+    assert artifact["summary"]["rejected_cannot_clear"] == 1
+    assert artifact["summary"]["appraise_now"] == 100
+    assert artifact["summary"]["deferred_to_next_run"] == 2
+    assert artifact["candidate_records"][0]["listing_key"] == weighted["listing_key"]
+    assert artifact["rejected"][0]["listing_key"] == dead["listing_key"]
+    assert len(artifact["deferred_listing_keys"]) == 2
+
+
+def test_manifest_ignores_nonterminal_appraisal_scratch_names(tmp_path):
+    candidate = _candidate(1)
+    _write(tmp_path / "shopgoodwill.json", _source([candidate]))
+    _write(tmp_path / "shopgoodwill.appraisal-1.json",
+           [_appraisal(candidate["listing_key"])])
+    for name in (
+        "shopgoodwill.appraisal-1.json.error.json",
+        "shopgoodwill.appraisal-schema-1.json",
+        "shopgoodwill.appraisal-1.input.json",
+        "shopgoodwill.appraisal-1.coverage.json",
+    ):
+        _write(tmp_path / name, {})
+
+    manifest = build_run_manifest(str(tmp_path), active_sources=["shopgoodwill"])
+
+    assert manifest["complete"] is True
+    assert manifest["sources"][0]["problems"] == []
+
+
+def test_manifest_requires_persisted_triage_handoff(tmp_path):
+    candidate = _candidate(1)
+    (tmp_path / "shopgoodwill.json").write_text(
+        json.dumps(_source([candidate])), encoding="utf-8")
+
+    manifest = build_run_manifest(str(tmp_path), active_sources=["shopgoodwill"])
+
+    assert manifest["complete"] is False
+    assert "triage.json" in manifest["sources"][0]["problems"][0]

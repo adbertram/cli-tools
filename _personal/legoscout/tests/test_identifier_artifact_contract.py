@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
+import legoscout_cli.orchestrator as orchestrator
 from typer.testing import CliRunner
 
 from legoscout_cli.ledger import minifig_analysis as mfa
@@ -913,6 +914,10 @@ def _source_artifact(candidates):
 def _write(path, payload):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
+    if isinstance(payload, dict) and isinstance(payload.get("candidate_records"), list):
+        path.with_name(path.stem + ".triage.json").write_text(
+            json.dumps(orchestrator.build_triage_handoff(
+                path.stem, payload["candidate_records"])), encoding="utf-8")
 
 
 def _stub_manifest_build(monkeypatch):
@@ -975,7 +980,6 @@ def test_manifest_requires_identification_only_for_minifigure_subset(
 @pytest.mark.parametrize("name, payload, expected", [
     ("shop.identify-1.json", "{bad", "not valid JSON"),
     ("shop.identify-1.json", {"results": []}, "must be an array"),
-    ("shop.identify-x.json", [], "invalid identification artifact name"),
     ("shop.identify-2.json", [], "unexpected identification batches"),
 ])
 def test_manifest_reports_identification_artifact_defects(
@@ -1003,7 +1007,7 @@ def test_manifest_reports_identification_artifact_defects(
     assert expected in "\n".join(manifest["sources"][0]["problems"])
 
 
-def test_manifest_rejects_duplicate_identification_batch_number(
+def test_manifest_ignores_noncanonical_identification_scratch_name(
     monkeypatch,
     tmp_path,
 ):
@@ -1019,8 +1023,7 @@ def test_manifest_rejects_duplicate_identification_batch_number(
 
     manifest = orchestrator.build_run_manifest(
         str(tmp_path), active_sources=["shop"])
-    assert "duplicate identification batch number" in "\n".join(
-        manifest["sources"][0]["problems"])
+    assert manifest["complete"] is True
 
 
 def test_manifest_reports_wrong_source_identification_as_orphan(

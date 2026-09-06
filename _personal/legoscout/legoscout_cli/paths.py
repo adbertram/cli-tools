@@ -22,6 +22,7 @@ DB_PATH = str(LEGOSCOUT_ROOT / "data" / "found_deals.db")
 SHIPPING_RATE_CACHE = str(LEGOSCOUT_ROOT / "data" / ".shipping_rate_cache.json")
 BRICKLINK_CALL_CACHE = str(LEGOSCOUT_ROOT / "data" / ".bricklink_call_cache.json")
 EBAY_COMP_CALL_CACHE = str(LEGOSCOUT_ROOT / "data" / ".ebay_comp_call_cache.json")
+EBAY_BROWSER_LOCK = str(LEGOSCOUT_ROOT / "data" / ".ebay_browser.lock")
 LISTING_IMAGES_ROOT = str(LEGOSCOUT_ROOT / "agent_workspaces" / "listing-images")
 MINIFIG_EVAL_WORKSPACE = "/Users/adam/Dropbox/GitRepos/Agents/LegoScout/agent_workspaces/minifig-eval"
 # Deployed hosts mirror the project under ~/GitRepos/legoscout, so the crop
