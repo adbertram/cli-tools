@@ -2406,7 +2406,10 @@ def test_publish_status_rejected_before_source_or_external_reads(publisher):
     client, *_ = publisher
     client.get_article = lambda _page_id: pytest.fail("source read must not run")
 
-    with pytest.raises(ClientError, match="Production promotion is owned by P20"):
+    with pytest.raises(
+        ClientError,
+        match="Production promotion requires the completed static cutover",
+    ):
         client._publish_static_transaction(
             page_id=PAGE_ID,
             status="publish",
@@ -2550,3 +2553,428 @@ def test_publish_article_static_only_restores_wordpress_notion_state(publisher):
     ]
     assert result["deployment_id"] == "dep-9"
     assert result["notion_restored"]["published_url"] == "https://adamtheautomator.com/?p=7"
+
+
+# --- single-post production promotion after the cutover -----------------------
+
+CUTOVER_DEPLOYMENT_ID = "55555555-5555-4555-8555-555555555555"
+PRIOR_PRODUCTION_DEPLOYMENT_ID = "44444444-4444-4444-8444-444444444444"
+PRODUCTION_DEPLOYMENT_ID = "33333333-3333-4333-8333-333333333333"
+PRODUCTION_ORIGIN = "https://adamtheautomator.com"
+
+
+def _production_deployment_payload(*, commit_hash, commit_message, deployment_id):
+    return {
+        "id": deployment_id,
+        "short_id": deployment_id[:8],
+        "url": "https://ata-blog-static.pages.dev",
+        "environment": "production",
+        "latest_stage": {"name": "deploy", "status": "success"},
+        "deployment_trigger": {
+            "metadata": {
+                "branch": "main",
+                "commit_hash": commit_hash,
+                "commit_message": commit_message,
+            },
+        },
+        "files": {
+            "/index.html": hashlib.md5(b"accepted build").hexdigest(),
+            "/release-manifest.json": "a" * 32,
+        },
+    }
+
+
+def _cutover_documents():
+    """Return the exact Gate D and cutover-journal pair the gate accepts."""
+    gate = {
+        "artifact_kind": "static_cutover_gate_d",
+        "release_ref": {
+            "release_id": "ata-static-cutoverrelease000",
+            "contract_hash": "b" * 64,
+        },
+        "pages_approval": {
+            "approved": True,
+            "deployment_id": CUTOVER_DEPLOYMENT_ID,
+            "approved_by": "adam",
+        },
+        "uploads_route_approval": {"approved": True, "approved_by": "adam"},
+    }
+    journal = {
+        "artifact_kind": "static_cutover_production_promotion",
+        "status": "COMPLETED",
+        "gate_d_sha256": None,
+        "release_ref": dict(gate["release_ref"]),
+        "promoted_deployment_id": CUTOVER_DEPLOYMENT_ID,
+        "custom_domain": PRODUCTION_ORIGIN,
+        "uploads_route_created": True,
+    }
+    return gate, journal
+
+
+def _write_cutover(gate, journal):
+    """Persist one cutover evidence pair under the live release root."""
+    cutover = client_module.STATIC_RELEASE_ROOT / "cutover"
+    cutover.mkdir(parents=True, exist_ok=True)
+    gate_path = cutover / "gate-d.json"
+    gate_path.write_text(json.dumps(gate))
+    if journal["gate_d_sha256"] is None:
+        journal["gate_d_sha256"] = hashlib.sha256(gate_path.read_bytes()).hexdigest()
+    (cutover / "cutover-journal.json").write_text(json.dumps(journal))
+    return cutover
+
+
+def _arm_promotion(client, *, validator_result="pass"):
+    """Install the Cloudflare/validator command seam one promotion needs."""
+    validator = client_module.STATIC_REPOSITORY_ROOT / "scripts" / "validate-static-post.sh"
+    validator.parent.mkdir(parents=True, exist_ok=True)
+    validator.write_text("#!/usr/bin/env bash\nexit 0\n")
+    calls = {
+        "production_lookup": 0,
+        "promotion_lookup": 0,
+        "promotion_create": 0,
+        "rollback": 0,
+        "validator": 0,
+    }
+    rollback_targets = []
+    validator_commands = []
+    production = [
+        _production_deployment_payload(
+            commit_hash="c" * 40,
+            commit_message="ata-blog cutover promotion",
+            deployment_id=PRIOR_PRODUCTION_DEPLOYMENT_ID,
+        )
+    ]
+
+    original_run = client_module.AtaBlogClient._run_checked_command
+
+    def run(command, *, timeout, label, cwd=None):
+        if command[0] == str(validator):
+            calls["validator"] += 1
+            validator_commands.append(list(command))
+            if validator_result == "fail":
+                raise ClientError(
+                    "Post-promotion validation failed (exit 1): body_too_short"
+                )
+            return SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps(
+                    {
+                        "valid": True,
+                        "pageId": PAGE_ID,
+                        "staticUrl": f"{PRODUCTION_ORIGIN}/journaled-static-publisher/",
+                        "deploymentId": command[command.index("--deployment-id") + 1],
+                        "postType": "Standard",
+                        "bodyWords": 1200,
+                        "threshold": 1000,
+                        "hasFeaturedImage": True,
+                        "hasTags": True,
+                        "failureReason": "",
+                    }
+                ),
+                stderr="",
+            )
+        if command[:3] != ["cloudflare", "pages", "deployments"]:
+            return original_run(command, cwd=cwd, timeout=timeout, label=label)
+        action = command[3]
+        if action == "list":
+            limit = command[command.index("--limit") + 1]
+            if limit == "1":
+                calls["production_lookup"] += 1
+                return SimpleNamespace(
+                    returncode=0, stdout=json.dumps(production[:1]), stderr=""
+                )
+            calls["promotion_lookup"] += 1
+            return SimpleNamespace(
+                returncode=0, stdout=json.dumps(production), stderr=""
+            )
+        if action == "create":
+            calls["promotion_create"] += 1
+            payload = _production_deployment_payload(
+                commit_hash=command[command.index("--commit-hash") + 1],
+                commit_message=command[command.index("--commit-message") + 1],
+                deployment_id=PRODUCTION_DEPLOYMENT_ID,
+            )
+            production.insert(0, payload)
+            return SimpleNamespace(returncode=0, stdout=json.dumps(payload), stderr="")
+        if action == "rollback":
+            calls["rollback"] += 1
+            rollback_targets.append(command[5])
+            return SimpleNamespace(returncode=0, stdout="{}", stderr="")
+        raise AssertionError(f"unexpected command: {command}")
+
+    client._run_checked_command = run
+    return calls, rollback_targets, validator_commands
+
+
+def test_production_promotion_refused_before_cutover(publisher):
+    client, _article, _markdown, _image, _manifest, counters, _token = publisher
+    client.get_article = lambda _page_id: pytest.fail("source read must not run")
+
+    with pytest.raises(
+        ClientError, match="Production promotion requires the completed static cutover"
+    ):
+        _publish(client, status="publish")
+
+    assert counters == {name: 0 for name in counters}
+    assert not (client_module.STATIC_RELEASE_ROOT / "cutover").exists()
+
+
+def test_gate_d_alone_does_not_open_production_promotion(publisher):
+    client, *_ = publisher
+    gate, _journal = _cutover_documents()
+    cutover = client_module.STATIC_RELEASE_ROOT / "cutover"
+    cutover.mkdir(parents=True)
+    (cutover / "gate-d.json").write_text(json.dumps(gate))
+
+    assert client._static_cutover_completed() is False
+    with pytest.raises(
+        ClientError, match="Production promotion requires the completed static cutover"
+    ):
+        _publish(client, status="publish")
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (
+            lambda gate, journal: gate["pages_approval"].update({"approved": False}),
+            "both required approvals",
+        ),
+        (
+            lambda gate, journal: gate["uploads_route_approval"].update(
+                {"approved": False}
+            ),
+            "both required approvals",
+        ),
+        (
+            lambda gate, journal: gate["pages_approval"].update({"deployment_id": "x"}),
+            "no UUID deployment_id",
+        ),
+        (
+            lambda gate, journal: gate["release_ref"].update({"contract_hash": "nope"}),
+            "not a bound release identity",
+        ),
+        (
+            lambda gate, journal: journal.update({"status": "IN_PROGRESS"}),
+            "not COMPLETED",
+        ),
+        (
+            lambda gate, journal: journal.update({"artifact_kind": "something-else"}),
+            "not a production promotion record",
+        ),
+        (
+            lambda gate, journal: journal.update({"gate_d_sha256": "d" * 64}),
+            "not bound to the current Gate D approval bytes",
+        ),
+        (
+            lambda gate, journal: journal.update(
+                {"release_ref": {"release_id": "other", "contract_hash": "e" * 64}}
+            ),
+            "release_ref does not match Gate D",
+        ),
+        (
+            lambda gate, journal: journal.update(
+                {"promoted_deployment_id": PRODUCTION_DEPLOYMENT_ID}
+            ),
+            "Gate D did not approve",
+        ),
+        (
+            lambda gate, journal: journal.update(
+                {"custom_domain": "https://preview.example"}
+            ),
+            "did not attach the production custom domain",
+        ),
+        (
+            lambda gate, journal: journal.update({"uploads_route_created": False}),
+            "did not record the live uploads Worker route",
+        ),
+    ],
+)
+def test_incomplete_cutover_evidence_fails_closed(publisher, mutate, message):
+    client, *_ = publisher
+    gate, journal = _cutover_documents()
+    cutover = client_module.STATIC_RELEASE_ROOT / "cutover"
+    cutover.mkdir(parents=True)
+    gate_path = cutover / "gate-d.json"
+    gate_path.write_text(json.dumps(gate))
+    journal["gate_d_sha256"] = hashlib.sha256(gate_path.read_bytes()).hexdigest()
+    mutate(gate, journal)
+    gate_path.write_text(json.dumps(gate))
+    (cutover / "cutover-journal.json").write_text(json.dumps(journal))
+
+    with pytest.raises(ClientError, match=message):
+        client._static_cutover_completed()
+
+
+def test_single_post_promotion_publishes_and_validates_production(publisher):
+    client, article, _markdown, _image, _manifest, counters, _token = publisher
+    _write_cutover(*_cutover_documents())
+    calls, _rollbacks, validator_commands = _arm_promotion(client)
+
+    result = _publish(client, status="publish")
+
+    assert counters["build"] == 1
+    assert counters["deploy"] == 1
+    assert counters["scanner"] == 1
+    assert counters["notion"] == 1
+    assert calls["production_lookup"] == 1
+    assert calls["promotion_lookup"] == 1
+    assert calls["promotion_create"] == 1
+    assert calls["validator"] == 1
+    assert calls["rollback"] == 0
+    assert result["journal_state"] == "completed"
+    assert result["promoted"] is True
+    assert result["static_url"] == f"{PRODUCTION_ORIGIN}/journaled-static-publisher/"
+    assert article["Published URL"] == f"{PRODUCTION_ORIGIN}/journaled-static-publisher/"
+    assert article["Status"] == "Published"
+    validator_command = validator_commands[0]
+    assert validator_command[1] == PAGE_ID
+    assert validator_command[validator_command.index("--slug") + 1] == (
+        "journaled-static-publisher"
+    )
+    assert validator_command[validator_command.index("--deployment-url") + 1] == (
+        PRODUCTION_ORIGIN
+    )
+    assert validator_command[validator_command.index("--deployment-id") + 1] == (
+        PRODUCTION_DEPLOYMENT_ID
+    )
+    assert "--rollback-on-fail" not in validator_command
+
+    runtime = json.loads(Path(result["journal_path"]).with_name(
+        Path(result["journal_path"]).name.replace(".journal.", ".runtime.")
+    ).read_text())
+    assert runtime["promotion_applied"] is True
+    assert runtime["prior_production_deployment_id"] == PRIOR_PRODUCTION_DEPLOYMENT_ID
+    assert runtime["promotion"]["promotion_id"] == PRODUCTION_DEPLOYMENT_ID
+
+
+def test_promotion_replay_repeats_no_build_deploy_promotion_or_notion_update(publisher):
+    client, _article, _markdown, _image, _manifest, counters, _token = publisher
+    _write_cutover(*_cutover_documents())
+    calls, _rollbacks, _commands = _arm_promotion(client)
+
+    first = _publish(client, status="publish")
+    baseline = dict(counters)
+    baseline_calls = dict(calls)
+
+    replay = _publish(client, status="publish")
+
+    assert replay["replayed"] is True
+    assert replay["idempotency_key"] == first["idempotency_key"]
+    assert replay["invocation_effects"] == {field: 0 for field in replay["effects"]}
+    assert counters == baseline
+    assert calls == baseline_calls
+    assert replay["static_url"] == first["static_url"]
+
+
+def test_resumed_accepted_transaction_promotes_exactly_once(publisher):
+    client, article, _markdown, _image, _manifest, counters, _token = publisher
+    _write_cutover(*_cutover_documents())
+    calls, _rollbacks, _commands = _arm_promotion(client)
+    committed = client.update_article
+
+    def crash(_page_id, *, status, properties):
+        raise KeyboardInterrupt("crash after promotion, before Notion")
+
+    client.update_article = crash
+    with pytest.raises(KeyboardInterrupt):
+        _publish(client, status="publish")
+    assert calls["promotion_create"] == 1
+
+    client.update_article = committed
+    result = _publish(client, status="publish")
+
+    assert result["journal_state"] == "completed"
+    assert calls["promotion_create"] == 1
+    assert calls["production_lookup"] == 1
+    # The read-only validation gate re-verifies the live result on resume; only
+    # the mutating steps (build, deploy, promote, Notion) are once-only.
+    assert calls["validator"] == 2
+    assert counters["build"] == 1
+    assert counters["deploy"] == 1
+    assert counters["notion"] == 1
+    assert article["Published URL"] == f"{PRODUCTION_ORIGIN}/journaled-static-publisher/"
+
+
+def test_validation_gate_failure_rolls_production_back(publisher):
+    client, article, _markdown, _image, _manifest, _counters, _token = publisher
+    _write_cutover(*_cutover_documents())
+    calls, rollback_targets, _commands = _arm_promotion(client, validator_result="fail")
+
+    with pytest.raises(ClientError, match="body_too_short") as failure:
+        _publish(client, status="publish")
+
+    assert "post-promotion validation" in str(failure.value)
+    assert "rollback failed" not in str(failure.value)
+    assert calls["promotion_create"] == 1
+    assert calls["rollback"] == 1
+    assert rollback_targets == [PRIOR_PRODUCTION_DEPLOYMENT_ID]
+    assert article["Status"] == "Draft"
+    assert article["Published URL"] is None
+
+    revision = client._source_revision(
+        article, client.get_article_markdown(PAGE_ID), client._resolve_featured_image(PAGE_ID, None)
+    )
+    key = client._publisher_idempotency_key(PAGE_ID, revision)
+    paths = client._publisher_paths(PAGE_ID, key)
+    journal = json.loads(paths["journal"].read_text())
+    runtime = json.loads(paths["runtime"].read_text())
+    assert journal["state"] == "failed"
+    assert journal["effects"]["notion_updates"] == 0
+    assert runtime["promotion_applied"] is False
+    assert runtime["promotion_rolled_back"] is True
+
+
+def test_concurrent_promotions_collapse_to_one_transaction(publisher):
+    client, _article, _markdown, _image, _manifest, counters, _token = publisher
+    _write_cutover(*_cutover_documents())
+    calls, _rollbacks, _commands = _arm_promotion(client)
+    barrier = threading.Barrier(2)
+    results = []
+    errors = []
+
+    def invoke():
+        barrier.wait()
+        try:
+            results.append(_publish(client, status="publish"))
+        except Exception as exc:  # noqa: BLE001 - recorded and asserted below
+            errors.append(exc)
+
+    threads = [threading.Thread(target=invoke) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert not errors
+    assert len(results) == 2
+    assert calls["promotion_create"] == 1
+    assert calls["validator"] == 1
+    assert counters["build"] == 1
+    assert counters["deploy"] == 1
+    assert counters["notion"] == 1
+    assert {result["journal_state"] for result in results} == {"completed"}
+    assert sum(1 for result in results if result["replayed"]) == 1
+
+
+def test_publish_article_runs_static_alone_after_cutover(publisher):
+    client, *_ = publisher
+    _write_cutover(*_cutover_documents())
+    calls = []
+    client._static_cutover_active = lambda: True
+
+    def fake_static(page_id, **kwargs):
+        calls.append(("static", kwargs["status"], kwargs["force"]))
+        return {"static_url": f"{PRODUCTION_ORIGIN}/p/", "deployment_id": "dep-2", "promoted": True}
+
+    client._publish_static_transaction = fake_static
+    client._publish_article_classic = (
+        lambda *a, **k: pytest.fail("WordPress leg must not run after cutover")
+    )
+    client.update_article = lambda *a, **k: pytest.fail("no Notion restore after cutover")
+
+    result = client.publish_article(PAGE_ID, status="publish", force=False)
+
+    assert calls == [("static", "publish", False)]
+    assert result["promoted"] is True
+    assert "wordpress_post" not in result

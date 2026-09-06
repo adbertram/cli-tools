@@ -185,7 +185,16 @@ def articles_create(
 @command
 def articles_publish(
     page_id: str = typer.Argument(..., help="Notion page ID to publish"),
-    status: str = typer.Option("draft", "--status", "-s", help="Static publish status (draft/publish)"),
+    status: str = typer.Option(
+        "draft",
+        "--status",
+        "-s",
+        help=(
+            "Publish status (draft/publish). After the static cutover has "
+            "completed, --status publish promotes this one post to the live "
+            "production deployment; before it, publish is refused"
+        ),
+    ),
     slug: Optional[str] = typer.Option(None, "--slug", help="Custom URL slug (auto-generated if not provided)"),
     date: Optional[str] = typer.Option(None, "--date", "-d", help="Schedule date (ISO 8601)"),
     auto_schedule: bool = typer.Option(False, "--auto-schedule", help="Auto-find next available slot"),
@@ -198,7 +207,14 @@ def articles_publish(
         help="Run only the static-site transaction; restores WordPress-owned Notion state afterward",
     ),
 ):
-    """Publish a Notion article to WordPress and, when the static cutover artifacts exist, also through the journaled static-site transaction."""
+    """Publish a Notion article through the static-site transaction and, before the cutover, WordPress.
+
+    Before the production cutover this dual-publishes: the journaled
+    static-site transaction deploys a preview and the WordPress leg owns the
+    final Notion state. After the cutover it runs the static transaction
+    alone, and --status publish promotes that one post to production behind
+    the per-post validation gate.
+    """
     client = get_client()
 
     print_info(f"Publishing article {page_id}...")
@@ -229,6 +245,10 @@ def articles_publish(
         if "wordpress_post" in result:
             print_success(
                 f"Published to WordPress (Post ID: {result['wordpress_post']['id']})"
+            )
+        elif result.get("promoted") is True:
+            print_success(
+                f"Promoted to production (Deployment ID: {result['deployment_id']})"
             )
         else:
             print_success(

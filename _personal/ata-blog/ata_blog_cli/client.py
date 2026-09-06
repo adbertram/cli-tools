@@ -90,6 +90,7 @@ STATIC_PAGES_PENDING_STATUSES = frozenset({"idle", "active"})
 STATIC_PAGES_TERMINAL_FAILURE_STATUSES = frozenset({"failure", "canceled"})
 STATIC_MEDIA_BUCKET = "ata-blog-media"
 STATIC_SITE_ORIGIN = "https://adamtheautomator.com"
+STATIC_CUTOVER_JOURNAL_KIND = "static_cutover_production_promotion"
 # WordPress REST media collection on the same origin the inline media URLs
 # point at. `media_details.sizes` on these records is WordPress's own
 # declaration of which derivative files it generated for one attachment, so it
@@ -3023,38 +3024,541 @@ class AtaBlogClient:
             return None
         return result
 
+    @staticmethod
+    def _static_cutover_paths() -> Dict[str, Path]:
+        """Resolve the one-time cutover evidence paths under the release root."""
+        cutover_root = STATIC_RELEASE_ROOT / "cutover"
+        return {
+            "root": cutover_root,
+            "gate_d": cutover_root / "gate-d.json",
+            "journal": cutover_root / "cutover-journal.json",
+        }
+
+    def _load_static_cutover_record(self) -> Optional[Dict[str, Any]]:
+        """Return the validated completed-cutover record, or None before cutover.
+
+        Absence of either cutover artifact means the one-time whole-lattice
+        cutover has not run, so production promotion is not legal yet and the
+        dual-publish window still applies. Presence of a malformed, unapproved,
+        or unbound artifact is a hard error: the gate never degrades to the
+        pre-cutover answer because evidence failed to validate.
+        """
+        paths = self._static_cutover_paths()
+        if not paths["gate_d"].is_file() or not paths["journal"].is_file():
+            return None
+        gate = self._load_required_json(paths["gate_d"], "Gate D approval")
+        pages = gate.get("pages_approval")
+        uploads = gate.get("uploads_route_approval")
+        if not isinstance(pages, dict) or not isinstance(uploads, dict):
+            raise ClientError("Gate D approval is missing its two approval records")
+        if pages.get("approved") is not True or uploads.get("approved") is not True:
+            raise ClientError("Gate D does not contain both required approvals")
+        try:
+            approved_deployment_id = str(uuid.UUID(str(pages.get("deployment_id"))))
+        except ValueError as exc:
+            raise ClientError(
+                "Gate D Pages approval has no UUID deployment_id"
+            ) from exc
+        gate_release_ref = gate.get("release_ref")
+        if (
+            not isinstance(gate_release_ref, dict)
+            or set(gate_release_ref) != {"release_id", "contract_hash"}
+            or not isinstance(gate_release_ref["release_id"], str)
+            or not gate_release_ref["release_id"]
+            or not re.fullmatch(
+                r"[0-9a-f]{64}", str(gate_release_ref["contract_hash"])
+            )
+        ):
+            raise ClientError("Gate D release_ref is not a bound release identity")
+        gate_sha256 = _file_sha256(paths["gate_d"])
+
+        journal = self._load_required_json(paths["journal"], "cutover journal")
+        if journal.get("artifact_kind") != STATIC_CUTOVER_JOURNAL_KIND:
+            raise ClientError("Cutover journal is not a production promotion record")
+        if journal.get("status") != "COMPLETED":
+            raise ClientError(
+                "Cutover journal is not COMPLETED; production promotion is closed"
+            )
+        if journal.get("gate_d_sha256") != gate_sha256:
+            raise ClientError(
+                "Cutover journal is not bound to the current Gate D approval bytes"
+            )
+        if journal.get("release_ref") != gate_release_ref:
+            raise ClientError("Cutover journal release_ref does not match Gate D")
+        if journal.get("promoted_deployment_id") != approved_deployment_id:
+            raise ClientError(
+                "Cutover journal promoted a deployment Gate D did not approve"
+            )
+        if journal.get("custom_domain") != STATIC_SITE_ORIGIN:
+            raise ClientError(
+                "Cutover journal did not attach the production custom domain"
+            )
+        if journal.get("uploads_route_created") is not True:
+            raise ClientError(
+                "Cutover journal did not record the live uploads Worker route"
+            )
+        return {
+            "gate_d_sha256": gate_sha256,
+            "release_ref": gate_release_ref,
+            "promoted_deployment_id": approved_deployment_id,
+            "custom_domain": STATIC_SITE_ORIGIN,
+        }
+
+    def _static_cutover_completed(self) -> bool:
+        """Return whether the one-time production cutover has already run."""
+        return self._load_static_cutover_record() is not None
+
+    def _require_completed_static_cutover(self) -> Dict[str, Any]:
+        """Fail closed unless the cutover evidence opens production promotion."""
+        record = self._load_static_cutover_record()
+        if record is None:
+            paths = self._static_cutover_paths()
+            raise ClientError(
+                "Production promotion requires the completed static cutover: "
+                f"{paths['gate_d']} and {paths['journal']} must both exist. "
+                "Publish with --status draft until the cutover has run."
+            )
+        return record
+
+    def _current_production_deployment_id(self) -> str:
+        """Read the live production deployment a failed promotion rolls back to."""
+        result = self._run_checked_command(
+            [
+                "cloudflare",
+                "pages",
+                "deployments",
+                "list",
+                STATIC_PAGES_PROJECT,
+                "--env",
+                "production",
+                "--limit",
+                "1",
+            ],
+            timeout=300,
+            label="Pages production deployment lookup",
+        )
+        deployments = self._parse_checked_command_json(
+            result,
+            "Pages production deployment lookup",
+        )
+        if (
+            not isinstance(deployments, list)
+            or len(deployments) != 1
+            or not isinstance(deployments[0], dict)
+        ):
+            raise ClientError(
+                "Pages production deployment lookup did not return exactly one "
+                "deployment"
+            )
+        current = deployments[0]
+        latest_stage = current.get("latest_stage")
+        status = latest_stage.get("status") if isinstance(latest_stage, dict) else None
+        if current.get("environment") != "production" or status != "success":
+            raise ClientError(
+                "Current Pages production deployment is not a successful "
+                "production deployment"
+            )
+        try:
+            return str(uuid.UUID(str(current["id"])))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ClientError(
+                "Current Pages production deployment has no UUID id"
+            ) from exc
+
+    @staticmethod
+    def _static_promotion_receipt_state(
+        payload: Dict[str, Any],
+        *,
+        commit_hash: str,
+        commit_message: str,
+    ) -> tuple[str, str]:
+        """Return one exact production receipt's deployment id and stage status."""
+        trigger = payload.get("deployment_trigger")
+        metadata = trigger.get("metadata") if isinstance(trigger, dict) else None
+        latest_stage = payload.get("latest_stage")
+        actual = {
+            "environment": payload.get("environment"),
+            "commit_hash": (
+                metadata.get("commit_hash") if isinstance(metadata, dict) else None
+            ),
+            "commit_message": (
+                metadata.get("commit_message") if isinstance(metadata, dict) else None
+            ),
+        }
+        expected = {
+            "environment": "production",
+            "commit_hash": commit_hash,
+            "commit_message": commit_message,
+        }
+        if actual != expected:
+            raise ClientError(
+                "Pages production receipt identity mismatch: "
+                f"expected {json.dumps(expected, sort_keys=True)}, "
+                f"got {json.dumps(actual, sort_keys=True)}"
+            )
+        try:
+            deployment_id = str(uuid.UUID(str(payload["id"])))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ClientError(
+                "Pages production promotion returned no UUID deployment id"
+            ) from exc
+        status = latest_stage.get("status") if isinstance(latest_stage, dict) else None
+        valid_statuses = (
+            {"success"}
+            | STATIC_PAGES_PENDING_STATUSES
+            | STATIC_PAGES_TERMINAL_FAILURE_STATUSES
+        )
+        if status not in valid_statuses:
+            raise ClientError(
+                "Pages production promotion returned unsupported latest_stage "
+                f"status: {status!r}"
+            )
+        return deployment_id, status
+
+    @staticmethod
+    def _normalize_static_promotion_deployment(
+        payload: Dict[str, Any],
+        *,
+        commit_hash: str,
+        commit_message: str,
+    ) -> Dict[str, Any]:
+        """Validate one exact successful production deployment receipt."""
+        deployment_id, status = AtaBlogClient._static_promotion_receipt_state(
+            payload,
+            commit_hash=commit_hash,
+            commit_message=commit_message,
+        )
+        if status != "success":
+            raise ClientError(
+                "Pages production receipt identity mismatch: "
+                f'expected status "success", got {status!r}'
+            )
+        files = payload.get("files")
+        if (
+            not isinstance(files, dict)
+            or not files
+            or "/release-manifest.json" not in files
+            or any(
+                not isinstance(path, str)
+                or not path.startswith("/")
+                or not re.fullmatch(r"[0-9a-f]{32}", str(digest))
+                for path, digest in files.items()
+            )
+        ):
+            raise ClientError(
+                "Pages production promotion returned no valid release-bound "
+                "deployment files map"
+            )
+        return {
+            "deployment_id": deployment_id,
+            "deployment": payload,
+            "deployment_sha256": _artifact_sha256(payload),
+        }
+
+    def _wait_for_static_promotion(
+        self,
+        deployment_id: str,
+        *,
+        commit_hash: str,
+        commit_message: str,
+    ) -> Dict[str, Any]:
+        """Hydrate one production deployment UUID until it succeeds or fails."""
+        deadline = time.monotonic() + STATIC_PAGES_POLL_TIMEOUT_SECONDS
+        observed_statuses = []
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                observed = " -> ".join(observed_statuses) or "none"
+                raise ClientError(
+                    f"Pages production deployment {deployment_id} did not reach "
+                    f"success within {STATIC_PAGES_POLL_TIMEOUT_SECONDS} seconds; "
+                    f"observed statuses: {observed}"
+                )
+            result = self._run_checked_command(
+                [
+                    "cloudflare",
+                    "pages",
+                    "deployments",
+                    "get",
+                    STATIC_PAGES_PROJECT,
+                    deployment_id,
+                ],
+                timeout=max(1, min(300, int(remaining))),
+                label="Pages production receipt fetch",
+            )
+            deployment = self._parse_checked_command_json(
+                result,
+                "Pages production receipt fetch",
+            )
+            if not isinstance(deployment, dict):
+                raise ClientError(
+                    "Pages production receipt fetch did not return a JSON object"
+                )
+            received_id, status = self._static_promotion_receipt_state(
+                deployment,
+                commit_hash=commit_hash,
+                commit_message=commit_message,
+            )
+            if received_id != deployment_id:
+                raise ClientError(
+                    "Pages production receipt deployment id mismatch: "
+                    f"expected {deployment_id}, got {received_id}"
+                )
+            observed_statuses.append(status)
+            if status == "success":
+                return self._normalize_static_promotion_deployment(
+                    deployment,
+                    commit_hash=commit_hash,
+                    commit_message=commit_message,
+                )
+            if status in STATIC_PAGES_TERMINAL_FAILURE_STATUSES:
+                raise ClientError(
+                    f"Pages production deployment {deployment_id} reached terminal "
+                    f"status {status}; observed statuses: "
+                    f"{' -> '.join(observed_statuses)}"
+                )
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                continue
+            time.sleep(min(STATIC_PAGES_POLL_INTERVAL_SECONDS, remaining))
+
+    def _existing_static_promotion(
+        self,
+        *,
+        commit_hash: str,
+        commit_message: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Recover one production deployment by its exact transaction identity."""
+        result = self._run_checked_command(
+            [
+                "cloudflare",
+                "pages",
+                "deployments",
+                "list",
+                STATIC_PAGES_PROJECT,
+                "--env",
+                "production",
+                "--limit",
+                "100",
+            ],
+            timeout=300,
+            label="Pages production receipt lookup",
+        )
+        deployments = self._parse_checked_command_json(
+            result,
+            "Pages production receipt lookup",
+        )
+        if not isinstance(deployments, list):
+            raise ClientError(
+                "Pages production receipt lookup did not return a JSON array"
+            )
+        matches = []
+        for deployment in deployments:
+            if not isinstance(deployment, dict):
+                raise ClientError(
+                    "Pages production receipt lookup returned a non-object deployment"
+                )
+            trigger = deployment.get("deployment_trigger")
+            metadata = trigger.get("metadata") if isinstance(trigger, dict) else None
+            if (
+                isinstance(metadata, dict)
+                and metadata.get("commit_message") == commit_message
+            ):
+                matches.append(deployment)
+        if len(matches) > 1:
+            raise ClientError(
+                "Multiple Pages production deployments match this transaction"
+            )
+        if not matches:
+            return None
+        deployment_id, status = self._static_promotion_receipt_state(
+            matches[0],
+            commit_hash=commit_hash,
+            commit_message=commit_message,
+        )
+        if status in STATIC_PAGES_TERMINAL_FAILURE_STATUSES:
+            raise ClientError(
+                f"Pages production deployment {deployment_id} reached terminal "
+                f"status {status}"
+            )
+        if status == "success":
+            return self._normalize_static_promotion_deployment(
+                matches[0],
+                commit_hash=commit_hash,
+                commit_message=commit_message,
+            )
+        return self._wait_for_static_promotion(
+            deployment_id,
+            commit_hash=commit_hash,
+            commit_message=commit_message,
+        )
+
     def _promote_static_release(
         self,
         manifest: Dict[str, Any],
         deployment: Dict[str, Any],
+        *,
+        journal: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """Refuse production promotion outside P20's hash-current Gate D journal."""
-        gate_path = STATIC_RELEASE_ROOT / "cutover" / "gate-d.json"
-        gate = self._load_required_json(gate_path, "Gate D approval")
-        expected_ref = {
-            "release_id": manifest["release_id"],
-            "contract_hash": manifest["contract_hash"],
-        }
-        if gate.get("release_ref") != expected_ref:
-            raise ClientError("Gate D release_ref is stale")
-        pages = gate.get("pages_approval", {})
-        uploads = gate.get("uploads_route_approval", {})
-        if pages.get("approved") is not True or uploads.get("approved") is not True:
-            raise ClientError("Gate D does not contain both required approvals")
-        if pages.get("deployment_id") != deployment["deployment_id"]:
-            raise ClientError("Gate D Pages approval is for a different deployment")
-        raise ClientError(
-            "Production promotion is owned by P20's cutover operator; "
-            "the static publisher will not create a second Pages deployment"
+        """Promote this transaction's accepted build to the production deployment.
+
+        Legal only after the one-time cutover recorded in
+        release-state/static-cutover-release/cutover/. The promotion re-uses the
+        exact dist/ tree the bound preview was uploaded from (the global build
+        lock is still held), and is recovered rather than repeated when a prior
+        attempt already created it.
+        """
+        record = self._require_completed_static_cutover()
+        idempotency_key = journal["idempotency"]["key"]
+        commit_hash = journal["source"]["source_revision"][:40]
+        commit_message = f"ata-blog promotion {idempotency_key}"
+        promoted = self._existing_static_promotion(
+            commit_hash=commit_hash,
+            commit_message=commit_message,
         )
+        if promoted is None:
+            result = self._run_checked_command(
+                [
+                    "cloudflare",
+                    "pages",
+                    "deployments",
+                    "create",
+                    STATIC_PAGES_PROJECT,
+                    "--directory",
+                    str(STATIC_SITE_ROOT / "dist"),
+                    "--commit-message",
+                    commit_message,
+                    "--commit-hash",
+                    commit_hash,
+                ],
+                timeout=1800,
+                label="Pages production promotion",
+            )
+            payload = self._parse_checked_command_json(
+                result,
+                "Pages production promotion",
+            )
+            if not isinstance(payload, dict):
+                raise ClientError(
+                    "Pages production promotion did not return a JSON object"
+                )
+            promotion_id, status = self._static_promotion_receipt_state(
+                payload,
+                commit_hash=commit_hash,
+                commit_message=commit_message,
+            )
+            if status in STATIC_PAGES_TERMINAL_FAILURE_STATUSES:
+                raise ClientError(
+                    f"Pages production deployment {promotion_id} reached terminal "
+                    f"status {status}"
+                )
+            if status == "success":
+                promoted = self._normalize_static_promotion_deployment(
+                    payload,
+                    commit_hash=commit_hash,
+                    commit_message=commit_message,
+                )
+            else:
+                promoted = self._wait_for_static_promotion(
+                    promotion_id,
+                    commit_hash=commit_hash,
+                    commit_message=commit_message,
+                )
+        return {
+            "promotion_id": promoted["deployment_id"],
+            "promotion_sha256": promoted["deployment_sha256"],
+            "preview_deployment_id": deployment["deployment_id"],
+            "release_ref": {
+                "release_id": manifest["release_id"],
+                "contract_hash": manifest["contract_hash"],
+            },
+            "custom_domain": record["custom_domain"],
+            "cutover_gate_d_sha256": record["gate_d_sha256"],
+        }
+
+    def _apply_static_promotion(
+        self,
+        *,
+        manifest: Dict[str, Any],
+        deployment: Dict[str, Any],
+        journal: Dict[str, Any],
+        runtime: Dict[str, Any],
+        paths: Dict[str, Path],
+    ) -> None:
+        """Record and perform this transaction's single production promotion.
+
+        A resumed transaction whose runtime already carries the promotion does
+        not create a second production deployment and does not re-read the
+        rollback target, so replay stays effect-free.
+        """
+        if runtime.get("promotion_applied") is True:
+            return
+        if not runtime.get("prior_production_deployment_id"):
+            runtime["prior_production_deployment_id"] = (
+                self._current_production_deployment_id()
+            )
+            _atomic_write_json(paths["runtime"], runtime)
+        runtime["promotion"] = self._promote_static_release(
+            manifest,
+            deployment,
+            journal=journal,
+        )
+        runtime["promotion_applied"] = True
+        runtime["promotion_rolled_back"] = False
+        _atomic_write_json(paths["runtime"], runtime)
 
     def _post_promotion_validate(
         self,
         manifest: Dict[str, Any],
-        deployment: Dict[str, Any],
+        *,
+        page_id: str,
+        slug: str,
+        deployment_id: str,
     ) -> None:
-        """P20 override seam for production validation after promotion."""
-        raise ClientError("Post-promotion validation is owned by P20")
+        """Gate the promoted post on the deployed per-post validation contract.
+
+        Rollback is owned by the transaction's failure handler, so the gate is
+        invoked without --rollback-on-fail: one rollback path, not two.
+        """
+        validator = STATIC_REPOSITORY_ROOT / "scripts" / "validate-static-post.sh"
+        if not validator.is_file():
+            raise ClientError(
+                f"Per-post static validation gate is missing: {validator}"
+            )
+        normalized_page_id = page_id.replace("-", "")
+        result = self._run_checked_command(
+            [
+                str(validator),
+                normalized_page_id,
+                "--slug",
+                slug,
+                "--deployment-url",
+                STATIC_SITE_ORIGIN,
+                "--deployment-id",
+                deployment_id,
+                "--json",
+            ],
+            timeout=600,
+            label="Post-promotion validation",
+        )
+        report = self._parse_checked_command_json(result, "Post-promotion validation")
+        if not isinstance(report, dict):
+            raise ClientError(
+                "Post-promotion validation did not return a JSON object"
+            )
+        if report.get("valid") is not True:
+            raise ClientError(
+                "Post-promotion validation did not accept the promoted post: "
+                f"{json.dumps(report, sort_keys=True)}"
+            )
+        if (
+            report.get("pageId") != normalized_page_id
+            or report.get("deploymentId") != deployment_id
+        ):
+            raise ClientError(
+                "Post-promotion validation reported a different post: "
+                f"{json.dumps(report, sort_keys=True)}"
+            )
 
     def _rollback_static_promotion(self, prior_deployment_id: str) -> None:
         """Roll Pages back only when a production promotion was actually recorded."""
@@ -3356,6 +3860,8 @@ class AtaBlogClient:
     ) -> Dict[str, Any]:
         """Return the stable public result for a completed transaction."""
         deployment_url = runtime["deployment_url"]
+        promoted = runtime.get("promotion_applied") is True
+        public_base_url = STATIC_SITE_ORIGIN if promoted else deployment_url
         slug = runtime["slug"]
         baseline = initial_effects or {field: 0 for field in journal["effects"]}
         invocation_effects = {
@@ -3366,9 +3872,10 @@ class AtaBlogClient:
             "notion_page_id": journal["source"]["page_id"],
             "status": runtime["status"],
             "scheduled_date": runtime.get("scheduled_date"),
-            "static_url": f"{deployment_url}/{slug}/",
+            "static_url": f"{public_base_url}/{slug}/",
             "deployment_id": journal["artifacts"]["deployment_id"],
             "deployment_url": deployment_url,
+            "promoted": promoted,
             "release_ref": journal["release_ref"],
             "source_revision": journal["source"]["source_revision"],
             "idempotency_key": journal["idempotency"]["key"],
@@ -3884,13 +4391,20 @@ class AtaBlogClient:
                     public_base_url = deployment["deployment_url"]
                     if runtime["status"] == "publish":
                         current_stage = "promotion"
-                        runtime["promotion"] = self._promote_static_release(
-                            manifest, deployment
+                        self._apply_static_promotion(
+                            manifest=manifest,
+                            deployment=deployment,
+                            journal=journal,
+                            runtime=runtime,
+                            paths=paths,
                         )
-                        runtime["promotion_applied"] = True
-                        _atomic_write_json(paths["runtime"], runtime)
                         current_stage = "post-promotion validation"
-                        self._post_promotion_validate(manifest, deployment)
+                        self._post_promotion_validate(
+                            manifest,
+                            page_id=page_id,
+                            slug=runtime["slug"],
+                            deployment_id=runtime["promotion"]["promotion_id"],
+                        )
                         public_base_url = STATIC_SITE_ORIGIN
                     current_stage = "Notion update"
                     public_url = f"{public_base_url}/{runtime['slug']}/"
@@ -3954,9 +4468,14 @@ class AtaBlogClient:
             rollback_errors = []
             if runtime.get("promotion_applied"):
                 try:
-                    self._rollback_static_promotion(journal["prior_state"]["deployment_id"])
+                    self._rollback_static_promotion(
+                        runtime["prior_production_deployment_id"]
+                    )
                 except Exception as rollback_exc:
                     rollback_errors.append(f"production rollback: {rollback_exc}")
+                else:
+                    runtime["promotion_applied"] = False
+                    runtime["promotion_rolled_back"] = True
             try:
                 self._restore_static_corpus(runtime, journal, paths)
             except Exception as rollback_exc:
@@ -4016,10 +4535,7 @@ class AtaBlogClient:
         if date and auto_schedule:
             raise ClientError("Use either --date or --auto-schedule, not both")
         if status == "publish":
-            raise ClientError(
-                "Production promotion is owned by P20 and requires its hash-current "
-                "Gate D transaction; use --status draft for a P14 preview"
-            )
+            self._require_completed_static_cutover()
         if date:
             try:
                 parsed_date = datetime.fromisoformat(date.replace("Z", "+00:00"))
@@ -4425,12 +4941,20 @@ class AtaBlogClient:
                     public_base_url = deployment["deployment_url"]
                     if status == "publish":
                         current_stage = "promotion"
-                        promotion = self._promote_static_release(manifest, deployment)
-                        runtime["promotion"] = promotion
-                        runtime["promotion_applied"] = True
-                        _atomic_write_json(paths["runtime"], runtime)
+                        self._apply_static_promotion(
+                            manifest=manifest,
+                            deployment=deployment,
+                            journal=journal,
+                            runtime=runtime,
+                            paths=paths,
+                        )
                         current_stage = "post-promotion validation"
-                        self._post_promotion_validate(manifest, deployment)
+                        self._post_promotion_validate(
+                            manifest,
+                            page_id=page_id,
+                            slug=final_slug,
+                            deployment_id=runtime["promotion"]["promotion_id"],
+                        )
                         public_base_url = STATIC_SITE_ORIGIN
 
                     current_stage = "Notion update"
@@ -4491,10 +5015,13 @@ class AtaBlogClient:
                 if runtime.get("promotion_applied"):
                     try:
                         self._rollback_static_promotion(
-                            journal["prior_state"]["deployment_id"]
+                            runtime["prior_production_deployment_id"]
                         )
                     except Exception as rollback_exc:
                         rollback_errors.append(f"production rollback: {rollback_exc}")
+                    else:
+                        runtime["promotion_applied"] = False
+                        runtime["promotion_rolled_back"] = True
                 try:
                     self._restore_static_corpus(runtime, journal, paths)
                 except Exception as rollback_exc:
@@ -4541,6 +5068,13 @@ class AtaBlogClient:
         """
         Publish a Notion article to WordPress.
 
+        After the one-time production cutover has completed (Gate D approval
+        plus the completed cutover journal under
+        release-state/static-cutover-release/cutover/), WordPress is dark: the
+        journaled static transaction runs alone with the caller's requested
+        status and owns the final Notion state. Until then the pre-cutover
+        dual-publish window below applies unchanged.
+
         Dual-publish mode (2026-09-01 directive): when the static cutover
         artifacts are present (P05/P13 handoffs plus the integrated release
         manifest), publish through the journaled static-site transaction AND
@@ -4569,6 +5103,23 @@ class AtaBlogClient:
         dict also carries "static_url" and the full static transaction result
         under "static_publish".
         """
+        if self._static_cutover_completed():
+            # Post-cutover: WordPress no longer serves the site, so there is no
+            # classic leg to hand the final Notion state to. The requested
+            # status reaches the static transaction unchanged, which refuses
+            # "publish" unless the cutover gate is still satisfied, and which
+            # fails loudly if the P05/P13 handoffs have gone missing rather
+            # than degrading to a WordPress-only publish.
+            return self._publish_static_transaction(
+                page_id=page_id,
+                status=status,
+                slug=slug,
+                date=date,
+                auto_schedule=auto_schedule,
+                check_duplicates=check_duplicates,
+                featured_image=featured_image,
+                force=force,
+            )
         if static_only:
             if not self._static_cutover_active():
                 raise ClientError(
