@@ -27,7 +27,7 @@ def isolated_user_data_and_in_memory_secret_manager(tmp_path, monkeypatch):
     def fake_run(command: str, secret_name: str, *, secret_value=None):
         if command == "get":
             if secret_name not in secrets:
-                return subprocess.CompletedProcess([], 1, stdout="", stderr="missing")
+                return subprocess.CompletedProcess([], 44, stdout="", stderr="missing")
             return subprocess.CompletedProcess([], 0, stdout=secrets[secret_name], stderr="")
         if command == "set":
             secrets[secret_name] = secret_value or ""

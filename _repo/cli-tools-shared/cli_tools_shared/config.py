@@ -173,6 +173,11 @@ _AUTH_METADATA_FIELDS = {"ACTIVE"}
 _AUTH_FIELD_PREFIXES = ("AUTH_", "OAUTH_")
 _AUTH_FIELD_NAMES = {"AUTHORIZATION_CODE", "REDIRECT_URI"}
 _SECRET_PLACEHOLDER_PREFIX = "secret://"
+# macOS `security find-generic-password` exits 44 when the item is not found
+# (errSecItemNotFound). Any other non-zero exit means the secret manager itself
+# failed (for example a permission error), and that failure must be surfaced
+# with its stderr instead of being mislabeled as a missing secret.
+_SECRET_NOT_FOUND_EXIT_CODE = 44
 _DEFAULT_ROOT_CONFIG_FIELDS = {
     "BASE_URL",
     "CACHE_ENABLED",
@@ -262,11 +267,23 @@ def _strip_secret_output(value: str) -> str:
 
 
 def read_cli_tool_secret(secret_name: str) -> Optional[str]:
-    """Read a raw reusable CLI-tool secret from the central secret manager."""
+    """Read a raw reusable CLI-tool secret from the central secret manager.
+
+    Returns ``None`` only when the secret does not exist. Raises
+    :class:`ConfigError` — preserving the secret manager's stderr — when the
+    secret manager fails for any other reason, so a permission error is not
+    mislabeled as a missing secret.
+    """
     result = _run_secret_manager("get", secret_name)
-    if result.returncode != 0:
+    if result.returncode == 0:
+        return _strip_secret_output(result.stdout)
+    if result.returncode == _SECRET_NOT_FOUND_EXIT_CODE:
         return None
-    return _strip_secret_output(result.stdout)
+    stderr = (result.stderr or "").strip()
+    detail = f": {stderr}" if stderr else ""
+    raise ConfigError(
+        f"Secret manager failed reading secret '{secret_name}'{detail}"
+    )
 
 
 def _get_secret_value(secret_name: str, profile_path: Path) -> str:

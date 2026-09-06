@@ -430,7 +430,7 @@ def test_auth_status_reports_missing_profile_secret_as_unauthenticated(tmp_path,
         assert secret_name == "tool-api-key"
         return config_module.subprocess.CompletedProcess(
             [],
-            1,
+            44,
             stdout="",
             stderr="missing",
         )

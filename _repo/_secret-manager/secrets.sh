@@ -15,7 +15,11 @@ cli_tools_data_root() {
 if [[ "$REMOTE_CONTEXT" == "1" ]]; then
     DEFAULT_LOG_FILE="${HOME}/.local/share/cli-tools/secrets.log"
 else
-    DEFAULT_LOG_FILE="${SCRIPT_DIR}/secrets.log"
+    # Diagnostic logs must live in the writable runtime-state directory, not
+    # inside the repository. Writing into the checkout (${SCRIPT_DIR}) fails on
+    # a read-only repo and aborts the secret operation with a permission error
+    # that callers then mislabel as "missing secret".
+    DEFAULT_LOG_FILE="$(cli_tools_data_root)/secrets.log"
 fi
 LOG_FILE="${LOG_FILE:-$DEFAULT_LOG_FILE}"
 mkdir -p "$(dirname "$LOG_FILE")"
