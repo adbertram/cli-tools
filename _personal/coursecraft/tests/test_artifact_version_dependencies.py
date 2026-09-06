@@ -24,12 +24,11 @@ def _course_fields(state="Not Submitted"):
             "PASS\nReviewed-Version: course.outline_draft@v1 sha256:"
             + hashlib.sha256(b"old draft").hexdigest()
         ),
-        # NOT human-verified. A live stamp is read-only: since
-        # artifact_versions._require_human_verified_reopen landed, a content
-        # write to a stamped artifact is REFUSED outright (the reopen is its
-        # own separate write) rather than silently un-stamping it. A stamped
-        # draft therefore cannot reach the dependency cascade these tests are
-        # about -- only an unstamped one can.
+        # NOT human-verified here so the cascade tests read cleanly. A live
+        # stamp is never read-only (policy 2026-09-06, course-pipeline/SKILL.md
+        # rule 4a): a content write to a stamped draft lands and un-stamps it
+        # in the same PATCH -- see
+        # test_stamped_draft_change_lands_and_clears_the_stamp_in_the_same_write.
         "Outline Draft Human Verified": False,
         "Course Outline": "stale built outline",
         "Course Outline Review State": state,
@@ -249,3 +248,101 @@ def test_demo_overview_update_does_not_wipe_the_downstream_demo_chain():
     ):
         assert versions[slug]["v"] == 2
         assert versions[slug]["sha256"] == hashlib.sha256(content.encode()).hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# Human Verified is not read-only (policy 2026-09-06; course-pipeline/SKILL.md
+# rule 4a). A content write to a stamped artifact -- or to a dependency whose
+# same-record dependent is stamped -- lands, and the stamp clears to False in
+# the same PATCH, exactly like the paired "... Review (AI)" clears to "".
+# ---------------------------------------------------------------------------
+
+
+def test_stamped_draft_change_lands_and_clears_the_stamp_in_the_same_write():
+    fields = _course_fields()
+    fields["Outline Draft Human Verified"] = True
+
+    planned = _plan(fields)
+
+    assert planned["Outline Draft"] == "new draft"
+    assert planned["Outline Draft Human Verified"] is False
+    assert planned["Outline Draft Review (AI)"] == ""
+    assert planned["Course Outline"] == ""
+    assert json.loads(planned["Version Control"])["course.outline_draft"]["v"] == 2
+
+
+def test_stamped_draft_no_op_resubmission_keeps_the_stamp():
+    fields = _course_fields()
+    fields["Outline Draft Human Verified"] = True
+
+    planned = av.plan_record_update(
+        "Courses",
+        "recCourse",
+        {"Outline Draft": "old draft"},
+        fields,
+        {
+            "Outline Draft": {"type": "multilineText"},
+            "Course Outline": {"type": "multilineText"},
+        },
+    )
+
+    assert planned == {"Outline Draft": "old draft"}
+
+
+def test_content_change_with_explicit_paired_stamp_in_same_write_is_rejected():
+    """The un-stamp is automatic; re-stamping in the same write still is not."""
+    persisted = {
+        "Demo Overview": "old overview",
+        "Demo Overview Human Verified": True,
+        "Version Control": json.dumps({"demo.overview": _version(1, "old overview")}),
+    }
+
+    with pytest.raises(av.VersioningError, match="same write"):
+        av.plan_record_update(
+            "Demos",
+            "recDemo",
+            {"Demo Overview": "new overview", "Demo Overview Human Verified": True},
+            persisted,
+            {"Demo Overview": {"type": "multilineText"}},
+        )
+
+
+def test_dependency_change_clears_a_stamped_same_record_dependent():
+    """A Demo Overview edit un-stamps the stamped downstream Action Summary."""
+    persisted = {
+        "Demo Overview": "old overview",
+        "Demo Overview Human Verified": True,
+        "Environment Spec": "the spec",
+        "Action Summary": "the walk",
+        "Action Summary Human Verified": True,
+        "Script": "the narration",
+        "Script Human Verified": True,
+        "Version Control": json.dumps({
+            "demo.overview": _version(1, "old overview"),
+            "demo.environment_spec": _version(1, "the spec"),
+            "demo.action_summary": _version(1, "the walk"),
+            "demo.script": _version(1, "the narration"),
+        }),
+    }
+    planned = av.plan_record_update(
+        "Demos",
+        "recDemo",
+        {"Demo Overview": "new overview"},
+        persisted,
+        {
+            "Demo Overview": {"type": "multilineText"},
+            "Environment Spec": {"type": "multilineText"},
+            "Action Summary": {"type": "multilineText"},
+            "Script": {"type": "multilineText"},
+        },
+    )
+
+    assert planned["Demo Overview"] == "new overview"
+    for field in (
+        "Demo Overview Human Verified",
+        "Action Summary Human Verified",
+        "Script Human Verified",
+    ):
+        assert planned[field] is False, field
+    for field in ("Environment Spec", "Action Summary", "Script"):
+        assert field not in planned, f"{field} must keep its live content"

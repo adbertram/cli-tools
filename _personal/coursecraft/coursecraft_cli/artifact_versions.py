@@ -330,10 +330,13 @@ def _paired_review_targets(slug: str) -> List[str]:
         :func:`_artifact_owning_reference_index`) -- course-pipeline.json
         already carries this mapping; it is read here, never duplicated.
     (b) course-pipeline.json's ``human_verified_pairs`` map:
-        ``{slug: [field, ...]}``. Every field it names is cleared to ``""``
-        the same as an AI-review field; a non-text (e.g. checkbox) pair would
-        need this function extended if one is ever added, which it is not
-        today.
+        ``{slug: [field, ...]}``. Every field it names is cleared the same
+        way as an AI-review field, in the same PATCH as the content change;
+        :func:`_cleared_gate_value` picks ``False`` for a ``… Human
+        Verified`` checkbox and ``""`` for a long-text field. A live Human
+        Verified stamp is never read-only: it is un-stamped by the write
+        that changes the content it vouched for, so the next review re-earns
+        it (course-pipeline/SKILL.md rule 4a).
 
     Both sources can name a field that lives on a DIFFERENT table than
     ``slug``'s own content -- e.g. ``module-slide-build-review``'s
@@ -400,137 +403,6 @@ def _cleared_gate_value(field: str) -> Any:
     Writing ``""`` into a checkbox is not a valid clear.
     """
     return False if field.endswith("Human Verified") else ""
-
-
-def _human_verified_gates(table: str, slug: str) -> List[str]:
-    """Airtable ``… Human Verified`` fields whose live stamp makes ``slug`` read-only.
-
-    Two data sources, both already owned by course-pipeline.json and read
-    fresh from the cached router -- neither is duplicated here:
-
-    (a) ``human_verified_pairs[slug]`` (the same map
-        :func:`_paired_review_targets` reads).
-    (b) ``artifact_lifecycle.instances[*].readiness_gates`` entries of kind
-        ``field_truthy`` that name this slug -- today
-        ``course.outline_draft``'s ``Outline Draft Human Verified``. A gate
-        with no ``slug`` (``PowerPoint Deck Human Verified``) is a
-        cross-record composite gate and is deliberately excluded, same V1
-        scope boundary :func:`_paired_review_targets` documents.
-
-    Only fields ending in ``Human Verified`` are returned: those record
-    Adam's approval, given directly or delegated. Machine-owned completion
-    gates (``Module Plan Complete``, ``Module Review Complete``) are not
-    approval stamps and keep the ordinary clear-on-change behaviour. Same-table filtered against
-    ``FIELD_MAPPINGS`` for the reason :func:`_paired_review_targets`
-    documents: a cross-table field is never a valid write on this record's
-    own PATCH.
-    """
-    router = _pipeline_router()
-    slug_table = _RESOURCE_TABLE.get(coverage_map().get(slug, {}).get("table"))
-    if slug_table != table:
-        return []
-    same_table_fields = frozenset(FIELD_MAPPINGS.get(table, {}).values())
-
-    fields: List[str] = []
-
-    def _add(field: Any) -> None:
-        if (
-            isinstance(field, str)
-            and field.endswith("Human Verified")
-            and field in same_table_fields
-            and field not in fields
-        ):
-            fields.append(field)
-
-    for field in router.get("human_verified_pairs", {}).get(slug, []):
-        _add(field)
-
-    lifecycle = router.get("artifact_lifecycle")
-    if not isinstance(lifecycle, dict):
-        raise VersioningError("course-pipeline.json has no artifact_lifecycle object.")
-    instances = lifecycle.get("instances")
-    if not isinstance(instances, dict):
-        raise VersioningError(
-            "course-pipeline.json artifact_lifecycle has no instances object."
-        )
-    for instance in instances.values():
-        if not isinstance(instance, dict) or instance.get("table") != table:
-            continue
-        for gate in instance.get("readiness_gates", []) or []:
-            if isinstance(gate, dict) and gate.get("slug") == slug:
-                _add(gate.get("field"))
-    return fields
-
-
-def _reopen_command(table: str, field: str) -> str:
-    """The exact command that reopens one human-verified artifact.
-
-    Derived from ``_RESOURCE_TABLE`` and ``FIELD_MAPPINGS`` -- the CLI option
-    name for an Airtable field is already modelled there (Slides'
-    ``Script Human Verified`` is ``--script-human-verified``; Demos'
-    identically-named field is ``--script-review-human``), so the reopen
-    instruction is read from the same mapping the write itself uses rather
-    than guessed or hardcoded per table.
-    """
-    group = next((key for key, name in _RESOURCE_TABLE.items() if name == table), None)
-    options = sorted(
-        f"--no-{cli_field.replace('_', '-')}"
-        for cli_field, airtable_field in FIELD_MAPPINGS.get(table, {}).items()
-        if airtable_field == field
-    )
-    if group is None or not options:
-        raise VersioningError(
-            f"{table}.{field!r} is a human-verified gate with no CLI option in "
-            "FIELD_MAPPINGS; add one before writing tracked content."
-        )
-    return f"coursecraft {group} update <record-id> {options[0]}"
-
-
-def _require_human_verified_reopen(
-    table: str, changed_slugs: List[str], current_fields: Dict[str, Any]
-) -> None:
-    """Refuse a content write to an artifact whose human-verified stamp is set.
-
-    A live ``... Human Verified`` stamp makes the artifact read-only. Before
-    this guard, a content write to a stamped artifact fell straight through to
-    the ordinary clear-on-change consequence engine --
-    :func:`_readiness_gate_invalidations` and :func:`plan_record_update`'s
-    ``_paired_review_targets`` loop -- which silently un-stamped the record and
-    let the mutation land. The write is REFUSED instead: one path, no
-    warn-and-continue, no bypass by bundling the reopen flag into the same call
-    (the check reads the PERSISTED value, so reopening has to be its own
-    committed write).
-
-    The refusal sequences the work; it is not a wait-on-Adam gate. The caller
-    reopens the stamp itself with the named ``--no-<field>`` flag (allowed
-    under autonomous mode or Adam's explicit in-chat approval -- see
-    ``course-pipeline/references/field-assignment.md``, Reviews), then re-runs
-    the content write.
-
-    ``changed_slugs`` is every slug this write actually changes PLUS the
-    same-record dependents it makes stale: a dependency change bumps a
-    dependent's version and clears its paired stamp, which is exactly the
-    silent mutation of a human-verified artifact this guard exists to stop.
-    """
-    blocked: List[str] = []
-    for slug in changed_slugs:
-        for field in _human_verified_gates(table, slug):
-            if checkbox_is_true(current_fields.get(field)):
-                blocked.append(
-                    f"{slug} (stamped by {field!r}; reopen with: "
-                    f"{_reopen_command(table, field)})"
-                )
-    if not blocked:
-        return
-    raise VersioningError(
-        f"{table}: refusing this write. It would change human-verified content, "
-        "and a live stamp makes the artifact read-only: "
-        + "; ".join(blocked)
-        + ". Run the reopen command above as its own write first (autonomous "
-        "mode or Adam's explicit approval required -- see "
-        "course-pipeline/references/field-assignment.md, Reviews), then re-run "
-        "this write."
-    )
 
 
 def check_write_conflict(
@@ -1046,13 +918,6 @@ def plan_record_update(
 
     planned = dict(proposed_fields)
     dependent_slugs = _same_record_dependents(table, changed_slugs)
-
-    # A live human-verified stamp is read-only. Refuse before anything is
-    # planned -- including before the rebuilt-from-dependencies blanking loop
-    # below.
-    _require_human_verified_reopen(
-        table, changed_slugs + dependent_slugs, current_fields
-    )
 
     for slug in dependent_slugs:
         if not _rebuilt_from_dependencies(slug):

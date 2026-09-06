@@ -544,6 +544,41 @@ class CourseCraftClient:
         planning_fields["Template Name"] = [template_name]
         return planning_fields
 
+    @staticmethod
+    def _remind_cleared_human_verified(
+        table: str,
+        record_id: str,
+        proposed_fields: Dict[str, Any],
+        current_fields: Dict[str, Any],
+        planned_fields: Dict[str, Any],
+    ) -> None:
+        """Report every live ``… Human Verified`` stamp this write un-stamps.
+
+        The versioning engine clears a paired Human Verified checkbox in the
+        same PATCH as the content change it vouched for. A live stamp is never
+        read-only and never blocks a required fix -- the only terminal states
+        are a recorded demo and a Pluralsight-approved slide deck
+        (course-pipeline/SKILL.md rule 4a) -- so the clear is a reminder, not
+        a refusal. A stamp the caller cleared itself (``--no-<field>``) is a
+        deliberate write and gets no reminder.
+        """
+        for field, value in planned_fields.items():
+            if (
+                field.endswith("Human Verified")
+                and value is False
+                and field not in proposed_fields
+                and checkbox_is_true(current_fields.get(field))
+            ):
+                warn_policy(
+                    "human-verified.cleared",
+                    f"{table} {record_id}: this write changes content that "
+                    f"{field!r} vouched for, so the stamp is cleared to False in "
+                    "the same write. A Human Verified stamp is never read-only; "
+                    "the next review re-earns it. Only a recorded demo or a "
+                    "Pluralsight-approved slide deck is done "
+                    "(course-pipeline/SKILL.md rule 4a).",
+                )
+
     def _extract_record_id(self, response: Dict) -> str:
         """
         Extract record ID from airtable CLI response.
@@ -1622,6 +1657,9 @@ class CourseCraftClient:
             fields,
             current_fields,
             self._field_storage_metadata(table),
+        )
+        self._remind_cleared_human_verified(
+            table, record_id, fields, current_fields, planned_fields
         )
 
         args = ["records", "update", table, record_id, "--base", self.base_id, "--typecast"]
