@@ -165,6 +165,7 @@ def _photo_result(
     detector_name: str,
     crop_root: str | Path,
     crop_writer: CropWriter,
+    seen_photo_hashes: dict[str, str],
 ) -> dict[str, Any]:
     base = {
         "photo_relative_id": photo_relative_id,
@@ -180,6 +181,11 @@ def _photo_result(
         return base
     try:
         photo_sha256 = _photo_sha256(path)
+        duplicate_of = seen_photo_hashes.get(photo_sha256)
+        if duplicate_of is not None:
+            base.update(source_photo_sha256=photo_sha256,
+                        reason="duplicate photo content of " + duplicate_of)
+            return base
         detections = raw.get("detections")
         if not isinstance(detections, list):
             raise DetectionBatchError("photo detections must be an array")
@@ -203,6 +209,7 @@ def _photo_result(
     except Exception as exc:
         base["reason"] = f"crop persistence failed: {type(exc).__name__}: {exc}"
         return base
+    seen_photo_hashes[photo_sha256] = photo_relative_id
     base.update({
         "source_photo_sha256": photo_sha256,
         "status": "success",
@@ -272,31 +279,15 @@ def detect_batch(
                 raise DetectionBatchError(
                     "detector result path/order does not match input")
             photo_relative_id = f"photo-{index:04d}"
-            photo_sha256 = None
-            duplicate_of = None
-            if raw.get("status") == "success":
-                photo_sha256 = _photo_sha256(path)
-                duplicate_of = seen_photo_hashes.get(photo_sha256)
-                if duplicate_of is None:
-                    seen_photo_hashes[photo_sha256] = photo_relative_id
             photo_items.append({
                 "listing_key": listing["listing_key"],
                 "path": path,
                 "raw": raw,
                 "photo_relative_id": photo_relative_id,
-                "photo_sha256": photo_sha256,
-                "duplicate_of": duplicate_of,
+                "seen_photo_hashes": seen_photo_hashes,
             })
 
     def persist_photo(item: dict[str, Any]) -> dict[str, Any]:
-        if item["duplicate_of"] is not None:
-            return {
-                "photo_relative_id": item["photo_relative_id"],
-                "source_photo_sha256": item["photo_sha256"],
-                "status": "skipped",
-                "reason": "duplicate photo content of " + item["duplicate_of"],
-                "detections": [],
-            }
         return _photo_result(
             item["path"],
             item["raw"],
@@ -304,6 +295,7 @@ def detect_batch(
             detector_name=detector_name,
             crop_root=crop_root,
             crop_writer=crop_writer,
+            seen_photo_hashes=item["seen_photo_hashes"],
         )
 
     persisted_photos = run_batch_stage(
@@ -341,7 +333,7 @@ def detect_batch(
     }
 
 
-def atomic_write_json(path: str | Path, payload: object) -> None:
+def atomic_write_json(path: str | Path, payload: object, *, exclusive: bool = False) -> None:
     """Write JSON through a sibling temporary file, preserving old output."""
     output_path = Path(path)
     try:
@@ -357,7 +349,11 @@ def atomic_write_json(path: str | Path, payload: object) -> None:
                 stream.write(encoded)
                 stream.flush()
                 os.fsync(stream.fileno())
-            os.replace(temp_name, output_path)
+            if exclusive:
+                os.link(temp_name, output_path)
+                Path(temp_name).unlink()
+            else:
+                os.replace(temp_name, output_path)
         except Exception:
             Path(temp_name).unlink(missing_ok=True)
             raise
@@ -1579,6 +1575,12 @@ def _result_from_prepared(prepared: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _validate_price_workers(workers: int) -> None:
+    if type(workers) is not int or not 1 <= workers <= PRICE_MAX_WORKERS:
+        raise IdentificationArtifactError(
+            f"workers must be an integer in 1..{PRICE_MAX_WORKERS}")
+
+
 def price_batch(
     identification_artifact: dict[str, Any],
     *,
@@ -1588,9 +1590,7 @@ def price_batch(
     clock: Callable[[], float] = time.monotonic,
     executor_factory: Callable[..., Any] = ThreadPoolExecutor,
 ) -> dict[str, Any]:
-    if type(workers) is not int or not 1 <= workers <= PRICE_MAX_WORKERS:
-        raise IdentificationArtifactError(
-            f"workers must be an integer in 1..{PRICE_MAX_WORKERS}")
+    _validate_price_workers(workers)
     artifact = _validate_price_artifact(identification_artifact)
     prepared = [_prepared_listing(listing) for listing in artifact["listings"]]
     targets = [entry for listing in prepared if not listing["blocked"]
@@ -1662,7 +1662,26 @@ def price_file(
     if source == destination:
         raise IdentificationArtifactError(
             "input and output must be different paths")
-    artifact = load_price_input(input_path)
+    _validate_price_workers(workers)
+    from . import minifig_receipt
+    raw = source.read_bytes()
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise IdentificationArtifactError(
+            f"invalid JSON in {source}: {exc.msg} at line {exc.lineno} "
+            f"column {exc.colno}") from exc
+    artifact = _validate_price_artifact(payload)
+    if not artifact["listings"]:
+        raise minifig_receipt.AuditError(
+            "review input must have non-empty listing coverage")
+    if destination.exists() or (source.parent / "identifier.complete.json").exists():
+        raise minifig_receipt.AuditError("publication is one-shot; use fresh scratch and output")
+    artifact, evidence = minifig_receipt.consume_review(
+        source, source.parent / "identifier-run.json", source.parent / "checker-result.json", raw=raw)
+    launch = json.loads((source.parent / "identifier.launch.json").read_bytes())
+    if launch["output_path"] != str(destination):
+        raise minifig_receipt.AuditError("price output does not match launch output")
     report = price_batch(
         artifact,
         workers=workers,
@@ -1671,5 +1690,6 @@ def price_file(
         clock=clock,
         executor_factory=executor_factory,
     )
-    atomic_write_json(output_path, report["results"])
+    minifig_receipt.attach_receipts(report["results"], evidence)
+    atomic_write_json(output_path, report["results"], exclusive=True)
     return report["summary"]

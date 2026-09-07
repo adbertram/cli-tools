@@ -174,8 +174,8 @@ def test_push_crops_refuses_when_destination_holds_symlinks(
     def fake_run_local(argv: list[str], input: str | None = None) -> str:
         calls.append(argv)
         if "--dry-run" in argv:
-            # Every dry-run still shows the file as new: the simulated remote
-            # has a symlink named evil.jpg that --ignore-existing skips.
+            if "--existing" in argv:
+                return "cL+++++++|aa/evil.jpg\n"
             return ">f+++++++++|aa/evil.jpg\n"
         return ""
 
@@ -183,8 +183,9 @@ def test_push_crops_refuses_when_destination_holds_symlinks(
 
     with pytest.raises(ValueError, match="aa/evil\\.jpg"):
         db_sync._push_crops()
-    # mkdir leg (ssh via run_local), preflight, transfer, verification
-    assert len(calls) == 4
+    # mkdir, forward preflight, reverse metadata inspection; no transfer.
+    assert len(calls) == 3
+    assert all("--dry-run" in argv for argv in calls if argv[0] == "rsync")
     assert all(
         not any(arg.startswith("--delete") for arg in argv) for argv in calls
     )
@@ -216,29 +217,15 @@ def test_push_crops_still_reports_transferred_when_verification_clean(
     monkeypatch.setattr(db_sync.ssh, "run_local", fake_run_local)
 
     report: dict[str, Any] = db_sync._push_crops()
-    # mkdir leg (ssh via run_local), preflight, transfer, verification
-    assert len(calls) == 4
+    # mkdir, forward preflight, reverse metadata inspection, transfer, verification.
+    assert len(calls) == 5
     assert report == {"transferred": True, "collisions": []}
 
 
 # --- defect 6: failed code deploy must still report the sync outcomes --------
 
 
-def _sample_sync() -> dict[str, Any]:
-    return {
-        "ok": True,
-        "db": {"ok": True, "result": {"copied": True}},
-        "crops": {
-            "ok": True,
-            "result": {"transferred": True, "collisions": []},
-        },
-        "retention": {"ok": True, "result": {"scanned": 1, "referenced": 1, "deleted": []}},
-    }
-
-
-def test_failed_code_deploy_reports_sync_outcomes_structured(monkeypatch):
-    monkeypatch.setattr(db_sync, "push", _sample_sync)
-
+def test_failed_code_deploy_reports_structured_failure(monkeypatch):
     def failing_deploy():
         raise release.DeployError("pm2 restart failed")
 
@@ -253,6 +240,5 @@ def test_failed_code_deploy_reports_sync_outcomes_structured(monkeypatch):
     payload = printed[-1]
     assert payload["ok"] is False
     assert payload["code_deployed"] is False
-    # The already-successful legs stay visible in structured output.
-    assert payload["sync"]["db"]["ok"] is True
-    assert payload["sync"]["crops"]["ok"] is True
+    assert "sync" not in payload
+    assert "pm2 restart failed" in payload["error"]

@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 """The one reader of the LEGO Scout source registry.
 
-`source_capabilities.py`, `hypothesis_types.py` and `fees.py` were the same
-file three times: each defined HERE/CONFIG, a `table()`, a key normaliser, an
-`entry()` that raises "research it, do not default it", and an argparse
-`main()`. Only the config path and the noun differed. This is that file once.
+Source capabilities, fees, aliases, and learning notes share this access layer.
 
     legoscout sources                        # every source, one line each
     legoscout sources ebay                    # one source, no notes
@@ -46,10 +43,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # The ledger owns the database file, the WAL mode and the connect contract, so
-# the registry borrows all three rather than opening the file a second way. An
-# absolute literal, the same bridge prospects_db.py uses to reach the
-# prospector: these two skills sit in fixed places and a relative walk up the
-# tree breaks the moment either one is invoked through a symlink.
+# the registry borrows all three rather than opening the file a second way.
 
 from ..ledger import db as ledger_db  # noqa: E402
 
@@ -76,7 +70,7 @@ CREATE TABLE IF NOT EXISTS source_registry_meta (
 
 # Every object _SCHEMA creates. sqlite_master is read before the script runs, so
 # a database already at the current shape takes no write lock -- the same
-# idempotent-connect pattern sellers_db.py and prospects_db.py use.
+# idempotent-connect pattern sellers_db.py uses.
 _SCHEMA_OBJECTS: tuple[str, ...] = (
     "sources", "source_notes", "idx_source_notes_namespace",
     "source_registry_meta",
@@ -200,6 +194,16 @@ def _resolve(entries: dict, text) -> str:
                        "-- %s" % (raw, _HINT))
 
 
+class _RegistrySnapshot:
+    """One request's source table, resolved with the live registry rules."""
+
+    def __init__(self, entries):
+        self.entries = entries
+
+    def entry(self, text):
+        return self.entries[_resolve(self.entries, text)]
+
+
 class Registry:
     """The source registry, read through one code path.
 
@@ -233,9 +237,12 @@ class Registry:
     def key(self, text):
         return _resolve(self.table(), text)
 
+    def snapshot(self):
+        """Read once for a batch; a new call always sees current source data."""
+        return _RegistrySnapshot(self.table())
+
     def entry(self, text):
-        entries = self.table()
-        return entries[_resolve(entries, text)]
+        return self.snapshot().entry(text)
 
     def append_note(self, text, note, date):
         """Add a dated note to one source, inside one transaction.

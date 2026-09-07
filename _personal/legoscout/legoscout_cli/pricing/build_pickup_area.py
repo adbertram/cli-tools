@@ -26,7 +26,7 @@ the pickup gate.
 Run only when the radius or the origin changes:
 
     legoscout pricing rebuild-pickup-area --radius-miles 30
-    legoscout pricing rebuild-pickup-area --radius-miles 60 --out /path/to/prospect_area.json
+    legoscout pricing rebuild-pickup-area --radius-miles 60 --out /path/to/pickup_area.json
 
 The output is committed alongside this script so the runtime path
 (pickup_area.py) never touches the network.

@@ -224,6 +224,8 @@ def test_public_minifig_pipeline_pairs_builds_persists_and_displays(
         group["condition_notes"] = None
     verified_path.write_text(json.dumps(verified), encoding="utf-8")
 
+    from minifig_review_fixtures import prepare_review_files
+    prepare_review_files(verified_path.parent, verified, final_path)
     _set_kwdefault(monkeypatch, identification.price_file, "pricer", _pricer)
     priced = runner.invoke(app, [
         "minifig", "price",

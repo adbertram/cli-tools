@@ -38,7 +38,6 @@ from urllib.parse import unquote, urlparse
 HERE = os.path.dirname(os.path.abspath(__file__))
 from . import rows
 from ..ledger import db as ledger_db
-from ..ledger import prospects as prospects_db
 from ..scoring import rescore as rescore_ledger
 from ..ledger import sellers as sellers_db
 from ..paths import MINIFIG_CROP_ROOT
@@ -136,41 +135,6 @@ def set_favorite(source, seller_id, is_favorite, path):
     return True, "ok"
 
 
-# Prospect statuses the page may set. `dead` stays agent-side -- it is the
-# world's verdict (a closed business, a past event), recorded by
-# expire_events(), not a button Adam clicks.
-PROSPECT_SETTABLE_STATUS = ("active", "rejected")
-
-
-def set_prospect_status(prospect_id, status, path):
-    """Adam's reject/restore click on a prospect row. Same serialisation as
-    /status: two fast clicks must not interleave."""
-    if not isinstance(prospect_id, int) or isinstance(prospect_id, bool):
-        return False, "prospect_id must be an integer"
-    if status not in PROSPECT_SETTABLE_STATUS:
-        return False, "status %r not allowed" % status
-    with _write_lock:
-        if prospects_db.get_prospect(prospect_id, path=path) is None:
-            return False, "prospect not found"
-        prospects_db.update_prospect_status(prospect_id, status, path=path)
-    return True, "ok"
-
-
-def set_prospect_favorite(prospect_id, is_favorite, path):
-    """The ★ on a prospect row. Flips the flag only -- unlike a seller star,
-    no score changes, so no rescore follows."""
-    if not isinstance(prospect_id, int) or isinstance(prospect_id, bool):
-        return False, "prospect_id must be an integer"
-    if not isinstance(is_favorite, bool):
-        return False, "is_favorite must be a boolean"
-    with _write_lock:
-        try:
-            prospects_db.set_favorite(prospect_id, is_favorite, path=path)
-        except prospects_db.ProspectError as exc:
-            return False, str(exc)
-    return True, "ok"
-
-
 PAGE = r"""<!doctype html><html><head><meta charset="utf-8">
 <title>LEGO Scout — Deals</title>
 <style>
@@ -260,7 +224,6 @@ a.bl{margin-right:6px;color:var(--accent);text-decoration:none}
 </style></head><body>
 <header>
   <h1>LEGO Scout — Deals</h1>
-  <span id="viewtabs"></span>
   <button id="refresh">↻ Refresh</button>
   <span class="meta" id="stamp"></span>
   <label class="meta"><input type="checkbox" id="showall"> include rejected</label>
@@ -294,10 +257,6 @@ const MAXBID_PROFIT_TIP="If you were to win this item at your Max Bid, this is w
 
 let DATA=[], filter="active", catFilter="all", sortCol="score", sortAsc=false,
     showAll=false, firmOnly=false, flaggedOnly=false, minProfitOnly=true, minPriceOnly=true;
-// The Prospects view is a whole different object, so it is a top-level view
-// toggle rather than another status chip: its own columns, its own render,
-// and its own two write routes (/prospect_status, /prospect_favorite).
-let VIEW="deals", PDATA=[];
 const EXPANDED=new Set();
 // Typed target-$/lb values, kept outside DATA/render so a keystroke survives
 // the next render() -- search, sort, and filter clicks all replace tbody's
@@ -315,14 +274,6 @@ const COLS=[{k:"score",l:"Score",s:1},{k:"title",l:"Title",w:"width:99%"},{k:"ca
   {k:"perLb",l:"$ / lb",s:1},{k:"profit",l:"Profit",s:1},
   {k:"maxPrice",l:"Max bid",s:1},{k:"quality",l:"Qual",s:1},{k:"modelScore",l:"Model",s:1},
   {k:"ends",l:"Ends"},{k:"tlb",l:"Target $"},{k:"act",l:""}];
-
-// Name carries the same width:99% hint the deals Title column uses. td.tc is
-// max-width:0 so its ellipsis works, which collapses an unhinted column to
-// nothing -- without this the prospect name renders as "Platinu…".
-const PCOLS=[{k:"name",l:"Name",w:"width:99%"},{k:"hypothesis_type",l:"Type"},{k:"status",l:"Status"},
-  {k:"available_fulfillment",l:"Fulfillment"},{k:"distance_miles",l:"Miles"},{k:"event_date",l:"Event"},
-  {k:"location",l:"Location"},{k:"contact_count",l:"Contacts"},{k:"latest_outreach_state",l:"Outreach"},
-  {k:"created_at",l:"Added"},{k:"act",l:""}];
 
 // $1-10 red, $10-20 yellow, $20+ green. Below $1 (incl. negative) reads as the
 // same red as the rest of the "not worth it" band -- there is no separate,
@@ -622,78 +573,6 @@ function render(){const d=rows();
     '<button class="ftab '+(v===filter?"on":"")+'" onclick="setFilter(\''+v+'\')">'+v.replace("_"," ")+'</button>').join("");
 }
 
-// Static chrome, not data: the two tabs exist whatever the ledger says, so this
-// runs at load and on a view switch and never from a data render. Hanging it
-// off render() made the Prospects view unreachable the moment /rows.json
-// failed -- refresh() threw before render() ran, which is exactly the moment
-// Adam would want the other view.
-function renderViewTabs(){
-  document.getElementById("viewtabs").innerHTML=[["deals","Deals"],["prospects","Prospects"]].map(v=>
-    '<button class="ftab '+(v[0]===VIEW?"on":"")+'" onclick="setView(\''+v[0]+'\')">'+v[1]+'</button>').join("");
-}
-
-// Deals-only chrome: the metric tiles, the filter/search row, and the header
-// checkboxes all describe listings, so none of them mean anything against a
-// prospect row.
-function setView(v){VIEW=v;
-  renderViewTabs();
-  const d=(v==="deals")?"":"none";
-  document.getElementById("metrics").style.display=d;
-  document.querySelector(".controls").style.display=d;
-  document.querySelectorAll("header label.meta").forEach(el=>{el.style.display=d;});
-  refresh();}
-
-// A null renders — here, in the browser. The JSON keeps the null, so a missing
-// outreach state stays distinguishable from a stored empty string.
-function renderProspects(){
-  document.getElementById("thead").innerHTML=PCOLS.map(c=>'<th style="'+(c.w||"")+'">'+c.l+'</th>').join("");
-  document.getElementById("tbody").innerHTML=PDATA.map(r=>{
-    const star='<span class="star'+(r.is_favorite?" on":"")+'" title="'
-      +(r.is_favorite?"Favorited — click to remove":"Favorite this prospect")
-      +'" onclick="toggleProspectFavorite('+r.prospect_id+','+(r.is_favorite?"false":"true")+')">'
-      +(r.is_favorite?"★":"☆")+'</span> ';
-    const cells=PCOLS.map(c=>{
-      if(c.k==="act"){
-        // Same slot discipline as the deals table: rejected shows its label and
-        // a Restore path back; everything else gets a Reject button.
-        return r.status==="rejected"
-          ?'<td><button class="b-inq" onclick="markProspect('+r.prospect_id+',\'active\')">Restore</button></td>'
-          :'<td><button class="b-rej" onclick="markProspect('+r.prospect_id+',\'rejected\')">Reject</button></td>';
-      }
-      const v=r[c.k];
-      if(c.k==="name")return '<td class="tc">'+star+'<a href="'+esc(r.citation_url)+'" target="_blank" rel="noopener noreferrer">'+esc(v)+'</a></td>';
-      if(v===null||v===undefined||v==="")return '<td class="dim">—</td>';
-      if(c.k==="distance_miles")return '<td class="num">'+Number(v).toFixed(1)+'</td>';
-      if(c.k==="contact_count")return '<td class="num">'+esc(v)+'</td>';
-      if(c.k==="available_fulfillment"){
-        const opts=JSON.parse(v);
-        const label=opts.includes("local_pickup")&&opts.includes("shipping")?"ship/pickup"
-          :opts.includes("local_pickup")?"pickup":"ship";
-        return '<td>'+label+'</td>';
-      }
-      return '<td'+(c.k==="created_at"?' class="dim"':"")+'>'+esc(v)+'</td>';}).join("");
-    return '<tr data-pid="'+r.prospect_id+'" class="'+(r.is_favorite?"is-fav":"")+'">'+cells+'</tr>';}).join("");
-}
-async function markProspect(prospectId,status){
-  try{const res=await fetch("/prospect_status",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({prospect_id:prospectId,status:status})});
-    const j=await res.json();
-    if(!j.ok){toast("Failed: "+j.error);return;}
-    const r=PDATA.find(x=>x.prospect_id===prospectId);if(r)r.status=status;
-    renderProspects();toast((status==="rejected"?"Rejected":"Restored")+" prospect #"+prospectId);
-  }catch(e){toast("Failed: "+e.message);}
-}
-// A prospect favorite changes no score -- a local patch is enough; no refresh.
-async function toggleProspectFavorite(prospectId,next){
-  try{const res=await fetch("/prospect_favorite",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({prospect_id:prospectId,is_favorite:next})});
-    const j=await res.json();
-    if(!j.ok){toast("Failed: "+j.error);return;}
-    const r=PDATA.find(x=>x.prospect_id===prospectId);if(r)r.is_favorite=next;
-    renderProspects();
-    toast((next?"Favorited":"Unfavorited")+" prospect #"+prospectId);
-  }catch(e){toast("Failed: "+e.message);}
-}
 function toggle(k){if(EXPANDED.has(k))EXPANDED.delete(k);else EXPANDED.add(k);render();}
 function setFilter(v){filter=v;render();}
 function setCat(v){catFilter=v;render();}
@@ -747,17 +626,10 @@ async function rejectAll(){
 }
 async function refresh(){const b=document.getElementById("refresh");b.disabled=true;b.textContent="↻ Refreshing…";
   try{
-    if(VIEW==="prospects"){
-      const res=await fetch("/prospects.json",{cache:"no-store"});
-      const j=await res.json();if(j.error)throw new Error(j.error);PDATA=j.prospects;
-      document.getElementById("stamp").textContent="prospects read "+j.read_at+" · "+PDATA.length+" prospects";
-      renderProspects();toast("Reloaded the prospects");
-    }else{
       const res=await fetch("/rows.json?all="+(showAll?"1":"0"),{cache:"no-store"});
       const j=await res.json();if(j.error)throw new Error(j.error);DATA=j.rows;
       document.getElementById("stamp").textContent="ledger read "+j.read_at+" · "+j.deal_count+" deals";
       render();toast("Reloaded from the ledger");
-    }
   }catch(e){toast("Refresh failed: "+e.message);}
   b.disabled=false;b.textContent="↻ Refresh";}
 
@@ -765,8 +637,6 @@ async function refresh(){const b=document.getElementById("refresh");b.disabled=t
 // which one was just clicked. Class swap in place -- a re-render would reset
 // scroll position for no reason.
 document.getElementById("tbody").addEventListener("click",e=>{
-  // Prospect rows carry no listing_key, so "where I was" is a deals-only idea.
-  if(VIEW!=="deals")return;
   const a=e.target.closest("td.tc a");if(!a)return;
   const tr=a.closest("tr");if(!tr)return;
   LASTOPENED=tr.dataset.k;localStorage.setItem("ls_last_opened",LASTOPENED);
@@ -783,7 +653,6 @@ document.getElementById("minprofit").onchange=e=>{minProfitOnly=e.target.checked
 document.getElementById("minprice").onchange=e=>{minPriceOnly=e.target.checked;render();};
 // Tabs first, and unconditionally: a failed first fetch must not be able to
 // strand Adam in the deals view.
-renderViewTabs();
 refresh();
 </script></body></html>"""
 
@@ -807,7 +676,7 @@ class Handler(BaseHTTPRequestHandler):
         """The Host header has to name this server.
 
         A page on any domain can point that domain's A record at this
-        server's bind address and then read /prospects.json from its own
+        server's bind address and then read /rows.json from its own
         origin -- DNS rebinding. The browser sends the attacker's hostname in
         Host, so comparing it is the whole defence, and it costs one dict
         lookup.
@@ -926,27 +795,13 @@ class Handler(BaseHTTPRequestHandler):
                     "read_at": datetime.now().strftime("%H:%M:%S")}))
             except Exception as exc:
                 return self._fail(exc)
-        if path == "/prospects.json":
-            try:
-                rows = prospects_db.list_prospects(path=DB_OVERRIDE)
-                return self._send(200, json.dumps({
-                    "prospects": rows,
-                    "read_at": datetime.now().strftime("%H:%M:%S")}))
-            except Exception as exc:
-                return self._fail(exc)
         return self._send(404, json.dumps({"error": "not found"}))
 
     def do_POST(self):
         if not self._host_ok():
             return self._send(403, json.dumps({"ok": False,
                                                "error": "host not allowed"}))
-        # /status and /favorite write deals; /prospect_status and
-        # /prospect_favorite are Adam's Reject/Restore and ★ on a prospect
-        # row. POST /prospects.json is still a 404 -- the prospect READ stays
-        # exactly where it was, and these four named routes are the whole
-        # write surface.
-        if self.path not in ("/status", "/favorite",
-                             "/prospect_status", "/prospect_favorite"):
+        if self.path not in ("/status", "/favorite"):
             return self._send(404, json.dumps({"error": "not found"}))
         if not self._origin_ok():
             return self._send(403, json.dumps({"ok": False,
@@ -980,13 +835,6 @@ class Handler(BaseHTTPRequestHandler):
             elif self.path == "/favorite":
                 ok, msg = set_favorite(payload.get("source"), payload.get("seller_id"),
                                        payload.get("is_favorite"), DB_OVERRIDE)
-            elif self.path == "/prospect_status":
-                ok, msg = set_prospect_status(payload.get("prospect_id"),
-                                              payload.get("status"), DB_OVERRIDE)
-            else:
-                ok, msg = set_prospect_favorite(payload.get("prospect_id"),
-                                                payload.get("is_favorite"),
-                                                DB_OVERRIDE)
         except Exception as exc:
             return self._fail(exc)
         return self._send(200 if ok else 400,

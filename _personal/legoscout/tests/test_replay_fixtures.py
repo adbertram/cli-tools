@@ -1,47 +1,46 @@
-"""Replays real Phase-4 source-run fixtures through `build_deal_record`/`validate.check`.
+"""Replay captured source evidence through record assembly and validation.
 
-These fixtures live under `agent_workspaces/source-runs/<timestamp>/`, which
-AGENTS.md marks "Per-run source worker artifacts. Disposable." When a fixture's
-run directory has been cleaned up, the affected test is skipped with the exact
-restore instructions rather than failing or fabricating data -- restore the run
-(Dropbox version history, an adam-server release, or a fresh crawl) and it runs
-again automatically. This module replaces `legoscout_cli/orchestrator/replay_fixtures.py`
-and the `legoscout deals replay` leaf: the four cases below are the same
-assertions, run directly as pytest tests instead of a print-and-exit-code driver.
+Required fixtures are versioned beside this test. Their manifest records the
+original capture, transformations, and hashes; missing or changed evidence fails.
 """
 from __future__ import annotations
 
 import json
-import os
+import hashlib
+from pathlib import Path
 
 import pytest
 
-from legoscout_cli import paths
 from legoscout_cli.ledger import build_record as bdr
 from legoscout_cli.ledger import shipping as shipping_estimate
 from legoscout_cli.ledger import validate as vdr
 from legoscout_cli.pricing import pickup_area
 
-FIXTURES = paths.SOURCE_RUNS
+FIXTURES = Path(__file__).parent / "fixtures" / "source_replay"
 FIRST_SEEN = "2026-08-04T12:00:00+00:00"
 LAST_SEEN = "2026-08-04T12:00:00+00:00"
 
-SHOPGOODWILL_FIXTURE = "2026-08-03T15-23-22/ShopGoodwill.json"
-EBAY_FIXTURE = "2026-08-03T15-23-22/eBay.json"
-PROXIBID_FIXTURE = "20260802T143701Z/proxibid.json"
+SHOPGOODWILL_FIXTURE = "shopgoodwill.json"
+EBAY_FIXTURE = "ebay.json"
+PROXIBID_FIXTURE = "proxibid.json"
 
 
-def _require_fixture(rel):
-    path = os.path.join(FIXTURES, rel)
-    if not os.path.isfile(path):
-        pytest.skip(
-            "replay fixture missing at %s -- the disposable per-run "
-            "source-worker artifacts `test_replay_fixtures.py` depends on were "
-            "deleted; restore that run from Dropbox version history / "
-            "adam-server releases or re-crawl, then this test runs again"
-            % path)
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
+def _require_fixture(name):
+    manifest = json.loads((FIXTURES / "manifest.json").read_text())
+    assert manifest["schema_version"] == 1
+    evidence = manifest["fixtures"][name]
+    raw = (FIXTURES / name).read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == evidence["fixture_sha256"]
+    fixture = json.loads(raw)
+    assert fixture["source"] == evidence["source"]
+    assert len(fixture["candidate_records"]) == evidence["candidate_count"]
+    return fixture
+
+
+def test_required_fixture_absence_fails(tmp_path, monkeypatch):
+    monkeypatch.setitem(globals(), "FIXTURES", tmp_path)
+    with pytest.raises(FileNotFoundError):
+        _require_fixture(SHOPGOODWILL_FIXTURE)
 
 
 def _resolve_pickup_miles(location):

@@ -12,7 +12,9 @@ from typer.testing import CliRunner
 from legoscout_cli.ledger import minifig_analysis as mfa
 from legoscout_cli.main import app
 from legoscout_cli.pricing import minifig_identification as identification
+from legoscout_cli.pricing import minifig_receipt
 from legoscout_cli.pricing import minifig_sales
+from minifig_review_fixtures import prepare_review_files
 
 runner = CliRunner()
 
@@ -678,7 +680,7 @@ def test_should_emit_blocked_result_for_listing_without_groups():
     assert result["figure_count"] is None
 
 
-def test_should_write_empty_plain_array_and_loud_zero_price_summary(tmp_path):
+def test_should_reject_empty_publication_without_output(tmp_path):
     input_path = tmp_path / "input.json"
     output_path = tmp_path / "output.json"
     input_path.write_text(json.dumps(_artifact([])), encoding="utf-8")
@@ -689,17 +691,10 @@ def test_should_write_empty_plain_array_and_loud_zero_price_summary(tmp_path):
         "--output", str(output_path),
     ])
 
-    assert result.exit_code == 0, result.output
-    assert json.loads(output_path.read_text()) == []
-    summary = json.loads(result.stdout)
-    assert summary["listing_count"] == 0
-    assert summary["success_count"] == 0
-    assert summary["partial_count"] == 0
-    assert summary["blocked_count"] == 0
-    assert summary["entry_count"] == 0
-    assert summary["workers"] == 4
-    assert summary["wall_seconds"] == 0.0
-    assert summary["serial_equivalent_seconds"] == 0.0
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "non-empty listing coverage" in result.stderr
+    assert not output_path.exists()
 
 
 @pytest.mark.parametrize("payload, expected", [
@@ -744,15 +739,16 @@ def test_should_preserve_price_input_and_existing_output_on_failures(
     assert "different paths" in result.stderr
     assert same.read_text() == before
 
-    input_path = tmp_path / "input.json"
     output_path = tmp_path / "output.json"
-    input_path.write_text(json.dumps(_artifact([])), encoding="utf-8")
+    input_path = prepare_review_files(tmp_path, _artifact([
+        ("source|1", [], "skipped", "detector found no usable crops"),
+    ]), output_path)
     output_path.write_text('{"sentinel": true}\n', encoding="utf-8")
     monkeypatch.setattr(
-        identification.os,
-        "replace",
-        lambda source, destination: (_ for _ in ()).throw(
-            OSError("price promotion refused")),
+        minifig_receipt,
+        "consume_review",
+        lambda *args, **kwargs: pytest.fail(
+            "existing output must be rejected before review consumption"),
     )
     result = runner.invoke(app, [
         "minifig", "price",
@@ -760,7 +756,7 @@ def test_should_preserve_price_input_and_existing_output_on_failures(
         "--output", str(output_path),
     ])
     assert result.exit_code == 1
-    assert "price promotion refused" in result.stderr
+    assert "one-shot" in result.stderr
     assert output_path.read_text() == '{"sentinel": true}\n'
 
 

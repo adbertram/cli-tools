@@ -1,0 +1,170 @@
+{
+  "source": "eBay",
+  "candidate_records": [
+    {
+      "listing_key": "eBay_307104891223",
+      "url": "https://www.ebay.com/itm/307104891223?_skw=lego&epid=22052738127&itmmeta=01KZ4MVY7X0WCH0MGM8HN6M5TP&hash=item4780e0c157%3Ag%3ABcsAAeSwe41qbNg0&itmprp=enc%3AAQALAAAA4GfYFPkwiKCW4ZNSs2u11xBQs8MtUdRx5LpCfmHx1v1sbOeVocDrVEiewT5Zo8AcDp2Srx%2FtjmKPKkSmMkwYICnNj4N0Fnsnn8lQvbzVHmGx965xGuD%2FbffBNc01KfCIKbY%2F5qwzItMtlhZMVPidUYedSnW9W4LnU8CNPmQf6QPdAv9GrfN5JEL1Pj%2BtK2AuicO58LDt3bryjFhf4Rk%2B8yX6EuK9nP6CWHnLZKjuSeXidGMxrKfqlPyKsd6bfWLQ06bWFyDqdFajIdy5w82zcdcD1H8lNUVz%2FZjJoagvXnvZ%7Ctkp%3ABk9SR4Lm75T5Zw&LH_BIN=1",
+      "title": "LEGO Harry Potter: Hogwarts Hospital Wing (76398) - Retired",
+      "price_basis": "buy_now",
+      "shipping_cost": 15.0,
+      "image_urls": [
+        "https://i.ebayimg.com/images/g/BcsAAeSwe41qbNg0/s-l140.webp"
+      ],
+      "buy_now_price": 50.0
+    },
+    {
+      "listing_key": "eBay_358879753518",
+      "url": "https://www.ebay.com/itm/358879753518?_skw=lego&epid=16049845430&itmmeta=01KZ4MVY7X3NCAA2JPPXXFS4TV&hash=item538ee6752e%3Ag%3AAXIAAeSwtD9qcPe%7E&itmprp=enc%3AAQALAAAA4GfYFPkwiKCW4ZNSs2u11xC%2BDRcVGaZ%2B488beHU3Ifzs5j9%2Fv5a%2FHqc2W83ZrlICUoAEViqwxPvojZp%2BgSxXOD5Ok%2B0wZ6VRx7eXqwYrg1ebJODo3MnEVkuTWBcsKa3sdxidwGQoy%2BMOHAC5R0I8YRg0%2F4u1UHBMQu1R310v%2BIfnidvR8aAVbYzBOjN1v8zhDQqsg%2B1IXM5Bquobb4QyimGp6u6Ao9cw1F4Grj0vnJcQ5ckXjxdObzHBMARj8tnqWk2sZBKUyTEWjsjzHxAogf2iF3b2%2BSlBfhoal8wHQBW9%7Ctkp%3ABk9SR4Lm75T5Zw&LH_BIN=1",
+      "title": "LEGO 71741 NINJAGO City Gardens BRAND NEW SEALED",
+      "price_basis": "buy_now",
+      "shipping_cost": 14.85,
+      "image_urls": [
+        "https://i.ebayimg.com/images/g/AXIAAeSwtD9qcPe~/s-l140.webp"
+      ],
+      "buy_now_price": 420.0
+    },
+    {
+      "listing_key": "eBay_407117736072",
+      "url": "https://www.ebay.com/itm/407117736072?_skw=lego&itmmeta=01KZ4MVY7X0SF9GH85624HNBC1&hash=item5eca1ba888%3Ag%3A05wAAOSwNlVk2A7v&itmprp=enc%3AAQALAAAAwGfYFPkwiKCW4ZNSs2u11xDqO%2FccrTLWPto8sTjMpRQ36HZrdMSNAjGZE%2BSOoHStZxFPErD%2BLrg2G%2FonCWknl4Tz3hK7hmTNkRw1RJoOVnSlSFmnYYE0Dh3jWW3HG9KX7c7jIAQeQisTbXsBqYpOAIA6K0Gv0nJW1%2Fx6yTsT3JMPshNgD76XWyHvYH9fiTyMLm2BLTUrpnvYiUBHQNcLI5nSE8wH9%2FlXnY23pKzobyWySpRvgP5AWmaGgGGFQy8Gig%3D%3D%7Ctkp%3ABk9SR4Lm75T5Zw&LH_BIN=1",
+      "title": "LEGO NinjaGo Movie Camera Viewer 2017 McDonald’s green Ninja",
+      "price_basis": "buy_now",
+      "shipping_cost": 0.0,
+      "image_urls": [
+        "https://i.ebayimg.com/images/g/05wAAOSwNlVk2A7v/s-l140.webp"
+      ],
+      "buy_now_price": 15.94
+    },
+    {
+      "listing_key": "eBay_117338897677",
+      "url": "https://www.ebay.com/itm/117338897677?_skw=lego&itmmeta=01KZ4MVY7X28PYDB2M3HBE2A33&hash=item1b51f17d0d%3Ag%3AkIoAAeSwOzFqcPbf&itmprp=enc%3AAQALAAAA4GfYFPkwiKCW4ZNSs2u11xDz7fdGJ6SkUZpu0xOg8WXPUlBQ47sdmO%2F%2Buk0aWH8E9tBGksjd3drd7I5RO0wzIVvzBDL%2FnsqoRQGYY2trLJxkYNNutWU5pyeNOG6iFPdB5uOn9A3d6vnKKvGM4OUNlCkOXxAS%2Fpfee0fYx0BNjq5fCjUUTF%2FqBFwGyLqC%2BjZobxhKsBQl5Njh9JtUfMKU%2BXxd%2Bz%2BsmPGrEYVSBAi%2Fr6hp32jQ6zHN6JBhWaAj9PDTZA01KJgeBA9jKaNc9rBNF3m5eNhLH6eXVN1eKqLQb%2F0W%7Ctkp%3ABk9SR4Lm75T5Zw&LH_BIN=1",
+      "title": "Lego Minecraft Lot",
+      "price_basis": "buy_now",
+      "shipping_cost": 9.42,
+      "image_urls": [
+        "https://i.ebayimg.com/images/g/kIoAAeSwOzFqcPbf/s-l140.webp"
+      ],
+      "buy_now_price": 24.99
+    },
+    {
+      "listing_key": "eBay_287501514722",
+      "url": "https://www.ebay.com/itm/287501514722?_skw=lego&itmmeta=01KZ4MVY7XD9880J2AGW8Y7BK3&hash=item42f06cf7e2%3Ag%3AoIYAAeSwknFqcPgM&itmprp=enc%3AAQALAAAA4GfYFPkwiKCW4ZNSs2u11xCSPADhxnXjnS%2F4%2BusaAH05mmiRktcbA0zS%2BFmCunigmnsZZNJX5Y8GpEz93kebd%2BeOQVytjlZzNs74eyHXq55iSpnKxLEUasVmni6cvWPamUMcCBWWB7WZlr1o0h5RDApY3Z%2BK4VM8sZbMebkwTMYbJluWPjD4mG15XyenQgIHmVTbW00kq7NtF9PIDkJ4fzdcXWvCGMFhCetBzjBB1%2BSZQ2Fk%2FNvVoHvrrAF1fp%2FOEXwA1wGir3OenuLqf5wMaT%2BtAyAdc7OTi0KOFk9gd2Ib%7Ctkp%3ABk9SR4Lm75T5Zw&LH_BIN=1",
+      "title": "LEGO Bionicle Kanohi Mask Olmak 53583 Brutaka Set 8734",
+      "price_basis": "buy_now",
+      "shipping_cost": 5.48,
+      "image_urls": [
+        "https://i.ebayimg.com/images/g/oIYAAeSwknFqcPgM/s-l140.webp"
+      ],
+      "buy_now_price": 15.0
+    },
+    {
+      "listing_key": "eBay_800455928633",
+      "url": "https://www.ebay.com/itm/800455928633?_skw=lego&epid=17053422646&itmmeta=01KZ4MVY7XPXGA24EVM6VDB3BM&hash=itemba5ee42b39%3Ag%3AiAIAAeSwfCxqXOcK&itmprp=enc%3AAQALAAAAwGfYFPkwiKCW4ZNSs2u11xBG2%2BuF%2Bv4mk94CO6tGJ0KO6e8DCP7mtAm%2Bnuzc2aeGBz9w%2F9Bah%2FKUKovmE7aY0lusxASVar1saA3hpgVc2zNKeUKf7QsouwEvs%2BtbkE8YEC3%2F4Ptck6LIqFFvHy8R9v28Etvqfo0ojBbXXKIoXGwLjvVJe%2FzuNmr6erA67OXLOYQgqVgy99Ka4QP5np6MNKUc1HbBafNluUen3KdkoqyJe4d%2FxSZMdk96eHoZo3b5Rg%3D%3D%7Ctkp%3ABk9SR4Lm75T5Zw&LH_BIN=1",
+      "title": "LEGO NINJAGO 70609 Manta Ray Bomber New Sealed Retired 2017 Set",
+      "price_basis": "buy_now",
+      "shipping_cost": 14.1,
+      "image_urls": [
+        "https://i.ebayimg.com/images/g/iAIAAeSwfCxqXOcK/s-l140.webp"
+      ],
+      "buy_now_price": 399.99
+    },
+    {
+      "listing_key": "eBay_137582327361",
+      "url": "https://www.ebay.com/itm/137582327361?_skw=lego&epid=28053429454&itmmeta=01KZ4MVY7XVWZPG3PY54QH0Z8G&hash=item20088bb641%3Ag%3AFDMAAeSwe41qcPf7&itmprp=enc%3AAQALAAAAwGfYFPkwiKCW4ZNSs2u11xAuGraemfI0dsf1%2F8WL17Jegl1mtgFqzfDt%2B9xYIAuMc%2FSt0NmtvCFnC4ccK9EVyXa1CCF4QNXimbU9h%2BeUroxFx7lrgK3AGSjhZH71vxKa5qhBInjD1X6BS4KjoCrc%2FVyYNo83G9uQj2gn1P8orne6lpbSkrtEvxMSCCCF9CZ6wfmdIusSM2A9nX1c6lox9irqaVE6bGpcnVqRGPk%2BG2qnV0PFh%2FO%2BBGd8NL9V4wyRNw%3D%3D%7Ctkp%3ABk9SR4Lm75T5Zw&LH_BIN=1",
+      "title": "LEGO METEOR STRIKE SPECIAL EDITION 3850 NEW SEALED BOX",
+      "price_basis": "buy_now",
+      "shipping_cost": 9.94,
+      "image_urls": [
+        "https://i.ebayimg.com/images/g/FDMAAeSwe41qcPf7/s-l140.webp"
+      ],
+      "buy_now_price": 19.5
+    },
+    {
+      "listing_key": "eBay_327293679119",
+      "url": "https://www.ebay.com/itm/327293679119?_skw=lego&epid=10061773601&itmmeta=01KZ4MVY7XBR1QJRVA2X4Q4YFM&hash=item4c3439360f%3Ag%3ASa4AAeSwo4NqcPWB&itmprp=enc%3AAQALAAAAwGfYFPkwiKCW4ZNSs2u11xBwzbvp4jLtRF6ho65PyVebIWhdmi8aY968h2vfHAuK%2FA7M%2BvW%2FGdegUJbchwu7B8XSLiawjh7YcNaeotn0Ji0vyYhs%2FUPlrtsHdOM58QFlTzofvuQj6fOcax5I1ts4FgdczO6BCATKmIfYeHDLQX17KztFlsbeotk8afTbe0xUgm42%2B8TORCld8QXcCOhAAJOtGjWR%2FaP2EyVqd7yuu3Wz%2FMhrW%2BkK4GLlCN%2BA5%2BljlA%3D%3D%7Ctkp%3ABk9SR4Lm75T5Zw&LH_BIN=1",
+      "title": "LEGO Ideas Disney Hocus Pocus the Sanderson Sisters' Cottage 21341 - New Sealed",
+      "price_basis": "buy_now",
+      "shipping_cost": 37.3,
+      "image_urls": [
+        "https://i.ebayimg.com/images/g/Sa4AAeSwo4NqcPWB/s-l140.webp"
+      ],
+      "buy_now_price": 305.0
+    },
+    {
+      "listing_key": "eBay_407117735376",
+      "url": "https://www.ebay.com/itm/407117735376?_skw=lego&itmmeta=01KZ4MVY7X3H9CBZ2YC696YQ48&hash=item5eca1ba5d0%3Ag%3AA6EAAeSwkN9qcPeA&itmprp=enc%3AAQALAAAA4GfYFPkwiKCW4ZNSs2u11xByD9ubXdgmtBhvApV6Q02XsHT13kxb1Xdn5iLoZ5eY%2Fj8mghLQJzs%2Bimv38v%2BMYZHKHtsz21ibWpRfVYeHhmAa8LapiXgQib%2F3ZQSCHw%2FuskTXFCfSdyrquEPPCqskZz%2BybMOpqdU3LstXmzuMuX0cbgWgFBJzKIVQ9wK47rBEbFJRQbWTzdkXQyA2anQj%2Bf9ejPbPSrT7W17cdcAktPgOR7IzXLCg9XRi2cS6WgYgi3rvozPhqfXyzsrIvs5hPqz2SaY46zfdW2%2FDC66wp6Lq%7Ctkp%3ABk9SR4Lm75T5Zw&LH_BIN=1",
+      "title": "LEGO Ninjago Airtjitzu lot, Cole, Zane ,Jay",
+      "price_basis": "buy_now",
+      "shipping_cost": 5.48,
+      "image_urls": [
+        "https://i.ebayimg.com/images/g/A6EAAeSwkN9qcPeA/s-l140.webp"
+      ],
+      "buy_now_price": 40.0
+    },
+    {
+      "listing_key": "eBay_117338897430",
+      "url": "https://www.ebay.com/itm/117338897430?_skw=lego&epid=17053422910&itmmeta=01KZ4MVY7X94TM0FSD94VRZFXQ&hash=item1b51f17c16%3Ag%3Ak%7EsAAeSwQOlp7Pvi&itmprp=enc%3AAQALAAAAwGfYFPkwiKCW4ZNSs2u11xAJTkMPdFRvwBx3y7Prekpeo6u4vkKy64gnXUde0Xqdgsg9RGqGbzKO6UFUCNvbmisC%2FyCHwlq8C60%2FDkfe7BI97rpPg3FawcWCsbpBCrehFAPpXyOzv7UDJx03pHFzzOPKWGuJerQy31ToX3y7iu7tBr%2B5l14g2ZArGTFGvECSxSMG2knp5Y27fHul5UIRdpMOG07eUYC%2FBvISD4Xt7mov7D5OqWEQP0%2Fcs9R3MkW2DA%3D%3D%7Ctkp%3ABk9SR4Lm75T5Zw&LH_BIN=1",
+      "title": "LEGO Legends of Chima Eagles' Castle (70011) New",
+      "price_basis": "buy_now",
+      "shipping_cost": 5.99,
+      "image_urls": [
+        "https://i.ebayimg.com/images/g/k~sAAeSwQOlp7Pvi/s-l140.webp"
+      ],
+      "buy_now_price": 39.95
+    },
+    {
+      "listing_key": "eBay_117338897473",
+      "url": "https://www.ebay.com/itm/117338897473?_skw=lego&epid=7043437107&itmmeta=01KZ4MVY7XKAM02GCV8EF8XN52&hash=item1b51f17c41%3Ag%3AaRQAAeSwASBp0WoR&itmprp=enc%3AAQALAAAAwGfYFPkwiKCW4ZNSs2u11xBBVWnoi%2B1ZLa3ddmx88EMdOq7A5yM1UgrsxQaa0wt%2FK%2Bf3%2B6Z%2BDxwD1FEhIMxHz46yrutcxruGej3m9Z60Kp%2FcTf3lLxio3C61PrQ6HH5ocIiQMy9xeNHb0PziA5AKB36rYgNOrnW%2FyTeaJTe87ySzg4u6mbCUkaVqUKZe5xQQprXOnSXmUF2xp%2F0kv6CsVNmZOWqg0G%2FLuzO0yN3B7GLOdRrlAmBLt%2FgQnCkmupmCbg%3D%3D%7Ctkp%3ABk9SR4Lm75T5Zw&LH_BIN=1",
+      "title": "LEGO Minecraft The Abandoned Mine 21166 Building Kit Playset 248pcs",
+      "price_basis": "buy_now",
+      "shipping_cost": 5.99,
+      "image_urls": [
+        "https://i.ebayimg.com/images/g/aRQAAeSwASBp0WoR/s-l140.webp"
+      ],
+      "buy_now_price": 21.95
+    },
+    {
+      "listing_key": "eBay_128009181673",
+      "url": "https://www.ebay.com/itm/128009181673?_skw=lego&itmmeta=01KZ4MVY7X397CVBGJ6E83ZYSV&hash=item1dcdf119e9%3Ag%3A8m8AAeSw3jFqcPTj&itmprp=enc%3AAQALAAAAwGfYFPkwiKCW4ZNSs2u11xBHOoobac%2BXQmzyF1b6JQV5gDjcLpgLQYmDOduqFFg2WxukqcIhMpFKI6c%2BAuqhNgNGQUpcjShRwawghRb6b2CTVwSUp%2FMLia1y5%2FdRNQVf0lx91xiSSJ1NadRpoXjY3%2F5tjmasmodJrsFsN%2FDdusyWTRDp9BydfjQ1CLPO2Fu66f5tyFwiROwjxwuEU0j6FAkFwB17Vj2yHYh1H6qru%2FJsxqTJfw6C%2F1rxNjlnXX5tzA%3D%3D%7Ctkp%3ABk9SR4Lm75T5Zw&LH_BIN=1",
+      "title": "LEGO Batman DC Comics Super Heroes Digital Alarm Clock Figure Dark Knight",
+      "price_basis": "buy_now",
+      "shipping_cost": 7.22,
+      "image_urls": [
+        "https://i.ebayimg.com/images/g/8m8AAeSw3jFqcPTj/s-l140.webp"
+      ],
+      "buy_now_price": 22.95
+    },
+    {
+      "listing_key": "eBay_336724048050",
+      "url": "https://www.ebay.com/itm/336724048050?_skw=lego&epid=1148717142&itmmeta=01KZ4MVY7X3EJFAGBDPEMXN7V1&hash=item4e665138b2%3Ai%3A336724048050&itmprp=enc%3AAQALAAAAwGfYFPkwiKCW4ZNSs2u11xDsnq8aMMtGRZL4eBtwHeJR1Y8mXk9P4Uq4p0D8h571V63Ly60ml4Lvk2UJDhj%2BJp1imH963nBT61iGKNrzhkQTbz1UaTbWwkf4%2F6TvwGY%2BWEm7e%2F8yxwOCuHZoE78FQr4GecDKrMnJlsYsbR2D%2BcgMWX2PPtFEgSzMKn8TYs5fhRtAxnBEMpk%2B73R%2B3yfFP3kUrd5RgN2GQy2jelqTMtYcdfaZBcBWO6gvo0OmBW%2BDog%3D%3D%7Ctkp%3ABk9SR4Lm75T5Zw&LH_BIN=1",
+      "title": "THE LEGO MOVIE MEET UNIKITTY! (DK READS BEGINNING TO READ) - Hardcover EXCELLENT",
+      "price_basis": "buy_now",
+      "shipping_cost": 0.0,
+      "image_urls": [
+        "https://secureir.ebaystatic.com/pictures/aw/pics/stockimage1.jpg"
+      ],
+      "buy_now_price": 23.95
+    },
+    {
+      "listing_key": "eBay_188738399403",
+      "url": "https://www.ebay.com/itm/188738399403?_skw=lego&epid=2411499&itmmeta=01KZ4MVY7XGNN6YJED7EJ6YZZJ&hash=item2bf1af6cab%3Ag%3Ai44AAeSwBEtqcPg6&itmprp=enc%3AAQALAAAA4GfYFPkwiKCW4ZNSs2u11xAAYM3UyXgOVpKs4aL7dz7qrPccuvGvaSFIBc6G3%2FHSClu9ph%2FJR8BnULsINp0ey07rCjU0cRyo04%2FGfUbKld%2FvxQ8iuXoDrr5FQbQU8mYnEbKM8dGDmnoJQbMSDe1Jmrr27%2B69tiGPxAddHMSwcd9om5ARQSXXaN%2BEpK4elVFpBWowt42ljt1nuHK%2Ft09j0me1pfUEzFyeUccKw0eiAa7rBeNIcrifLENUigMYZjFZh9xvgGk%2FHcBg0KjmKTXz%2FYUR%2B3QlblDFNxvL1ZYXwUE9%7Ctkp%3ABk9SR4Lm75T5Zw&LH_BIN=1",
+      "title": "DEFINITIVE GUIDE TO LEGO MINDSTORMS, SECOND EDITION By Dave Baum Mint Condition",
+      "price_basis": "buy_now",
+      "shipping_cost": 0.0,
+      "image_urls": [
+        "https://i.ebayimg.com/images/g/i44AAeSwBEtqcPg6/s-l140.webp"
+      ],
+      "buy_now_price": 32.95
+    },
+    {
+      "listing_key": "eBay_377391980695",
+      "url": "https://www.ebay.com/itm/377391980695?_skw=lego&itmmeta=01KZ4MVY7XJZWS7SX1XQDXKW9W&hash=item57de50a097%3Ag%3AwZ4AAeSw0XBqcPcQ&itmprp=enc%3AAQALAAAA4GfYFPkwiKCW4ZNSs2u11xDwLDzjZ%2FWbA3kVDljzqCV3dbDISTVpFtmUHT8laMF7HzjTOU4oevEsyHzSXPkc92hKaxDP4an7oWvohGJt2sHECw2RRLBWtoQysPQGgFdz3SsFl4fuBGGW9LyL1K7T1%2BRPK67nArWdq%2Fl%2FaE2OM7dsPrYN19oxuUSWxa4785j%2F7q1l6irl9hYGvaseXKOyDGAFNT2kCmeNLFNiwt--%2FCSR9YXzFwTeYhZ8lKI%2FB5eieVHAo0KC9j7lASD1SBSTVan3PGiJiJVGrLDHWeUQKvHR%7Ctkp%3ABk9SR4Lm75T5Zw&LH_BIN=1",
+      "title": "LEGO The LEGO Batman Movie: The Ultimate Batmobile (70917) - Complete",
+      "price_basis": "buy_now",
+      "shipping_cost": 35.0,
+      "image_urls": [
+        "https://i.ebayimg.com/images/g/wZ4AAeSw0XBqcPcQ/s-l140.webp"
+      ],
+      "buy_now_price": 274.99
+    }
+  ]
+}

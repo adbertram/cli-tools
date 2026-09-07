@@ -2,7 +2,7 @@
 
 ## DESCRIPTION
 
-LegoScout sources used LEGO bulk lots and set listings across about 20 marketplaces and auction sites, then prices them on resale economics. This CLI owns every piece of that pipeline: the source registry, the canonical deal ledger, set comps and landed cost, the deterministic 0-100 deal score, prospect discovery, and the local deals web page. It finds and prices deals; it never buys, bids, or messages a seller.
+LegoScout sources used LEGO bulk lots and set listings across about 20 marketplaces and auction sites, then prices them on resale economics. This CLI owns every piece of that pipeline: the source registry, the canonical deal ledger, set comps and landed cost, the deterministic 0-100 deal score, and the deals web page. It finds and prices deals; it never buys, bids, or messages a seller.
 
 ## Installation
 
@@ -116,29 +116,6 @@ legoscout sellers favorite shopgoodwill 8
 legoscout sellers backfill --dry-run
 ```
 
-### prospects
-
-Prospecting records: new inventory sources, their contacts, outreach, and runs.
-
-```bash
-legoscout prospects list --table
-legoscout prospects list --filter "status:eq:new" --limit 20 --properties id,name,status
-legoscout prospects get 42 --table
-legoscout prospects create prospect.json
-
-legoscout prospects contacts list --limit 10 --table
-legoscout prospects contacts create contact.json
-
-legoscout prospects outreach list --table
-legoscout prospects outreach send 7 --confirm
-
-legoscout prospects runs list --table
-legoscout prospects runs create
-
-legoscout prospects hypotheses list --table
-legoscout prospects hypotheses get estate_sale_company --table
-```
-
 ### pricing
 
 Deal economics: fees, landed cost, comps, freight, images, and the pickup area.
@@ -182,26 +159,9 @@ legoscout score rescore --dry-run
 legoscout score rescore --apply --limit 50
 ```
 
-### server
-
-Start and stop the owned local deals server. `start` starts the loopback server,
-proves the spawned PID answers its private health gate, opens the deals page,
-and prints the URL, PID, and log path as JSON. It reuses a live verified server
-that it already owns. It refuses a port answered by another process.
-
-```bash
-legoscout server start
-legoscout server start --port 8790
-legoscout server stop
-```
-
-The command stores `server.json` and per-start logs under
-`$XDG_DATA_HOME/cli-tools/legoscout/server/`. When `XDG_DATA_HOME` is unset,
-the path is `~/.local/share/cli-tools/legoscout/server/`.
-
 ### display
 
-The local deals web page, and the rows it renders.
+The standing deals web page on adam-server, and the rows it renders.
 
 ```bash
 legoscout display serve --port 8787
@@ -234,15 +194,37 @@ legoscout minifig eval --help
 
 ### deploy
 
-Synchronize the canonical ledger and standing deals application with
-adam-server.
+Deploy code independently from data publication. The server owns the ledger;
+each run reads a new immutable baseline and submits only explicit observations.
+Ingestion preserves server decisions, seller favorites, and unrelated history.
+Overlapping observation changes reject the entire batch; replaying the same run
+and payload is idempotent. Never edit a baseline or automatically rebase a conflict.
+Deploy the new code before the first run using these commands.
 
 ```bash
-legoscout deploy pull-db
+legoscout deploy expire
+legoscout deploy pull-db --output /path/to/run/baseline.db
+export LEGOSCOUT_DB_PATH=/path/to/run/baseline.db
+legoscout deploy prepare-ingest --run-id run-20260907 --baseline /path/to/run/baseline.db --records /path/to/run/records.json --output /path/to/run/ingest.json
+legoscout deploy ingest /path/to/run/ingest.json
+legoscout deploy source-note ebay --date 2026-09-07 --text "newest-first sort is _sop=10"
 legoscout deploy status
 legoscout deploy push
 legoscout deploy rollback --help
 ```
+
+`source-note` appends run learnings directly to the authoritative source registry,
+even while `LEGOSCOUT_DB_PATH` selects a read-only baseline. Note text travels over
+stdin and retains quotes and newlines. `sources notes add` remains a local
+maintenance command and must not be used to publish run learnings.
+
+`records.json` is the JSON array of validated deal records produced by this run,
+not a dump of the baseline. `pull-db` and `prepare-ingest` refuse existing output
+paths so unsent work cannot be overwritten. Source watermarks advance only for
+accepted observations, using the authoritative server rows. Crop transfers stay
+additive and reject content collisions; ingestion never deletes crops. Existing
+status, creation timestamps, and status timestamps remain server-owned; use the
+server verification/status operations to change them.
 
 ## Output Formats
 

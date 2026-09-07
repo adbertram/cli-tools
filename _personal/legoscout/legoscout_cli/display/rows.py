@@ -596,7 +596,7 @@ def build_rows(active_only=False, path=None):
     # registry read against the wrong file doesn't return stale data, it
     # raises `FileNotFoundError` -- which is exactly what failed every row on
     # first deploy, 100% of the page, silently landing as "no results".
-    reg = registry.Registry(path) if path else registry.sources
+    reg = (registry.Registry(path) if path else registry.sources).snapshot()
     out = []
     for deal in (ledger.get("deals") or []):
         if deal.get("status") in skip_status or not bidding_open(deal):

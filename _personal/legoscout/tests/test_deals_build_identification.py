@@ -7,6 +7,7 @@ from typer.testing import CliRunner
 
 from legoscout_cli.commands import deals as deals_command
 from legoscout_cli.main import app
+from minifig_review_fixtures import attach_test_receipts
 
 
 runner = CliRunner()
@@ -94,7 +95,7 @@ def _identification(key: str = LISTING_KEY) -> dict:
         "null_value_reason": None,
         "errors": [],
     }]
-    return {
+    return attach_test_receipts([{
         "listing_key": key,
         "minifig_analysis": analysis,
         "figure_count": 2,
@@ -105,7 +106,7 @@ def _identification(key: str = LISTING_KEY) -> dict:
         "sold_count": 7,
         "pricing_complete": True,
         "status": "success",
-    }
+    }])[0]
 
 
 def _write(path, payload) -> str:

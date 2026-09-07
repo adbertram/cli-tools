@@ -10,8 +10,7 @@ source publishes no seller identity (Craigslist, StockX) never produces a row --
 see the source's `seller_id()` reader, or its `NEEDS_PAGE_READ` note
 (``legoscout sources``).
 
-`is_favorite` carries no DDL default, the same convention `prospects_db.py`
-uses for `status`/`state`: every insert sets it explicitly, so a default can
+`is_favorite` carries no DDL default: every insert sets it explicitly, so a default can
 never quietly stand in for a value the caller forgot.
 
     legoscout sellers              # favorite count, total seller count
@@ -45,7 +44,7 @@ CREATE INDEX IF NOT EXISTS idx_sellers_favorite ON sellers(is_favorite);
 
 # Every object _SCHEMA creates. sqlite_master is checked against this list
 # before the script runs, so a database already at the current shape takes no
-# write lock -- the same idempotent-connect pattern prospects_db.py uses.
+# write lock.
 _SCHEMA_OBJECTS: tuple[str, ...] = ("sellers", "idx_sellers_favorite")
 
 
@@ -63,7 +62,7 @@ def _ensure_sellers_schema(conn: sqlite3.Connection) -> None:
 
     Idempotent -- runs on every connect, including against the live ledger.
     sqlite_master is read FIRST so a reader never takes a write lock for a
-    migration it does not need; see the identical comment in prospects_db.py.
+    migration it does not need.
     """
     have = {row[0] for row in conn.execute("SELECT name FROM sqlite_master")}
     if all(name in have for name in _SCHEMA_OBJECTS):
@@ -80,7 +79,7 @@ def connect(path: str = DB_PATH) -> sqlite3.Connection:
 
 
 def _now() -> str:
-    """UTC, ISO-8601, with the offset -- matches prospects_db._now()."""
+    """UTC, ISO-8601, with the offset."""
     return datetime.now(timezone.utc).isoformat()
 
 
@@ -97,29 +96,34 @@ def upsert_seen_bulk(deals: list[dict[str, Any]], path: str = DB_PATH) -> int:
     read, and neither case has an identity to key a row on.
     """
     conn = connect(path)
-    touched = 0
     try:
         with conn:
-            for deal in deals:
-                seller_id = deal.get("seller_id")
-                if not isinstance(seller_id, str) or not seller_id.strip():
-                    continue
-                source = deal.get("source")
-                if not isinstance(source, str) or not source.strip():
-                    continue
-                seen_at = deal.get("last_seen_at") or deal.get("first_seen_at") or _now()
-                conn.execute(
-                    "INSERT INTO sellers "
-                    "(source, seller_id, seller_name, is_favorite, first_seen_at, last_seen_at) "
-                    "VALUES (?, ?, ?, 0, ?, ?) "
-                    "ON CONFLICT(source, seller_id) DO UPDATE SET "
-                    "  seller_name = excluded.seller_name, "
-                    "  last_seen_at = excluded.last_seen_at",
-                    (source, seller_id, deal.get("seller_name"), seen_at, seen_at),
-                )
-                touched += 1
+            return upsert_seen(conn, deals)
     finally:
         conn.close()
+
+
+def upsert_seen(conn: sqlite3.Connection, deals: list[dict[str, Any]]) -> int:
+    """Upsert seller observations inside the caller's transaction; keep favorites."""
+    touched = 0
+    for deal in deals:
+        seller_id = deal.get("seller_id")
+        if not isinstance(seller_id, str) or not seller_id.strip():
+            continue
+        source = deal.get("source")
+        if not isinstance(source, str) or not source.strip():
+            continue
+        seen_at = deal.get("last_seen_at") or deal.get("first_seen_at") or _now()
+        conn.execute(
+            "INSERT INTO sellers "
+            "(source, seller_id, seller_name, is_favorite, first_seen_at, last_seen_at) "
+            "VALUES (?, ?, ?, 0, ?, ?) "
+            "ON CONFLICT(source, seller_id) DO UPDATE SET "
+            "  seller_name = excluded.seller_name, "
+            "  last_seen_at = excluded.last_seen_at",
+            (source, seller_id, deal.get("seller_name"), seen_at, seen_at),
+        )
+        touched += 1
     return touched
 
 

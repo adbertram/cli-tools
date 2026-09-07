@@ -1,27 +1,43 @@
-"""`legoscout deploy` -- sync the ledger and code to adam-server.
-
-`pull-db` and `push` bookend a run (see `legoscout-orchestrator`): pull the
-adam-server ledger down before a run touches anything, push the local
-working copy plus a code deploy back up after it finishes. `status` and
-`rollback` are manual, ad hoc recovery tools.
-"""
+"""Independent code deployment and server-authoritative observation ingestion."""
 from __future__ import annotations
+
+import json
+from pathlib import Path
 
 import typer
 from cli_tools_shared.output import command, print_json
 
-from ..deploy import db_sync, release
+from ..deploy import availability, db_sync, release, source_notes
+from ..ledger import ingestion
 
 COMMAND_CREDENTIALS = ["no_auth"]
 
 app = typer.Typer(help="Sync the ledger and app code to adam-server", no_args_is_help=True)
 
 
+@app.command("source-note")
+@command
+def source_note(
+    source: str = typer.Argument(..., help="A namespace, alias or listing_key"),
+    text: str = typer.Option(..., "--text", help="The source learning to append"),
+    date: str | None = typer.Option(None, "--date", help="ISO date; today in UTC when omitted"),
+):
+    """Append a source learning on the authoritative server, preserving run baselines."""
+    print_json(source_notes.add(source, text, date))
+
+
+@app.command("expire")
+@command
+def expire():
+    """Verify and expire active listings on the authoritative server before a run."""
+    print_json(availability.expire())
+
+
 @app.command("pull-db")
 @command
-def pull_db():
-    """Pull adam-server's shared ledger and crops into the local workspace."""
-    report = db_sync.pull()
+def pull_db(output: str = typer.Option(..., "--output", help="New immutable baseline DB path; must not exist")):
+    """Pull a new server baseline and merge shared crops additively."""
+    report = db_sync.pull(output)
     print_json(report)
     if not report["ok"]:
         raise typer.Exit(1)
@@ -30,21 +46,14 @@ def pull_db():
 @app.command("push")
 @command
 def push():
-    """Push the local ledger/crops, then deploy code if sync succeeded."""
-    sync = db_sync.push()
-    if not sync["ok"]:
-        print_json({"ok": False, "sync": sync, "code_deployed": False})
-        raise typer.Exit(1)
+    """Deploy application code; never upload a ledger or change its data."""
     try:
         result = release.deploy_code()
     except Exception as exc:
-        # The sync legs already succeeded; their outcomes stay visible so a
-        # code-deploy failure never hides completed work.
         print_json(
             {
                 "ok": False,
                 "error": "%s: %s" % (type(exc).__name__, exc),
-                "sync": sync,
                 "code_deployed": False,
             }
         )
@@ -52,11 +61,36 @@ def push():
     print_json(
         {
             "ok": True,
-            "sync": sync,
             "code_deployed": not result.skipped,
             "release_name": result.release_name,
         }
     )
+
+
+@app.command("prepare-ingest")
+@command
+def prepare_ingest(
+    run_id: str = typer.Option(..., "--run-id", help="Unique immutable run ID"),
+    baseline: str = typer.Option(..., "--baseline", help="Immutable DB from pull-db"),
+    records: str = typer.Option(..., "--records", help="JSON array of explicit newly observed deal records"),
+    output: str = typer.Option(..., "--output", help="New ingestion payload file; must not exist"),
+):
+    """Bind explicit observations to their server baseline for conflict detection."""
+    payload = ingestion.prepare(run_id, baseline, json.loads(Path(records).read_text(encoding="utf-8")))
+    with open(output, "x", encoding="utf-8") as stream:
+        json.dump(payload, stream, indent=2, allow_nan=False)
+        stream.write("\n")
+    print_json({"run_id": run_id, "observations": len(payload["observations"]), "path": str(Path(output).resolve())})
+
+
+@app.command("ingest")
+@command
+def ingest(payload: str = typer.Argument(..., help="Payload created by prepare-ingest")):
+    """Publish a keyed observation batch transactionally on adam-server."""
+    report = db_sync.ingest(payload)
+    print_json(report)
+    if not report["ok"]:
+        raise typer.Exit(1)
 
 
 @app.command("status")

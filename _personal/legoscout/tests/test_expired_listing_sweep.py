@@ -696,7 +696,7 @@ def test_final_write_skips_a_row_changed_concurrently_during_the_run(ledger, mon
     # single-column update that commits immediately.
     ledger_db.update_status("mercari|9999", "rejected", NOW.isoformat(), path=ledger)
 
-    to_write, skipped = sweep._prepare_write_batch(changed, path=ledger)
+    to_write, skipped = sweep._apply_write_batch(changed, path=ledger)
 
     assert to_write == []
     assert [s["listing_key"] for s in skipped] == ["mercari|9999"]
@@ -717,13 +717,11 @@ def test_final_write_applies_a_still_active_rows_sweep_result(ledger, monkeypatc
     # Nobody touched the row during the run -- its live status is still
     # `active`, so the sweep's verdict is still current and must write
     # through.
-    to_write, skipped = sweep._prepare_write_batch(changed, path=ledger)
+    to_write, skipped = sweep._apply_write_batch(changed, path=ledger)
 
     assert skipped == []
     assert [d["listing_key"] for d in to_write] == ["mercari|8888"]
     assert to_write[0]["status"] == "unavailable"
-    counts = ledger_db.upsert_deals(to_write, path=ledger)
-    assert counts == {"inserted": 0, "updated": 1}
     assert ledger_db.get_deal("mercari|8888", path=ledger)["status"] == "unavailable"
 
 
@@ -744,7 +742,7 @@ def test_final_write_preserves_other_fields_changed_concurrently(ledger, monkeyp
     concurrent["current_price"] = 19.99
     ledger_db.upsert_deals([concurrent], path=ledger)
 
-    to_write, skipped = sweep._prepare_write_batch(changed, path=ledger)
+    to_write, skipped = sweep._apply_write_batch(changed, path=ledger)
 
     assert skipped == []
     assert to_write[0]["current_price"] == 19.99

@@ -402,12 +402,6 @@ def test_should_preserve_existing_output_when_atomic_promotion_fails(
         "input.json", "output.json"]
 
 
-def test_should_report_nine_command_groups_plus_triage():
-    main_module = importlib.import_module("legoscout_cli.main")
-    assert main_module.__doc__ is not None
-    assert "Nine command groups plus `triage`" in main_module.__doc__
-
-
 def _candidate(candidate_id, score):
     return {
         "id": candidate_id,
@@ -956,3 +950,43 @@ def test_should_preserve_identify_input_and_existing_output_on_failures(
     assert result.stdout == ""
     assert "identify promotion refused" in result.stderr
     assert output_path.read_text() == '{"sentinel": true}\n'
+
+
+def test_missing_photo_after_detector_success_preserves_valid_listing(tmp_path):
+    first = _save(tmp_path / "first.png", "PNG")
+    second = _save(tmp_path / "second.jpg", "JPEG")
+    handoff = tmp_path / "handoff.json"
+    output = tmp_path / "detect.json"
+    handoff.write_text(json.dumps([_row([first], "ebay|1"), _row([second], "ebay|2")]))
+
+    def detector(name, paths):
+        result = _success_detector(name, paths)
+        first.unlink()
+        return result
+
+    _identification().detect_file(
+        handoff, output, detector_name="grounding-dino-tiny",
+        crop_root=tmp_path / "crops", detector_fn=detector)
+    artifact = json.loads(output.read_bytes())
+    assert [row["listing_key"] for row in artifact["listings"]] == ["ebay|1", "ebay|2"]
+    failed, successful = artifact["listings"]
+    assert failed["status"] == "skipped"
+    assert "FileNotFoundError" in failed["photos"][0]["reason"]
+    assert successful["status"] == "success"
+    assert len(successful["photos"][0]["detections"]) == 1
+    assert artifact["summary"]["photo_skipped_count"] == 1
+
+
+def test_failed_first_copy_does_not_suppress_readable_duplicate(tmp_path):
+    first = _save(tmp_path / "first.png", "PNG")
+    second = tmp_path / "second.png"
+    second.write_bytes(first.read_bytes())
+    def detector(name, paths):
+        result = _success_detector(name, paths)
+        first.unlink()
+        return result
+    artifact = _identification().detect_batch(
+        [_row([first, second], "ebay|1")], detector_name="grounding-dino-tiny",
+        crop_root=tmp_path / "crops", detector_fn=detector)
+    assert [row["status"] for row in artifact["listings"][0]["photos"]] == ["skipped", "success"]
+    assert artifact["summary"]["detection_count"] == 1

@@ -172,6 +172,58 @@ def test_generic_fallback_unambiguous_removal_phrase_is_gone(monkeypatch):
     assert result.status == "gone"
 
 
+@pytest.mark.parametrize("hidden", [
+    '<script>const removed="this listing has been removed";</script>',
+    '<style>.removed::after {content:"this listing has been removed"}</style>',
+    '<template><div>This listing has been removed</div></template>',
+    '<!-- This listing has been removed -->',
+    '<div hidden><div>This listing has been removed</div></div>',
+    '<div style="display: none"><span>This listing has been removed</span></div>',
+    '<div style="visibility: hidden">This listing has been removed</div>',
+    '<input type="hidden" value="This listing has been removed">',
+])
+def test_generic_ignores_removal_text_outside_visible_content(monkeypatch, hidden):
+    html = hidden + '<h1>LEGO bulk lot</h1><p>' + 'Clean LEGO bricks for sale. ' * 8 + '</p>'
+    monkeypatch.setattr(checks, "_http_get", lambda url: (200, html))
+    monkeypatch.setattr(checks, "_playwright_text", lambda url: pytest.fail("HTTP resolved the listing"))
+    result = checks.check_generic(_deal("offerup|1"))
+    assert result.status == "available"
+    assert result.stop_source is False
+
+
+@pytest.mark.parametrize("html", [
+    '<p>This listing has been <strong>removed</strong></p>',
+    '<p>This listing has been&#32;removed</p>',
+    '<div hidden><div>Unused dialog</div></div><p>This listing has been removed</p>',
+])
+def test_generic_visible_removal_is_gone_after_html_extraction(monkeypatch, html):
+    monkeypatch.setattr(checks, "_http_get", lambda url: (200, html))
+    monkeypatch.setattr(checks, "_playwright_text", lambda url: pytest.fail("HTTP resolved the listing"))
+    assert checks.check_generic(_deal("offerup|1")).status == "gone"
+
+
+def test_generic_hidden_content_cannot_confirm_a_listing(monkeypatch):
+    html = '<template>' + 'Clean LEGO bricks for sale. ' * 8 + '</template>'
+    monkeypatch.setattr(checks, "_http_get", lambda url: (200, html))
+    monkeypatch.setattr(checks, "_playwright_text", lambda url: (False, "No rendered listing"))
+    assert checks.check_generic(_deal("offerup|1")).status == "error"
+
+
+def test_generic_raw_challenge_still_stops_source(monkeypatch):
+    html = '<script src="hcaptcha.js"></script><p>This listing has been removed</p>'
+    monkeypatch.setattr(checks, "_http_get", lambda url: (200, html))
+    monkeypatch.setattr(checks, "_playwright_text", lambda url: pytest.fail("A challenge stops the source"))
+    result = checks.check_generic(_deal("offerup|1"))
+    assert result.status == "blocked"
+    assert result.stop_source is True
+
+
+def test_generic_rendered_text_is_not_parsed_as_html(monkeypatch):
+    monkeypatch.setattr(checks, "_http_get", lambda url: (200, ""))
+    monkeypatch.setattr(checks, "_playwright_text", lambda url: (True, "<this listing has been removed>"))
+    assert checks.check_generic(_deal("offerup|1")).status == "gone"
+
+
 def test_generic_fallback_ambiguous_text_never_confirms_unavailable(monkeypatch):
     # Weak/ambiguous: the word appears, but not as one of the documented
     # unambiguous phrases -- must never resolve to "gone", and must not be
@@ -480,6 +532,18 @@ def test_shopgoodwill_missing_available_key_is_error_not_gone(monkeypatch):
         lambda args, timeout=30: {"isItemEndTimeExpire": False, "remainingTime": 500})
     result = checks.check_shopgoodwill(_deal("shopgoodwill|1"))
     assert result.status == "error"
+
+
+@pytest.mark.parametrize("available", [None, 0, 1, "", "false", "true", [], {}, [False]])
+def test_shopgoodwill_nonboolean_available_is_error(monkeypatch, available):
+    monkeypatch.setattr(checks, "_run_cli_json", lambda args: {
+        "available": available, "isItemEndTimeExpire": True, "remainingTime": 0,
+    })
+    result = checks.check_shopgoodwill(_deal("shopgoodwill|1"))
+    assert result.status == "error"
+    assert "expected boolean" in result.detail
+    assert "available=%r" % available in result.detail
+    assert result.stop_source is False
 
 
 def test_shopgoodwill_cli_failure_is_error(monkeypatch):

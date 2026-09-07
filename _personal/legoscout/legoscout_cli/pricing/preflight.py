@@ -5,8 +5,8 @@ A deal run touches far more than the two comps credentials: a dozen source
 CLIs (some needing live authenticated sessions), a runtime headless browser,
 the adam-server deployment the `pull-db`/`push` bookends depend on, the
 source registry's own structural health and researched fee configs, the
-ledger working copy, five custom-agent definitions plus their hard-rules
-parity contract, ten project skills, the global agent standards file the
+ledger working copy, custom-agent definitions plus their hard-rules
+parity contract, project skills, the global agent standards file the
 worker prompts reference verbatim, and the per-run workspace directories.
 This command verifies every one of those BEFORE any worker spawns, because
 each of them has already silently cost a run something when skipped:
@@ -27,8 +27,7 @@ each of them has already silently cost a run something when skipped:
 Gate vs warning: anything a run cannot complete without (credentials,
 binaries, auth sessions, browser, adam-server/pm2, registry soundness,
 ledger writability, agent files, parity, skills, standards) FAILS the run
-at the door. Missing outreach (Gmail) auth only degrades the optional
-prospect half, so it warns. Unresearched fee configs warn because the run
+at the door. Unresearched fee configs warn because the run
 still completes for every OTHER source while naming the gap.
 
 Execution model (2026-08-23 chaos-hardened):
@@ -98,7 +97,6 @@ SOURCE_CLI_BINARIES = {
 }
 
 PLAYWRIGHT_CLI = "playwright-cli"
-GOOGLE_CLI = "google"
 BRICKOGNIZE_HEALTH_URL = "https://api.brickognize.com/health/"
 BRICKOGNIZE_TIMEOUT_SECONDS = 10
 DETECTOR_CHECK_TIMEOUT_SECONDS = 120
@@ -123,7 +121,6 @@ AGENT_NAMES = (
     "legoscout-source-worker",
     "legoscout-classifier",
     "legoscout-appraiser",
-    "legoscout-prospect-scout",
     "legoscout-minifig-identifier",
 )
 
@@ -653,9 +650,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
                     "the run workspaces -- before any source worker starts.")
     parser.add_argument("--profile", default=None,
                         help="Check this profile on the comps/source tools "
-                             "instead of each tool's own active profile. The "
-                             "gmail outreach check always uses ITS OWN active "
-                             "profile.")
+                             "instead of each tool's own active profile.")
     parser.add_argument("--source", action="append", default=None, metavar="NS",
                         help="Scope the source-CLI and fee-config checks to "
                              "this active namespace instead of every active "
@@ -710,7 +705,6 @@ def main(argv: list[str] | None = None) -> int:
             "adam": pool.submit(_check_adam_server),
             "agents": pool.submit(_check_agents, paths.LEGOSCOUT_ROOT),
             "registry": pool.submit(_registry_health, scoped),
-            "google": pool.submit(_check, GOOGLE_CLI, None),
             "brickognize": pool.submit(_check_brickognize),
             "minifig_detector": pool.submit(_check_minifig_detector),
             "installed_usage": pool.submit(_check_installed_cli_usage),
@@ -723,7 +717,6 @@ def main(argv: list[str] | None = None) -> int:
         server_row = futures["adam"].result()
         agents_row = futures["agents"].result()
         registry_row = futures["registry"].result()
-        google_status = futures["google"].result()
         brickognize_row = futures["brickognize"].result()
         detector_row = futures["minifig_detector"].result()
         usage_row = futures["installed_usage"].result()
@@ -772,14 +765,6 @@ def main(argv: list[str] | None = None) -> int:
             "minifig identifier contract: %s"
             % identifier_contract.get("error", "failed"),
         ))
-
-    # 6. Outreach channel -- WARNING tier: only the optional prospect half
-    # needs Gmail, so a dead credential degrades rather than blocks.
-    checks["outreach_channel"] = google_status
-    if not google_status["authenticated"]:
-        warnings.append("gmail outreach unavailable (%s) -- prospect email "
-                        "drafts cannot be sent; deals half unaffected"
-                        % (google_status.get("error") or "not authenticated"))
 
     # 7. Minifigure identification -- WARNING tier for provider/detector
     # outages, but a BLOCKER when the installed CLI lacks minifig leaves:

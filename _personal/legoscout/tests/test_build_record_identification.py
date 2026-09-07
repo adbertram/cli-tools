@@ -7,6 +7,7 @@ import pytest
 from legoscout_cli.ledger import build_record
 from legoscout_cli.ledger import minifig_analysis as mfa
 from legoscout_cli.scoring import score
+from minifig_review_fixtures import attach_test_receipts
 
 
 def _candidate(key="k-bid|1"):
@@ -132,7 +133,7 @@ def _identification(entries, key="k-bid|1", blocked=False):
     complete = unknown_count == 0 and all(
         entry["unit_value"] is not None and not entry["errors"]
         for entry in entries)
-    return {
+    return attach_test_receipts([{
         "listing_key": key,
         "minifig_analysis": entries,
         "figure_count": figure_count,
@@ -145,7 +146,7 @@ def _identification(entries, key="k-bid|1", blocked=False):
         "sold_count": mfa.sold_count(entries),
         "pricing_complete": complete,
         "status": "success" if complete else "partial",
-    }
+    }])[0]
 
 
 def _build(
@@ -180,6 +181,33 @@ def test_should_require_identification_for_new_minifigure_and_validate_kwarg():
 def test_should_forbid_identification_on_non_minifigure_rows():
     with pytest.raises(ValueError, match="non-minifigure"):
         _build(_identification([_entry("g1")]), category="bulk")
+
+
+def test_new_minifigure_build_requires_content_bound_review():
+    identification = _identification([_entry("g1")])
+    identification.pop("minifig_review_receipt")
+    with pytest.raises(ValueError, match="receipt"):
+        _build(identification)
+
+
+def test_new_minifigure_build_rejects_post_review_evidence_change():
+    identification = _identification([_entry("g1")])
+    identification["minifig_analysis"][0]["condition_notes"] = "Changed after review"
+    with pytest.raises(ValueError):
+        _build(identification)
+
+
+def test_new_minifigure_build_retains_review_for_server_ingestion():
+    from legoscout_cli.pricing.minifig_receipt import validate_publication_record
+
+    identification = _identification([_entry("g1")])
+    record = _build(identification)
+    assert record["minifig_review_receipt"]["synthesis_sha256"]
+    assert {
+        key: value for key, value in record["minifig_review_receipt"].items()
+        if key != "synthesis_sha256"
+    } == identification["minifig_review_receipt"]
+    validate_publication_record(record, kind="deal")
 
 
 def test_should_leave_non_minifigure_builds_without_identification_unchanged():

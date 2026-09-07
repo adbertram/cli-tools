@@ -52,6 +52,7 @@ import urllib.error
 import urllib.request
 import uuid
 from dataclasses import dataclass
+from html.parser import HTMLParser
 from typing import Any, Callable, Literal
 
 from ..sources import listing as source_listing  # noqa: E402
@@ -277,14 +278,7 @@ def check_shopgoodwill(deal: dict[str, Any]) -> CheckResult:
         return CheckResult("error", str(exc))
     if data is None:
         return CheckResult("error", "CLI call failed or non-JSON output")
-    # A MISSING `available` key is not the same signal as an explicit
-    # `false` -- the former is a payload the CLI never actually answered
-    # (shape drift, a partial response), and guessing `gone` from that is
-    # exactly the "weak signal -> destructive write" shape that caused a
-    # 15-row incident elsewhere in this file. `data.get("available")` alone
-    # cannot tell the two apart (both read as `None`/falsy), so the key's
-    # presence is checked explicitly. An explicit `available: false` still
-    # resolves `gone`, same as before.
+    # Only a boolean availability value answers the listing-state question.
     if "available" not in data:
         expired = data.get("isItemEndTimeExpire")
         detail = "no 'available' key in payload; isItemEndTimeExpire=%r, remainingTime=%r" % (
@@ -294,6 +288,8 @@ def check_shopgoodwill(deal: dict[str, Any]) -> CheckResult:
     expired = data.get("isItemEndTimeExpire")
     detail = "available=%r, isItemEndTimeExpire=%r, remainingTime=%r" % (
         available, expired, data.get("remainingTime"))
+    if not isinstance(available, bool):
+        return CheckResult("error", "expected boolean 'available'; " + detail)
     return CheckResult("available" if available else "gone", detail)
 
 
@@ -767,13 +763,44 @@ _GENERIC_ERROR_PAGE_PHRASES = (
     "we will be right back",
 )
 
-# Strips <script>/<style> block CONTENTS, not just their tags -- a page's
-# own stylesheet or client bundle is not "visible" text a human reading the
-# page would see, and counting it let boilerplate (e.g. Poshmark's
-# `icon.sold-tag` CSS class, present on every page regardless of listing
-# state) pad an otherwise-empty body past the length check below.
-_SCRIPT_OR_STYLE_RE = re.compile(r"<(script|style)\b[^>]*>.*?</\1>", re.I | re.S)
-_TAG_RE = re.compile(r"<[^>]+>")
+class _VisibleTextParser(HTMLParser):
+    """Extract static body text, excluding explicitly hidden subtrees.
+
+    This does not execute JavaScript or compute external stylesheets. Browser
+    reads already supply innerText and must not pass through this HTML parser.
+    """
+
+    _NONCONTENT_TAGS = {"head", "script", "style", "template"}
+    _VOID_TAGS = {
+        "area", "base", "br", "col", "embed", "hr", "img", "input", "link",
+        "meta", "param", "source", "track", "wbr",
+    }
+    _HIDDEN_STYLE = re.compile(
+        r"(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*(?:hidden|collapse))"
+        r"\s*(?:!important\s*)?(?:;|$)", re.I)
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.stack: list[tuple[str, bool]] = []
+        self.parts: list[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        hidden = bool(self.stack and self.stack[-1][1]) or (
+            tag in self._NONCONTENT_TAGS or "hidden" in attrs
+            or bool(self._HIDDEN_STYLE.search(attrs.get("style") or "")))
+        if tag not in self._VOID_TAGS:
+            self.stack.append((tag, hidden))
+
+    def handle_endtag(self, tag):
+        for index in range(len(self.stack) - 1, -1, -1):
+            if self.stack[index][0] == tag:
+                del self.stack[index:]
+                break
+
+    def handle_data(self, data):
+        if not self.stack or not self.stack[-1][1]:
+            self.parts.append(data)
 
 # Below this many characters of real visible text, a page is treated as an
 # empty/near-empty shell (an unrendered SPA root, a blank error page) rather
@@ -783,17 +810,19 @@ _MIN_VISIBLE_LISTING_CHARS = 120
 
 
 def _visible_text(html: str) -> str:
-    """The text a human reading the rendered page would see, roughly."""
-    stripped = _SCRIPT_OR_STYLE_RE.sub(" ", html)
-    stripped = _TAG_RE.sub(" ", stripped)
-    return re.sub(r"\s+", " ", stripped).strip()
+    """Static visible text from HTML, excluding non-content and hidden nodes."""
+    parser = _VisibleTextParser()
+    parser.feed(html)
+    parser.close()
+    return " ".join(" ".join(parser.parts).split())
 
 
 def _classify_generic_text(tier: str, text: str) -> CheckResult:
     wall = _detect_wall(text)
     if wall:
         return _source_wall("%s tier hit a bot wall (%r)" % (tier, wall))
-    lowered = text.lower()
+    visible = _visible_text(text) if tier == "http" else " ".join(text.split())
+    lowered = visible.lower()
     gone_match = next((phrase for phrase in _GENERIC_GONE_PHRASES if phrase in lowered), None)
     if gone_match:
         return CheckResult("gone", "%s tier page text matched removal phrase %r" % (tier, gone_match))
@@ -803,7 +832,6 @@ def _classify_generic_text(tier: str, text: str) -> CheckResult:
             "error",
             "%s tier page text matched error-page phrase %r -- ambiguous, not "
             "the listing's own state" % (tier, error_match))
-    visible = _visible_text(text)
     if len(visible) < _MIN_VISIBLE_LISTING_CHARS:
         return CheckResult(
             "error",

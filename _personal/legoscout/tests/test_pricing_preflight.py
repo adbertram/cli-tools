@@ -6,7 +6,7 @@ binary, failed subprocess, non-JSON stdout, zero profiles, ambiguous active
 profile) resolves to "not authenticated" with a descriptive error, never an
 unhandled exception. The newer checks follow the same discipline: per-item
 evidence, collected failures, exactly one non-zero exit at the end. Warnings
-(unresearched fee configs, dead Gmail outreach) never fail the gate.
+(unresearched fee configs) never fail the gate.
 
 Gate-level tests run `main()` under mocks with every external seam patched
 (binaries on PATH, subprocess calls, the source registry access layer, the
@@ -708,14 +708,6 @@ def test_gate_missing_fee_config_warns_without_failing(capsys):
     assert report["ok"] is True
     assert any("govdeals" in w for w in report["warnings"])
     assert report["checks"]["registry"]["missing_fee_config"] == ["govdeals"]
-
-
-def test_gate_dead_gmail_outreach_only_warns(capsys):
-    assert _run_gate(unauthed=("google",)) == 0
-    report = json.loads(capsys.readouterr().out)
-    assert report["ok"] is True
-    assert any("gmail" in w.lower() for w in report["warnings"])
-    assert report["checks"]["outreach_channel"]["authenticated"] is False
 
 
 # --- selected-source scope (--source) ---------------------------------------

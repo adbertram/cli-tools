@@ -240,13 +240,13 @@ def preflight(
     (plus live auth where the registry requires it), the runtime headless
     browser, adam-server SSH + the deployed display app's pm2 process,
     source-registry structure and researched fee configs, ledger working
-    copy writability, all four custom-agent definitions on both harnesses
-    plus hard-rules parity, the nine project skills, the global agent
+    copy writability, the required custom-agent definitions on both harnesses
+    plus hard-rules parity, the project skills, the global agent
     standards file, and the run workspace directories. A session-wide eBay
     auth lapse looks identical to a per-candidate miss inside any one comps
     call -- this gate catches it at the door instead of 20 candidates deep.
-    Exits non-zero on any blocker; warnings (unresearched fee configs, dead
-    Gmail outreach) are reported without failing the run. Pass --source once
+    Exits non-zero on any blocker; warnings (unresearched fee configs, unavailable
+    minifigure providers) are reported without failing the run. Pass --source once
     per namespace for a selected-source run; omit it for an all-active run.
     """
     argv = []

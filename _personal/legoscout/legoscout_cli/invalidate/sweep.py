@@ -47,6 +47,7 @@ from typing import Any, Callable
 # write of the deal ledger goes through `legoscout_cli.ledger.db`; nothing
 # here opens `found_deals.db` itself.
 from ..ledger import db as ledger_db  # noqa: E402
+from ..ledger.availability import apply as _apply_write_batch, evidence_basis, STATUS_FIELDS, SEEN_FIELDS
 from . import checks  # noqa: E402
 
 LEDGER = ledger_db.DB_PATH
@@ -232,15 +233,15 @@ def _in_cooldown(deal: dict[str, Any], now: datetime) -> bool:
 
 
 #  Which top-level fields a changed row's write actually touches, keyed by
-# the same shape every mutation branch below uses. `_prepare_write_batch`
+# the same shape every mutation branch below uses. `ledger.availability.apply`
 # reads this off each `changed` entry (as `deal["_sweep_fields"]`) so its
 # final merge onto a freshly re-fetched row copies ONLY what this sweep
 # meant to change -- never a whole stale snapshot. Never a ledger field
-# itself: stripped by construction, since `_prepare_write_batch` builds its
+# itself: stripped by construction, since `ledger.availability.apply` builds its
 # merged row from the FRESH read, not from `deal`, and only ever copies
 # these named keys onto it.
-_STATUS_CHANGE_FIELDS = ("status", "last_status", "last_seen_at", "notes")
-_STILL_ACTIVE_FIELDS = ("last_seen_at",)
+_STATUS_CHANGE_FIELDS = STATUS_FIELDS
+_STILL_ACTIVE_FIELDS = SEEN_FIELDS
 
 
 def _check_worker(
@@ -614,6 +615,7 @@ def _record_live_result(
     changed: list[dict[str, Any]],
 ) -> None:
     key = deal["listing_key"]
+    deal["_sweep_basis"] = evidence_basis(deal)
     entry = {
         "listing_key": key,
         "source": deal.get("source"),
@@ -626,11 +628,8 @@ def _record_live_result(
         deal["status"] = "unavailable"
         deal["last_status"] = "unavailable"
         deal["last_seen_at"] = now_iso
-        deal["notes"] = (
-            deal.get("notes", "")
-            + " [Marked unavailable %s by invalidate/sweep.py: %s]"
-            % (now_iso, result.detail)
-        ).strip()
+        deal["_sweep_note"] = "[Marked unavailable %s by invalidate/sweep.py: %s]" % (now_iso, result.detail)
+        deal["notes"] = (deal.get("notes", "") + " " + deal["_sweep_note"]).strip()
         deal["_sweep_fields"] = _STATUS_CHANGE_FIELDS
         changed.append(deal)
     elif result.status == "available":
@@ -643,11 +642,8 @@ def _record_live_result(
         deal["status"] = "blocked"
         deal["last_status"] = "blocked"
         deal["last_seen_at"] = now_iso
-        deal["notes"] = (
-            deal.get("notes", "")
-            + " [Marked blocked %s by invalidate/sweep.py: %s]"
-            % (now_iso, result.detail)
-        ).strip()
+        deal["_sweep_note"] = "[Marked blocked %s by invalidate/sweep.py: %s]" % (now_iso, result.detail)
+        deal["notes"] = (deal.get("notes", "") + " " + deal["_sweep_note"]).strip()
         deal["_sweep_fields"] = _STATUS_CHANGE_FIELDS
         changed.append(deal)
     else:
@@ -671,9 +667,9 @@ def sweep(
     ~45s HTTP + ~60s playwright-cli, across hundreds of candidate rows), so
     by the time a caller is ready to write, one of these rows may already
     have moved under it (Adam's own click on the deals page, a concurrent
-    `update_status()`). Pass `changed_rows` through `_prepare_write_batch()`
-    first -- see that function -- and write ONLY what it returns, via ONE
-    `ledger_db.upsert_deals()` call. This function never writes the ledger
+    `update_status()`). Pass `changed_rows` through `ledger.availability.apply()`
+    to perform the guarded write in one transaction. Never write its returned
+    rows again. This function never writes the ledger
     itself, and never calls `ledger_db.mark_unavailable()` /
     `mark_blocked()` per row: those are the single-row primitives for an
     ad-hoc confirmation, and calling either in a loop here would be hundreds
@@ -738,14 +734,15 @@ def sweep(
             # A real date already in the past is sufficient proof on its own
             # -- no live check runs.
             evidence = "Auction end date %s has passed (checked %s)" % (auction_end_date, now_iso)
+            deal["_sweep_basis"] = evidence_basis(deal)
             report["confirmed_unavailable"].append(
                 {"listing_key": key, "source": source, "auction_end_date": auction_end_date,
                  "evidence": evidence})
             deal["status"] = "unavailable"
             deal["last_status"] = "unavailable"
             deal["last_seen_at"] = now_iso
-            deal["notes"] = (deal.get("notes", "")
-                             + " [Marked unavailable %s by invalidate/sweep.py: %s]" % (now_iso, evidence)).strip()
+            deal["_sweep_note"] = "[Marked unavailable %s by invalidate/sweep.py: %s]" % (now_iso, evidence)
+            deal["notes"] = (deal.get("notes", "") + " " + deal["_sweep_note"]).strip()
             deal["_sweep_fields"] = _STATUS_CHANGE_FIELDS
             changed.append(deal)
             continue
@@ -851,67 +848,12 @@ def sweep(
     return report, changed
 
 
-def _prepare_write_batch(
-    changed: list[dict[str, Any]], path: str = LEDGER
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Reconcile `sweep()`'s stale in-memory verdicts against the ledger's
-    CURRENT state, right before the one batched write. Returns
-    (rows_to_write, skipped).
-
-    A run can sit open for many minutes, and `changed` was built from a
-    `load_deals()` snapshot taken at the very start of it. If Adam acts on
-    one of these listing_keys from the deals display page while the sweep
-    is still mid-run -- a fast, single-column `update_status()` that
-    commits immediately -- the sweep's later batched write would otherwise
-    overwrite his decision back to whatever it computed from that stale
-    snapshot, silently, with no error. Reproduced live: seed a row, run the
-    sweep, apply a concurrent `update_status(..., "rejected", ...)` while
-    the sweep's result sits unwritten, then run the old unconditional
-    `upsert_deals(changed)` -- the row's status reverted from `rejected`
-    back to whatever the sweep decided.
-
-    For each row, this re-fetches the CURRENT ledger record with
-    `ledger_db.get_deal()` and checks its live `status`:
-
-      - No longer `active` (or the row is gone entirely) -> DROPPED from the
-        write batch. Someone else already acted on it during this run;
-        `skipped` names it so the caller can report it, but it is never
-        overwritten.
-      - Still `active` -> this sweep's verdict is still current. The row to
-        write is the FRESH record (so any OTHER field a concurrent writer
-        touched survives) with only `deal["_sweep_fields"]` copied on top --
-        the exact set of fields this sweep's own branch changed, never a
-        whole stale snapshot.
-    """
-    to_write: list[dict[str, Any]] = []
-    skipped: list[dict[str, Any]] = []
-    for deal in changed:
-        key = deal["listing_key"]
-        fresh = ledger_db.get_deal(key, path=path)
-        if fresh is None:
-            skipped.append({"listing_key": key,
-                            "why": "listing_key no longer exists in the ledger"})
-            continue
-        if fresh.get("status") != "active":
-            skipped.append({
-                "listing_key": key,
-                "why": "status changed to %r during this run -- not overwritten"
-                       % fresh.get("status"),
-            })
-            continue
-        merged = dict(fresh)
-        for field in deal.get("_sweep_fields", ()):
-            merged[field] = deal.get(field)
-        to_write.append(merged)
-    return to_write, skipped
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--apply", action="store_true",
                         help="write confirmed/blocked records back to the ledger, "
-                             "batched in one upsert_deals() call")
+                             "batched in one guarded transaction")
     parser.add_argument(
         "--timeout-seconds", type=float, default=DEFAULT_SWEEP_TIMEOUT_SECONDS,
         help="hard limit for the complete sweep (default: %(default)s)")
@@ -954,16 +896,15 @@ def main() -> int:
 
     if args.apply and changed:
         # Re-fetch each row's CURRENT ledger state right before the write --
-        # see `_prepare_write_batch()` -- so a decision Adam made on the
+        # see `ledger.availability.apply()` -- so a decision Adam made on the
         # deals page while this run was still checking other rows is never
         # overwritten by a stale in-memory snapshot.
-        to_write, skipped = _prepare_write_batch(changed)
+        to_write, skipped = _apply_write_batch(changed, path=LEDGER)
         if skipped:
             report["skipped_due_to_concurrent_change"] = skipped
         if to_write:
-            counts = ledger_db.upsert_deals(to_write)
             report["applied"] = [d["listing_key"] for d in to_write]
-            report["applied_counts"] = counts
+            report["applied_counts"] = {"inserted": 0, "updated": len(to_write)}
         else:
             report["applied"] = []
     else:

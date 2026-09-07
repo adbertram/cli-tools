@@ -656,6 +656,11 @@
       "phase": "appraisal",
       "description": "One entry per detected set: BrickLink catalog metadata plus 6-month sold summaries, from `lookup_set_sales.py`. An ARRAY because `summarize_set()` returns exactly one per-set object and the appraiser calls it once per set; `null` when no set was priced, and never `[]`, which is the same answer spelled twice. It was typed `object|null` until 2026-08-05 while 331 rows already held the array, and the ledger carried four incompatible dict spellings beside it (a `sets` wrapper, keyed by set number, a bare per-set object, an unkeyed blob). Read and write it only through `legoscout-ledger/scripts/set_analysis.py` -- `normalize()`/`entries()`/`names()`. A lot-level value (`potential_profit_total`, `purchase_price`, `used_avg_6mo`, `set_numbers`) does NOT belong in an entry: it has its own column, and the wrapper copy had already gone stale on 7 rows."
     },
+    "minifig_review_receipt": {
+      "type": ["object", "null"],
+      "phase": "synthesis",
+      "description": "Content-bound review evidence for newly published minifigure identification. legoscout_cli.pricing.minifig_receipt owns its exact contract and validates it at publication, synthesis, and server ingestion. Null or absent on historical rows; historical readers do not manufacture review evidence."
+    },
     "minifig_analysis": {
       "type": [
         "array",

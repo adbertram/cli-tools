@@ -50,6 +50,7 @@ from typing import Any
 from . import fulfillment as af  # noqa: E402
 from . import schema as deal_schema  # noqa: E402
 from ..pricing import profit as profit_module  # noqa: E402
+from ..pricing.minifig_receipt import bind_deal_record, validate_publication_record  # noqa: E402
 from ..scoring import score as score_deal  # noqa: E402
 from . import sellers as sellers_db  # noqa: E402
 from . import minifig_analysis as mfa  # noqa: E402
@@ -372,14 +373,13 @@ def _apply_comps(merged: dict, comps: dict | None, fee_rate: float | None) -> No
     $20.59 from the record's own `potential_profit` on
     `shopgoodwill|271135286` (see `set_analysis.py`).
 
-    A multi-set listing allocates the landed cost EVENLY across every detected
-    set number (no better per-set allocation evidence exists generically), and
-    sums `used_avg_6mo`/`new_avg_6mo`/`potential_profit` across whichever sets
-    priced -- matching the pre-split system's documented rule. A set that
-    BrickLink could not confirm, or that lacks its selected condition's
-    sold average, stays in `set_analysis` with null price/profit fields and
-    contributes nothing to the sums; only the priced sets are summed, and the
-    lot is marked `profit_incomplete` whenever any set could not be priced.
+    Per-set explanations allocate the landed cost evenly across detected sets.
+    Lot profit instead sums evidenced gross resale, applies selling fees once,
+    and deducts the full landed lot cost, including the cost of unpriced sets.
+    Unconfirmed sets or sets lacking usable comps keep null per-set profit and
+    contribute no evidenced resale. They mark the lot `profit_incomplete`;
+    a lot with no priced sets stays unpriced. Source average fields remain
+    sums of their available per-set values.
 
     `potential_profit` itself is priced off a comp-count-weighted BLEND of
     BrickLink's selected-condition average and eBay's same-condition average
@@ -458,7 +458,7 @@ def _apply_comps(merged: dict, comps: dict | None, fee_rate: float | None) -> No
     ebay_avg_sum: float | None = None
     ebay_count_sum = 0
     any_ebay_available = False
-    profit_sum = 0.0
+    priced_resale_sum = 0.0
     any_priced = False
     any_unpriced = False
     any_zero_in_both = False
@@ -523,7 +523,6 @@ def _apply_comps(merged: dict, comps: dict | None, fee_rate: float | None) -> No
                 entry["comp_basis"] = (
                     "bricklink: zero sold comps in both conditions; ebay: "
                     "zero sold comps -- priced at $0 loss, no market evidence")
-                profit_sum += -allocated_cost
                 any_priced = True
                 any_zero_in_both = True
             else:
@@ -547,7 +546,7 @@ def _apply_comps(merged: dict, comps: dict | None, fee_rate: float | None) -> No
                     entry["potential_profit"] = profit_result["potential_profit"]
                     entry["blended_avg_sold_price"] = blended["avg"]
                     entry["comp_basis"] = blended["basis"]
-                    profit_sum += profit_result["potential_profit"]
+                    priced_resale_sum += blended["avg"]
                     any_priced = True
                 else:
                     # This set's SELECTED condition has no BrickLink evidence,
@@ -590,7 +589,11 @@ def _apply_comps(merged: dict, comps: dict | None, fee_rate: float | None) -> No
         return
 
     if fee_rate is not None:
-        merged["potential_profit"] = round(profit_sum, 2) if any_priced else None
+        # Unknown sets add no evidenced resale, but the full lot still costs
+        # estimated_total. Round once at the lot boundary, not once per set.
+        merged["potential_profit"] = (
+            profit_module.net_profit(priced_resale_sum, estimated_total, fee_rate)
+            if any_priced else None)
         # A zero-in-both-conditions $0 loss is a real number, but a weaker one
         # than an ordinary priced comp -- it rests on zero market evidence, not
         # a real average -- so it marks the lot incomplete too, matching the
@@ -632,6 +635,8 @@ def _apply_minifig_identification(
         raise ValueError(
             "build_deal_record: identification is blocked: %s"
             % identification.get("blocker"))
+    validate_publication_record(identification, kind="identification")
+    merged["minifig_review_receipt"] = identification["minifig_review_receipt"]
     analysis = mfa.normalize(identification.get("minifig_analysis"))
     if not analysis:
         raise ValueError(
@@ -822,6 +827,8 @@ def build_deal_record(
     merged["prospect_id"] = candidate.get("prospect_id", appraisal.get("prospect_id"))
     merged["verification"] = None
     _require_semantically_valid(merged)
+    if merged.get("listing_category") == "minifigure":
+        bind_deal_record(merged)
 
     return merged
 

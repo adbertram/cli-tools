@@ -146,11 +146,7 @@ SCALAR_FIELDS: tuple[str, ...] = (
     # deals page. Never set when the set number itself is unconfirmed; see
     # legoscout-pricing's <pricing_basis>.
     "zero_comp_note",
-    # Phase-2 link to the prospects table (prospects_db.py): which prospect
-    # produced this deal. Deliberately NOT a declared FK: save() bulk
-    # re-INSERTs every deal under foreign_keys=ON, and a dangling reference
-    # would abort a full-ledger write over prospector bookkeeping. NULL on
-    # every row until phase 2 starts writing it.
+    # Inert legacy association retained so historical deals round-trip losslessly.
     "prospect_id",
 )
 
@@ -194,6 +190,7 @@ JSON_FIELDS: tuple[str, ...] = (
     # value). Read/written only through ledger/minifig_analysis.py; null on
     # every legacy row.
     "minifig_analysis",
+    "minifig_review_receipt",
     # The classifier's evidence-backed correction of a crawl price the listing
     # text contradicts ({price, evidence}). Kept verbatim on the record so the
     # correction's evidence survives next to the numbers it moved -- the deals
@@ -220,6 +217,13 @@ META_FIELDS: tuple[str, ...] = (
 _REVISION_KEY = "_revision"
 
 _COLUMNS = SCALAR_FIELDS + JSON_FIELDS
+
+# Fields whose authoritative values come from the server row rather than a
+# submitted observation. Receipt hashes omit the same fields so a status click
+# or server timestamp update does not invalidate reviewed deal content.
+SERVER_OWNED_FIELDS = frozenset({
+    "status", "last_status", "first_seen_at", "last_seen_at",
+})
 
 # Columns the schema used to have and must not grow back. A retired column is
 # dropped on connect so a database restored from an older copy converges on the
@@ -288,9 +292,7 @@ _NUMERIC = {
     "figure_count_source",
     "winning_bid",
     "pickup_miles",
-    # An integer key, not a measurement. It is here for the affinity, not the
-    # float safety: TEXT affinity would store integer 42 as '42' and silently
-    # break every join against prospects.prospect_id.
+    # Preserve the integer type of legacy associations.
     "prospect_id",
 }
 
@@ -363,11 +365,48 @@ def connect(path: str = DB_PATH) -> sqlite3.Connection:
         raise FileNotFoundError(_missing_ledger_message(path))
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
+    has_meta = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meta'"
+    ).fetchone()
+    baseline = None
+    if has_meta is not None:
+        baseline = conn.execute(
+            "SELECT value FROM meta WHERE key = '_ingest_baseline'"
+        ).fetchone()
+    if baseline is not None:
+        # A run snapshot is immutable even through legacy write-capable APIs.
+        conn.execute("PRAGMA query_only=ON")
+        return conn
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     _add_missing_columns(conn)
     _ensure_indexes(conn)
     return conn
+
+
+def snapshot(source: str, destination: str, *, baseline: bool = False) -> None:
+    """Copy a coherent SQLite snapshot to a new file, never replace local work."""
+    src = connect_readonly(source)
+    try:
+        with open(destination, "xb"):
+            pass
+        try:
+            dst = sqlite3.connect(destination)
+            try:
+                src.backup(dst)
+                if baseline:
+                    dst.execute(
+                        "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+                        ("_ingest_baseline", "true"),
+                    )
+                    dst.commit()
+            finally:
+                dst.close()
+        except BaseException:
+            os.unlink(destination)
+            raise
+    finally:
+        src.close()
 
 
 def _add_missing_columns(conn: sqlite3.Connection) -> None:

@@ -300,7 +300,7 @@ def test_bricklink_zero_in_both_but_ebay_has_comps_prices_off_ebay_not_zero():
 
 # --- multi-set listing --------------------------------------------------------
 
-def test_multi_set_allocates_landed_cost_evenly_and_sums_profit():
+def test_multi_set_allocates_cost_for_entries_and_prices_the_whole_lot():
     comps = _set_comps(
         _one_set(set_no="75192-1", avg_price=500.0, count=10),
         _one_set(set_no="6868-1", avg_price=200.0, count=5),
@@ -333,8 +333,8 @@ def test_multi_set_one_unfound_set_does_not_block_the_others():
     # Allocated cost still splits by the full detected-set count (2), not 1.
     assert by_no["75192-1"]["purchase_price"] == 150.0
     assert by_no["75192-1"]["potential_profit"] == round(500.0 * 0.87 - 150.0, 2)
-    # Only the priced set's profit is summed; the lot is marked incomplete.
-    assert rec["potential_profit"] == round(500.0 * 0.87 - 150.0, 2)
+    # Known resale must cover the full $300 lot, including the unknown set.
+    assert rec["potential_profit"] == 135.0
     assert rec["profit_incomplete"] is True
 
 
@@ -363,3 +363,88 @@ def test_multi_set_incomplete_never_gets_a_profit_number():
     assert rec["potential_profit"] is None
     assert rec["profit_incomplete"] is True
     assert all(e["potential_profit"] is None for e in rec["set_analysis"])
+
+
+@pytest.mark.parametrize("known_count,unknown_count,landed", [
+    (1, 1, 300.0), (1, 2, 90.0), (2, 1, 300.0), (2, 2, 600.0),
+])
+def test_partial_lot_deducts_full_cost(known_count, unknown_count, landed):
+    entries = [_one_set(set_no=f"75{i:03d}-1", avg_price=200.0)
+               for i in range(known_count)]
+    entries += [{"set_no": f"99{i:03d}-1",
+                 "bricklink": _bricklink_not_found(f"99{i:03d}-1"),
+                 "ebay": dict(_EBAY_UNAVAILABLE)} for i in range(unknown_count)]
+    record = _build("ebay|1", "set", comps=_set_comps(*entries),
+                    fee_rate=0.13, estimated_total=landed)
+    assert record["potential_profit"] == round(known_count * 200.0 * 0.87 - landed, 2)
+    assert record["profit_incomplete"] is True
+
+
+def test_zero_demand_plus_unknown_still_costs_the_full_lot():
+    comps = _set_comps(
+        _one_set(avg_price=None, count=0),
+        {"set_no": "99999999-1", "bricklink": _bricklink_not_found("99999999-1"),
+         "ebay": dict(_EBAY_UNAVAILABLE)},
+    )
+    record = _build("ebay|1", "set", comps=comps, fee_rate=0.13)
+    assert record["potential_profit"] == -300.0
+    assert record["profit_incomplete"] is True
+
+
+def test_all_unknown_sets_remain_unpriced():
+    comps = _set_comps(*[
+        {"set_no": name, "bricklink": _bricklink_not_found(name),
+         "ebay": dict(_EBAY_UNAVAILABLE)} for name in ("99999998-1", "99999999-1")])
+    record = _build("ebay|1", "set", comps=comps, fee_rate=0.13)
+    assert record["potential_profit"] is None
+    assert record["profit_incomplete"] is True
+
+
+def test_lot_profit_rounds_once_after_aggregating_resale():
+    comps = _set_comps(*[_one_set(set_no=name, avg_price=0.01, count=1)
+                         for name in ("75001-1", "75002-1", "75003-1")])
+    record = _build("ebay|1", "set", comps=comps, fee_rate=0.13,
+                    estimated_total=1.0)
+    assert record["potential_profit"] == -0.97
+    assert record["profit_incomplete"] is False
+
+
+def test_partial_profit_survives_persistence_and_display(tmp_path, monkeypatch):
+    """The user sees $135 with incomplete evidence after a full ledger round-trip."""
+    import json
+    from legoscout_cli.display import rows
+    from legoscout_cli.ledger import db
+    from legoscout_cli.sources import registry
+
+    path = str(tmp_path / "partial-profit.db")
+    db.init(path).close()
+    # Any accidental default-ledger access must fail before opening a file.
+    for name in ("connect", "connect_readonly"):
+        original = getattr(db, name)
+        def isolated(selected_path=db.DB_PATH, *, _open=original):
+            assert selected_path == path, "test attempted to open the live ledger"
+            return _open(selected_path)
+        monkeypatch.setattr(db, name, isolated)
+    connection = registry._connect(path)
+    with connection:
+        connection.execute("INSERT INTO sources (namespace, payload) VALUES (?, ?)", (
+            "ebay", json.dumps({"short": "eBay", "capability": {"can_offer": False}})))
+    connection.close()
+    monkeypatch.setattr(registry, "sources", registry.Registry(path))
+    comps = _set_comps(
+        _one_set(set_no="75192-1", avg_price=500.0, count=10),
+        {"set_no": "99999999-1", "bricklink": _bricklink_not_found("99999999-1"),
+         "ebay": dict(_EBAY_UNAVAILABLE)},
+    )
+    record = build_record.build_deal_record(
+        _record("ebay|1"), _appraisal("ebay|1", "set"),
+        first_seen_at="2026-09-07T00:00:00Z", last_seen_at="2026-09-07T00:00:00Z",
+        comps=comps, fee_rate=0.13, favorite_sellers=set())
+    db.upsert_deals([record], path=path)
+    saved = db.get_deal("ebay|1", path=path)
+    assert saved["potential_profit"] == 135.0
+    assert saved["profit_incomplete"] is True
+    displayed = rows.build_rows(path=path)
+    assert len(displayed) == 1
+    assert displayed[0]["profit"] == 135.0
+    assert displayed[0]["pinc"] is True

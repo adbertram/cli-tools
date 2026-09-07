@@ -1,17 +1,8 @@
 """Every leaf subcommand runs once, against a disposable ledger.
 
-Two of the worst defects this tool has shipped were commands that had never
-been executed. `legoscout deals build` omitted both of `build_deal_record`'s
-keyword-only arguments and failed on 100% of invocations from the day of the
-CLI cutover. Four `legoscout prospects` subcommands queried a column that does
-not exist. Neither was subtle, neither had a test, and both would have been
-caught the same day by a suite that simply RAN each command once.
-
-So that is what this is. The command list is discovered from the Typer app --
-never hand-written -- because a hand-written list drifts in exactly the way the
-column lists did. `test_every_leaf_is_accounted_for` fails the moment a new
-leaf subcommand appears without either a smoke case or an explicit, reasoned
-skip, so nothing can slip into the CLI uncovered.
+The command list is discovered from the Typer app. Each leaf needs a smoke
+case or an explicit reason why it requires live network access or an external
+side effect, so new commands cannot silently escape coverage.
 
 `SKIPPED` is the whole escape hatch, and it is deliberately loud: a command
 lands there only when running it would make a live network call or a real-world
@@ -38,7 +29,6 @@ import legoscout_cli
 from legoscout_cli import paths
 from legoscout_cli.ledger import db as ledger_db
 from legoscout_cli.main import app
-from legoscout_cli.prospector import hypothesis_types
 from legoscout_cli.sources import registry
 
 
@@ -158,12 +148,6 @@ def ids(ledger):
             raise RuntimeError(
                 "source_notes has no row with a non-null id -- the leaf-command "
                 "smoke test needs one real note id to invoke `sources notes get`")
-        prospect = conn.execute(
-            "SELECT prospect_id FROM prospects ORDER BY prospect_id LIMIT 1").fetchone()
-        contact = conn.execute(
-            "SELECT contact_id FROM contacts ORDER BY contact_id LIMIT 1").fetchone()
-        run = conn.execute(
-            "SELECT run_id FROM prospect_runs ORDER BY run_id LIMIT 1").fetchone()
     finally:
         conn.close()
     return {
@@ -173,10 +157,6 @@ def ids(ledger):
         "namespace": namespace,
         "note_id": note[0],
         "note_source": note[1],
-        "prospect_id": str(prospect[0]),
-        "contact_id": str(contact[0]),
-        "run_id": str(run[0]),
-        "hypothesis_type": sorted(hypothesis_types.table())[0],
     }
 
 
@@ -232,19 +212,6 @@ def files(tmp_path_factory, ledger):
             "model_rationale": "The smoke fixture has neutral deal evidence.",
         },
     }
-    prospect = {
-        "name": "LegoScout Smoke Test Thrift",
-        "hypothesis_type": sorted(hypothesis_types.table())[0],
-        "location": "Evansville, IN",
-        "evidence_url": "https://example.invalid/legoscout-smoke-test",
-        "contacts": [{"channel": "email", "value": "smoke@example.invalid"}],
-    }
-    contact = {"prospect_id": 1, "channel": "email",
-               "value": "smoke-contact@example.invalid"}
-    run = {"run_key": "legoscout-smoke-test-run",
-           "hypothesis_type": sorted(hypothesis_types.table())[0],
-           "searches": ["smoke test"], "result_count": 0,
-           "notes": "written by the leaf-subcommand smoke test"}
     minifig_identify_input = {
         "version": 1,
         "kind": "minifig_detection",
@@ -295,8 +262,6 @@ def files(tmp_path_factory, ledger):
                           ("triage", []), ("minifig_input", []),
                           ("minifig_identify_input", minifig_identify_input),
                           ("minifig_price_input", minifig_price_input),
-                          ("prospect", prospect),
-                          ("contact", contact), ("run", run),
                           ("entry", {ADDED_SOURCE: _source_entry(ADDED_SOURCE)})):
         path = root / ("%s.json" % name)
         path.write_text(json.dumps(payload), encoding="utf-8")
@@ -305,6 +270,19 @@ def files(tmp_path_factory, ledger):
     written["minifig_identify_output"] = str(
         root / "minifig_identify_output.json")
     written["minifig_price_output"] = str(root / "minifig_price_output.json")
+    from minifig_review_fixtures import prepare_review_files
+    from test_minifig_contract_repairs import _artifact
+    reviewed = _artifact([("ebay|smoke", [], "skipped", "offline-no-detections")])
+    written["minifig_price_input"] = str(prepare_review_files(
+        root / "minifig-review", reviewed, root / "minifig_price_output.json",
+    ))
+    written["ingest_baseline"] = str(root / "baseline.db")
+    ledger_db.snapshot(ledger, written["ingest_baseline"], baseline=True)
+    written["ingest_payload"] = str(root / "ingest.json")
+    from test_server_ingestion import deal
+    records_path = root / "ingest-records.json"
+    records_path.write_text(json.dumps([deal("ebay|offline-smoke")] ), encoding="utf-8")
+    written["ingest_records"] = str(records_path)
     manifest_dir = root / "run-manifest"
     manifest_dir.mkdir()
     for namespace in registry.active_namespaces():
@@ -406,6 +384,10 @@ def cases(ids, files):
     """path -> the minimum valid invocation, for every leaf that can be run."""
     return {
         ("triage",): _case([files["triage"]]),
+        ("deploy", "prepare-ingest"): _case([
+            "--run-id", "offline-smoke", "--baseline", files["ingest_baseline"],
+            "--records", files["ingest_records"], "--output", files["ingest_payload"],
+        ]),
 
         ("sources", "list"): _case([]),
         ("sources", "get"): _case([ids["namespace"]]),
@@ -432,19 +414,6 @@ def cases(ids, files):
         ("sellers", "get"): _case([ids["source"], ids["seller_id"]]),
         ("sellers", "favorite"): _case([ids["source"], ids["seller_id"], "--off"]),
         ("sellers", "backfill"): _case(["--dry-run"]),
-
-        ("prospects", "list"): _case(["--limit", "5"]),
-        ("prospects", "get"): _case([ids["prospect_id"]]),
-        ("prospects", "contacts", "list"): _case(["--limit", "5"]),
-        ("prospects", "contacts", "get"): _case([ids["contact_id"]]),
-        ("prospects", "outreach", "list"): _case(["--limit", "5"]),
-        ("prospects", "runs", "list"): _case(["--limit", "5"]),
-        ("prospects", "runs", "get"): _case([ids["run_id"]]),
-        ("prospects", "hypotheses", "list"): _case(["--limit", "5"]),
-        ("prospects", "hypotheses", "get"): _case([ids["hypothesis_type"]]),
-        ("prospects", "create"): _case([files["prospect"]]),
-        ("prospects", "contacts", "create"): _case([files["contact"]]),
-        ("prospects", "runs", "create"): _case([files["run"]]),
 
         ("pricing", "fees"): _case(["--source", ids["namespace"]]),
         ("pricing", "landed-cost"): _case(
@@ -482,12 +451,6 @@ SKIPPED: dict[tuple[str, ...], str] = {
     ("deals", "expire"):
         "re-verifies each expired listing against its live source, so a run "
         "makes one marketplace call per candidate row",
-    ("prospects", "outreach", "get"):
-        "the ledger holds no outreach row and the CLI has no command that "
-        "creates one; an outreach row exists only after Adam approves a body, "
-        "and seeding one here would fake that approval",
-    ("prospects", "outreach", "send"):
-        "sends a real email to a real prospect through the google CLI",
     ("pricing", "set-sales"):
         "calls BrickLink for sold comps",
     ("pricing", "ebay-comps"):
@@ -514,6 +477,12 @@ SKIPPED: dict[tuple[str, ...], str] = {
         "starts a long-lived HTTP server and opens a browser",
     ("deploy", "pull-db"):
         "sshes and scps against the real adam-server host",
+    ("deploy", "expire"):
+        "runs live marketplace availability checks and writes the authoritative server ledger",
+    ("deploy", "source-note"):
+        "appends a source note to the authoritative server over SSH; covered with a disposable remote-adapter fixture",
+    ("deploy", "ingest"):
+        "copies crops and writes validated observations to the authoritative server ledger",
     ("deploy", "push"):
         "sshes, scps, and git-archives against the real adam-server host",
     ("deploy", "status"):
@@ -521,39 +490,6 @@ SKIPPED: dict[tuple[str, ...], str] = {
     ("deploy", "rollback"):
         "sshes against the real adam-server host and restarts its pm2 process",
 }
-
-
-# Commands this suite RUNS and that currently fail, with the defect named. They
-# stay in `cases` -- not in `SKIPPED` -- so the coverage is real; the xfail is
-# strict, so the day the owner fixes one of these the test FAILS and forces the
-# entry out. This is what a smoke test is for: all three are the same defect as
-# `deals build` was, a Typer wrapper calling a function with fewer arguments
-# than its signature requires.
-#
-# They live in `legoscout_cli/commands/prospects.py`, which this change does not
-# own.
-KNOWN_BROKEN: dict[tuple[str, ...], str] = {
-    ("prospects", "create"):
-        "commands/prospects.py calls insert_prospect(record) but the signature "
-        "is insert_prospect(prospect, contacts, *, path) -- TypeError on every "
-        "invocation",
-    ("prospects", "contacts", "create"):
-        "commands/prospects.py calls insert_contact(record) but the signature "
-        "is insert_contact(prospect_id, contact, *, path) -- TypeError on "
-        "every invocation",
-    ("prospects", "runs", "create"):
-        "commands/prospects.py calls record_run(record) but the signature is "
-        "record_run(run_key, hypothesis_type, searches, result_count, ...) -- "
-        "TypeError on every invocation",
-}
-
-
-def test_known_broken_commands_are_still_run(ids, files):
-    """A known defect is a case that runs, never a skip that hides it."""
-    covered = set(cases(ids, files))
-    for path in KNOWN_BROKEN:
-        assert path in covered, "%s is marked broken but has no case" % " ".join(path)
-        assert path not in SKIPPED, "%s must not be skipped as well" % " ".join(path)
 
 
 def test_every_leaf_is_accounted_for(ids, files):
@@ -586,12 +522,6 @@ def test_leaf_subcommand_runs(path, request, runner, ids, files, ledger,
                               removable_source):
     if path in SKIPPED:
         pytest.skip(SKIPPED[path])
-    if path in KNOWN_BROKEN:
-        # strict: fixing the command turns this into a FAILURE, which is the
-        # prompt to delete the entry rather than let it rot into a permanent
-        # exemption.
-        request.applymarker(pytest.mark.xfail(reason=KNOWN_BROKEN[path],
-                                              strict=True))
     case = cases(ids, files)[path]
     argv = list(path) + case["args"]
     result = runner.invoke(app, argv)

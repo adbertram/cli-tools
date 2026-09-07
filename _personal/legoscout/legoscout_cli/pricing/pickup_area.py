@@ -77,9 +77,7 @@ def normalize_city(city):
 def resolve(location, area_path=AREA):
     """Return a verdict dict. Raises ValueError if the location is unusable.
 
-    Pass `area_path` to resolve against a different radius table (the
-    prospector's 60-mile prospect_area.json); the default is the 30-mile deal
-    gate.
+    The default radius table is the 30-mile deal gate.
     """
     if location is None or not str(location).strip():
         raise ValueError("no location given -- a pickup decision needs one")

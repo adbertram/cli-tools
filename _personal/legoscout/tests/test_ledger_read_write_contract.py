@@ -351,3 +351,31 @@ def test_connect_raises_the_shared_missing_message(tmp_path):
     with pytest.raises(FileNotFoundError) as ro_exc:
         ledger_db.connect_readonly(path)
     assert str(ro_exc.value) == message
+
+
+def test_status_click_invalidates_stale_whole_ledger_save(ledger):
+    stale = ledger_db.load_document(path=ledger)
+    assert ledger_db.update_status("ebay|2002", "rejected", "2026-09-07T00:00:00Z", path=ledger)
+    with pytest.raises(ledger_db.StaleWrite):
+        ledger_db.save(stale, path=ledger)
+    current = ledger_db.get_deal("ebay|2002", path=ledger)
+    assert current["status"] == "rejected"
+    assert current["last_status"] == "rejected"
+    assert ledger_db.load_document(path=ledger)["_revision"] == stale["_revision"] + 1
+
+
+def test_missing_status_target_does_not_invalidate_valid_document(ledger):
+    document = ledger_db.load_document(path=ledger)
+    assert ledger_db.update_status("ebay|missing", "rejected", "2026-09-07T00:00:00Z", path=ledger) is False
+    assert ledger_db.load_document(path=ledger)["_revision"] == document["_revision"]
+    ledger_db.save(document, path=ledger)
+
+
+def test_failed_revision_advance_rolls_back_status_click(ledger, monkeypatch):
+    before = ledger_db.load_document(path=ledger)
+    def fail_revision(*_args):
+        raise RuntimeError("revision write failed")
+    monkeypatch.setattr(ledger_db, "_bump_revision", fail_revision)
+    with pytest.raises(RuntimeError, match="revision write failed"):
+        ledger_db.update_status("ebay|2002", "rejected", "2026-09-07T00:00:00Z", path=ledger)
+    assert ledger_db.load_document(path=ledger) == before

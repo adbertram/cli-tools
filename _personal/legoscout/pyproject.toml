@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "legoscout-cli"
 version = "0.1.0"
-description = "Sources and prices used LEGO deals: ledger, scoring, pricing, sources, prospects, display"
+description = "Sources and prices used LEGO deals: ledger, scoring, pricing, sources, display"
 requires-python = ">=3.11"
 dependencies = [
     "cli-tools-shared",
@@ -35,8 +35,6 @@ legoscout_cli = [
     "ledger/deal_schema.json",
     "pricing/pickup_area.json",
     "pricing/seller_origins.json",
-    "prospector/hypothesis_types.json",
-    "prospector/prospect_area.json",
     "sources/triage_rules.json",
 ]
 
