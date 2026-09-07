@@ -337,14 +337,30 @@ CREATE INDEX IF NOT EXISTS idx_deals_per_lb ON deals(per_lb_price);
 """
 
 
+def _missing_ledger_message(path: str) -> str:
+    """The one 'database missing' message every connect path raises.
+
+    A missing file has two different fixes, and the caller must be able to tell
+    which applies without reading the source:
+      - a scratch/staging ledger the caller meant to create but never
+        initialized -> `init(path).close()` is the fix, not a restore;
+      - the canonical ledger, which has no JSON export and no second copy ->
+        restore the newest copy from ~/legoscout-snapshots/ or Dropbox version
+        history.
+    """
+    return (
+        f"Ledger database missing: {path}. "
+        "If this is a scratch/staging ledger you meant to create, initialize it "
+        "first with ledger_db.init(path).close(), then retry. "
+        "If this is the canonical ledger, it is the only ledger and there is no "
+        "JSON export to rebuild it from -- restore the newest copy from "
+        "~/legoscout-snapshots/, or from Dropbox version history."
+    )
+
+
 def connect(path: str = DB_PATH) -> sqlite3.Connection:
     if not os.path.isfile(path):
-        raise FileNotFoundError(
-            f"Ledger database missing: {path}. "
-            "It is the only ledger; there is no JSON export to rebuild it from. "
-            "Restore the newest copy from ~/legoscout-snapshots/, "
-            "or from Dropbox version history."
-        )
+        raise FileNotFoundError(_missing_ledger_message(path))
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
@@ -415,7 +431,21 @@ def _ensure_indexes(conn: sqlite3.Connection) -> None:
 
 
 def init(path: str = DB_PATH) -> sqlite3.Connection:
-    """Create the database and schema if absent. Used by the migration only."""
+    """Create the database and schema if absent.
+
+    This is the sanctioned way to bring a NEW ledger into existence. The
+    canonical migration uses it, and so does any scratch or staging ledger.
+    `connect()` REFUSES a file that does not exist, so a caller that points
+    `upsert_deals(path=...)`, `save(doc, path=...)`, or
+    `load_document(path=...)` at a path nobody created yet MUST initialize it
+    first:
+
+        ledger_db.init(path).close()
+
+    then call the access layer normally. `init()` on an existing path re-runs
+    the idempotent schema DDL (`CREATE TABLE IF NOT EXISTS`) and leaves rows
+    untouched.
+    """
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
@@ -795,12 +825,7 @@ def connect_readonly(path: str = DB_PATH) -> sqlite3.Connection:
     still migrate on their own write-capable connections.
     """
     if not os.path.isfile(path):
-        raise FileNotFoundError(
-            f"Ledger database missing: {path}. "
-            "It is the only ledger; there is no JSON export to rebuild it from. "
-            "Restore the newest copy from ~/legoscout-snapshots/, "
-            "or from Dropbox version history."
-        )
+        raise FileNotFoundError(_missing_ledger_message(path))
     conn = sqlite3.connect(
         pathlib.Path(path).as_uri() + "?mode=ro",
         uri=True,

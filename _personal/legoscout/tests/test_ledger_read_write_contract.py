@@ -267,3 +267,46 @@ def test_concurrent_upserts_both_land(ledger):
     assert [p.exitcode for p in procs] == [0, 0]
     keys = {d["listing_key"] for d in ledger_db.load_deals(path=ledger)}
     assert {"hibid|3003", "craigslist|4004"} <= keys
+
+
+# --- a missing database is a caller defect, fixed by init(), not by guessing -
+
+def test_upsert_deals_requires_an_initialized_database(tmp_path):
+    """`upsert_deals(path=...)` writes through `connect()`, which REFUSES a
+    missing file. A scratch/staging ledger must be initialized first.
+
+    This is the exact failure that closed the 2026-09-06 partial run: a
+    `staged-found-deals.db` that had never been initialized was passed straight
+    to `upsert_deals(path=...)`, and the error message had only restore-from-
+    snapshot guidance for a ledger nobody ever created. The message must now
+    name `init(path).close()` as the fix for a scratch path.
+    """
+    path = str(tmp_path / "staged-found-deals.db")
+    with pytest.raises(FileNotFoundError, match="init"):
+        ledger_db.upsert_deals([_seed_deal("shopgoodwill|1001")], path=path)
+
+
+def test_init_then_upsert_is_the_sanctioned_scratch_ledger_path(tmp_path):
+    """The staging validation example, as a test: `init()` creates the schema,
+    and only then does `upsert_deals(path=...)` open and write it."""
+    path = str(tmp_path / "staged-found-deals.db")
+    ledger_db.init(path).close()
+    assert ledger_db.upsert_deals(
+        [_seed_deal("shopgoodwill|1001")], path=path
+    ) == {"inserted": 1, "updated": 0}
+    assert [d["listing_key"] for d in ledger_db.load_deals(path=path)] == \
+        ["shopgoodwill|1001"]
+
+
+def test_connect_raises_the_shared_missing_message(tmp_path):
+    """Both `connect()` and the read-only loader raise the same message, and it
+    distinguishes a never-initialized scratch ledger from a lost canonical one."""
+    path = str(tmp_path / "never-created.db")
+    with pytest.raises(FileNotFoundError) as exc:
+        ledger_db.connect(path)
+    message = str(exc.value)
+    assert "init(path).close()" in message
+    assert "scratch/staging" in message
+    with pytest.raises(FileNotFoundError) as ro_exc:
+        ledger_db.connect_readonly(path)
+    assert str(ro_exc.value) == message
