@@ -1,5 +1,6 @@
 """Microworkers client using BrowserAutomation from cli_tools_shared."""
 
+import random
 import re
 import time
 from contextlib import contextmanager
@@ -265,14 +266,25 @@ def _is_authoritative_submitted_state(
     return current_provider == requested_provider and current_id == requested_id
 
 
-MAX_LIST_PAGES = 25  # /jobs.php shows 100 rows/page; matches the site's own page cap.
+ROWS_PER_PAGE = 100  # /jobs.php returns 100 rows per page.
 
-# Seconds to wait between consecutive /jobs.php page loads. Microworkers'
-# bot detection watches listing cadence, not volume: fetching the full
-# 2500-row queue back to back earned this account a 1-day
-# "Auto-refresh / Bot" ban on both 2026-09-05 and 2026-09-06. Spacing the
-# page loads keeps a full listing walk inside a human-looking rhythm.
-LIST_PAGE_DELAY_SECONDS = 4.0
+# The site's own listing cap: /jobs.php serves at most 25 pages (2500 rows).
+# This is a safety ceiling, not a target — the walk is bounded by the caller's
+# limit first (see `_pages_needed`), so a small limit never walks past need.
+MAX_LIST_PAGES = 25
+
+
+def _pages_needed(limit: int) -> int:
+    """Number of /jobs.php pages required to satisfy ``limit`` rows.
+
+    /jobs.php returns ``ROWS_PER_PAGE`` rows per page, so the walk needs
+    ``ceil(limit / ROWS_PER_PAGE)`` pages. This need-based bound replaces the
+    old fixed ``MAX_LIST_PAGES`` walk: a ``--limit 100`` request fetches exactly
+    one page instead of always walking toward the full 2500-row queue.
+    """
+    if limit <= 0:
+        return 0
+    return (limit + ROWS_PER_PAGE - 1) // ROWS_PER_PAGE
 
 
 class MicroworkersClient:
@@ -340,21 +352,39 @@ class MicroworkersClient:
         finally:
             browser.close()
 
+    def _next_page_delay(self) -> float:
+        """Seconds to pause before the next listing page, jittered.
+
+        Microworkers' bot detection reads listing cadence, not volume: fetching
+        the full 2500-row queue back to back earned this account a 1-day
+        "Auto-refresh / Bot" ban on both 2026-09-05 and 2026-09-06. A fixed
+        delay still forms a regular rhythm, so each pause is drawn uniformly
+        from ``base * [1 - jitter, 1 + jitter]`` (jitter clamped to ``[0, 0.9]``
+        so the delay never collapses to zero while pacing is enabled).
+        """
+        base = max(0.0, float(self.config.list_page_delay_seconds))
+        jitter = max(0.0, min(float(self.config.list_page_delay_jitter), 0.9))
+        if base == 0.0:
+            return 0.0
+        factor = random.uniform(1.0 - jitter, 1.0 + jitter)
+        return base * factor
+
     @cached
     def list_tasks(self, limit: int = 100) -> List[dict]:
         """List available worker jobs from /jobs.php (paginated, 100/page)."""
         base_url = self.config.base_url
+        max_pages = min(_pages_needed(limit), MAX_LIST_PAGES)
         rows: List[dict] = []
         page_num = 1
-        while len(rows) < limit and page_num <= MAX_LIST_PAGES:
+        while len(rows) < limit and page_num <= max_pages:
             with self._page(f"{base_url}/jobs.php?page={page_num}") as page:
                 page_rows = page.evaluate(LIST_JS)
             if not page_rows:
                 break
             rows.extend(page_rows)
             page_num += 1
-            if len(rows) < limit and page_num <= MAX_LIST_PAGES:
-                time.sleep(LIST_PAGE_DELAY_SECONDS)
+            if len(rows) < limit and page_num <= max_pages:
+                time.sleep(self._next_page_delay())
         # /jobs.php pages overlap at their boundaries -- campaigns posted
         # while the pages are fetched move the split point, so the same
         # campaign appears on two consecutive pages (verified live 2026-09-04:

@@ -19,6 +19,14 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     DEFAULT_BASE_URL = "https://www.microworkers.com"
 
+    # Root (non-auth) config fields this CLI accepts in its .env files. The
+    # listing-pacing knobs below must be whitelisted so `config set` and the
+    # .env loader accept them (see the issue #52 pacing fix).
+    ROOT_CONFIG_FIELDS = ("LIST_PAGE_DELAY_SECONDS", "LIST_PAGE_DELAY_JITTER")
+
+    DEFAULT_LIST_PAGE_DELAY_SECONDS = 4.0
+    DEFAULT_LIST_PAGE_DELAY_JITTER = 0.5
+
     def __init__(self, profile: Optional[str] = None):
         super().__init__(
             tool_dir=resolve_tool_dir(self.DIST_NAME),
@@ -29,6 +37,37 @@ class Config(BaseConfig):
     def headless(self) -> bool:
         val = self._get("HEADLESS")
         return val is None or val.lower() == "true"
+
+    @property
+    def list_page_delay_seconds(self) -> float:
+        """Base seconds between consecutive /jobs.php listing page loads.
+
+        A malformed value silently falls back to the safe default so a bad
+        config never disables pacing (and risks the account ban again).
+        """
+        val = self._get("LIST_PAGE_DELAY_SECONDS")
+        if val is None:
+            return self.DEFAULT_LIST_PAGE_DELAY_SECONDS
+        try:
+            return float(val)
+        except ValueError:
+            return self.DEFAULT_LIST_PAGE_DELAY_SECONDS
+
+    @property
+    def list_page_delay_jitter(self) -> float:
+        """Fractional jitter applied to the listing page delay.
+
+        The effective per-page pause is drawn from
+        ``base * [1 - jitter, 1 + jitter]`` and clamped in the client. A
+        malformed value falls back to the safe default.
+        """
+        val = self._get("LIST_PAGE_DELAY_JITTER")
+        if val is None:
+            return self.DEFAULT_LIST_PAGE_DELAY_JITTER
+        try:
+            return float(val)
+        except ValueError:
+            return self.DEFAULT_LIST_PAGE_DELAY_JITTER
 
     def get_browser(self):
         """Return the BrowserAutomation subclass for this CLI."""

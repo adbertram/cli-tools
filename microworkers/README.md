@@ -269,6 +269,14 @@ in each file for what was captured and where.
 - **Headless mode**: Set `HEADLESS=false` to watch the browser during debugging
 - **Session persistence**: Login sessions are saved under the active profile's browser-data directory
 - **Rate limiting**: Be respectful of the site's terms of service
+- **Listing pacing**: `tasks list` walks `/jobs.php` one page at a time and
+  pauses a jittered delay between consecutive pages so the listing cadence
+  stays inside a human-looking rhythm (Microworkers bans accounts for
+  "Auto-refresh / Bot" cadence). The delay is configurable:
+  `LIST_PAGE_DELAY_SECONDS` (base seconds, default `4.0`) and
+  `LIST_PAGE_DELAY_JITTER` (fractional jitter, default `0.5`; each pause is
+  drawn from `base * [1 - jitter, 1 + jitter]`). Pages fetched are bounded by
+  the `--limit` value (100 rows/page), never a fixed walk of the full queue.
 
 ## Debugging
 
