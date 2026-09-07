@@ -27,6 +27,7 @@ import json
 import multiprocessing
 import sqlite3
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -68,6 +69,46 @@ def ledger(tmp_path):
 
 
 # --- the read API says which of the two shapes it returns -------------------
+
+
+@pytest.mark.parametrize("reader", [
+    ledger_db.load_document, ledger_db.load_document_readonly,
+])
+def test_document_snapshot_rejects_save_after_mid_read_status_change(
+    ledger, monkeypatch, reader,
+):
+    """A committed rejection between row and revision reads cannot be erased.
+
+    The document read happens in one snapshot. A status click that commits
+    WHILE the document is being read must leave the document holding the rows
+    AND the revision it saw before the click, so `save()` rejects the stale
+    document instead of overwriting the click with the older rows.
+    """
+    before = ledger_db.load_document(path=ledger)
+    read_deals = ledger_db._deals
+    key = "shopgoodwill|1001"
+
+    with ThreadPoolExecutor(max_workers=1) as writer:
+        def read_then_reject(conn):
+            rows = read_deals(conn)
+            assert writer.submit(
+                ledger_db.update_status, key, "rejected", "2026-09-07T12:00:00Z",
+                path=ledger,
+            ).result(timeout=5)
+            return rows
+
+        with monkeypatch.context() as patch:
+            patch.setattr(ledger_db, "_deals", read_then_reject)
+            stale = reader(path=ledger)
+
+    assert stale["_revision"] == before["_revision"]
+    assert next(d for d in stale["deals"] if d["listing_key"] == key)["status"] == "active"
+    with pytest.raises(ledger_db.StaleWrite):
+        ledger_db.save(stale, path=ledger)
+    current = ledger_db.load_document(path=ledger)
+    assert current["_revision"] == before["_revision"] + 1
+    assert ledger_db.get_deal(key, path=ledger)["status"] == "rejected"
+
 
 def test_load_deals_returns_records_a_caller_can_use(ledger):
     """The documented deal read must survive the obvious loop.

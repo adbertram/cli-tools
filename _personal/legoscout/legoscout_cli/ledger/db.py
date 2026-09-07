@@ -561,27 +561,42 @@ def load_document_readonly(path: str = DB_PATH) -> dict[str, Any]:
 
 
 def _document_from_connection(conn: sqlite3.Connection) -> dict[str, Any]:
-    """Build the familiar document shape from an open ledger connection."""
-    doc: dict[str, Any] = {}
-    meta = {r["key"]: json.loads(r["value"]) for r in conn.execute("SELECT key, value FROM meta")}
-    for field in META_FIELDS:
-        if field in meta:
-            doc[field] = meta[field]
-    doc["deals"] = _deals(conn)
-    watermarks = {
-        r["source"]: json.loads(r["payload"])
-        for r in conn.execute("SELECT source, payload FROM source_watermarks ORDER BY source")
-    }
-    if watermarks or "source_watermarks" in meta:
-        doc["source_watermarks"] = watermarks
-    # Restore the original top-level key order.
-    order = meta.get("_top_level_order")
-    if order:
-        doc = {k: doc[k] for k in order if k in doc} | {
-            k: v for k, v in doc.items() if k not in order
+    """Read every document field and the revision in one snapshot; caller closes.
+
+    The meta, deals, watermarks and revision reads are one SQLite read
+    transaction. Without the explicit BEGIN, each SELECT in WAL mode opens its
+    own snapshot, so a concurrent writer (a status click, an upsert) can commit
+    between the deals SELECT and the revision SELECT: the document then carries
+    the OLD rows and the NEW revision, and `save()` accepts the stale write
+    because the revision still matches. One BEGIN freezes a single snapshot for
+    every read here, so the document's rows and its revision always agree.
+    """
+    conn.execute("BEGIN")
+    try:
+        doc: dict[str, Any] = {}
+        meta = {r["key"]: json.loads(r["value"]) for r in conn.execute("SELECT key, value FROM meta")}
+        for field in META_FIELDS:
+            if field in meta:
+                doc[field] = meta[field]
+        doc["deals"] = _deals(conn)
+        watermarks = {
+            r["source"]: json.loads(r["payload"])
+            for r in conn.execute("SELECT source, payload FROM source_watermarks ORDER BY source")
         }
-    doc[_REVISION_KEY] = _read_revision(conn)
-    return doc
+        if watermarks or "source_watermarks" in meta:
+            doc["source_watermarks"] = watermarks
+        # Restore the original top-level key order.
+        order = meta.get("_top_level_order")
+        if order:
+            doc = {k: doc[k] for k in order if k in doc} | {
+                k: v for k, v in doc.items() if k not in order
+            }
+        doc[_REVISION_KEY] = _read_revision(conn)
+        conn.execute("COMMIT")
+        return doc
+    except BaseException:
+        conn.execute("ROLLBACK")
+        raise
 
 
 # How many bad records a failed save reports before it stops listing them. A
@@ -889,7 +904,8 @@ def update_status(
     existed.
 
     This is a single-row transaction, not a read-modify-write of the whole
-    ledger, so concurrent clicks cannot lose each other's write.
+    ledger. The row update and revision advance share the same transaction,
+    so an older whole-ledger save cannot overwrite the click.
 
     It used to mirror the same two values into a `display` object as well. There
     is no second copy of a record any more, so there is nothing left to keep in
@@ -910,7 +926,10 @@ def update_status(
                 "WHERE listing_key = ?",
                 (status, status, last_seen_at, listing_key),
             )
-            return cursor.rowcount > 0
+            updated = cursor.rowcount > 0
+            if updated:
+                _bump_revision(conn, _read_revision(conn))
+            return updated
     finally:
         conn.close()
 
