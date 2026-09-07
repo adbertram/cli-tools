@@ -20,7 +20,7 @@ homepage content before it navigates.
 import json
 import re
 from typing import Any, Optional
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from cli_tools_shared.browser import BrowserHarnessError
 from cli_tools_shared.output import print_info, print_warning
@@ -362,6 +362,7 @@ ITEM_DETAIL_JS = """() => {
     const bodyText = document.body ? document.body.innerText : '';
     const low = bodyText.toLowerCase();
     return {
+        jsonld,
         url: location.href,
         doc_title: document.title,
         dom_title: q('h1.x-item-title__mainTitle .ux-textspans')
@@ -536,6 +537,15 @@ def parse_item_status(item_id: str, data: dict) -> dict[str, Any]:
     if data.get("captcha"):
         raise BrowserError(
             "eBay item page is blocked by a CAPTCHA/security-verification page. "
+            f"url={data.get('url')!r}"
+        )
+
+    # A catalog or different-item redirect cannot establish this listing's state.
+    page_url = urlsplit(data.get("url") or "")
+    if (page_url.hostname not in {"www.ebay.com", "ebay.com"}
+            or not re.fullmatch(r"/itm/(?:[^/]+/)?" + re.escape(item_id) + r"/?", page_url.path)):
+        raise BrowserError(
+            f"eBay item {item_id} page does not identify the requested listing. "
             f"url={data.get('url')!r}"
         )
 

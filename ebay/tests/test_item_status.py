@@ -165,3 +165,22 @@ def test_listings_status_command_returns_json_and_closes_client(monkeypatch):
         "url": "https://www.ebay.com/itm/336724048050",
     }
     assert client.closed is True
+
+
+@pytest.mark.parametrize("url", [
+    "https://www.ebay.com/p/2411499",
+    "https://www.ebay.com/itm/188738399403",
+    "https://example.invalid/itm/336724048050",
+])
+@pytest.mark.parametrize("availability", ["InStock", "SoldOut"])
+def test_status_refuses_catalog_or_other_item_availability(url, availability):
+    state = _page_state("https://schema.org/" + availability)
+    state["url"] = url
+    with pytest.raises(BrowserError, match="requested listing"):
+        parse_item_status("336724048050", state)
+
+
+def test_status_accepts_same_item_slug_and_original_listing_query():
+    state = _page_state()
+    state["url"] = "https://www.ebay.com/itm/LEGO-item/336724048050?orig_cvip=true"
+    assert parse_item_status("336724048050", state)["availability"] == "InStock"
