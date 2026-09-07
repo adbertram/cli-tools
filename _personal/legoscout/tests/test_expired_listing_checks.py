@@ -555,13 +555,13 @@ def test_shopgoodwill_cli_failure_is_error(monkeypatch):
 # --- Mercari / eBay / Facebook / StockX: verified-live status field mapping -
 
 def test_mercari_on_sale_status_is_available(monkeypatch):
-    monkeypatch.setattr(source_listing, "cli", lambda args: {"status": "on_sale"})
+    monkeypatch.setattr(source_listing, "cli", lambda args: [{"item_id": "m1", "status": "ok", "item": {"status": "on_sale"}}])
     result = checks.check_mercari(_deal("mercari|m1"))
     assert result.status == "available"
 
 
 def test_mercari_sold_out_status_is_gone(monkeypatch):
-    monkeypatch.setattr(source_listing, "cli", lambda args: {"status": "sold_out"})
+    monkeypatch.setattr(source_listing, "cli", lambda args: [{"item_id": "m1", "status": "ok", "item": {"status": "sold_out"}}])
     result = checks.check_mercari(_deal("mercari|m1"))
     assert result.status == "gone"
 
@@ -569,7 +569,7 @@ def test_mercari_sold_out_status_is_gone(monkeypatch):
 def test_mercari_trading_with_sale_time_is_gone(monkeypatch):
     monkeypatch.setattr(
         source_listing, "cli",
-        lambda args: {"status": "trading", "lastSoldAt": 1786467446},
+        lambda args: [{"item_id": "m1", "status": "ok", "item": {"status": "trading", "lastSoldAt": 1786467446}}],
     )
     result = checks.check_mercari(_deal("mercari|m1"))
     assert result.status == "gone"
@@ -577,7 +577,7 @@ def test_mercari_trading_with_sale_time_is_gone(monkeypatch):
 
 
 def test_mercari_trading_without_sale_time_stays_fail_closed(monkeypatch):
-    monkeypatch.setattr(source_listing, "cli", lambda args: {"status": "trading"})
+    monkeypatch.setattr(source_listing, "cli", lambda args: [{"item_id": "m1", "status": "ok", "item": {"status": "trading"}}])
     result = checks.check_mercari(_deal("mercari|m1"))
     assert result.status == "error"
 
@@ -795,7 +795,7 @@ def test_resolve_cli_executable_names_the_missing_executable(monkeypatch):
 
 
 def test_check_mercari_uses_the_resolved_absolute_path(tmp_path, monkeypatch):
-    fake = _fake_cli_dir(tmp_path, "mercari", "#!/bin/sh\necho '{\"status\": \"on_sale\"}'\n")
+    fake = _fake_cli_dir(tmp_path, "mercari", "#!/bin/sh\necho '[{\"item_id\":\"123\",\"status\":\"ok\",\"item\":{\"status\":\"on_sale\"}}]'\n")
     monkeypatch.setattr(
         source_listing, "_EXTRA_CLI_DIRS", (str(fake.parent),), raising=False)
     _strip_path(monkeypatch)
@@ -870,7 +870,8 @@ def test_forked_batch_children_resolve_clis_from_install_dirs_with_stripped_path
 ):
     fake = _fake_cli_dir(tmp_path, "mercari", (
         "#!/bin/sh\n"
-        "shift 2\n"
+        '[ "$3" = "--status-only" ] || exit 2\n'
+        "shift 3\n"
         "printf '['\n"
         "first=1\n"
         'for id in "$@"; do\n'
@@ -896,3 +897,26 @@ def test_forked_batch_children_resolve_clis_from_install_dirs_with_stripped_path
 
     assert set(results) == {deal["listing_key"] for deal in deals}
     assert all(results[deal["listing_key"]].status == "available" for deal in deals)
+
+
+def test_mercari_batch_requests_status_without_checkout_pricing(monkeypatch):
+    def status_only(args):
+        assert args == ["mercari", "listings", "get-many", "--status-only", "m1", "m2"]
+        return [
+            {"item_id": "m1", "status": "ok", "item": {"status": "sold_out"}},
+            {"item_id": "m2", "status": "ok", "item": {"status": "on_sale"}},
+        ]
+
+    monkeypatch.setattr(source_listing, "cli", status_only)
+    results = checks.check_mercari_batch([_deal("mercari|m1"), _deal("mercari|m2")])
+    assert results["mercari|m1"].status == "gone"
+    assert results["mercari|m2"].status == "available"
+
+
+def test_mercari_singleton_uses_uncached_status_only_batch_path(monkeypatch):
+    def status_only(args):
+        assert args == ["mercari", "listings", "get-many", "--status-only", "m1"]
+        return [{"item_id": "m1", "status": "ok", "item": {"status": "on_sale"}}]
+
+    monkeypatch.setattr(source_listing, "cli", status_only)
+    assert checks.check_mercari(_deal("mercari|m1")).status == "available"

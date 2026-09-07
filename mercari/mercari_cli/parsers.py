@@ -11,9 +11,13 @@ return the full response object verbatim (no field is dropped) and add two
 convenience fields (`id`, `url`) so the CLI's id/url conventions work without
 discarding any upstream data.
 """
+import re
 from typing import Any, Dict, List
 
 ITEM_URL_TEMPLATE = "https://www.mercari.com/us/item/{item_id}/"
+BUYER_PROTECTION_HEADLINE_RE = re.compile(
+    r"^\+\$(?P<dollars>\d{1,3}(?:,\d{3})*)\.(?P<cents>\d{2}) Buyer Protection fee$"
+)
 
 
 def _item_id_of(raw: Dict[str, Any]) -> Any:
@@ -46,8 +50,23 @@ def normalize_items(raw_items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return [_with_conveniences(item) for item in raw_items]
 
 
+def normalize_item_status(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Expose published availability fields without requiring checkout pricing."""
+    item = _with_conveniences(raw)
+    if (not isinstance(item, dict) or not isinstance(item.get("status"), str)
+            or not item["status"].strip()):
+        raise ValueError("Mercari item detail has no published status")
+    return {key: item[key] for key in ("id", "url", "status", "lastSoldAt") if key in item}
+
+
 def normalize_item_detail(raw: Dict[str, Any]) -> Dict[str, Any]:
-    """Normalize item detail and expose exact buyer-cost values in cents."""
+    """Normalize item detail and expose exact published buyer costs in cents.
+
+    ``priceSummary.totalPrice`` is Mercari's checkout total. It can include
+    costs beyond item price, buyer shipping, and Buyer Protection, so that fee
+    comes from Mercari's explicit ``priceSummary.headline`` instead of residual
+    arithmetic.
+    """
     item = _with_conveniences(raw)
     price = item.get("price")
     price_summary = item.get("priceSummary")
@@ -60,7 +79,6 @@ def normalize_item_detail(raw: Dict[str, Any]) -> Dict[str, Any]:
             "Mercari item detail has no integer priceSummary.totalPrice in cents"
         )
 
-    shipping_fee = 0
     shipping_payer = item.get("shippingPayer")
     if isinstance(shipping_payer, dict) and shipping_payer.get("code") == "buyer":
         shipping_class = item.get("shippingClass")
@@ -70,14 +88,21 @@ def normalize_item_detail(raw: Dict[str, Any]) -> Dict[str, Any]:
             raise ValueError(
                 "Mercari buyer-paid shipping has no integer shippingClass.fee in cents"
             )
-        shipping_fee = shipping_class["fee"]
 
     landed_total = price_summary["totalPrice"]
-    buyer_protection_fee = landed_total - price - shipping_fee
-    if buyer_protection_fee < 0:
+    if landed_total < price:
+        raise ValueError("Mercari priceSummary.totalPrice is less than price")
+
+    headline = price_summary.get("headline")
+    match = BUYER_PROTECTION_HEADLINE_RE.fullmatch(headline or "")
+    if match is None:
         raise ValueError(
-            "Mercari priceSummary.totalPrice is less than price plus buyer shipping"
+            "Mercari item detail has no parseable priceSummary.headline Buyer Protection fee"
         )
+    buyer_protection_fee = (
+        int(match.group("dollars").replace(",", "")) * 100
+        + int(match.group("cents"))
+    )
     item["buyer_protection_fee_cents"] = buyer_protection_fee
     item["landed_total_cents"] = landed_total
     return item

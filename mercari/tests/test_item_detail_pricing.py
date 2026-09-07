@@ -11,7 +11,10 @@ def test_detail_exposes_fee_and_total_for_seller_paid_shipping():
         {
             "itemId": "m1",
             "price": 12000,
-            "priceSummary": {"totalPrice": 12432},
+            "priceSummary": {
+                "totalPrice": 12432,
+                "headline": "+$4.32 Buyer Protection fee",
+            },
             "shippingPayer": {"code": "seller"},
         }
     )
@@ -20,12 +23,15 @@ def test_detail_exposes_fee_and_total_for_seller_paid_shipping():
     assert item["landed_total_cents"] == 12432
 
 
-def test_detail_subtracts_buyer_shipping_from_fee():
+def test_detail_reads_explicit_fee_with_buyer_paid_shipping():
     item = normalize_item_detail(
         {
             "itemId": "m2",
             "price": 28500,
-            "priceSummary": {"totalPrice": 30351},
+            "priceSummary": {
+                "totalPrice": 30351,
+                "headline": "+$10.54 Buyer Protection fee",
+            },
             "shippingPayer": {"code": "buyer"},
             "shippingClass": {"fee": 797},
         }
@@ -40,7 +46,10 @@ def test_client_normalizes_each_cached_raw_item(monkeypatch):
     raw_item = {
         "itemId": "m2",
         "price": 28500,
-        "priceSummary": {"totalPrice": 30351},
+        "priceSummary": {
+            "totalPrice": 30351,
+            "headline": "+$10.54 Buyer Protection fee",
+        },
         "shippingPayer": {"code": "buyer"},
         "shippingClass": {"fee": 797},
     }
@@ -50,6 +59,24 @@ def test_client_normalizes_each_cached_raw_item(monkeypatch):
 
     assert item["buyer_protection_fee_cents"] == 1054
     assert item["landed_total_cents"] == 30351
+
+
+def test_detail_does_not_mislabel_other_checkout_costs_as_buyer_protection():
+    item = normalize_item_detail(
+        {
+            "itemId": "m6",
+            "price": 1500,
+            "priceSummary": {
+                "totalPrice": 2346,
+                "headline": "+$0.74 Buyer Protection fee",
+            },
+            "shippingPayer": {"code": "buyer"},
+            "shippingClass": {"fee": 566},
+        }
+    )
+
+    assert item["buyer_protection_fee_cents"] == 74
+    assert item["landed_total_cents"] == 2346
 
 
 @pytest.mark.parametrize(
@@ -72,6 +99,15 @@ def test_client_normalizes_each_cached_raw_item(monkeypatch):
                 "shippingClass": {},
             },
             "shippingClass.fee",
+        ),
+        (
+            {
+                "itemId": "m7",
+                "price": 100,
+                "priceSummary": {"totalPrice": 110},
+                "shippingPayer": {"code": "seller"},
+            },
+            "priceSummary.headline",
         ),
     ],
 )

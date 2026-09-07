@@ -60,9 +60,9 @@ from ..sources import hibid as hibid_reader  # noqa: E402
 
 Status = Literal["gone", "available", "error", "blocked"]
 
-# Mercari can reuse one browser client across multiple item reads. The sweep
-# uses this size to keep each batch below its 180-second worker limit.
-BATCH_SIZES = {"mercari": 20}
+# Mercari reads items sequentially: two 45-second capture windows plus the
+# 60-second readiness budget leave room within the 180-second worker limit.
+BATCH_SIZES = {"mercari": 2}
 
 
 @dataclass(frozen=True)
@@ -336,12 +336,7 @@ def check_hibid(deal: dict[str, Any]) -> CheckResult:
 # ---------------------------------------------------------------------------
 
 def check_mercari(deal: dict[str, Any]) -> CheckResult:
-    item_id = source_listing.lot_id(deal)
-    try:
-        payload = source_listing.cli(["mercari", "listings", "get", item_id])
-    except source_listing.Undetermined as exc:
-        return _from_cli_error(exc)
-    return _mercari_payload_result(payload)
+    return check_mercari_batch([deal])[deal["listing_key"]]
 
 
 def _mercari_payload_result(payload: dict[str, Any]) -> CheckResult:
@@ -362,7 +357,7 @@ def check_mercari_batch(
     item_ids = [source_listing.lot_id(deal) for deal in deals]
     try:
         rows = source_listing.cli(
-            ["mercari", "listings", "get-many", *item_ids])
+            ["mercari", "listings", "get-many", "--status-only", *item_ids])
     except source_listing.Undetermined as exc:
         result = _from_cli_error(exc)
         if result.stop_source:

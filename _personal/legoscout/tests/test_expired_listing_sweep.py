@@ -410,10 +410,11 @@ def test_bounded_batch_groups_mercari_rows_under_one_worker():
         batch_dispatch_fn=_batch_dispatch,
     )
 
-    assert [results[deal["listing_key"]].detail for deal in deals[:20]] \
-        == ["batch_size=20"] * 20
-    assert [results[deal["listing_key"]].detail for deal in deals[20:]] \
-        == ["batch_size=5"] * 5
+    assert [results[deal["listing_key"]].detail for deal in deals[:24]] \
+        == ["batch_size=2"] * 24
+    # The odd final row is a one-deal chunk, so it takes the single-row
+    # dispatch path rather than the batch dispatcher.
+    assert results[deals[24]["listing_key"]].detail == "still active"
 
 
 def test_source_wall_inside_batch_skips_batch_and_pending_source_rows():

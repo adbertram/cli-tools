@@ -32,7 +32,7 @@ from cli_tools_shared.exceptions import ClientError
 
 from .browser import MercariBrowser
 from .config import get_config
-from .parsers import normalize_item_detail, normalize_items
+from .parsers import normalize_item_detail, normalize_item_status, normalize_items
 
 
 class MercariChallengeError(ClientError):
@@ -367,8 +367,9 @@ class MercariClient:
         """
         return normalize_item_detail(self._fetch_item(item_id))
 
-    def get_items(self, item_ids: List[str]) -> List[dict]:
-        """Get many public items through one Mercari app shell."""
+    def get_items(self, item_ids: List[str], *, status_only: bool = False) -> List[dict]:
+        """Get public details or availability through one uncached app shell."""
+        normalize = normalize_item_status if status_only else normalize_item_detail
         results = []
         page = None
         for requested_id in item_ids:
@@ -376,12 +377,10 @@ class MercariClient:
                 normalized_id = _normalize_item_id(requested_id)
                 if page is None:
                     page = self._app_shell(HOME_URL)
-                item = normalize_item_detail(
-                    self._fetch_item_from_page(page, normalized_id)
-                )
+                item = normalize(self._fetch_item_from_page(page, normalized_id))
             except MercariChallengeError:
                 raise
-            except ClientError as exc:
+            except (ClientError, ValueError) as exc:
                 results.append(
                     {
                         "item_id": requested_id,
