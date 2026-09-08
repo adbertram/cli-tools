@@ -68,6 +68,11 @@ def _make_client(monkeypatch, tmp_path, utc_now: datetime, local_offset_hours: i
 
     client = AtaBlogClient.__new__(AtaBlogClient)
     client.config = _Config(tmp_path / "profile")
+    # The schedule-slot fixtures populate the publisher runtime records that
+    # own scheduling after the one-time static cutover; pin the completed
+    # cutover so the slots are read from those records instead of the live
+    # WordPress future schedule.
+    client._static_cutover_completed = lambda: True
     # Isolate the reservation cache from the real ~/.cache directory instead
     # of stubbing the reservation methods, so the real read/write/expiry
     # logic (including the UTC-aware fix in it) is exercised too.

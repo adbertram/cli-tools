@@ -525,7 +525,7 @@ def test_publish_article_auto_schedule_uses_conventional_featured_image(
     client.resolve_tags_by_names = lambda names: [
         {"Azure": 10, "Security": 11}[name] for name in names
     ]
-    client.find_next_schedule_slot = lambda: "2026-06-12T09:00:00"
+    client.find_next_schedule_slot = lambda schedule_window=None: "2026-06-12T09:00:00"
     client.clear_schedule_reservation = lambda: None
     client.get_article_markdown = lambda _page_id: "# Article"
 

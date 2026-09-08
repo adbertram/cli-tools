@@ -79,7 +79,7 @@ class _PublishHarness:
         client.check_duplicate_post = lambda slug: False
         client.resolve_category_by_name = lambda name: 5403
         client.resolve_tags_by_names = lambda names: [11, 12]
-        client.find_next_schedule_slot = lambda: "2026-07-28T09:00:00"
+        client.find_next_schedule_slot = lambda schedule_window=None: "2026-07-28T09:00:00"
         client.clear_schedule_reservation = lambda: None
         client._run_notion = self._fake_run_notion
         client._run_wordpress = self._fake_run_wordpress
