@@ -308,6 +308,15 @@ def _static_corpus_sha256() -> str:
         "src/data/terms.json",
         "src/data/redirects.json",
         "src/data/home_featured.json",
+        "src/data/zero_post_authors.json",
+        "src/data/post_seo.json",
+        "src/data/page_seo.json",
+        "src/data/archive_seo.json",
+        # The guid WordPress stored for each post at publish time. It is content,
+        # not configuration: it decides what every feed emits as an item's
+        # identity, so a change here changes the built output and must move the
+        # corpus hash. Mirrors release_manifest.mjs hashCorpus() membership.
+        "src/data/post_guids.json",
     ):
         candidate = STATIC_SITE_ROOT / relative_path
         if candidate.is_symlink() or not candidate.is_file():

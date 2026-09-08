@@ -231,6 +231,9 @@ def publisher(tmp_path, monkeypatch):
         + "\n",
         "src/data/redirects.json": "[]\n",
         "src/data/home_featured.json": "[]\n",
+        "src/data/zero_post_authors.json": "[]\n",
+        "src/data/page_seo.json": json.dumps({"pages": {}}) + "\n",
+        "src/data/archive_seo.json": json.dumps({"archives": {}}) + "\n",
         # src/lib/feed.js imports this at module load, so the release manifest
         # cannot even be parsed without it.
         "src/data/post_guids.json": json.dumps({"byWpId": {}}) + "\n",
@@ -829,6 +832,11 @@ def test_active_staged_journal_resumes_with_manifest_corpus_hash(publisher):
             "src/data/terms.json",
             "src/data/redirects.json",
             "src/data/home_featured.json",
+            "src/data/zero_post_authors.json",
+            "src/data/post_seo.json",
+            "src/data/page_seo.json",
+            "src/data/archive_seo.json",
+            "src/data/post_guids.json",
         )
     )
     records = sorted(

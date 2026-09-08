@@ -1,11 +1,11 @@
 """Mutable P11 source bindings consumed by the static publisher."""
 
 P11_RELEASE_MANIFEST_SHA256 = (
-    "ab309cf073aebb3eb2b382d140f484bc8de94f36a7b269acbd4e4e3ade3eae75"
+    "1b9c6a934d04e21f653d5c80687cba72b589e3f9b0bebdfb89433de0b527a6f9"
 )
 
 STATIC_SCANNER_SHA256 = (
-    "c24bc92d3050db5818a0c7cb3717024259b489f7a52a8b42e3f8e7c860bbd2a6"
+    "0b72450bca6c98c7596471f3a29a11a1810d06401eac74ecdf9c89c22429a75e"
 )
 
 STATIC_BASELINE_ORACLE_SHA256 = (
