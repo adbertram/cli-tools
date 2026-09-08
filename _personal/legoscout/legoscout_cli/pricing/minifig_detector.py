@@ -5,12 +5,12 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-import os
-import tempfile
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 from PIL import Image
+
+from . import content_store
 
 DETECTOR_CONTRACT_VERSION = "v1"
 DUPLICATE_IOU_THRESHOLD = 0.70
@@ -350,7 +350,6 @@ def write_crop(
             f"figcrop-{DETECTOR_CONTRACT_VERSION}-"):
         raise CropWriteError("detection has invalid crop_id")
     box = _normalized_box(detection.get("box"))
-    root = Path(crop_root)
     digest = crop_id.rsplit("-", 1)[-1]
 
     try:
@@ -364,20 +363,12 @@ def write_crop(
             )
             output_format = "PNG" if source.format == "PNG" else "JPEG"
             suffix = ".png" if output_format == "PNG" else ".jpg"
-            relative = Path(digest[:2]) / f"{crop_id}{suffix}"
-            destination = root / relative
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            handle, temp_name = tempfile.mkstemp(
-                prefix=f".{crop_id}-", suffix=".tmp",
-                dir=destination.parent,
-            )
-            os.close(handle)
-            temp = Path(temp_name)
-            try:
-                crop = source.crop(pixels)
+            crop = source.crop(pixels)
+
+            def _write(temp: Path) -> None:
                 if output_format == "JPEG":
-                    crop = crop.convert("RGB")
-                    crop.save(
+                    rgb_crop = crop.convert("RGB")
+                    rgb_crop.save(
                         temp,
                         format="JPEG",
                         quality=95,
@@ -392,13 +383,10 @@ def write_crop(
                         optimize=False,
                         compress_level=9,
                     )
-                os.replace(temp, destination)
-            except Exception:
-                temp.unlink(missing_ok=True)
-                raise
+
+            return content_store.write_sharded(
+                crop_root, digest, crop_id, suffix, _write)
     except Exception as exc:
         if isinstance(exc, CropWriteError):
             raise
         raise CropWriteError(f"crop write failed: {exc}") from exc
-
-    return relative.as_posix()

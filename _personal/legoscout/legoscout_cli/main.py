@@ -13,7 +13,9 @@ import typer
 from cli_tools_shared.output import command
 
 from . import delegate
-from .commands import deals, deploy, display, minifig, pricing, score, sellers, sources
+from .commands import (
+    deals, deploy, display, images, minifig, pricing, score, sellers, sources,
+)
 from .sources import triage as triage_module
 
 app = create_app(
@@ -28,6 +30,7 @@ app.add_typer(sources.app, name="sources")
 app.add_typer(deals.app, name="deals")
 app.add_typer(sellers.app, name="sellers")
 app.add_typer(pricing.app, name="pricing")
+app.add_typer(images.app, name="images")
 app.add_typer(minifig.app, name="minifig")
 app.add_typer(score.app, name="score")
 app.add_typer(display.app, name="display")

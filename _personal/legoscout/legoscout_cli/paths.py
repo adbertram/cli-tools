@@ -33,6 +33,12 @@ MINIFIG_CROP_ROOT = os.environ.get("LEGOSCOUT_MINIFIG_CROP_ROOT") or str(
 )
 BRICKOGNIZE_MINIFIG_CACHE = "/Users/adam/Dropbox/GitRepos/Agents/LegoScout/data/.brickognize_minifig_cache.json"
 SOURCE_RUNS = str(LEGOSCOUT_ROOT / "agent_workspaces" / "source-runs")
+# Downloaded, downscaled listing photos -- disposable, 14-day TTL via
+# `legoscout images gc`. Unlike MINIFIG_CROP_ROOT this is never synced or
+# release-preserved; see legoscout_cli.pricing.deal_images.
+DEAL_IMAGE_ROOT = os.environ.get("LEGOSCOUT_DEAL_IMAGE_ROOT") or str(
+    LEGOSCOUT_ROOT / "agent_workspaces" / "deal-images"
+)
 
 # --- package data ------------------------------------------------------------
 

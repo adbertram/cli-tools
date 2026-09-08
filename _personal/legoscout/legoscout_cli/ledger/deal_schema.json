@@ -160,6 +160,17 @@
       "phase": "crawl",
       "description": "Listing photo URLs, captured through the source's authenticated CLI."
     },
+    "image_local_ids": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": ["string", "null"]
+      },
+      "phase": "appraisal",
+      "description": "Content-addressed IDs of a downscaled (max 1600px), WebP-re-encoded copy of each image_urls entry, positionally parallel, from `legoscout images download-batch`. Null entry where that URL's download failed or fell past the per-listing cap (deal_images.DEAL_IMAGE_MAX_PER_LISTING). Null/absent on every row written before this field existed -- historical readers do not manufacture it, same convention as minifig_analysis. Files live under agent_workspaces/deal-images/ as <id>.webp, 14-day TTL via `legoscout images gc`; an ID surviving in this column after its bytes have expired means only that the photo isn't currently on disk, not that the record is wrong."
+    },
     "shipping_estimate": {
       "type": [
         "object",

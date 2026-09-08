@@ -257,15 +257,23 @@ def files(tmp_path_factory, ledger):
             "mean_per_crop_seconds": 0.0,
         },
     }
+    # Empty `image_urls` keeps this offline: `deal_images.download_batch`
+    # only ever calls `listing_images.fetch` for a URL that's actually
+    # present, so this record completes the whole leaf with zero network
+    # calls, unlike `pricing images` (SKIPPED below) which always fetches.
+    images_records = [{"listing_key": "shopgoodwill|999999999", "image_urls": []}]
     written = {}
     for name, payload in (("candidate", candidate), ("appraisal", appraisal),
                           ("triage", []), ("minifig_input", []),
                           ("minifig_identify_input", minifig_identify_input),
                           ("minifig_price_input", minifig_price_input),
+                          ("images_records", images_records),
                           ("entry", {ADDED_SOURCE: _source_entry(ADDED_SOURCE)})):
         path = root / ("%s.json" % name)
         path.write_text(json.dumps(payload), encoding="utf-8")
         written[name] = str(path)
+    written["images_out"] = str(root / "images-out.json")
+    written["images_root"] = str(root / "images-store")
     written["minifig_output"] = str(root / "minifig_output.json")
     written["minifig_identify_output"] = str(
         root / "minifig_identify_output.json")
@@ -422,6 +430,12 @@ def cases(ids, files):
         ("pricing", "profit"): _case(
             ["--avg-price", "100", "--price-detail-count", "5",
              "--estimated-total", "50", "--fee-rate", "0.13"]),
+        ("images", "download-batch"): _case([
+            "--records", files["images_records"],
+            "--out", files["images_out"],
+            "--image-root", files["images_root"],
+        ]),
+        ("images", "gc"): _case(["--image-root", files["images_root"]]),
         ("minifig", "detect"): _case([
             "--input", files["minifig_input"],
             "--output", files["minifig_output"],

@@ -174,6 +174,10 @@ JSON_FIELDS: tuple[str, ...] = (
     # hand. An empty list means "looked, none published"; None means "not
     # captured".
     "image_urls",
+    # Content-addressed local IDs of a downscaled/WebP-re-encoded copy of each
+    # image_urls entry, positionally parallel; see deal_images.py. Null/absent
+    # on every row written before this field existed.
+    "image_local_ids",
     "shipping_estimate",
     # What was seen, never what it is worth: Python's text scan plus the model's
     # image read, as enums and evidence strings. Written by
