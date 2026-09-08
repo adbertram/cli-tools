@@ -1,8 +1,8 @@
 {
   "tool": "google",
   "description": "CLI interface for Google Workspace APIs",
-  "discovered_at": "2026-08-27T16:46:11Z",
-  "total_commands": 105,
+  "discovered_at": "2026-09-08T22:34:55Z",
+  "total_commands": 108,
   "global_options": [
     {
       "name": "--version",
@@ -3480,6 +3480,121 @@
               "help": "Profile name"
             }
           ]
+        },
+        "sitemaps": {
+          "help": "Manage submitted Search Console sitemaps",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "get": {
+              "help": "Get Google's processing status for a submitted sitemap.",
+              "arguments": [
+                {
+                  "name": "site_url",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Exact Search Console property URL or sc-domain property"
+                },
+                {
+                  "name": "sitemap_url",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Submitted sitemap URL"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "List sitemaps submitted for a Search Console property.",
+              "arguments": [
+                {
+                  "name": "site_url",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Exact Search Console property URL or sc-domain property"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "bool",
+                  "required": false,
+                  "help": "<int range> [x>=1]  Maximum number of sitemaps",
+                  "short": "-l",
+                  "takes_value": false,
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated output fields",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ]
+            },
+            "submit": {
+              "help": "Submit a sitemap URL to Google; acceptance does not guarantee indexing.",
+              "arguments": [
+                {
+                  "name": "site_url",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Exact Search Console property URL or sc-domain property"
+                },
+                {
+                  "name": "sitemap_url",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Public sitemap URL to submit"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ]
+            }
+          }
         },
         "sites": {
           "help": "Manage Search Console sites",
