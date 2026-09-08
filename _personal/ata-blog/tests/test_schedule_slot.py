@@ -68,6 +68,7 @@ def _make_client(monkeypatch, tmp_path, utc_now: datetime, local_offset_hours: i
 
     client = AtaBlogClient.__new__(AtaBlogClient)
     client.config = _Config(tmp_path / "profile")
+    monkeypatch.setattr(client, "_static_cutover_completed", lambda: True)
     # Isolate the reservation cache from the real ~/.cache directory instead
     # of stubbing the reservation methods, so the real read/write/expiry
     # logic (including the UTC-aware fix in it) is exercised too.

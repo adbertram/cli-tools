@@ -327,6 +327,16 @@ def publisher(tmp_path, monkeypatch):
 
     fixture_set = json.loads(release_fixture.read_text())
     manifest_body = fixture_set["release_manifest"]
+    # Preserve the historical P05 fixture bytes while adapting the disposable
+    # current release to the active-Raptive contract.
+    raptive = next(item for item in manifest_body["integrations"] if item["integration_id"] == "raptive")
+    raptive["release_disposition"] = "required"
+    raptive["check_ids"] = ["raptive-active"]
+    vendor = next(item for item in manifest_body["acceptance"]["sections"] if item["section_id"] == "vendor-publisher")
+    vendor["required_check_ids"] = [
+        "raptive-active" if item == "raptive-deferred" else item
+        for item in vendor["required_check_ids"]
+    ]
     manifest_body.pop("release_id")
     manifest_body.pop("contract_hash")
     manifest_body["inputs"]["scanner_implementation_sha256"] = scanner_sha
@@ -869,8 +879,10 @@ def test_active_staged_journal_resumes_with_manifest_corpus_hash(publisher):
     assert counters["build"] == counters["deploy"] == counters["scanner"] == counters["notion"] == 1
 
 
-def test_explicit_schedule_slot_contention_is_atomic(publisher):
+def test_explicit_schedule_slot_contention_is_atomic(publisher, monkeypatch):
     client, *_ = publisher
+    # This test exercises static reservation contention, not WordPress routing.
+    monkeypatch.setattr(client, "_static_cutover_completed", lambda: True)
     slot = "2026-09-01T13:00:00+00:00"
     barrier = threading.Barrier(2)
     outcomes = []
