@@ -8,11 +8,19 @@ in `srcset`, so none of them reached R2. The 2026-09-05 media parity audit
 measured 112 missing derivative keys across 15 attachments created since
 2026-08-26, 7 of which were missing even their base file.
 
+Second defect: that owner lookup enumerated the media library anonymously. An
+attachment inherits its owning post's status, and the pipeline schedules posts
+instead of publishing them on the spot, so for essentially every post the
+anonymous read returned 200 with an empty array and the publish failed with
+"No WordPress media attachment publishes ...". The search now runs through the
+authenticated `wordpress` CLI.
+
 These tests pin that every referenced attachment now mirrors its base file plus
 every variant declared in `media_details.sizes`, at the identical
-`wp-content/uploads/...` key, and that a key containing a literal `..` is
-uploaded through the R2 S3-compatible transport because Cloudflare's REST edge
-WAF answers those paths with a 403 before R2 sees them.
+`wp-content/uploads/...` key, that an attachment whose owning post is not yet
+public still resolves, and that a key containing a literal `..` is uploaded
+through the R2 S3-compatible transport because Cloudflare's REST edge WAF
+answers those paths with a 403 before R2 sees them.
 
 Hermetic: no network, no Cloudflare calls; every collaborator is stubbed.
 """
@@ -56,6 +64,51 @@ _HUB_SPOKE_KEYS = [
     "wp-content/uploads/2026/08/hub-spoke-topology.png",
 ]
 
+# Attachment 27239 as the authenticated WordPress media API returns it. Its
+# owning post (27242) is status=future, scheduled for 2026-09-08, so an
+# anonymous read of the media collection cannot see this record at all.
+_SCHEDULED_POST_RECORD = {
+    "id": 27239,
+    "slug": "bicep-compile-deploy-flow",
+    "source_url": f"{_UPLOADS}/2026/09/bicep-compile-deploy-flow.png",
+    "media_details": {
+        "file": "2026/09/bicep-compile-deploy-flow.png",
+        "sizes": {
+            "thumbnail": {
+                "source_url": f"{_UPLOADS}/2026/09/bicep-compile-deploy-flow-150x150.png"
+            },
+            "medium": {
+                "source_url": f"{_UPLOADS}/2026/09/bicep-compile-deploy-flow-300x171.png"
+            },
+            "medium_large": {
+                "source_url": f"{_UPLOADS}/2026/09/bicep-compile-deploy-flow-768x439.png"
+            },
+            "large": {
+                "source_url": f"{_UPLOADS}/2026/09/bicep-compile-deploy-flow-1024x585.png"
+            },
+            "featured-small": {
+                "source_url": f"{_UPLOADS}/2026/09/bicep-compile-deploy-flow-330x200.png"
+            },
+            "featured-large": {
+                "source_url": f"{_UPLOADS}/2026/09/bicep-compile-deploy-flow-350x200.png"
+            },
+            "full": {
+                "source_url": f"{_UPLOADS}/2026/09/bicep-compile-deploy-flow.png"
+            },
+        },
+    },
+}
+
+_SCHEDULED_POST_KEYS = [
+    "wp-content/uploads/2026/09/bicep-compile-deploy-flow-1024x585.png",
+    "wp-content/uploads/2026/09/bicep-compile-deploy-flow-150x150.png",
+    "wp-content/uploads/2026/09/bicep-compile-deploy-flow-300x171.png",
+    "wp-content/uploads/2026/09/bicep-compile-deploy-flow-330x200.png",
+    "wp-content/uploads/2026/09/bicep-compile-deploy-flow-350x200.png",
+    "wp-content/uploads/2026/09/bicep-compile-deploy-flow-768x439.png",
+    "wp-content/uploads/2026/09/bicep-compile-deploy-flow.png",
+]
+
 # An attachment WordPress registered with no derivatives at all serializes its
 # empty size map as a PHP array, which reaches JSON as [].
 _NO_SIZES_RECORD = {
@@ -92,20 +145,29 @@ class _MediaHarness:
     def build_client(self) -> AtaBlogClient:
         client = object.__new__(AtaBlogClient)
         client._fetch_static_origin_bytes = self._fake_fetch
+        client._run_wordpress = self._fake_wordpress
         client._existing_static_inline_media_key = self._fake_existing
         client._run_checked_command = self._fake_r2
         return client
 
+    def _fake_wordpress(self, args, timeout=60):
+        """Stand in for the authenticated `wordpress` CLI media search."""
+        assert args[:2] == ["media", "list"]
+        assert "--filter" in args
+        search = args[args.index("--filter") + 1].split("search:eq:", 1)[1]
+        self.searches.append(search)
+        matched = [
+            record for record in self.records if search in json.dumps(record)
+        ]
+        return subprocess.CompletedProcess(
+            ["wordpress", *args], 0, stdout=json.dumps(matched), stderr=""
+        )
+
     def _fake_fetch(self, url, *, attempts=5):
-        if "/wp-json/wp/v2/media" in url:
-            search = url.split("search=", 1)[1].split("&", 1)[0]
-            self.searches.append(search)
-            matched = [
-                record
-                for record in self.records
-                if search in json.dumps(record)
-            ]
-            return json.dumps(matched).encode("utf-8"), "application/json"
+        # The media library is never enumerated anonymously: an attachment on a
+        # scheduled post is invisible to an anonymous reader, and this origin
+        # fetch is only for downloading the image bytes themselves.
+        assert "/wp-json/" not in url
         self.fetched_urls.append(url)
         return b"image-bytes", "image/png; charset=binary"
 
@@ -154,6 +216,26 @@ def test_derivative_reference_resolves_through_its_parent_attachment():
 
     assert keys == _HUB_SPOKE_KEYS
     assert harness.searches == ["hub-spoke-topology"]
+
+
+def test_attachment_on_a_not_yet_public_post_resolves():
+    """The pipeline schedules posts, so the owning post is normally non-public.
+
+    An attachment inherits its owning post's status, so while that post is
+    scheduled the WordPress media collection is empty to an anonymous reader --
+    it answers 200 with []. The lookup therefore has to run through the
+    authenticated `wordpress` CLI; an anonymous read here reported every
+    scheduled post's images as missing and failed the static publish.
+    """
+    harness = _MediaHarness([_SCHEDULED_POST_RECORD])
+    client = harness.build_client()
+
+    keys = client._wordpress_media_keys_for_reference(
+        "wp-content/uploads/2026/09/bicep-compile-deploy-flow.png"
+    )
+
+    assert keys == _SCHEDULED_POST_KEYS
+    assert harness.searches == ["bicep-compile-deploy-flow"]
 
 
 def test_attachment_without_derivatives_yields_only_its_base_key():

@@ -92,8 +92,10 @@ def test_slot_is_strictly_future_mid_afternoon(monkeypatch, tmp_path):
     assert slot_dt.tzinfo is not None, f"slot {slot} must carry an explicit UTC offset"
     slot_utc = slot_dt.astimezone(timezone.utc)
     assert slot_utc > utc_now, f"slot {slot} is not strictly after true UTC now {utc_now}"
-    # now (17:46) + 1h = 18:46, ceiled up to the next hour boundary: 19:00.
-    assert slot_utc == datetime(2026, 7, 21, 19, 0, 0, tzinfo=timezone.utc)
+    # now (17:46) + 1h = 18:46, ceiled up to the next hour boundary: 19:00, which
+    # is past the 17:00 window close, so the slot rolls to the next weekday's
+    # 09:00 opening rather than publishing in the evening.
+    assert slot_utc == datetime(2026, 7, 22, 9, 0, 0, tzinfo=timezone.utc)
 
 
 def test_slot_is_future_when_now_is_on_the_hour(monkeypatch, tmp_path):
@@ -120,8 +122,12 @@ def test_slot_uses_true_utc_now_not_host_local_time(monkeypatch, tmp_path):
     slot_utc = slot_dt.astimezone(timezone.utc)
 
     assert slot_utc > utc_now
-    # Ceiling of (19:52 + 1h) = 20:52 -> next hour boundary = 21:00 UTC.
-    assert slot_utc == datetime(2026, 8, 7, 21, 0, 0, tzinfo=timezone.utc)
+    # Ceiling of (19:52 + 1h) = 20:52 -> next hour boundary = 21:00 UTC, which is
+    # outside the 09:00-17:00 window, so it rolls forward over the weekend to
+    # Monday 09:00. Reading the host's local clock instead (14:52 CDT) would have
+    # produced an in-window 16:00 slot on the Friday, so this assertion still
+    # discriminates true UTC from host local time.
+    assert slot_utc == datetime(2026, 8, 10, 9, 0, 0, tzinfo=timezone.utc)
 
 
 def test_occupied_times_use_static_publisher_runtime(monkeypatch, tmp_path):
@@ -211,3 +217,45 @@ def test_read_schedule_reservations_discards_legacy_naive_entries(tmp_path):
 
     assert times == []
     assert not legacy.exists()
+
+
+def test_evening_seed_rolls_into_the_next_weekday_window(monkeypatch, tmp_path):
+    """A candidate seeded after the window closes must not be handed back.
+
+    Before the window guard was unified, the 17:00 upper bound was only checked
+    inside the 4-hour-gap conflict branch, so an evening seed with no conflicts
+    was accepted unclamped (e.g. 20:00 UTC).
+    """
+    utc_now = datetime(2026, 9, 7, 19, 3, 0, tzinfo=timezone.utc)  # Monday evening
+    client = _make_client(monkeypatch, tmp_path, utc_now)
+
+    slot_utc = datetime.fromisoformat(client.find_next_schedule_slot()).astimezone(timezone.utc)
+
+    assert slot_utc == datetime(2026, 9, 8, 9, 0, 0, tzinfo=timezone.utc)
+
+
+def test_consecutive_slots_all_land_inside_the_publishing_window(monkeypatch, tmp_path):
+    """Serialized publishes must never walk past the window.
+
+    The reported failure: three consecutive calls from a Monday evening returned
+    20:00, 00:00 and 04:00 UTC, because each 4-hour conflict push skipped the
+    upper-bound check once the candidate crossed midnight.
+    """
+    utc_now = datetime(2026, 9, 7, 19, 3, 0, tzinfo=timezone.utc)  # Monday evening
+    client = _make_client(monkeypatch, tmp_path, utc_now)
+
+    slots = [
+        datetime.fromisoformat(client.find_next_schedule_slot()).astimezone(timezone.utc)
+        for _ in range(20)
+    ]
+
+    for slot in slots:
+        assert slot.weekday() < 5, f"{slot.isoformat()} falls on a weekend"
+        assert 9 <= slot.hour < 17, f"{slot.isoformat()} falls outside 09:00-17:00 UTC"
+    assert slots == sorted(slots)
+    assert len(set(slots)) == len(slots)
+    assert slots[:3] == [
+        datetime(2026, 9, 8, 9, 0, 0, tzinfo=timezone.utc),
+        datetime(2026, 9, 8, 13, 0, 0, tzinfo=timezone.utc),
+        datetime(2026, 9, 9, 9, 0, 0, tzinfo=timezone.utc),
+    ]

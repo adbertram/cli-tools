@@ -18,6 +18,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, unquote, urlparse
 from urllib.request import Request, urlopen
+from zoneinfo import ZoneInfo
 
 from .config import get_config
 from .static_release_bindings import (
@@ -91,11 +92,9 @@ STATIC_PAGES_TERMINAL_FAILURE_STATUSES = frozenset({"failure", "canceled"})
 STATIC_MEDIA_BUCKET = "ata-blog-media"
 STATIC_SITE_ORIGIN = "https://adamtheautomator.com"
 STATIC_CUTOVER_JOURNAL_KIND = "static_cutover_production_promotion"
-# WordPress REST media collection on the same origin the inline media URLs
-# point at. `media_details.sizes` on these records is WordPress's own
+# `media_details.sizes` on a WordPress media record is WordPress's own
 # declaration of which derivative files it generated for one attachment, so it
 # is the authority for what the R2 mirror has to contain.
-STATIC_WORDPRESS_MEDIA_ENDPOINT = f"{STATIC_SITE_ORIGIN}/wp-json/wp/v2/media"
 # A WordPress derivative filename ends in -<width>x<height>; removing that
 # suffix yields the parent attachment's searchable filename stem.
 _WORDPRESS_SIZE_SUFFIX_RE = re.compile(r"-\d+x\d+$")
@@ -165,6 +164,101 @@ def _file_sha256(path: Path) -> str:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+# The time zone every WordPress timestamp in the static corpus is written in.
+# src/lib/routes.js siteLocalIso resolves a corpus timestamp under this zone.
+STATIC_SITE_TIME_ZONE = "America/Chicago"
+
+
+def _corpus_wall_clock(instant: str) -> str:
+    """Return one instant as the naive site-local wall clock the corpus stores.
+
+    All 1,332 imported posts carry pubDate/modDate as a naive WordPress
+    site-local wall clock, and the static site resolves a corpus timestamp
+    under exactly that rule. Astro normalizes a YAML timestamp to UTC before a
+    route ever sees it, which erases whatever offset the file carried, so a
+    staged post written with a UTC offset came out of the resolver five or six
+    hours later than it publishes. The only thing that had been correcting it
+    was the harvested Rank Math published override in
+    static-site/src/data/post_seo.json -- a record that exists only for posts
+    WordPress had already published. A post the static site originates has no
+    such record and never will, so it is staged in the corpus's own convention
+    and needs no correction.
+    """
+    parsed = datetime.fromisoformat(instant.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        raise ClientError(f"Static post publish date must carry a UTC offset: {instant}")
+    local = parsed.astimezone(ZoneInfo(STATIC_SITE_TIME_ZONE))
+    return local.replace(tzinfo=None, microsecond=0).isoformat()
+
+
+def _image_pixel_size(path: Path) -> Tuple[int, int]:
+    """Return one image file's real pixel width and height, read from its header.
+
+    The static site's head needs og:image:width and og:image:height for every
+    post. For a post migrated from WordPress those values were harvested from
+    the live page; for a post the static site originates there is nothing to
+    harvest, and the build never sees the image because the file goes straight
+    to R2. This publisher is the only component that holds the bytes, so it
+    measures them here and stages the result in the post's own frontmatter.
+
+    Only the formats this publisher actually uploads are decoded. An
+    unrecognized file raises instead of yielding a guessed size, because a wrong
+    og:image dimension is a rendering defect on every social card the post ever
+    produces.
+    """
+    header = path.read_bytes()[:64]
+    if header[:8] == b"\x89PNG\r\n\x1a\n":
+        if header[12:16] != b"IHDR":
+            raise ClientError(f"PNG has no leading IHDR chunk: {path}")
+        return (
+            int.from_bytes(header[16:20], "big"),
+            int.from_bytes(header[20:24], "big"),
+        )
+    if header[:4] == b"RIFF" and header[8:12] == b"WEBP":
+        chunk = header[12:16]
+        if chunk == b"VP8X":
+            return (
+                int.from_bytes(header[24:27], "little") + 1,
+                int.from_bytes(header[27:30], "little") + 1,
+            )
+        if chunk == b"VP8 ":
+            if header[23:26] != b"\x9d\x01\x2a":
+                raise ClientError(f"Lossy WebP has no start code: {path}")
+            return (
+                int.from_bytes(header[26:28], "little") & 0x3FFF,
+                int.from_bytes(header[28:30], "little") & 0x3FFF,
+            )
+        if chunk == b"VP8L":
+            if header[20] != 0x2F:
+                raise ClientError(f"Lossless WebP has no signature byte: {path}")
+            bits = int.from_bytes(header[21:25], "little")
+            return ((bits & 0x3FFF) + 1, ((bits >> 14) & 0x3FFF) + 1)
+        raise ClientError(f"Unsupported WebP chunk {chunk!r}: {path}")
+    if header[:2] == b"\xff\xd8":
+        return _jpeg_pixel_size(path)
+    raise ClientError(f"Cannot measure the pixel size of {path}: unrecognized image format")
+
+
+def _jpeg_pixel_size(path: Path) -> Tuple[int, int]:
+    """Return a JPEG's pixel size from its first start-of-frame marker."""
+    data = path.read_bytes()
+    offset = 2
+    while offset + 4 <= len(data):
+        if data[offset] != 0xFF:
+            raise ClientError(f"JPEG segment is not marker-aligned: {path}")
+        marker = data[offset + 1]
+        length = int.from_bytes(data[offset + 2 : offset + 4], "big")
+        # SOF0-SOF15 carry the frame dimensions; DHT (C4), DAC (CC) and the
+        # RSTn markers (D0-D7) share the C0-CF range and do not.
+        if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
+            return (
+                int.from_bytes(data[offset + 7 : offset + 9], "big"),
+                int.from_bytes(data[offset + 5 : offset + 7], "big"),
+            )
+        offset += 2 + length
+    raise ClientError(f"JPEG has no start-of-frame segment: {path}")
 
 
 def _file_md5(path: Path) -> str:
@@ -912,6 +1006,13 @@ class AtaBlogClient:
     # still refuses to hand back a slot that isn't safely in the future.
     _MIN_SCHEDULE_LEAD = timedelta(minutes=30)
 
+    # Publishing window, in UTC hours. A slot is valid when its hour is in
+    # [_SCHEDULE_WINDOW_START_HOUR, _SCHEDULE_WINDOW_END_HOUR): 09:00 is the
+    # earliest slot of a weekday and 16:00 the latest, so nothing publishes at
+    # or after 5pm UTC.
+    _SCHEDULE_WINDOW_START_HOUR = 9
+    _SCHEDULE_WINDOW_END_HOUR = 17
+
     def _schedule_reservation_dir(self) -> Path:
         """Return the active-profile schedule reservation directory."""
         if self._RESERVATION_DIR is not None:
@@ -1006,6 +1107,28 @@ class AtaBlogClient:
         truncated = value.replace(minute=0, second=0, microsecond=0)
         return truncated if truncated == value else truncated + timedelta(hours=1)
 
+    @classmethod
+    def _in_schedule_window(cls, value: datetime) -> bool:
+        """Return True when the value's hour is inside the publishing window."""
+        return cls._SCHEDULE_WINDOW_START_HOUR <= value.hour < cls._SCHEDULE_WINDOW_END_HOUR
+
+    @classmethod
+    def _next_window_start(cls, value: datetime) -> datetime:
+        """Return the earliest window opening at or after an out-of-window value.
+
+        Only called for values the window guard rejected, so the hour is either
+        before the window opens (roll forward to today's opening) or at/after it
+        closes (roll forward to tomorrow's opening). Weekend handling stays with
+        the loop's weekend guard, which re-runs on the returned value.
+        """
+        day = value if value.hour < cls._SCHEDULE_WINDOW_START_HOUR else value + timedelta(days=1)
+        return day.replace(
+            hour=cls._SCHEDULE_WINDOW_START_HOUR,
+            minute=0,
+            second=0,
+            microsecond=0,
+        )
+
     def _find_next_schedule_slot_unlocked(self) -> str:
         """
         Find next available publication slot respecting:
@@ -1031,31 +1154,37 @@ class AtaBlogClient:
         now = datetime.now(timezone.utc)
         candidate = self._ceil_to_hour(now + timedelta(hours=1))
 
-        # If before 9am, start at 9am
-        if candidate.hour < 9:
-            candidate = candidate.replace(hour=9)
-
         max_iterations = 100  # Safety limit
         for _ in range(max_iterations):
             # Skip weekends (5=Saturday, 6=Sunday)
             if candidate.weekday() >= 5:
                 days_until_monday = 7 - candidate.weekday()
-                candidate = (candidate + timedelta(days=days_until_monday)).replace(hour=9, minute=0)
+                candidate = (candidate + timedelta(days=days_until_monday)).replace(
+                    hour=self._SCHEDULE_WINDOW_START_HOUR, minute=0, second=0, microsecond=0
+                )
+                continue
+
+            # Single publishing-window guard. Every candidate passes through
+            # here before it can be accepted, whatever produced it: the initial
+            # seed, a 4-hour conflict push that ran past 5pm or past midnight,
+            # or the lead-time recovery below. Keeping the window in one place
+            # is what stops an out-of-hours slot from slipping through.
+            if not self._in_schedule_window(candidate):
+                candidate = self._next_window_start(candidate)
                 continue
 
             # Count posts on same day
             same_day = [t for t in occupied_times if t.date() == candidate.date()]
             if len(same_day) >= 2:
-                candidate = (candidate + timedelta(days=1)).replace(hour=9, minute=0)
+                candidate = (candidate + timedelta(days=1)).replace(
+                    hour=self._SCHEDULE_WINDOW_START_HOUR, minute=0, second=0, microsecond=0
+                )
                 continue
 
             # Check 4+ hour gap
             conflicts = [t for t in occupied_times if abs((t - candidate).total_seconds()) < 4 * 3600]
             if conflicts:
                 candidate = candidate + timedelta(hours=4)
-                # If pushed past reasonable hours (after 5pm), go to next day
-                if candidate.hour >= 17:
-                    candidate = (candidate + timedelta(days=1)).replace(hour=9, minute=0)
                 continue
 
             # Defense-in-depth guard: refuse to hand back a slot that is not
@@ -1063,8 +1192,6 @@ class AtaBlogClient:
             # matter how "candidate" was derived above.
             if candidate < datetime.now(timezone.utc) + self._MIN_SCHEDULE_LEAD:
                 candidate = self._ceil_to_hour(datetime.now(timezone.utc) + timedelta(hours=1))
-                if candidate.hour < 9:
-                    candidate = candidate.replace(hour=9)
                 continue
 
             # Found valid slot - reserve it before returning
@@ -1662,6 +1789,16 @@ class AtaBlogClient:
         extension = image_path.suffix.lower()
         object_key = f"wp-content/uploads/publisher/{page_id}/{image_hash}{extension}"
         image_url = f"{STATIC_SITE_ORIGIN}/{object_key}"
+        # The featured image's real pixel size, measured from this exact file.
+        # The static build emits og:image:width/height and the JSON-LD
+        # ImageObject dimensions for every post. A migrated post takes them
+        # from src/data/post_seo.json, which was harvested from the live
+        # WordPress pages and therefore only ever covers posts WordPress
+        # already published. A post the static site originates has no such
+        # record and never will, so its dimensions come from the image itself
+        # -- and this publisher is the only component that holds the bytes,
+        # because the file goes straight to R2 and the build never sees it.
+        image_width, image_height = _image_pixel_size(image_path)
         title = str(article.get("Title") or article.get("title") or "Untitled")
         excerpt = " ".join(str(article.get("Excerpt") or "").split())
         replacements = {
@@ -1669,9 +1806,11 @@ class AtaBlogClient:
             "slug": json.dumps(slug, ensure_ascii=False),
             "title": json.dumps(title, ensure_ascii=False),
             "description": json.dumps(excerpt, ensure_ascii=False),
-            "pubDate": publish_date,
-            "modDate": publish_date,
+            "pubDate": _corpus_wall_clock(publish_date),
+            "modDate": _corpus_wall_clock(publish_date),
             "featuredImage": json.dumps(image_url, ensure_ascii=False),
+            "featuredImageWidth": str(image_width),
+            "featuredImageHeight": str(image_height),
         }
         # The corpus loaders require authorId, categoryIds, tagIds, and wpId on
         # every post. A first-time post has no prior frontmatter and no
@@ -1890,16 +2029,23 @@ class AtaBlogClient:
         return key
 
     def _fetch_wordpress_media_records(self, search: str) -> List[Dict[str, Any]]:
-        """Read the WordPress media library records matching one filename stem."""
-        endpoint = (
-            f"{STATIC_WORDPRESS_MEDIA_ENDPOINT}"
-            f"?search={quote(search, safe='')}"
-            "&per_page=100"
-            "&_fields=id,source_url,media_details"
+        """Read the WordPress media library records matching one filename stem.
+
+        This enumeration has to be authenticated. An attachment inherits the
+        status of the post that owns it, and the pipeline schedules posts
+        rather than publishing them on the spot, so for essentially every post
+        the attachment is still non-public when the static mirror runs: an
+        anonymous read of /wp-json/wp/v2/media returns 200 with an empty array
+        and the owner lookup then reports the attachment as missing. The
+        delegated `wordpress` CLI already owns the site's REST credentials, so
+        the search goes through it -- one path, and a credential or transport
+        failure raises rather than degrading to an anonymous read.
+        """
+        result = self._run_wordpress(
+            ["media", "list", "--filter", f"search:eq:{search}", "--limit", "100"]
         )
-        payload, _ = self._fetch_static_origin_bytes(endpoint)
         try:
-            records = json.loads(payload)
+            records = json.loads(result.stdout)
         except json.JSONDecodeError as exc:
             raise ClientError(
                 f"WordPress media search for {search!r} returned invalid JSON: {exc}"
@@ -5064,6 +5210,7 @@ class AtaBlogClient:
         featured_image: Optional[str] = None,
         force: bool = False,
         static_only: bool = False,
+        wordpress_only: bool = False,
     ) -> Dict[str, Any]:
         """
         Publish a Notion article to WordPress.
@@ -5111,6 +5258,29 @@ class AtaBlogClient:
             # fails loudly if the P05/P13 handoffs have gone missing rather
             # than degrading to a WordPress-only publish.
             return self._publish_static_transaction(
+                page_id=page_id,
+                status=status,
+                slug=slug,
+                date=date,
+                auto_schedule=auto_schedule,
+                check_duplicates=check_duplicates,
+                featured_image=featured_image,
+                force=force,
+            )
+        if wordpress_only:
+            if static_only:
+                raise ClientError(
+                    "--wordpress-only and --static-only are mutually exclusive"
+                )
+            # The static and WordPress legs have independent post-id spaces
+            # and neither needs the other's id, so this is a convenience for
+            # publishing the WordPress leg on its own -- correcting or
+            # re-running a WordPress publication whose static leg is already
+            # done, or deliberately shipping WordPress-only. It is NOT required
+            # in order to publish a new post: the default dual-publish path
+            # runs the static leg first and serves a post with no WordPress id
+            # under its own static identity.
+            return self._publish_article_classic(
                 page_id=page_id,
                 status=status,
                 slug=slug,

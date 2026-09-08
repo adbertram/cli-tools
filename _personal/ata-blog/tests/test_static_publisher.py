@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import struct
 import threading
+import zlib
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
@@ -13,8 +15,39 @@ import pytest
 from typer.testing import CliRunner
 
 import ata_blog_cli.client as client_module
-from ata_blog_cli.client import AtaBlogClient, ClientError, _artifact_sha256, _atomic_write_json
+from ata_blog_cli.client import (
+    AtaBlogClient,
+    ClientError,
+    _artifact_sha256,
+    _atomic_write_json,
+    _corpus_wall_clock,
+    _image_pixel_size,
+)
 from ata_blog_cli.commands import notion_page
+
+
+# The publisher measures the featured image it stages, so the fixture image has
+# to be a real image file rather than a placeholder byte string. These are the
+# fixture's dimensions and they are what the staged frontmatter must carry.
+FIXTURE_IMAGE_WIDTH = 640
+FIXTURE_IMAGE_HEIGHT = 360
+
+
+def _png_bytes(width: int, height: int) -> bytes:
+    """Return a real, decodable 8-bit RGB PNG of the given pixel size."""
+
+    def chunk(kind: bytes, payload: bytes) -> bytes:
+        body = kind + payload
+        return struct.pack(">I", len(payload)) + body + struct.pack(">I", zlib.crc32(body))
+
+    header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    raw = b"".join(b"\x00" + b"\x00" * (width * 3) for _ in range(height))
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", header)
+        + chunk(b"IDAT", zlib.compress(raw, 1))
+        + chunk(b"IEND", b"")
+    )
 
 
 PAGE_ID = "31b5d9c85b2b814298a0ea98cb7d78f4"
@@ -442,7 +475,7 @@ def publisher(tmp_path, monkeypatch):
     monkeypatch.setattr(client_module, "STATIC_WORKER_PROOF_SHA256", worker_proof_sha)
 
     image = tmp_path / "featured.png"
-    image.write_bytes(b"image")
+    image.write_bytes(_png_bytes(FIXTURE_IMAGE_WIDTH, FIXTURE_IMAGE_HEIGHT))
     article = {
         "Title": "Journaled Static Publisher",
         "Keywords": "static publisher",
@@ -2456,7 +2489,82 @@ def test_staging_is_byte_identical_for_same_persisted_publish_date(publisher):
     )
 
     assert Path(second["article_path"]).read_bytes() == first_bytes
-    assert f"modDate: {publish_date}".encode() in first_bytes
+    # The corpus stores a naive site-local wall clock, because that is what the
+    # static site's resolver reads a corpus timestamp as. Staging the UTC form
+    # published the post five hours late unless the harvested Rank Math override
+    # in post_seo.json corrected it -- a record that only ever exists for a post
+    # WordPress already published.
+    assert b"pubDate: 2026-08-31T07:34:56\n" in first_bytes
+    assert b"modDate: 2026-08-31T07:34:56\n" in first_bytes
+    assert publish_date.encode() not in first_bytes
+    # The featured image's real pixel size, measured from the file the publisher
+    # is about to upload. The static build emits these as og:image:width and
+    # og:image:height for a post that has no harvested head record.
+    assert f"featuredImageWidth: {FIXTURE_IMAGE_WIDTH}\n".encode() in first_bytes
+    assert f"featuredImageHeight: {FIXTURE_IMAGE_HEIGHT}\n".encode() in first_bytes
+
+
+def test_corpus_wall_clock_converts_any_offset_to_the_site_local_wall_clock():
+    # The one staged post already in the corpus was scheduled at 13:00 UTC and
+    # its harvested production head says it published at 08:00-05:00; the
+    # conversion has to reproduce that without the harvested record.
+    assert _corpus_wall_clock("2026-09-03T13:00:00+00:00") == "2026-09-03T08:00:00"
+    assert _corpus_wall_clock("2026-09-03T08:00:00-05:00") == "2026-09-03T08:00:00"
+    assert _corpus_wall_clock("2026-09-03T13:00:00Z") == "2026-09-03T08:00:00"
+    # Central Standard Time in winter, Central Daylight Time in summer.
+    assert _corpus_wall_clock("2026-01-15T14:30:00Z") == "2026-01-15T08:30:00"
+    assert _corpus_wall_clock("2026-07-15T14:30:00Z") == "2026-07-15T09:30:00"
+    with pytest.raises(ClientError, match="must carry a UTC offset"):
+        _corpus_wall_clock("2026-09-03T08:00:00")
+
+
+def test_image_pixel_size_reads_real_headers_and_refuses_anything_else(tmp_path):
+    png = tmp_path / "featured.png"
+    png.write_bytes(_png_bytes(1920, 1080))
+    assert _image_pixel_size(png) == (1920, 1080)
+
+    # A lossy WebP: RIFF container, VP8 chunk, the 0x9d012a start code, then
+    # the 14-bit width and height.
+    lossy = tmp_path / "featured.webp"
+    vp8 = b"\x00\x00\x00\x9d\x01\x2a" + (1200).to_bytes(2, "little") + (675).to_bytes(2, "little")
+    lossy.write_bytes(
+        b"RIFF" + (len(vp8) + 12).to_bytes(4, "little") + b"WEBPVP8 "
+        + len(vp8).to_bytes(4, "little") + vp8
+    )
+    assert _image_pixel_size(lossy) == (1200, 675)
+
+    # A lossless WebP: VP8L, its 0x2f signature byte, then 14-bit width-1 and
+    # height-1 packed little-endian.
+    lossless = tmp_path / "lossless.webp"
+    packed = ((1080 - 1) << 14) | (1920 - 1)
+    vp8l = b"\x2f" + packed.to_bytes(4, "little")
+    lossless.write_bytes(
+        b"RIFF" + (len(vp8l) + 12).to_bytes(4, "little") + b"WEBPVP8L"
+        + len(vp8l).to_bytes(4, "little") + vp8l
+    )
+    assert _image_pixel_size(lossless) == (1920, 1080)
+
+    # An extended WebP: VP8X, 24-bit canvas width-1 and height-1.
+    extended = tmp_path / "extended.webp"
+    vp8x = b"\x00\x00\x00\x00" + (2752 - 1).to_bytes(3, "little") + (1536 - 1).to_bytes(3, "little")
+    extended.write_bytes(
+        b"RIFF" + (len(vp8x) + 12).to_bytes(4, "little") + b"WEBPVP8X"
+        + len(vp8x).to_bytes(4, "little") + vp8x
+    )
+    assert _image_pixel_size(extended) == (2752, 1536)
+
+    # A baseline JPEG: the SOF0 frame header carries height then width.
+    jpeg = tmp_path / "featured.jpg"
+    sof0 = b"\xff\xc0" + (17).to_bytes(2, "big") + b"\x08" + (630).to_bytes(2, "big") + (1200).to_bytes(2, "big")
+    jpeg.write_bytes(b"\xff\xd8" + b"\xff\xe0" + (16).to_bytes(2, "big") + b"\x00" * 14 + sof0)
+    assert _image_pixel_size(jpeg) == (1200, 630)
+
+    # Anything the publisher cannot actually measure stops the publish rather
+    # than staging a guessed size into the head.
+    unknown = tmp_path / "featured.tiff"
+    unknown.write_bytes(b"II*\x00not really a tiff")
+    with pytest.raises(ClientError, match="unrecognized image format"):
+        _image_pixel_size(unknown)
 
 
 def test_schedule_cleanup_failure_never_transitions_completed_to_failed(

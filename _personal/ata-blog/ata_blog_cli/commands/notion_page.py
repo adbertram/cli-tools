@@ -206,6 +206,16 @@ def articles_publish(
         "--static-only",
         help="Run only the static-site transaction; restores WordPress-owned Notion state afterward",
     ),
+    wordpress_only: bool = typer.Option(
+        False,
+        "--wordpress-only",
+        help=(
+            "Run only the classic WordPress leg, leaving the static site "
+            "untouched. Not needed to publish a new post -- the default "
+            "dual-publish path handles that -- use it to re-run or correct a "
+            "WordPress publication on its own"
+        ),
+    ),
 ):
     """Publish a Notion article through the static-site transaction and, before the cutover, WordPress.
 
@@ -228,6 +238,7 @@ def articles_publish(
         featured_image=featured_image,
         force=force,
         static_only=static_only,
+        wordpress_only=wordpress_only,
     )
 
     if result.get("scheduled_date"):
