@@ -505,6 +505,9 @@ def publisher(tmp_path, monkeypatch):
     client = object.__new__(AtaBlogClient)
     client.config = _Config(tmp_path / "profile")
     client._RESERVATION_DIR = tmp_path / "schedule-reservations"
+    # Pre-cutover slot discovery reads the live WordPress future schedule;
+    # these tests pin scheduling to the empty runtime-root state instead.
+    client._read_publisher_schedule_slots = lambda: []
     client._p05_gate_a_bindings = lambda: {
         "expectedBaselineIndexSha256": bindings["baseline_index_sha256"],
         "expectedBaselineOracleSha256": bindings["baseline_oracle_sha256"],
