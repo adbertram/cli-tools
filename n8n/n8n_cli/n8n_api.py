@@ -154,6 +154,8 @@ class N8nApiClient:
         nodes: List[Dict],
         connections: Dict,
         error_workflow: Optional[str] = GLOBAL_ERROR_HANDLER_ID,
+        settings: Optional[Dict[str, Any]] = None,
+        tags: Optional[List[Dict]] = None,
     ) -> Dict:
         """Create a new workflow.
 
@@ -163,23 +165,31 @@ class N8nApiClient:
             connections: Node connections
             error_workflow: Workflow ID to run on error (default: global error handler).
                            Pass None to skip.
+            settings: Workflow settings (e.g., timezone, executionTimeout) from the
+                      input definition. Merged over the defaults so explicitly
+                      supplied settings are preserved.
+            tags: Workflow tags to attach to the new workflow.
 
         Returns:
             Created workflow object with id
         """
-        settings: Dict[str, Any] = {
+        merged_settings: Dict[str, Any] = {
             "saveManualExecutions": True,
             "saveDataSuccessExecution": "all",
             "saveDataErrorExecution": "all",
         }
+        if settings:
+            merged_settings.update(settings)
         if error_workflow:
-            settings["errorWorkflow"] = error_workflow
-        payload = {
+            merged_settings.setdefault("errorWorkflow", error_workflow)
+        payload: Dict[str, Any] = {
             "name": name,
             "nodes": nodes,
             "connections": connections,
-            "settings": settings,
+            "settings": merged_settings,
         }
+        if tags is not None:
+            payload["tags"] = tags
         return self._request("POST", "/workflows", json=payload)
 
     def delete_workflow(self, workflow_id: str) -> Dict:
