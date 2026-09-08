@@ -1085,7 +1085,28 @@ class AtaBlogClient:
                         path.unlink()
 
     def _read_publisher_schedule_slots(self) -> List[datetime]:
-        """Return future slots already committed to publisher runtime records."""
+        """Read committed slots from the backend that currently owns publication."""
+        if not self._static_cutover_completed():
+            result = self._run_wordpress([
+                "posts", "list", "--filter", "status:eq:future",
+                "--properties", "id,status,date_gmt", "--limit", "1000",
+            ])
+            posts = json.loads(result.stdout)
+            if not isinstance(posts, list) or len(posts) >= 1000:
+                raise ClientError("WordPress future schedule must be a complete list below 1000 posts")
+            slots = []
+            for post in posts:
+                if post["status"] != "future":
+                    raise ClientError("WordPress future schedule returned a non-future post")
+                try:
+                    parsed = datetime.fromisoformat(post["date_gmt"].replace("Z", "+00:00"))
+                except (ValueError, TypeError) as exc:
+                    raise ClientError(f"Invalid WordPress date_gmt for post {post['id']}") from exc
+                # WordPress's date_gmt field is UTC even when the offset is omitted.
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+                slots.append(parsed.astimezone(timezone.utc))
+            return slots
         runtime_root = self._publisher_runtime_root()
         if not runtime_root.exists():
             return []
@@ -1138,7 +1159,49 @@ class AtaBlogClient:
             microsecond=0,
         )
 
-    def _find_next_schedule_slot_unlocked(self) -> str:
+    @staticmethod
+    def _parse_schedule_window(
+        schedule_after: Optional[str], schedule_before: Optional[str],
+    ) -> Optional[Tuple[datetime, datetime]]:
+        """Parse an optional inclusive/exclusive, timezone-aware scheduling window."""
+        if schedule_after is None and schedule_before is None:
+            return None
+        if schedule_after is None or schedule_before is None:
+            raise ClientError("--schedule-after and --schedule-before must be supplied together")
+        bounds = []
+        for name, value in (("--schedule-after", schedule_after), ("--schedule-before", schedule_before)):
+            try:
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise ClientError(f"{name} is not valid ISO 8601: {value}") from exc
+            if parsed.tzinfo is None:
+                raise ClientError(f"{name} must include a UTC offset")
+            bounds.append(parsed.astimezone(timezone.utc))
+        if bounds[0] >= bounds[1]:
+            raise ClientError("--schedule-after must precede --schedule-before")
+        return bounds[0], bounds[1]
+
+    @staticmethod
+    def _require_schedule_in_window(
+        value: Optional[str], schedule_window: Optional[Tuple[datetime, datetime]],
+    ) -> None:
+        """Reject unscheduled or out-of-window dates, including journal replays."""
+        if schedule_window is None:
+            return
+        if value is None:
+            raise ClientError("A bounded publication requires a scheduled date")
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ClientError(f"Schedule date is not valid ISO 8601: {value}") from exc
+        if parsed.tzinfo is None:
+            raise ClientError("Schedule date must include a UTC offset")
+        if not schedule_window[0] <= parsed < schedule_window[1]:
+            raise ClientError(f"Schedule date is outside the frozen scheduling window: {value}")
+
+    def _find_next_schedule_slot_unlocked(
+        self, schedule_window: Optional[Tuple[datetime, datetime]] = None,
+    ) -> str:
         """
         Find next available publication slot respecting:
         - Max 2 posts per weekday
@@ -1162,9 +1225,13 @@ class AtaBlogClient:
         # slot is never earlier than "now" plus a full hour of lead time.
         now = datetime.now(timezone.utc)
         candidate = self._ceil_to_hour(now + timedelta(hours=1))
+        if schedule_window is not None:
+            candidate = max(candidate, self._ceil_to_hour(schedule_window[0]))
 
         max_iterations = 100  # Safety limit
         for _ in range(max_iterations):
+            if schedule_window is not None and candidate >= schedule_window[1]:
+                raise ClientError("No available schedule slot inside the frozen scheduling window")
             # Skip weekends (5=Saturday, 6=Sunday)
             if candidate.weekday() >= 5:
                 days_until_monday = 7 - candidate.weekday()
@@ -1205,17 +1272,22 @@ class AtaBlogClient:
 
             # Found valid slot - reserve it before returning
             slot = candidate.isoformat()
+            self._require_schedule_in_window(slot, schedule_window)
             self._create_schedule_reservation(slot)
             return slot
 
         raise ClientError("Could not find available schedule slot within iteration limit")
 
-    def find_next_schedule_slot(self) -> str:
+    def find_next_schedule_slot(
+        self, schedule_window: Optional[Tuple[datetime, datetime]] = None,
+    ) -> str:
         """Atomically select and reserve the next available UTC schedule slot."""
         with self._exclusive_publisher_lock(self._schedule_lock_path()):
-            return self._find_next_schedule_slot_unlocked()
+            return self._find_next_schedule_slot_unlocked(schedule_window)
 
-    def _reserve_explicit_schedule_slot(self, value: str) -> str:
+    def _reserve_explicit_schedule_slot(
+        self, value: str, schedule_window: Optional[Tuple[datetime, datetime]] = None,
+    ) -> str:
         """Validate and atomically reserve an explicit UTC-aware slot."""
         try:
             parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -1225,6 +1297,7 @@ class AtaBlogClient:
             raise ClientError("--date must include a UTC offset")
         slot = parsed.astimezone(timezone.utc).isoformat()
         with self._exclusive_publisher_lock(self._schedule_lock_path()):
+            self._require_schedule_in_window(slot, schedule_window)
             occupied = self._read_publisher_schedule_slots()
             occupied.extend(self._read_schedule_reservations())
             if any(existing == parsed.astimezone(timezone.utc) for existing in occupied):
@@ -4658,6 +4731,7 @@ class AtaBlogClient:
         check_duplicates: bool,
         featured_image: Optional[str],
         force: bool,
+        schedule_window: Optional[Tuple[datetime, datetime]] = None,
     ) -> Dict[str, Any]:
         """Serialize source capture and transaction work for one Notion page."""
         with self._exclusive_publisher_lock(self._publisher_page_lock_path(page_id)):
@@ -4670,6 +4744,7 @@ class AtaBlogClient:
                 check_duplicates=check_duplicates,
                 featured_image=featured_image,
                 force=force,
+                schedule_window=schedule_window,
             )
 
     def _publish_static_transaction_locked(
@@ -4683,6 +4758,7 @@ class AtaBlogClient:
         check_duplicates: bool,
         featured_image: Optional[str],
         force: bool,
+        schedule_window: Optional[Tuple[datetime, datetime]] = None,
     ) -> Dict[str, Any]:
         """Run or resume the single journaled static publication transaction."""
         if status not in {"draft", "publish"}:
@@ -4727,6 +4803,7 @@ class AtaBlogClient:
             )
             if journal and journal["state"] == "completed":
                 runtime = self._load_required_json(paths["runtime"], "publisher runtime")
+                self._require_schedule_in_window(runtime.get("scheduled_date"), schedule_window)
                 self._validate_publisher_runtime(
                     runtime,
                     page_id=page_id,
@@ -4805,6 +4882,7 @@ class AtaBlogClient:
                 }
             else:
                 runtime = self._load_required_json(paths["runtime"], "publisher runtime")
+                self._require_schedule_in_window(runtime.get("scheduled_date"), schedule_window)
                 self._validate_publisher_runtime(
                     runtime,
                     page_id=page_id,
@@ -4957,9 +5035,9 @@ class AtaBlogClient:
                         current_stage = "schedule reservation"
                         scheduled_date = None
                         if auto_schedule:
-                            scheduled_date = self.find_next_schedule_slot()
+                            scheduled_date = self.find_next_schedule_slot(schedule_window)
                         elif date:
-                            scheduled_date = self._reserve_explicit_schedule_slot(date)
+                            scheduled_date = self._reserve_explicit_schedule_slot(date, schedule_window)
                         runtime["scheduled_date"] = scheduled_date
                         runtime["publish_date"] = (
                             scheduled_date
@@ -5220,6 +5298,8 @@ class AtaBlogClient:
         force: bool = False,
         static_only: bool = False,
         wordpress_only: bool = False,
+        schedule_after: Optional[str] = None,
+        schedule_before: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Publish a Notion article to WordPress.
@@ -5259,6 +5339,12 @@ class AtaBlogClient:
         dict also carries "static_url" and the full static transaction result
         under "static_publish".
         """
+        schedule_window = self._parse_schedule_window(schedule_after, schedule_before)
+        if schedule_window is not None:
+            if date and auto_schedule:
+                raise ClientError("Use either --date or --auto-schedule, not both")
+            if not auto_schedule:
+                self._require_schedule_in_window(date, schedule_window)
         if self._static_cutover_completed():
             # Post-cutover: WordPress no longer serves the site, so there is no
             # classic leg to hand the final Notion state to. The requested
@@ -5275,6 +5361,7 @@ class AtaBlogClient:
                 check_duplicates=check_duplicates,
                 featured_image=featured_image,
                 force=force,
+                schedule_window=schedule_window,
             )
         if wordpress_only:
             if static_only:
@@ -5298,6 +5385,7 @@ class AtaBlogClient:
                 check_duplicates=check_duplicates,
                 featured_image=featured_image,
                 force=force,
+                schedule_window=schedule_window,
             )
         if static_only:
             if not self._static_cutover_active():
@@ -5320,6 +5408,7 @@ class AtaBlogClient:
                 check_duplicates=check_duplicates,
                 featured_image=featured_image,
                 force=force,
+                schedule_window=schedule_window,
             )
             if prior_state["published_url"]:
                 self.update_article(
@@ -5342,6 +5431,7 @@ class AtaBlogClient:
                 check_duplicates=check_duplicates,
                 featured_image=featured_image,
                 force=force,
+                schedule_window=schedule_window,
             )
         # Static leg first: its journal requires the deployed->notion_updated
         # ->completed progression, so it writes an intermediate Notion state.
@@ -5365,6 +5455,7 @@ class AtaBlogClient:
             check_duplicates=check_duplicates,
             featured_image=featured_image,
             force=force,
+            schedule_window=schedule_window,
         )
         classic_result = self._publish_article_classic(
             page_id=page_id,
@@ -5375,6 +5466,7 @@ class AtaBlogClient:
             check_duplicates=check_duplicates,
             featured_image=featured_image,
             force=True,
+            schedule_window=schedule_window,
         )
         if "static_url" in static_result:
             classic_result["static_url"] = static_result["static_url"]
@@ -5391,6 +5483,7 @@ class AtaBlogClient:
         check_duplicates: bool = True,
         featured_image: Optional[str] = None,
         force: bool = False,
+        schedule_window: Optional[Tuple[datetime, datetime]] = None,
     ) -> Dict[str, Any]:
         """
         Classic WordPress publish path (pre-static-rewrite behavior).
@@ -5530,7 +5623,7 @@ class AtaBlogClient:
         effective_date = None
         effective_status = status
         if auto_schedule:
-            effective_date = self.find_next_schedule_slot()
+            effective_date = self.find_next_schedule_slot(schedule_window)
             effective_status = "future"
         elif date:
             effective_date = date

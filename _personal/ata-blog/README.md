@@ -43,6 +43,21 @@ ata-blog shoutouts site set --logo 27000 --link https://example.com/product
 ata-blog shoutouts site set --no-display --no-cache-clear
 ```
 
+### Frozen scheduling windows
+
+Supply both UTC-aware bounds to keep automatic scheduling inside one frozen
+interval. The lower bound is inclusive; the upper bound is exclusive:
+
+```bash
+ata-blog notion-page publish PAGE_ID --auto-schedule --schedule-after 2026-09-08T20:00:00Z --schedule-before 2026-09-15T20:00:00Z --featured-image featured.png
+```
+
+The locked scheduler keeps weekday, daily-capacity, four-hour spacing, and
+reservation rules. It reads live WordPress future posts before static cutover,
+and static publisher records after completed cutover. If no slot fits, it
+raises an error before reserving or publishing outside the interval. Both
+bounds also validate an explicit `--date` and static transaction replays.
+
 ### Body shoutouts vs the site shoutout
 
 `ata-blog shoutouts list|get|add|remove` manage `wp:quote` blocks inside one
