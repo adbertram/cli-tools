@@ -286,7 +286,20 @@ def _tree_sha256(root: Path) -> str:
 
 
 def _static_corpus_sha256() -> str:
-    """Match the release manifest's exact static corpus membership hash."""
+    """Match the release manifest's exact static corpus membership hash.
+
+    This must stay byte-for-byte identical to ``release_manifest.mjs``'s
+    ``hashCorpus()``: the same roots (``src/data/posts``, ``src/data/pages``,
+    ``src/partials/pages``), the same fixed data files, and the same record
+    join (``relative_path<TAB>file_sha256`` per file, sorted, then SHA-256 of
+    the newline-terminated concatenation). The build itself does not write into
+    these roots -- its markdown generation targets ``dist/`` -- so when this
+    membership drifts from the JS side the staged hash can never equal the
+    in-transaction build manifest's ``inputs.corpus_sha256`` and the static leg
+    aborts (agent-issues#85). ``test_staged_corpus_hash_matches_release_manifest_hash_corpus``
+    cross-checks the real JS hash against this function on one hermetic staged
+    corpus so a future drift fails the suite instead of a live publish.
+    """
     roots = (
         STATIC_SITE_ROOT / "src" / "data" / "posts",
         STATIC_SITE_ROOT / "src" / "data" / "pages",

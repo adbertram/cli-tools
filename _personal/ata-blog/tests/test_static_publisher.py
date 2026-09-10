@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import struct
+import subprocess
 import threading
 import zlib
 from contextlib import contextmanager
@@ -880,6 +881,47 @@ def test_active_staged_journal_resumes_with_manifest_corpus_hash(publisher):
     assert result["journal_state"] == "completed"
     assert counters["media"] == 0
     assert counters["build"] == counters["deploy"] == counters["scanner"] == counters["notion"] == 1
+
+
+def test_staged_corpus_hash_matches_release_manifest_hash_corpus(publisher, tmp_path):
+    """The staged corpus hash must byte-match the build's own hashCorpus().
+
+    Regression guard for agent-issues#85: the publisher's
+    `_static_corpus_sha256` once omitted several data files that
+    release_manifest.mjs's `hashCorpus()` includes, so the staged corpus hash
+    could never equal the build manifest's `inputs.corpus_sha256` and the
+    static leg aborted. The two memberships are duplicated across Python and
+    JS, so this test cross-checks the real JS `hashCorpus()` (run through node
+    against the hermetic contract copy) instead of re-implementing the Python
+    hash a second time -- a duplicate would pass even when both sides drift
+    from the build.
+    """
+    client, article, markdown, image, _manifest, _counters, _token = publisher
+    revision = client._source_revision(article, markdown, image)
+    key = client._publisher_idempotency_key(PAGE_ID, revision)
+    paths = client._publisher_paths(PAGE_ID, key)
+    stage = client._stage_static_article(
+        page_id=PAGE_ID,
+        slug="azure-bicep-vs-arm-templates",
+        article=article,
+        markdown_content=markdown,
+        image_path=image,
+        publish_date="2026-09-08T12:00:00+00:00",
+        paths=paths,
+    )
+
+    contract = client_module.STATIC_SITE_ROOT / "scripts" / "release_manifest.mjs"
+    # hashCorpus() is module-local; re-export it from the hermetic copy so the
+    # real membership walk runs unchanged against the staged corpus.
+    contract.write_bytes(contract.read_bytes() + b"\nexport { hashCorpus };\n")
+    wrapper = tmp_path / "hash_corpus.mjs"
+    wrapper.write_text(
+        f'import {{ hashCorpus }} from "{contract.as_uri()}";\n'
+        "console.log(await hashCorpus());\n"
+    )
+    result = subprocess.run(["node", str(wrapper)], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert stage["corpus_sha256"] == result.stdout.strip()
 
 
 def test_explicit_schedule_slot_contention_is_atomic(publisher, monkeypatch):
