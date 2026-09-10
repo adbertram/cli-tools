@@ -143,7 +143,7 @@ def articles_update(
         ata-blog notion-page update PAGE_ID --status "Draft"
         ata-blog notion-page update PAGE_ID --status "Developmental Review"
         ata-blog notion-page update PAGE_ID --property "Keywords:azure, cloud"
-        ata-blog notion-page update PAGE_ID -s "Draft" -p "Dev Review Iterations:2"
+        ata-blog notion-page update PAGE_ID -s "Draft" -p "AI Search Iterations:2"
         ata-blog notion-page update PAGE_ID -p "Promoted:true"
         ata-blog notion-page update PAGE_ID -p "Published URL:" -p "Promoted:false"
     """
