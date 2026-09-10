@@ -10,6 +10,12 @@ Controlled by:
 - CACHE_ENABLED env var (default: true) — --no-cache flag sets this to false
 - CACHE_TTL env var (default: 3600 seconds)
 
+A cached value backed by a browser session is not served once that session is
+gone. That gate keys off the DECORATED METHOD's own credential — declared with
+``@cached(credential_type=...)``, or inferred when the tool declares exactly one
+credential type — never off the mere presence of a browser session among a
+tool's several credential types.
+
 Pydantic models are serialized via model_dump() and deserialized via model_validate().
 Plain dicts/lists are stored as-is.
 """
@@ -75,12 +81,49 @@ def cache_dir_for(instance: Any) -> Path:
     return _get_cache_dir(instance)
 
 
-def _cache_allowed_for_instance(instance: Any) -> bool:
-    """Return whether cached data may be served for this instance."""
+BROWSER_SESSION_CREDENTIAL = "browser_session"
+
+
+def _credential_value(credential_type: Any) -> Any:
+    """Return a credential type's string value, accepting an enum or a string."""
+    return getattr(credential_type, "value", credential_type)
+
+
+def _method_needs_browser_session(instance: Any, credential_type: Any) -> bool:
+    """Return whether the cached method's OWN credential is a browser session.
+
+    ``credential_type`` is the credential the decorated method declared via
+    ``@cached(credential_type=...)``. When a method declares nothing, the
+    credential is inferred ONLY when the tool declares exactly one credential
+    type — then that single type is unambiguously the method's own credential.
+
+    A tool that declares several credential types (e.g. eBay's OAuth **and**
+    browser session) says nothing about which one an undeclared cached method
+    uses, so its browser session is not that method's credential. Treating it
+    as one is the bug this function replaces: it gated OAuth- and API-key-backed
+    methods on an unrelated browser login, silently disabling their cache on any
+    machine with no saved session.
+    """
+    if credential_type is not None:
+        return _credential_value(credential_type) == BROWSER_SESSION_CREDENTIAL
+
     config = getattr(instance, "config", None)
-    credential_types = getattr(config, "CREDENTIAL_TYPES", [])
-    if not any(getattr(item, "value", None) == "browser_session" for item in credential_types):
+    declared = list(getattr(config, "CREDENTIAL_TYPES", []) or [])
+    if len(declared) != 1:
+        return False
+    return _credential_value(declared[0]) == BROWSER_SESSION_CREDENTIAL
+
+
+def _cache_allowed_for_instance(instance: Any, credential_type: Any = None) -> bool:
+    """Return whether cached data may be served for this instance.
+
+    A cached value backed by a browser session must not be served once that
+    session is gone — the caller would otherwise read data it can no longer
+    fetch. Every other credential is unaffected by the browser profile.
+    """
+    if not _method_needs_browser_session(instance, credential_type):
         return True
+    config = getattr(instance, "config", None)
     return bool(config.has_saved_session())
 
 
@@ -149,7 +192,7 @@ def invalidate(instance: Any, method_name: str, *args, **kwargs) -> None:
             cache_file.unlink(missing_ok=True)
 
 
-def cached(fn):
+def cached(fn=None, *, credential_type=None):
     """Decorator that caches method return values as JSON files.
 
     Usage::
@@ -162,8 +205,17 @@ def cached(fn):
             def get_data(self, item_id: str) -> MyModel:
                 ...  # expensive browser/API call
 
+    ``credential_type`` declares which credential the decorated method itself
+    uses. Pass it on a tool that declares several credential types, so a method
+    reading through the browser session is still gated on that session while an
+    API- or OAuth-backed method on the same client is not. On a tool with a
+    single credential type the declaration is redundant — that one type is the
+    method's credential.
+
     Cache is skipped when CACHE_ENABLED=false or method raises an exception.
     """
+    if fn is None:
+        return functools.partial(cached, credential_type=credential_type)
 
     @functools.wraps(fn)
     def wrapper(self, *args, **kwargs):
@@ -182,7 +234,7 @@ def cached(fn):
         # Check cache
         if cache_file.exists():
             age = time.time() - cache_file.stat().st_mtime
-            if age < ttl and _cache_allowed_for_instance(self):
+            if age < ttl and _cache_allowed_for_instance(self, credential_type):
                 with open(cache_file) as f:
                     cached_data = json.load(f)
                 # Resolve return type for deserialization

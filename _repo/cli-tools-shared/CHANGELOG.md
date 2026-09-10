@@ -12,6 +12,19 @@
   moved onto it. Tests: `tests/test_auth.py`.
 
 ### Fixes
+- `data_cache.cached` no longer refuses to serve cached values for
+  non-browser methods on a multi-credential CLI. `_cache_allowed_for_instance`
+  gated EVERY cached method on a saved browser session whenever the tool
+  declared `browser_session` among its `CREDENTIAL_TYPES`, so on a machine with
+  no saved session an OAuth- or API-key-backed cached read never hit its cache
+  and re-issued the (sometimes metered) upstream call every time. The gate now
+  keys off the decorated method's OWN credential: declare it with
+  `@cached(credential_type=CredentialType.BROWSER_SESSION)`, or let it be
+  inferred when the tool declares exactly one credential type. Single-credential
+  browser CLIs are unaffected. Mixed-credential CLIs (bricklink, brickowl,
+  clickbank, ebay) now cache their non-browser reads; a browser-backed cached
+  method on such a CLI must declare `credential_type` to keep the gate.
+  Tests: `tests/test_data_cache.py`.
 - `press()` no longer double-types every printable character.
   `browser_harness.helpers.press_key` dispatched `text` on BOTH the `keyDown`
   event and a separate `char` event; Chrome inserts the character once for each,
