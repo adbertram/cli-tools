@@ -42,7 +42,8 @@ from .commands import (
 app.add_typer(auth.app, name="auth", help="Manage eBay API authentication")
 register_commands(app, get_config, categories, name="categories", help="Search and browse eBay marketplace categories")
 
-# Marketplace commands — top-level (browser-based, searches all eBay listings)
+# Marketplace commands — top-level. `search` runs on the SoldComps API;
+# `get`/`status` still scrape one public item page each.
 register_commands(app, get_config, search, name="listings", help="Search eBay marketplace listings")
 
 # Seller commands — grouped under "ebay seller"
@@ -177,6 +178,69 @@ def whoami(
         else:
             print_json(user)
 
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+QUOTA_TABLE_FIELDS = [
+    "quota_limit",
+    "quota_remaining",
+    "quota_reset",
+    "rate_limit",
+    "rate_limit_remaining",
+    "rate_limit_reset",
+    "recorded_at",
+]
+QUOTA_TABLE_HEADERS = [
+    "Monthly Limit",
+    "Monthly Left",
+    "Monthly Reset",
+    "Per-Min Limit",
+    "Per-Min Left",
+    "Per-Min Reset",
+    "Recorded At",
+]
+
+
+@app.command()
+@command
+def quota(
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+):
+    """
+    Show SoldComps plan usage recorded from the last marketplace search.
+
+    `ebay listings search` runs on a metered SoldComps plan, and every response
+    carries its own usage headers, which the client records. This reads those
+    recorded values, so it costs no request of its own. `quota_*` is the monthly
+    quota (the binding constraint); `rate_limit_*` is the per-minute window.
+    Reset values are the Unix epoch seconds SoldComps returned.
+
+    Examples:
+
+        ebay quota
+
+        ebay quota --table
+    """
+    from cli_tools_shared.output import print_error, print_json, print_table, handle_error
+    from .soldcomps_client import SoldCompsError, get_soldcomps_client
+
+    try:
+        client = get_soldcomps_client(profile=profile)
+        try:
+            usage = client.read_usage()
+        finally:
+            client.close()
+
+        if table:
+            print_table([usage], QUOTA_TABLE_FIELDS, QUOTA_TABLE_HEADERS)
+        else:
+            print_json(usage)
+
+    except SoldCompsError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
     except Exception as e:
         raise typer.Exit(handle_error(e))
 

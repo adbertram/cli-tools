@@ -1,11 +1,16 @@
 """Marketplace search & item-detail commands for eBay CLI.
 
-Searches eBay listings via the shared stealth browser (Playwright/CDP), since
-eBay restricts completed-listing search to Terapeak partners and exposes no
-public API for active-listing discovery:
+Two different backends, on purpose:
+
+- ``search`` calls the SoldComps API (``api.sold-comps.com``), which sells the
+  sold-comp and active-listing data eBay itself exposes to no public API. It
+  needs the ``ebay-soldcomps-api-key`` secret and no browser at all.
+- ``get`` and ``status`` still scrape the public ``/itm/<id>`` page through the
+  shared stealth browser — SoldComps is a search product with no single-item
+  lookup.
 
 Commands:
-- search: Search ACTIVE (live) or completed/sold listings by keywords.
+- search: Search ACTIVE (live) or SOLD listings by keywords.
 - get:    Fetch detail for a single active listing by item ID.
 - status: Fetch availability without requiring fulfillment details.
 """
@@ -19,10 +24,11 @@ from typing import Optional
 
 import typer
 
-from ..browser_client import (
-    get_browser_client,
-    resolve_sop,
-    BrowserError,
+from ..browser_client import get_browser_client, BrowserError
+from ..soldcomps_client import (
+    get_soldcomps_client,
+    resolve_sort_order,
+    SoldCompsError,
     SEARCH_CONDITION_HELP,
     LISTING_FORMATS,
     LISTING_FORMAT_HELP,
@@ -43,7 +49,7 @@ from ..properties import validate_and_filter_properties, PropertyValidationError
 
 app = typer.Typer(help="Search eBay marketplace listings")
 
-# Table columns for completed-comps and active search results.
+# Table columns for sold-comp and active search results.
 COMPLETED_TABLE_FIELDS = ["title", "price", "shipping_price", "status", "date_sold", "format", "bids"]
 COMPLETED_TABLE_HEADERS = ["Title", "Price", "Shipping", "Status", "Date", "Format", "Bids"]
 ACTIVE_TABLE_FIELDS = ["title", "price", "shipping_price", "status", "time_left", "format", "bids"]
@@ -70,13 +76,16 @@ def listings_search(
     keywords: str = typer.Argument(..., help="Search keywords"),
     active: bool = typer.Option(
         False, "--active/--completed",
-        help="Search ACTIVE (live, purchasable) listings instead of completed/sold comps",
+        help="Search ACTIVE (live, purchasable) listings instead of sold comps",
     ),
     listing_format: Optional[str] = typer.Option(
         None, "--format",
         help=LISTING_FORMAT_HELP + " (only applies with --active)",
     ),
-    sold: bool = typer.Option(False, "--sold/--no-sold", help="Completed search only: only show sold items"),
+    sold: bool = typer.Option(
+        False, "--sold/--no-sold",
+        help="Search completed SOLD listings (required unless --active is used)",
+    ),
     min_price: Optional[float] = typer.Option(None, "--min-price", help="Minimum price filter"),
     max_price: Optional[float] = typer.Option(None, "--max-price", help="Maximum price filter"),
     category: Optional[str] = typer.Option(None, "--category", "-c", help="eBay category ID"),
@@ -94,7 +103,7 @@ def listings_search(
         help=(
             "Sort field: " + ", ".join(VALID_SORT_FIELDS)
             + ". Default 'newest'. With --active, 'newest' = newly listed; for "
-            "completed comps 'newest' = most recently ended/sold (eBay has no "
+            "sold comps 'newest' = most recently ended/sold (there is no "
             "'newly listed' order for ended listings)."
         ),
     ),
@@ -106,40 +115,56 @@ def listings_search(
         50,
         "--limit",
         "-l",
-        help=f"Maximum number of results (eBay provides up to {SEARCH_MAX_RESULTS})",
+        help=(
+            f"Maximum number of results (up to {SEARCH_MAX_RESULTS}); every 200 "
+            "results cost one SoldComps request"
+        ),
     ),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     filter_expr: Optional[list[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., status:eq:active)"),
     properties: Optional[list[str]] = typer.Option(None, "--properties", "-p", help="Select fields to display"),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
 ):
-    """Search eBay ACTIVE or completed/sold listings.
+    """Search eBay SOLD comps or ACTIVE listings via the SoldComps API.
 
-    By default searches COMPLETED listings (sold + unsold comps). Pass --active
-    to search live, purchasable listings (BIN + auction) with current price,
-    current bid, time-left, shipping, and item URL.
+    Pass --sold for completed, sold comps (the pricing signal) or --active for
+    live, purchasable listings (BIN + auction) with current price, current bid,
+    time-left, shipping, and item URL.
 
-    Completed search requires an authenticated browser session. Run
-    `ebay auth login --credential-type browser_session` first. Active search
-    remains public.
+    Needs the SoldComps API key in the CLI-tools secret manager under
+    'ebay-soldcomps-api-key'. No browser session and no eBay sign-in.
+
+    Sold-comp searches are cached for the profile's CACHE_TTL, so repeating one
+    costs no quota; pass the global --no-cache to force a fresh fetch. Active
+    searches are never cached. `ebay quota` reports the plan usage recorded from
+    the last response.
 
     Results are sorted newest-first by default. With --active, 'newest' orders
-    by newly listed; for completed comps it orders by most recently ended/sold.
+    by newly listed; for sold comps it orders by most recently ended/sold.
 
     Examples:
 
         ebay listings search "LEGO bulk lot" --active --format bin --limit 5
 
-        ebay listings search "LEGO 75192" --active --format auction --sort ending
+        ebay listings search "LEGO 75192" --sold --limit 5         # sold comps
 
-        ebay listings search "LEGO 75192" --sold --limit 5        # completed comps
+        ebay listings search "LEGO 75192" --sold --us-only         # US items only
 
-        ebay listings search "LEGO 75192" --sold --us-only        # US items only
+        ebay listings search "iPhone 15" --sold --sort price       # cheapest first
 
-        ebay listings search "iPhone 15" --sort price             # cheapest first
+        ebay --no-cache listings search "LEGO 75192" --sold        # bypass cache
     """
     if active and sold:
-        print_error("--sold applies to completed comps only; it cannot be combined with --active.")
+        print_error("--sold applies to sold comps only; it cannot be combined with --active.")
+        raise typer.Exit(1)
+
+    if not active and not sold:
+        print_error(
+            "Unsold completed listings are no longer available: the SoldComps "
+            "search API this CLI uses returns sold listings or active listings, "
+            "nothing in between. Use --sold for completed sold comps or "
+            "--active for live listings."
+        )
         raise typer.Exit(1)
 
     if listing_format is not None:
@@ -154,13 +179,13 @@ def listings_search(
             raise typer.Exit(1)
 
     try:
-        sop = resolve_sop(sort, desc, active=active)
+        sort_order = resolve_sort_order(sort, desc, active=active)
     except ValueError as e:
         print_error(str(e))
         raise typer.Exit(1)
 
     try:
-        client = get_browser_client(profile=profile)
+        client = get_soldcomps_client(profile=profile)
 
         try:
             if active:
@@ -173,19 +198,18 @@ def listings_search(
                     condition=condition,
                     us_only=us_only,
                     limit=limit,
-                    sop=sop,
+                    sort_order=sort_order,
                 )
             else:
-                results = client.search_completed(
+                results = client.search_sold(
                     keywords=keywords,
-                    sold_only=sold,
                     min_price=min_price,
                     max_price=max_price,
                     category=category,
                     condition=condition,
                     us_only=us_only,
                     limit=limit,
-                    sop=sop,
+                    sort_order=sort_order,
                 )
         finally:
             client.close()
@@ -224,7 +248,7 @@ def listings_search(
         else:
             print_json(data)
 
-    except BrowserError as e:
+    except SoldCompsError as e:
         print_error(str(e))
         raise typer.Exit(1)
     except Exception as e:

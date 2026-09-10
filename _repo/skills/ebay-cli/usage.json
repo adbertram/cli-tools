@@ -1,8 +1,8 @@
 {
   "tool": "ebay",
   "description": "eBay CLI — seller tools, marketplace categories, and account management",
-  "discovered_at": "2026-08-28T16:34:09Z",
-  "total_commands": 75,
+  "discovered_at": "2026-09-09T20:50:18Z",
+  "total_commands": 76,
   "global_options": [
     {
       "name": "--version",
@@ -542,13 +542,12 @@
           ]
         },
         "search": {
-          "help": "Search eBay ACTIVE or completed/sold listings. By default searches COMPLETED listings (sold + unsold comps). Pass --active to search live, purchasable listings (BIN + auction) with current price, current bid, time-left, shipping, and item URL. Completed search requires an authenticated browser session. Run `ebay auth login --credential-type browser_session` first. Active search remains public. Results are sorted newest-first by default. With --active, 'newest' orders by newly listed; for completed comps it orders by most recently ended/sold.",
+          "help": "Search eBay SOLD comps or ACTIVE listings via the SoldComps API. Pass --sold for completed, sold comps (the pricing signal) or --active for live, purchasable listings (BIN + auction) with current price, current bid, time-left, shipping, and item URL. Needs the SoldComps API key in the CLI-tools secret manager under 'ebay-soldcomps-api-key'. No browser session and no eBay sign-in. Sold-comp searches are cached for the profile's CACHE_TTL, so repeating one costs no quota; pass the global --no-cache to force a fresh fetch. Active searches are never cached. `ebay quota` reports the plan usage recorded from the last response. Results are sorted newest-first by default. With --active, 'newest' orders by newly listed; for sold comps it orders by most recently ended/sold.",
           "examples": [
             "ebay listings search \"LEGO bulk lot\" --active --format bin --limit 5",
-            "ebay listings search \"LEGO 75192\" --active --format auction --sort ending",
-            "ebay listings search \"LEGO 75192\" --sold --limit 5        # completed comps",
-            "ebay listings search \"LEGO 75192\" --sold --us-only        # US items only",
-            "ebay listings search \"iPhone 15\" --sort price             # cheapest first"
+            "ebay listings search \"LEGO 75192\" --sold --limit 5         # sold comps",
+            "ebay listings search \"LEGO 75192\" --sold --us-only         # US items only",
+            "ebay listings search \"iPhone 15\" --sold --sort price       # cheapest first"
           ],
           "arguments": [
             {
@@ -563,7 +562,7 @@
               "name": "--active",
               "type": "bool",
               "required": false,
-              "help": "Search ACTIVE (live, purchasable) listings instead of completed/sold comps",
+              "help": "Search ACTIVE (live, purchasable) listings instead of sold comps",
               "takes_value": false,
               "secondary": "--completed",
               "default": "completed"
@@ -578,7 +577,7 @@
               "name": "--sold",
               "type": "bool",
               "required": false,
-              "help": "Completed search only: only show sold items",
+              "help": "Search completed SOLD listings (required unless --active is used)",
               "takes_value": false,
               "secondary": "--no-sold",
               "default": "no-sold"
@@ -619,7 +618,7 @@
               "name": "--sort",
               "type": "TEXT",
               "required": false,
-              "help": "Sort field: newest, price, ending. Default 'newest'. With --active, 'newest' = newly listed; for completed comps 'newest' = most recently ended/sold (eBay has no 'newly listed' order for ended listings)",
+              "help": "Sort field: newest, price. Default 'newest'. With --active, 'newest' = newly listed; for sold comps 'newest' = most recently ended/sold (there is no 'newly listed' order for ended listings)",
               "short": "-s",
               "default": "newest"
             },
@@ -635,7 +634,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "Maximum number of results (eBay provides up to 960)",
+              "help": "Maximum number of results (up to 960); every 200 results cost one SoldComps request",
               "short": "-l",
               "default": "50"
             },
@@ -708,6 +707,30 @@
           ]
         }
       }
+    },
+    "quota": {
+      "help": "Show SoldComps plan usage recorded from the last marketplace search. `ebay listings search` runs on a metered SoldComps plan, and every response carries its own usage headers, which the client records. This reads those recorded values, so it costs no request of its own. `quota_*` is the monthly quota (the binding constraint); `rate_limit_*` is the per-minute window. Reset values are the Unix epoch seconds SoldComps returned.",
+      "examples": [
+        "ebay quota",
+        "ebay quota --table"
+      ],
+      "arguments": [],
+      "options": [
+        {
+          "name": "--table",
+          "type": "bool",
+          "required": false,
+          "help": "Display as table",
+          "short": "-t",
+          "takes_value": false
+        },
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Profile name"
+        }
+      ]
     },
     "seller": {
       "help": "Seller tools — listings, orders, inventory, policies, and more",

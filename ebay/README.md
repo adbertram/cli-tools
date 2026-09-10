@@ -25,7 +25,7 @@ ebay auth login
 # List your recent orders
 ebay seller orders list
 
-# Search sold/completed marketplace listings with a browser session
+# Search sold/completed marketplace listings (SoldComps API)
 ebay listings search "LEGO 75357" --sold --limit 5
 
 # Discover ACTIVE (live, purchasable) listings + item detail
@@ -34,6 +34,9 @@ ebay listings get 127992747834
 
 # Get details for a specific order
 ebay seller orders get 12-12345-12345
+
+# Check SoldComps plan usage behind marketplace search
+ebay quota --table
 ```
 
 ## Commands
@@ -92,6 +95,21 @@ ebay whoami
 ebay whoami
 ```
 
+### quota - SoldComps Plan Usage
+
+```bash
+# Plan usage recorded from the last marketplace search response
+ebay quota
+ebay quota --table
+```
+
+`ebay quota` reports the SoldComps plan behind `ebay listings search`:
+`quota_limit` / `quota_remaining` / `quota_reset` for the monthly quota, and
+`rate_limit` / `rate_limit_remaining` / `rate_limit_reset` for the per-minute
+window. Reset values are Unix epoch seconds. Values come from the headers of the
+last real search response, so the command costs no request of its own and errors
+until at least one search has run.
+
 ### Categories
 
 Search and browse eBay marketplace categories using the Taxonomy API.
@@ -119,26 +137,37 @@ ebay categories tree 183448 --flat
 
 ### Marketplace Search
 
-Marketplace search uses the shared stealth browser. Completed search requires
-an authenticated browser session because eBay sends cold `LH_Complete=1`
-requests to sign-in. Run `ebay auth login --credential-type browser_session`
-before a completed search. Active search and `listings get` remain public.
-`listings search` uses completed comps by default. Pass `--active` for live,
-purchasable listings.
+`ebay listings search` runs on the [SoldComps](https://sold-comps.com) API
+(`api.sold-comps.com/v1/scrape`), which sells the sold-comp and active-listing
+data eBay itself exposes to no public API. It needs no browser, no eBay sign-in,
+and no browser session — only the SoldComps API key, stored in the CLI-tools
+secret manager under `ebay-soldcomps-api-key`:
 
 ```bash
-# Completed/sold comps (default)
+~/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh \
+    set --tool ebay --type soldcomps-api-key
+```
+
+`listings get` and `listings status` are unchanged: they still scrape one public
+`/itm/<id>` page each through the shared stealth browser, because SoldComps is a
+search product with no single-item lookup.
+
+Pass `--sold` for completed sold comps or `--active` for live, purchasable
+listings. One of the two is required.
+
+```bash
+# Completed sold comps
 ebay listings search "LEGO 75357" --sold --limit 5
 ebay listings search "LEGO 75357" --sold --us-only --limit 5
-ebay listings search "LEGO bulk" --table
+ebay listings search "LEGO bulk" --sold --table
 
 # ACTIVE (live, purchasable) listings — newest first
 ebay listings search "LEGO bulk lot" --active --format bin --sort newest --limit 5
 
-# ACTIVE auctions ending soonest (shows time_left + bids)
-ebay listings search "LEGO minifigure" --active --format auction --sort ending
+# ACTIVE auctions (shows time_left + bids)
+ebay listings search "LEGO minifigure" --active --format auction --limit 5
 
-# Detail for one active listing by item ID
+# Detail for one active listing by item ID (still browser-scraped)
 ebay listings get 127992747834
 ebay listings get 127992747834 --table
 ```
@@ -147,14 +176,57 @@ ebay listings get 127992747834 --table
 `time_left` (and `bids` for auctions with bids). `--format` filters active
 results to `bin` (Buy It Now), `auction`, or `all` (default). `--sold` and
 `--format` apply to their respective modes only and are rejected if combined
-with the wrong mode. `--us-only` limits active or completed results to items
-located in the United States. `listings get` returns price, currency, condition,
-availability, shipping, and (for auctions) current bid / time-left, parsed from
-the item page's schema.org `Product` JSON-LD with DOM fallbacks.
+with the wrong mode. `--us-only` limits results to items located in the United
+States. `listings get` returns price, currency, condition, availability,
+shipping, and (for auctions) current bid / time-left, parsed from the item
+page's schema.org `Product` JSON-LD with DOM fallbacks.
 
-eBay provides at most four search result pages. The command returns up to 960
-results. It prints a warning when `--limit` requests more results than those
-four pages provide.
+`--limit` still accepts up to 960 results. SoldComps returns at most 200 items
+per request and each request spends one unit of the monthly plan quota, so a
+`--limit` above 200 prints the number of requests it will cost on stderr before
+spending them. Paging stops as soon as the API reports no next page.
+
+#### Removed with the browser scraper
+
+Two capabilities the scraper had have no SoldComps equivalent, and both now fail
+with a message naming what is missing rather than silently returning something
+else:
+
+- **Unsold completed listings** (`--completed --no-sold`, and a bare
+  `ebay listings search "<q>"` with neither flag). SoldComps returns sold
+  listings or active listings, nothing in between. Use `--sold` or `--active`.
+- **`--sort ending`** (eBay's "ending soonest"), on active listings as well as
+  completed. Use `--sort newest` or `--sort price`.
+
+#### Quota and caching
+
+The SoldComps plan is metered. Three things keep a repeat price check from
+burning it:
+
+```bash
+# Plan usage recorded from the last search response (costs no request)
+ebay quota
+ebay quota --table
+
+# Force a fresh fetch for one run
+ebay --no-cache listings search "LEGO 75357" --sold
+
+# Drop every stored answer
+ebay cache clear
+```
+
+Completed/sold search **is cached**, for `CACHE_TTL` seconds (the profile
+`.env.example` ships one week — sold comps are historical, so a listing that
+ended last Tuesday will still have ended last Tuesday tomorrow). A repeat of an
+identical sold search costs no quota. The cache key covers every argument, so a
+narrowed search never serves a broader search's results.
+
+Active-listing search is **never cached**: its whole value is "what is live
+right now", and a stale answer is a wrong answer.
+
+`ebay quota` reads the `X-Usage-*` (monthly) and `X-RateLimit-*` (per-minute)
+headers the client records after every response, so it reports the plan without
+spending a request. It errors until at least one search has run.
 
 #### Sorting
 
@@ -162,12 +234,11 @@ four pages provide.
 (default `newest`) plus `--desc/-d` to reverse a field's natural direction. The
 meaning of `newest` depends on the mode:
 
-| `--sort` | `--desc` | Active `_sop` | Completed `_sop` | Meaning |
-|----------|----------|---------------|------------------|---------|
-| `newest` (default) | — | `10` (Time: newly listed) | `13` (Time: ended recently) | Newly listed (active) / most recently ended (completed) |
-| `price` | no | `15` (Price + Shipping: lowest first) | `15` | Cheapest first |
-| `price` | yes | `16` (Price + Shipping: highest first) | `16` | Priciest first |
-| `ending` | — | `1` (Time: ending soonest) | `1` | Sorted by listing end time |
+| `--sort` | `--desc` | Active `sortOrder` | Sold `sortOrder` | Meaning |
+|----------|----------|--------------------|------------------|---------|
+| `newest` (default) | — | `timeNewlyListed` | `endedRecently` | Newly listed (active) / most recently ended (sold) |
+| `price` | no | `pricePlusPostageLowest` | `pricePlusPostageLowest` | Cheapest first |
+| `price` | yes | `pricePlusPostageHighest` | `pricePlusPostageHighest` | Priciest first |
 
 ```bash
 # Newest sold/ended comps first (default)
@@ -177,18 +248,17 @@ ebay listings search "LEGO 75357" --sold
 ebay listings search "LEGO 75357" --active
 
 # Cheapest first (either mode)
-ebay listings search "LEGO 75357" --sort price
+ebay listings search "LEGO 75357" --sold --sort price
 ```
 
-**Recency-sort exception (completed comps):** for COMPLETED search
-(`LH_Complete=1`), eBay has no "newly listed" order for ended listings, so the
-canonical `newest` sort maps to "Time: ended recently" (`_sop=13`) — the most
-recently ended/sold items first. For ACTIVE search, `newest` maps to eBay's true
-"newly listed" order (`_sop=10`). Because eBay exposes only one time-based
-direction per order, `--desc` is supported **only** with `--sort price`;
-`newest --desc` and `ending --desc` are rejected with a clear error. An unknown
-`--sort` value also fails fast (non-zero exit) listing the valid values — there
-is no silent fallback.
+**Recency-sort exception (sold comps):** there is no "newly listed" order for
+ended listings, so for a `--sold` search the canonical `newest` sort means
+`endedRecently` — the most recently ended/sold items first. For ACTIVE search,
+`newest` means `timeNewlyListed`. Because only one time-based direction exists
+per order, `--desc` is supported **only** with `--sort price`; `newest --desc`
+is rejected with a clear error. `--sort ending` is rejected naming the removed
+capability, and an unknown `--sort` value fails fast listing the valid values —
+there is no silent fallback.
 
 ### Seller Commands
 
@@ -650,9 +720,12 @@ ebay seller store time-away disable --dry-run
 ### Cache
 
 ```bash
-ebay cache status
-ebay cache clear
+ebay cache clear                 # drop every stored response
+ebay --no-cache <command>        # bypass the cache for one run
 ```
+
+Only completed/sold marketplace search is cached. See
+[Quota and caching](#quota-and-caching).
 
 ## Output Formats
 

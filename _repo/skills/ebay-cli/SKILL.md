@@ -35,7 +35,8 @@ ebay <command-group> <action> [arguments] [options]
 | Search completed/sold comps | `ebay listings search "<q>" --sold --limit 5` |
 | Search US-only sold comps | `ebay listings search "<q>" --sold --us-only --limit 5` |
 | Discover ACTIVE listings | `ebay listings search "<q>" --active --format bin --sort newest` |
-| Active auctions (time-left/bids) | `ebay listings search "<q>" --active --format auction --sort ending` |
+| Active auctions (time-left/bids) | `ebay listings search "<q>" --active --format auction --limit 5` |
+| Check SoldComps plan usage | `ebay quota --table` |
 | Active item detail | `ebay listings get <item_id>` |
 | Fulfillment for one item | `ebay listings get <item_id> -p item_id,ships,local_pickup,item_location` |
 </quick_start>
@@ -46,10 +47,33 @@ ebay <command-group> <action> [arguments] [options]
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 
-<principle name="Marketplace Search Page Limit">
-eBay provides at most four marketplace search result pages. Therefore,
-`ebay listings search` returns up to 960 results. It prints a warning when
-`--limit` requests more results than those four pages provide.
+<principle name="Marketplace Search Runs On A Metered API">
+`ebay listings search` calls the SoldComps API (`api.sold-comps.com`), not a
+browser. It needs the `ebay-soldcomps-api-key` secret and NO browser session.
+
+The plan is metered, so treat requests as a budget:
+
+- `--limit` accepts up to 960. Every 200 results is one request against the
+  monthly quota, and a `--limit` above 200 prints its cost on stderr first.
+  Ask for the smallest `--limit` that answers the question.
+- `--sold` searches ARE cached (a week by default), so repeating an identical
+  sold search costs nothing. Do not add `--no-cache` unless the caller needs
+  provably fresh data.
+- `--active` searches are NEVER cached, by design.
+- `ebay quota` reports the recorded plan usage and costs no request. Check it
+  before a large batch of searches.
+</principle>
+
+<principle name="Search Capabilities Removed With The Scraper">
+Two option combinations the browser scraper supported now fail fast with a
+message naming what is missing. Do not retry them or work around them:
+
+- **Unsold completed listings** — `--completed --no-sold`, and a bare
+  `ebay listings search "<q>"` with neither `--sold` nor `--active`. SoldComps
+  returns sold or active listings, nothing in between. Always pass `--sold` or
+  `--active`.
+- **`--sort ending`** (eBay's "ending soonest"), for active listings as well as
+  completed. Use `--sort newest` or `--sort price`.
 </principle>
 
 <principle name="One Item Per Detail Command">
@@ -59,10 +83,16 @@ successful, failed, empty, and invalid JSON counts.
 Do not use the loop's final exit status as proof of complete coverage.
 </principle>
 
-<principle name="Completed Search Browser Session">
-Completed and sold searches require an authenticated browser session. Run
-`ebay auth login --credential-type browser_session` before those searches.
-Active search and active item detail remain public.
+<principle name="Search And Item Detail Use Different Backends">
+`ebay listings search` runs on the SoldComps API — no browser, no eBay sign-in,
+no browser session. If it reports a missing API key, the fix is storing
+`ebay-soldcomps-api-key` in the CLI-tools secret manager, never `ebay auth
+login`.
+
+`ebay listings get` and `ebay listings status` still scrape the public
+`/itm/<id>` page through the stealth browser. Those pages are public, so they
+need no session either, but they CAN hit eBay's interstitial walls (see Known
+Issues).
 </principle>
 
 <principle name="Item Fulfillment Fields">
@@ -94,9 +124,10 @@ Top-level (admin/agnostic):
 - **auth** — Manage eBay API authentication (OAuth)
 - **auth** -- Authentication commands and nested `auth profiles` management
 - **categories** — Search and browse marketplace categories
-- **listings** — Browser-based marketplace search and item detail. Completed
-  search requires a browser session. Use `--active` for public live BIN or
-  auction listings. `listings get <item_id>` remains public.
+- **quota** — SoldComps plan usage recorded from the last marketplace search
+- **listings** — Marketplace search (SoldComps API) and item detail (browser).
+  Pass `--sold` for sold comps or `--active` for live BIN/auction listings; one
+  of the two is required. `listings get <item_id>` scrapes one public item page.
 
 Under `ebay seller`:
 - **orders** — View orders and fulfillment details
@@ -129,33 +160,65 @@ Set template `pricing.allowOffers` to `true` to enable Best Offer.
 
 ## Known Issues
 
-### 1. `ebay listings search` Fails with `eBay search results container was not found on the page` and title `🐴 Error Page | eBay`
+### 1. `ebay listings get` / `ebay listings status` fail with an eBay interstitial page
 
-**Symptom:** A browser-backed command (e.g. `ebay listings search "<q>" --sold --us-only`) intermittently exits 1 with `Error: eBay search results container was not found on the page -- the page did not load as expected. url=https://www.ebay.com/sch/i.html?... title='🐴 Error Page | eBay'`.
+**Applies to item-page scraping only.** Marketplace search moved to the SoldComps
+API and no longer touches a browser, so this cannot affect `ebay listings
+search`. The three walls below were captured live on 2026-08-28 against a search
+URL, but they front every eBay page, including `/itm/<id>`.
 
-**Cause (corrected 2026-08-28):** eBay fronts the SAME url with **three** distinct walls, and the original fix recognized only one of them. The retry loop was gated on a one-string title blocklist (`ERROR_PAGE_TITLE_MARKERS = ("Error Page",)`), so the second wall — `/splashui/challenge`, titled **"🐴 Pardon Our Interruption..."** — was classified as a healthy page. `get_page` returned that interstitial to the caller, whose `wait_for_selector` then timed out and reported the misleading container-not-found error. An instrumented run of the real loop caught it directly: one detection probe, `detected: false`, and `get_page` returning a page still parked on `/splashui/challenge`. That is why the failure printed `attempt 1/4` and then died immediately instead of exhausting its attempts — it was not a loop that gave up early, it was a loop whose exit condition was wrong.
+**Symptom:** `ebay listings get <item_id>` intermittently exits 1 reporting a
+page that did not load as expected, quoting a title such as `🐴 Error Page |
+eBay` or a URL under `/splashui/`.
 
-This is **not** a stale-session symptom. It reproduces with `ebay auth status` reporting `browser_session.authenticated: true` and the live results page rendering "Hi Adam!".
+**Cause:** eBay fronts the same URL with **three** distinct walls that look alike
+to a naive title check but need opposite handling. The original retry loop was
+gated on a one-string title blocklist (`ERROR_PAGE_TITLE_MARKERS = ("Error
+Page",)`), so `/splashui/challenge`, titled **"🐴 Pardon Our Interruption..."**,
+was classified as a healthy page and returned to the caller, whose selector wait
+then timed out and reported a misleading "page did not load" error.
 
-The three walls, all captured live:
+This is **not** a stale-session symptom. It reproduces with `ebay auth status`
+reporting `browser_session.authenticated: true`, and item pages are public
+anyway.
 
 | Wall | Signature | Behavior | Handling |
 |------|-----------|----------|----------|
 | `error` | title `🐴 Error Page \| eBay`, body `SORRY Something went wrong on our end <ref>` | eBay's **request-rate** wall. Sticky — held 8s+ without re-navigation and survived re-navigation at ~9.5s spacing | Jittered exponential backoff, then re-navigate |
-| `challenge` | `/splashui/challenge`, title `🐴 Pardon Our Interruption...` | **Self-clearing** JS check ("your browser will redirect ... shortly") — resolved to real results on the next sample | **Waited out in place.** Re-navigating abandons the redirect eBay just issued and spends another request against the rate budget |
+| `challenge` | `/splashui/challenge`, title `🐴 Pardon Our Interruption...` | **Self-clearing** JS check ("your browser will redirect ... shortly") — resolved to real content on the next sample | **Waited out in place.** Re-navigating abandons the redirect eBay just issued and spends another request against the rate budget |
 | `captcha` | `/splashui/captcha`, hcaptcha/recaptcha, "verify you are human" | Real human verification | **Hard stop** — never solved, clicked through, or reloaded around |
 
-**Fix:** The handling moved into the shared engine as a declarative hook, so `EbayBrowser` stays a declarative subclass (`test_lean_cli_architecture.py::test_browser_automation_subclasses_are_declarative`). `cli_tools_shared.auth` now provides the `Interstitial` rule dataclass, `classify_interstitial()`, and the `settle`/`reload`/`abort` strategies; `BrowserAutomation.get_page` navigates via `_navigate_page` and then resolves the walls declared in `INTERSTITIALS`, returning **only** once the page holds real content. eBay declares its three rules in `EBAY_INTERSTITIALS` (most-severe first, so a captcha can never be masked by a retryable rule). `_raise_for_search_blocker` classifies against the same rules, so each wall gets its own accurate message instead of the generic container-missing one — including a distinct "expired or unauthenticated session" message for a sign-in redirect. Sources: `_repo/cli-tools-shared/cli_tools_shared/auth.py`, `ebay/ebay_cli/browser.py`, `ebay/ebay_cli/browser_client.py`. Tests: `cli-tools-shared/tests/test_browser_interstitials.py`, `ebay/tests/test_browser_error_interstitial.py`, `ebay/tests/test_search_blocker_diagnosis.py`.
+**Fix:** The handling lives in the shared engine as a declarative hook, so
+`EbayBrowser` stays a declarative subclass
+(`test_lean_cli_architecture.py::test_browser_automation_subclasses_are_declarative`).
+`cli_tools_shared.auth` provides the `Interstitial` rule dataclass,
+`classify_interstitial()`, and the `settle`/`reload`/`abort` strategies;
+`BrowserAutomation.get_page` navigates via `_navigate_page` and then resolves the
+walls declared in `INTERSTITIALS`, returning **only** once the page holds real
+content. eBay declares its three rules in `EBAY_INTERSTITIALS` (most-severe
+first, so a captcha can never be masked by a retryable rule). Sources:
+`_repo/cli-tools-shared/cli_tools_shared/auth.py`, `ebay/ebay_cli/browser.py`.
+Tests: `cli-tools-shared/tests/test_browser_interstitials.py`,
+`ebay/tests/test_browser_error_interstitial.py`.
 
-**Verification:** Run `ebay listings search "LEGO 7097" --sold --us-only --limit 40 --table`. When the walls are hit, stderr shows the retry working through them, e.g.:
+**Verification:** Run `ebay listings get 127992747834`. When the walls are hit,
+stderr shows the retry working through them, e.g.:
 ```
 Warning: error ('Error Page') interstitial detected (attempt 1/4) -- retrying <url> in 4.4s
-Warning: error ('Error Page') interstitial detected (attempt 2/4) -- retrying <url> in 11.6s
 Warning: browser-check ('Pardon Our Interruption') interstitial detected -- waiting for it to clear (0s/20s)
 ```
-followed by real sold comps on stdout.
+followed by the item JSON on stdout.
 
-**Recurrence Prevention:** Resolution is central to `BrowserAutomation.get_page`, so every browser-backed operation in every browser CLI inherits it; a tool that declares no `INTERSTITIALS` is unaffected. If eBay adds or rotates a wall, add/adjust an `Interstitial` rule in `EBAY_INTERSTITIALS` — do not reintroduce a bare title check, and do not treat "the title isn't the one bad string" as proof the page is good. Match on the narrowest reliable signal (URL path first, then title); broad body markers such as "something went wrong" legitimately appear inside real listing content. If the rate wall starts outlasting the backoff, raise `INTERSTITIAL_MAX_ATTEMPTS`/`INTERSTITIAL_BASE_DELAY_MS` rather than shortening the waits — tight reloads measurably deepen the throttle.
+**Recurrence Prevention:** Resolution is central to `BrowserAutomation.get_page`,
+so every browser-backed operation in every browser CLI inherits it. If eBay adds
+or rotates a wall, add/adjust an `Interstitial` rule in `EBAY_INTERSTITIALS` — do
+not reintroduce a bare title check, and do not treat "the title isn't the one bad
+string" as proof the page is good. Match on the narrowest reliable signal (URL
+path first, then title); broad body markers such as "something went wrong"
+legitimately appear inside real listing content. If the rate wall starts
+outlasting the backoff, raise
+`INTERSTITIAL_MAX_ATTEMPTS`/`INTERSTITIAL_BASE_DELAY_MS` rather than shortening
+the waits — tight reloads measurably deepen the throttle.
 
 <success_criteria>
 - Command executes without error
