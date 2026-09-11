@@ -111,22 +111,27 @@ airtable auth profiles delete <name> --force
 
 **CLI behavior:** `airtable fields delete` is intentionally guarded and returns a clear unsupported-operation error before making any API request.
 
-### 3. Lookup field creation is not a reliable production schema path through fields create
+### 3. Lookup fields are created with `multipleLookupValues`, not `lookup`
 
-**Symptom:** `airtable fields create tbl... "Lookup" multipleLookupValues --options '{"recordLinkFieldId":"fld...","fieldIdInLinkedTable":"fld..."}'` returns `Error: API request failed (422): {'type': 'UNSUPPORTED_FIELD_TYPE_FOR_CREATE'}`. `airtable fields create Clips "Module Status" lookup --base app... --options '{"recordLinkFieldId":"fld...","fieldIdInLinkedTable":"fld..."}'` returns `Error: API request failed (422): Invalid options for Clips.Module Status: Creating lookup fields is not supported at this time`.
+**Symptom:** `airtable fields create Clips "Module Status" lookup --base app... --options '{"recordLinkFieldId":"fld...","fieldIdInLinkedTable":"fld..."}'` is refused before the request with a message naming `multipleLookupValues`. Sending `lookup` to Airtable directly returns `422 UNSUPPORTED_FIELD_TYPE_FOR_CREATE` — "Creating lookup fields is not supported at this time".
 
-**Cause:** Airtable schema reads expose lookup fields as `multipleLookupValues`, while current Airtable docs list create-field variant type `lookup`; both have been rejected by the public create-field API for live CourseCraft-style schema work. Do not copy a lookup field's returned `type` from `fields list` into `fields create`, and do not treat documented `lookup` create examples as a reliable production schema-migration path.
+**Cause:** Airtable's create-field endpoint accepts the same type name it returns from schema reads, `multipleLookupValues`. The `lookup` spelling in its docs is not accepted by the create-field API.
 
-**Correct path:** Create lookup fields in Airtable's web UI, then verify with `airtable fields list <table> --filter 'name:eq:<field name>'` or `airtable fields get <table> <field>`.
+**Correct path:** Use the type that `fields list` reports:
 
-**CLI behavior:** `airtable fields create ... multipleLookupValues ...` and `airtable fields create ... lookup ...` are guarded and return a clear unsupported-operation error before making any API request.
+```bash
+airtable fields create Clips "Module Status" multipleLookupValues --base app... \
+  --options '{"recordLinkFieldId":"fld...","fieldIdInLinkedTable":"fld..."}'
+```
 
-### 4. Rollup field creation is not reliable through fields create
+Measured live against base `app9uzzru5KZOImYQ` on 2026-09-11: `multipleLookupValues` returned 201 with `options.isValid: true`; `rollup` with a `formula` returned 201 with `options.isValid: true`; only `lookup` returned 422.
 
-**Symptom:** `airtable fields create Clips "Module Status" rollup --base app... --options '{"recordLinkFieldId":"fld...","fieldIdInLinkedTable":"fld...","formula":"ARRAYJOIN(values)"}'` returns `Error: API request failed (422): {'type': 'UNSUPPORTED_FIELD_TYPE_FOR_CREATE'}`.
+**CLI behavior:** `airtable fields create ... multipleLookupValues ...` and `airtable fields create ... rollup ...` forward the request normally. Only `airtable fields create ... lookup ...` is guarded, and the refusal names `multipleLookupValues` as the working type.
 
-**Cause:** Airtable documents a rollup create payload, and the CLI can forward it, but Airtable's public create-field API has rejected rollup creation for a live CourseCraft base. Do not treat a rollup create example or schema-read field type as a reliable production schema-migration path.
+### 4. A created field can never be removed or repointed through the API
 
-**Correct path:** Create or change rollup fields in Airtable's web UI, then verify with `airtable fields list <table> --filter 'name:eq:<field name>'` or `airtable fields get <table> <field>`. Use `airtable fields create ... rollup` only in a disposable base when the task is specifically to test Airtable API support.
+**Symptom:** A field created with wrong options (for example a lookup pointing at the wrong `fieldIdInLinkedTable`) cannot be deleted or corrected by API. `DELETE /v0/meta/bases/{base}/tables/{table}/fields/{id}` returns 404, and `PATCH .../fields/{id}` with `recordLinkFieldId` or `fieldIdInLinkedTable` returns 422.
 
-**CLI behavior:** `airtable fields create ... rollup ...` is not guarded today; it forwards the request and can return Airtable's 422 unsupported-field-type response.
+**Cause:** Airtable exposes no delete-field endpoint, and the update-field endpoint accepts only `name` and `description`. Verified in the same live pass on 2026-09-11.
+
+**Correct path:** Verify the `--options` payload before creating — field IDs resolved from `airtable fields list <linked table>` — because the only way to remove a mistake is Airtable's web UI. `airtable fields create` prints this warning on every successful create, and `airtable fields delete` refuses before making a request.

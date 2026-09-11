@@ -34,24 +34,34 @@ SELECT_CHOICES_UPDATE_MESSAGE = (
     "the public API exposes no endpoint for this."
 )
 
+# Airtable's create-field endpoint rejects the documented write type "lookup"
+# with HTTP 422 UNSUPPORTED_FIELD_TYPE_FOR_CREATE, but accepts the schema-read
+# type "multipleLookupValues" and returns 201 with options.isValid true
+# (measured 2026-09-11). Only the "lookup" spelling is blocked here, and the
+# message names the type that works.
 LOOKUP_CREATE_TYPE_MESSAGE = (
-    "Airtable lookup field creation is not a reliable production schema path "
-    "through `fields create`. Airtable returns lookup fields from schema reads "
-    "as type 'multipleLookupValues', and its documented create-field write "
-    "type 'lookup' was rejected for the live CourseCraft base with HTTP 422: "
-    "Creating lookup fields is not supported at this time. Do not pass "
-    "'multipleLookupValues' or 'lookup' to `fields create`; recordLinkFieldId "
-    "and fieldIdInLinkedTable options do not make lookup creation reliable. "
-    "Create lookup fields in Airtable's web UI, then verify with "
-    "`airtable fields list` or `airtable fields get`. Rollup creation is also "
-    "not a reliable production schema path; rollup options include "
-    "recordLinkFieldId, fieldIdInLinkedTable, and formula."
+    "Airtable rejects the create-field type 'lookup' with HTTP 422 "
+    "UNSUPPORTED_FIELD_TYPE_FOR_CREATE: Creating lookup fields is not "
+    "supported at this time. Use the schema-read type "
+    "'multipleLookupValues' instead; it is the working create type for "
+    "lookup fields. Example:\n"
+    "  airtable fields create <table> '<name>' multipleLookupValues "
+    "--options '{\"recordLinkFieldId\":\"fld...\",\"fieldIdInLinkedTable\":\"fld...\"}'"
 )
 
 UNSUPPORTED_FIELD_CREATE_TYPE_MESSAGES = {
-    "multipleLookupValues": LOOKUP_CREATE_TYPE_MESSAGE,
     "lookup": LOOKUP_CREATE_TYPE_MESSAGE,
 }
+
+# Airtable exposes no delete-field endpoint (DELETE /v0/meta/bases/{base}/
+# tables/{table}/fields/{id} returns 404), and PATCH on a field accepts only
+# name and description, so a lookup's recordLinkFieldId/fieldIdInLinkedTable
+# cannot be repointed (422). A created field is permanent through the API.
+FIELD_CREATE_PERMANENCE_NOTE = (
+    "Airtable has no delete-field API endpoint, and field updates accept only "
+    "name and description. This field cannot be removed or repointed through "
+    "the API; removing it requires the Airtable web UI."
+)
 
 
 class AirtableClient:

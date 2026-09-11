@@ -2,7 +2,7 @@
   "tool": "airtable",
   "description": "CLI interface for Airtable API",
   "usage_instructions": "Use `airtable auth login` first to configure credentials for the default or named profile, then use `tables list`, `tables get`, `fields list`, `fields get`, and `records list` against the configured base. Base ID defaults to `AIRTABLE_BASE_ID`; override with `--base/-b` when the target base matters. Table-name arguments are Airtable table names inside the selected base, not project CLI resource names such as CourseCraft `modules`.",
-  "discovered_at": "2026-07-05T19:09:25Z",
+  "discovered_at": "2026-09-11T16:10:17Z",
   "total_commands": 29,
   "global_options": [
     {
@@ -42,7 +42,8 @@
               "type": "bool",
               "required": false,
               "help": "Clear existing ephemeral auth state and re-authenticate",
-              "short": "-F"
+              "short": "-F",
+              "takes_value": false
             }
           ]
         },
@@ -96,7 +97,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -117,12 +119,13 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "List all configured Airtable profiles. Shows which is default. Use --table/-t for formatted output. Use --filter/-f to find specific profiles (e.g., is_default:eq:True).",
               "arguments": [],
               "options": [
@@ -131,7 +134,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -172,7 +176,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -197,14 +202,16 @@
                   "name": "--keep-old",
                   "type": "bool",
                   "required": false,
-                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
                 },
                 {
                   "name": "--force",
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -239,7 +246,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -253,14 +261,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--verbose",
               "type": "bool",
               "required": false,
               "help": "Show detailed checks",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -286,7 +296,11 @@
       ],
       "commands": {
         "get": {
-          "help": "Get one base by ID or name from the accessible bases list.",
+          "help": "Get one base by ID or name from the accessible bases list. Airtable exposes no single-base detail endpoint, so this resolves the base from the full bases listing.",
+          "examples": [
+            "airtable bases get app9uzzru5KZOImYQ",
+            "airtable bases get CourseCraft --table"
+          ],
           "arguments": [
             {
               "name": "base_id",
@@ -301,7 +315,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -312,7 +327,12 @@
           ]
         },
         "list": {
-          "help": "List every base the active Personal Access Token can access.",
+          "help": "List every base the active Personal Access Token can access. Follows Airtable's Metadata API offset pagination so all accessible bases are returned, not just the first page.",
+          "examples": [
+            "airtable bases list",
+            "airtable bases list --table",
+            "airtable bases list --filter \"name:contains:Course\""
+          ],
           "arguments": [],
           "options": [
             {
@@ -320,7 +340,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -364,7 +385,14 @@
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "usage_instructions": "Clear all cached Airtable CLI responses. Use when stale cached API data is affecting command output.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
@@ -386,9 +414,11 @@
           "examples": [
             "airtable fields create \"Tasks\" \"Status\" singleLineText",
             "airtable fields create tblXXXXXXXXXXXXXX \"Status\" singleLineText",
-            "airtable fields create \"Tasks\" \"Done\" checkbox --options '{\"icon\":\"check\",\"color\":\"greenBright\"}'"
+            "airtable fields create \"Tasks\" \"Done\" checkbox --options '{\"icon\":\"check\",\"color\":\"greenBright\"}'",
+            "airtable fields create \"Clips\" \"Module Status\" multipleLookupValues --options '{\"recordLinkFieldId\":\"fldLink\",\"fieldIdInLinkedTable\":\"fldSource\"}'",
+            "airtable fields create \"Clips\" \"Slide Count\" rollup --options '{\"recordLinkFieldId\":\"fldLink\",\"fieldIdInLinkedTable\":\"fldSource\",\"formula\":\"COUNTA(values)\"}'"
           ],
-          "usage_instructions": "Create a field in TABLE_ID with NAME and FIELD_TYPE positional arguments. Use --description/-d for a field description, --options/-o with a JSON object for type-specific options, --base/-b to override BASE_ID, and --table/-t for table output. Do not create lookup fields through fields create: Airtable has rejected both the fields-list read type `multipleLookupValues` and the documented create-field type `lookup`; the live CourseCraft base returned HTTP 422 `Creating lookup fields is not supported at this time`, and the CLI guards both types before making an API request. Create lookup fields in the Airtable web UI and verify with fields list/get. Rollup field creation is not a reliable production schema path through this CLI: Airtable's public create-field API returned UNSUPPORTED_FIELD_TYPE_FOR_CREATE for a live CourseCraft rollup create request, even with recordLinkFieldId, fieldIdInLinkedTable, and formula options. Create rollup fields in Airtable's web UI, then verify with fields list/get; use fields create ... rollup only in a disposable base when specifically testing Airtable API support.",
+          "usage_instructions": "Create a field in TABLE_ID with NAME and FIELD_TYPE positional arguments. Use --description/-d for a field description, --options/-o with a JSON object for type-specific options, --base/-b to override BASE_ID, and --table/-t for table output. Lookup fields use the schema-read type `multipleLookupValues`, which the create-field API accepts: `airtable fields create Clips \"Module Status\" multipleLookupValues --options '{\"recordLinkFieldId\":\"fld...\",\"fieldIdInLinkedTable\":\"fld...\"}'`. The documented write type `lookup` is rejected by Airtable with HTTP 422 UNSUPPORTED_FIELD_TYPE_FOR_CREATE, so the CLI refuses that spelling before the request and names `multipleLookupValues` instead. Rollup creation works the same way, with recordLinkFieldId, fieldIdInLinkedTable, and formula options. A created field is permanent through the API: Airtable exposes no delete-field endpoint and field updates accept only name and description, so verify the --options payload before creating; removing a field requires the Airtable web UI.",
           "arguments": [
             {
               "name": "table_id",
@@ -436,7 +466,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -479,7 +510,8 @@
               "type": "bool",
               "required": false,
               "help": "Skip confirmation prompt",
-              "short": "-y"
+              "short": "-y",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -519,7 +551,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -557,7 +590,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -590,10 +624,11 @@
           ]
         },
         "update": {
-          "help": "Update a field's name, description, or options.",
+          "help": "Update a field's name, description, or options. Note: Airtable's API cannot edit a select field's choices (add/remove/ rename/recolor/reorder) here. Add a choice via `records update ... --typecast`; remove or rename choices in the Airtable web UI.",
           "examples": [
+            "airtable fields update \"Tasks\" fldXXXXXXXXXXXXXX --name \"New Status\"",
             "airtable fields update tblXXXXXXXXXXXXXX fldXXXXXXXXXXXXXX --name \"New Status\"",
-            "airtable fields update tblXXXXXXXXXXXXXX fldXXXXXXXXXXXXXX --options '{\"formula\":\"{Hours} * {Rate}\"}'"
+            "airtable fields update \"Tasks\" fldXXXXXXXXXXXXXX --options '{\"formula\":\"{Hours} * {Rate}\"}'"
           ],
           "usage_instructions": "Update FIELD_ID in TABLE_ID. Specify at least one of --name/-n, --description/-d, or --options/-o; --options must be a JSON object. Use --base/-b to override BASE_ID and --table/-t for table output.",
           "arguments": [
@@ -644,7 +679,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -684,10 +720,10 @@
               "help": "The table ID or name"
             },
             {
-              "name": "field_values...",
+              "name": "field_values",
               "type": "TEXT",
               "required": true,
-              "help": "TEXT  Field values as 'FieldName=value' pairs"
+              "help": "Field values as 'FieldName=value' pairs"
             }
           ],
           "options": [
@@ -702,7 +738,8 @@
               "name": "--typecast",
               "type": "bool",
               "required": false,
-              "help": "Enable automatic type conversion"
+              "help": "Enable automatic type conversion",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -746,7 +783,8 @@
               "type": "bool",
               "required": false,
               "help": "Skip confirmation prompt",
-              "short": "-y"
+              "short": "-y",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -760,7 +798,8 @@
           "help": "Get a specific record by ID.",
           "examples": [
             "airtable records get \"Tasks\" recXXXXXXXXXXXXXX",
-            "airtable records get \"Tasks\" recXXX --table"
+            "airtable records get \"Tasks\" recXXX --table",
+            "airtable records get \"Tasks\" recXXX --properties \"id,Name,Status\""
           ],
           "usage_instructions": "Get a single record by TABLE_ID and RECORD_ID (both required positional). Use --base/-b to override default base. Use --table/-t for formatted output.",
           "arguments": [
@@ -790,7 +829,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -841,7 +881,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -906,7 +947,7 @@
           ]
         },
         "update": {
-          "help": "Update a record's fields. Use PATCH (default) to update only specified fields, or --replace for PUT to clear unspecified fields.",
+          "help": "{field_values}... Update a record's fields. Use PATCH (default) to update only specified fields, or --replace for PUT to clear unspecified fields.",
           "examples": [
             "airtable records update \"Tasks\" recXXX \"Status=Complete\" \"Priority=High\"",
             "airtable records update \"Tasks\" recXXX \"Name=New Task\" --replace",
@@ -927,10 +968,10 @@
               "help": "The record ID"
             },
             {
-              "name": "field_values...",
+              "name": "field_values",
               "type": "TEXT",
               "required": true,
-              "help": "TEXT  Field updates as 'FieldName=value' pairs"
+              "help": "Field updates as 'FieldName=value' pairs"
             }
           ],
           "options": [
@@ -945,13 +986,15 @@
               "name": "--typecast",
               "type": "bool",
               "required": false,
-              "help": "Enable automatic type conversion"
+              "help": "Enable automatic type conversion",
+              "takes_value": false
             },
             {
               "name": "--replace",
               "type": "bool",
               "required": false,
-              "help": "Replace entire record (PUT) instead of updating (PATCH)"
+              "help": "Replace entire record (PUT) instead of updating (PATCH)",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -962,7 +1005,11 @@
           ]
         },
         "upload-attachment": {
-          "help": "FILE_PATH",
+          "help": "{file_path} Upload a local file to a record's attachment field. Uses Airtable's content-upload endpoint, which requires an existing record and caps the base64 payload at 5 MB. For larger files, host the file and attach it by URL via `records update <table> <record> 'Field=[{\"url\":\"...\"}]'`.",
+          "examples": [
+            "airtable records upload-attachment recXXX \"Image\" ./diagram.png --base appXXX",
+            "airtable records upload-attachment recXXX \"Image\" ./file.bin --content-type image/png --base appXXX"
+          ],
           "arguments": [
             {
               "name": "record_id",
@@ -1061,7 +1108,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1095,7 +1143,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1127,7 +1176,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -1201,7 +1251,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",

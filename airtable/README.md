@@ -253,18 +253,31 @@ airtable fields create "Tasks" "Notes" multilineText \
 
 ```
 
-Do not create lookup fields through `fields create`. Airtable has rejected both
-the `multipleLookupValues` type returned by `fields list` and the documented
-create-field type `lookup`; the live CourseCraft base returned
-`Creating lookup fields is not supported at this time`. Create lookup fields in
-the Airtable web UI, then verify them with `fields list` or `fields get`.
+Lookup and rollup fields are created through `fields create` like any other
+type:
 
-Do not treat rollup field creation as a reliable production schema path through
-`fields create`. Airtable's public create-field API has returned
-`UNSUPPORTED_FIELD_TYPE_FOR_CREATE` for a live rollup create request even when
-the request included `recordLinkFieldId`, `fieldIdInLinkedTable`, and `formula`
-options. Create rollup fields in the Airtable web UI, then verify them with
-`fields list` or `fields get`.
+```bash
+# Create a lookup field (use the schema-read type multipleLookupValues)
+airtable fields create "Clips" "Module Status" multipleLookupValues \
+  --options '{"recordLinkFieldId":"fldXXXXXXXXXXXXXX","fieldIdInLinkedTable":"fldYYYYYYYYYYYYYY"}'
+
+# Create a rollup field
+airtable fields create "Modules" "Clip Count" rollup \
+  --options '{"recordLinkFieldId":"fldXXXXXXXXXXXXXX","fieldIdInLinkedTable":"fldYYYYYYYYYYYYYY","formula":"COUNTA(values)"}'
+```
+
+`multipleLookupValues` is the working create type for lookups. Airtable rejects
+the documented write type `lookup` with HTTP 422
+`UNSUPPORTED_FIELD_TYPE_FOR_CREATE` ("Creating lookup fields is not supported at
+this time"), so the CLI refuses that spelling before the request and names
+`multipleLookupValues` instead.
+
+**A created field is permanent through the API.** Airtable exposes no
+delete-field endpoint (`DELETE .../fields/{id}` returns 404), and
+`PATCH .../fields/{id}` accepts only `name` and `description` — a lookup's
+`recordLinkFieldId`/`fieldIdInLinkedTable` cannot be repointed (422). Removing a
+field requires the Airtable web UI, so verify the options payload before
+creating.
 
 #### Update a Field
 

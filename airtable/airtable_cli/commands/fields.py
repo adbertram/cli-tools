@@ -22,10 +22,10 @@ from typing import Any, Dict, List, Optional
 
 import typer
 
-from ..client import get_client
+from ..client import FIELD_CREATE_PERMANENCE_NOTE, get_client
 from ..commands.records import resolve_base_id
 from cli_tools_shared.filters import apply_filters, apply_properties_filter, validate_filters
-from cli_tools_shared.output import print_json, print_table, print_success, command
+from cli_tools_shared.output import print_json, print_table, print_success, print_warning, command
 
 app = typer.Typer(help="Manage Airtable fields", no_args_is_help=True)
 
@@ -153,13 +153,17 @@ def fields_create(
         airtable fields create tblXXXXXXXXXXXXXX "Status" singleLineText
         airtable fields create "Tasks" "Done" checkbox --options '{"icon":"check","color":"greenBright"}'
 
-    Do not create lookup fields through this command. Airtable has rejected
-    both the fields-list read type multipleLookupValues and the documented
-    create-field type lookup for lookup creation; create lookup fields in
-    Airtable's web UI, then verify them with fields list/get.
-    Do not treat rollup creation as a reliable production schema path through
-    this command; create rollups in Airtable's web UI, then verify them with
-    fields list/get.
+        airtable fields create "Clips" "Module Status" multipleLookupValues --options '{"recordLinkFieldId":"fldLink","fieldIdInLinkedTable":"fldSource"}'
+        airtable fields create "Clips" "Slide Count" rollup --options '{"recordLinkFieldId":"fldLink","fieldIdInLinkedTable":"fldSource","formula":"COUNTA(values)"}'
+
+    Lookup fields are created with the schema-read type multipleLookupValues.
+    Airtable rejects the documented write type lookup with HTTP 422; the CLI
+    refuses it before the request and names multipleLookupValues instead.
+
+    A created field is permanent through the API: Airtable exposes no
+    delete-field endpoint, and field updates accept only name and description,
+    so a lookup's recordLinkFieldId/fieldIdInLinkedTable cannot be repointed.
+    Removing a field requires the Airtable web UI.
     """
     parsed_options = parse_options(options)
     resolved_base_id = resolve_base_id(base_id)
@@ -173,6 +177,7 @@ def fields_create(
         options=parsed_options,
     )
     print_success(f"Field created with ID: {result.get('id')}")
+    print_warning(FIELD_CREATE_PERMANENCE_NOTE)
     print_field(result, table)
 
 
