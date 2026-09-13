@@ -86,6 +86,38 @@ def _find_lightpanda_binary() -> str:
     )
 
 
+def _is_cloudflare_blocked(title: str, body: str, url: str, status_code: Optional[int] = None) -> bool:
+    """Detect if page shows Cloudflare challenge/block.
+    
+    Args:
+        title: Page title (lowercased)
+        body: Page body text (lowercased) 
+        url: Current URL
+        status_code: HTTP status code if available
+        
+    Returns:
+        True if page appears to be Cloudflare-blocked
+    """
+    # Check HTTP 403
+    if status_code == 403:
+        return True
+    
+    # Check title/body markers (case-insensitive)
+    title_lower = title.lower()
+    body_lower = body.lower()
+    
+    cf_markers = [
+        "just a moment",
+        "checking your browser",
+        "attention required",
+        "cloudflare",
+        "please enable javascript",
+        "enable cookies",
+    ]
+    
+    return any(marker in title_lower or marker in body_lower for marker in cf_markers)
+
+
 def _wait_for_cdp_ready(port: int, timeout: float = 10.0) -> str:
     """Poll /json/version until CDP endpoint is ready.
     
@@ -293,9 +325,47 @@ class LightpandaBrowserService:
             "--port", str(self._cdp_port),
         ]
         
-        # Load cookies if file exists
+        # Load cookies if file exists (both --cookie for read and --cookie-jar for write)
         if self._cookie_file.exists():
             args.extend(["--cookie", str(self._cookie_file)])
+        args.extend(["--cookie-jar", str(self._cookie_file)])
+        
+        # Load resources (iframes and stylesheets for better rendering)
+        args.extend([
+            "--load-resources", "iframe",
+            "--load-resources", "stylesheet",
+        ])
+        
+        # Optional user agent (Lightpanda forbids Mozilla strings)
+        # Use CLI_TOOLS_LIGHTPANDA_USER_AGENT for custom identity (e.g. bot name)
+        # or CLI_TOOLS_LIGHTPANDA_UA_SUFFIX to append to default Lightpanda/1.0
+        custom_ua = os.environ.get("CLI_TOOLS_LIGHTPANDA_USER_AGENT")
+        ua_suffix = os.environ.get("CLI_TOOLS_LIGHTPANDA_UA_SUFFIX")
+        
+        if custom_ua:
+            # Validate: Lightpanda rejects any UA containing "Mozilla"
+            if "mozilla" in custom_ua.lower():
+                raise LightpandaServiceError(
+                    "CLI_TOOLS_LIGHTPANDA_USER_AGENT cannot contain 'Mozilla' - "
+                    "Lightpanda intentionally forbids Chrome impersonation. "
+                    "Use a non-browser identity or Web Bot Auth instead."
+                )
+            args.extend(["--user-agent", custom_ua])
+        elif ua_suffix:
+            args.extend(["--user-agent", f"Lightpanda/1.0 {ua_suffix}"])
+        
+        # Optional Web Bot Auth for Cloudflare Verified Bots
+        # See: https://developers.cloudflare.com/bots/concepts/bot-management/
+        web_bot_key = os.environ.get("CLI_TOOLS_LIGHTPANDA_WEB_BOT_AUTH_KEY_FILE")
+        web_bot_keyid = os.environ.get("CLI_TOOLS_LIGHTPANDA_WEB_BOT_AUTH_KEYID")
+        web_bot_domain = os.environ.get("CLI_TOOLS_LIGHTPANDA_WEB_BOT_AUTH_DOMAIN")
+        
+        if web_bot_key and web_bot_keyid and web_bot_domain:
+            args.extend([
+                "--web-bot-auth-key-file", web_bot_key,
+                "--web-bot-auth-keyid", web_bot_keyid,
+                "--web-bot-auth-domain", web_bot_domain,
+            ])
 
         # Launch Lightpanda
         try:
@@ -745,6 +815,26 @@ class LightpandaBrowserService:
     def url(self) -> str:
         """Return current URL."""
         return self._current_url
+    
+    def is_cloudflare_blocked(self) -> bool:
+        """Check if current page shows Cloudflare challenge/block.
+        
+        Returns True if the page appears to be Cloudflare-blocked,
+        indicating a fallback to Chrome is needed.
+        """
+        if not self._opened:
+            return False
+        
+        try:
+            # Get page title and body text
+            title = self.evaluate("() => document.title || ''") or ""
+            body = self.evaluate("() => document.body?.innerText?.slice(0, 2000) || ''") or ""
+            
+            # Check for CF markers
+            return _is_cloudflare_blocked(title, body, self._current_url)
+        except Exception:
+            # If we can't check, assume not blocked
+            return False
 
     def __enter__(self):
         return self

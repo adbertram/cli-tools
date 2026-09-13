@@ -17,11 +17,13 @@ The Lightpanda browser backend provides an **optional, lightweight alternative**
 - ✓ **CDP-compatible**: Works with raw CDP commands via cdp-use
 - ✓ **Drop-in backend**: No CLI code changes required
 - ✓ **Cookie persistence**: Saves/loads cookies from JSON file
+- ✓ **Automatic CF fallback**: Detects Cloudflare blocks and switches to Chrome
 
 ### Limitations
 - ✗ **No lifecycle events**: Lightpanda doesn't emit `domcontentloaded`/`load` events; uses raw CDP navigation
 - ✗ **No graphical rendering**: Cannot handle sites requiring visual elements
-- ✗ **Bot detection risk**: May trigger Cloudflare/Akamai/Imperva on protected sites
+- ✗ **Cannot impersonate Chrome**: Lightpanda intentionally forbids Mozilla user-agent strings
+- ✗ **Cloudflare Bot Management**: Cannot beat CF by UA spoofing; automatic Chrome fallback is the solution
 - ✗ **No Chromium profile support**: Cannot reuse `user-data-dir` from Chrome
 - ⚠️ **Read-only cookies at start**: `--cookie` loads cookies at `serve` startup; mutations saved on close
 
@@ -70,9 +72,48 @@ poshmark search "lego"
 depop search "vintage"
 ```
 
+### Optional Configuration
+
+#### Custom User Agent (Non-Mozilla Only)
+
+Lightpanda **intentionally forbids** Mozilla-based user-agent strings. You can set a custom bot identity:
+
+```bash
+# Custom identity (e.g. bot name)
+export CLI_TOOLS_LIGHTPANDA_USER_AGENT="MyBot/1.0"
+
+# Or append to default Lightpanda/1.0
+export CLI_TOOLS_LIGHTPANDA_UA_SUFFIX="MyCompany/2.0"
+
+# ❌ This will FAIL (contains Mozilla):
+# export CLI_TOOLS_LIGHTPANDA_USER_AGENT="Mozilla/5.0 Chrome/120.0"
+```
+
+#### Cloudflare Fallback Control
+
+Chrome fallback is **enabled by default**. Disable to see raw CF errors:
+
+```bash
+# Disable automatic Chrome fallback (for debugging)
+export CLI_TOOLS_LIGHTPANDA_CF_FALLBACK=0
+poshmark search "lego"  # Will fail if CF-protected
+```
+
+#### Web Bot Auth (Verified Bots)
+
+For sites that verify Cloudflare Verified Bots:
+
+```bash
+export CLI_TOOLS_LIGHTPANDA_WEB_BOT_AUTH_KEY_FILE=/path/to/private-key.pem
+export CLI_TOOLS_LIGHTPANDA_WEB_BOT_AUTH_KEYID=your-key-id
+export CLI_TOOLS_LIGHTPANDA_WEB_BOT_AUTH_DOMAIN=your-bot-domain.com
+```
+
+**Note**: Most sites don't verify Web Bot Auth. **Automatic Chrome fallback is the recommended approach.**
+
 ### Supported Backends
 
-- **`lightpanda`** → `LightpandaBrowserService` (this backend)
+- **`lightpanda`** → `LightpandaBrowserService` (this backend, with CF fallback)
 - **`playwright`** → `PlaywrightBrowserService` (Playwright persistent context)
 - **`webwright`** → `WebwrightBrowserService` (Webwright local browser)
 - **(default/empty)** → `BrowserHarnessService` (Chrome via browser-harness)
@@ -137,25 +178,66 @@ ps aux | grep -E "(chrome|lightpanda)" | grep -v grep
 
 ## Known Issues & Workarounds
 
+### Issue: Cloudflare Bot Management (HARD LIMIT)
+
+**Symptom**: Sites protected by Cloudflare serve 403 Forbidden or "Just a moment" challenge page.
+
+**Root Cause**: Lightpanda **intentionally forbids Chrome impersonation**:
+- `--user-agent` rejects any string containing `Mozilla`
+- CDP `Network.setUserAgentOverride` does not stick (navigator stays `Lightpanda/1.0`)
+- Cookie seeding with `cf_clearance` alone is insufficient (bound to IP+UA+TLS fingerprint)
+
+**Official Guidance from Lightpanda**:
+- Use **Web Bot Auth** for CF Verified Bots program (see below)
+- Use a **classic browser** (Chrome) for fingerprint-sensitive sites
+- Do NOT attempt UA spoofing - it will not work
+
+**Automatic Solution**: Cloudflare fallback is **enabled by default**:
+
+```python
+# BrowserAutomation automatically detects CF blocks and falls back to Chrome
+page = browser.get_page("https://cf-protected-site.com")
+# → Opens with Lightpanda
+# → Detects "Just a moment" / 403
+# → Closes Lightpanda, reopens with Chrome
+# → Returns Chrome page (transparent to caller)
+```
+
+**Disable fallback** (to see raw CF error):
+```bash
+CLI_TOOLS_LIGHTPANDA_CF_FALLBACK=0 poshmark search "lego"
+```
+
+**Local Proof** (from Adam's Mac):
+- **With fallback=1** (default): Depop/AuctionZip/Mercari all returned 8 results
+- **With fallback=0**: Depop still HTTP 403 on Lightpanda
+
+### Issue: Web Bot Auth (Optional for Verified Bots)
+
+**What it is**: Cloudflare's Verified Bots program allows legitimate bots to identify themselves cryptographically.
+
+**Setup**:
+1. Register with Cloudflare Verified Bots program
+2. Get private key, key ID, and authorized domain
+3. Set env vars:
+   ```bash
+   export CLI_TOOLS_LIGHTPANDA_WEB_BOT_AUTH_KEY_FILE=/path/to/private-key.pem
+   export CLI_TOOLS_LIGHTPANDA_WEB_BOT_AUTH_KEYID=your-key-id
+   export CLI_TOOLS_LIGHTPANDA_WEB_BOT_AUTH_DOMAIN=your-bot-domain.com
+   ```
+
+**Note**: This only works for sites that verify Web Bot Auth. Most sites just use CF Bot Management without verification. **Automatic Chrome fallback is the recommended path.**
+
 ### Issue: No lifecycle events (domcontentloaded, load)
 
 **Symptom**: Lightpanda doesn't emit the lifecycle events that Playwright/Puppeteer wait on.
 
-**Solution**: We use raw CDP `Page.navigate` + short fixed wait instead of high-level `page.goto()`.
+**Solution**: We use raw CDP `Page.navigate` + `readyState` polling instead of high-level `page.goto()`.
 
 ```python
 # Internally handled - no CLI changes needed
 # Service uses: Page.navigate → sleep(0.5) → verify document.readyState
 ```
-
-### Issue: Cloudflare/bot detection blocks
-
-**Symptom**: Sites serve challenge pages instead of content.
-
-**Mitigation**: 
-- Lightpanda has no stealth mode or user-agent masking (yet)
-- For protected sites, fall back to Chrome: unset `CLI_TOOLS_BROWSER_BACKEND`
-- **Not a blocker for spike**: Document failures, evaluate later
 
 ### Issue: Cannot import Chrome profile
 
@@ -178,14 +260,19 @@ Path("cookies.json").write_text(json.dumps(chrome_cookies))
 ✓ **Good fit**:
 - Parallel scraping (many workers, memory constrained)
 - Simple DOM extraction (no JS-heavy SPAs)
-- Known-good sites (tested, no bot protection)
+- Sites with **automatic CF fallback enabled** (default)
 - LegoScout deal-run source workers (controlled environment)
 
 ✗ **Bad fit**:
-- Sites with aggressive bot detection (Cloudflare JS challenge)
+- Sites requiring visual rendering or canvas
 - Complex SPAs requiring full JS runtime
-- Sites needing visual rendering or canvas
 - Untested/exploratory scraping
+
+⚠️ **Cloudflare-protected sites**: 
+- **Works with default settings** - automatic Chrome fallback
+- Verified: Depop, AuctionZip, Mercari all work (return results after CF fallback)
+- Transparent to caller - `get_page()` returns Chrome page when CF detected
+- Disable with `CLI_TOOLS_LIGHTPANDA_CF_FALLBACK=0` to see raw CF errors
 
 ### Rollout Strategy
 
