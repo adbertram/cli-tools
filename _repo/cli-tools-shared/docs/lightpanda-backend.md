@@ -60,7 +60,9 @@ The Lightpanda backend uses `cdp-use` for raw CDP commands, which is already a d
 
 ### Environment Variable Control
 
-Set `CLI_TOOLS_BROWSER_BACKEND=lightpanda` before running any CLI command:
+Set `CLI_TOOLS_BROWSER_BACKEND` to control backend selection:
+
+#### Manual Mode: Always Lightpanda
 
 ```bash
 # Single command
@@ -71,6 +73,40 @@ export CLI_TOOLS_BROWSER_BACKEND=lightpanda
 poshmark search "lego"
 depop search "vintage"
 ```
+
+#### Auto Mode: Intelligent Backend Selection (Recommended for LegoScout)
+
+`auto` mode selects Lightpanda **only** for SESSION_NAMEs verified to work on pure Lightpanda. Non-allowlisted tools get Chrome directly (no Lightpanda startup overhead):
+
+```bash
+# Enable auto mode
+export CLI_TOOLS_BROWSER_BACKEND=auto
+
+# Allowlisted tools use Lightpanda (lower RAM)
+poshmark search "lego"     # → Lightpanda (~350MB)
+offerup search "lego"      # → Lightpanda (~350MB)
+
+# Non-allowlisted tools use Chrome (skip Lightpanda entirely)
+mercari search "lego"      # → Chrome (~1.8GB, no Lightpanda fallback)
+depop search "lego"        # → Chrome (~1.8GB, CF-protected)
+```
+
+**Default allowlist** (built-in): `poshmark`, `offerup`
+
+**Custom allowlist** (replaces default):
+```bash
+# Override with comma-separated SESSION_NAMEs
+export CLI_TOOLS_LIGHTPANDA_SESSIONS="poshmark,offerup,customtool"
+export CLI_TOOLS_BROWSER_BACKEND=auto
+poshmark search "lego"     # → Lightpanda
+mercari search "lego"      # → Chrome (not in custom list)
+```
+
+**Why auto mode?**
+- **Memory efficiency**: Run many parallel workers on allowlisted tools with Lightpanda's 5× RAM savings
+- **Zero per-CLI changes**: SESSION_NAME-based selection; CLI code unchanged
+- **No fallback overhead**: Non-allowlisted tools skip Lightpanda entirely
+- **Safe expansion**: Add to allowlist after verifying pure Lightpanda works
 
 ### Optional Configuration
 
@@ -113,7 +149,8 @@ export CLI_TOOLS_LIGHTPANDA_WEB_BOT_AUTH_DOMAIN=your-bot-domain.com
 
 ### Supported Backends
 
-- **`lightpanda`** → `LightpandaBrowserService` (this backend, with CF fallback)
+- **`auto`** → Lightpanda for allowlisted SESSION_NAMEs, Chrome otherwise (recommended for LegoScout)
+- **`lightpanda`** → `LightpandaBrowserService` (always, with CF fallback)
 - **`playwright`** → `PlaywrightBrowserService` (Playwright persistent context)
 - **`webwright`** → `WebwrightBrowserService` (Webwright local browser)
 - **(default/empty)** → `BrowserHarnessService` (Chrome via browser-harness)

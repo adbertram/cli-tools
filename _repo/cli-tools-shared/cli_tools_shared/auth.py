@@ -465,16 +465,49 @@ class BrowserAutomation:
         """Get a cached browser service for this profile.
         
         The backend is selected via CLI_TOOLS_BROWSER_BACKEND:
-        - 'lightpanda' → LightpandaBrowserService (with CF fallback to Chrome)
+        - 'auto' → Lightpanda for allowlisted SESSION_NAMEs, else Chrome
+          - Default allowlist: poshmark, offerup
+          - Override with CLI_TOOLS_LIGHTPANDA_SESSIONS (comma-separated, replaces default)
+        - 'lightpanda' → LightpandaBrowserService (always, with CF fallback)
         - 'playwright' → PlaywrightBrowserService  
         - 'webwright' → WebwrightBrowserService
-        - default → BrowserHarnessService (Chrome/browser-harness)
+        - default/unset → BrowserHarnessService (Chrome/browser-harness)
+        
+        Auto mode selects Lightpanda only for tools verified to work on pure
+        Lightpanda. Non-allowlisted tools get Chrome directly (no Lightpanda
+        startup + CF fallback overhead).
         """
         if self._service is None:
             backend = os.environ.get("CLI_TOOLS_BROWSER_BACKEND", "").lower()
             session_key = _safe_daemon_key(self._session_name())
             
-            if backend == "lightpanda":
+            # Auto mode: check SESSION_NAME against allowlist
+            if backend == "auto":
+                # Default allowlist: tools verified to work on pure Lightpanda
+                default_allowlist = frozenset({"poshmark", "offerup"})
+                
+                # Optional override via env (replaces default if set)
+                env_sessions = os.environ.get("CLI_TOOLS_LIGHTPANDA_SESSIONS", "").strip()
+                if env_sessions:
+                    allowlist = frozenset(s.strip() for s in env_sessions.split(",") if s.strip())
+                else:
+                    allowlist = default_allowlist
+                
+                # Check if current SESSION_NAME is allowlisted
+                session_name = self.SESSION_NAME or self._tool_name()
+                if session_name in allowlist:
+                    logger.debug(
+                        "Auto mode: %s in allowlist, using Lightpanda", session_name
+                    )
+                    from .browser import LightpandaBrowserService
+                    self._service = LightpandaBrowserService(session_key)
+                    self._lightpanda_backend = True
+                else:
+                    logger.debug(
+                        "Auto mode: %s not in allowlist, using Chrome", session_name
+                    )
+                    self._service = BrowserHarnessService(session_key)
+            elif backend == "lightpanda":
                 from .browser import LightpandaBrowserService
                 self._service = LightpandaBrowserService(session_key)
                 # Track that we're using Lightpanda for CF fallback
