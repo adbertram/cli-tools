@@ -1,0 +1,1547 @@
+{
+  "tool": "grokbot-sessions",
+  "description": "CLI interface for grokbot-sessions",
+  "discovered_at": "2026-09-13T16:09:11Z",
+  "total_commands": 37,
+  "global_options": [],
+  "commands": {
+    "approvals": {
+      "help": "Query permission and review approvals",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get one approval request. Example: grokbot-sessions approvals get 76ba30d6-8ed3-40d7-b25e-87b329eddb1c:t3s10 --table grokbot-sessions approvals get 0f30ca1d-2fb1-41aa-a621-477f6c57740f --table",
+          "arguments": [
+            {
+              "name": "approval_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Approval entry id, or its request id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List permission requests and automatic review approvals. Example: grokbot-sessions approvals list --table grokbot-sessions approvals list --filter \"kind:eq:auto-review-approval\" grokbot-sessions approvals list --agent 76ba30d6-8ed3-40d7-b25e-87b329eddb1c --table",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--agent",
+              "type": "TEXT",
+              "required": false,
+              "help": "Agent id, legacy UUID, or name (repeatable; default: all agents)",
+              "short": "-a"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., status:eq:allowed)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "auth": {
+      "help": "Adopt and check the Grok Bot desktop session",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing ephemeral auth state and re-authenticate",
+              "short": "-F",
+              "takes_value": false
+            }
+          ]
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show their auth types and active state.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "automations": {
+      "help": "Query Grok Bot automations",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get one automation with its full record. Example: grokbot-sessions automations get 5e3d822f-fa83-5f42-82ce-a0a02d7343c4 --table",
+          "arguments": [
+            {
+              "name": "automation_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Automation id (automationId)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List the automations attached to Grok Bot agents. Example: grokbot-sessions automations list --table grokbot-sessions automations list --agent 76ba30d6-8ed3-40d7-b25e-87b329eddb1c --table grokbot-sessions automations list --filter \"is_enabled:eq:True\"",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--agent",
+              "type": "TEXT",
+              "required": false,
+              "help": "Agent id, legacy UUID, or name (repeatable; default: all agents)",
+              "short": "-a"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., is_enabled:eq:True)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
+        }
+      }
+    },
+    "conversations": {
+      "help": "List conversations within agents",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get one conversation with its decoded transcript entries. Example: grokbot-sessions conversations get 5658aa56-122b-4f56-acd9-5102e4f39d1b:1 --table",
+          "arguments": [
+            {
+              "name": "conversation_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Conversation id: <agent legacy UUID>:<generation>"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List one conversation per agent generation, with entry and turn counts. Example: grokbot-sessions conversations list --table grokbot-sessions conversations list --agent 5658aa56-122b-4f56-acd9-5102e4f39d1b --table grokbot-sessions conversations list --filter \"turn_count:gt:5\"",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--agent",
+              "type": "TEXT",
+              "required": false,
+              "help": "Agent id, legacy UUID, or name (repeatable; default: all agents)",
+              "short": "-a"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., generation:eq:1)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "projects": {
+      "help": "List implicit Grokbot projects",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get one implicit project. Example: grokbot-sessions projects get account-1",
+          "arguments": [
+            {
+              "name": "project_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project ID (account-<n>) or name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List Grokbot's implicit projects. Example: grokbot-sessions projects list grokbot-sessions projects list --table grokbot-sessions projects list --filter \"active:eq:true\"",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., active:eq:true)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "search": {
+      "help": "Search keywords across transcript entries",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "run": {
+          "help": "Search every selected agent's transcript for a keyword. Example: grokbot-sessions search run \"legoscout\" grokbot-sessions search run \"timeout\" --table --snippets grokbot-sessions search run \"context7\" --agent 5658aa56-122b-4f56-acd9-5102e4f39d1b",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Keyword(s) to search for (case-insensitive)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--agent",
+              "type": "TEXT",
+              "required": false,
+              "help": "Agent id, legacy UUID, or name (repeatable; default: all agents)",
+              "short": "-a"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum agents to return",
+              "short": "-l",
+              "default": "20"
+            },
+            {
+              "name": "--max-matches",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum snippet matches per agent",
+              "short": "-m",
+              "default": "5"
+            },
+            {
+              "name": "--snippets",
+              "type": "bool",
+              "required": false,
+              "help": "Show the first matching snippet in table mode",
+              "takes_value": false
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., kind:eq:ROOM)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "sessions": {
+      "help": "List, get, and search Grok Bot agents",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get one Grok Bot agent. Example: grokbot-sessions sessions get 1036984 grokbot-sessions sessions get 5658aa56-122b-4f56-acd9-5102e4f39d1b --table grokbot-sessions sessions get \"Lego Scout\"",
+          "arguments": [
+            {
+              "name": "session_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Numeric agent id, legacy UUID, or agent name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List Grok Bot agents, one per session. Example: grokbot-sessions sessions list --table grokbot-sessions sessions list --filter \"kind:eq:ROOM\" grokbot-sessions sessions list --properties id,legacy_id,name --table",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., kind:eq:ROOM)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "search": {
+          "help": "Search Grok Bot agents by name, title, description, or id. Use `search run` to search transcript text instead. Example: grokbot-sessions sessions search lego grokbot-sessions sessions search kalshi --table",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Text to match against agent names, titles, descriptions, and ids"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., kind:eq:AGENT)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "skills": {
+      "help": "Query agent-store skills (unsupported)",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get one skill (never found: the API exposes no agent store). Example: grokbot-sessions skills get legoscout",
+          "arguments": [
+            {
+              "name": "skill_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Skill id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List agent-store skills (always empty: the API exposes no store). Example: grokbot-sessions skills list grokbot-sessions skills list --table",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:legoscout)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "subagent-activity": {
+      "help": "Query room members and cursor-agent runs",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get one subagent surface, with the member's conversation summary. Example: grokbot-sessions subagent-activity get cd58935c-b2fa-448e-ac49-15fe781ddcec --table",
+          "arguments": [
+            {
+              "name": "subagent_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Room member agent UUID, cursor-agent entry id, or bc id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List room memberships and cursor-agent runs. Example: grokbot-sessions subagent-activity list --table grokbot-sessions subagent-activity list --filter \"kind:eq:room-member\" grokbot-sessions subagent-activity list --agent 2781289 --table",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--agent",
+              "type": "TEXT",
+              "required": false,
+              "help": "Agent id, legacy UUID, or name (repeatable; default: all agents)",
+              "short": "-a"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., kind:eq:room-member)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "timeline": {
+      "help": "View transcript timelines",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "consolidated": {
+          "help": "Interleave every agent's transcript entries by timestamp, newest first. Example: grokbot-sessions timeline consolidated --limit 50 --table grokbot-sessions timeline consolidated --agent 5658aa56-122b-4f56-acd9-5102e4f39d1b --table",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--agent",
+              "type": "TEXT",
+              "required": false,
+              "help": "Agent id, legacy UUID, or name (repeatable; default: all agents)",
+              "short": "-a"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum entries",
+              "short": "-l",
+              "default": "500"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., agent_name:eq:Lego Scout)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get one decoded transcript entry. Example: grokbot-sessions timeline get 5658aa56-122b-4f56-acd9-5102e4f39d1b:t6u --table",
+          "arguments": [
+            {
+              "name": "entry_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Entry id: <agent legacy UUID>:<entry id>"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List transcript entries, newest first within each agent. Example: grokbot-sessions timeline list --agent 5658aa56-122b-4f56-acd9-5102e4f39d1b --limit 20 grokbot-sessions timeline list --table grokbot-sessions timeline list --filter \"kind:eq:send-message\" --table",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--agent",
+              "type": "TEXT",
+              "required": false,
+              "help": "Agent id, legacy UUID, or name (repeatable; default: all agents, grouped per agent)",
+              "short": "-a"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum entries",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., kind:eq:message)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "todos": {
+      "help": "Query todo items (unsupported)",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get one todo item (never found: Grokbot records none). Example: grokbot-sessions todos get 5658aa56-122b-4f56-acd9-5102e4f39d1b:0",
+          "arguments": [
+            {
+              "name": "todo_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Todo id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List todo items (always empty: Grokbot records none). Example: grokbot-sessions todos list grokbot-sessions todos list --table",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--agent",
+              "type": "TEXT",
+              "required": false,
+              "help": "Agent id, legacy UUID, or name (repeatable; default: all agents)",
+              "short": "-a"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., status:eq:pending)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "tool-calls": {
+      "help": "Query tool call cards",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get one derived tool call. Example: grokbot-sessions tool-calls get 76ba30d6-8ed3-40d7-b25e-87b329eddb1c:t2s7 --table",
+          "arguments": [
+            {
+              "name": "tool_call_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Card entry id: <agent legacy UUID>:<entry id>"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List interactive card entries that stand in for Grokbot tool calls. Example: grokbot-sessions tool-calls list --table grokbot-sessions tool-calls list --agent 1036984 --table grokbot-sessions tool-calls list --filter \"card_type:eq:local-tool-permission\"",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--agent",
+              "type": "TEXT",
+              "required": false,
+              "help": "Agent id, legacy UUID, or name (repeatable; default: all agents)",
+              "short": "-a"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., card_type:eq:widget)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "turns": {
+      "help": "Query agent turns and their entries",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get one turn with its entries in chronological order. Example: grokbot-sessions turns get 5658aa56-122b-4f56-acd9-5102e4f39d1b:t6 --table",
+          "arguments": [
+            {
+              "name": "turn_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Turn id: <agent legacy UUID>:t<turn>"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List turns grouped from each agent's transcript, newest turn first. Example: grokbot-sessions turns list --table grokbot-sessions turns list --agent 5658aa56-122b-4f56-acd9-5102e4f39d1b --table grokbot-sessions turns list --filter \"tool_call_count:gt:0\"",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--agent",
+              "type": "TEXT",
+              "required": false,
+              "help": "Agent id, legacy UUID, or name (repeatable; default: all agents)",
+              "short": "-a"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., has_approval:eq:true)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "usage_instructions": "Use the `grokbot-sessions` CLI. Run `grokbot-sessions --help` to discover command groups and `--help` on any subcommand for its options."
+}
