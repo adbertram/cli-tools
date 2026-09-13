@@ -71,6 +71,7 @@ def test_create_order_sends_signed_private_create_order(monkeypatch):
         order_type="LIMIT",
         limit_price="96.50",
         time_in_force="IMMEDIATE_OR_CANCEL",
+        spot_margin="SPOT",
     )
 
     assert result == {"order_id": "ORDER-1"}
@@ -88,6 +89,7 @@ def test_create_order_sends_signed_private_create_order(monkeypatch):
         "quantity": "0.1",
         "price": "96.50",
         "time_in_force": "IMMEDIATE_OR_CANCEL",
+        "spot_margin": "SPOT",
     }
     expected_sig = client._signature(
         body["method"], body["id"], body["params"], body["nonce"]
@@ -114,6 +116,7 @@ def test_create_order_market_omits_limit_price_and_tif(monkeypatch):
     assert params["type"] == "MARKET"
     assert "price" not in params
     assert "time_in_force" not in params
+    assert "spot_margin" not in params
 
 
 def test_create_order_limit_requires_price():
@@ -134,6 +137,23 @@ def test_create_order_rejects_price_for_market():
             order_type="MARKET",
             limit_price="96.50",
         )
+
+
+def test_create_order_rejects_invalid_spot_margin_before_transport(monkeypatch):
+    client = make_client()
+    calls = patch_transport(monkeypatch, client, [ENVELOPE_OK({"order_id": "NEVER"})])
+
+    with pytest.raises(ClientError, match="Invalid spot margin"):
+        client.create_order(
+            instrument_name="SOL_USD",
+            side="BUY",
+            quantity="0.1",
+            order_type="LIMIT",
+            limit_price="96.50",
+            spot_margin="BORROW",
+        )
+
+    assert calls == []
 
 
 def test_get_order_detail_uses_singular_method_name(monkeypatch):
@@ -225,6 +245,8 @@ def test_orders_create_prints_order_json_to_stdout_only(monkeypatch):
             "0.1",
             "--tif",
             "IOC",
+            "--spot-margin",
+            "spot",
         ],
     )
 
@@ -238,6 +260,7 @@ def test_orders_create_prints_order_json_to_stdout_only(monkeypatch):
         limit_price="96.50",
         time_in_force="IMMEDIATE_OR_CANCEL",
         client_oid=None,
+        spot_margin="SPOT",
     )
 
 
@@ -280,6 +303,33 @@ def test_orders_create_invalid_tif_is_clean_cli_error(monkeypatch):
     assert result.exit_code == 1
     assert result.stdout == ""
     assert "Invalid time in force" in result.stderr
+
+
+def test_orders_create_invalid_spot_margin_fails_before_transport(monkeypatch):
+    client = MagicMock()
+    monkeypatch.setattr(orders, "get_client", lambda: client)
+
+    result = CliRunner().invoke(
+        orders.app,
+        [
+            "create",
+            "--symbol",
+            "SOL_USD",
+            "--side",
+            "buy",
+            "--price",
+            "96.50",
+            "--quantity",
+            "0.1",
+            "--spot-margin",
+            "borrow",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "Invalid spot margin" in result.stderr
+    client.create_order.assert_not_called()
 
 
 def test_orders_details_venue_error_exits_one_with_message_on_stderr(monkeypatch):

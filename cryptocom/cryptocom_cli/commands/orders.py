@@ -1,5 +1,6 @@
 """Private order commands for Crypto.com Exchange."""
 COMMAND_CREDENTIALS = {
+    "history": ["custom"],
     "create": [
         "custom"
     ],
@@ -25,7 +26,7 @@ import typer
 from cli_tools_shared.exceptions import ClientError
 from cli_tools_shared.output import command
 
-from ..client import get_client
+from ..client import SPOT_MARGIN_VALUES, get_client
 from ._display import emit
 
 app = typer.Typer(help="Place and manage trading orders", no_args_is_help=True)
@@ -58,6 +59,8 @@ TIME_IN_FORCE_ALIASES = {
     "IMMEDIATE_OR_CANCEL": "IMMEDIATE_OR_CANCEL",
     "FILL_OR_KILL": "FILL_OR_KILL",
 }
+
+SPOT_MARGIN_CHOICES = {value: value for value in SPOT_MARGIN_VALUES}
 
 
 def _resolve_choice(value: str, choices: dict, label: str) -> str:
@@ -98,6 +101,7 @@ def orders_create(
     order_type: str = typer.Option("LIMIT", "--type", help="Order type: MARKET or LIMIT"),
     tif: Optional[str] = typer.Option(None, "--tif", help="Time in force: GTC, IOC, FOK (default GOOD_TILL_CANCEL)"),
     client_oid: Optional[str] = typer.Option(None, "--client-oid", help="Optional client order ID"),
+    spot_margin: Optional[str] = typer.Option(None, "--spot-margin", help="Execution mode: SPOT or MARGIN"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
@@ -110,36 +114,39 @@ def orders_create(
         limit_price=_validated_amount(price, "Price") if price is not None else None,
         time_in_force=_resolve_time_in_force(tif),
         client_oid=client_oid,
+        spot_margin=_resolve_choice(spot_margin, SPOT_MARGIN_CHOICES, "spot margin") if spot_margin is not None else None,
     )
     emit(order, table=table, columns=["order_id"], properties=properties)
 
 
-def _emit_order_detail(order_id: str, table: bool, properties: Optional[str]):
+def _emit_order_detail(order_id: Optional[str], client_oid: Optional[str], table: bool, properties: Optional[str]):
     """Fetch one order by ID and emit it."""
-    order = get_client().get_order_detail(order_id)
+    order = get_client().get_order_detail(order_id, client_oid=client_oid)
     emit(order, table=table, columns=ORDER_COLUMNS, properties=properties)
 
 
 @app.command("get")
 @command
 def orders_get(
-    order_id: str = typer.Argument(..., help="Order ID"),
+    order_id: Optional[str] = typer.Argument(None, help="Order ID; exclusive with --client-oid"),
+    client_oid: Optional[str] = typer.Option(None, "--client-oid", help="Client order ID; exclusive with ORDER_ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
     """Get one order by ID."""
-    _emit_order_detail(order_id, table=table, properties=properties)
+    _emit_order_detail(order_id, client_oid, table=table, properties=properties)
 
 
 @app.command("details")
 @command
 def orders_details(
-    order_id: str = typer.Argument(..., help="Order ID (alias of 'orders get')"),
+    order_id: Optional[str] = typer.Argument(None, help="Order ID; exclusive with --client-oid"),
+    client_oid: Optional[str] = typer.Option(None, "--client-oid", help="Client order ID; exclusive with ORDER_ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
     """Get one order by ID (alias of get)."""
-    _emit_order_detail(order_id, table=table, properties=properties)
+    _emit_order_detail(order_id, client_oid, table=table, properties=properties)
 
 
 @app.command("cancel")
@@ -170,3 +177,22 @@ def orders_list(
         filters=filter,
     )
     emit(orders, table=table, columns=ORDER_COLUMNS, properties=properties)
+
+
+@app.command("history")
+@command
+def orders_history(
+    instrument_name: Optional[str] = typer.Option(None, "--instrument-name", "-i", help="Instrument name"),
+    start_time: Optional[int] = typer.Option(None, "--start-time", help="Start timestamp in milliseconds or nanoseconds"),
+    end_time: Optional[int] = typer.Option(None, "--end-time", help="End timestamp in milliseconds or nanoseconds"),
+    limit: int = typer.Option(100, "--limit", "-l", min=1, max=100, help="Maximum rows in one venue page; no automatic pagination"),
+    filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter returned page: field:op:value"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
+):
+    """Read one terminal order-history page; a full page is not complete history."""
+    rows = get_client().get_history_page(
+        "private/get-order-history", instrument_name=instrument_name,
+        start_time=start_time, end_time=end_time, limit=limit, filters=filter,
+    )
+    emit(rows, table=table, columns=ORDER_COLUMNS, properties=properties)
