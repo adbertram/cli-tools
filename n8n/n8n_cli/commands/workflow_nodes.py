@@ -5,7 +5,7 @@ import typer
 from typing import Optional
 
 from ..n8n_api import get_n8n_api_client, parse_node_resources, N8nApiError
-from cli_tools_shared.output import print_json, print_table, print_error, print_success, print_info, handle_error
+from cli_tools_shared.output import command, print_json, print_table, print_error, print_success, print_info, handle_error
 
 app = typer.Typer(help="Add and connect nodes in workflows", no_args_is_help=True)
 
@@ -110,6 +110,7 @@ def _auto_resolve_credentials(api, node_def: dict) -> dict:
 
 
 @app.command("add")
+@command
 def node_add(
     workflow_id: str = typer.Argument(..., help="Workflow ID"),
     node_type: str = typer.Argument(..., help="Node type name (e.g., 'slack', 'n8n-nodes-base.slack')"),
@@ -371,6 +372,7 @@ def node_add(
 
 
 @app.command("update")
+@command
 def node_update(
     workflow_id: str = typer.Argument(..., help="Workflow ID"),
     node_name: str = typer.Argument(..., help="Node display name or node ID"),
@@ -496,6 +498,7 @@ def _deep_merge(base: dict, override: dict):
 
 
 @app.command("connect")
+@command
 def node_connect(
     workflow_id: str = typer.Argument(..., help="Workflow ID"),
     from_node: str = typer.Option(..., "--from", help="Source node name"),

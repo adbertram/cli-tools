@@ -8,6 +8,7 @@ client-side date filter must use startedAt because running executions have no
 stoppedAt.
 """
 import json
+import pytest
 
 from typer.testing import CliRunner
 
@@ -116,3 +117,56 @@ def test_default_list_dedupes_overlapping_running_executions(monkeypatch):
 
     assert [ex["id"] for ex in output] == [3049]
     assert [req["workflowId"] for req in api.requests] == ["wf123", "wf123"]
+
+
+@pytest.mark.parametrize("page", [
+    {}, {"data": []}, {"data": None, "nextCursor": None},
+    {"data": {}, "nextCursor": None}, {"data": [], "nextCursor": 42},
+    {"data": [None], "nextCursor": None},
+] + [
+    {"data": [_execution("42", "running", value, None)], "nextCursor": None}
+    for value in [None, "", 42, "invalid", "2026-06-12T12:00:00"]
+])
+def test_inventory_rejects_unknown_upstream_data(monkeypatch, page):
+    api = FakeExecutionsApi({"running": [page]})
+    monkeypatch.setattr(executions_module, "get_n8n_api_client", lambda: api)
+    result = runner.invoke(executions_app, ["list", "--status", "running", "--from", "1970-01-01", "--limit", "100000", "--properties", "id,workflowId,status"])
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "Invalid execution inventory" in result.stderr
+
+
+def test_inventory_paginates_valid_rows_and_empty_final_page(monkeypatch):
+    api = FakeExecutionsApi({"running": [
+        {"data": [_execution("42", "running", "2026-06-12T12:00:00+00:00", None)], "nextCursor": "page2"},
+        {"data": [], "nextCursor": None},
+    ]})
+    output = _invoke(monkeypatch, api, IN_RANGE_ARGS + ["--status", "running"])
+    assert [row["id"] for row in output] == ["42"]
+    assert api.requests[1]["cursor"] == "page2"
+
+
+def test_inventory_rejects_repeated_pagination_cursor(monkeypatch):
+    api = FakeExecutionsApi({"running": [
+        {"data": [], "nextCursor": "page2"},
+        {"data": [], "nextCursor": "page2"},
+    ]})
+    monkeypatch.setattr(executions_module, "get_n8n_api_client", lambda: api)
+    result = runner.invoke(executions_app, IN_RANGE_ARGS + ["--status", "running"])
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "Invalid execution inventory" in result.stderr
+
+
+def test_inventory_does_not_infer_completeness_from_old_row(monkeypatch):
+    api = FakeExecutionsApi({"running": [
+        {"data": [_execution("old", "running", "2026-05-01T12:00:00Z", None)], "nextCursor": "page2"},
+        {"data": [_execution("current", "running", "2026-06-12T12:00:00Z", None)], "nextCursor": None},
+    ]})
+    output = _invoke(monkeypatch, api, IN_RANGE_ARGS + ["--status", "running"])
+    assert [row["id"] for row in output] == ["current"]
+
+
+def test_inventory_preserves_valid_empty_inventory(monkeypatch):
+    api = FakeExecutionsApi({"running": [{"data": [], "nextCursor": None}]})
+    assert _invoke(monkeypatch, api, IN_RANGE_ARGS + ["--status", "running"]) == []

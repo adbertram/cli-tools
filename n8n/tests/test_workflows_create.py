@@ -1,11 +1,15 @@
 """Behavior tests for `n8n workflows create` preserving explicit workflow settings."""
 
 import json
+from unittest.mock import Mock
+
+import pytest
+import requests
 
 from typer.testing import CliRunner
 
 import n8n_cli.commands.workflows as workflows_module
-from n8n_cli.n8n_api import N8nApiClient
+from n8n_cli.n8n_api import N8nApiClient, N8nApiError
 
 
 class FakeCreateApi:
@@ -112,3 +116,21 @@ def test_create_workflow_payload_omits_tags_when_not_supplied():
 
     payload = recorded["kwargs"]["json"]
     assert "tags" not in payload
+
+
+def test_should_not_replay_workflow_post_after_lost_response(monkeypatch):
+    client = N8nApiClient(base_url="https://fixture.invalid/api/v1", api_key="fixture-only")
+    client.session = Mock()
+    client.session.request.side_effect = requests.Timeout("fixture-only lost response")
+    monkeypatch.setattr("n8n_cli.n8n_api.time.sleep", lambda _: None)
+
+    with pytest.raises(N8nApiError, match="fixture-only lost response"):
+        client.create_workflow("Fixture", [], {}, error_workflow=None)
+
+    client.session.request.assert_called_once_with(
+        "POST", "https://fixture.invalid/api/v1/workflows",
+        json={"name": "Fixture", "nodes": [], "connections": {}, "settings": {
+            "saveManualExecutions": True, "saveDataSuccessExecution": "all",
+            "saveDataErrorExecution": "all",
+        }},
+    )

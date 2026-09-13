@@ -1,7 +1,7 @@
 {
   "tool": "n8n",
   "description": "Manage n8n server - workflows, nodes, executions, credentials, data tables, and logs",
-  "discovered_at": "2026-08-26T14:36:38Z",
+  "discovered_at": "2026-09-12T22:58:41Z",
   "total_commands": 64,
   "global_options": [
     {
@@ -314,8 +314,8 @@
       ],
       "commands": {
         "create": {
-          "help": "Create a credential on the n8n server. The credential type must match a type defined by an installed node. Use 'n8n credentials schema <type>' to see required fields. Example: n8n credentials create brickowlApi '{\"apiKey\": \"abc123\"}' n8n credentials create brickowlApi '{\"apiKey\": \"abc\"}' --name \"Brickowl Prod\"",
-          "usage_instructions": "Create a credential on the server. The credential type must match one of the schemas returned by `credentials schema`. Pass the credential data as JSON.",
+          "help": "Create a credential on the n8n server. The credential type must match a type defined by an installed node. Use 'n8n credentials schema <type>' to see required fields. Example: $HOME/.local/bin/n8n credentials create brickowlApi --data-stdin --name \"Brickowl Prod\" Supply exactly one of DATA or --data-stdin. Pipe JSON into stdin; do not type secrets into an interactive terminal or put them in command arguments.",
+          "usage_instructions": "Create a credential on the server. The credential type must match one of the schemas returned by `credentials schema`. Supply exactly one of positional DATA JSON or --data-stdin. Use --data-stdin with piped or redirected JSON for secrets; interactive stdin is rejected.",
           "arguments": [
             {
               "name": "cred_type",
@@ -325,9 +325,9 @@
             },
             {
               "name": "data",
-              "type": "TEXT",
-              "required": true,
-              "help": "Credential data as JSON string"
+              "type": "DATA",
+              "required": false,
+              "help": "Credential data as JSON string; use --data-stdin for secrets"
             }
           ],
           "options": [
@@ -337,6 +337,13 @@
               "required": false,
               "help": "Display name (defaults to credential type)",
               "short": "-n"
+            },
+            {
+              "name": "--data-stdin",
+              "type": "bool",
+              "required": false,
+              "help": "Read credential JSON from piped stdin instead of DATA",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1253,7 +1260,7 @@
           "options": [
             {
               "name": "--type",
-              "type": "DEFAULT|COMMUNITY|CUSTOM",
+              "type": "default|community|custom",
               "required": false,
               "help": "Node source: 'default' (built-in) or 'community'"
             },
@@ -1327,7 +1334,7 @@
           "options": [
             {
               "name": "--type",
-              "type": "DEFAULT|COMMUNITY|CUSTOM",
+              "type": "default|community|custom",
               "required": false,
               "help": "Node source: 'default', 'community' (third-party), or 'custom' (generated)"
             },

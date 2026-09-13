@@ -190,7 +190,7 @@ class N8nApiClient:
         }
         if tags is not None:
             payload["tags"] = tags
-        return self._request("POST", "/workflows", json=payload)
+        return self._request("POST", "/workflows", _retries=0, json=payload)
 
     def delete_workflow(self, workflow_id: str) -> Dict:
         """Delete a workflow.
@@ -765,7 +765,7 @@ class N8nApiClient:
             Created credential object with id, name, type
         """
         payload = {"name": name, "type": cred_type, "data": data}
-        return self._request("POST", "/credentials", json=payload)
+        return self._request("POST", "/credentials", _retries=0, json=payload)
 
     def update_credential(self, credential_id: str, **kwargs) -> Dict:
         """Update a credential on the n8n server via the public API.
@@ -874,7 +874,7 @@ class N8nApiClient:
         Returns:
             Updated workflow object
         """
-        return self._request("PUT", f"/workflows/{workflow_id}", json=data)
+        return self._request("PUT", f"/workflows/{workflow_id}", json=data, _retries=0)
 
     def get_execution(self, execution_id: int, include_data: bool = True) -> Dict:
         """Get a specific execution by ID.

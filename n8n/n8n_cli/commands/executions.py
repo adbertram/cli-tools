@@ -1,10 +1,10 @@
 """Executions commands - query workflow execution history and events."""
 import json
 import typer
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Optional, List
 
-from cli_tools_shared.output import print_json, print_table, print_error, print_info, handle_error
+from cli_tools_shared.output import command, print_json, print_table, print_error, print_info, handle_error
 from cli_tools_shared.filters import apply_filters, apply_properties_filter, apply_limit
 from ..parsers import format_local_time
 from ..n8n_api import get_n8n_api_client
@@ -23,11 +23,12 @@ def _fetch_executions_in_range(client, status, workflow_id, include_data, start_
     """Paginate /executions and keep executions whose startedAt falls in [start_utc, end_utc].
 
     Date filtering must use startedAt: a running execution has no stoppedAt yet.
-    Pages arrive newest-first, so pagination stops once an execution older than
-    start_utc is seen.
+    Unknown timestamps cannot establish inclusion and must fail explicitly.
+    Read every page rather than infer completeness from row ordering.
     """
     results = []
     cursor = None
+    seen_cursors = set()
     page_size = 250  # max allowed by API
 
     while True:
@@ -42,24 +43,32 @@ def _fetch_executions_in_range(client, status, workflow_id, include_data, start_
             params["cursor"] = cursor
 
         response = client._request("GET", "/executions", params=params)
-        data = response.get("data", [])
+        if not isinstance(response, dict) or not isinstance(response.get("data"), list) or "nextCursor" not in response:
+            raise ValueError("Invalid execution inventory: expected data array and nextCursor")
+        data = response["data"]
+        next_cursor = response["nextCursor"]
+        if next_cursor is not None and (not isinstance(next_cursor, str) or not next_cursor or next_cursor in seen_cursors):
+            raise ValueError("Invalid execution inventory: invalid or repeated pagination cursor")
 
-        reached_older = False
         for ex in data:
+            if not isinstance(ex, dict):
+                raise ValueError("Invalid execution inventory: expected execution object")
             started = ex.get("startedAt")
-            if not started:
-                continue
-            # API returns UTC timestamps like "2026-02-13T14:37:08.123Z"
-            ex_utc = started.replace("Z", "")[:19]
-            if ex_utc < start_utc:
-                reached_older = True
-                break
-            if ex_utc <= end_utc:
+            try:
+                if not isinstance(started, str):
+                    raise ValueError
+                timestamp = datetime.fromisoformat(started.replace("Z", "+00:00"))
+                if timestamp.tzinfo is None:
+                    raise ValueError
+            except ValueError:
+                raise ValueError("Invalid execution inventory: startedAt cannot establish date-filter inclusion") from None
+            ex_utc = timestamp.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+            if start_utc <= ex_utc <= end_utc:
                 results.append(ex)
 
-        next_cursor = response.get("nextCursor")
-        if reached_older or not next_cursor:
+        if next_cursor is None:
             break
+        seen_cursors.add(next_cursor)
         cursor = next_cursor
 
     return results
@@ -80,6 +89,7 @@ COMMAND_CREDENTIALS = {
 
 
 @app.command("list")
+@command
 def executions_list(
     from_dt: str = typer.Option(None, "--from", help="Start datetime (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS). Default: start of today"),
     to_dt: str = typer.Option(None, "--to", help="End datetime. Default: now"),
@@ -179,6 +189,7 @@ def executions_list(
 
 
 @app.command("get")
+@command
 def executions_get(
     execution_id: str = typer.Argument(..., help="Execution ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -213,6 +224,7 @@ def executions_get(
 
 
 @app.command("events")
+@command
 def executions_events(
     from_dt: str = typer.Option(None, "--from", help="Start datetime (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS). Default: start of today"),
     to_dt: str = typer.Option(None, "--to", help="End datetime. Default: now"),

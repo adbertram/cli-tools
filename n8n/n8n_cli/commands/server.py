@@ -4,7 +4,7 @@ import time
 import typer
 
 from ..n8n_api import get_n8n_api_client, N8nApiError
-from cli_tools_shared.output import print_json, print_error, print_info, print_success
+from cli_tools_shared.output import command, print_json, print_error, print_info, print_success
 from ..server import run_on_server, run_on_server_raw
 from . import logs, server_config
 
@@ -65,6 +65,7 @@ def _restart_n8n():
 
 
 @app.command("upgrade")
+@command
 def upgrade(
     version: str = typer.Argument(None, help="Target version (default: latest)"),
     skip_restart: bool = typer.Option(False, "--skip-restart", help="Skip n8n server restart"),
@@ -140,6 +141,7 @@ def upgrade(
 
 
 @app.command("version")
+@command
 def server_version():
     """
     Show the n8n server version.
@@ -156,6 +158,7 @@ def server_version():
 
 
 @app.command("restart")
+@command
 def restart():
     """
     Restart the n8n server.

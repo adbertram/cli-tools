@@ -1,10 +1,11 @@
 """Credentials commands - list, get, create, delete, and inspect n8n credentials on the server."""
 import json
+import sys
 import typer
 from typing import Optional, List
 
 from ..n8n_api import get_n8n_api_client, N8nApiError
-from cli_tools_shared.output import print_json, print_table, print_error, print_success, handle_error
+from cli_tools_shared.output import command, print_json, print_table, print_error, print_success, handle_error
 from cli_tools_shared.filters import apply_filters, apply_properties_filter, apply_limit
 
 app = typer.Typer(help="Manage n8n credentials on the server", no_args_is_help=True)
@@ -32,6 +33,7 @@ COMMAND_CREDENTIALS = {
 
 
 @app.command("list")
+@command
 def credentials_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of results"),
@@ -73,6 +75,7 @@ def credentials_list(
 
 
 @app.command("get")
+@command
 def credentials_get(
     credential_id: str = typer.Argument(..., help="Credential ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -111,10 +114,12 @@ def credentials_get(
 
 
 @app.command("create")
+@command
 def credentials_create(
     cred_type: str = typer.Argument(..., help="Credential type name (e.g., brickowlApi)"),
-    data: str = typer.Argument(..., help="Credential data as JSON string"),
+    data: Optional[str] = typer.Argument(None, help="Credential data as JSON string; use --data-stdin for secrets"),
     name: Optional[str] = typer.Option(None, "--name", "-n", help="Display name (defaults to credential type)"),
+    data_stdin: bool = typer.Option(False, "--data-stdin", help="Read credential JSON from piped stdin instead of DATA"),
 ):
     """
     Create a credential on the n8n server.
@@ -123,15 +128,25 @@ def credentials_create(
     Use 'n8n credentials schema <type>' to see required fields.
 
     Example:
-        n8n credentials create brickowlApi '{"apiKey": "abc123"}'
-        n8n credentials create brickowlApi '{"apiKey": "abc"}' --name "Brickowl Prod"
+        $HOME/.local/bin/n8n credentials create brickowlApi --data-stdin --name "Brickowl Prod"
+
+    Supply exactly one of DATA or --data-stdin. Pipe JSON into stdin; do not
+    type secrets into an interactive terminal or put them in command arguments.
     """
     try:
-        # Parse JSON data
+        if (data is not None) == data_stdin:
+            print_error("Provide exactly one of DATA or --data-stdin")
+            raise typer.Exit(1)
+        if data_stdin:
+            if sys.stdin.isatty():
+                print_error("--data-stdin requires piped or redirected input")
+                raise typer.Exit(1)
+            data = sys.stdin.read()
+
         try:
             cred_data = json.loads(data)
         except json.JSONDecodeError as e:
-            print_error(f"Invalid JSON data: {e}")
+            print_error(f"Invalid JSON data at line {e.lineno}, column {e.colno}")
             raise typer.Exit(1)
 
         if not isinstance(cred_data, dict):
@@ -174,6 +189,7 @@ def credentials_create(
 
 
 @app.command("delete")
+@command
 def credentials_delete(
     credential_id: str = typer.Argument(..., help="Credential ID to delete"),
 ):
@@ -194,6 +210,7 @@ def credentials_delete(
 
 
 @app.command("rename")
+@command
 def credentials_rename(
     credential_id: str = typer.Argument(..., help="Credential ID to rename"),
     name: str = typer.Argument(..., help="New display name"),
@@ -215,6 +232,7 @@ def credentials_rename(
 
 
 @app.command("schema")
+@command
 def credentials_schema(
     cred_type: str = typer.Argument(..., help="Credential type name (e.g., brickowlApi)"),
 ):

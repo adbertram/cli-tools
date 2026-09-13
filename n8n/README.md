@@ -187,8 +187,8 @@ n8n workflows node connect WORKFLOW_ID --from "Router" --to "Branch 2" --output-
 n8n credentials list
 n8n credentials list --table
 
-# Create a credential
-n8n credentials create brickowlApi '{"apiKey":"abc123"}'
+# Create a credential from an existing protected JSON input file
+$HOME/.local/bin/n8n credentials create brickowlApi --data-stdin --name "Brickowl Prod" < /private/path/credential.json
 
 # Get credential type schema
 n8n credentials schema brickowlApi
@@ -196,6 +196,12 @@ n8n credentials schema brickowlApi
 # Delete a credential
 n8n credentials delete CREDENTIAL_ID
 ```
+
+Credential creation accepts exactly one input: positional `DATA` JSON (legacy
+compatibility) or `--data-stdin`. Use stdin for secrets so the JSON is absent from
+process arguments and shell history. Pipe a credential producer into the command
+or redirect an existing protected file; interactive terminal input is rejected.
+Empty, malformed, and non-object JSON fail before credential creation.
 
 ### Data Tables
 
