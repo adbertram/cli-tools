@@ -12,17 +12,19 @@ Key differences from Chrome/browser-harness:
 - No graphical rendering; may fail on sites requiring visual elements
 - Lower memory footprint (~350MB vs ~1.8GB for Chrome)
 
-The service launches `lightpanda serve` via subprocess and connects using raw
-CDP commands via cdp-use (Target.createTarget, Page.navigate, Runtime.evaluate).
+The service launches `lightpanda serve` via subprocess and connects using
+CDPClient (async) with a background event loop via run_coroutine_threadsafe.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import signal
 import socket
 import subprocess
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -84,30 +86,6 @@ def _find_lightpanda_binary() -> str:
     )
 
 
-def _parse_window_size(window_size: str | None) -> tuple[int, int] | None:
-    """Parse window size string like '1280x720' into (width, height)."""
-    if not window_size:
-        return None
-    cleaned = window_size.lower().replace(",", "x")
-    parts = cleaned.split("x")
-    if len(parts) != 2:
-        raise LightpandaServiceError(
-            f"window_size must be formatted as WIDTHxHEIGHT, got {window_size!r}."
-        )
-    try:
-        width = int(parts[0].strip())
-        height = int(parts[1].strip())
-    except ValueError as exc:
-        raise LightpandaServiceError(
-            f"window_size must contain integer width and height, got {window_size!r}."
-        ) from exc
-    if width <= 0 or height <= 0:
-        raise LightpandaServiceError(
-            f"window_size values must be positive, got {window_size!r}."
-        )
-    return width, height
-
-
 def _wait_for_cdp_ready(port: int, timeout: float = 10.0) -> str:
     """Poll /json/version until CDP endpoint is ready.
     
@@ -135,11 +113,11 @@ def _wait_for_cdp_ready(port: int, timeout: float = 10.0) -> str:
 
 
 class LightpandaBrowserService:
-    """Synchronous browser service backed by Lightpanda + raw CDP.
+    """Synchronous browser service backed by Lightpanda + async CDP.
     
     Lightpanda is a lightweight browser engine optimized for automation.
-    This service launches `lightpanda serve` and connects via raw CDP
-    commands using cdp-use (Target.createTarget, Page.navigate, etc.).
+    This service launches `lightpanda serve` and connects via CDPClient
+    (async) running in a background event loop thread.
     
     Note: Lightpanda does not emit lifecycle events (domcontentloaded, load)
     that Playwright/Puppeteer wait on, so we use raw CDP navigation instead.
@@ -156,7 +134,9 @@ class LightpandaBrowserService:
         self._lightpanda_proc: Optional[subprocess.Popen] = None
         self._cdp_port: Optional[int] = None
         self._cdp_ws_url: Optional[str] = None
-        self._cdp = None  # cdp-use Client
+        self._cdp_client = None  # CDPClient (async)
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._loop_thread: Optional[threading.Thread] = None
         self._target_id: Optional[str] = None
         self._session_id: Optional[str] = None
         self._opened = False
@@ -182,10 +162,35 @@ class LightpandaBrowserService:
 
     def _require_open(self) -> None:
         """Ensure browser is open, raise if not."""
-        if not self._opened or self._cdp is None:
+        if not self._opened or self._cdp_client is None:
             raise LightpandaServiceError(
                 f"No browser open for session '{self.session}'. Call browser_open() first."
             )
+
+    def _run_async(self, coro):
+        """Run async coroutine in background event loop, return result synchronously."""
+        if not self._loop:
+            raise LightpandaServiceError("Event loop not running")
+        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        try:
+            return future.result(timeout=self.default_timeout)
+        except Exception as exc:
+            if isinstance(exc, asyncio.TimeoutError):
+                raise LightpandaServiceError(
+                    f"CDP operation timed out after {self.default_timeout}s"
+                ) from exc
+            raise
+
+    async def _cdp_send(self, method: str, params: Optional[Dict] = None) -> Any:
+        """Send CDP command on current session."""
+        if not self._cdp_client or not self._session_id:
+            raise LightpandaServiceError("CDP session not established")
+        result = await self._cdp_client.send_raw(
+            method,
+            params or {},
+            session_id=self._session_id
+        )
+        return result
 
     def _page_info(self) -> Dict[str, Any]:
         """Return current page metadata."""
@@ -202,12 +207,6 @@ class LightpandaBrowserService:
             "console_warnings": 0,
         }
 
-    def _cdp_call(self, method: str, **params) -> Any:
-        """Call a CDP method on the current session."""
-        if not self._cdp or not self._session_id:
-            raise LightpandaServiceError("CDP session not established")
-        return self._cdp.send(method, params, session_id=self._session_id)
-
     def _save_cookies(self) -> None:
         """Save current cookies to persistent file.
         
@@ -223,6 +222,25 @@ class LightpandaBrowserService:
             # Non-fatal; cookies may not be critical
             pass
 
+    def _start_event_loop(self):
+        """Start background asyncio event loop in a daemon thread."""
+        def run_loop(loop):
+            asyncio.set_event_loop(loop)
+            loop.run_forever()
+        
+        self._loop = asyncio.new_event_loop()
+        self._loop_thread = threading.Thread(target=run_loop, args=(self._loop,), daemon=True)
+        self._loop_thread.start()
+
+    def _stop_event_loop(self):
+        """Stop background event loop."""
+        if self._loop:
+            self._loop.call_soon_threadsafe(self._loop.stop)
+            if self._loop_thread:
+                self._loop_thread.join(timeout=2.0)
+            self._loop = None
+            self._loop_thread = None
+
     def browser_open(
         self,
         url: Optional[str] = None,
@@ -231,7 +249,7 @@ class LightpandaBrowserService:
         user_agent: Optional[str] = None,
         window_size: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Open Lightpanda browser and connect via raw CDP.
+        """Open Lightpanda browser and connect via async CDP.
         
         Args:
             url: Optional URL to navigate to after opening
@@ -299,24 +317,45 @@ class LightpandaBrowserService:
             self._terminate_lightpanda()
             raise
 
-        # Connect via cdp-use
+        # Start background event loop
+        self._start_event_loop()
+
+        # Connect via CDPClient
         try:
-            from cdp_use import Client
-            self._cdp = Client(self._cdp_ws_url)
+            from cdp_use.client import CDPClient
             
-            # Create a target (page)
-            result = self._cdp.send("Target.createTarget", {"url": "about:blank"})
-            self._target_id = result.get("targetId")
+            async def connect_and_setup():
+                # Create and start CDP client
+                client = CDPClient(self._cdp_ws_url)
+                await client.start()
+                self._cdp_client = client
+                
+                # Create a target (page)
+                result = await client.send_raw("Target.createTarget", {"url": "about:blank"})
+                target_id = result.get("targetId")
+                
+                # Attach to target to get session
+                attach_result = await client.send_raw("Target.attachToTarget", {
+                    "targetId": target_id,
+                    "flatten": True,
+                })
+                session_id = attach_result.get("sessionId")
+                
+                if not session_id:
+                    raise LightpandaServiceError("Failed to establish CDP session")
+                
+                return target_id, session_id
             
-            # Attach to target to get session
-            attach_result = self._cdp.send("Target.attachToTarget", {
-                "targetId": self._target_id,
-                "flatten": True,
-            })
-            self._session_id = attach_result.get("sessionId")
+            self._target_id, self._session_id = self._run_async(connect_and_setup())
             
-            if not self._session_id:
-                raise LightpandaServiceError("Failed to establish CDP session")
+            # Enable necessary domains
+            async def enable_domains():
+                await self._cdp_send("Page.enable")
+                await self._cdp_send("Runtime.enable")
+                await self._cdp_send("Network.enable")
+                await self._cdp_send("DOM.enable")
+            
+            self._run_async(enable_domains())
             
             self._opened = True
             
@@ -330,12 +369,7 @@ class LightpandaBrowserService:
             
         except Exception as exc:
             self._terminate_lightpanda()
-            if self._cdp:
-                try:
-                    self._cdp.close()
-                except Exception:
-                    pass
-                self._cdp = None
+            self._stop_event_loop()
             raise LightpandaServiceError(
                 f"Failed to connect to Lightpanda via CDP: {exc}"
             ) from exc
@@ -361,17 +395,27 @@ class LightpandaBrowserService:
         # Save cookies before closing
         self._save_cookies()
         
-        cdp = self._cdp
-        self._cdp = None
+        cdp_client = self._cdp_client
+        self._cdp_client = None
         self._session_id = None
         self._target_id = None
         self._opened = False
         self._current_url = ""
         
         try:
-            if cdp:
-                cdp.close()
+            if cdp_client and self._loop:
+                async def close_client():
+                    try:
+                        await cdp_client.close()
+                    except Exception:
+                        pass
+                
+                try:
+                    self._run_async(close_client())
+                except Exception:
+                    pass
         finally:
+            self._stop_event_loop()
             self._terminate_lightpanda()
         
         return {"success": True, "message": "Browser closed"}
@@ -380,32 +424,43 @@ class LightpandaBrowserService:
         """Navigate to URL using raw CDP (no lifecycle wait).
         
         Note: wait_until is ignored; Lightpanda doesn't emit lifecycle events.
-        We use Page.navigate then wait a fixed time for the page to load.
+        We use Page.navigate then poll document.readyState.
         """
         self._require_open()
         
         try:
-            # Navigate via CDP
-            self._cdp_call("Page.enable")
-            result = self._cdp_call("Page.navigate", url=url)
+            async def navigate():
+                # Navigate via CDP
+                result = await self._cdp_send("Page.navigate", {"url": url})
+                
+                # Check for immediate error
+                if "errorText" in result:
+                    raise LightpandaServiceError(
+                        f"Navigation failed: {result['errorText']}"
+                    )
+                
+                # Wait for page to settle (no lifecycle events in Lightpanda)
+                await asyncio.sleep(0.5)
+                
+                # Verify page is accessible by checking readyState
+                try:
+                    eval_result = await self._cdp_send(
+                        "Runtime.evaluate",
+                        {
+                            "expression": "document.readyState",
+                            "returnByValue": True,
+                        }
+                    )
+                    if "exceptionDetails" not in eval_result:
+                        # Page is ready
+                        return
+                except Exception:
+                    pass
+                
+                # If not ready, wait a bit more
+                await asyncio.sleep(1.0)
             
-            # Check for immediate error
-            if "errorText" in result:
-                raise LightpandaServiceError(
-                    f"Navigation failed: {result['errorText']}"
-                )
-            
-            # Wait for page to settle (no lifecycle events in Lightpanda)
-            # Use a short fixed wait + check if document is ready
-            time.sleep(0.5)
-            
-            # Verify page is accessible
-            try:
-                self.evaluate("() => document.readyState")
-            except Exception:
-                # Page not ready yet, wait a bit more
-                time.sleep(1.0)
-            
+            self._run_async(navigate())
             self._current_url = url
             
         except Exception as exc:
@@ -422,7 +477,7 @@ class LightpandaBrowserService:
         self.page_goto(url, wait_until=wait_until)
 
     def evaluate(self, js: str, arg: Any = None) -> Any:
-        """Evaluate JavaScript in page context using raw CDP.
+        """Evaluate JavaScript in page context using async CDP.
         
         Wraps string functions in immediate invocation.
         """
@@ -437,12 +492,14 @@ class LightpandaBrowserService:
             else:
                 expression = f"({expression})()"
         
-        try:
-            result = self._cdp_call(
+        async def eval_js():
+            result = await self._cdp_send(
                 "Runtime.evaluate",
-                expression=expression,
-                returnByValue=True,
-                awaitPromise=True,
+                {
+                    "expression": expression,
+                    "returnByValue": True,
+                    "awaitPromise": True,
+                }
             )
             
             if "exceptionDetails" in result:
@@ -469,7 +526,9 @@ class LightpandaBrowserService:
                 return value
             
             return None
-            
+        
+        try:
+            return self._run_async(eval_js())
         except Exception as exc:
             if not isinstance(exc, LightpandaServiceError):
                 raise LightpandaServiceError(f"Eval error: {exc}") from exc
@@ -522,9 +581,12 @@ class LightpandaBrowserService:
         }
         key_to_send = key_map.get(key, key)
         
+        async def press_key():
+            await self._cdp_send("Input.dispatchKeyEvent", {"type": "keyDown", "text": key_to_send})
+            await self._cdp_send("Input.dispatchKeyEvent", {"type": "keyUp", "text": key_to_send})
+        
         try:
-            self._cdp_call("Input.dispatchKeyEvent", type="keyDown", text=key_to_send)
-            self._cdp_call("Input.dispatchKeyEvent", type="keyUp", text=key_to_send)
+            self._run_async(press_key())
         except Exception as exc:
             raise LightpandaServiceError(f"Failed to press key {key}: {exc}") from exc
         
@@ -534,9 +596,12 @@ class LightpandaBrowserService:
         """Type text into focused element."""
         self._require_open()
         
-        try:
+        async def type_chars():
             for char in text:
-                self._cdp_call("Input.dispatchKeyEvent", type="char", text=char)
+                await self._cdp_send("Input.dispatchKeyEvent", {"type": "char", "text": char})
+        
+        try:
+            self._run_async(type_chars())
         except Exception as exc:
             raise LightpandaServiceError(f"Failed to type text: {exc}") from exc
         
@@ -546,14 +611,17 @@ class LightpandaBrowserService:
         """Return all cookies via CDP."""
         self._require_open()
         
-        try:
-            result = self._cdp_call("Network.getAllCookies")
+        async def get_cookies():
+            result = await self._cdp_send("Network.getAllCookies")
             cookies = result.get("cookies", [])
             if not isinstance(cookies, list):
                 raise LightpandaServiceError(
                     f"Network.getAllCookies returned unexpected payload: {result!r}"
                 )
             return cookies
+        
+        try:
+            return self._run_async(get_cookies())
         except Exception as exc:
             if not isinstance(exc, LightpandaServiceError):
                 raise LightpandaServiceError(f"Failed to get cookies: {exc}") from exc
