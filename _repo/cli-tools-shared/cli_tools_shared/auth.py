@@ -462,11 +462,30 @@ class BrowserAutomation:
         return f"{tool}-{profile}"
 
     def _get_service(self) -> BrowserHarnessService:
-        """Get a cached :class:`BrowserHarnessService` for this profile."""
+        """Get a cached browser service for this profile.
+        
+        The backend is selected via CLI_TOOLS_BROWSER_BACKEND:
+        - 'lightpanda' → LightpandaBrowserService
+        - 'playwright' → PlaywrightBrowserService  
+        - 'webwright' → WebwrightBrowserService
+        - default → BrowserHarnessService (Chrome/browser-harness)
+        """
         if self._service is None:
-            self._service = BrowserHarnessService(
-                _safe_daemon_key(self._session_name())
-            )
+            backend = os.environ.get("CLI_TOOLS_BROWSER_BACKEND", "").lower()
+            session_key = _safe_daemon_key(self._session_name())
+            
+            if backend == "lightpanda":
+                from .browser import LightpandaBrowserService
+                self._service = LightpandaBrowserService(session_key)
+            elif backend == "playwright":
+                from .browser.playwright_service import PlaywrightBrowserService
+                self._service = PlaywrightBrowserService(session_key)
+            elif backend == "webwright":
+                from .browser.webwright import WebwrightBrowserService
+                self._service = WebwrightBrowserService(session_key)
+            else:
+                # Default: browser-harness (Chrome CDP daemon)
+                self._service = BrowserHarnessService(session_key)
         return self._service
 
     _safe_url_for_log = staticmethod(BrowserHarnessService._safe_url_for_log)
