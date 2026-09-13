@@ -30,6 +30,26 @@ cloudflare cache purge ZONE_ID
 
 ## Commands
 
+### Account Token Discovery
+
+These read-only commands use the CLI's existing credential without exporting it.
+They require Account API Tokens Read or Write. Successful reads and the available
+permission catalog do not prove that the caller has Account API Tokens Write.
+No create, delete, rotation, or bearer-value command is provided.
+
+```bash
+cloudflare account-tokens list ACCOUNT_ID --limit 0
+cloudflare account-tokens list ACCOUNT_ID --filter 'name:eq:Issue Manager Queue' --properties id,name,status
+cloudflare account-tokens get TOKEN_ID ACCOUNT_ID --table
+cloudflare account-tokens permissions list ACCOUNT_ID --filter 'name:contains:Queues' --limit 0
+cloudflare account-tokens permissions get PERMISSION_ID ACCOUNT_ID --table
+```
+
+Token lists follow page metadata with 50 records requested per page. Filters run
+client-side before the limit; `--limit 0` returns all matching records. The permission
+catalog has no pagination parameters. Its `get` command selects an ID from that catalog.
+Both list/get support `--properties`, `--table`, and the shared `--profile` option.
+
 ### Authentication
 
 ```bash
@@ -389,6 +409,76 @@ cloudflare pages domains update my-site docs.example.com
 # Remove a custom domain (confirmation prompt; --force skips it)
 cloudflare pages domains delete my-site docs.example.com --force
 ```
+
+### R2
+
+```bash
+cloudflare r2 buckets list --table
+cloudflare r2 buckets get BUCKET_NAME ACCOUNT_ID
+```
+
+Use `cloudflare r2 buckets --help` and `cloudflare r2 objects --help` for the
+bucket and object command groups, including upload and synchronization options.
+
+### Queues
+
+```bash
+cloudflare queues list --limit 0
+cloudflare queues list ACCOUNT_ID --filter "queue_name:eq:issue-manager" --properties queue_id,queue_name
+cloudflare queues get QUEUE_ID ACCOUNT_ID --table
+cloudflare queues create issue-manager ACCOUNT_ID
+cloudflare queues create regional-work ACCOUNT_ID --jurisdiction eu
+```
+
+All queue commands accept an optional account name or ID; omit it only when the
+token sees exactly one account. JSON preserves Cloudflare queue fields, including
+`queue_id` and `queue_name`. List/get support `--properties/-p` and `--table/-t`;
+create also supports table output.
+
+Queues list follows Cloudflare page metadata, matching Wrangler's `page` query
+behavior. Filters run before `--limit/-l` (default 100; 0 means all pages).
+Create sends one POST attempt, including on timeout or HTTP
+5xx. If it fails, inspect `cloudflare queues list ACCOUNT_ID --limit 0` for the
+requested name before retrying: the remote write may have succeeded. Creation
+does not configure a consumer, buy a plan, or replace existing resources.
+Optional jurisdictions are `eu`, `us`, and `fedramp`.
+
+Read operations accept Queues Read/Write or Workers Scripts Read/Write; creation
+requires Queues Write or Workers Scripts Write. Successful reads do not prove
+write permission.
+
+API references: [list](https://developers.cloudflare.com/api/resources/queues/methods/list/),
+[get](https://developers.cloudflare.com/api/resources/queues/methods/get/),
+[create](https://developers.cloudflare.com/api/resources/queues/methods/create/).
+
+#### HTTP-pull consumers
+
+```bash
+cloudflare queues consumers list QUEUE_ID ACCOUNT_ID --limit 0
+cloudflare queues consumers get QUEUE_ID CONSUMER_ID ACCOUNT_ID
+cloudflare queues consumers create QUEUE_ID ACCOUNT_ID --batch-size 1 --visibility-timeout-ms 30000
+```
+
+Consumer list/get preserve native records and support `--table`, `--properties`,
+and account/profile selection. List filters precede the limit; 0 returns all.
+The consumer collection endpoint returns an array without pagination metadata.
+Create configures only `type: http_pull`. Optional settings are `--batch-size`,
+`--max-retries`, `--retry-delay` (seconds), `--visibility-timeout-ms` (milliseconds),
+and `--dead-letter-queue` (queue name). Unspecified settings are omitted and
+Cloudflare validates setting ranges. Create attempts one POST; inspect consumer
+list before retrying a failed or ambiguous create. Existing consumer conflicts
+are returned as errors; these commands never remove or replace a consumer.
+
+Configuration enables external HTTP consumption; it does not run a poller or
+acknowledge messages. The external consumer needs its own Queues read/write API
+token and must pull and acknowledge messages through the native messages API.
+Queue expiry and retry exhaustion remain separate from an application's durable
+source receipts.
+
+API references: [consumer list](https://developers.cloudflare.com/api/resources/queues/subresources/consumers/methods/list/),
+[consumer get](https://developers.cloudflare.com/api/resources/queues/subresources/consumers/methods/get/),
+[consumer create](https://developers.cloudflare.com/api/resources/queues/subresources/consumers/methods/create/),
+[HTTP-pull configuration](https://developers.cloudflare.com/queues/configuration/pull-consumers/).
 
 ## Output Formats
 

@@ -1,5 +1,6 @@
 """Cloudflare API client with automatic token management and exponential retry."""
 from datetime import date, timedelta
+from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 import json
@@ -22,6 +23,14 @@ DEFAULT_MAX_RETRIES = 3
 DEFAULT_BASE_DELAY = 1.0  # seconds
 DEFAULT_MAX_DELAY = 30.0  # seconds
 DEFAULT_JITTER = 0.1  # 10% jitter
+DEFAULT_LIST_LIMIT = 100
+
+
+def _validate_list_query(limit, filters, label):
+    if limit < 0:
+        raise ClientError(f"{label} limit must be zero (all) or positive")
+    if filters:
+        validate_filters(filters)
 
 # HTTP status codes that trigger retry
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
@@ -78,6 +87,7 @@ PERMISSION_GROUPS = (
         "Account > Workers R2 Storage > Write",
     ),
     ("/pages/", "Pages Read", "Pages Write"),
+    ("/queues", "Queues Read or Workers Scripts Read", "Queues Write or Workers Scripts Write"),
     ("/graphql", "Zone > Analytics > Read", "Zone > Analytics > Read"),
     ("/zones", "Zone > Zone > Read", "Zone > Zone > Edit"),
 )
@@ -94,6 +104,8 @@ def required_permission_group(method: str, endpoint: str) -> Optional[str]:
     Returns:
         The permission group name, or None when the endpoint family is unmapped.
     """
+    if re.fullmatch(r"/accounts/[^/]+/tokens(?:/.*)?", endpoint):
+        return "Account API Tokens Write" if method.upper() in WRITE_METHODS else "Account API Tokens Read or Account API Tokens Write"
     for fragment, read_group, write_group in PERMISSION_GROUPS:
         if fragment in endpoint:
             return write_group if method.upper() in WRITE_METHODS else read_group
@@ -199,6 +211,20 @@ query TopPaths($zoneTag: string, $start: Time, $end: Time, $limit: uint64!) {
 
 
 from cli_tools_shared.exceptions import ClientError
+
+
+class QueueJurisdiction(str, Enum):
+    EU = "eu"
+    US = "us"
+    FEDRAMP = "fedramp"
+
+
+def _queue_result(response: Dict, id_field: str = "queue_id") -> Dict:
+    """Require an identified queue or consumer object from a Queues endpoint."""
+    queue = response.get("result")
+    if not isinstance(queue, dict) or not queue.get(id_field):
+        raise ClientError(f"Invalid Queues response: expected object with {id_field}")
+    return queue
 
 
 class CloudflareClient:
@@ -425,6 +451,8 @@ class CloudflareClient:
             return {}
 
         # Cloudflare API returns {"success": bool, "errors": [...], "result": ...}
+        if not isinstance(response_data, dict):
+            raise ClientError("Invalid API response: expected JSON object envelope")
         if not response_data.get("success", True):
             errors = response_data.get("errors", [])
             if errors:
@@ -438,6 +466,145 @@ class CloudflareClient:
         return response_data
 
     # ==================== API Methods ====================
+    def list_account_tokens(self, account_id: str, limit: int = DEFAULT_LIST_LIMIT, filters: Optional[List[str]] = None) -> List[Dict]:
+        """Read token metadata across pages, filtering before limiting."""
+        _validate_list_query(limit, filters, "Token")
+        tokens = []
+        page = 1
+        while True:
+            response = self._envelope("GET", f"/accounts/{account_id}/tokens", params={"page": page, "per_page": 50})
+            rows = self._account_token_rows(response)
+            tokens.extend(apply_filters(rows, filters) if filters else rows)
+            if limit and len(tokens) >= limit:
+                return tokens[:limit]
+            info = response.get("result_info")
+            if not isinstance(info, dict) or info.get("page") != page or not isinstance(info.get("per_page"), int) or info["per_page"] <= 0 or not isinstance(info.get("total_count"), int) or info["total_count"] < 0:
+                raise ClientError("Invalid account-token pagination: expected page, per_page and total_count")
+            if page * info["per_page"] >= info["total_count"]:
+                return tokens
+            if not rows:
+                raise ClientError("Invalid account-token pagination: unexpectedly empty page")
+            page += 1
+
+    @staticmethod
+    def _account_token_rows(response: Dict) -> List[Dict]:
+        rows = response.get("result")
+        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+            raise ClientError("Invalid account-token response: expected result array of objects")
+        return rows
+
+    def get_account_token(self, account_id: str, token_id: str) -> Dict:
+        """Read metadata and policies; this endpoint does not return bearer values."""
+        response = self._envelope("GET", f"/accounts/{account_id}/tokens/{token_id}")
+        result = response.get("result")
+        if not isinstance(result, dict) or not result.get("id"):
+            raise ClientError("Invalid account-token response: expected result object with id")
+        return result
+
+    def list_account_token_permissions(self, account_id: str, limit: int = DEFAULT_LIST_LIMIT, filters: Optional[List[str]] = None) -> List[Dict]:
+        """Read the permission catalog, not the caller's granted permissions."""
+        _validate_list_query(limit, filters, "Permission")
+        response = self._envelope("GET", f"/accounts/{account_id}/tokens/permission_groups")
+        rows = self._account_token_rows(response)
+        if filters:
+            rows = apply_filters(rows, filters)
+        return rows[:limit] if limit else rows
+
+    def get_account_token_permission(self, account_id: str, permission_id: str) -> Dict:
+        """Select a catalog entry by ID from the documented collection endpoint."""
+        for permission in self.list_account_token_permissions(account_id, limit=0):
+            if permission.get("id") == permission_id:
+                return permission
+        raise ClientError(f"Permission group not found: {permission_id}")
+
+    def list_queues(self, account_id: str, limit: int = DEFAULT_LIST_LIMIT, filters: Optional[List[str]] = None) -> List[Dict]:
+        """Follow Queues page metadata, applying filters before the result limit."""
+        _validate_list_query(limit, filters, "Queue")
+        queues = []
+        page = 1
+        while True:
+            response = self._envelope("GET", f"/accounts/{account_id}/queues", params={"page": page})
+            rows = response.get("result")
+            if not isinstance(rows, list):
+                raise ClientError("Invalid Queues response: expected result array")
+            queues.extend(apply_filters(rows, filters) if filters else rows)
+            if limit and len(queues) >= limit:
+                return queues[:limit]
+            info = response.get("result_info")
+            if info is None:
+                return queues
+            if not isinstance(info, dict) or not isinstance(info.get("total_pages"), int):
+                raise ClientError("Invalid Queues pagination: expected total_pages")
+            if page >= info["total_pages"]:
+                return queues
+            if info.get("page") != page or not rows:
+                raise ClientError("Invalid Queues pagination: page did not advance or is unexpectedly empty")
+            page += 1
+
+    def get_queue(self, account_id: str, queue_id: str) -> Dict:
+        """Get a queue by its Cloudflare queue ID."""
+        response = self._envelope("GET", f"/accounts/{account_id}/queues/{queue_id}")
+        return _queue_result(response)
+
+    def create_queue(self, account_id: str, queue_name: str, jurisdiction: Optional[str] = None) -> Dict:
+        """Create once; never replay a potentially accepted POST."""
+        if not queue_name.strip():
+            raise ClientError("Queue name must not be empty")
+        choices = [choice.value for choice in QueueJurisdiction]
+        if jurisdiction is not None and jurisdiction not in choices:
+            raise ClientError(f"Queue jurisdiction must be one of: {', '.join(choices)}")
+        body = {"queue_name": queue_name}
+        if jurisdiction is not None:
+            body["jurisdiction"] = jurisdiction
+        try:
+            response = self._envelope("POST", f"/accounts/{account_id}/queues", data=body, retry=False)
+            return _queue_result(response)
+        except ClientError as exc:
+            raise ClientError(
+                f"{exc}\nCreate was attempted once. Check 'cloudflare queues list {account_id} --limit 0' "
+                "for the requested queue name before retrying."
+            ) from exc
+
+    def list_queue_consumers(self, account_id: str, queue_id: str, limit: int = DEFAULT_LIST_LIMIT, filters: Optional[List[str]] = None) -> List[Dict]:
+        """Read the consumer collection, then filter before limiting output."""
+        _validate_list_query(limit, filters, "Consumer")
+        response = self._envelope("GET", f"/accounts/{account_id}/queues/{queue_id}/consumers")
+        consumers = response.get("result")
+        if not isinstance(consumers, list):
+            raise ClientError("Invalid Queues consumers response: expected result array")
+        if filters:
+            consumers = apply_filters(consumers, filters)
+        return consumers[:limit] if limit else consumers
+
+    def get_queue_consumer(self, account_id: str, queue_id: str, consumer_id: str) -> Dict:
+        """Read one consumer by its native ID."""
+        response = self._envelope("GET", f"/accounts/{account_id}/queues/{queue_id}/consumers/{consumer_id}")
+        return _queue_result(response, "consumer_id")
+
+    def create_queue_http_consumer(
+        self, account_id: str, queue_id: str, *, batch_size: Optional[int] = None,
+        max_retries: Optional[int] = None, retry_delay: Optional[int] = None,
+        visibility_timeout_ms: Optional[int] = None, dead_letter_queue: Optional[str] = None,
+    ) -> Dict:
+        """Enable HTTP pull with one POST; omitted settings use service defaults."""
+        settings = {key: value for key, value in {
+            "batch_size": batch_size, "max_retries": max_retries,
+            "retry_delay": retry_delay, "visibility_timeout_ms": visibility_timeout_ms,
+        }.items() if value is not None}
+        body = {"type": "http_pull"}
+        if settings:
+            body["settings"] = settings
+        if dead_letter_queue is not None:
+            body["dead_letter_queue"] = dead_letter_queue
+        try:
+            response = self._envelope("POST", f"/accounts/{account_id}/queues/{queue_id}/consumers", data=body, retry=False)
+            return _queue_result(response, "consumer_id")
+        except ClientError as exc:
+            raise ClientError(
+                f"{exc}\nCreate was attempted once. Check 'cloudflare queues consumers list {queue_id} {account_id} --limit 0' "
+                "before retrying."
+            ) from exc
+
     # All methods return Pydantic models for type safety and validation
 
     def list_zones(self, limit: int = 50, filters: Optional[List[str]] = None) -> List[Zone]:

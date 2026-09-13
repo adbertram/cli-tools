@@ -1,8 +1,8 @@
 {
   "tool": "cloudflare",
   "description": "CLI interface for Cloudflare API",
-  "discovered_at": "2026-08-26T16:18:16Z",
-  "total_commands": 65,
+  "discovered_at": "2026-09-13T03:34:43Z",
+  "total_commands": 75,
   "global_options": [
     {
       "name": "--version",
@@ -52,7 +52,7 @@
           "options": [
             {
               "name": "--target",
-              "type": "IP|IP_RANGE|ASN|COUNTRY|IPV6",
+              "type": "ip|ip_range|asn|country|ipv6",
               "required": true,
               "help": "Target type (ip, ip_range, asn, country, ipv6)",
               "short": "-t"
@@ -66,7 +66,7 @@
             },
             {
               "name": "--mode",
-              "type": "WHITELIST|BLOCK|CHALLENGE|JS_CHALLENGE|MANAGED_CHALLENGE",
+              "type": "whitelist|block|challenge|js_challenge|managed_challenge",
               "required": true,
               "help": "Action mode (whitelist, block, challenge, js_challenge, managed_challenge)",
               "short": "-m"
@@ -220,14 +220,14 @@
             },
             {
               "name": "--mode",
-              "type": "WHITELIST|BLOCK|CHALLENGE|JS_CHALLENGE|MANAGED_CHALLENGE",
+              "type": "whitelist|block|challenge|js_challenge|managed_challenge",
               "required": false,
               "help": "Filter by mode",
               "short": "-m"
             },
             {
               "name": "--target",
-              "type": "IP|IP_RANGE|ASN|COUNTRY|IPV6",
+              "type": "ip|ip_range|asn|country|ipv6",
               "required": false,
               "help": "Filter by target type"
             },
@@ -270,7 +270,7 @@
           "options": [
             {
               "name": "--mode",
-              "type": "WHITELIST|BLOCK|CHALLENGE|JS_CHALLENGE|MANAGED_CHALLENGE",
+              "type": "whitelist|block|challenge|js_challenge|managed_challenge",
               "required": false,
               "help": "New action mode",
               "short": "-m"
@@ -289,6 +289,217 @@
               "help": "Auth profile name"
             }
           ]
+        }
+      }
+    },
+    "account-tokens": {
+      "help": "Read account API token metadata and permission catalog",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get token metadata and policies without retrieving its bearer value.",
+          "examples": [
+            "cloudflare account-tokens get TOKEN_ID ACCOUNT_ID"
+          ],
+          "arguments": [
+            {
+              "name": "token_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Token ID from account-tokens list"
+            },
+            {
+              "name": "account",
+              "type": "TEXT",
+              "required": true,
+              "help": "Account name or ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List token metadata across pages; filters precede limit.",
+          "examples": [
+            "cloudflare account-tokens list ACCOUNT_ID --limit 0"
+          ],
+          "arguments": [
+            {
+              "name": "account",
+              "type": "TEXT",
+              "required": true,
+              "help": "Account name or ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=0]  Maximum matching tokens; 0 returns all",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Client-side filter: field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "permissions": {
+          "help": "Available permission catalog, not caller grants",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "get": {
+              "help": "{account} Select one permission by ID from the permission catalog.",
+              "examples": [
+                "cloudflare account-tokens permissions get PERMISSION_ID ACCOUNT_ID"
+              ],
+              "arguments": [
+                {
+                  "name": "permission_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Permission ID from permissions list"
+                },
+                {
+                  "name": "account",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Account name or ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated output fields",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "List available permission groups; these are not caller grants.",
+              "examples": [
+                "cloudflare account-tokens permissions list ACCOUNT_ID --filter 'name:contains:Queues' --limit 0"
+              ],
+              "arguments": [
+                {
+                  "name": "account",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Account name or ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "[x>=0]  Maximum matching groups; 0 returns all",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Client-side filter: field:op:value",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated output fields",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
         }
       }
     },
@@ -1364,7 +1575,7 @@
               "options": [
                 {
                   "name": "--env",
-                  "type": "PRODUCTION|PREVIEW",
+                  "type": "production|preview",
                   "required": false,
                   "help": "Filter by environment (production or preview)",
                   "short": "-e"
@@ -2030,6 +2241,339 @@
         }
       }
     },
+    "queues": {
+      "help": "Manage Cloudflare Queues",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "consumers": {
+          "help": "Inspect consumers and enable HTTP pull",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create an HTTP-pull consumer once; omitted settings use Cloudflare defaults.",
+              "examples": [
+                "cloudflare queues consumers create QUEUE_ID ACCOUNT_ID --batch-size 1 --visibility-timeout-ms 30000"
+              ],
+              "arguments": [
+                {
+                  "name": "queue_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Queue ID"
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID; defaults to the single visible account"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--batch-size",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum messages per batch; service validates allowed range"
+                },
+                {
+                  "name": "--max-retries",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum delivery retries; service validates allowed range"
+                },
+                {
+                  "name": "--retry-delay",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Seconds before a retry becomes available"
+                },
+                {
+                  "name": "--visibility-timeout-ms",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Milliseconds a pulled message is exclusively leased"
+                },
+                {
+                  "name": "--dead-letter-queue",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Optional dead-letter queue name"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "[account] Get one configured consumer by ID.",
+              "examples": [
+                "cloudflare queues consumers get QUEUE_ID CONSUMER_ID ACCOUNT_ID"
+              ],
+              "arguments": [
+                {
+                  "name": "queue_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Queue ID"
+                },
+                {
+                  "name": "consumer_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Consumer ID from consumers list"
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID; defaults to the single visible account"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated output fields",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "List the consumers configured for a queue.",
+              "examples": [
+                "cloudflare queues consumers list QUEUE_ID ACCOUNT_ID --limit 0"
+              ],
+              "arguments": [
+                {
+                  "name": "queue_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Queue ID"
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID; defaults to the single visible account"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "[x>=0]  Maximum matching consumers; 0 returns all",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Client-side filter: field:op:value",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated output fields",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        },
+        "create": {
+          "help": "Create a queue with one POST attempt. Inspect queues list before retrying failures.",
+          "examples": [
+            "cloudflare queues create issue-manager ACCOUNT_ID",
+            "cloudflare queues create regional-work ACCOUNT_ID --jurisdiction eu"
+          ],
+          "arguments": [
+            {
+              "name": "queue_name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Name for the new queue"
+            },
+            {
+              "name": "account",
+              "type": "ACCOUNT",
+              "required": false,
+              "help": "Account name or ID; defaults to the single visible account"
+            }
+          ],
+          "options": [
+            {
+              "name": "--jurisdiction",
+              "type": "eu|us|fedramp",
+              "required": false,
+              "help": "Optional queue jurisdiction"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get a queue by ID.",
+          "examples": [
+            "cloudflare queues get QUEUE_ID ACCOUNT_ID"
+          ],
+          "arguments": [
+            {
+              "name": "queue_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Queue ID from queues list or create"
+            },
+            {
+              "name": "account",
+              "type": "ACCOUNT",
+              "required": false,
+              "help": "Account name or ID; defaults to the single visible account"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List queues across pages; filters precede the result limit.",
+          "examples": [
+            "cloudflare queues list --limit 0",
+            "cloudflare queues list --filter \"queue_name:eq:issue-manager\" --table"
+          ],
+          "arguments": [
+            {
+              "name": "account",
+              "type": "ACCOUNT",
+              "required": false,
+              "help": "Account name or ID; defaults to the single visible account"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=0]  Maximum matching queues; 0 returns all",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Client-side filter: field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
     "r2": {
       "help": "Manage R2 buckets and objects",
       "arguments": [],
@@ -2209,11 +2753,10 @@
                 },
                 {
                   "name": "--limit",
-                  "type": "bool",
+                  "type": "INTEGER",
                   "required": false,
-                  "help": "<int range> [1<=x<=1000]",
+                  "help": "[1<=x<=1000]",
                   "short": "-l",
-                  "takes_value": false,
                   "default": "100"
                 },
                 {
@@ -2434,11 +2977,10 @@
                 },
                 {
                   "name": "--limit",
-                  "type": "bool",
+                  "type": "INTEGER",
                   "required": false,
-                  "help": "<int range> [x>=1]",
+                  "help": "[x>=1]",
                   "short": "-l",
-                  "takes_value": false,
                   "default": "100"
                 },
                 {
@@ -2497,7 +3039,7 @@
               "options": [
                 {
                   "name": "--file",
-                  "type": "FILE",
+                  "type": "file",
                   "required": true,
                   "help": ""
                 },
@@ -2548,7 +3090,7 @@
               "options": [
                 {
                   "name": "--file",
-                  "type": "FILE",
+                  "type": "file",
                   "required": true,
                   "help": ""
                 },
@@ -2578,7 +3120,7 @@
                 },
                 {
                   "name": "directory",
-                  "type": "DIRECTORY",
+                  "type": "directory",
                   "required": true,
                   "help": ""
                 },
@@ -2958,13 +3500,13 @@
           "options": [
             {
               "name": "--file",
-              "type": "FILENAME",
+              "type": "filename",
               "required": true,
               "help": "Path to the script source ('-' for stdin)"
             },
             {
               "name": "--format",
-              "type": "MODULES|SERVICE-WORKER",
+              "type": "modules|service-worker",
               "required": false,
               "help": "Script format",
               "default": "modules"
@@ -3120,7 +3662,7 @@
           "options": [
             {
               "name": "--security-level",
-              "type": "OFF|ESSENTIALLY_OFF|LOW|MEDIUM|HIGH|UNDER_ATTACK",
+              "type": "off|essentially_off|low|medium|high|under_attack",
               "required": false,
               "help": "Set security level (off, essentially_off, low, medium, high, under_attack)",
               "short": "-s"

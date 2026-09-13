@@ -11,7 +11,7 @@ app = create_app(
 )
 
 # Register command modules (local auth/profiles with API verification and standard flags)
-from .commands import auth, zones, cache, access_rules, dns, analytics, workers, pages, r2
+from .commands import auth, zones, cache, access_rules, dns, analytics, workers, pages, r2, queues, account_tokens
 app.add_typer(auth.app, name="auth", help="Manage authentication")
 register_commands(app, get_config, zones, name="zones", help="Manage Cloudflare zones")
 register_commands(app, get_config, cache, name="cache", help="Manage Cloudflare cache")
@@ -21,6 +21,8 @@ register_commands(app, get_config, analytics, name="analytics", help="Zone traff
 register_commands(app, get_config, workers, name="workers", help="Manage Workers scripts")
 register_commands(app, get_config, pages, name="pages", help="Manage Cloudflare Pages (projects, deployments, domains)")
 register_commands(app, get_config, r2, name="r2", help="Manage R2 buckets and objects")
+register_commands(app, get_config, queues, name="queues", help="Manage Cloudflare Queues")
+register_commands(app, get_config, account_tokens, name="account-tokens", help="Read account API token metadata and permission catalog")
 def main():
     """Main entry point."""
     run_app(app)
