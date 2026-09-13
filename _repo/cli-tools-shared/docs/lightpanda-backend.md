@@ -14,15 +14,15 @@ The Lightpanda browser backend provides an **optional, lightweight alternative**
 
 ### Advantages
 - ✓ **Low memory footprint**: ~350MB vs ~1.8GB for Chrome
-- ✓ **CDP-compatible**: Works with existing Playwright/Puppeteer tooling
+- ✓ **CDP-compatible**: Works with raw CDP commands via cdp-use
 - ✓ **Drop-in backend**: No CLI code changes required
 - ✓ **Cookie persistence**: Saves/loads cookies from JSON file
 
 ### Limitations
+- ✗ **No lifecycle events**: Lightpanda doesn't emit `domcontentloaded`/`load` events; uses raw CDP navigation
 - ✗ **No graphical rendering**: Cannot handle sites requiring visual elements
 - ✗ **Bot detection risk**: May trigger Cloudflare/Akamai/Imperva on protected sites
 - ✗ **No Chromium profile support**: Cannot reuse `user-data-dir` from Chrome
-- ✗ **Evaluate quirk**: String-form `"() => ..."` may return `{}`; use function form
 - ⚠️ **Read-only cookies at start**: `--cookie` loads cookies at `serve` startup; mutations saved on close
 
 ## Installation
@@ -43,23 +43,16 @@ npx @lightpanda/browser serve --help
 # Check if binary is in PATH
 which lightpanda
 
+# Check common npm cache location
+ls ~/.cache/lightpanda-node/lightpanda
+
 # Or set custom path
 export CLI_TOOLS_LIGHTPANDA_BINARY=/path/to/lightpanda
 ```
 
-### 3. Add Playwright Dependency
+### 3. Dependencies
 
-Lightpanda CDP connection requires Playwright:
-
-```bash
-# For a specific CLI tool
-cd /path/to/cli-tool
-uv add playwright
-
-# Or for cli-tools-shared development
-cd _repo/cli-tools-shared
-uv add playwright
-```
+The Lightpanda backend uses `cdp-use` for raw CDP commands, which is already a dependency of `cli-tools-shared`. No additional installation needed.
 
 ## Usage
 
@@ -102,9 +95,12 @@ cli_tools_shared/
 ### How It Works
 
 1. **Launch**: Spawns `lightpanda serve --host 127.0.0.1 --port <port> --cookie <file>`
-2. **Connect**: Uses Playwright's CDP client to connect to Lightpanda's WebSocket endpoint
-3. **Persist**: Saves cookies to `<profile_dir>/cookies.json` on browser close
-4. **Reuse**: Loads cookies from JSON file on next `browser_open`
+2. **Wait**: Polls `/json/version` until CDP endpoint is ready (avoids hang)
+3. **Connect**: Uses `cdp-use` to connect via WebSocket and create a target/page
+4. **Navigate**: Raw CDP `Page.navigate` (no lifecycle wait; Lightpanda doesn't emit events)
+5. **Operate**: Standard operations via CDP (`Runtime.evaluate`, `Network.getAllCookies`, etc.)
+6. **Persist**: Saves cookies to `<profile_dir>/cookies.json` on close
+7. **Cleanup**: Terminates subprocess, closes CDP connection
 
 ### Cookie Persistence
 
@@ -141,16 +137,15 @@ ps aux | grep -E "(chrome|lightpanda)" | grep -v grep
 
 ## Known Issues & Workarounds
 
-### Issue: `evaluate("() => ...")` returns `{}`
+### Issue: No lifecycle events (domcontentloaded, load)
 
-**Symptom**: String-form function expressions may return empty object instead of result.
+**Symptom**: Lightpanda doesn't emit the lifecycle events that Playwright/Puppeteer wait on.
 
-**Workaround**: Lightpanda backend always uses function-form evaluate (handled internally).
+**Solution**: We use raw CDP `Page.navigate` + short fixed wait instead of high-level `page.goto()`.
 
 ```python
-# Both work with LightpandaBrowserService
-page.evaluate("() => document.title")          # ✓ Automatic function wrapping
-page.evaluate("document.title")                # ✓ Direct expression
+# Internally handled - no CLI changes needed
+# Service uses: Page.navigate → sleep(0.5) → verify document.readyState
 ```
 
 ### Issue: Cloudflare/bot detection blocks
@@ -160,7 +155,7 @@ page.evaluate("document.title")                # ✓ Direct expression
 **Mitigation**: 
 - Lightpanda has no stealth mode or user-agent masking (yet)
 - For protected sites, fall back to Chrome: unset `CLI_TOOLS_BROWSER_BACKEND`
-- **Not a blocker for spike**: Document which sites fail, evaluate later
+- **Not a blocker for spike**: Document failures, evaluate later
 
 ### Issue: Cannot import Chrome profile
 

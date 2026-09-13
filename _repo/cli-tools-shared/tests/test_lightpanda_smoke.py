@@ -3,6 +3,8 @@
 
 Tests basic navigation, evaluate, and cookie operations against example.com.
 Run with CLI_TOOLS_BROWSER_BACKEND=lightpanda to test Lightpanda backend.
+
+Note: Requires Lightpanda binary and cdp-use (already a dependency).
 """
 
 import json
@@ -43,18 +45,22 @@ def test_lightpanda_service():
             print("\n2. Testing evaluate (function form)...")
             title = service.evaluate("() => document.title")
             print(f"   ✓ Page title: {title}")
+            assert title == "Example Domain", f"Expected 'Example Domain', got '{title}'"
             
             print("\n3. Testing DOM query...")
             has_h1 = service.evaluate("() => !!document.querySelector('h1')")
             print(f"   ✓ Has H1: {has_h1}")
+            assert has_h1 is True, "Expected H1 element to exist"
             
             print("\n4. Testing selector wait...")
             element = service.wait_for_selector("h1", state="visible", timeout=5000)
             print(f"   ✓ Found H1 element: {element is not None}")
+            assert element is not None, "Expected to find H1 element"
             
             print("\n5. Testing cookie list...")
             cookies = service.cookie_list()
             print(f"   ✓ Cookies count: {len(cookies)}")
+            # example.com may or may not have cookies
             
             print("\n6. Testing localStorage...")
             service.evaluate("() => { localStorage.setItem('test', 'value123'); }")
@@ -62,6 +68,7 @@ def test_lightpanda_service():
             print(f"   ✓ localStorage entries: {len(storage)}")
             test_value = next((item['value'] for item in storage if item['key'] == 'test'), None)
             print(f"   ✓ Test value retrieved: {test_value == 'value123'}")
+            assert test_value == 'value123', f"Expected 'value123', got '{test_value}'"
             
             print("\n7. Closing browser...")
             service.browser_close()
@@ -165,11 +172,10 @@ def main():
     
     # Check dependencies
     try:
-        from playwright.sync_api import sync_playwright
-        print("✓ Playwright installed")
+        import cdp_use
+        print("✓ cdp-use installed (required for Lightpanda CDP connection)")
     except ImportError:
-        print("✗ Playwright not installed (required for Lightpanda CDP connection)")
-        print("  Install: uv add playwright")
+        print("✗ cdp-use not installed (should be in cli-tools-shared dependencies)")
         sys.exit(1)
     
     # Note: We can't check for lightpanda binary here since it might be in PATH
