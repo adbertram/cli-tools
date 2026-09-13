@@ -85,6 +85,17 @@ These principles apply to ALL CLI tool operations. They cannot be skipped.
 This handles: directory structure, uv tool installation (isolated venv + symlink), and placement inside the parent cli-tools monorepo.
 </principle>
 
+
+<principle name="Browser CLIs Share Chrome Safely">
+New browser CLIs inherit the shared Chromium user-data-dir from
+`cli_tools_shared.config.BaseConfig`; never hard-code a per-tool
+`--user-data-dir`. The `default` auth profile shares
+`~/.local/share/cli-tools/_shared/chromium-profile`; named auth profiles stay
+isolated. Chrome processes using the shared profile must run sequentially.
+See `_repo/skills/cli-tool-browser-expert/SKILL.md` and
+`_repo/cli-tools-shared/docs/shared-chromium-profile.md`.
+</principle>
+
 <principle name="Output Stream Separation">
 **stdout = DATA ONLY. stderr = MESSAGES ONLY.** See `references/output-standards.md` for details.
 </principle>

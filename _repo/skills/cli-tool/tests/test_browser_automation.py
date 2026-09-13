@@ -11,6 +11,7 @@ Tests validate:
 5. No custom is_logged_in/is_authenticated — must use base class is_authenticated() via hooks
 6. No direct browser-binary subprocess calls (must go through cli_tools_shared BrowserHarnessService)
 7. browser_harness module is importable in the CLI's uv tool venv
+8. shared Chromium profile resolution stays owned by cli_tools_shared (no per-CLI override)
 """
 import re
 import subprocess
@@ -94,6 +95,55 @@ def test_browser_cli_config_has_get_browser(cli_name, cli_dir, test_config, comm
     assert "get_browser" in content, (
         f"'{cli_name}' config.py must implement get_browser() returning the BrowserAutomation subclass. "
         f"Fix: Add 'def get_browser(self): return MyBrowser(self)' to Config."
+    )
+
+
+
+
+def test_browser_cli_inherits_shared_chromium_profile_contract(
+    cli_name, cli_dir, test_config, command_filter, is_browser_cli
+):
+    """Browser CLIs must inherit shared-vs-isolated profile resolution.
+
+    The shared package owns ``get_persistent_profile_dir()``. Per-CLI path
+    overrides, raw ``--user-data-dir`` flags, or hard-coded shared paths would
+    bypass named-profile isolation, environment overrides, logout safety, and
+    Chrome lifecycle locking.
+    """
+    if command_filter:
+        pytest.skip("Skipping browser automation tests (command filter active)")
+    if not is_browser_cli:
+        pytest.skip(f"{cli_name} is not a browser automation CLI")
+
+    pkg_dir = _get_pkg_dir(cli_dir, cli_name)
+    violations = []
+    forbidden = {
+        "def get_persistent_profile_dir": "per-CLI persistent-profile override",
+        "--user-data-dir": "raw Chrome user-data-dir flag",
+        "/_shared/chromium-profile": "hard-coded shared profile path",
+        "\\_shared\\chromium-profile": "hard-coded shared profile path",
+    }
+
+    for py_file in pkg_dir.rglob("*.py"):
+        if "__pycache__" in py_file.parts:
+            continue
+        content = py_file.read_text()
+        for marker, description in forbidden.items():
+            if marker in content:
+                violations.append(
+                    (str(py_file.relative_to(cli_dir)), description, marker)
+                )
+
+    assert not violations, (
+        f"'{cli_name}' must inherit shared Chromium profile resolution from "
+        "cli_tools_shared.config.BaseConfig. Violations:\n"
+        + "\n".join(
+            f"  {path}: {description} ({marker})"
+            for path, description, marker in violations
+        )
+        + "\nFix: remove per-CLI user-data-dir logic and call BrowserAutomation "
+        "through Config.get_browser(); BaseConfig keeps default profiles "
+        "shared and named profiles isolated."
     )
 
 

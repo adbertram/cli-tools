@@ -124,11 +124,34 @@ def profile_name_from_path(env_path: Path) -> str:
 
 def get_tool_data_dir(tool_name: str) -> Path:
     """Get the platform-appropriate root user-data directory for a tool."""
+    return get_cli_tools_data_root() / tool_name
+
+
+def get_cli_tools_data_root() -> Path:
+    """Platform root for all cli-tools runtime data (``…/cli-tools``)."""
     if os.name == "nt":
         base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
     else:
         base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-    return base / "cli-tools" / tool_name
+    return base / "cli-tools"
+
+
+def default_shared_chromium_profile_dir() -> Path:
+    """Default shared Chromium user-data-dir for browser CLIs.
+
+    Override the path with ``CLI_TOOLS_SHARED_CHROME_PROFILE`` (absolute or
+    ``~``-relative). Chrome allows only one process on a given user-data-dir
+    at a time.
+    """
+    override = os.environ.get("CLI_TOOLS_SHARED_CHROME_PROFILE", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    return get_cli_tools_data_root() / "_shared" / "chromium-profile"
+
+
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
 
 
 def config_env_path_for_tool(tool_name: str) -> Path:
@@ -1345,6 +1368,24 @@ class BaseConfig:
         browser_dir.mkdir(parents=True, exist_ok=True)
         return browser_dir
 
+    def uses_shared_chromium_profile(self) -> bool:
+        """Return True when this config should use the shared Chrome profile.
+
+        Shared by default for browser-session tools on the ``default``
+        authentication profile so Google/SSO login is once across CLIs.
+
+        Isolated when:
+        - ``CLI_TOOLS_ISOLATE_CHROME_PROFILE`` is truthy, or
+        - the active auth profile name is not ``default`` (multi-account
+          tools such as google/target named profiles), or
+        - this config does not declare ``CredentialType.BROWSER_SESSION``.
+        """
+        if _env_flag("CLI_TOOLS_ISOLATE_CHROME_PROFILE"):
+            return False
+        if CredentialType.BROWSER_SESSION not in (self.CREDENTIAL_TYPES or []):
+            return False
+        return self.get_active_profile_name() == "default"
+
     def get_persistent_profile_dir(self) -> Path:
         """Get the persistent Chromium user-data-dir for the active profile.
 
@@ -1352,7 +1393,17 @@ class BaseConfig:
         cookies (``Default/Cookies`` SQLite), localStorage, IndexedDB,
         service workers, and cache there. Single source of truth for
         browser session state.
+
+        Browser-session tools on the ``default`` auth profile share
+        ``~/.local/share/cli-tools/_shared/chromium-profile`` (override with
+        ``CLI_TOOLS_SHARED_CHROME_PROFILE``). Named auth profiles stay
+        per-tool under ``…/browser-data/chromium-profile``. Chrome allows
+        only one process on a given user-data-dir at a time.
         """
+        if self.uses_shared_chromium_profile():
+            path = default_shared_chromium_profile_dir()
+            path.mkdir(parents=True, exist_ok=True)
+            return path
         return self.get_browser_data_dir() / "chromium-profile"
 
     def has_saved_session(self) -> bool:
@@ -1368,10 +1419,52 @@ class BaseConfig:
         return (self.get_persistent_profile_dir() / "Default" / "Cookies").exists()
 
     def clear_session(self):
-        """Clear saved session data for the active profile."""
+        """Clear tool-local browser-data for the active profile.
+
+        When using the shared Chromium profile, tool-local files under
+        ``browser-data/`` are removed but the shared user-data-dir is left
+        intact so logging out of one CLI does not wipe Google/SSO cookies
+        for every other browser CLI. Call
+        :meth:`clear_shared_chromium_profile` to wipe the shared profile.
+
+        Non-shared (isolated) profiles keep the previous behavior: the entire
+        ``browser-data/`` directory is removed.
+        """
         browser_dir = self.get_profile_data_dir() / "browser-data"
-        if browser_dir.exists():
+        if not browser_dir.exists():
+            return
+        if not self.uses_shared_chromium_profile():
             shutil.rmtree(browser_dir)
+            return
+        shared = default_shared_chromium_profile_dir().resolve()
+        for child in list(browser_dir.iterdir()):
+            try:
+                if child.resolve() == shared:
+                    continue
+            except OSError:
+                pass
+            if child.is_symlink() or child.is_file():
+                child.unlink(missing_ok=True)
+            elif child.is_dir():
+                shutil.rmtree(child)
+        # Drop empty browser-data after removing only local files.
+        try:
+            if browser_dir.exists() and not any(browser_dir.iterdir()):
+                browser_dir.rmdir()
+        except OSError:
+            pass
+
+    def clear_shared_chromium_profile(self) -> Path:
+        """Delete the shared Chromium user-data-dir (all browser CLIs).
+
+        Returns the path that was cleared (or would have been). Prefer this
+        over :meth:`clear_session` when you intentionally want to reset the
+        shared Google/SSO login.
+        """
+        path = default_shared_chromium_profile_dir()
+        if path.exists():
+            shutil.rmtree(path)
+        return path
 
     def clear_all(self):
         """Clear credentials and session data."""

@@ -150,7 +150,7 @@ This CLI uses `cli_tools_shared.auth.BrowserAutomation` with browser-harness-bac
 
 - **First run**: Run `{{name}} auth login` to launch the persistent browser session and complete login
 - **Headless mode**: Set `HEADLESS=false` to watch the browser during debugging
-- **Session persistence**: Login sessions are saved under the active profile's browser-data directory
+- **Session persistence**: Chromium cookies/SSO for the ``default`` auth profile live in the **shared** user-data-dir ``~/.local/share/cli-tools/_shared/chromium-profile`` (all browser CLIs). Named auth profiles stay under that profile's ``browser-data/chromium-profile``. Tool-local files (markers, auth-state) remain under the profile ``browser-data/`` directory. Override with ``CLI_TOOLS_SHARED_CHROME_PROFILE``; isolate with ``CLI_TOOLS_ISOLATE_CHROME_PROFILE=1``. Chrome allows only one process on the shared profile at a time.
 - **Rate limiting**: Be respectful of the site's terms of service
 
 ## Debugging
