@@ -141,3 +141,13 @@ def test_parse_help_option_secondary_tokens_single_flag_returns_nothing():
     section = "--limit   -l   INTEGER   Maximum rows [default: 10]\n"
 
     assert cli_test_utils.parse_help_option_secondary_tokens(section) == []
+
+
+def test_parse_help_options_numeric_range_takes_value():
+    section = '--limit  -l  <int range> [1<=x<=100] Maximum page rows [default: 100]\n'
+    option, = cli_test_utils.parse_help_options(section)
+    assert option == {
+        'name': '--limit', 'short': '-l', 'type': 'INTEGER',
+        'required': False, 'help': '[1<=x<=100] Maximum page rows', 'default': '100',
+    }
+    assert option.get('takes_value', True) is True
