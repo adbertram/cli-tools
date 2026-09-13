@@ -22,10 +22,11 @@ Plain dicts/lists are stored as-is.
 
 import hashlib
 import json
+import os
 import time
 import functools
 from pathlib import Path
-from typing import Any, get_type_hints
+from typing import Any, Optional, get_type_hints
 
 import threading
 
@@ -169,6 +170,65 @@ def _json_default(obj: Any) -> Any:
     raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
 
+def _read_cache_entry(cache_file: Path) -> Optional[Any]:
+    """Return the cached payload, or ``None`` when the entry is unreadable.
+
+    An empty (0-byte), truncated, hand-corrupted, or otherwise unreadable file
+    is reported as a miss. ``json.load`` raising on such a file must not escape
+    the decorator: that would abort the command before the cache-miss body
+    could refetch and rewrite the entry, leaving the profile permanently
+    broken until ``cache clear``.
+    """
+    try:
+        with open(cache_file, encoding="utf-8") as f:
+            cached_data = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(cached_data, dict) or "data" not in cached_data:
+        return None
+    return cached_data["data"]
+
+
+def _write_cache_entry(cache_file: Path, result: Any) -> None:
+    """Persist a cache entry atomically, best-effort.
+
+    The entry is serialized to a same-directory temp file and moved into place
+    with :func:`os.replace`, so a concurrent reader can never observe a
+    partially written (0-byte or truncated) file. The temp name carries the pid
+    and thread id so two writers of the same key never share a scratch file.
+
+    A cache write failure — for example a read-only cache directory — never
+    fails the command: the cache is an optimization and the caller already has
+    the fresh result. A serialization failure still propagates, after the
+    scratch file is removed.
+    """
+    serialized = _serialize(result)
+    cache_entry = {
+        "timestamp": time.time(),
+        "data": serialized,
+    }
+    temp_file = cache_file.with_name(
+        f"{cache_file.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+    )
+    try:
+        with open(temp_file, "w", encoding="utf-8") as f:
+            json.dump(cache_entry, f, indent=2, default=_json_default)
+        os.replace(temp_file, cache_file)
+    except OSError:
+        _discard_cache_temp(temp_file)
+    except BaseException:
+        _discard_cache_temp(temp_file)
+        raise
+
+
+def _discard_cache_temp(temp_file: Path) -> None:
+    """Remove a cache scratch file, ignoring an already-gone or unremovable one."""
+    try:
+        temp_file.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 def invalidate(instance: Any, method_name: str, *args, **kwargs) -> None:
     """Delete cached entry/entries for a `@cached` method on `instance`.
 
@@ -231,30 +291,36 @@ def cached(fn=None, *, credential_type=None):
 
         ttl = get_cache_ttl()
 
-        # Check cache
+        # Check cache. A missing, empty, truncated, or otherwise unreadable
+        # entry is a MISS, never an error: another process may be mid-write
+        # (the write below is atomic, so this only covers older/foreign
+        # writers), and a corrupt file must be re-fetched and rewritten rather
+        # than wedging the command until `cache clear`.
         if cache_file.exists():
-            age = time.time() - cache_file.stat().st_mtime
-            if age < ttl and _cache_allowed_for_instance(self, credential_type):
-                with open(cache_file) as f:
-                    cached_data = json.load(f)
-                # Resolve return type for deserialization
-                hints = get_type_hints(fn)
-                return_type = hints.get("return")
-                _cache_state.hit = True
-                return _deserialize(cached_data["data"], return_type)
+            try:
+                age = time.time() - cache_file.stat().st_mtime
+            except OSError:
+                age = None
+            if (
+                age is not None
+                and age < ttl
+                and _cache_allowed_for_instance(self, credential_type)
+            ):
+                cached_data = _read_cache_entry(cache_file)
+                if cached_data is not None:
+                    # Resolve return type for deserialization
+                    hints = get_type_hints(fn)
+                    return_type = hints.get("return")
+                    _cache_state.hit = True
+                    return _deserialize(cached_data, return_type)
 
         # Cache miss — call the real method
         _cache_state.hit = False
         result = fn(self, *args, **kwargs)
 
-        # Serialize and save
-        serialized = _serialize(result)
-        cache_entry = {
-            "timestamp": time.time(),
-            "data": serialized,
-        }
-        with open(cache_file, "w") as f:
-            json.dump(cache_entry, f, indent=2, default=_json_default)
+        # Serialize and write atomically so a concurrent reader can never see a
+        # partially written (0-byte or truncated) file.
+        _write_cache_entry(cache_file, result)
 
         return result
 
