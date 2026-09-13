@@ -524,7 +524,7 @@ The command returns an error when multiple current offers use the same SKU.
 - Use `--image` for specific local files or `--image-url` for remote URLs
 - Use `--photos-album` to export and upload images from a macOS Photos app album
 - All image options can be combined together
-- Maximum 12 images per listing (eBay limit)
+- Maximum 24 images per ordinary listing (eBay limit; variations allow 12 per variation)
 - Images are uploaded to eBay and associated with the listing
 - Upload failures produce warnings but don't stop listing creation
 - Uploaded images are stored locally in `~/.ebay/images.json`

@@ -40,6 +40,10 @@ STATIC_RELEASE_FIXTURE = (
     STATIC_SITE_ROOT / "tests" / "fixtures" / "release-contract" / "valid-interface-set.json"
 )
 STATIC_P05_HANDOFF = STATIC_REPOSITORY_ROOT / "agent_workspaces" / "p05_scope_v2" / "handoff.json"
+# The static site's own record of every image and the resized variants its
+# pages reference. Replaces the WordPress media library as the authority for
+# which derivative keys a mirrored attachment owns.
+STATIC_MEDIA_INVENTORY = STATIC_SITE_ROOT / "src" / "data" / "media_variants.json"
 STATIC_SCANNER = STATIC_REPOSITORY_ROOT / "scripts" / "validate-published-post.sh"
 STATIC_SCANNER_HANDOFF = (
     STATIC_REPOSITORY_ROOT / "agent_workspaces" / "p13_scope_v2" / "handoff.json"
@@ -90,6 +94,9 @@ STATIC_PAGES_READINESS_ASSET_PATHS = (
 STATIC_PAGES_PENDING_STATUSES = frozenset({"idle", "active"})
 STATIC_PAGES_TERMINAL_FAILURE_STATUSES = frozenset({"failure", "canceled"})
 STATIC_MEDIA_BUCKET = "ata-blog-media"
+# Every mirrored image lives under this key prefix, the same path WordPress
+# served it from and the same path the built pages still reference.
+_STATIC_MEDIA_KEY_PREFIX = "wp-content/uploads/"
 STATIC_SITE_ORIGIN = "https://adamtheautomator.com"
 STATIC_CUTOVER_JOURNAL_KIND = "static_cutover_production_promotion"
 # `media_details.sizes` on a WordPress media record is WordPress's own
@@ -410,6 +417,9 @@ class AtaBlogClient:
         # Populated lazily by get_property_types() so a single CLI invocation
         # fetches the schema at most once.
         self._property_types_cache: Optional[Dict[str, str]] = None
+        # Cache of the static site's media inventory, read once per invocation
+        # by the mirroring step that enumerates an attachment's size variants.
+        self._static_media_inventory_cache: Optional[Dict[str, Any]] = None
 
         # Only check Notion CLI on init - WordPress is checked lazily when needed
         if not self.config.is_notion_available():
@@ -2215,51 +2225,81 @@ class AtaBlogClient:
                 )
         return any(cls._same_origin_upload_key(candidate) == key for candidate in candidates)
 
-    def _wordpress_media_keys_for_reference(self, key: str) -> List[str]:
-        """Return every bucket key WordPress generated for the attachment owning `key`.
+    def _static_media_keys_for_reference(self, key: str) -> List[str]:
+        """Return every bucket key belonging to the attachment that owns `key`.
 
         The mirroring step used to copy only the exact URL a post body
-        referenced, so the responsive derivatives WordPress generates
+        referenced, so the responsive derivatives generated for each image
         (thumbnail, medium, medium_large, large, 1536x1536, 2048x2048, plus
-        this theme's featured-small/featured-large) never reached R2 — the
+        this theme's featured-small/featured-large) never reached R2 -- the
         2026-09-05 parity audit measured 112 missing derivative keys across 15
         attachments created since 2026-08-26. The built static site emits those
         variants in `srcset`, so every one of them has to be mirrored at its
         identical wp-content/uploads key.
 
-        The reference may itself be a derivative, so the search stem drops a
-        trailing -<width>x<height> before asking WordPress which attachment
-        owns it.
+        The size family is read from the static site's own media inventory,
+        `src/data/media_variants.json`, which is the same record the site
+        builds its `srcset` from. It used to be read from the WordPress media
+        library, which stopped being reachable when adamtheautomator.com
+        became the static site: that domain now answers every WordPress API
+        path with the static 404 page, so the lookup failed and took every
+        publish with it. The inventory is the right authority anyway -- it is
+        what the pages actually reference.
+
+        The reference may itself be a derivative, so an attachment matches
+        either by its own path or by declaring this filename among its
+        variants.
         """
-        filename = key.rsplit("/", 1)[-1]
-        stem = filename.rsplit(".", 1)[0]
-        search = _WORDPRESS_SIZE_SUFFIX_RE.sub("", stem)
-        records = self._fetch_wordpress_media_records(search)
+        inventory = self._static_media_inventory()
+        relative = key[len(_STATIC_MEDIA_KEY_PREFIX):]
+        filename = relative.rsplit("/", 1)[-1]
+        directory = relative.rsplit("/", 1)[0] if "/" in relative else ""
         matches = [
-            record
-            for record in records
-            if self._wordpress_media_record_owns_key(record, key)
+            path
+            for path, record in inventory.items()
+            if path == relative
+            or (
+                path.rsplit("/", 1)[0] == directory
+                and any(variant[0] == filename for variant in record.get("v", []))
+            )
         ]
         if not matches:
             raise ClientError(
-                f"No WordPress media attachment publishes {key}; searched the "
-                f"media library for {search!r}. The static mirror cannot "
-                "enumerate its size variants."
+                f"No media inventory attachment publishes {key}. The static "
+                "mirror cannot enumerate its size variants. An image added "
+                "after the inventory was captured has no record yet: see "
+                "adbertram/agent-issues#343."
             )
         if len(matches) > 1:
             raise ClientError(
-                f"{key} is published by {len(matches)} WordPress media attachments"
+                f"{key} is published by {len(matches)} media inventory attachments"
             )
-        variant_keys = [
-            self._static_media_key_from_url(url)
-            for url in self._wordpress_media_variant_urls(matches[0])
+        attachment = matches[0]
+        attachment_directory = attachment.rsplit("/", 1)[0]
+        variant_keys = [f"{_STATIC_MEDIA_KEY_PREFIX}{attachment}"] + [
+            f"{_STATIC_MEDIA_KEY_PREFIX}{attachment_directory}/{variant[0]}"
+            for variant in inventory[attachment].get("v", [])
         ]
         if key not in variant_keys:
             raise ClientError(
-                f"WordPress media {matches[0].get('id')!r} matched {key} but does "
-                "not declare it among its own variant URLs"
+                f"Media inventory attachment {attachment!r} matched {key} but "
+                "does not declare it among its own variant keys"
             )
         return sorted(dict.fromkeys(variant_keys))
+
+    def _static_media_inventory(self) -> Dict[str, Any]:
+        """Load the static site's media inventory once per publisher instance."""
+        if self._static_media_inventory_cache is None:
+            document = self._load_required_json(
+                STATIC_MEDIA_INVENTORY, "static media inventory"
+            )
+            attachments = document.get("attachments")
+            if not isinstance(attachments, dict) or not attachments:
+                raise ClientError(
+                    f"Static media inventory has no attachments: {STATIC_MEDIA_INVENTORY}"
+                )
+            self._static_media_inventory_cache = attachments
+        return self._static_media_inventory_cache
 
     @staticmethod
     def _r2_put_subcommand(key: str) -> str:
@@ -2415,7 +2455,7 @@ class AtaBlogClient:
         receipts: List[Dict[str, Any]] = []
         mirrored: set = set()
         for reference in self._find_inline_static_media_urls(markdown_content):
-            for key in self._wordpress_media_keys_for_reference(reference["key"]):
+            for key in self._static_media_keys_for_reference(reference["key"]):
                 if key in mirrored:
                     continue
                 mirrored.add(key)

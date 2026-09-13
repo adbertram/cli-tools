@@ -1,5 +1,8 @@
 """Private account commands for Crypto.com Exchange."""
 COMMAND_CREDENTIALS = {
+    "fee-rate": ["custom"],
+    "instrument-fee-rate": ["custom"],
+    "fills": ["custom"],
     "balance": [
         "custom"
     ],
@@ -80,3 +83,49 @@ def account_open_orders(
         columns=["order_id", "instrument_name", "side", "order_type", "quantity", "limit_price", "status"],
         properties=properties,
     )
+
+
+@app.command("fee-rate")
+@command
+def account_fee_rate(
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
+):
+    """Get actual account fee rates in basis points (1 bps = 0.0001)."""
+    emit(get_client().get_fee_rate(), table=table,
+         columns=["effective_spot_maker_rate_bps", "effective_spot_taker_rate_bps"],
+         properties=properties)
+
+
+@app.command("instrument-fee-rate")
+@command
+def account_instrument_fee_rate(
+    instrument_name: str = typer.Argument(..., help="Instrument name, for example SOL_USD"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
+):
+    """Get actual instrument fee rates in basis points (1 bps = 0.0001)."""
+    emit(get_client().get_instrument_fee_rate(instrument_name), table=table,
+         columns=["instrument_name", "effective_maker_rate_bps", "effective_taker_rate_bps"],
+         properties=properties)
+
+
+@app.command("fills")
+@command
+def account_fills(
+    instrument_name: Optional[str] = typer.Option(None, "--instrument-name", "-i", help="Instrument name"),
+    start_time: Optional[int] = typer.Option(None, "--start-time", help="Inclusive start timestamp in milliseconds or nanoseconds"),
+    end_time: Optional[int] = typer.Option(None, "--end-time", help="Exclusive end timestamp in milliseconds or nanoseconds"),
+    limit: int = typer.Option(100, "--limit", "-l", min=1, max=100, help="Maximum rows in one venue page; no automatic pagination"),
+    filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter returned page: field:op:value"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
+):
+    """Read one private trade-fill page; negative fees mean a balance deduction."""
+    rows = get_client().get_history_page(
+        "private/get-trades", instrument_name=instrument_name,
+        start_time=start_time, end_time=end_time, limit=limit, filters=filter,
+    )
+    emit(rows, table=table,
+         columns=["trade_id", "order_id", "instrument_name", "traded_quantity", "traded_price", "fees", "fee_instrument_name"],
+         properties=properties)

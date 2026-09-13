@@ -239,6 +239,8 @@ _HELP_METAVAR_TYPES = {
 
 def _normalize_help_metavar(metavar: str) -> str:
     """Return the canonical usage.json type for a Typer angle metavar."""
+    if metavar in {"int range", "float range"}:
+        metavar = metavar.removesuffix(" range")
     return _HELP_METAVAR_TYPES.get(metavar, metavar)
 
 
@@ -340,115 +342,22 @@ def parse_help_arguments(section_text: str) -> List[Dict]:
     return arguments
 
 
-def _reconstruct_option(lines):
-    """Reconstruct a single wrapped option from its raw lines, column-aware.
-
-    Lines before the ``>`` line: extract metavar content up to the help
-    column (found by the last ``|`` position). The ``>`` line: split at the
-    first non-space after ``>``. Lines after: all help continuation.
-    Metavar parts are concatenated (no space); help parts are space-joined.
-    """
-    if len(lines) <= 1:
-        return lines[0].strip() if lines else ""
-
-    # Find which line has the metavar closing ``>``
-    gt_line_idx = -1
-    for i, l in enumerate(lines):
-        if ">" in l:
-            gt_line_idx = i
-            break
-
-    if gt_line_idx < 0:
-        # No angle metavar at all -- use old strip-join
-        return " ".join(l.strip() for l in lines)
-
-    flag_line = lines[0]
-    lt_col = flag_line.find("<")
-    if lt_col >= 0:
-        flag_part = flag_line[:lt_col].strip()
-    else:
-        parts = flag_line.strip().split(None, 1)
-        flag_part = parts[0]
-        lt_col = 0
-
-    metavar_parts = []
-    help_parts = []
-
-    for i, l in enumerate(lines):
-        if i < gt_line_idx:
-            # Lines before the ``>`` line
-            last_pipe = l.rfind("|")
-            if last_pipe >= 0:
-                help_start = last_pipe + 1
-                while help_start < len(l) and l[help_start] == " ":
-                    help_start += 1
-                lt_in_line = l.find("<")
-                if lt_in_line >= 0:
-                    mp = l[lt_in_line:help_start].strip()
-                else:
-                    indent = len(l) - len(l.lstrip())
-                    mp = l[indent:help_start].strip()
-                hp = l[help_start:].strip()
-                if mp:
-                    metavar_parts.append(mp)
-                if hp:
-                    help_parts.append(hp)
-            else:
-                metavar_parts.append(l.strip())
-        elif i == gt_line_idx:
-            gt = l.find(">")
-            help_start = gt + 1
-            while help_start < len(l) and l[help_start] == " ":
-                help_start += 1
-            mp = l[:help_start].strip()
-            hp = l[help_start:].strip() if help_start < len(l) else ""
-            if mp:
-                metavar_parts.append(mp)
-            if hp:
-                help_parts.append(hp)
-        else:
-            hp = l.strip()
-            if hp:
-                help_parts.append(hp)
-
-    metavar = "".join(metavar_parts)
-    help_text = " ".join(help_parts)
-
-    if help_text:
-        return f"{flag_part} {metavar}  {help_text}"
-    return f"{flag_part} {metavar}"
-
-
 def _join_wrapped_option_lines(section_text: str) -> List[str]:
-    """Join a Rich/Typer Options section's wrapped continuation lines,
-    column-aware.
+    """Join a Rich/Typer Options section's wrapped continuation lines.
 
-    Learns the metavar closing ``>`` across each option's raw lines and
-    splits continuation text at the help-column boundary so that pipe-joined
-    metavar text (``<A|B|C>``}) and help text are not interleaved.
-
-    Single-line options pass through unchanged.
+    Shared by parse_help_options and parse_help_option_secondary_tokens so
+    both walk the same one-physical-line-per-option view of the section.
     """
     joined_lines: List[str] = []
-    current_option: List[str] = []
 
     for line in section_text.splitlines():
         stripped = line.strip()
         if not stripped:
-            if current_option:
-                joined_lines.append(_reconstruct_option(current_option))
-                current_option = []
             continue
-
         if stripped.startswith("--") or stripped.startswith("*"):
-            if current_option:
-                joined_lines.append(_reconstruct_option(current_option))
-            current_option = [line]
-        elif current_option:
-            current_option.append(line)
-
-    if current_option:
-        joined_lines.append(_reconstruct_option(current_option))
+            joined_lines.append(stripped)
+        elif joined_lines:
+            joined_lines[-1] += " " + stripped
 
     return joined_lines
 
@@ -522,7 +431,7 @@ def parse_help_options(section_text: str) -> List[Dict]:
                 short_flag = secondary_match.group(2)
             rest = secondary_match.group(3).strip()
 
-        metavar_match = re.match(r"^<([^<>\s]+)>\s+(.*)", rest)
+        metavar_match = re.match(r"^<([^<>]+)>\s+(.*)", rest)
         type_match = re.match(r"^([A-Z][A-Z_0-9]+)\s+(.*)", rest)
         if metavar_match:
             opt_type = _normalize_help_metavar(metavar_match.group(1))

@@ -117,6 +117,9 @@ cryptocom candlesticks get BTCUSD-PERP 1776197280000 --timeframe 1m
 ### Account
 
 ```bash
+cryptocom account fee-rate
+cryptocom account instrument-fee-rate SOL_USD
+cryptocom account fills --instrument-name SOL_USD --start-time 1771761038000 --end-time 1771847438000 --limit 100
 cryptocom account balance
 cryptocom account balance --table
 cryptocom account balance --filter "instrument_name:eq:USD"
@@ -137,10 +140,14 @@ cryptocom account open-orders --properties "order_id,instrument_name,side,quanti
 Authenticated trading order commands (signed private endpoints):
 
 ```bash
-cryptocom orders create --symbol SOL_USD --side buy --price 96.50 --quantity 0.1
+cryptocom orders create --symbol SOL_USD --side buy --price 96.50 --quantity 0.1 --spot-margin SPOT
 cryptocom orders create --symbol BTC_USD --side buy --price 96.50 --quantity 0.1 --type LIMIT --tif IOC
 cryptocom orders create --symbol BTC_USD --side sell --quantity 0.01 --type MARKET
+cryptocom orders get ORDER_ID
+cryptocom orders get --client-oid CLIENT_ORDER_ID
 cryptocom orders details ORDER_ID
+cryptocom orders details --client-oid CLIENT_ORDER_ID
+cryptocom orders history --instrument-name SOL_USD --start-time 1771761038000 --end-time 1771847438000 --limit 100
 cryptocom orders cancel ORDER_ID
 cryptocom orders list
 cryptocom orders list --instrument-name BTC_USD
@@ -153,6 +160,17 @@ cryptocom orders list --properties "order_id,instrument_name,side,quantity,limit
 `GOOD_TILL_CANCEL`, `IMMEDIATE_OR_CANCEL`, `FILL_OR_KILL`. `--price` is required
 for LIMIT orders and rejected for MARKET orders. stdout carries only the API
 result (for example `{"order_id": ...}`); messages go to stderr.
+
+`--spot-margin` accepts `SPOT` or `MARGIN` (case-insensitive). Use `SPOT` to
+make the execution mode explicit and prevent a spot order from borrowing.
+
+Order lookup requires exactly one positional order ID or `--client-oid`; client-ID lookup also supports terminal orders. Create and cancel requests are attempted once, without automatic transport retries. Persist the client order ID before submission and reconcile ambiguous outcomes before another mutation. A cancel acknowledgement alone does not prove cancellation.
+
+`account fee-rate` and `account instrument-fee-rate` preserve the venue fee fields in basis points; divide by 10,000 for a fractional rate. `account fills` preserves private executed trades, including `trade_id`, `client_oid`, `fees`, and `fee_instrument_name`; negative fees deduct from the balance.
+
+`orders history` and `account fills` return a single venue page, capped at 100 rows, with raw fields and exact decimal strings. They do not claim complete history or paginate automatically. Use explicit `--start-time` and `--end-time` windows and nanosecond timestamps for recovery; the fills end time is exclusive. A full page requires further recovery reads before claiming completeness. `--filter` and `--properties` operate only on the returned page.
+
+Official contracts: [order detail](https://exchange-developer.crypto.com/exchange/v1/docs/api/rest/private-get-order-detail), [order history](https://exchange-developer.crypto.com/exchange/v1/docs/api/rest/private-get-order-history), [private fills](https://exchange-developer.crypto.com/exchange/v1/docs/api/rest/private-get-trades), [account fees](https://exchange-developer.crypto.com/exchange/v1/docs/api/rest/private-get-fee-rate), [instrument fees](https://exchange-developer.crypto.com/exchange/v1/docs/api/rest/private-get-instrument-fee-rate).
 
 ### Cache
 
@@ -202,6 +220,7 @@ cryptocom trades list BTCUSD-PERP --limit 5 --properties "p,q,s,t"
 | `--type` | | `orders create` | Order type: MARKET or LIMIT |
 | `--tif` | | `orders create` | Time in force: GTC, IOC, FOK |
 | `--client-oid` | | `orders create` | Optional client order ID |
+| `--spot-margin` | | `orders create` | Execution mode: SPOT or MARGIN |
 | `--version` | `-v` | Root command | Show version and exit |
 
 ## Configuration

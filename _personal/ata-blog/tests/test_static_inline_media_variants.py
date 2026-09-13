@@ -8,17 +8,18 @@ in `srcset`, so none of them reached R2. The 2026-09-05 media parity audit
 measured 112 missing derivative keys across 15 attachments created since
 2026-08-26, 7 of which were missing even their base file.
 
-Second defect: that owner lookup enumerated the media library anonymously. An
-attachment inherits its owning post's status, and the pipeline schedules posts
-instead of publishing them on the spot, so for essentially every post the
-anonymous read returned 200 with an empty array and the publish failed with
-"No WordPress media attachment publishes ...". The search now runs through the
-authenticated `wordpress` CLI.
+Second defect: that owner lookup asked the WordPress media library which
+derivatives an attachment owns. When adamtheautomator.com became the static
+site, WordPress stopped answering there -- every API path returns the static
+404 page -- and the lookup took every publish down with it. The size family is
+now read from the static site's own media inventory, `media_variants.json`,
+which is the same record the built pages generate their `srcset` from, so the
+publish path no longer depends on WordPress at all.
 
 These tests pin that every referenced attachment now mirrors its base file plus
 every variant declared in `media_details.sizes`, at the identical
 `wp-content/uploads/...` key, that an attachment whose owning post is not yet
-public still resolves, and that a key containing a literal `..` is uploaded
+public still resolves (the inventory does not model post status at all), and that a key containing a literal `..` is uploaded
 through the R2 S3-compatible transport because Cloudflare's REST edge WAF
 answers those paths with a 403 before R2 sees them.
 
@@ -38,23 +39,16 @@ from ata_blog_cli.client import AtaBlogClient, ClientError
 _ORIGIN = "https://adamtheautomator.com"
 _UPLOADS = f"{_ORIGIN}/wp-content/uploads"
 
-_HUB_SPOKE_RECORD = {
-    "id": 27232,
-    "source_url": f"{_UPLOADS}/2026/08/hub-spoke-topology.png",
-    "media_details": {
-        "file": "2026/08/hub-spoke-topology.png",
-        "sizes": {
-            "thumbnail": {
-                "source_url": f"{_UPLOADS}/2026/08/hub-spoke-topology-150x150.png"
-            },
-            "medium": {
-                "source_url": f"{_UPLOADS}/2026/08/hub-spoke-topology-300x167.png"
-            },
-            "featured-large": {
-                "source_url": f"{_UPLOADS}/2026/08/hub-spoke-topology-1200x675.png"
-            },
-        },
-    },
+_HUB_SPOKE_INVENTORY = {
+    "2026/08/hub-spoke-topology.png": {
+        "w": 1600,
+        "h": 900,
+        "v": [
+            ["hub-spoke-topology-150x150.png", 150, 150],
+            ["hub-spoke-topology-300x167.png", 300, 167],
+            ["hub-spoke-topology-1200x675.png", 1200, 675],
+        ],
+    }
 }
 
 _HUB_SPOKE_KEYS = [
@@ -64,39 +58,23 @@ _HUB_SPOKE_KEYS = [
     "wp-content/uploads/2026/08/hub-spoke-topology.png",
 ]
 
-# Attachment 27239 as the authenticated WordPress media API returns it. Its
-# owning post (27242) is status=future, scheduled for 2026-09-08, so an
-# anonymous read of the media collection cannot see this record at all.
-_SCHEDULED_POST_RECORD = {
-    "id": 27239,
-    "slug": "bicep-compile-deploy-flow",
-    "source_url": f"{_UPLOADS}/2026/09/bicep-compile-deploy-flow.png",
-    "media_details": {
-        "file": "2026/09/bicep-compile-deploy-flow.png",
-        "sizes": {
-            "thumbnail": {
-                "source_url": f"{_UPLOADS}/2026/09/bicep-compile-deploy-flow-150x150.png"
-            },
-            "medium": {
-                "source_url": f"{_UPLOADS}/2026/09/bicep-compile-deploy-flow-300x171.png"
-            },
-            "medium_large": {
-                "source_url": f"{_UPLOADS}/2026/09/bicep-compile-deploy-flow-768x439.png"
-            },
-            "large": {
-                "source_url": f"{_UPLOADS}/2026/09/bicep-compile-deploy-flow-1024x585.png"
-            },
-            "featured-small": {
-                "source_url": f"{_UPLOADS}/2026/09/bicep-compile-deploy-flow-330x200.png"
-            },
-            "featured-large": {
-                "source_url": f"{_UPLOADS}/2026/09/bicep-compile-deploy-flow-350x200.png"
-            },
-            "full": {
-                "source_url": f"{_UPLOADS}/2026/09/bicep-compile-deploy-flow.png"
-            },
-        },
-    },
+# An image on a post that has not gone live yet. The inventory records images,
+# not posts, so its owning post's status is irrelevant here -- which is the
+# whole point of moving off the WordPress media library, where a scheduled
+# post's attachment was invisible.
+_SCHEDULED_POST_INVENTORY = {
+    "2026/09/bicep-compile-deploy-flow.png": {
+        "w": 1920,
+        "h": 1097,
+        "v": [
+            ["bicep-compile-deploy-flow-150x150.png", 150, 150],
+            ["bicep-compile-deploy-flow-300x171.png", 300, 171],
+            ["bicep-compile-deploy-flow-768x439.png", 768, 439],
+            ["bicep-compile-deploy-flow-1024x585.png", 1024, 585],
+            ["bicep-compile-deploy-flow-330x200.png", 330, 200],
+            ["bicep-compile-deploy-flow-350x200.png", 350, 200],
+        ],
+    }
 }
 
 _SCHEDULED_POST_KEYS = [
@@ -109,64 +87,57 @@ _SCHEDULED_POST_KEYS = [
     "wp-content/uploads/2026/09/bicep-compile-deploy-flow.png",
 ]
 
-# An attachment WordPress registered with no derivatives at all serializes its
-# empty size map as a PHP array, which reaches JSON as [].
-_NO_SIZES_RECORD = {
-    "id": 27237,
-    "source_url": f"{_UPLOADS}/2026/09/featured_image.webp",
-    "media_details": {"file": "2026/09/featured_image.webp", "sizes": []},
+# An image registered with no derivatives at all.
+_NO_SIZES_INVENTORY = {
+    "2026/09/featured_image.webp": {"w": 1200, "h": 675, "v": []}
 }
 
 # Cloudflare's REST edge blocks any object path containing a literal '..'.
-_DOTDOT_RECORD = {
-    "id": 27299,
-    "source_url": f"{_UPLOADS}/2026/09/az..cli-output.png",
-    "media_details": {
-        "file": "2026/09/az..cli-output.png",
-        "sizes": {
-            "thumbnail": {
-                "source_url": f"{_UPLOADS}/2026/09/az..cli-output-150x150.png"
-            }
-        },
-    },
+# Two attachments in one folder both declaring the same derivative filename.
+# Unresolvable, and never a silent pick.
+_DUPLICATE_CLAIM_INVENTORY = {
+    "2026/08/hub-spoke-topology-alternate.png": {
+        "w": 1600,
+        "h": 900,
+        "v": [["hub-spoke-topology-300x167.png", 300, 167]],
+    }
+}
+
+# A record in another folder that shares a name stem. It must not be mistaken
+# for the owner of a key under 2026/08.
+_UNRELATED_INVENTORY = {
+    "2024/01/hub-spoke-topology.png": {"w": 800, "h": 450, "v": []}
+}
+
+_DOTDOT_INVENTORY = {
+    "2026/09/az..cli-output.png": {
+        "w": 1200,
+        "h": 800,
+        "v": [["az..cli-output-150x150.png", 150, 150]],
+    }
 }
 
 
 class _MediaHarness:
     """Stubbed origin reads and R2 calls for the inline mirroring path."""
 
-    def __init__(self, records, *, present_keys=()):
-        self.records = list(records)
+    def __init__(self, inventory, *, present_keys=()):
+        self.inventory = dict(inventory)
         self.present_keys = set(present_keys)
-        self.searches: list[str] = []
         self.fetched_urls: list[str] = []
         self.r2_calls: list[list[str]] = []
 
     def build_client(self) -> AtaBlogClient:
         client = object.__new__(AtaBlogClient)
         client._fetch_static_origin_bytes = self._fake_fetch
-        client._run_wordpress = self._fake_wordpress
+        client._static_media_inventory_cache = self.inventory
         client._existing_static_inline_media_key = self._fake_existing
         client._run_checked_command = self._fake_r2
         return client
 
-    def _fake_wordpress(self, args, timeout=60):
-        """Stand in for the authenticated `wordpress` CLI media search."""
-        assert args[:2] == ["media", "list"]
-        assert "--filter" in args
-        search = args[args.index("--filter") + 1].split("search:eq:", 1)[1]
-        self.searches.append(search)
-        matched = [
-            record for record in self.records if search in json.dumps(record)
-        ]
-        return subprocess.CompletedProcess(
-            ["wordpress", *args], 0, stdout=json.dumps(matched), stderr=""
-        )
-
     def _fake_fetch(self, url, *, attempts=5):
-        # The media library is never enumerated anonymously: an attachment on a
-        # scheduled post is invisible to an anonymous reader, and this origin
-        # fetch is only for downloading the image bytes themselves.
+        # Nothing in this path may call WordPress: the only network read is the
+        # image bytes, fetched from the static origin.
         assert "/wp-json/" not in url
         self.fetched_urls.append(url)
         return b"image-bytes", "image/png; charset=binary"
@@ -194,28 +165,26 @@ class _MediaHarness:
 
 def test_reference_expands_to_every_declared_size_variant():
     """A base-file reference must enumerate the whole attachment key family."""
-    harness = _MediaHarness([_HUB_SPOKE_RECORD])
+    harness = _MediaHarness(_HUB_SPOKE_INVENTORY)
     client = harness.build_client()
 
-    keys = client._wordpress_media_keys_for_reference(
+    keys = client._static_media_keys_for_reference(
         "wp-content/uploads/2026/08/hub-spoke-topology.png"
     )
 
     assert keys == _HUB_SPOKE_KEYS
-    assert harness.searches == ["hub-spoke-topology"]
 
 
 def test_derivative_reference_resolves_through_its_parent_attachment():
     """A -WxH reference must drop that suffix to find its owning attachment."""
-    harness = _MediaHarness([_HUB_SPOKE_RECORD])
+    harness = _MediaHarness(_HUB_SPOKE_INVENTORY)
     client = harness.build_client()
 
-    keys = client._wordpress_media_keys_for_reference(
+    keys = client._static_media_keys_for_reference(
         "wp-content/uploads/2026/08/hub-spoke-topology-300x167.png"
     )
 
     assert keys == _HUB_SPOKE_KEYS
-    assert harness.searches == ["hub-spoke-topology"]
 
 
 def test_attachment_on_a_not_yet_public_post_resolves():
@@ -227,57 +196,55 @@ def test_attachment_on_a_not_yet_public_post_resolves():
     authenticated `wordpress` CLI; an anonymous read here reported every
     scheduled post's images as missing and failed the static publish.
     """
-    harness = _MediaHarness([_SCHEDULED_POST_RECORD])
+    harness = _MediaHarness(_SCHEDULED_POST_INVENTORY)
     client = harness.build_client()
 
-    keys = client._wordpress_media_keys_for_reference(
+    keys = client._static_media_keys_for_reference(
         "wp-content/uploads/2026/09/bicep-compile-deploy-flow.png"
     )
 
     assert keys == _SCHEDULED_POST_KEYS
-    assert harness.searches == ["bicep-compile-deploy-flow"]
 
 
 def test_attachment_without_derivatives_yields_only_its_base_key():
-    """An empty PHP sizes array must not be mistaken for shape drift."""
-    harness = _MediaHarness([_NO_SIZES_RECORD])
+    """An image with no derivatives yields only its own key."""
+    harness = _MediaHarness(_NO_SIZES_INVENTORY)
     client = harness.build_client()
 
-    assert client._wordpress_media_keys_for_reference(
+    assert client._static_media_keys_for_reference(
         "wp-content/uploads/2026/09/featured_image.webp"
     ) == ["wp-content/uploads/2026/09/featured_image.webp"]
 
 
 def test_unowned_reference_fails_loudly():
     """A referenced key no attachment publishes must raise, not mirror alone."""
-    harness = _MediaHarness([_HUB_SPOKE_RECORD])
+    harness = _MediaHarness(_HUB_SPOKE_INVENTORY)
     client = harness.build_client()
 
-    with pytest.raises(ClientError, match="No WordPress media attachment publishes"):
-        client._wordpress_media_keys_for_reference(
+    with pytest.raises(ClientError, match="No media inventory attachment publishes"):
+        client._static_media_keys_for_reference(
             "wp-content/uploads/2026/08/hub-spoke-topology-missing.png"
         )
 
 
 def test_ambiguous_reference_fails_loudly():
     """Two attachments claiming one key is unresolvable, never a silent pick."""
-    duplicate = {**_HUB_SPOKE_RECORD, "id": 27233}
-    harness = _MediaHarness([_HUB_SPOKE_RECORD, duplicate])
+    harness = _MediaHarness({**_HUB_SPOKE_INVENTORY, **_DUPLICATE_CLAIM_INVENTORY})
     client = harness.build_client()
 
-    with pytest.raises(ClientError, match="published by 2 WordPress media attachments"):
-        client._wordpress_media_keys_for_reference(
-            "wp-content/uploads/2026/08/hub-spoke-topology.png"
+    with pytest.raises(ClientError, match="published by 2 media inventory attachments"):
+        client._static_media_keys_for_reference(
+            "wp-content/uploads/2026/08/hub-spoke-topology-300x167.png"
         )
 
 
 def test_unrelated_search_hits_never_break_the_lookup():
-    """A malformed unrelated record in the search result must be ignored."""
-    harness = _MediaHarness([{"id": 1, "slug": "hub-spoke-topology"}, _HUB_SPOKE_RECORD])
+    """A same-named image in another folder must not claim this key."""
+    harness = _MediaHarness({**_UNRELATED_INVENTORY, **_HUB_SPOKE_INVENTORY})
     client = harness.build_client()
 
     assert (
-        client._wordpress_media_keys_for_reference(
+        client._static_media_keys_for_reference(
             "wp-content/uploads/2026/08/hub-spoke-topology.png"
         )
         == _HUB_SPOKE_KEYS
@@ -286,7 +253,7 @@ def test_unrelated_search_hits_never_break_the_lookup():
 
 def test_inline_mirroring_uploads_every_variant_once():
     """Every variant is mirrored, and two references share one key family."""
-    harness = _MediaHarness([_HUB_SPOKE_RECORD])
+    harness = _MediaHarness(_HUB_SPOKE_INVENTORY)
     client = harness.build_client()
 
     markdown = (
@@ -304,7 +271,7 @@ def test_inline_mirroring_uploads_every_variant_once():
 
 def test_inline_mirroring_skips_variants_already_in_the_bucket():
     """Mirroring is idempotent per key, so a resumed run re-uploads nothing."""
-    harness = _MediaHarness([_HUB_SPOKE_RECORD], present_keys=_HUB_SPOKE_KEYS)
+    harness = _MediaHarness(_HUB_SPOKE_INVENTORY, present_keys=_HUB_SPOKE_KEYS)
     client = harness.build_client()
 
     receipts = client._upload_static_inline_media(
@@ -319,7 +286,7 @@ def test_inline_mirroring_skips_variants_already_in_the_bucket():
 
 def test_dotdot_keys_upload_through_the_s3_transport():
     """Cloudflare's REST edge 403s '..' paths, so those keys must use put-s3."""
-    harness = _MediaHarness([_DOTDOT_RECORD])
+    harness = _MediaHarness(_DOTDOT_INVENTORY)
     client = harness.build_client()
 
     receipts = client._upload_static_inline_media(

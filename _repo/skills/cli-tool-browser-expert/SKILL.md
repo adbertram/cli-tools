@@ -78,6 +78,30 @@ Hidden elements (collapsed menus, avatars in sidebars) cause false negatives.
 Always validate selectors against real page snapshots using `playwright-cli page snapshot`.
 </principle>
 
+
+<principle name="Shared Chromium Profile (default)">
+Browser-session CLIs on the ``default`` authentication profile share one
+Chromium user-data-dir so Google/SSO login is once across tools:
+
+``~/.local/share/cli-tools/_shared/chromium-profile``
+
+Resolved by ``BaseConfig.get_persistent_profile_dir()`` / ``uses_shared_chromium_profile()``.
+New browser CLIs need **zero** per-CLI glue — the shared package owns the path.
+
+**Stay isolated when:**
+- the active auth profile name is not ``default`` (multi-account tools), or
+- ``CLI_TOOLS_ISOLATE_CHROME_PROFILE=1``, or
+- the config does not declare ``CredentialType.BROWSER_SESSION``.
+
+**Overrides:** ``CLI_TOOLS_SHARED_CHROME_PROFILE=/absolute/or/~/path`` changes the shared dir.
+
+**Concurrency:** Chrome allows only one process on a given user-data-dir. Run browser CLIs that need Chrome sequentially, or isolate.
+
+**Logout:** ``clear_session()`` clears tool-local ``browser-data/`` but does **not** wipe the shared profile (so one CLI logout does not log every tool out of Google). Use ``clear_shared_chromium_profile()`` for a full shared reset.
+
+**Tests:** ``cli-tools-shared/tests/test_shared_chromium_profile.py``.
+</principle>
+
 </essential_principles>
 
 <intake>

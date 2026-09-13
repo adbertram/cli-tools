@@ -35,12 +35,24 @@ Authentication profiles live under the `authentication_profiles` directory:
 └── authentication_profiles/
     └── <profile-name>/
         ├── .env              ← auth data (active profile's ACTIVE=true)
-        ├── browser-data/     ← persistent Chromium profile for browser auth
+        ├── browser-data/     ← tool-local browser files (auth-state, etc.)
         ├── profile.json      ← auth marker
         └── cache/            ← cached responses
+
+~/.local/share/cli-tools/_shared/
+└── chromium-profile/         ← shared Chromium user-data-dir for browser CLIs
 ```
 
-Each authentication profile is fully self-contained for auth-related state. The cli-tools source repo holds only `.env.example` (the template, no creds).
+**Shared Chromium profile:** browser-session tools on the ``default`` auth profile
+use ``~/.local/share/cli-tools/_shared/chromium-profile`` via
+``BaseConfig.get_persistent_profile_dir()`` so Google/SSO login is once across
+CLIs. Named auth profiles (not ``default``) keep a per-tool
+``browser-data/chromium-profile``. Override path with
+``CLI_TOOLS_SHARED_CHROME_PROFILE``; force isolation with
+``CLI_TOOLS_ISOLATE_CHROME_PROFILE=1``. Chrome allows only one process on that
+shared user-data-dir at a time. See `_repo/cli-tools-shared/docs/shared-chromium-profile.md` for migration, logout, and validation rules.
+
+Each authentication profile is self-contained for auth-related env/marker/cache state. The cli-tools source repo holds only `.env.example` (the template, no creds).
 
 **Agent rule:** Reusable raw credentials do not belong in any `.env` file. Agents must store and retrieve them through the CLI-tools secret manager. The only `.env` writes an agent may rely on are non-secret config and CLI-managed runtime auth state written by the tool itself.
 

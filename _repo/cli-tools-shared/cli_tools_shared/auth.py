@@ -1542,16 +1542,31 @@ class BrowserAutomation:
         return self._page
 
     def clear_session(self) -> None:
-        """Wipe the persistent profile and invalidate the cached service.
+        """Clear this CLI's browser session state.
 
-        Propagates failures from the underlying ``data_delete()`` — no
-        silent recovery (one execution path, fail loudly).
+        Isolated profiles retain the historical behavior and delete their
+        Chromium user-data-dir. Shared profiles are never deleted from a
+        per-tool logout/``--force`` path: doing so would sign every browser
+        CLI out of Google/SSO. For a shared profile, close the service and
+        clear only tool-local browser-data through the config. Use
+        ``config.clear_shared_chromium_profile()`` for an intentional global
+        reset.
         """
         self._auth_verified_at = 0
-        svc = self._get_service()
-        if getattr(svc, "_user_data_dir", None) is None:
-            svc._user_data_dir = self._get_persistent_profile_dir()
-        svc.data_delete()
+        uses_shared = bool(
+            hasattr(self.config, "uses_shared_chromium_profile")
+            and self.config.uses_shared_chromium_profile()
+        )
+        if uses_shared:
+            if self._service is not None:
+                self._service.close()
+            if hasattr(self.config, "clear_session"):
+                self.config.clear_session()
+        else:
+            svc = self._get_service()
+            if getattr(svc, "_user_data_dir", None) is None:
+                svc._user_data_dir = self._get_persistent_profile_dir()
+            svc.data_delete()
         self._service = None
         self._page = None
 

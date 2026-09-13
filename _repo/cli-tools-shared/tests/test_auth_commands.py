@@ -946,13 +946,9 @@ def test_force_custom_login_handler_preserves_profile_credentials(tmp_path, monk
             "ACCESS_TOKEN=old-access-token\n",
         )
     )
-    cookies = (
-        default_dir
-        / "browser-data"
-        / "chromium-profile"
-        / "Default"
-        / "Cookies"
-    )
+    shared_profile = tmp_path / "shared-chromium-profile"
+    monkeypatch.setenv("CLI_TOOLS_SHARED_CHROME_PROFILE", str(shared_profile))
+    cookies = shared_profile / "Default" / "Cookies"
     cookies.parent.mkdir(parents=True, exist_ok=True)
     cookies.write_text("sqlite-stub")
 
@@ -1900,9 +1896,11 @@ def test_auth_status_canonical_shape_with_browser_session(tmp_path, monkeypatch)
     _seed_profile(
         base_profiles_dir, "default", active=True, env_body="API_KEY=key-abc-def\n"
     )
-    # Seed the persistent Chromium profile's cookie database so the real
+    # Seed the official shared Chromium profile's cookie database so the real
     # ``BaseConfig.has_saved_session()`` reports True.
-    cookies = base_profiles_dir / "default" / "browser-data" / "chromium-profile" / "Default" / "Cookies"
+    shared_profile = tmp_path / "shared-chromium-profile"
+    monkeypatch.setenv("CLI_TOOLS_SHARED_CHROME_PROFILE", str(shared_profile))
+    cookies = shared_profile / "Default" / "Cookies"
     cookies.parent.mkdir(parents=True, exist_ok=True)
     cookies.write_text("sqlite-stub")
 
@@ -1967,14 +1965,9 @@ def test_auth_status_dual_auth_browser_session_is_not_overridden_by_api_test(tmp
         active=True,
         env_body="CLIENT_ID=\nCLIENT_SECRET=\nACCESS_TOKEN=\nREFRESH_TOKEN=\n",
     )
-    cookies = (
-        base_profiles_dir
-        / "default"
-        / "browser-data"
-        / "chromium-profile"
-        / "Default"
-        / "Cookies"
-    )
+    shared_profile = tmp_path / "shared-chromium-profile"
+    monkeypatch.setenv("CLI_TOOLS_SHARED_CHROME_PROFILE", str(shared_profile))
+    cookies = shared_profile / "Default" / "Cookies"
     cookies.parent.mkdir(parents=True, exist_ok=True)
     cookies.write_text("sqlite-stub")
 
