@@ -46,10 +46,12 @@ from typing import Optional, Any, List
 import typer
 
 from ..client import get_client, ClientError
+from ..models.image import MAX_IMAGES_PER_LISTING
 from ..models import (
     Listing,
     ListingFormat,
     ListingStatus,
+    OfferStatus,
     Image,
     is_valid_sku,
     listing_from_offer,
@@ -95,9 +97,6 @@ TRADING_LISTING_FORMATS = {
     "FixedPriceItem": ListingFormat.FIXED_PRICE,
 }
 FEED_WAIT_TIMEOUT_SECONDS = 300.0
-
-# Maximum images per listing (eBay limit)
-MAX_IMAGES = 12
 
 # Supported image extensions for --image-folder scanning
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
@@ -283,7 +282,10 @@ def _scan_folder_for_images(folder_path: str) -> list[str]:
     return image_files
 
 
-def _export_photos_from_album(album_name: str, limit: int = MAX_IMAGES) -> tuple[list[str], str]:
+def _export_photos_from_album(
+    album_name: str,
+    limit: int = MAX_IMAGES_PER_LISTING,
+) -> tuple[list[str], str]:
     """Export photos from macOS Photos app album to temp directory."""
     temp_dir = tempfile.mkdtemp(prefix="ebay_photos_")
 
@@ -341,9 +343,12 @@ def _upload_images_for_listing(
     if not sources:
         return uploaded_urls, errors
 
-    if len(sources) > MAX_IMAGES:
-        print_warning(f"Only first {MAX_IMAGES} images will be used (eBay limit). {len(sources)} provided.")
-        sources = sources[:MAX_IMAGES]
+    if len(sources) > MAX_IMAGES_PER_LISTING:
+        print_warning(
+            f"Only first {MAX_IMAGES_PER_LISTING} images will be used (eBay limit). "
+            f"{len(sources)} provided."
+        )
+        sources = sources[:MAX_IMAGES_PER_LISTING]
 
     for source_value, source_type in sources:
         try:
@@ -377,7 +382,7 @@ def _upload_images_for_listing(
             existing_urls = product.get("imageUrls", [])
 
             combined_urls = uploaded_urls + [u for u in existing_urls if u not in uploaded_urls]
-            combined_urls = combined_urls[:MAX_IMAGES]
+            combined_urls = combined_urls[:MAX_IMAGES_PER_LISTING]
 
             update_payload = current_item.copy()
             for field in ["sku", "locale", "groupIds", "inventoryItemGroupKeys"]:
@@ -981,7 +986,7 @@ def _generate_preview_html(listing: Listing) -> str:
         main_image = listing.images[0].url
         thumbnail_html = "".join([
             f'<img src="{img.url}" class="thumbnail" onclick="document.getElementById(\'mainImage\').src=\'{img.url}\'" alt="Thumbnail {i+1}">'
-            for i, img in enumerate(listing.images[:12])
+            for i, img in enumerate(listing.images[:MAX_IMAGES_PER_LISTING])
         ])
         gallery_html = f'''
         <div class="image-gallery">
@@ -2347,6 +2352,13 @@ def listings_unpublish(
 
         print_info(f"Unpublishing listing: {sku}")
         client.withdraw_offer(listing.offer_id)
+        verified_offer = client.get_offer(listing.offer_id)
+        verified_status = verified_offer.get("status")
+        if verified_status != OfferStatus.UNPUBLISHED.value:
+            raise ClientError(
+                f"Offer {listing.offer_id} was not unpublished: "
+                f"expected {OfferStatus.UNPUBLISHED.value}, got {verified_status!r}"
+            )
 
         print_success(f"Listing unpublished: {sku}")
         print_info("The listing is now a draft and can be republished later.")
@@ -2355,7 +2367,7 @@ def listings_unpublish(
             summary = [{
                 "sku": sku,
                 "offer_id": listing.offer_id,
-                "status": "draft",
+                "status": verified_status,
             }]
             print_table(
                 summary,
@@ -2366,7 +2378,7 @@ def listings_unpublish(
             print_json({
                 "sku": sku,
                 "offer_id": listing.offer_id,
-                "status": "draft",
+                "status": verified_status,
             })
 
     except Exception as e:

@@ -480,6 +480,7 @@ def messages_reply(
         original_message = messages[0]
         recipient_id = original_message.get("sender")
         item_id = original_message.get("item_id")
+        parent_message_id = original_message.get("external_message_id") or message_id
 
         if not recipient_id:
             print_error("Could not determine recipient from original message")
@@ -488,7 +489,7 @@ def messages_reply(
         # Send reply
         print_info("Sending reply...")
         xml_response = client.add_member_message_reply(
-            parent_message_id=message_id,
+            parent_message_id=parent_message_id,
             recipient_id=recipient_id,
             body=reply_body,
             item_id=item_id,

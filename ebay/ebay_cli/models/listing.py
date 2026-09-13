@@ -11,7 +11,7 @@ from typing import Optional
 from pydantic import Field, field_validator, model_validator
 
 from .base import EbayBaseModel
-from .image import Image
+from .image import Image, MAX_IMAGES_PER_LISTING
 
 
 class ListingStatus(str, Enum):
@@ -84,7 +84,6 @@ CONDITION_ENUM_TO_ID["MANUFACTURER_REFURBISHED"] = "2000"
 # SKU validation pattern: alphanumeric, hyphens, underscores, max 50 chars (eBay API requirement)
 SKU_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,50}$")
 
-
 class Listing(EbayBaseModel):
     """
     Unified listing model combining data from eBay's multiple APIs.
@@ -117,7 +116,11 @@ class Listing(EbayBaseModel):
     condition: Optional[str] = Field(None, description="Item condition")
 
     # Media
-    images: list[Image] = Field(default_factory=list, max_length=12, description="Listing images")
+    images: list[Image] = Field(
+        default_factory=list,
+        max_length=MAX_IMAGES_PER_LISTING,
+        description="Listing images",
+    )
 
     # Policies
     fulfillment_policy_id: Optional[str] = Field(None, description="Fulfillment policy ID")
