@@ -144,7 +144,10 @@ def list_files(
             raise typer.Exit(1)
 
         client = get_client()
-        result = client.Files.find_for_app(ref_type=ref_type, ref_id=ref_id)
+        if ref_type == "item":
+            result = client.Item.find(item_id=ref_id).get("files", [])
+        else:
+            result = client.Files.transport.GET(url=f"/file/{ref_type}/{ref_id}/")
         formatted = format_response(result)
 
         # Apply client-side filter if specified
