@@ -19,6 +19,12 @@ class _FakePage:
     def set_default_navigation_timeout(self, _timeout):
         return None
 
+    def goto(self, url):
+        self.url = url
+
+    def close(self):
+        return None
+
 
 class _FakeContext:
     def __init__(self):
@@ -83,6 +89,34 @@ def test_playwright_service_restores_persistent_browser_session(tmp_path, monkey
     assert playwright.chromium.launch_calls
     _args, kwargs = playwright.chromium.launch_calls[0]
     assert "--restore-last-session" in kwargs["args"]
+
+
+def test_playwright_service_uses_real_keychain_like_cdp_backend(tmp_path, monkeypatch):
+    """Playwright must encrypt cookies with the same OS key as the CDP backend.
+
+    Playwright's default Chromium switches include ``--use-mock-keychain`` and
+    ``--password-store=basic``. The CDP backend launches plain Chrome, which
+    uses the real macOS "Chrome Safe Storage" key. Both backends open the one
+    shared user-data-dir, so each purged the other's cookies as undecryptable
+    and every cross-backend CLI run signed the other CLIs out (agent-issues#530).
+    """
+    from cli_tools_shared.browser import playwright_service as module
+    from cli_tools_shared.browser.playwright_service import PlaywrightBrowserService
+
+    playwright = _FakePlaywright()
+    fake_sync_module = types.SimpleNamespace(
+        sync_playwright=lambda: _FakeSyncPlaywright(playwright)
+    )
+    monkeypatch.setitem(sys.modules, "playwright.sync_api", fake_sync_module)
+    monkeypatch.setattr(module, "_chrome_binary", lambda: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+
+    service = PlaywrightBrowserService("sample-browser-session", timeout=7)
+    service.browser_open(persistent_profile_dir=tmp_path / "profile")
+
+    _args, kwargs = playwright.chromium.launch_calls[0]
+    assert set(kwargs["ignore_default_args"]) == {"--use-mock-keychain", "--password-store=basic"}
+    assert "--use-mock-keychain" not in kwargs["args"]
+    assert "--password-store=basic" not in kwargs["args"]
 
 
 def test_playwright_service_holds_profile_lifecycle_lock_until_close(tmp_path, monkeypatch):
@@ -330,3 +364,45 @@ def test_playwright_service_data_delete_surfaces_process_cleanup_failure(tmp_pat
     with pytest.raises(PlaywrightServiceError, match="67275"):
         service.data_delete()
     assert profile.exists()
+
+
+class _RecordingPage:
+    def __init__(self, name, events):
+        self.name = name
+        self.events = events
+
+    def goto(self, url):
+        self.events.append(f"goto:{self.name}:{url}")
+
+    def close(self):
+        self.events.append(f"close:{self.name}")
+
+
+def test_playwright_service_close_leaves_single_blank_tab_for_next_restore(tmp_path, monkeypatch):
+    """Other tools' restored tabs must not reopen on the next launch (agent-issues#530)."""
+    from cli_tools_shared.browser.playwright_service import PlaywrightBrowserService
+
+    events = []
+    ours = _RecordingPage("ours", events)
+    restored = [_RecordingPage("brickowl-login", events), _RecordingPage("lego-identity", events)]
+    context = _FakeContext()
+    context.pages = [restored[0], ours, restored[1]]
+    original_close = context.close
+    context.close = lambda: (events.append("context-close"), original_close())
+
+    service = PlaywrightBrowserService("sample-browser-session")
+    service._user_data_dir = tmp_path / "chromium-profile"
+    service._opened = True
+    service._context = context
+    service._page = ours
+    service._playwright = _FakePlaywright()
+    monkeypatch.setattr(service, "_cleanup_stale_profile_processes", lambda: None)
+
+    service.browser_close()
+
+    assert events == [
+        "close:brickowl-login",
+        "close:lego-identity",
+        "goto:ours:about:blank",
+        "context-close",
+    ]

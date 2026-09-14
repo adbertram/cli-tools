@@ -296,6 +296,22 @@ class BrowserHarnessService:
         finally:
             self._chrome_proc = None
 
+    def _reset_tabs_for_restore(self) -> None:
+        """Leave exactly one blank tab so the next launch restores nothing.
+
+        ``--restore-last-session`` is required to keep session-only cookies
+        across launches, but it also reopens every tab from the last run. On
+        the shared profile that meant each CLI's launch reloaded other CLIs'
+        login/logout pages (agent-issues#530). A single ``about:blank`` tab
+        still counts as a restored session, so session cookies survive.
+        """
+        helpers = self._bh.h
+        keep = helpers.current_tab()["targetId"]
+        for tab in helpers.list_tabs():
+            if tab["targetId"] != keep:
+                helpers.cdp("Target.closeTarget", targetId=tab["targetId"])
+        helpers.goto_url("about:blank")
+
     def _request_browser_close(self) -> None:
         """Ask Chrome to exit cleanly before hard-stop teardown.
 
@@ -305,6 +321,10 @@ class BrowserHarnessService:
         """
         if not self._opened:
             return
+        try:
+            self._reset_tabs_for_restore()
+        except Exception as e:
+            logger.warning("_request_browser_close: tab reset failed: %s", e)
         try:
             self._bh.h.cdp("Browser.close")
         except Exception as e:

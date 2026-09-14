@@ -1778,3 +1778,39 @@ def test_locator_press_types_each_printable_character_exactly_once(monkeypatch):
     # char event, so this landed as "AAddaa4422".
     assert field.value == typed
     assert len(focus_calls) == len(typed)
+
+
+def test_request_browser_close_leaves_single_blank_tab_before_browser_close():
+    """Restored tabs from other CLIs must not reopen on the next launch (agent-issues#530)."""
+    service = BrowserHarnessService("sample-browser-session")
+    service._opened = True
+    events: list[str] = []
+
+    class _Helpers:
+        def current_tab(self):
+            return {"targetId": "OURS", "url": "https://www.brickowl.com/mystore/orders", "title": ""}
+
+        def list_tabs(self):
+            return [
+                {"targetId": "BL-LOGIN", "url": "https://identity.lego.com/en-US/login", "title": ""},
+                {"targetId": "OURS", "url": "https://www.brickowl.com/mystore/orders", "title": ""},
+                {"targetId": "BF-LOGIN", "url": "https://brickfreedom.com/login", "title": ""},
+            ]
+
+        def cdp(self, method, **params):
+            events.append(f"{method}:{params.get('targetId', '')}")
+
+        def goto_url(self, url):
+            events.append(f"goto:{url}")
+
+    service._bh = type("_BH", (), {"h": _Helpers()})()
+    service._chrome_proc = None
+
+    service._request_browser_close()
+
+    assert events == [
+        "Target.closeTarget:BL-LOGIN",
+        "Target.closeTarget:BF-LOGIN",
+        "goto:about:blank",
+        "Browser.close:",
+    ]

@@ -31,6 +31,11 @@ from .processes import (
 )
 
 
+# Playwright default Chromium switches that swap the OS cookie-encryption key
+# for a mock one. Stripped so Playwright and the CDP backend share one key.
+_MOCK_KEYCHAIN_DEFAULT_ARGS = ("--use-mock-keychain", "--password-store=basic")
+
+
 class PlaywrightServiceError(BrowserHarnessError):
     """Error from PlaywrightBrowserService operations."""
 
@@ -312,6 +317,11 @@ class PlaywrightBrowserService:
                 "headless": not headed,
                 "executable_path": self.executable_path or os.getenv("CLI_TOOLS_CHROME_BINARY") or _chrome_binary(),
                 "args": launch_args,
+                # Playwright's defaults make Chrome encrypt cookies with a mock
+                # key. The CDP backend (plain Chrome) uses the real OS keychain
+                # key on the same shared user-data-dir, so each backend purged
+                # the other's cookies as undecryptable. Use the real keychain.
+                "ignore_default_args": list(_MOCK_KEYCHAIN_DEFAULT_ARGS),
                 "timeout": self.default_timeout * 1000,
             }
             if width_height is not None:
@@ -343,8 +353,23 @@ class PlaywrightBrowserService:
                 self._release_profile_lifecycle_lock()
             raise PlaywrightServiceError(f"Failed to open Playwright browser: {exc}") from exc
 
+    @staticmethod
+    def _reset_tabs_for_restore(context, page) -> None:
+        """Leave exactly one blank tab so the next launch restores nothing.
+
+        ``--restore-last-session`` keeps session-only cookies across launches
+        but also reopens every tab from the last run; on the shared profile
+        that reloaded other CLIs' login pages on every launch
+        (agent-issues#530). One ``about:blank`` tab keeps the restore.
+        """
+        for other in list(context.pages):
+            if other is not page:
+                other.close()
+        page.goto("about:blank")
+
     def browser_close(self) -> Dict[str, Any]:
         context = self._context
+        page = self._page
         playwright = self._playwright
         cleanup_owned_profile = self._opened or context is not None or playwright is not None
         self._context = None
@@ -353,7 +378,11 @@ class PlaywrightBrowserService:
         self._opened = False
         try:
             if context is not None:
-                context.close()
+                try:
+                    if page is not None:
+                        self._reset_tabs_for_restore(context, page)
+                finally:
+                    context.close()
         finally:
             try:
                 if playwright is not None:
