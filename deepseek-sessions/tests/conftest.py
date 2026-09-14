@@ -29,7 +29,12 @@ def event(kind: str, seq: int, time: int, **data) -> dict:
     return {"type": kind, "seq": seq, "time": time, "data": data}
 
 
-def write_log(session_dir: Path, records: list, compressed: bool = True) -> Path:
+def write_log(
+    session_dir: Path,
+    records: list,
+    compressed: bool = True,
+    basename: str = "session.jsonl",
+) -> Path:
     """Write records as a dsh session log in the chosen encoding.
 
     When compressed, each record becomes its own Zstandard frame, matching the
@@ -39,11 +44,11 @@ def write_log(session_dir: Path, records: list, compressed: bool = True) -> Path
     body = "\n".join(json.dumps(record) for record in records) + "\n"
 
     if not compressed:
-        path = session_dir / "session.jsonl"
+        path = session_dir / basename
         path.write_text(body, encoding="utf-8")
         return path
 
-    path = session_dir / "session.jsonl.zstd"
+    path = session_dir / f"{basename}.zstd"
     frames = b"".join(
         zstd.compress((json.dumps(record) + "\n").encode("utf-8")) for record in records
     )
@@ -57,6 +62,14 @@ def sessions_root(tmp_path: Path) -> Path:
     root = tmp_path / "dsh" / "sessions"
     root.mkdir(parents=True)
     return root
+
+
+@pytest.fixture(autouse=True)
+def isolated_title_index(tmp_path: Path, monkeypatch) -> Path:
+    """Keep every test title cache inside the test's temporary directory."""
+    path = tmp_path / "session_title_index.json"
+    monkeypatch.setenv("DEEPSEEK_SESSIONS_TITLE_INDEX_PATH", str(path))
+    return path
 
 
 # `projectKey("/work/demo")` -> "--work-demo--"

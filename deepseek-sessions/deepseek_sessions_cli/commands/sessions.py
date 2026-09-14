@@ -8,10 +8,16 @@ COMMAND_CREDENTIALS = {
 from typing import List, Optional
 
 import typer
-from cli_tools_shared.filters import apply_filters
+from cli_tools_shared.filters import (
+    apply_filters,
+    parse_filter_part,
+    split_filter_parts,
+    validate_filters,
+)
 from cli_tools_shared.output import command, handle_error, print_json, print_table
 
 from ..client import ClientError, get_client
+from ..models import SessionSummary
 from ..parsers import (
     extract_user_prompts,
     format_local_time,
@@ -46,6 +52,22 @@ EXTRA = [
     ("reasoning", "Reasoning"),
     ("has_errors", "Errors"),
 ]
+
+
+def _session_filters_can_match(filters: List[str]) -> bool:
+    """Return whether any filter group can match a SessionSummary row."""
+    available = set(SessionSummary.model_fields)
+    for filter_string in filters:
+        group_can_match = True
+        for raw_part in split_filter_parts(filter_string):
+            field, operator, _ = parse_filter_part(raw_part)
+            # A missing field is null; every other operator cannot match it.
+            if field not in available and operator != "null":
+                group_can_match = False
+                break
+        if group_can_match:
+            return True
+    return False
 
 
 def _render_session_table(items: List[dict], wide: bool) -> None:
@@ -116,21 +138,23 @@ def list_sessions(
 
     try:
         client = get_client()
-        sessions = client.list_sessions(
-            project=project,
-            limit=fetch_limit(limit, filter),
-            since=since,
-            date_bounds=date_bounds,
-            min_tool_calls=min_tool_calls,
-            include_subagents=subagents,
-        )
+        if filter:
+            validate_filters(filter)
+        if filter and not _session_filters_can_match(filter):
+            sessions = []
+        else:
+            sessions = client.list_sessions(
+                project=project,
+                limit=fetch_limit(limit, filter),
+                since=since,
+                date_bounds=date_bounds,
+                min_tool_calls=min_tool_calls,
+                include_subagents=subagents,
+            )
 
         items = to_items(sessions)
         if filter:
-            items = items
-        if filter:
             items = apply_filters(items, filter)
-        items = select_properties(items, None)
 
         if include_prompts and (first_n > 0 or last_n > 0):
             for item in items:
@@ -146,9 +170,6 @@ def list_sessions(
                     )
                 )
 
-        items = items
-        if None:
-            items = apply_filters(items, None)
         items = select_properties(items[:limit], properties)
 
         if table:
@@ -223,9 +244,12 @@ def search_sessions(
     properties: Optional[str] = typer.Option(None, "--properties", help="Comma-separated fields to include"),
 ):
     """
-    Search for sessions whose transcript contains a query string.
+    Search session titles first, then full transcripts when no title matches.
 
-    Returns session summaries. Use `search run` for matching snippets.
+    A title match returns the matching session summaries directly, so a known
+    title does not require a full transcript scan. Queries that do not match a
+    title fall back to the complete transcript search. Use `search run` for
+    matching snippets.
 
     Example:
         deepseek-sessions sessions search "legoscout"
@@ -233,7 +257,11 @@ def search_sessions(
     """
     try:
         sessions = get_client().search_sessions(
-            query=query, project=project, limit=fetch_limit(limit, filter), since=since
+            query=query,
+            project=project,
+            limit=fetch_limit(limit, filter),
+            since=since,
+            title_fast_path=not bool(filter),
         )
         items = to_items(sessions)
         if filter:

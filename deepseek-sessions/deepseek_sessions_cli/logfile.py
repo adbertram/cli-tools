@@ -37,8 +37,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-LOG_BASENAME = "session.jsonl"
+LOG_BASENAMES = (
+    "session.v3.jsonl",
+    "session.jsonl",
+)
 ZSTD_SUFFIX = ".zstd"
+READ_CHUNK_BYTES = 1024 * 1024
 
 
 class SessionLogError(Exception):
@@ -67,48 +71,49 @@ class SessionLog:
 def find_log_path(session_dir: Path) -> Optional[Path]:
     """Return the session log inside a session directory, or None.
 
-    Prefers the Zstandard artifact; falls back to the plaintext artifact only
-    because both are valid dsh encodings, never to mask a missing file.
+    Prefers the current v3 Zstandard artifact, then the legacy Zstandard
+    artifact, then the corresponding plaintext encodings. Both layouts are
+    valid dsh encodings; the fallback never masks a missing file.
     """
-    compressed = session_dir / f"{LOG_BASENAME}{ZSTD_SUFFIX}"
-    if compressed.is_file():
-        return compressed
-    plain = session_dir / LOG_BASENAME
-    if plain.is_file():
-        return plain
+    for basename in LOG_BASENAMES:
+        compressed = session_dir / f"{basename}{ZSTD_SUFFIX}"
+        if compressed.is_file():
+            return compressed
+    for basename in LOG_BASENAMES:
+        plain = session_dir / basename
+        if plain.is_file():
+            return plain
     return None
+
+
+def _open_log_stream(path: Path):
+    """Open a compressed or plaintext log as a binary stream."""
+    if path.suffix == ZSTD_SUFFIX:
+        return zstd.open(path, "rb")
+    return path.open("rb")
 
 
 def _read_text(path: Path) -> tuple[str, bool]:
     """Return the log's decoded text and whether a partial tail was dropped.
 
-    Decoding proceeds one frame at a time rather than through a whole-stream
-    reader. A whole-stream read raises on the incomplete final frame *before*
-    handing back the frames it already decoded, which would discard an entire
-    truncated log. Per-frame decoding keeps every complete frame and drops only
-    the unfinished one.
+    `read1()` returns decoded bytes already available before a damaged tail
+    raises. That keeps every complete frame and drops only the unfinished one,
+    unlike a single `read()` that can raise before returning earlier bytes.
     """
     if path.suffix != ZSTD_SUFFIX:
         return path.read_text(encoding="utf-8", errors="replace"), False
 
-    raw = path.read_bytes()
     parts: List[bytes] = []
     truncated = False
-    remaining = raw
-
-    while remaining:
-        decompressor = zstd.ZstdDecompressor()
-        try:
-            parts.append(decompressor.decompress(remaining))
-        except zstd.ZstdError:
-            # The tail is not a decodable frame at all.
-            truncated = True
-            break
-        if not decompressor.eof:
-            # Input ended inside this frame: it was still being written.
-            truncated = True
-            break
-        remaining = decompressor.unused_data
+    try:
+        with _open_log_stream(path) as stream:
+            read = getattr(stream, "read1", stream.read)
+            while chunk := read(READ_CHUNK_BYTES):
+                parts.append(chunk)
+    except (EOFError, zstd.ZstdError):
+        # A final frame was still being written. Keep every complete line from
+        # the frames that decoded successfully.
+        truncated = True
 
     text = b"".join(parts).decode("utf-8", errors="replace")
     if truncated:
@@ -149,19 +154,48 @@ def load_log_header(path: Path) -> Dict[str, Any]:
     transcript. Reading one line avoids decoding and parsing every event in
     every log just to render the project list.
     """
-    if path.suffix == ZSTD_SUFFIX:
-        try:
-            decompressor = zstd.ZstdDecompressor()
-            first_frame = decompressor.decompress(path.read_bytes())
-            line = first_frame.decode("utf-8", errors="replace").splitlines()[0]
-        except (OSError, zstd.ZstdError) as exc:
-            raise SessionLogError(f"session log header cannot be decoded: {path}") from exc
-        except IndexError as exc:
-            raise SessionLogError(f"empty session log: {path}") from exc
-    else:
-        with path.open(encoding="utf-8", errors="replace") as stream:
-            line = stream.readline()
+    try:
+        with _open_log_stream(path) as stream:
+            raw_line = stream.readline()
+    except (OSError, EOFError, zstd.ZstdError) as exc:
+        raise SessionLogError(f"session log header cannot be decoded: {path}") from exc
+
+    if not raw_line:
+        raise SessionLogError(f"empty session log: {path}")
+    line = raw_line.decode("utf-8", errors="replace")
     return _parse_header(line, path)
+
+
+def load_log_title(path: Path) -> Optional[str]:
+    """Read only the final session-title event from a log.
+
+    Discovery can resolve a title without materializing every message, tool
+    result, and usage record. A truncated tail is ignored because the latest
+    complete title event is still authoritative.
+    """
+    title: Optional[str] = None
+    try:
+        with _open_log_stream(path) as stream:
+            header_line = stream.readline()
+            if not header_line:
+                raise SessionLogError(f"empty session log: {path}")
+            _parse_header(header_line.decode("utf-8", errors="replace"), path)
+
+            for raw_line in stream:
+                try:
+                    record = json.loads(raw_line.decode("utf-8", errors="replace"))
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(record, dict):
+                    continue
+                if record.get("type") != "session/title":
+                    continue
+                data = record.get("data") or {}
+                if isinstance(data, dict):
+                    title = data.get("title")
+    except (EOFError, zstd.ZstdError):
+        pass
+    return title
 
 
 def load_log(path: Path) -> SessionLog:

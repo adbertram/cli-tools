@@ -6,6 +6,7 @@ from typer.testing import CliRunner
 
 from deepseek_sessions_cli import client as client_module
 from deepseek_sessions_cli import config as config_module
+from deepseek_sessions_cli.commands import sessions as sessions_commands
 from deepseek_sessions_cli.main import app
 
 runner = CliRunner()
@@ -99,6 +100,29 @@ def test_filter_narrows_rows(cli):
     )
     assert payload
     assert all(row["origin"] == "subagent" for row in payload)
+
+
+def test_impossible_missing_field_filter_skips_session_scan(cli, monkeypatch):
+    class NoScanClient:
+        def list_sessions(self, **_kwargs):
+            raise AssertionError("session scan ran")
+
+    monkeypatch.setattr(sessions_commands, "get_client", lambda: NoScanClient())
+
+    payload = json.loads(
+        invoke(
+            [
+                "sessions",
+                "list",
+                "--limit",
+                "5",
+                "--filter",
+                "name:eq:__zzz_nonexistent_xyzzy__",
+            ]
+        ).output
+    )
+
+    assert payload == []
 
 
 def test_limit_caps_rows(cli):

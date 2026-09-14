@@ -34,6 +34,7 @@ Non-secret settings live in `~/.local/share/cli-tools/deepseek-sessions/.env`.
 | `DSH_HOME` | The harness's own home override, honored second | unset |
 | `DEEPSEEK_SESSIONS_CLI_COMMAND` | Name of the `dsh` executable | `dsh` |
 | `DEEPSEEK_SESSIONS_CLI_PATH` | Full path to the `dsh` executable | unset |
+| `DEEPSEEK_SESSIONS_TITLE_INDEX_PATH` | Override the durable session-title index path | CLI profile directory |
 
 Home resolution follows the harness: `DEEPSEEK_SESSIONS_DSH_HOME`, then `DSH_HOME`, then `~/.dsh`. A blank `DSH_HOME` is treated as unset.
 
@@ -51,7 +52,7 @@ Understanding the layout explains most of the command surface.
 
 - **Project directory name is lossy.** `projectKey(cwd)` collapses `/`, `\`, and `:` to `-`, so it cannot be reversed. Every real path in this CLI's output comes from the `cwd` field in the log header instead.
 - **Session id is the directory name.** `session-<uuid>` is a session you started; a bare `<uuid>` is a subagent session spawned by another one.
-- **A log is an append-only JSONL event stream.** The first line is the session header; every later line is one event. Both `session.jsonl.zstd` (concatenated Zstandard frames) and plaintext `session.jsonl` are read.
+- **A log is an append-only JSONL event stream.** The first line is the session header; every later line is one event. Current `session.v3.jsonl.zstd` logs, legacy `session.jsonl.zstd` logs, and their plaintext equivalents are read.
 - **A truncated log is expected, not corrupt.** `dsh` appends whole frames, so a process killed mid-append leaves a partial one. This CLI drops the unfinished frame, keeps everything before it, and sets `truncated: true` on the session so a clipped log is never mistaken for a complete one.
 - **Subagents are separate sessions.** The parent logs a `subagent` tool call whose result reads `started subagent <child id>`; the child's header carries `origin: subagent`, `parentSession`, and `delegationDepth`.
 - **There is no `/clear`.** The equivalent boundary is context compaction, so a "conversation" here is the run of turns between compactions. A session that was never compacted has exactly one.
@@ -112,6 +113,11 @@ deepseek-sessions sessions get session-53a213f2-c5ac-4950-a2c7-8011f2281e55 --ta
 deepseek-sessions sessions get "Fix Lego deal run issues"
 deepseek-sessions sessions search "timeout" --since 7d --table
 ```
+
+Session-name resolution uses a durable title index under the CLI profile
+directory. The index reads only session title events for new or changed logs.
+`sessions search` checks that title index first; if no title matches, it falls
+back to a complete transcript scan.
 
 `--date`, `--date-range`, `--date-alias`, and `--since` are mutually exclusive. `--date-alias` accepts `today`, `yesterday`, `this_week`, `last_week` (ISO weeks, Monday-Sunday).
 

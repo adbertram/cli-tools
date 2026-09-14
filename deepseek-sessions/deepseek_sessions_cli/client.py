@@ -4,17 +4,17 @@ Layout this client walks:
 
     <dsh home>/sessions/
       --Users-adam-Dropbox-GitRepos-Agents-LegoScout--/   project key
-        session-<uuid>/session.jsonl.zstd                 a session the user drove
-        <uuid>/session.jsonl.zstd                         a spawned subagent session
+        session-<uuid>/session.v3.jsonl.zstd              a session the user drove
+        <uuid>/session.v3.jsonl.zstd                      a spawned subagent session
       _no-cwd/                                            sessions with no cwd
 
 The project directory name is a lossy encoding of the working directory, so the
 real path always comes from each log's header `cwd` field, never from decoding
 the directory name.
 """
+import json
 import re
 from datetime import datetime, timezone
-from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -27,6 +27,7 @@ from .logfile import (
     find_log_path,
     load_log,
     load_log_header,
+    load_log_title,
     read_log_text,
 )
 from .models import (
@@ -80,6 +81,7 @@ SESSION_ID_RE = re.compile(
     r"^(session-)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
     re.IGNORECASE,
 )
+TITLE_INDEX_VERSION = 1
 
 
 class ClientError(Exception):
@@ -260,63 +262,226 @@ class DeepSeekSessionsClient:
 
     # ==================== Sessions ====================
 
-    def resolve_session_id(self, identifier: str, project: Optional[str] = None) -> str:
-        """Resolve a session id or title to a session id.
+    def _load_title_index(self) -> Dict[str, Dict[str, Any]]:
+        """Read the durable title index, returning an empty map when unusable."""
+        path = self.config.title_index_path
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        if not isinstance(payload, dict):
+            return {}
+        if payload.get("version") != TITLE_INDEX_VERSION:
+            return {}
+        entries = payload.get("sessions")
+        return entries if isinstance(entries, dict) else {}
 
-        A `session-<uuid>` or bare `<uuid>` value is returned unchanged.
-        Anything else is matched case-insensitively against session titles,
-        scoped to the project when one is given. A name that matches more than
-        one session raises rather than silently picking one.
+    def _save_title_index(self, entries: Dict[str, Dict[str, Any]]) -> None:
+        """Persist the title index atomically under the CLI profile directory."""
+        path = self.config.title_index_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_name(f"{path.name}.tmp")
+        temporary.write_text(
+            json.dumps(
+                {"version": TITLE_INDEX_VERSION, "sessions": entries},
+                indent=2,
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
+        temporary.replace(path)
+
+    def _projection_titles(
+        self,
+    ) -> Tuple[Dict[str, Dict[str, Optional[str]]], Optional[int]]:
+        """Read dsh's durable title projection without requiring an up-to-date file."""
+        path = self.dsh_home / "storages" / "session_projcache.json"
+        try:
+            projection_mtime_ns = path.stat().st_mtime_ns
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}, None
+
+        tables = payload.get("tables") if isinstance(payload, dict) else None
+        sessions = tables.get("sessions") if isinstance(tables, dict) else None
+        if not isinstance(sessions, dict):
+            return {}, projection_mtime_ns
+
+        titles: Dict[str, Dict[str, Optional[str]]] = {}
+        for session_id, record in sessions.items():
+            if not isinstance(record, dict):
+                continue
+            rows = record.get("rows")
+            if not isinstance(rows, dict):
+                continue
+            title_row = rows.get("title")
+            title = title_row.get("val") if isinstance(title_row, dict) else None
+            identity = record.get("identity")
+            cwd = identity.get("cwd") if isinstance(identity, dict) else None
+            if isinstance(title, str):
+                titles[session_id] = {
+                    "title": title,
+                    "cwd": cwd if isinstance(cwd, str) else None,
+                }
+        return titles, projection_mtime_ns
+
+    def _refresh_title_index(self) -> List[Dict[str, Any]]:
+        """Refresh changed title entries using projection data or title-only reads."""
+        existing = self._load_title_index()
+        projection, projection_mtime_ns = self._projection_titles()
+        refreshed: Dict[str, Dict[str, Any]] = {}
+        changed = False
+
+        for project_dir in self._project_dirs():
+            for session_dir in self._session_dirs(project_dir):
+                log_path = find_log_path(session_dir)
+                if log_path is None:
+                    continue
+                try:
+                    stat = log_path.stat()
+                except OSError:
+                    continue
+
+                session_id = session_dir.name
+                prior = existing.get(session_id)
+                if (
+                    isinstance(prior, dict)
+                    and prior.get("log_path") == str(log_path)
+                    and prior.get("size") == stat.st_size
+                    and prior.get("mtime_ns") == stat.st_mtime_ns
+                ):
+                    refreshed[session_id] = prior
+                    continue
+
+                try:
+                    header = load_log_header(log_path)
+                except SessionLogError as exc:
+                    print_warning(f"skipping unreadable session log: {exc}")
+                    continue
+
+                projected = (
+                    projection.get(session_id)
+                    if projection_mtime_ns is not None
+                    and projection_mtime_ns >= stat.st_mtime_ns
+                    else None
+                )
+                if projected is not None:
+                    title = projected.get("title")
+                else:
+                    title = load_log_title(log_path)
+
+                entry = {
+                    "session_id": session_id,
+                    "title": title,
+                    "project_dir": project_dir.name,
+                    "cwd": header.get("cwd") or "",
+                    "log_path": str(log_path),
+                    "size": stat.st_size,
+                    "mtime_ns": stat.st_mtime_ns,
+                }
+                refreshed[session_id] = entry
+                if prior != entry:
+                    changed = True
+
+        if not changed and set(existing) != set(refreshed):
+            changed = True
+        if changed:
+            self._save_title_index(refreshed)
+        return list(refreshed.values())
+
+    def _title_matches(
+        self,
+        query: str,
+        *,
+        exact: bool,
+        project_dir: Optional[Path] = None,
+    ) -> List[Dict[str, Any]]:
+        wanted = query.strip().casefold()
+        if not wanted:
+            return []
+
+        matches = []
+        for entry in self._refresh_title_index():
+            title = entry.get("title")
+            if not isinstance(title, str):
+                continue
+            normalized = title.strip().casefold()
+            matched = normalized == wanted if exact else wanted in normalized
+            if matched:
+                matches.append(entry)
+
+        if project_dir is not None:
+            matches = [
+                entry
+                for entry in matches
+                if entry.get("project_dir") == project_dir.name
+            ]
+        matches.sort(key=lambda entry: entry.get("mtime_ns") or 0, reverse=True)
+        return matches
+
+    @staticmethod
+    def _title_match_project(entry: Dict[str, Any]) -> str:
+        cwd = entry.get("cwd")
+        if isinstance(cwd, str) and cwd:
+            return project_name_from_cwd(cwd)
+        return str(entry.get("project_dir") or "")
+
+    @staticmethod
+    def _title_match_activity(entry: Dict[str, Any]) -> str:
+        mtime_ns = entry.get("mtime_ns") or 0
+        return datetime.fromtimestamp(
+            mtime_ns / 1_000_000_000,
+            tz=timezone.utc,
+        ).isoformat().replace("+00:00", "Z")
+
+    def resolve_session_id(self, identifier: str, project: Optional[str] = None) -> str:
+        """Resolve a session id or exact title to a session id.
+
+        Titles resolve through a durable title index that reads only title
+        events for changed logs. Full transcripts are not loaded here.
         """
         if SESSION_ID_RE.match(identifier):
             return identifier
 
-        wanted = identifier.strip().lower()
+        project_dir = self._resolve_project_dir(project) if project else None
+        matches = self._title_matches(identifier, exact=True)
+        if project_dir is not None:
+            scoped = [
+                entry
+                for entry in matches
+                if entry.get("project_dir") == project_dir.name
+            ]
+        else:
+            scoped = matches
 
-        def scan(dirs: List[Path]) -> List[Tuple[str, str, str]]:
-            found = []
-            for project_dir in dirs:
-                for log in self._iter_logs(project_dir):
-                    summary = parse_session_summary(
-                        log, self._project_name(project_dir, log)
-                    )
-                    title = summary.custom_title
-                    if title and title.strip().lower() == wanted:
-                        found.append(
-                            (summary.id, summary.project, summary.last_activity)
-                        )
-            return found
-
-        scoped = [self._resolve_project_dir(project)] if project else self._project_dirs()
-        matches = scan(scoped)
-
-        if not matches:
-            if project:
-                elsewhere = scan(self._project_dirs())
-                if elsewhere:
-                    found_in = ", ".join(sorted({row[1] for row in elsewhere}))
-                    raise ClientError(
-                        f'Session "{identifier}" not found in project "{project}". '
-                        f"Found in: {found_in}. "
-                        "Omit --project to auto-resolve, or pass the correct project."
-                    )
+        if not scoped:
+            if project and matches:
+                found_in = ", ".join(
+                    sorted({self._title_match_project(entry) for entry in matches})
+                )
+                raise ClientError(
+                    f'Session "{identifier}" not found in project "{project}". '
+                    f"Found in: {found_in}. "
+                    "Omit --project to auto-resolve, or pass the correct project."
+                )
             raise ClientError(
                 f'No session named "{identifier}". '
                 "Run 'deepseek-sessions sessions list' to see names, "
                 "or pass a session ID."
             )
 
-        if len(matches) > 1:
-            matches.sort(key=lambda row: row[2] or "", reverse=True)
-            lines = [f'{len(matches)} sessions match "{identifier}":']
-            for session_id, project_name, last_activity in matches:
+        if len(scoped) > 1:
+            lines = [f'{len(scoped)} sessions match "{identifier}":']
+            for entry in scoped:
                 lines.append(
-                    f"  {session_id}  {project_name}   {format_local_time(last_activity)}"
+                    f"  {entry['session_id']}  "
+                    f"{self._title_match_project(entry)}   "
+                    f"{format_local_time(self._title_match_activity(entry))}"
                 )
             lines.append("Re-run with a session ID.")
             raise ClientError("\n".join(lines))
 
-        return matches[0][0]
+        return scoped[0]["session_id"]
 
     def _find_session_dir(self, session_id: str) -> Tuple[Path, Path]:
         """Return (project_dir, session_dir) for a session id."""
@@ -370,6 +535,45 @@ class DeepSeekSessionsClient:
 
         return summaries
 
+    def _list_sessions_bounded(
+        self,
+        project_dirs: List[Path],
+        limit: int,
+        include_subagents: bool,
+    ) -> List[SessionSummary]:
+        """Summarize only enough newest candidates to satisfy an unfiltered limit."""
+        candidates: List[Tuple[int, Path, Path, Dict[str, Any]]] = []
+        for project_dir in project_dirs:
+            for session_dir in self._session_dirs(project_dir):
+                log_path = find_log_path(session_dir)
+                if log_path is None:
+                    continue
+                try:
+                    header = load_log_header(log_path)
+                    mtime_ns = log_path.stat().st_mtime_ns
+                except (OSError, SessionLogError) as exc:
+                    print_warning(f"skipping unreadable session log: {exc}")
+                    continue
+                if not include_subagents and header.get("origin") == "subagent":
+                    continue
+                candidates.append((mtime_ns, project_dir, session_dir, header))
+
+        candidates.sort(key=lambda candidate: candidate[0], reverse=True)
+        summaries: List[SessionSummary] = []
+        for _, project_dir, session_dir, header in candidates:
+            log = self._load(session_dir)
+            if log is None:
+                continue
+            project_name = project_name_from_cwd(header.get("cwd") or "")
+            summaries.append(
+                parse_session_summary(log, project_name or project_dir.name)
+            )
+            if len(summaries) >= limit:
+                break
+
+        summaries.sort(key=lambda summary: summary.last_activity or "", reverse=True)
+        return summaries[:limit]
+
     def list_sessions(
         self,
         project: Optional[str] = None,
@@ -383,6 +587,19 @@ class DeepSeekSessionsClient:
         project_dirs = (
             [self._resolve_project_dir(project)] if project else self._project_dirs()
         )
+
+        if (
+            limit > 0
+            and limit < 1_000_000
+            and since is None
+            and date_bounds is None
+            and min_tool_calls is None
+        ):
+            return self._list_sessions_bounded(
+                project_dirs,
+                limit=limit,
+                include_subagents=include_subagents,
+            )
 
         merged: List[SessionSummary] = []
         for project_dir in project_dirs:
@@ -418,25 +635,66 @@ class DeepSeekSessionsClient:
 
         return session
 
+    def _summaries_for_session_ids(
+        self,
+        session_ids: List[str],
+        since: Optional[str] = None,
+    ) -> List[SessionSummary]:
+        """Load summaries for matched session ids only, newest first."""
+        summaries: List[SessionSummary] = []
+        for session_id in session_ids:
+            project_dir, session_dir = self._find_session_dir(session_id)
+            log = self._load(session_dir)
+            if log is None:
+                continue
+            summaries.append(
+                parse_session_summary(log, self._project_name(project_dir, log))
+            )
+
+        if since:
+            cutoff = parse_since(since)
+            summaries = [
+                summary
+                for summary in summaries
+                if is_after_cutoff(summary.last_activity, cutoff)
+            ]
+        summaries.sort(key=lambda summary: summary.last_activity or "", reverse=True)
+        return summaries
+
     def search_sessions(
         self,
         query: str,
         project: Optional[str] = None,
         limit: int = 100,
         since: Optional[str] = None,
+        title_fast_path: bool = True,
     ) -> List[SessionSummary]:
         """Return session summaries whose transcript contains a query string."""
-        matched_ids = {
-            result.session_id
-            for result in self.search_all(
-                query=query, project=project, limit=100000, since=since, max_matches_per_session=1
+        project_dir = self._resolve_project_dir(project) if project else None
+        if title_fast_path:
+            title_matches = self._title_matches(
+                query,
+                exact=False,
+                project_dir=project_dir,
             )
-        }
-        return [
-            summary
-            for summary in self.list_sessions(project=project, limit=100000, since=since)
-            if summary.id in matched_ids
-        ][:limit]
+            title_summaries = self._summaries_for_session_ids(
+                [entry["session_id"] for entry in title_matches],
+                since=since,
+            )
+            if title_summaries:
+                return title_summaries[:limit]
+
+        matches = self.search_all(
+            query=query,
+            project=project,
+            limit=limit,
+            since=since,
+            max_matches_per_session=1,
+        )
+        return self._summaries_for_session_ids(
+            [result.session_id for result in matches],
+            since=since,
+        )[:limit]
 
     def search_all(
         self,
