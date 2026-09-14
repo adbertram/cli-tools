@@ -1,7 +1,7 @@
 {
   "tool": "podio",
   "description": "CLI interface for Podio API - Manage apps, items, tasks, and more",
-  "discovered_at": "2026-09-14T17:29:16Z",
+  "discovered_at": "2026-09-14T18:21:07Z",
   "total_commands": 94,
   "global_options": [
     {
@@ -2358,6 +2358,7 @@
           "help": "List items in a Podio application with optional filtering.",
           "examples": [
             "podio item list 12345",
+            "podio item list 12345 --filter 'title:contains:report'",
             "podio item list 12345 --filter '{\"status\": \"active\"}'",
             "podio item list 12345 --limit 50 --offset 0",
             "podio item list 12345 --sort-by \"created_on\" --desc",
@@ -3387,6 +3388,44 @@
             }
           }
         },
+        "create": {
+          "help": "Create a new webform for an application. The JSON file must contain an object with settings, domains, fields, and attachments values accepted by the Podio API.",
+          "examples": [
+            "podio webform create 30831886 --json-file webform.json",
+            "podio webform create 30831886 -f webform.json --table"
+          ],
+          "arguments": [
+            {
+              "name": "app_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Application ID to create the webform in"
+            }
+          ],
+          "options": [
+            {
+              "name": "--json-file",
+              "type": "PATH",
+              "required": true,
+              "help": "Path to JSON file with the complete webform request body",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "field": {
           "help": "Manage webform fields",
           "usage_instructions": "Use to get field details for a webform.",
@@ -3687,44 +3726,6 @@
               "required": false,
               "help": "File(s) to attach to the submission (can be used multiple times)",
               "short": "-a"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Output as formatted table",
-              "short": "-t",
-              "takes_value": false
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ]
-        },
-        "create": {
-          "help": "Create a new webform for an application. The JSON file must contain an object with settings, domains, fields, and attachments values accepted by the Podio API.",
-          "examples": [
-            "podio webform create 30831886 --json-file webform.json",
-            "podio webform create 30831886 -f webform.json --table"
-          ],
-          "arguments": [
-            {
-              "name": "app_id",
-              "type": "INTEGER",
-              "required": true,
-              "help": "Application ID to create the webform in"
-            }
-          ],
-          "options": [
-            {
-              "name": "--json-file",
-              "type": "PATH",
-              "required": true,
-              "help": "Path to JSON file with the complete webform request body",
-              "short": "-f"
             },
             {
               "name": "--table",
