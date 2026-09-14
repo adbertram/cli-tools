@@ -294,42 +294,42 @@ podio app field delete <app_id> <field_id>
 
 **Examples:**
 ```bash
-# Get details of app 30529466
-podio app get 30529466
+# Get details of app 30831884
+podio app get 30831884
 
 # Get only field schema for an app
-podio app get 30529466 --fields
-podio app get 30529466 --fields
+podio app get 30831884 --fields
+podio app get 30831884 --fields
 
-# List all apps in space 10479826
-podio app list --space-id 10479826
-podio app list -s 10479826  # Short form
+# List all apps in space 10572537
+podio app list --space-id 10572537
+podio app list -s 10572537  # Short form
 
 # List all apps in default workspace (uses PODIO_WORKSPACE_ID)
 podio app list
 
 # Get first 100 items from an app
-podio app items 30529466 --limit 100
+podio app items 30831884 --limit 100
 
 # Export app to Excel file
-podio app export 30529466
-podio app export 30529466 --output my_export.xlsx
-podio app export 30529466 --format xls --limit 1000
+podio app export 30831884
+podio app export 30831884 --output my_export.xlsx
+podio app export 30831884 --format xls --limit 1000
 
 # List all fields in an app
-podio app field list 30529466
+podio app field list 30831884
 
 # Get a specific field
-podio app field get 30529466 274720804
+podio app field get 30831884 278028139
 
 # Add a new field to an app
-podio app field add 30529466 --json-file new_field.json
+podio app field add 30831884 --json-file new_field.json
 
 # Delete a field
-podio app field delete 30529466 274720804
+podio app field delete 30831884 278028139
 
 # Update a field (e.g., add category option)
-podio app field update 30529466 274720804 --json-file updated_field.json
+podio app field update 30831884 278028139 --json-file updated_field.json
 ```
 
 **Field Update Data Format:**
@@ -392,16 +392,16 @@ podio item get 12345 --basic
 podio item get --external-id my-custom-id --app-id 30543397
 
 # List active items
-podio item list 30529466 --filter '{"status": "active"}' --limit 50
+podio item list 30831884 --filter '{"status": "active"}' --limit 50
 
 # List items with specific properties
-podio item list 30529466 --properties "item_id,title,status"
+podio item list 30831884 --properties "item_id,title,status"
 
 # Create item from JSON file
-podio item create 30529466 --json-file new_article.json
+podio item create 30831884 --json-file new_article.json
 
 # Create item from stdin (pipe)
-echo '{"fields": [{"external_id": "title", "values": [{"value": "Test"}]}]}' | podio item create 30529466
+echo '{"fields": [{"external_id": "title", "values": [{"value": "Test"}]}]}' | podio item create 30831884
 
 # Update item silently (no notifications)
 podio item update 12345 --json-file update.json --silent
@@ -714,13 +714,13 @@ podio webhook update-field <hook_id> <url>
 **Examples:**
 ```bash
 # Create a webhook for an app
-podio webhook create app 30529466 https://myserver.com/webhook
+podio webhook create app 30831884 https://myserver.com/webhook
 
 # List all webhooks on an item
 podio webhook list item 12345
 
 # Create a field-level webhook
-podio webhook create-field 30529466 274720804 https://myserver.com/field-webhook
+podio webhook create-field 30831884 278028139 https://myserver.com/field-webhook
 
 # Request webhook verification
 podio webhook verify 98765
@@ -822,6 +822,9 @@ podio conversation mark-read 12345678
 Manage Podio webforms (public forms for item creation).
 
 ```bash
+# Create a webform for an app
+podio webform create <app_id> --json-file webform.json
+
 # List all webforms for an app
 podio webform list <app_id>
 
@@ -834,19 +837,35 @@ podio webform submit <webform_url> --json-file data.json
 
 **Examples:**
 ```bash
+# Create a new webform from a JSON file
+podio webform create 30831886 -f webform.json
+
 # List webforms for an app
-podio webform list 30529466
-podio webform list 30529466
+podio webform list 30831886
+podio webform list 30831886
 
 # Get webform details
-podio webform get 2581518
-podio webform get 2581518
+podio webform get 2624333
+podio webform get 2624333
 
 # Submit to a webform using the public URL
-echo '{"title": "My Title", "requested-description": "Description text"}' | podio webform submit "https://podio.com/webforms/30560419/2584779"
+echo '{"content-item": 3360281382}' | podio webform submit "https://podio.com/webforms/30831886/2624333"
 
 # Submit from a JSON file
-podio webform submit "https://podio.com/webforms/30560419/2584779" -f data.json
+podio webform submit "https://podio.com/webforms/30831886/2624333" -f data.json
+```
+
+**Create Request Format:**
+
+The JSON file is the complete request body sent to the Podio API:
+
+```json
+{
+  "settings": {},
+  "domains": ["example.com"],
+  "fields": [{"field_id": 12345}],
+  "attachments": false
+}
 ```
 
 **Submit Data Format:**
@@ -870,16 +889,16 @@ All commands output JSON by default, making them perfect for automation:
 
 ```bash
 # Get all apps and extract their IDs
-podio app list 10479826 | jq '.[].app_id'
+podio app list 10572537 | jq '.[].app_id'
 
 # Count items in an app
-podio item filter 30529466 | jq '.total'
+podio item filter 30831884 | jq '.total'
 
 # Get all active items
-podio item filter 30529466 --filters '{"status": "active"}' > active_items.json
+podio item filter 30831884 --filters '{"status": "active"}' > active_items.json
 
 # Process items in a loop
-for item_id in $(podio item filter 30529466 | jq -r '.items[].item_id'); do
+for item_id in $(podio item filter 30831884 | jq -r '.items[].item_id'); do
   podio item get $item_id
 done
 ```
@@ -889,7 +908,7 @@ done
 ```bash
 # Create multiple items from individual JSON files
 for file in items/*.json; do
-  podio item create 30529466 --json-file "$file"
+podio item create 30831884 --json-file "$file"
 done
 
 # Update multiple items
@@ -922,7 +941,7 @@ All commands output JSON to stdout, while status messages and errors go to stder
 
 ```bash
 # Success message goes to stderr, JSON to stdout
-podio item create 30529466 --json-file item.json
+podio item create 30831884 --json-file item.json
 # stderr: ✓ Item created successfully
 # stdout: {"item_id": 12345, ...}
 

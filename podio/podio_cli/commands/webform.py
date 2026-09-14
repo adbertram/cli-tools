@@ -4,6 +4,9 @@ COMMAND_CREDENTIALS = {
     "attachments": [
         "oauth_authorization_code"
     ],
+    "create": [
+        "oauth_authorization_code"
+    ],
     "field": [
         "oauth_authorization_code"
     ],
@@ -42,6 +45,55 @@ app.add_typer(field_app, name="field")
 # Subcommand group for attachment operations
 attachments_app = typer.Typer(help="Manage webform file attachments")
 app.add_typer(attachments_app, name="attachments")
+
+
+@app.command("create")
+@command
+def create_webform(
+    app_id: int = typer.Argument(..., help="Application ID to create the webform in"),
+    json_file: Path = typer.Option(
+        ...,
+        "--json-file",
+        "-f",
+        help="Path to JSON file with the complete webform request body",
+    ),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
+):
+    """
+    Create a new webform for an application.
+
+    The JSON file must contain an object with settings, domains, fields, and
+    attachments values accepted by the Podio API.
+
+    Examples:
+        podio webform create 30831886 --json-file webform.json
+        podio webform create 30831886 -f webform.json --table
+    """
+    try:
+        try:
+            with json_file.open(encoding="utf-8") as file:
+                webform_data = json.load(file)
+        except json.JSONDecodeError as e:
+            print_error(f"Invalid JSON in {json_file}: {e}")
+            raise typer.Exit(1)
+        except OSError as e:
+            print_error(f"Could not read {json_file}: {e}")
+            raise typer.Exit(1)
+
+        if not isinstance(webform_data, dict):
+            print_error("Webform configuration must be a JSON object")
+            raise typer.Exit(1)
+
+        client = get_client()
+        result = client.transport.POST(
+            url=f"/form/app/{app_id}/",
+            body=json.dumps(webform_data),
+            type="application/json",
+        )
+        print_output(result, table=table)
+    except TransportException as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
 
 
 @app.command("list")

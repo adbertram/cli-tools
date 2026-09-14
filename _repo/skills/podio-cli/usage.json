@@ -1,8 +1,8 @@
 {
   "tool": "podio",
   "description": "CLI interface for Podio API - Manage apps, items, tasks, and more",
-  "discovered_at": "2026-09-02T18:50:44Z",
-  "total_commands": 93,
+  "discovered_at": "2026-09-14T17:29:16Z",
+  "total_commands": 94,
   "global_options": [
     {
       "name": "--version",
@@ -3687,6 +3687,44 @@
               "required": false,
               "help": "File(s) to attach to the submission (can be used multiple times)",
               "short": "-a"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "create": {
+          "help": "Create a new webform for an application. The JSON file must contain an object with settings, domains, fields, and attachments values accepted by the Podio API.",
+          "examples": [
+            "podio webform create 30831886 --json-file webform.json",
+            "podio webform create 30831886 -f webform.json --table"
+          ],
+          "arguments": [
+            {
+              "name": "app_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Application ID to create the webform in"
+            }
+          ],
+          "options": [
+            {
+              "name": "--json-file",
+              "type": "PATH",
+              "required": true,
+              "help": "Path to JSON file with the complete webform request body",
+              "short": "-f"
             },
             {
               "name": "--table",
