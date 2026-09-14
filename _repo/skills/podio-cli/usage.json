@@ -1,7 +1,7 @@
 {
   "tool": "podio",
   "description": "CLI interface for Podio API - Manage apps, items, tasks, and more",
-  "discovered_at": "2026-09-02T18:50:44Z",
+  "discovered_at": "2026-09-14T16:59:19Z",
   "total_commands": 93,
   "global_options": [
     {
@@ -2358,6 +2358,7 @@
           "help": "List items in a Podio application with optional filtering.",
           "examples": [
             "podio item list 12345",
+            "podio item list 12345 --filter 'title:contains:report'",
             "podio item list 12345 --filter '{\"status\": \"active\"}'",
             "podio item list 12345 --limit 50 --offset 0",
             "podio item list 12345 --sort-by \"created_on\" --desc",
