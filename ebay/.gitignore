@@ -1,0 +1,23 @@
+# Written when this folder was made a git repository so agents can
+# repair it in a worktree instead of editing it live.
+.DS_Store
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+node_modules/
+agent_workspaces/
+agent_tmp_*/
+_temp/
+.fallow/
+.playwright-cli/
+logs/
+*.log
+*.sqlite
+*.sqlite3
+*.db
+.env
+.env.*
+*.pem
+*.key
