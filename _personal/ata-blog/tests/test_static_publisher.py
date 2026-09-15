@@ -55,21 +55,16 @@ PAGE_ID = "31b5d9c85b2b814298a0ea98cb7d78f4"
 PRIOR_DEPLOYMENT_ID = "11111111-1111-4111-8111-111111111111"
 PREVIEW_DEPLOYMENT_ID = "22222222-2222-4222-8222-222222222222"
 PREVIEW_DEPLOYMENT_URL = "https://22222222.example.pages.dev"
-P12_MEDIA_EDGE_CONTRACT_SHA256 = (
-    "d9aa9ce2c2de411965b587959066ec513547bc48642c5f5578c389b9325e59ef"
-)
-P05_FIXTURE = Path(
-    "/Users/adam/Dropbox/GitRepos/Agents/ATABlogger/static-site/tests/fixtures/"
-    "release-contract/valid-interface-set.json"
-)
-P05_RELEASE_CONTRACT = Path(
+# The real build's corpus-hashing contract, used only by
+# test_staged_corpus_hash_matches_release_manifest_hash_corpus to cross-check
+# Python's _static_corpus_sha256() against the actual JS hashCorpus()
+# implementation. release_manifest.mjs imports the site's shared route/feed
+# modules, so both have to be staged for the import to resolve.
+REAL_RELEASE_MANIFEST_CONTRACT = Path(
     "/Users/adam/Dropbox/GitRepos/Agents/ATABlogger/static-site/scripts/"
     "release_manifest.mjs"
 )
-# release_manifest.mjs imports the site's shared route and feed contracts, so
-# the isolated fixture tree has to stage those modules alongside it or the
-# validator cannot resolve its own imports.
-P05_RELEASE_CONTRACT_MODULES = Path(
+REAL_RELEASE_MANIFEST_CONTRACT_LIB = Path(
     "/Users/adam/Dropbox/GitRepos/Agents/ATABlogger/static-site/src/lib"
 )
 
@@ -104,14 +99,6 @@ def _preview_deployment_payload(
     return payload
 
 
-def test_static_worker_proof_pin_matches_canonical_bytes():
-    assert client_module.STATIC_WORKER_PROOF.is_file()
-    assert (
-        hashlib.sha256(client_module.STATIC_WORKER_PROOF.read_bytes()).hexdigest()
-        == client_module.STATIC_WORKER_PROOF_SHA256
-    )
-
-
 class _Config:
     def __init__(self, data_dir: Path):
         self.data_dir = data_dir
@@ -120,101 +107,11 @@ class _Config:
         return self.data_dir
 
 
-def _scanner_result(manifest, deployment, deployment_sha256):
-    release_ref = {
-        "release_id": manifest["release_id"],
-        "contract_hash": manifest["contract_hash"],
-    }
-    deployment_ref = {
-        "deployment_id": deployment["deployment_id"],
-        "deployment_sha256": deployment_sha256,
-        "worker_version": manifest["worker"]["version"],
-        "route_payload_sha256": manifest["worker"]["route_payload_sha256"],
-    }
-    section_ids = ["routes", "content-media", "vendor-publisher"]
-    sections = [
-        {
-            "schema_version": "ata-static-acceptance-section/v1",
-            "section_id": section_id,
-            "release_ref": release_ref,
-            "deployment_ref": deployment_ref,
-            "scanner_implementation_sha256": client_module.STATIC_SCANNER_SHA256,
-            "checks": [],
-            "failures": [],
-        }
-        for section_id in section_ids
-    ]
-    return {
-        "schema_version": "ata-static-scanner-result/v1",
-        "passed": True,
-        "exit_code": 0,
-        "release_ref": release_ref,
-        "deployment_ref": deployment_ref,
-        "scanner_implementation_sha256": client_module.STATIC_SCANNER_SHA256,
-        "section_ids": section_ids,
-        "sections": sections,
-    }
-
-
-def _rejected_scanner_result(manifest, deployment, deployment_sha256):
-    result = _scanner_result(manifest, deployment, deployment_sha256)
-    result["passed"] = False
-    result["exit_code"] = 1
-    result["sections"][0]["failures"] = [
-        {
-            "failure_id": "routes-http-status",
-            "check_id": "http-status",
-            "message": "expected HTTP 200, got 404",
-            "evidence_sha256": "f" * 64,
-        }
-    ]
-    return result
-
-
-def _readiness_deployment(dist: Path):
-    metadata = _preview_deployment_payload(
-        idempotency_key="b" * 64,
-        source_revision="a" * 64,
-    )
-    metadata["files"] = {
-        asset_path: f"{index:032x}"
-        for index, asset_path in enumerate(
-            client_module.STATIC_PAGES_READINESS_ASSET_PATHS,
-            start=1,
-        )
-    }
-    for asset_path, file_identifier in metadata["files"].items():
-        local_bytes = (dist / asset_path.removeprefix("/")).read_bytes()
-        assert file_identifier != hashlib.md5(
-            local_bytes,
-            usedforsecurity=False,
-        ).hexdigest()
-    return {
-        "deployment_id": PREVIEW_DEPLOYMENT_ID,
-        "deployment_url": PREVIEW_DEPLOYMENT_URL,
-        "deployment": metadata,
-        "deployment_sha256": _artifact_sha256(metadata),
-    }
-
-
-@pytest.fixture
-def readiness_preview(tmp_path, monkeypatch):
-    site = tmp_path / "static-site"
-    dist = site / "dist"
-    dist.mkdir(parents=True)
-    (dist / "release-manifest.json").write_bytes(b'{"release":"exact"}\n')
-    (dist / "index.html").write_bytes(b"<html>exact preview</html>\n")
-    monkeypatch.setattr(client_module, "STATIC_SITE_ROOT", site)
-    client = object.__new__(AtaBlogClient)
-    deployment = _readiness_deployment(dist)
-    return client, dist, deployment
-
 
 @pytest.fixture
 def publisher(tmp_path, monkeypatch):
     repository = tmp_path / "ATABlogger"
     site = repository / "static-site"
-    release = repository / "agent_workspaces" / "static-cutover-release"
     dist = site / "dist"
     dist.mkdir(parents=True)
     (dist / "index.html").write_text("accepted build")
@@ -246,212 +143,25 @@ def publisher(tmp_path, monkeypatch):
         corpus_path.parent.mkdir(parents=True, exist_ok=True)
         corpus_path.write_text(content)
 
-    scanner = repository / "scripts" / "validate-published-post.sh"
-    scanner.parent.mkdir(parents=True)
-    historical_scanner_sha = hashlib.sha256(b"historical P13 scanner\n").hexdigest()
-    scanner.write_bytes(b"current resealed scanner\n")
-    scanner_sha = hashlib.sha256(scanner.read_bytes()).hexdigest()
-    release_contract = site / "scripts" / "release_manifest.mjs"
-    release_contract.parent.mkdir(parents=True)
-    release_contract.write_bytes(P05_RELEASE_CONTRACT.read_bytes())
-    release_contract_sha = hashlib.sha256(release_contract.read_bytes()).hexdigest()
-    release_contract_lib = site / "src" / "lib"
-    release_contract_lib.mkdir(parents=True, exist_ok=True)
-    for module_path in sorted(P05_RELEASE_CONTRACT_MODULES.glob("*.js")):
-        (release_contract_lib / module_path.name).write_bytes(module_path.read_bytes())
-
-    release_fixture = site / "tests" / "fixtures" / "release-contract" / "valid-interface-set.json"
-    release_fixture.parent.mkdir(parents=True)
-    release_fixture.write_bytes(P05_FIXTURE.read_bytes())
-    release_fixture_sha = hashlib.sha256(release_fixture.read_bytes()).hexdigest()
-
-    p05_handoff = repository / "agent_workspaces" / "p05_scope_v2" / "handoff.json"
-    p05_handoff.parent.mkdir(parents=True)
-    p05_handoff_document = {
-        "package_id": "P05-SCOPE-V2",
-        "phase_id": "P05.release_interfaces.scope_amendment_v2",
-        "status": "PASS",
-        "source_hashes": {
-            "static-site/scripts/release_manifest.mjs": (
-                client_module.HISTORICAL_P05_RELEASE_MANIFEST_SHA256
-            ),
-            "static-site/tests/fixtures/release-contract/valid-interface-set.json": release_fixture_sha,
-        },
-        "release_contract_v2": {"schema_version": "ata-static-release/v2"},
-    }
-    p05_handoff.write_text(json.dumps(p05_handoff_document))
-    p05_handoff_sha = hashlib.sha256(p05_handoff.read_bytes()).hexdigest()
-
-    p13_handoff = repository / "agent_workspaces" / "p13_scope_v2" / "handoff.json"
-    p13_handoff.parent.mkdir(parents=True)
-    p13_handoff_document = {
-        "package_id": "P13-SCOPE-V2",
-        "phase_id": "P13.scanner_freeze.scope_amendment_v2",
-        "status": "PASS",
-        "inputs": {
-            "p05_scope_v2_handoff": {"sha256": p05_handoff_sha},
-        },
-        "source_hashes": {
-            "scripts/validate-published-post.sh": historical_scanner_sha,
-        },
-        "scanner_contract": {
-            "release_schema": "ata-static-release/v2",
-            "required_options": [
-                "--base-url",
-                "--media-base-url",
-                "--manifest",
-                "--publisher-journal",
-                "--scheduled-replay",
-                "--deployment-metadata",
-                "--expected-release-id",
-                "--expected-contract-hash",
-                "--expected-post-routes",
-                "--deployment-id",
-                "--deployment-sha256",
-                "--worker-version",
-                "--route-payload-sha256",
-                "--expected-scanner-sha256",
-            ],
-            "deployment_binding": {
-                "source": "saved Cloudflare Pages deployment metadata",
-                "artifact_hash": "canonical JSON SHA-256 equals --deployment-sha256",
-                "static_identity_headers_required": False,
-                "direct_media_worker_headers": [
-                    "x-ata-worker-version",
-                    "x-ata-route-payload-sha256",
-                ],
-            },
-        },
-    }
-    p13_handoff.write_text(json.dumps(p13_handoff_document))
-    p13_handoff_sha = hashlib.sha256(p13_handoff.read_bytes()).hexdigest()
-
-    fixture_set = json.loads(release_fixture.read_text())
-    manifest_body = fixture_set["release_manifest"]
-    # Preserve the historical P05 fixture bytes while adapting the disposable
-    # current release to the active-Raptive contract.
-    raptive = next(item for item in manifest_body["integrations"] if item["integration_id"] == "raptive")
-    raptive["release_disposition"] = "required"
-    raptive["check_ids"] = ["raptive-active"]
-    vendor = next(item for item in manifest_body["acceptance"]["sections"] if item["section_id"] == "vendor-publisher")
-    vendor["required_check_ids"] = [
-        "raptive-active" if item == "raptive-deferred" else item
-        for item in vendor["required_check_ids"]
-    ]
-    manifest_body.pop("release_id")
-    manifest_body.pop("contract_hash")
-    manifest_body["inputs"]["scanner_implementation_sha256"] = scanner_sha
-    contract_hash = _artifact_sha256(manifest_body)
-    schema_version = manifest_body.pop("schema_version")
-    manifest = {
-        "schema_version": schema_version,
-        "release_id": f"ata-static-{contract_hash[:24]}",
-        "contract_hash": contract_hash,
-        **manifest_body,
-    }
+    # The client's release-manifest contract is now a minimal shape check
+    # (schema_version/release_id/contract_hash) with no P05/P13 handoff, Gate
+    # A, scanner, or worker-proof binding, so the fixture manifest only needs
+    # to satisfy that shape.
     manifest_path = dist / "release-manifest.json"
-    manifest_path.write_text(json.dumps(manifest))
-
-    worker_proof = release / "media-edge" / "direct-worker-proof.json"
-    worker_proof.parent.mkdir(parents=True)
-    worker_proof_document = {
-        "artifact_kind": "static_cutover_direct_worker_proof",
-        "package_id": "P12",
-        "phase_id": "P12.direct_worker_proof",
-        "status": "PASS",
-        "completion": {"gate_c2": "GREEN", "unresolved_blocker_count": 0},
-        "dependency_bindings": {
-            "media_edge_contract": {
-                "sha256": P12_MEDIA_EDGE_CONTRACT_SHA256,
-            },
-        },
-        "worker_runtime": {
-            "direct_endpoint": "https://media-worker.example.workers.dev",
-            "deployment": {
-                "status": "ACTIVE_EXACT_VERSION",
-                "version_id": manifest["worker"]["version"],
-            },
-            "source": {
-                "local_sha256": manifest["worker"]["script_sha256"],
-                "remote_sha256": manifest["worker"]["script_sha256"],
-                "status": "EXACT_MATCH",
-            },
-        },
-        "next_owner_contract": {
-            "worker_version_id": manifest["worker"]["version"],
-            "pending_route_sha256": manifest["worker"]["route_payload_sha256"],
-        },
-        "route_safety_and_precedence": {
-            "status": "PASS_ZERO_PRODUCTION_ROUTES",
-            "target_worker_route_count": 0,
-        },
-        "verification": {
-            "direct_http": {
-                "status": "PASS",
-                "objects": [
-                    {
-                        "key": "wp-content/uploads/proof.png",
-                        "status": "PASS",
-                    },
-                ],
-            },
-        },
+    manifest = {
+        "schema_version": "ata-static-release/v2",
+        "inputs": {"corpus_sha256": "0" * 64},
     }
-    worker_proof.write_text(json.dumps(worker_proof_document))
-    worker_proof_sha = hashlib.sha256(worker_proof.read_bytes()).hexdigest()
-    manifest["inputs"]["media_edge_proof_sha256"] = worker_proof_sha
-    manifest_body = {
-        key: value
-        for key, value in manifest.items()
-        if key not in {"release_id", "contract_hash"}
-    }
-    contract_hash = _artifact_sha256(manifest_body)
+    contract_hash = _artifact_sha256(manifest)
     manifest["release_id"] = f"ata-static-{contract_hash[:24]}"
     manifest["contract_hash"] = contract_hash
     manifest_path.write_text(json.dumps(manifest))
 
-    checkpoint = release / "checkpoints" / "checkpoint-1.json"
-    checkpoint.parent.mkdir(parents=True)
-    bindings = fixture_set["bindings"]
-    checkpoint.write_text(
-        json.dumps(
-            {
-                "schema_version": 1,
-                "package_id": "P06",
-                "phase_id": "P06.checkpoint_1",
-                "checkpoint_id": "CHECKPOINT_1",
-                "status": "PASS",
-                "gate_a": {
-                    "status": "PASS",
-                    "baseline_index_sha256": bindings["baseline_index_sha256"],
-                    "baseline_oracle_sha256": bindings["baseline_oracle_sha256"],
-                    "direct_result": {
-                        "valid": True,
-                        "summary": {"pages_deployment_id": PRIOR_DEPLOYMENT_ID},
-                        "gates": {
-                            "baseline": {
-                                "status": "pass",
-                                "sha256": bindings["baseline_index_sha256"],
-                            },
-                            "redirect": {
-                                "status": "pass",
-                                "sha256": bindings["redirect_export_sha256"],
-                            },
-                            "media": {
-                                "status": "pass",
-                                "sha256": bindings["media_inventory_sha256"],
-                            },
-                            "provenance": {
-                                "status": "pass",
-                                "sha256": bindings["provenance_ledger_sha256"],
-                            },
-                        },
-                    },
-                },
-            }
-        )
-    )
-    build_token = release / "build-token.json"
+    profile_dir = tmp_path / "profile"
+    # _static_build_lock now computes the build-token path directly from
+    # _publisher_runtime_root() (profile-relative), not a fixed repo path.
+    build_token = profile_dir / "static-publisher" / "build-token.json"
+    build_token.parent.mkdir(parents=True)
     build_token.write_text(
         json.dumps(
             {
@@ -466,27 +176,7 @@ def publisher(tmp_path, monkeypatch):
 
     monkeypatch.setattr(client_module, "STATIC_REPOSITORY_ROOT", repository)
     monkeypatch.setattr(client_module, "STATIC_SITE_ROOT", site)
-    monkeypatch.setattr(client_module, "STATIC_RELEASE_ROOT", release)
     monkeypatch.setattr(client_module, "STATIC_RELEASE_MANIFEST", manifest_path)
-    monkeypatch.setattr(client_module, "STATIC_RELEASE_CONTRACT", release_contract)
-    monkeypatch.setattr(client_module, "STATIC_RELEASE_FIXTURE", release_fixture)
-    monkeypatch.setattr(client_module, "STATIC_P05_HANDOFF", p05_handoff)
-    monkeypatch.setattr(client_module, "STATIC_SCANNER", scanner)
-    monkeypatch.setattr(client_module, "STATIC_SCANNER_HANDOFF", p13_handoff)
-    monkeypatch.setattr(client_module, "STATIC_WORKER_PROOF", worker_proof)
-    monkeypatch.setattr(client_module, "STATIC_CHECKPOINT", checkpoint)
-    monkeypatch.setattr(client_module, "STATIC_BUILD_TOKEN", build_token)
-    monkeypatch.setattr(client_module, "STATIC_P05_HANDOFF_SHA256", p05_handoff_sha)
-    monkeypatch.setattr(client_module, "P11_RELEASE_MANIFEST_SHA256", release_contract_sha)
-    monkeypatch.setattr(client_module, "STATIC_RELEASE_FIXTURE_SHA256", release_fixture_sha)
-    monkeypatch.setattr(
-        client_module,
-        "HISTORICAL_P13_SCANNER_SHA256",
-        historical_scanner_sha,
-    )
-    monkeypatch.setattr(client_module, "STATIC_SCANNER_SHA256", scanner_sha)
-    monkeypatch.setattr(client_module, "STATIC_SCANNER_HANDOFF_SHA256", p13_handoff_sha)
-    monkeypatch.setattr(client_module, "STATIC_WORKER_PROOF_SHA256", worker_proof_sha)
 
     image = tmp_path / "featured.png"
     image.write_bytes(_png_bytes(FIXTURE_IMAGE_WIDTH, FIXTURE_IMAGE_HEIGHT))
@@ -501,27 +191,17 @@ def publisher(tmp_path, monkeypatch):
         "Publish Date": None,
     }
     markdown = "# Journaled Static Publisher\n\nDeterministic body.\n"
-    counters = {name: 0 for name in ("media", "build", "deploy", "scanner", "notion", "lock")}
+    counters = {name: 0 for name in ("media", "build", "deploy", "notion")}
 
     client = object.__new__(AtaBlogClient)
-    client.config = _Config(tmp_path / "profile")
+    client.config = _Config(profile_dir)
     client._RESERVATION_DIR = tmp_path / "schedule-reservations"
     # Pre-cutover slot discovery reads the live WordPress future schedule;
     # these tests pin scheduling to the empty runtime-root state instead.
     client._read_publisher_schedule_slots = lambda: []
-    client._p05_gate_a_bindings = lambda: {
-        "expectedBaselineIndexSha256": bindings["baseline_index_sha256"],
-        "expectedBaselineOracleSha256": bindings["baseline_oracle_sha256"],
-        "expectedRedirectExportSha256": bindings["redirect_export_sha256"],
-        "expectedMediaInventorySha256": bindings["media_inventory_sha256"],
-        "expectedProvenanceLedgerSha256": bindings[
-            "provenance_ledger_sha256"
-        ],
-    }
     client.get_article = lambda _page_id: dict(article)
     client.get_article_markdown = lambda _page_id: markdown
     client._resolve_featured_image = lambda _page_id, _supplied: image
-    client._probe_static_worker_endpoint = lambda *_args, **_kwargs: None
 
     def media(stage):
         counters["media"] += 1
@@ -559,15 +239,6 @@ def publisher(tmp_path, monkeypatch):
             "deployment_sha256": _artifact_sha256(metadata),
         }
 
-    def scanner_call(**kwargs):
-        counters["scanner"] += 1
-        assert kwargs["media_base_url"] == "https://media-worker.example.workers.dev"
-        deployment_metadata = json.loads(kwargs["deployment_metadata_path"].read_text())
-        assert _artifact_sha256(deployment_metadata) == kwargs["deployment_sha256"]
-        result = _scanner_result(manifest, kwargs["deployment"], kwargs["deployment_sha256"])
-        _atomic_write_json(kwargs["scanner_path"], result)
-        return result
-
     def update(_page_id, *, status, properties):
         counters["notion"] += 1
         article["Status"] = status
@@ -577,15 +248,14 @@ def publisher(tmp_path, monkeypatch):
     client._upload_static_media = media
     client._run_static_build = build
     client._deploy_static_preview = deploy
-    client._run_static_scanner = scanner_call
     client.update_article = update
     return client, article, markdown, image, manifest, counters, build_token
 
 
 def _publish(client, **kwargs):
     # Journal-mechanics tests target the static leg directly; publish_article
-    # is now the dual-publish orchestrator (static transaction + classic
-    # WordPress publish) covered by its own routing test.
+    # is a thin wrapper that parses the schedule window and delegates
+    # straight to this transaction (covered separately by its own test).
     call_kwargs = {
         "page_id": PAGE_ID,
         "status": "draft",
@@ -621,66 +291,6 @@ def _rotate_static_release(manifest, build_token):
     build_token.write_text(json.dumps(token))
 
 
-def test_current_gate_a_bindings_replace_historical_checkpoint_baseline(
-    tmp_path, monkeypatch
-):
-    historical_baseline = "1" * 64
-    current_baseline = "2" * 64
-    oracle = "3" * 64
-    current_gates = {
-        "baseline": {"status": "pass", "sha256": current_baseline},
-        "redirect": {"status": "pass", "sha256": "4" * 64},
-        "media": {"status": "pass", "sha256": "5" * 64},
-        "provenance": {"status": "pass", "sha256": "6" * 64},
-    }
-    checkpoint = tmp_path / "checkpoint-1.json"
-    checkpoint.write_text(
-        json.dumps(
-            {
-                "schema_version": 1,
-                "package_id": "P06",
-                "phase_id": "P06.checkpoint_1",
-                "checkpoint_id": "CHECKPOINT_1",
-                "status": "PASS",
-                "gate_a": {
-                    "status": "PASS",
-                    "baseline_index_sha256": historical_baseline,
-                    "baseline_oracle_sha256": oracle,
-                    "direct_result": {
-                        "valid": True,
-                        "gates": {
-                            "baseline": {
-                                "status": "pass",
-                                "sha256": historical_baseline,
-                            }
-                        },
-                    },
-                },
-            }
-        )
-    )
-    client = object.__new__(AtaBlogClient)
-
-    def run(command, **kwargs):
-        assert kwargs["label"] == "current Gate A validation"
-        assert "validateProductionGateABaseline" in command[3]
-        assert "CURRENT_BASELINE_VALIDATOR_SHA256" in command[3]
-        return SimpleNamespace(
-            stdout=json.dumps({"valid": True, "errors": [], "gates": current_gates})
-        )
-
-    monkeypatch.setattr(client_module, "STATIC_CHECKPOINT", checkpoint)
-    monkeypatch.setattr(client, "_run_checked_command", run)
-
-    assert client._p05_gate_a_bindings() == {
-        "expectedBaselineIndexSha256": current_baseline,
-        "expectedBaselineOracleSha256": client_module.STATIC_BASELINE_ORACLE_SHA256,
-        "expectedRedirectExportSha256": "4" * 64,
-        "expectedMediaInventorySha256": "5" * 64,
-        "expectedProvenanceLedgerSha256": "6" * 64,
-    }
-
-
 def test_p05_idempotency_encoding_is_exact():
     source_revision = "d" * 64
     expected = hashlib.sha256(f"{PAGE_ID}\n{source_revision}\n".encode()).hexdigest()
@@ -703,7 +313,7 @@ def test_completed_same_revision_replay_has_zero_effects_and_no_build_token(publ
         "deployments": 0,
         "notion_updates": 0,
     }
-    assert counters == {"media": 1, "build": 1, "deploy": 1, "scanner": 1, "notion": 1, "lock": 0}
+    assert counters == {"media": 1, "build": 1, "deploy": 1, "notion": 1}
 
 
 def test_first_staged_build_binds_post_stage_release_identity(publisher):
@@ -780,18 +390,6 @@ def test_first_build_binding_crash_keeps_immutable_identity(
     assert counters["build"] == 2
 
 
-def test_pages_deployment_metadata_is_saved_and_hash_bound(publisher):
-    client, *_ = publisher
-
-    result = _publish(client)
-
-    paths = client._publisher_paths(PAGE_ID, result["idempotency_key"])
-    metadata = json.loads(paths["deployment_metadata"].read_text())
-    runtime = json.loads(paths["runtime"].read_text())
-    assert metadata["id"] == PREVIEW_DEPLOYMENT_ID
-    assert runtime["deployment_sha256"] == _artifact_sha256(metadata)
-
-
 def test_active_staged_journal_resumes_with_manifest_corpus_hash(publisher):
     client, article, markdown, image, manifest, counters, _token = publisher
     revision = client._source_revision(article, markdown, image)
@@ -814,8 +412,6 @@ def test_active_staged_journal_resumes_with_manifest_corpus_hash(publisher):
         "scheduled_date": None,
         "publish_date": "2026-08-31T12:00:00+00:00",
         "release_ref": journal["release_ref"],
-        "scanner_handoff_sha256": client_module.STATIC_SCANNER_HANDOFF_SHA256,
-        "media_base_url": "https://media-worker.example.workers.dev",
         "failure_stage": None,
         "failure_message": None,
         "rollback_error": None,
@@ -880,7 +476,7 @@ def test_active_staged_journal_resumes_with_manifest_corpus_hash(publisher):
 
     assert result["journal_state"] == "completed"
     assert counters["media"] == 0
-    assert counters["build"] == counters["deploy"] == counters["scanner"] == counters["notion"] == 1
+    assert counters["build"] == counters["deploy"] == counters["notion"] == 1
 
 
 def test_staged_corpus_hash_matches_release_manifest_hash_corpus(publisher, tmp_path):
@@ -911,6 +507,12 @@ def test_staged_corpus_hash_matches_release_manifest_hash_corpus(publisher, tmp_
     )
 
     contract = client_module.STATIC_SITE_ROOT / "scripts" / "release_manifest.mjs"
+    contract.parent.mkdir(parents=True, exist_ok=True)
+    contract.write_bytes(REAL_RELEASE_MANIFEST_CONTRACT.read_bytes())
+    contract_lib = client_module.STATIC_SITE_ROOT / "src" / "lib"
+    contract_lib.mkdir(parents=True, exist_ok=True)
+    for module_path in sorted(REAL_RELEASE_MANIFEST_CONTRACT_LIB.glob("*.js")):
+        (contract_lib / module_path.name).write_bytes(module_path.read_bytes())
     # hashCorpus() is module-local; re-export it from the hermetic copy so the
     # real membership walk runs unchanged against the staged corpus.
     contract.write_bytes(contract.read_bytes() + b"\nexport { hashCorpus };\n")
@@ -926,8 +528,6 @@ def test_staged_corpus_hash_matches_release_manifest_hash_corpus(publisher, tmp_
 
 def test_explicit_schedule_slot_contention_is_atomic(publisher, monkeypatch):
     client, *_ = publisher
-    # This test exercises static reservation contention, not WordPress routing.
-    monkeypatch.setattr(client, "_static_cutover_completed", lambda: True)
     slot = "2026-09-01T13:00:00+00:00"
     barrier = threading.Barrier(2)
     outcomes = []
@@ -973,7 +573,6 @@ def test_cli_renders_static_result_fields(monkeypatch):
         ("_upload_static_media", "media"),
         ("_run_static_build", "build"),
         ("_deploy_static_preview", "preview upload"),
-        ("_run_static_scanner", "preview acceptance"),
         ("update_article", "Notion update"),
     ],
 )
@@ -1019,68 +618,22 @@ def test_failure_matrix_rolls_back_and_same_journal_retry_completes(
     assert attempts == 2
 
 
-def test_readiness_timeout_same_journal_retry_reuses_one_deployment(
-    publisher,
-    monkeypatch,
-):
-    client, _article, _markdown, _image, _manifest, counters, _token = publisher
-    original_scanner = client._run_static_scanner
-    scanner_attempts = 0
-
-    def timeout_once(**kwargs):
-        nonlocal scanner_attempts
-        scanner_attempts += 1
-        if scanner_attempts == 1:
-            raise ClientError(
-                "Pages preview readiness timed out for exact deployment "
-                f"{kwargs['deployment']['deployment_id']}"
-            )
-        return original_scanner(**kwargs)
-
-    monkeypatch.setattr(client, "_run_static_scanner", timeout_once)
-    with pytest.raises(ClientError, match="failed during preview acceptance"):
-        _publish(client)
-
-    journals = list(
-        (client._publisher_runtime_root() / "transactions").glob("*.journal.json")
-    )
-    assert len(journals) == 1
-    failed = json.loads(journals[0].read_text())
-    assert failed["state"] == "failed"
-    assert failed["effects"]["deployments"] == 1
-    assert failed["artifacts"]["deployment_id"] == PREVIEW_DEPLOYMENT_ID
-    assert counters["deploy"] == 1
-
-    monkeypatch.setattr(
-        client,
-        "_deploy_static_preview",
-        lambda *_args, **_kwargs: pytest.fail("same-journal retry redeployed"),
-    )
-    result = _publish(client)
-
-    assert result["journal_state"] == "completed"
-    assert result["deployment_id"] == PREVIEW_DEPLOYMENT_ID
-    assert scanner_attempts == 2
-    assert counters["deploy"] == 1
-    assert counters["scanner"] == 1
-
-
 def test_rolled_back_failed_competing_revision_does_not_block_fresh_source(
     publisher, monkeypatch
 ):
     client, _article, markdown, _image, manifest, counters, build_token = publisher
-    original_scanner = client._run_static_scanner
-    scanner_attempts = 0
+    original_update = client.update_article
+    update_attempts = 0
 
-    def fail_first_acceptance(*args, **kwargs):
-        nonlocal scanner_attempts
-        scanner_attempts += 1
-        if scanner_attempts == 1:
-            raise ClientError("injected preview acceptance failure")
-        return original_scanner(*args, **kwargs)
+    def fail_first_notion_update(*args, **kwargs):
+        nonlocal update_attempts
+        update_attempts += 1
+        if update_attempts == 1:
+            raise ClientError("injected Notion update failure")
+        return original_update(*args, **kwargs)
 
-    monkeypatch.setattr(client, "_run_static_scanner", fail_first_acceptance)
-    with pytest.raises(ClientError, match="failed during preview acceptance"):
+    monkeypatch.setattr(client, "update_article", fail_first_notion_update)
+    with pytest.raises(ClientError, match="failed during Notion update"):
         _publish(client)
 
     transaction_root = client._publisher_runtime_root() / "transactions"
@@ -1134,21 +687,21 @@ def test_historical_competing_revision_still_fails_closed(
     publisher, monkeypatch, historical_state, expected_error
 ):
     client, _article, markdown, _image, manifest, counters, build_token = publisher
-    original_scanner = client._run_static_scanner
-    scanner_attempts = 0
+    original_update = client.update_article
+    update_attempts = 0
 
-    def fail_first_acceptance(*args, **kwargs):
-        nonlocal scanner_attempts
-        scanner_attempts += 1
-        if scanner_attempts == 1:
-            raise ClientError("injected preview acceptance failure")
-        return original_scanner(*args, **kwargs)
+    def fail_first_notion_update(*args, **kwargs):
+        nonlocal update_attempts
+        update_attempts += 1
+        if update_attempts == 1:
+            raise ClientError("injected Notion update failure")
+        return original_update(*args, **kwargs)
 
     if historical_state == "completed":
         _publish(client)
     else:
-        monkeypatch.setattr(client, "_run_static_scanner", fail_first_acceptance)
-        with pytest.raises(ClientError, match="failed during preview acceptance"):
+        monkeypatch.setattr(client, "update_article", fail_first_notion_update)
+        with pytest.raises(ClientError, match="failed during Notion update"):
             _publish(client)
 
     transaction_root = client._publisher_runtime_root() / "transactions"
@@ -1238,7 +791,7 @@ def test_failed_built_retry_adopts_exact_preview_without_second_deploy(publisher
         client,
         "_run_static_build",
         lambda *_args, **_kwargs: pytest.fail(
-            "failed-built recovery reran the current P14 publisher-source preflight"
+            "failed-built recovery reran the current publisher-source preflight"
         ),
     )
 
@@ -1249,7 +802,7 @@ def test_failed_built_retry_adopts_exact_preview_without_second_deploy(publisher
     assert completed["release_ref"] == failed["release_ref"]
     assert completed["artifacts"]["deployment_id"] == remote_deployment["id"]
     assert counters["build"] == counters["deploy"] == 1
-    assert counters["scanner"] == counters["notion"] == 1
+    assert counters["notion"] == 1
     assert sum(
         command[1:4] == ["pages", "deployments", "list"] for command in commands
     ) == 1
@@ -1290,7 +843,7 @@ def test_failed_unbuilt_retry_cannot_bypass_current_publisher_source_preflight(
     with pytest.raises(ClientError, match="publisher implementation binding is stale"):
         _publish(client)
 
-    assert counters["deploy"] == counters["scanner"] == counters["notion"] == 0
+    assert counters["deploy"] == counters["notion"] == 0
 
 
 def test_legacy_failed_unbuilt_journal_rebinds_without_duplicate_media(
@@ -1554,105 +1107,7 @@ def test_concurrent_same_revision_has_one_effect_set(publisher):
     assert len(results) == 2
     assert sorted(result["replayed"] for result in results) == [False, True]
     assert counters["media"] == counters["build"] == counters["deploy"] == 1
-    assert counters["scanner"] == counters["notion"] == 1
-
-
-def test_static_worker_proof_is_hash_bound_before_any_mutation(publisher):
-    client, _article, _markdown, _image, manifest, counters, _token = publisher
-    proof = json.loads(client_module.STATIC_WORKER_PROOF.read_text())
-    proof["worker_runtime"]["source"]["remote_sha256"] = "0" * 64
-    client_module.STATIC_WORKER_PROOF.write_text(json.dumps(proof))
-    client_module.STATIC_WORKER_PROOF_SHA256 = hashlib.sha256(
-        client_module.STATIC_WORKER_PROOF.read_bytes()
-    ).hexdigest()
-    manifest["inputs"]["media_edge_proof_sha256"] = (
-        client_module.STATIC_WORKER_PROOF_SHA256
-    )
-
-    with pytest.raises(ClientError, match="Worker source does not match"):
-        client._resolve_static_media_base_url(manifest)
-
-    assert counters == {
-        "media": 0,
-        "build": 0,
-        "deploy": 0,
-        "scanner": 0,
-        "notion": 0,
-        "lock": 0,
-    }
-    assert not (client._publisher_runtime_root() / "transactions").exists()
-
-
-def test_static_worker_proof_hash_matches_release_manifest_before_any_mutation(
-    publisher,
-):
-    client, _article, _markdown, _image, manifest, counters, _token = publisher
-    manifest["inputs"]["media_edge_proof_sha256"] = "0" * 64
-
-    with pytest.raises(ClientError, match="hash-current zero-route PASS"):
-        client._resolve_static_media_base_url(manifest)
-
-    assert sum(counters.values()) == 0
-    assert not (client._publisher_runtime_root() / "transactions").exists()
-
-
-def test_static_worker_must_be_reachable_before_journal_creation(
-    publisher, monkeypatch
-):
-    client, _article, _markdown, _image, _manifest, counters, _token = publisher
-
-    def unreachable(*_args, **_kwargs):
-        raise ClientError("Direct Worker endpoint is unreachable")
-
-    monkeypatch.setattr(client, "_probe_static_worker_endpoint", unreachable)
-    with pytest.raises(ClientError, match="unreachable"):
-        _publish(client)
-
-    assert sum(counters.values()) == 0
-    assert not (client._publisher_runtime_root() / "transactions").exists()
-
-
-def test_static_worker_probe_requires_p13_identity_headers(publisher, monkeypatch):
-    client, _article, _markdown, _image, manifest, _counters, _token = publisher
-    requests = []
-
-    class _Response:
-        status = 200
-        headers = {
-            "x-ata-worker-version": manifest["worker"]["version"],
-            "x-ata-route-payload-sha256": manifest["worker"]["route_payload_sha256"],
-        }
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_args):
-            return False
-
-    def open_request(request, **_kwargs):
-        requests.append(request)
-        return _Response()
-
-    monkeypatch.setattr(client_module, "urlopen", open_request)
-    AtaBlogClient._probe_static_worker_endpoint(
-        "https://media-worker.example.workers.dev",
-        "wp-content/uploads/proof.png",
-        manifest,
-    )
-
-    request = requests[0]
-    assert request.get_method() == "HEAD"
-    assert request.get_header("Accept") == "*/*"
-    assert request.get_header("Connection") == "close"
-    assert request.get_header("User-agent") == "ata-static-publisher/1"
-
-    _Response.headers = {"x-ata-worker-version": manifest["worker"]["version"]}
-    with pytest.raises(ClientError, match="route payload header"):
-        AtaBlogClient._probe_static_worker_endpoint(
-            "https://media-worker.example.workers.dev",
-            "wp-content/uploads/proof.png",
-            manifest,
-        )
+    assert counters["notion"] == 1
 
 
 def test_media_upload_recovers_content_addressed_receipt_without_second_put(
@@ -1691,264 +1146,6 @@ def test_media_upload_recovers_content_addressed_receipt_without_second_put(
     assert second["receipt"]["key"] == stage["object_key"]
     assert second["receipt"]["recovered"] is True
     assert sum(command[1:4] == ["r2", "objects", "put"] for command in commands) == 1
-
-
-def test_preview_readiness_waits_for_404_then_two_stable_exact_rounds(
-    readiness_preview,
-):
-    client, dist, deployment = readiness_preview
-    asset_bytes = {
-        asset_path: (dist / asset_path.removeprefix("/")).read_bytes()
-        for asset_path in client_module.STATIC_PAGES_READINESS_ASSET_PATHS
-    }
-    responses = [
-        *[(404, b"") for _path in client_module.STATIC_PAGES_READINESS_ASSET_PATHS],
-        *[
-            (200, asset_bytes[asset_path])
-            for asset_path in client_module.STATIC_PAGES_READINESS_ASSET_PATHS
-        ],
-        *[
-            (200, asset_bytes[asset_path])
-            for asset_path in client_module.STATIC_PAGES_READINESS_ASSET_PATHS
-        ],
-    ]
-    clock = [0.0]
-    fetches = []
-    progress = []
-    side_effects = []
-
-    def fetch(url, timeout):
-        fetches.append((url, timeout))
-        return responses.pop(0)
-
-    def sleep(seconds):
-        clock[0] += seconds
-
-    client._deploy_static_preview = lambda *_args, **_kwargs: side_effects.append(
-        "deploy"
-    )
-    client._run_checked_command = lambda *_args, **_kwargs: side_effects.append(
-        "command"
-    )
-
-    client._wait_for_static_preview_readiness(
-        deployment=deployment,
-        deployment_sha256=deployment["deployment_sha256"],
-        fetcher=fetch,
-        clock=lambda: clock[0],
-        sleeper=sleep,
-        emit=progress.append,
-    )
-
-    assert responses == []
-    assert clock[0] == 4
-    assert side_effects == []
-    assert [url for url, _timeout in fetches] == [
-        f"{PREVIEW_DEPLOYMENT_URL}{asset_path}"
-        for _round in range(3)
-        for asset_path in client_module.STATIC_PAGES_READINESS_ASSET_PATHS
-    ]
-    assert all(0 < timeout <= 10 for _url, timeout in fetches)
-    assert any("stable=0/2" in message and "http=404" in message for message in progress)
-    assert any("stable=1/2" in message for message in progress)
-    assert progress[-1].startswith("Pages preview readiness passed:")
-
-
-@pytest.mark.parametrize(
-    ("status", "body", "expected_evidence"),
-    [
-        (404, b"", "http=404"),
-        (200, b"stale deployment bytes", "expected="),
-    ],
-)
-def test_preview_readiness_times_out_on_permanent_unready_or_hash_drift(
-    readiness_preview,
-    monkeypatch,
-    status,
-    body,
-    expected_evidence,
-):
-    client, _dist, deployment = readiness_preview
-    clock = [0.0]
-    fetch_count = 0
-    side_effects = []
-
-    def fetch(_url, _timeout):
-        nonlocal fetch_count
-        fetch_count += 1
-        return status, body
-
-    def sleep(seconds):
-        clock[0] += seconds
-
-    client._deploy_static_preview = lambda *_args, **_kwargs: side_effects.append(
-        "deploy"
-    )
-    monkeypatch.setattr(client_module, "STATIC_PAGES_READINESS_TIMEOUT_SECONDS", 5)
-    monkeypatch.setattr(client_module, "STATIC_PAGES_READINESS_POLL_INTERVAL_SECONDS", 2)
-
-    with pytest.raises(ClientError, match="readiness timed out") as exc_info:
-        client._wait_for_static_preview_readiness(
-            deployment=deployment,
-            deployment_sha256=deployment["deployment_sha256"],
-            fetcher=fetch,
-            clock=lambda: clock[0],
-            sleeper=sleep,
-            emit=lambda _message: None,
-        )
-
-    assert expected_evidence in str(exc_info.value)
-    assert PREVIEW_DEPLOYMENT_ID in str(exc_info.value)
-    assert clock[0] == 5
-    assert fetch_count == 6
-    assert side_effects == []
-
-
-def test_preview_readiness_rejects_deployment_url_identity_before_fetch(
-    readiness_preview,
-):
-    client, _dist, deployment = readiness_preview
-    deployment["deployment_url"] = "https://different.example.pages.dev"
-
-    with pytest.raises(ClientError, match="deployment URL identity mismatch"):
-        client._wait_for_static_preview_readiness(
-            deployment=deployment,
-            deployment_sha256=deployment["deployment_sha256"],
-            fetcher=lambda *_args: pytest.fail("identity drift reached HTTP fetch"),
-            emit=lambda _message: None,
-        )
-
-
-def test_scanner_rejection_persists_bound_receipt_before_raising(
-    publisher,
-    monkeypatch,
-    tmp_path,
-):
-    client, _article, _markdown, _image, manifest, _counters, _token = publisher
-    metadata = _preview_deployment_payload(
-        idempotency_key="b" * 64,
-        source_revision="a" * 64,
-    )
-    deployment = {
-        "deployment_id": PREVIEW_DEPLOYMENT_ID,
-        "deployment_url": PREVIEW_DEPLOYMENT_URL,
-        "deployment": metadata,
-        "deployment_sha256": _artifact_sha256(metadata),
-    }
-    rejected = _rejected_scanner_result(
-        manifest,
-        deployment,
-        deployment["deployment_sha256"],
-    )
-    scanner_path = tmp_path / "scanner-result.json"
-    events = []
-
-    monkeypatch.setattr(
-        client,
-        "_wait_for_static_preview_readiness",
-        lambda **kwargs: events.append(
-            ("readiness", kwargs["deployment"]["deployment_id"])
-        ),
-    )
-
-    def run(command, **kwargs):
-        events.append(("scanner", command[0]))
-        assert kwargs["cwd"] == client_module.STATIC_REPOSITORY_ROOT
-        assert kwargs["timeout"] == 14400
-        assert command[0] == str(client_module.STATIC_SCANNER)
-        assert command[command.index("--base-url") + 1] == PREVIEW_DEPLOYMENT_URL
-        return SimpleNamespace(
-            returncode=1,
-            stdout=json.dumps(rejected),
-            stderr="scanner rejected: 1 checks failed",
-        )
-
-    monkeypatch.setattr(client_module.subprocess, "run", run)
-    run_scanner = AtaBlogClient._run_static_scanner.__get__(client, AtaBlogClient)
-
-    with pytest.raises(ClientError, match="result saved to"):
-        run_scanner(
-            manifest=manifest,
-            journal_path=tmp_path / "journal.json",
-            replay_path=tmp_path / "replay.json",
-            deployment_metadata_path=tmp_path / "deployment.json",
-            scanner_path=scanner_path,
-            deployment=deployment,
-            deployment_sha256=deployment["deployment_sha256"],
-            media_base_url="https://media-worker.example.workers.dev",
-        )
-
-    assert json.loads(scanner_path.read_text()) == rejected
-    assert events == [
-        ("readiness", PREVIEW_DEPLOYMENT_ID),
-        ("scanner", str(client_module.STATIC_SCANNER)),
-    ]
-    assert (
-        client._load_existing_scanner_result(
-            scanner_path,
-            manifest=manifest,
-            deployment=deployment,
-            deployment_sha256=deployment["deployment_sha256"],
-        )
-        is None
-    )
-
-
-@pytest.mark.parametrize(
-    ("stdout", "expected_error"),
-    [
-        ("", "returned no JSON result"),
-        ("{", "returned invalid JSON"),
-    ],
-)
-def test_scanner_missing_or_invalid_stdout_fails_closed_without_receipt(
-    publisher,
-    monkeypatch,
-    tmp_path,
-    stdout,
-    expected_error,
-):
-    client, _article, _markdown, _image, manifest, _counters, _token = publisher
-    metadata = _preview_deployment_payload(
-        idempotency_key="b" * 64,
-        source_revision="a" * 64,
-    )
-    deployment = {
-        "deployment_id": PREVIEW_DEPLOYMENT_ID,
-        "deployment_url": PREVIEW_DEPLOYMENT_URL,
-        "deployment": metadata,
-        "deployment_sha256": _artifact_sha256(metadata),
-    }
-    scanner_path = tmp_path / "scanner-result.json"
-    monkeypatch.setattr(
-        client,
-        "_wait_for_static_preview_readiness",
-        lambda **_kwargs: None,
-    )
-    monkeypatch.setattr(
-        client_module.subprocess,
-        "run",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            returncode=1,
-            stdout=stdout,
-            stderr="scanner runtime error",
-        ),
-    )
-    run_scanner = AtaBlogClient._run_static_scanner.__get__(client, AtaBlogClient)
-
-    with pytest.raises(ClientError, match=expected_error):
-        run_scanner(
-            manifest=manifest,
-            journal_path=tmp_path / "journal.json",
-            replay_path=tmp_path / "replay.json",
-            deployment_metadata_path=tmp_path / "deployment.json",
-            scanner_path=scanner_path,
-            deployment=deployment,
-            deployment_sha256=deployment["deployment_sha256"],
-            media_base_url="https://media-worker.example.workers.dev",
-        )
-
-    assert not scanner_path.exists()
 
 
 def test_preview_deploy_recovers_branch_commit_without_second_create(monkeypatch):
@@ -2402,104 +1599,14 @@ def test_new_journal_captures_corpus_while_global_build_lock_is_held(
     assert held is False
 
 
-def test_p05_manifest_validation_precedes_journal_and_effects(publisher):
+def test_release_manifest_validation_precedes_journal_and_effects(publisher):
     client, _article, _markdown, _image, manifest, counters, _token = publisher
-    manifest["worker"]["route_payload_sha256"] = "invalid"
+    manifest["schema_version"] = "ata-static-release/v1"
     client_module.STATIC_RELEASE_MANIFEST.write_text(json.dumps(manifest))
 
-    with pytest.raises(ClientError, match="P05 release manifest validation failed"):
-        _publish(client)
-
-    assert sum(counters.values()) == 0
-    assert not (client._publisher_runtime_root() / "transactions").exists()
-
-
-def test_current_p11_release_manifest_matches_external_binding():
-    assert (
-        hashlib.sha256(client_module.STATIC_RELEASE_CONTRACT.read_bytes()).hexdigest()
-        == client_module.P11_RELEASE_MANIFEST_SHA256
-    )
-
-
-def test_historical_p05_evidence_and_current_p11_bytes_are_independent(publisher):
-    client, _article, _markdown, _image, manifest, counters, _token = publisher
-    p05_handoff = json.loads(client_module.STATIC_P05_HANDOFF.read_text())
-
-    assert (
-        p05_handoff["source_hashes"]["static-site/scripts/release_manifest.mjs"]
-        == client_module.HISTORICAL_P05_RELEASE_MANIFEST_SHA256
-    )
-    assert (
-        hashlib.sha256(client_module.STATIC_RELEASE_CONTRACT.read_bytes()).hexdigest()
-        == client_module.P11_RELEASE_MANIFEST_SHA256
-    )
-    assert (
-        client_module.HISTORICAL_P05_RELEASE_MANIFEST_SHA256
-        != client_module.P11_RELEASE_MANIFEST_SHA256
-    )
-    assert client._load_static_release_manifest()["release_id"] == manifest["release_id"]
-    assert sum(counters.values()) == 0
-
-
-def test_historical_p13_evidence_and_current_scanner_are_independent(publisher):
-    client, _article, _markdown, _image, manifest, counters, _token = publisher
-    p13_handoff = json.loads(client_module.STATIC_SCANNER_HANDOFF.read_text())
-    current_scanner_sha = hashlib.sha256(
-        client_module.STATIC_SCANNER.read_bytes()
-    ).hexdigest()
-
-    assert (
-        p13_handoff["source_hashes"]["scripts/validate-published-post.sh"]
-        == client_module.HISTORICAL_P13_SCANNER_SHA256
-    )
-    assert manifest["inputs"]["scanner_implementation_sha256"] == current_scanner_sha
-    assert current_scanner_sha == client_module.STATIC_SCANNER_SHA256
-    assert (
-        client_module.HISTORICAL_P13_SCANNER_SHA256
-        != client_module.STATIC_SCANNER_SHA256
-    )
-    assert client._load_static_release_manifest()["release_id"] == manifest["release_id"]
-    assert sum(counters.values()) == 0
-
-
-def test_current_scanner_drift_fails_before_mutation(publisher):
-    client, _article, _markdown, _image, _manifest, counters, _token = publisher
-    client_module.STATIC_SCANNER.write_bytes(b"drifted current scanner\n")
-
-    with pytest.raises(ClientError, match="Current scanner bytes changed"):
-        _publish(client)
-
-    assert sum(counters.values()) == 0
-    assert not (client._publisher_runtime_root() / "transactions").exists()
-
-
-def test_current_p11_release_manifest_drift_fails_before_mutation(publisher):
-    client, _article, _markdown, _image, _manifest, counters, _token = publisher
-    client_module.STATIC_RELEASE_CONTRACT.write_bytes(b"drifted P11 release manifest\n")
-
-    with pytest.raises(ClientError, match="Final P11 release manifest bytes changed"):
-        _publish(client)
-
-    assert sum(counters.values()) == 0
-    assert not (client._publisher_runtime_root() / "transactions").exists()
-
-
-def test_historical_p05_source_hash_drift_fails_before_mutation(
-    publisher, monkeypatch
-):
-    client, _article, _markdown, _image, _manifest, counters, _token = publisher
-    p05_handoff = json.loads(client_module.STATIC_P05_HANDOFF.read_text())
-    p05_handoff["source_hashes"]["static-site/scripts/release_manifest.mjs"] = (
-        client_module.P11_RELEASE_MANIFEST_SHA256
-    )
-    client_module.STATIC_P05_HANDOFF.write_text(json.dumps(p05_handoff))
-    monkeypatch.setattr(
-        client_module,
-        "STATIC_P05_HANDOFF_SHA256",
-        hashlib.sha256(client_module.STATIC_P05_HANDOFF.read_bytes()).hexdigest(),
-    )
-
-    with pytest.raises(ClientError, match="P05 v2 handoff does not bind"):
+    with pytest.raises(
+        ClientError, match="Release manifest schema is not ata-static-release/v2"
+    ):
         _publish(client)
 
     assert sum(counters.values()) == 0
@@ -2510,13 +1617,10 @@ def test_publish_status_rejected_before_source_or_external_reads(publisher):
     client, *_ = publisher
     client.get_article = lambda _page_id: pytest.fail("source read must not run")
 
-    with pytest.raises(
-        ClientError,
-        match="Production promotion requires the completed static cutover",
-    ):
+    with pytest.raises(ClientError, match="Static publish status must be draft or publish"):
         client._publish_static_transaction(
             page_id=PAGE_ID,
-            status="publish",
+            status="invalid-status",
             slug="journaled-static-publisher",
             date=None,
             auto_schedule=False,
@@ -2659,87 +1763,16 @@ def test_schedule_cleanup_failure_never_transitions_completed_to_failed(
     assert counters["notion"] == 1
 
 
-def test_publish_article_dual_publishes_static_then_classic(publisher):
-    client, *_ = publisher
-    calls = []
-    client._static_cutover_active = lambda: True
+# --- single-post production promotion --------------------------------------
+#
+# Promotion is unconditional now: a status="publish" transaction promotes to
+# production the moment it reaches the "deployed" state, with no cutover
+# gate precondition and no post-promotion content validator. Cloudflare
+# Pages rollback (on a later failure in the same transaction) is the only
+# safety net.
 
-    def fake_static(page_id, **kwargs):
-        calls.append(("static", kwargs["status"], kwargs["force"]))
-        return {"static_url": "https://static.example/p/", "deployment_id": "dep-1"}
-
-    def fake_classic(page_id, **kwargs):
-        calls.append(("classic", kwargs["status"], kwargs["force"]))
-        return {"wordpress_post": {"id": 7}, "wordpress_url": "https://wp.example/p/"}
-
-    client._publish_static_transaction = fake_static
-    client._publish_article_classic = fake_classic
-    result = client.publish_article(PAGE_ID, status="publish", force=False)
-    assert calls == [("static", "draft", False), ("classic", "publish", True)]
-    assert result["wordpress_post"]["id"] == 7
-    assert result["static_url"] == "https://static.example/p/"
-    assert result["static_publish"]["deployment_id"] == "dep-1"
-
-
-def test_publish_article_classic_only_when_cutover_inactive(publisher):
-    client, *_ = publisher
-    client._static_cutover_active = lambda: False
-    client._publish_static_transaction = (
-        lambda *a, **k: pytest.fail("static leg must not run")
-    )
-    client._publish_article_classic = lambda page_id, **kwargs: {
-        "wordpress_post": {"id": 8}
-    }
-    result = client.publish_article(PAGE_ID, status="draft")
-    assert result == {"wordpress_post": {"id": 8}}
-
-
-def test_publish_article_static_only_restores_wordpress_notion_state(publisher):
-    client, *_ = publisher
-    calls = []
-    client._static_cutover_active = lambda: True
-    client.get_article = lambda page_id: {
-        "Status": "Published",
-        "Published URL": "https://adamtheautomator.com/?p=7",
-        "Publish Date": "2026-09-03T08:00:00.000+00:00",
-    }
-
-    def fake_static(page_id, **kwargs):
-        calls.append(("static", kwargs["status"]))
-        return {"static_url": "https://static.example/p/", "deployment_id": "dep-9"}
-
-    def fake_update(page_id, status=None, properties=None):
-        calls.append(("restore", status, properties))
-
-    client._publish_static_transaction = fake_static
-    client._publish_article_classic = (
-        lambda *a, **k: pytest.fail("classic leg must not run in static-only mode")
-    )
-    client.update_article = fake_update
-    result = client.publish_article(
-        PAGE_ID, status="publish", force=True, static_only=True
-    )
-    assert calls == [
-        ("static", "draft"),
-        (
-            "restore",
-            "Published",
-            {
-                "Published URL": "https://adamtheautomator.com/?p=7",
-                "Publish Date": "2026-09-03T08:00:00.000+00:00",
-            },
-        ),
-    ]
-    assert result["deployment_id"] == "dep-9"
-    assert result["notion_restored"]["published_url"] == "https://adamtheautomator.com/?p=7"
-
-
-# --- single-post production promotion after the cutover -----------------------
-
-CUTOVER_DEPLOYMENT_ID = "55555555-5555-4555-8555-555555555555"
 PRIOR_PRODUCTION_DEPLOYMENT_ID = "44444444-4444-4444-8444-444444444444"
 PRODUCTION_DEPLOYMENT_ID = "33333333-3333-4333-8333-333333333333"
-PRODUCTION_ORIGIN = "https://adamtheautomator.com"
 
 
 def _production_deployment_payload(*, commit_hash, commit_message, deployment_id):
@@ -2763,63 +1796,19 @@ def _production_deployment_payload(*, commit_hash, commit_message, deployment_id
     }
 
 
-def _cutover_documents():
-    """Return the exact Gate D and cutover-journal pair the gate accepts."""
-    gate = {
-        "artifact_kind": "static_cutover_gate_d",
-        "release_ref": {
-            "release_id": "ata-static-cutoverrelease000",
-            "contract_hash": "b" * 64,
-        },
-        "pages_approval": {
-            "approved": True,
-            "deployment_id": CUTOVER_DEPLOYMENT_ID,
-            "approved_by": "adam",
-        },
-        "uploads_route_approval": {"approved": True, "approved_by": "adam"},
-    }
-    journal = {
-        "artifact_kind": "static_cutover_production_promotion",
-        "status": "COMPLETED",
-        "gate_d_sha256": None,
-        "release_ref": dict(gate["release_ref"]),
-        "promoted_deployment_id": CUTOVER_DEPLOYMENT_ID,
-        "custom_domain": PRODUCTION_ORIGIN,
-        "uploads_route_created": True,
-    }
-    return gate, journal
-
-
-def _write_cutover(gate, journal):
-    """Persist one cutover evidence pair under the live release root."""
-    cutover = client_module.STATIC_RELEASE_ROOT / "cutover"
-    cutover.mkdir(parents=True, exist_ok=True)
-    gate_path = cutover / "gate-d.json"
-    gate_path.write_text(json.dumps(gate))
-    if journal["gate_d_sha256"] is None:
-        journal["gate_d_sha256"] = hashlib.sha256(gate_path.read_bytes()).hexdigest()
-    (cutover / "cutover-journal.json").write_text(json.dumps(journal))
-    return cutover
-
-
-def _arm_promotion(client, *, validator_result="pass"):
-    """Install the Cloudflare/validator command seam one promotion needs."""
-    validator = client_module.STATIC_REPOSITORY_ROOT / "scripts" / "validate-static-post.sh"
-    validator.parent.mkdir(parents=True, exist_ok=True)
-    validator.write_text("#!/usr/bin/env bash\nexit 0\n")
+def _arm_promotion(client):
+    """Install the Cloudflare Pages production command seam promotion needs."""
     calls = {
         "production_lookup": 0,
         "promotion_lookup": 0,
         "promotion_create": 0,
         "rollback": 0,
-        "validator": 0,
     }
     rollback_targets = []
-    validator_commands = []
     production = [
         _production_deployment_payload(
             commit_hash="c" * 40,
-            commit_message="ata-blog cutover promotion",
+            commit_message="ata-blog prior production deployment",
             deployment_id=PRIOR_PRODUCTION_DEPLOYMENT_ID,
         )
     ]
@@ -2827,31 +1816,6 @@ def _arm_promotion(client, *, validator_result="pass"):
     original_run = client_module.AtaBlogClient._run_checked_command
 
     def run(command, *, timeout, label, cwd=None):
-        if command[0] == str(validator):
-            calls["validator"] += 1
-            validator_commands.append(list(command))
-            if validator_result == "fail":
-                raise ClientError(
-                    "Post-promotion validation failed (exit 1): body_too_short"
-                )
-            return SimpleNamespace(
-                returncode=0,
-                stdout=json.dumps(
-                    {
-                        "valid": True,
-                        "pageId": PAGE_ID,
-                        "staticUrl": f"{PRODUCTION_ORIGIN}/journaled-static-publisher/",
-                        "deploymentId": command[command.index("--deployment-id") + 1],
-                        "postType": "Standard",
-                        "bodyWords": 1200,
-                        "threshold": 1000,
-                        "hasFeaturedImage": True,
-                        "hasTags": True,
-                        "failureReason": "",
-                    }
-                ),
-                stderr="",
-            )
         if command[:3] != ["cloudflare", "pages", "deployments"]:
             return original_run(command, cwd=cwd, timeout=timeout, label=label)
         action = command[3]
@@ -2882,146 +1846,36 @@ def _arm_promotion(client, *, validator_result="pass"):
         raise AssertionError(f"unexpected command: {command}")
 
     client._run_checked_command = run
-    return calls, rollback_targets, validator_commands
+    return calls, rollback_targets
 
 
-def test_production_promotion_refused_before_cutover(publisher):
-    client, _article, _markdown, _image, _manifest, counters, _token = publisher
-    client.get_article = lambda _page_id: pytest.fail("source read must not run")
-
-    with pytest.raises(
-        ClientError, match="Production promotion requires the completed static cutover"
-    ):
-        _publish(client, status="publish")
-
-    assert counters == {name: 0 for name in counters}
-    assert not (client_module.STATIC_RELEASE_ROOT / "cutover").exists()
-
-
-def test_gate_d_alone_does_not_open_production_promotion(publisher):
-    client, *_ = publisher
-    gate, _journal = _cutover_documents()
-    cutover = client_module.STATIC_RELEASE_ROOT / "cutover"
-    cutover.mkdir(parents=True)
-    (cutover / "gate-d.json").write_text(json.dumps(gate))
-
-    assert client._static_cutover_completed() is False
-    with pytest.raises(
-        ClientError, match="Production promotion requires the completed static cutover"
-    ):
-        _publish(client, status="publish")
-
-
-@pytest.mark.parametrize(
-    ("mutate", "message"),
-    [
-        (
-            lambda gate, journal: gate["pages_approval"].update({"approved": False}),
-            "both required approvals",
-        ),
-        (
-            lambda gate, journal: gate["uploads_route_approval"].update(
-                {"approved": False}
-            ),
-            "both required approvals",
-        ),
-        (
-            lambda gate, journal: gate["pages_approval"].update({"deployment_id": "x"}),
-            "no UUID deployment_id",
-        ),
-        (
-            lambda gate, journal: gate["release_ref"].update({"contract_hash": "nope"}),
-            "not a bound release identity",
-        ),
-        (
-            lambda gate, journal: journal.update({"status": "IN_PROGRESS"}),
-            "not COMPLETED",
-        ),
-        (
-            lambda gate, journal: journal.update({"artifact_kind": "something-else"}),
-            "not a production promotion record",
-        ),
-        (
-            lambda gate, journal: journal.update({"gate_d_sha256": "d" * 64}),
-            "not bound to the current Gate D approval bytes",
-        ),
-        (
-            lambda gate, journal: journal.update(
-                {"release_ref": {"release_id": "other", "contract_hash": "e" * 64}}
-            ),
-            "release_ref does not match Gate D",
-        ),
-        (
-            lambda gate, journal: journal.update(
-                {"promoted_deployment_id": PRODUCTION_DEPLOYMENT_ID}
-            ),
-            "Gate D did not approve",
-        ),
-        (
-            lambda gate, journal: journal.update(
-                {"custom_domain": "https://preview.example"}
-            ),
-            "did not attach the production custom domain",
-        ),
-        (
-            lambda gate, journal: journal.update({"uploads_route_created": False}),
-            "did not record the live uploads Worker route",
-        ),
-    ],
-)
-def test_incomplete_cutover_evidence_fails_closed(publisher, mutate, message):
-    client, *_ = publisher
-    gate, journal = _cutover_documents()
-    cutover = client_module.STATIC_RELEASE_ROOT / "cutover"
-    cutover.mkdir(parents=True)
-    gate_path = cutover / "gate-d.json"
-    gate_path.write_text(json.dumps(gate))
-    journal["gate_d_sha256"] = hashlib.sha256(gate_path.read_bytes()).hexdigest()
-    mutate(gate, journal)
-    gate_path.write_text(json.dumps(gate))
-    (cutover / "cutover-journal.json").write_text(json.dumps(journal))
-
-    with pytest.raises(ClientError, match=message):
-        client._static_cutover_completed()
-
-
-def test_single_post_promotion_publishes_and_validates_production(publisher):
+def test_single_post_promotion_publishes_to_production(publisher):
     client, article, _markdown, _image, _manifest, counters, _token = publisher
-    _write_cutover(*_cutover_documents())
-    calls, _rollbacks, validator_commands = _arm_promotion(client)
+    calls, _rollbacks = _arm_promotion(client)
 
     result = _publish(client, status="publish")
 
     assert counters["build"] == 1
     assert counters["deploy"] == 1
-    assert counters["scanner"] == 1
     assert counters["notion"] == 1
     assert calls["production_lookup"] == 1
     assert calls["promotion_lookup"] == 1
     assert calls["promotion_create"] == 1
-    assert calls["validator"] == 1
     assert calls["rollback"] == 0
     assert result["journal_state"] == "completed"
     assert result["promoted"] is True
-    assert result["static_url"] == f"{PRODUCTION_ORIGIN}/journaled-static-publisher/"
-    assert article["Published URL"] == f"{PRODUCTION_ORIGIN}/journaled-static-publisher/"
+    assert result["static_url"] == (
+        f"{client_module.STATIC_SITE_ORIGIN}/journaled-static-publisher/"
+    )
+    assert article["Published URL"] == (
+        f"{client_module.STATIC_SITE_ORIGIN}/journaled-static-publisher/"
+    )
     assert article["Status"] == "Published"
-    validator_command = validator_commands[0]
-    assert validator_command[1] == PAGE_ID
-    assert validator_command[validator_command.index("--slug") + 1] == (
-        "journaled-static-publisher"
-    )
-    assert validator_command[validator_command.index("--deployment-url") + 1] == (
-        PRODUCTION_ORIGIN
-    )
-    assert validator_command[validator_command.index("--deployment-id") + 1] == (
-        PRODUCTION_DEPLOYMENT_ID
-    )
-    assert "--rollback-on-fail" not in validator_command
 
-    runtime = json.loads(Path(result["journal_path"]).with_name(
+    runtime_path = Path(result["journal_path"]).with_name(
         Path(result["journal_path"]).name.replace(".journal.", ".runtime.")
-    ).read_text())
+    )
+    runtime = json.loads(runtime_path.read_text())
     assert runtime["promotion_applied"] is True
     assert runtime["prior_production_deployment_id"] == PRIOR_PRODUCTION_DEPLOYMENT_ID
     assert runtime["promotion"]["promotion_id"] == PRODUCTION_DEPLOYMENT_ID
@@ -3029,8 +1883,7 @@ def test_single_post_promotion_publishes_and_validates_production(publisher):
 
 def test_promotion_replay_repeats_no_build_deploy_promotion_or_notion_update(publisher):
     client, _article, _markdown, _image, _manifest, counters, _token = publisher
-    _write_cutover(*_cutover_documents())
-    calls, _rollbacks, _commands = _arm_promotion(client)
+    calls, _rollbacks = _arm_promotion(client)
 
     first = _publish(client, status="publish")
     baseline = dict(counters)
@@ -3046,10 +1899,9 @@ def test_promotion_replay_repeats_no_build_deploy_promotion_or_notion_update(pub
     assert replay["static_url"] == first["static_url"]
 
 
-def test_resumed_accepted_transaction_promotes_exactly_once(publisher):
+def test_resumed_deployed_transaction_promotes_exactly_once(publisher):
     client, article, _markdown, _image, _manifest, counters, _token = publisher
-    _write_cutover(*_cutover_documents())
-    calls, _rollbacks, _commands = _arm_promotion(client)
+    calls, _rollbacks = _arm_promotion(client)
     committed = client.update_article
 
     def crash(_page_id, *, status, properties):
@@ -3064,27 +1916,29 @@ def test_resumed_accepted_transaction_promotes_exactly_once(publisher):
     result = _publish(client, status="publish")
 
     assert result["journal_state"] == "completed"
+    # Resuming from "deployed" finds promotion_applied already True and does
+    # not create a second production deployment.
     assert calls["promotion_create"] == 1
-    assert calls["production_lookup"] == 1
-    # The read-only validation gate re-verifies the live result on resume; only
-    # the mutating steps (build, deploy, promote, Notion) are once-only.
-    assert calls["validator"] == 2
     assert counters["build"] == 1
     assert counters["deploy"] == 1
     assert counters["notion"] == 1
-    assert article["Published URL"] == f"{PRODUCTION_ORIGIN}/journaled-static-publisher/"
+    assert article["Published URL"] == (
+        f"{client_module.STATIC_SITE_ORIGIN}/journaled-static-publisher/"
+    )
 
 
-def test_validation_gate_failure_rolls_production_back(publisher):
+def test_notion_update_failure_after_promotion_rolls_production_back(publisher):
     client, article, _markdown, _image, _manifest, _counters, _token = publisher
-    _write_cutover(*_cutover_documents())
-    calls, rollback_targets, _commands = _arm_promotion(client, validator_result="fail")
+    calls, rollback_targets = _arm_promotion(client)
 
-    with pytest.raises(ClientError, match="body_too_short") as failure:
+    def fail_notion_update(_page_id, *, status, properties):
+        raise ClientError("injected Notion update failure")
+
+    client.update_article = fail_notion_update
+
+    with pytest.raises(ClientError, match="failed during Notion update"):
         _publish(client, status="publish")
 
-    assert "post-promotion validation" in str(failure.value)
-    assert "rollback failed" not in str(failure.value)
     assert calls["promotion_create"] == 1
     assert calls["rollback"] == 1
     assert rollback_targets == [PRIOR_PRODUCTION_DEPLOYMENT_ID]
@@ -3106,8 +1960,7 @@ def test_validation_gate_failure_rolls_production_back(publisher):
 
 def test_concurrent_promotions_collapse_to_one_transaction(publisher):
     client, _article, _markdown, _image, _manifest, counters, _token = publisher
-    _write_cutover(*_cutover_documents())
-    calls, _rollbacks, _commands = _arm_promotion(client)
+    calls, _rollbacks = _arm_promotion(client)
     barrier = threading.Barrier(2)
     results = []
     errors = []
@@ -3128,7 +1981,6 @@ def test_concurrent_promotions_collapse_to_one_transaction(publisher):
     assert not errors
     assert len(results) == 2
     assert calls["promotion_create"] == 1
-    assert calls["validator"] == 1
     assert counters["build"] == 1
     assert counters["deploy"] == 1
     assert counters["notion"] == 1
@@ -3136,24 +1988,28 @@ def test_concurrent_promotions_collapse_to_one_transaction(publisher):
     assert sum(1 for result in results if result["replayed"]) == 1
 
 
-def test_publish_article_runs_static_alone_after_cutover(publisher):
+def test_publish_article_delegates_to_static_transaction(publisher, monkeypatch):
     client, *_ = publisher
-    _write_cutover(*_cutover_documents())
     calls = []
-    client._static_cutover_active = lambda: True
 
-    def fake_static(page_id, **kwargs):
-        calls.append(("static", kwargs["status"], kwargs["force"]))
-        return {"static_url": f"{PRODUCTION_ORIGIN}/p/", "deployment_id": "dep-2", "promoted": True}
+    def fake_transaction(**kwargs):
+        calls.append(kwargs)
+        return {
+            "static_url": f"{client_module.STATIC_SITE_ORIGIN}/p/",
+            "deployment_id": "dep-2",
+            "promoted": True,
+        }
 
-    client._publish_static_transaction = fake_static
-    client._publish_article_classic = (
-        lambda *a, **k: pytest.fail("WordPress leg must not run after cutover")
-    )
-    client.update_article = lambda *a, **k: pytest.fail("no Notion restore after cutover")
+    monkeypatch.setattr(client, "_publish_static_transaction", fake_transaction)
 
     result = client.publish_article(PAGE_ID, status="publish", force=False)
 
-    assert calls == [("static", "publish", False)]
-    assert result["promoted"] is True
-    assert "wordpress_post" not in result
+    assert len(calls) == 1
+    assert calls[0]["page_id"] == PAGE_ID
+    assert calls[0]["status"] == "publish"
+    assert calls[0]["force"] is False
+    assert result == {
+        "static_url": f"{client_module.STATIC_SITE_ORIGIN}/p/",
+        "deployment_id": "dep-2",
+        "promoted": True,
+    }

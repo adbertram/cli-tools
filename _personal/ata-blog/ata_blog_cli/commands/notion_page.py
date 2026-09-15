@@ -6,7 +6,7 @@ from pathlib import Path
 import typer
 from typing import Optional, List
 
-from ..client import get_client, ClientError
+from ..client import get_client
 from ..utils.images import process_local_images_for_wordpress
 from cli_tools_shared.filters import apply_filters, apply_limit, apply_properties_filter
 from cli_tools_shared.output import print_json, print_table, command, print_success, print_info
@@ -189,11 +189,7 @@ def articles_publish(
         "draft",
         "--status",
         "-s",
-        help=(
-            "Publish status (draft/publish). After the static cutover has "
-            "completed, --status publish promotes this one post to the live "
-            "production deployment; before it, publish is refused"
-        ),
+        help="Publish status (draft/publish). --status publish promotes this one post to the live production deployment",
     ),
     slug: Optional[str] = typer.Option(None, "--slug", help="Custom URL slug (auto-generated if not provided)"),
     date: Optional[str] = typer.Option(None, "--date", "-d", help="Schedule date (ISO 8601)"),
@@ -203,30 +199,8 @@ def articles_publish(
     no_duplicate_check: bool = typer.Option(False, "--no-duplicate-check", help="Skip duplicate slug check"),
     featured_image: Optional[str] = typer.Option(None, "--featured-image", help="Path to featured image file to upload and attach"),
     force: bool = typer.Option(False, "--force", "-F", help="Force republish even if already published"),
-    static_only: bool = typer.Option(
-        False,
-        "--static-only",
-        help="Run only the static-site transaction; restores WordPress-owned Notion state afterward",
-    ),
-    wordpress_only: bool = typer.Option(
-        False,
-        "--wordpress-only",
-        help=(
-            "Run only the classic WordPress leg, leaving the static site "
-            "untouched. Not needed to publish a new post -- the default "
-            "dual-publish path handles that -- use it to re-run or correct a "
-            "WordPress publication on its own"
-        ),
-    ),
 ):
-    """Publish a Notion article through the static-site transaction and, before the cutover, WordPress.
-
-    Before the production cutover this dual-publishes: the journaled
-    static-site transaction deploys a preview and the WordPress leg owns the
-    final Notion state. After the cutover it runs the static transaction
-    alone, and --status publish promotes that one post to production behind
-    the per-post validation gate.
-    """
+    """Publish a Notion article to the static site: build, deploy, and (with --status publish) promote to production."""
     client = get_client()
 
     print_info(f"Publishing article {page_id}...")
@@ -241,41 +215,23 @@ def articles_publish(
         check_duplicates=not no_duplicate_check,
         featured_image=featured_image,
         force=force,
-        static_only=static_only,
-        wordpress_only=wordpress_only,
     )
 
     if result.get("scheduled_date"):
-        if "wordpress_post" in result:
-            print_success(
-                f"Scheduled for {result['scheduled_date']} "
-                f"(Post ID: {result['wordpress_post']['id']})"
-            )
-        else:
-            print_success(
-                f"Scheduled for {result['scheduled_date']} "
-                f"(Deployment ID: {result['deployment_id']})"
-            )
+        print_success(
+            f"Scheduled for {result['scheduled_date']} "
+            f"(Deployment ID: {result['deployment_id']})"
+        )
+    elif result.get("promoted") is True:
+        print_success(
+            f"Promoted to production (Deployment ID: {result['deployment_id']})"
+        )
     else:
-        if "wordpress_post" in result:
-            print_success(
-                f"Published to WordPress (Post ID: {result['wordpress_post']['id']})"
-            )
-        elif result.get("promoted") is True:
-            print_success(
-                f"Promoted to production (Deployment ID: {result['deployment_id']})"
-            )
-        else:
-            print_success(
-                f"Static preview accepted (Deployment ID: {result['deployment_id']})"
-            )
+        print_success(
+            f"Static preview accepted (Deployment ID: {result['deployment_id']})"
+        )
 
-    if "wordpress_post" in result:
-        print_info(f"WordPress URL: {result.get('wordpress_url', 'N/A')}")
-        if "static_url" in result:
-            print_info(f"Static URL: {result['static_url']}")
-    else:
-        print_info(f"Static URL: {result['static_url']}")
+    print_info(f"Static URL: {result['static_url']}")
     print_json(result)
 
 
