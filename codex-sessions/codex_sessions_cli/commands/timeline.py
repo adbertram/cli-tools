@@ -1,5 +1,6 @@
 """Timeline commands."""
 import typer
+from cli_tools_shared.output import command
 from typing import List, Optional
 
 from ..client import get_client
@@ -13,6 +14,7 @@ TIMELINE_HEADERS = ["Time", "Session", "Type", "Name", "Status", "Text"]
 
 
 @app.command("list")
+@command
 def list_timeline(
     project: Optional[str] = typer.Option(None, "--project", "-p", help="Project name"),
     project_path: Optional[str] = typer.Option(None, "--project-path", help="Project folder path"),
@@ -32,6 +34,7 @@ def list_timeline(
 
 
 @app.command("consolidated")
+@command
 def consolidated_timeline(
     session_id: str = typer.Option(..., "--session-id", "-S", help="Session UUID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -46,6 +49,7 @@ def consolidated_timeline(
 
 
 @app.command("get")
+@command
 def get_timeline(
     event_id: str = typer.Argument(..., help="Timeline event ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),

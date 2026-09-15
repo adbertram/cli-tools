@@ -1,8 +1,8 @@
 {
   "tool": "codex-sessions",
   "description": "Query and analyze OpenAI Codex session data from ~/.codex",
-  "discovered_at": "2026-06-20T19:41:33Z",
-  "total_commands": 28,
+  "discovered_at": "2026-09-15T16:14:43Z",
+  "total_commands": 29,
   "global_options": [
     {
       "name": "--version",
@@ -20,8 +20,7 @@
       "options": [],
       "commands": {
         "login": {
-          "help": "Report local Codex access; no login is needed for local transcript files.",
-          "usage_instructions": "Use `codex-sessions auth login` when a workflow expects an auth check; it reports local access and does not change credentials. Add `--force`/`-F` to re-check local access and `--table`/`-t` for table output.",
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
           "arguments": [],
           "options": [
             {
@@ -35,14 +34,14 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
-              "short": "-F"
+              "help": "Clear existing ephemeral auth state and re-authenticate",
+              "short": "-F",
+              "takes_value": false
             }
           ]
         },
         "logout": {
-          "help": "No-op logout for local transcript files.",
-          "usage_instructions": "Use `codex-sessions auth logout` only when a standard CLI workflow requires logout; it does not remove Codex credentials or transcript files. Add `--table`/`-t` for table output.",
+          "help": "Clear stored credentials.",
           "arguments": [],
           "options": [
             {
@@ -87,7 +86,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -107,7 +107,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
@@ -120,7 +121,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -161,7 +163,42 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -180,7 +217,7 @@
           }
         },
         "status": {
-          "help": "Check whether Codex session data is readable.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
           "usage_instructions": "Use `codex-sessions auth status` before transcript work to confirm `codex_home`, sessions directory, CLI availability, and Codex CLI version. Add `--table`/`-t` for a compact table.",
           "arguments": [],
           "options": [
@@ -196,7 +233,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -209,14 +247,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--verbose",
               "type": "bool",
               "required": false,
               "help": "Show detailed checks",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -259,7 +299,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -306,7 +347,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -375,7 +417,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -402,7 +445,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -438,7 +482,6 @@
     },
     "sessions": {
       "help": "List, get, and search sessions",
-      "usage_instructions": "Use sessions commands for session-level discovery, full session details, and transcript text search. Prefer `--project`, `--project-path`, or `--since`/`-s` before broad listing when scope is known.",
       "arguments": [],
       "options": [
         {
@@ -466,7 +509,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -506,7 +550,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -557,7 +602,8 @@
               "name": "--prompts-clean",
               "type": "bool",
               "required": false,
-              "help": "When --include-prompts is set, skip system reminders, Caveat: lines, and tool-result content"
+              "help": "When --include-prompts is set, skip system reminders, Caveat: lines, and tool-result content",
+              "takes_value": false
             },
             {
               "name": "--prompts-max-chars",
@@ -617,7 +663,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -687,7 +734,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -734,7 +782,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -776,7 +825,6 @@
     },
     "subagent-activity": {
       "help": "Query subagent invocations",
-      "usage_instructions": "Use subagent-activity commands to find `spawn_agent` or `Task` tool calls and their returned agent ids/nicknames. Scope by `--session-id`/`-S` when possible.",
       "arguments": [],
       "options": [
         {
@@ -804,7 +852,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -851,7 +900,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -893,7 +943,6 @@
     },
     "timeline": {
       "help": "View activity timelines",
-      "usage_instructions": "Use timeline commands to reconstruct chronological activity from Codex records. Prefer `timeline consolidated --session-id <id>` for one session.",
       "arguments": [],
       "options": [
         {
@@ -921,7 +970,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -950,6 +1000,8 @@
               "type": "bool",
               "required": false,
               "help": "Accepted for CLI parity",
+              "takes_value": false,
+              "secondary": "--hide-agent-tools",
               "default": "show-agent-tools"
             },
             {
@@ -961,8 +1013,7 @@
           ]
         },
         "get": {
-          "help": "Get timeline events for a specific session.",
-          "usage_instructions": "Use `codex-sessions timeline get <session-id>` when a positional session id is more convenient than `timeline consolidated --session-id`. Add `--limit`/`-l`, `--filter`/`-f`, `--properties`/`-p`, or `--table`/`-t` as needed.",
+          "help": "Get a single timeline event by ID.",
           "arguments": [
             {
               "name": "event_id",
@@ -977,7 +1028,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -1024,7 +1076,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -1059,7 +1112,8 @@
               "type": "bool",
               "required": false,
               "help": "Show only error events",
-              "short": "-e"
+              "short": "-e",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1101,7 +1155,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -1148,7 +1203,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -1218,7 +1274,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -1265,7 +1322,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -1300,7 +1358,8 @@
               "type": "bool",
               "required": false,
               "help": "Accepted for CLI parity",
-              "short": "-a"
+              "short": "-a",
+              "takes_value": false
             },
             {
               "name": "--profile",

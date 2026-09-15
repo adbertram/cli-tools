@@ -34,6 +34,17 @@ def apply_properties(items: List[dict], properties: Optional[str]) -> List[dict]
     ]
 
 
+# A client-side --filter runs against the whole result set, so a filtered list
+# fetches every row and applies --limit only after filtering. Without this,
+# `--filter id:eq:X --limit 1` returns [] whenever X is not the newest row.
+UNBOUNDED = 1_000_000
+
+
+def fetch_limit(limit: int, filter: Optional[List[str]]) -> int:
+    """Rows to request from the client, given a possibly-filtered request."""
+    return UNBOUNDED if filter else limit
+
+
 def emit_list(
     items: Iterable,
     table: bool,
@@ -41,12 +52,15 @@ def emit_list(
     headers: List[str],
     filter: Optional[List[str]] = None,
     properties: Optional[str] = None,
+    limit: Optional[int] = None,
 ) -> None:
     try:
         data = [model_to_dict(item) for item in items]
         if filter:
             validate_filters(filter)
             data = apply_filters(data, filter)
+        if limit is not None:
+            data = data[:limit]
         data = apply_properties(data, properties)
         if table:
             selected_columns = [field.strip() for field in properties.split(",")] if properties else columns

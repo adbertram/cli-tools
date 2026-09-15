@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import typer
+from cli_tools_shared.output import command
 
 from ..client import get_client
 from ..parsers import (
@@ -10,7 +11,7 @@ from ..parsers import (
     parse_include_prompts,
     resolve_date_selector,
 )
-from .common import emit_list, emit_one, model_to_dict
+from .common import emit_list, emit_one, fetch_limit, model_to_dict
 
 app = typer.Typer(help="List, get, and search Codex sessions", no_args_is_help=True)
 COMMAND_CREDENTIALS = {"list": ["custom"], "get": ["custom"], "search": ["custom"]}
@@ -20,6 +21,7 @@ SESSION_HEADERS = ["ID", "Name", "Project", "Last Activity", "Model", "Messages"
 
 
 @app.command("list")
+@command
 def list_sessions(
     project: Optional[str] = typer.Option(None, "--project", "-p", help="Project name"),
     project_path: Optional[str] = typer.Option(None, "--project-path", help="Project folder path"),
@@ -70,7 +72,7 @@ def list_sessions(
         project,
         project_path,
         since,
-        limit,
+        fetch_limit(limit, filter),
         date_window=date_window,
         min_tool_calls=min_tool_calls,
     )
@@ -90,13 +92,14 @@ def list_sessions(
             row["first_user_prompts"] = prompts["first_user_prompts"]
             row["last_user_prompts"] = prompts["last_user_prompts"]
             rows.append(row)
-        emit_list(rows, table, SESSION_COLUMNS, SESSION_HEADERS, filter=filter, properties=properties)
+        emit_list(rows, table, SESSION_COLUMNS, SESSION_HEADERS, filter=filter, properties=properties, limit=limit)
         return
 
-    emit_list(items, table, SESSION_COLUMNS, SESSION_HEADERS, filter=filter, properties=properties)
+    emit_list(items, table, SESSION_COLUMNS, SESSION_HEADERS, filter=filter, properties=properties, limit=limit)
 
 
 @app.command("get")
+@command
 def get_session(
     session_id: str = typer.Argument(..., help="Session/thread UUID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -107,6 +110,7 @@ def get_session(
 
 
 @app.command("search")
+@command
 def search_sessions(
     query: str = typer.Argument(..., help="Search query"),
     project: Optional[str] = typer.Option(None, "--project", "-p", help="Project name"),

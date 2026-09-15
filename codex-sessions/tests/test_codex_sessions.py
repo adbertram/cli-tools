@@ -628,6 +628,34 @@ class CodexSessionsCliTests(unittest.TestCase):
             self.assertIn("custom", profile["credential_types"])
             self.assertEqual(profile["credential_types"]["custom"]["api_test"], "passed")
 
+    def test_sessions_list_filter_runs_before_limit(self):
+        # agent-issues #584: --limit was applied before --filter, so an exact
+        # id filter with --limit 1 returned [] for any non-newest session.
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            project_path = str(Path(tmp) / "Project One")
+            write_rollout(codex_home, project_path)
+            write_skill_rollout(codex_home, project_path)
+
+            runner = CliRunner()
+            with patch.dict("os.environ", {"CODEX_HOME": str(codex_home)}):
+                unfiltered = runner.invoke(app, ["sessions", "list", "--limit", "1", "--properties", "id"])
+                filtered = runner.invoke(
+                    app,
+                    ["sessions", "list", "--filter", f"id:eq:{SESSION_ID}", "--limit", "1", "--properties", "id"],
+                )
+                by_count = runner.invoke(
+                    app,
+                    ["sessions", "list", "--filter", "tool_call_count:gte:1", "--limit", "1", "--properties", "id"],
+                )
+
+            self.assertEqual(unfiltered.exit_code, 0, unfiltered.output)
+            self.assertEqual(json.loads(unfiltered.output), [{"id": SKILL_SESSION_ID}])
+            self.assertEqual(filtered.exit_code, 0, filtered.output)
+            self.assertEqual(json.loads(filtered.output), [{"id": SESSION_ID}])
+            self.assertEqual(by_count.exit_code, 0, by_count.output)
+            self.assertEqual(json.loads(by_count.output), [{"id": SESSION_ID}])
+
     def test_sessions_list_outputs_json_for_matching_project_path(self):
         with tempfile.TemporaryDirectory() as tmp:
             codex_home = Path(tmp) / ".codex"

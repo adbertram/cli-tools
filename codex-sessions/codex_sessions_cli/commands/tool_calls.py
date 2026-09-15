@@ -1,5 +1,6 @@
 """Tool call commands."""
 import typer
+from cli_tools_shared.output import command
 from typing import List, Optional
 
 from ..client import get_client
@@ -13,6 +14,7 @@ TOOL_HEADERS = ["Time", "Session", "Tool", "Status", "Exit"]
 
 
 @app.command("list")
+@command
 def list_tool_calls(
     project: Optional[str] = typer.Option(None, "--project", "-p", help="Project name"),
     project_path: Optional[str] = typer.Option(None, "--project-path", help="Project folder path"),
@@ -30,6 +32,7 @@ def list_tool_calls(
 
 
 @app.command("get")
+@command
 def get_tool_call(
     tool_call_id: str = typer.Argument(..., help="Tool call ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),

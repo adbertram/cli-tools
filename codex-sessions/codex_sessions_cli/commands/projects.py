@@ -1,5 +1,6 @@
 """Project commands."""
 import typer
+from cli_tools_shared.output import command
 from typing import List, Optional
 
 from ..client import get_client
@@ -13,6 +14,7 @@ PROJECT_HEADERS = ["Name", "Path", "Sessions", "Last Activity"]
 
 
 @app.command("list")
+@command
 def list_projects(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum results"),
@@ -24,6 +26,7 @@ def list_projects(
 
 
 @app.command("get")
+@command
 def get_project(
     name: str = typer.Argument(..., help="Project name or full path"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),

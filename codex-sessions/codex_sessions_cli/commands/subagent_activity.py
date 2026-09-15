@@ -1,5 +1,6 @@
 """Subagent activity commands."""
 import typer
+from cli_tools_shared.output import command
 from typing import List, Optional
 
 from ..client import get_client
@@ -13,6 +14,7 @@ SUBAGENT_HEADERS = ["Time", "Session", "Agent Type", "Name", "Status"]
 
 
 @app.command("list")
+@command
 def list_subagent_activity(
     project: Optional[str] = typer.Option(None, "--project", "-p", help="Project name"),
     project_path: Optional[str] = typer.Option(None, "--project-path", help="Project folder path"),
@@ -29,6 +31,7 @@ def list_subagent_activity(
 
 
 @app.command("get")
+@command
 def get_subagent_activity(
     subagent_id: str = typer.Argument(..., help="Subagent/tool call ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),

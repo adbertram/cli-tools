@@ -1,5 +1,6 @@
 """Conversation/turn commands."""
 import typer
+from cli_tools_shared.output import command
 from typing import List, Optional
 
 from ..client import get_client
@@ -13,6 +14,7 @@ CONVERSATION_HEADERS = ["ID", "Project", "Conversation", "Last Activity", "Model
 
 
 @app.command("list")
+@command
 def list_conversations(
     project: Optional[str] = typer.Option(None, "--project", "-p", help="Project name"),
     project_path: Optional[str] = typer.Option(None, "--project-path", help="Project folder path"),
@@ -29,6 +31,7 @@ def list_conversations(
 
 
 @app.command("get")
+@command
 def get_conversation(
     conversation_id: str = typer.Argument(..., help="Conversation ID: session_id:number"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
