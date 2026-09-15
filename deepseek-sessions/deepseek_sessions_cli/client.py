@@ -151,9 +151,19 @@ class DeepSeekSessionsClient:
             )
         return log
 
-    def _iter_logs(self, project_dir: Path) -> List[SessionLog]:
+    def _iter_logs(self, project_dir: Path, session_ids: Optional[List[str]] = None) -> List[SessionLog]:
+        """Logs in one project dir; only the named sessions' logs when ids are given.
+
+        A session lives in exactly one `<project>/<id>/` dir, so a named id that
+        is absent from this project dir simply contributes nothing.
+        """
+        session_dirs = (
+            self._session_dirs(project_dir)
+            if session_ids is None
+            else [path for path in (project_dir / session_id for session_id in session_ids) if path.is_dir()]
+        )
         logs = []
-        for session_dir in self._session_dirs(project_dir):
+        for session_dir in session_dirs:
             log = self._load(session_dir)
             if log is not None:
                 logs.append(log)
@@ -511,11 +521,12 @@ class DeepSeekSessionsClient:
         date_bounds: Optional[tuple] = None,
         min_tool_calls: Optional[int] = None,
         include_subagents: bool = True,
+        session_ids: Optional[List[str]] = None,
     ) -> List[SessionSummary]:
         cutoff = parse_since(since) if since else None
         summaries: List[SessionSummary] = []
 
-        for log in self._iter_logs(project_dir):
+        for log in self._iter_logs(project_dir, session_ids):
             if not include_subagents and log.header.get("origin") == "subagent":
                 continue
 
@@ -582,8 +593,13 @@ class DeepSeekSessionsClient:
         date_bounds: Optional[tuple] = None,
         min_tool_calls: Optional[int] = None,
         include_subagents: bool = True,
+        session_ids: Optional[List[str]] = None,
     ) -> List[SessionSummary]:
-        """List sessions in a project, or across every project when None."""
+        """List sessions in a project, or across every project when None.
+
+        session_ids: when given, only the `<project>/<id>/` logs named by these
+        ids are opened; every other session on disk is left unparsed.
+        """
         project_dirs = (
             [self._resolve_project_dir(project)] if project else self._project_dirs()
         )
@@ -594,6 +610,7 @@ class DeepSeekSessionsClient:
             and since is None
             and date_bounds is None
             and min_tool_calls is None
+            and session_ids is None
         ):
             return self._list_sessions_bounded(
                 project_dirs,
@@ -610,6 +627,7 @@ class DeepSeekSessionsClient:
                     date_bounds=date_bounds,
                     min_tool_calls=min_tool_calls,
                     include_subagents=include_subagents,
+                    session_ids=session_ids,
                 )
             )
 

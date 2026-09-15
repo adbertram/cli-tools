@@ -8,6 +8,7 @@ from deepseek_sessions_cli import client as client_module
 from deepseek_sessions_cli import config as config_module
 from deepseek_sessions_cli.commands import sessions as sessions_commands
 from deepseek_sessions_cli.main import app
+from conftest import PROJECT_KEY
 
 runner = CliRunner()
 
@@ -123,6 +124,60 @@ def test_impossible_missing_field_filter_skips_session_scan(cli, monkeypatch):
     )
 
     assert payload == []
+
+
+OLDEST_ROOT_SESSION = "session-11111111-1111-4111-8111-111111111111"
+
+
+def test_id_filter_with_limit_one_returns_non_newest_session(cli):
+    # agent-issues #584: the compacted session is newest, so a pre-fix
+    # limit-before-filter run returned [] for this older id.
+    payload = json.loads(
+        invoke([
+            "sessions", "list",
+            "--filter", f"id:eq:{OLDEST_ROOT_SESSION}",
+            "--properties", "id,last_activity",
+            "--limit", "1",
+        ]).output
+    )
+    assert [row["id"] for row in payload] == [OLDEST_ROOT_SESSION]
+    assert payload[0]["last_activity"]
+
+
+def test_id_filter_opens_only_the_named_session_log(cli, sessions_root, monkeypatch):
+    opened = []
+    real_load_log = client_module.load_log
+
+    def recording_load_log(log_path):
+        opened.append(log_path)
+        return real_load_log(log_path)
+
+    monkeypatch.setattr(client_module, "load_log", recording_load_log)
+
+    payload = json.loads(
+        invoke(["sessions", "list", "--filter", f"id:eq:{OLDEST_ROOT_SESSION}", "--properties", "id"]).output
+    )
+
+    assert payload == [{"id": OLDEST_ROOT_SESSION}]
+    assert opened == [sessions_root / PROJECT_KEY / OLDEST_ROOT_SESSION / "session.jsonl.zstd"]
+
+
+def test_id_filter_for_unknown_id_returns_empty(cli):
+    payload = json.loads(
+        invoke(["sessions", "list", "--filter", "id:eq:session-99999999-9999-4999-8999-999999999999"]).output
+    )
+    assert payload == []
+
+
+def test_exact_session_ids_bounds_only_fully_pinned_filters():
+    assert sessions_commands.exact_session_ids([f"id:eq:{OLDEST_ROOT_SESSION}"]) == [OLDEST_ROOT_SESSION]
+    assert sessions_commands.exact_session_ids([f"id:{OLDEST_ROOT_SESSION}"]) == [OLDEST_ROOT_SESSION]
+    assert sessions_commands.exact_session_ids(
+        [f"id:eq:{OLDEST_ROOT_SESSION},turn_count:gte:1", "id:eq:session-x"]
+    ) == [OLDEST_ROOT_SESSION, "session-x"]
+    assert sessions_commands.exact_session_ids(["turn_count:gte:1"]) is None
+    assert sessions_commands.exact_session_ids([f"id:eq:{OLDEST_ROOT_SESSION}", "turn_count:gte:1"]) is None
+    assert sessions_commands.exact_session_ids([f"id:contains:{OLDEST_ROOT_SESSION[:12]}"]) is None
 
 
 def test_limit_caps_rows(cli):

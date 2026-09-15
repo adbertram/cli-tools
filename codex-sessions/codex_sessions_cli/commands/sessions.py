@@ -11,7 +11,7 @@ from ..parsers import (
     parse_include_prompts,
     resolve_date_selector,
 )
-from .common import emit_list, emit_one, fetch_limit, model_to_dict
+from .common import emit_list, emit_one, exact_session_ids, fetch_limit, model_to_dict
 
 app = typer.Typer(help="List, get, and search Codex sessions", no_args_is_help=True)
 COMMAND_CREDENTIALS = {"list": ["custom"], "get": ["custom"], "search": ["custom"]}
@@ -75,6 +75,7 @@ def list_sessions(
         fetch_limit(limit, filter),
         date_window=date_window,
         min_tool_calls=min_tool_calls,
+        session_ids=exact_session_ids(filter),
     )
 
     if include_prompts is not None:

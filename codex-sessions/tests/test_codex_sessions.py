@@ -6,7 +6,9 @@ from unittest.mock import patch
 
 from typer.testing import CliRunner
 
+from codex_sessions_cli import client as client_module
 from codex_sessions_cli.client import CodexSessionsClient
+from codex_sessions_cli.commands.common import exact_session_ids
 from codex_sessions_cli.main import app
 from codex_sessions_cli.models import TimelineEventType, create_timeline_event
 from codex_sessions_cli.parsers import load_rollout_index
@@ -655,6 +657,87 @@ class CodexSessionsCliTests(unittest.TestCase):
             self.assertEqual(json.loads(filtered.output), [{"id": SESSION_ID}])
             self.assertEqual(by_count.exit_code, 0, by_count.output)
             self.assertEqual(json.loads(by_count.output), [{"id": SESSION_ID}])
+
+    def test_sessions_list_id_filter_returns_non_newest_session_with_limit_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            project_path = str(Path(tmp) / "Project One")
+            write_rollout(codex_home, project_path)
+            write_skill_rollout(codex_home, project_path)
+
+            with patch.dict("os.environ", {"CODEX_HOME": str(codex_home)}):
+                result = CliRunner().invoke(
+                    app,
+                    [
+                        "sessions", "list",
+                        "--filter", f"id:eq:{SESSION_ID}",
+                        "--properties", "id,last_activity",
+                        "--limit", "1",
+                    ],
+                )
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertEqual(
+                json.loads(result.output),
+                [{"id": SESSION_ID, "last_activity": "2026-04-21T15:00:08.000Z"}],
+            )
+
+    def test_sessions_list_id_filter_opens_only_the_named_rollout(self):
+        # An exact id filter resolves to rollout-<timestamp>-<id>.jsonl by name;
+        # the newer skill rollout must be neither indexed nor parsed.
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            project_path = str(Path(tmp) / "Project One")
+            named = write_rollout(codex_home, project_path)
+            write_skill_rollout(codex_home, project_path)
+
+            indexed, parsed = [], []
+            real_index, real_load = client_module.load_rollout_index, client_module.load_rollout
+
+            def recording_index(path):
+                indexed.append(path)
+                return real_index(path)
+
+            def recording_load(path):
+                parsed.append(path)
+                return real_load(path)
+
+            with patch.dict("os.environ", {"CODEX_HOME": str(codex_home)}), patch.object(
+                client_module, "load_rollout_index", recording_index
+            ), patch.object(client_module, "load_rollout", recording_load):
+                result = CliRunner().invoke(
+                    app, ["sessions", "list", "--filter", f"id:eq:{SESSION_ID}", "--properties", "id"]
+                )
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertEqual(json.loads(result.output), [{"id": SESSION_ID}])
+            self.assertEqual(indexed, [named])
+            self.assertEqual(parsed, [named])
+
+    def test_sessions_list_id_filter_for_unknown_id_returns_empty(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            write_rollout(codex_home, str(Path(tmp) / "Project One"))
+
+            with patch.dict("os.environ", {"CODEX_HOME": str(codex_home)}):
+                result = CliRunner().invoke(
+                    app, ["sessions", "list", "--filter", "id:eq:019db999-9999-7999-8999-999999999999"]
+                )
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertEqual(json.loads(result.output), [])
+
+    def test_exact_session_ids_bounds_only_fully_pinned_filters(self):
+        self.assertEqual(exact_session_ids([f"id:eq:{SESSION_ID}"]), [SESSION_ID])
+        self.assertEqual(exact_session_ids([f"id:{SESSION_ID}"]), [SESSION_ID])
+        self.assertEqual(
+            exact_session_ids([f"id:eq:{SESSION_ID},tool_call_count:gte:1", f"id:eq:{SKILL_SESSION_ID}"]),
+            [SESSION_ID, SKILL_SESSION_ID],
+        )
+        self.assertIsNone(exact_session_ids(None))
+        self.assertIsNone(exact_session_ids(["tool_call_count:gte:1"]))
+        self.assertIsNone(exact_session_ids([f"id:eq:{SESSION_ID}", "tool_call_count:gte:1"]))
+        self.assertIsNone(exact_session_ids([f"id:contains:{SESSION_ID[:8]}"]))
 
     def test_sessions_list_outputs_json_for_matching_project_path(self):
         with tempfile.TemporaryDirectory() as tmp:

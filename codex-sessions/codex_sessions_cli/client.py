@@ -127,9 +127,15 @@ class CodexSessionsClient:
         filters: Optional[List[str]] = None,
         date_window: Optional[Tuple[datetime, datetime]] = None,
         min_tool_calls: Optional[int] = None,
+        session_ids: Optional[List[str]] = None,
     ) -> List[SessionSummary]:
+        """List session summaries, newest first.
+
+        session_ids: when given, only the rollout files named by these ids are
+        indexed and parsed; every other rollout on disk is left untouched.
+        """
         sessions: List[SessionSummary] = []
-        for index in self._matching_rollout_indexes(project, project_path, since, date_window):
+        for index in self._matching_rollout_indexes(project, project_path, since, date_window, session_ids):
             parsed = self._load_rollout_or_record_error(index.path)
             if parsed is None:
                 continue
@@ -773,12 +779,12 @@ class CodexSessionsClient:
         rollouts.sort(key=lambda parsed: self._timestamp_sort_key(max_timestamp(parsed.records)), reverse=True)
         return rollouts
 
-    def _load_rollout_indexes(self) -> List[RolloutIndex]:
+    def _load_rollout_indexes(self, session_ids: Optional[List[str]] = None) -> List[RolloutIndex]:
         self.load_errors = []
         if not self.codex_home.exists():
             return []
         indexes = []
-        for path in iter_rollout_paths(self.codex_home):
+        for path in iter_rollout_paths(self.codex_home, session_ids):
             try:
                 indexes.append(load_rollout_index(path))
             except FileNotFoundError:
@@ -829,8 +835,9 @@ class CodexSessionsClient:
         project_path: Optional[str],
         since: Optional[str],
         date_window: Optional[Tuple[datetime, datetime]] = None,
+        session_ids: Optional[List[str]] = None,
     ):
-        for index in self._load_rollout_indexes():
+        for index in self._load_rollout_indexes(session_ids):
             if project_path is not None and index.cwd != project_path:
                 continue
             if project is not None and project_name(index.cwd) != project:

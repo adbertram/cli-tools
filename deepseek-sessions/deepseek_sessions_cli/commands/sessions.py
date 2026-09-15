@@ -70,6 +70,29 @@ def _session_filters_can_match(filters: List[str]) -> bool:
     return False
 
 
+def exact_session_ids(filters: List[str]) -> Optional[List[str]]:
+    """Return the session ids pinned by `id:eq:` conditions, or None.
+
+    Filter flags OR together and comma parts AND together, so the result set
+    is bounded to named ids only when every OR group carries an `id:eq:` part.
+    Those ids let the client open just the named session logs instead of
+    parsing every session on disk.
+    """
+    ids: List[str] = []
+    for filter_string in filters:
+        group_ids = [
+            value
+            for field, operator, value in (
+                parse_filter_part(part) for part in split_filter_parts(filter_string)
+            )
+            if field == "id" and operator == "eq" and value
+        ]
+        if not group_ids:
+            return None
+        ids.extend(group_ids)
+    return ids
+
+
 def _render_session_table(items: List[dict], wide: bool) -> None:
     """Format session rows and print them as a table."""
     add_tokens(items)
@@ -150,6 +173,7 @@ def list_sessions(
                 date_bounds=date_bounds,
                 min_tool_calls=min_tool_calls,
                 include_subagents=subagents,
+                session_ids=exact_session_ids(filter) if filter else None,
             )
 
         items = to_items(sessions)
