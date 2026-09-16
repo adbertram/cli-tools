@@ -376,12 +376,15 @@ class N8nApiClient:
                 timeout=kwargs.pop("timeout", 30),
                 **kwargs,
             )
-            resp.raise_for_status()
-            if resp.status_code == 204:
-                return None
-            return resp.json()
         except requests.exceptions.RequestException as e:
             raise N8nApiError(f"REST request failed: {e}")
+        if not resp.ok:
+            raise N8nApiError(
+                f"REST request failed ({resp.status_code}) {method} {path}: {resp.text}"
+            )
+        if resp.status_code == 204:
+            return None
+        return resp.json()
 
     def _get_project_id(self) -> str:
         """Get the default project ID from the n8n server.
@@ -875,6 +878,23 @@ class N8nApiClient:
             Updated workflow object
         """
         return self._request("PUT", f"/workflows/{workflow_id}", json=data, _retries=0)
+
+    def stop_execution(self, execution_id: str) -> Dict:
+        """Stop a running or waiting execution via the internal REST API.
+
+        The public API has no stop endpoint; n8n serves it at
+        POST /rest/executions/:id/stop behind session auth.
+
+        Args:
+            execution_id: Execution ID
+
+        Returns:
+            Stop result object from the response data envelope
+        """
+        response = self._rest_request("POST", f"/rest/executions/{execution_id}/stop")
+        if not isinstance(response, dict) or not isinstance(response.get("data"), dict):
+            raise N8nApiError("Execution stop response did not include a data object")
+        return response["data"]
 
     def get_execution(self, execution_id: int, include_data: bool = True) -> Dict:
         """Get a specific execution by ID.

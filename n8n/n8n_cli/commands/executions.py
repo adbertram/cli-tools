@@ -84,6 +84,9 @@ COMMAND_CREDENTIALS = {
     ],
     "list": [
         "api_key"
+    ],
+    "stop": [
+        "api_key"
     ]
 }
 
@@ -219,6 +222,28 @@ def executions_get(
 
     except typer.Exit:
         raise
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+@app.command("stop")
+@command
+def executions_stop(
+    execution_id: str = typer.Argument(..., help="ID of a running or waiting execution"),
+):
+    """
+    Stop a running or waiting execution.
+
+    Uses the internal REST endpoint POST /rest/executions/{id}/stop (the public
+    API has no stop endpoint), so EMAIL and PASSWORD session auth is required.
+    Fails when the execution has already finished.
+
+    Example:
+        n8n executions stop 12345
+    """
+    try:
+        result = get_n8n_api_client().stop_execution(execution_id)
+        print_json(result)
     except Exception as e:
         raise typer.Exit(handle_error(e))
 

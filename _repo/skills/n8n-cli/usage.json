@@ -1,8 +1,8 @@
 {
   "tool": "n8n",
   "description": "Manage n8n server - workflows, nodes, executions, credentials, data tables, and logs",
-  "discovered_at": "2026-09-16T15:23:11Z",
-  "total_commands": 65,
+  "discovered_at": "2026-09-16T16:54:53Z",
+  "total_commands": 66,
   "global_options": [
     {
       "name": "--version",
@@ -1086,6 +1086,25 @@
               "short": "-t",
               "takes_value": false
             },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "stop": {
+          "help": "Stop a running or waiting execution. Uses the internal REST endpoint POST /rest/executions/{id}/stop (the public API has no stop endpoint), so EMAIL and PASSWORD session auth is required. Fails when the execution has already finished. Example: n8n executions stop 12345",
+          "arguments": [
+            {
+              "name": "execution_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "ID of a running or waiting execution"
+            }
+          ],
+          "options": [
             {
               "name": "--profile",
               "type": "TEXT",

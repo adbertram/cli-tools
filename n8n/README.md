@@ -258,6 +258,11 @@ n8n executions list --from 2026-02-12 --status error --table
 n8n executions list --from "2026-02-12T08:00" --to "2026-02-12T09:00"
 n8n executions list --workflow-id 17VB4GJjjp0ijgjJ
 
+# Stop a running or waiting execution (internal REST API; needs EMAIL/PASSWORD session auth)
+# Prints the stop result, e.g. {"mode": "manual", "startedAt": "...", "stoppedAt": "...", "finished": false, "status": "canceled"}
+# Exits 1 when the execution is already finished or does not exist
+n8n executions stop 20635
+
 # Query event log files (audit trail, workflow events, node events)
 n8n executions events --from 2026-02-12 --type audit --table
 n8n executions events --from 2026-02-12 --type workflow --table
