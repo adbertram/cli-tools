@@ -1,8 +1,8 @@
 {
   "tool": "n8n",
   "description": "Manage n8n server - workflows, nodes, executions, credentials, data tables, and logs",
-  "discovered_at": "2026-09-12T22:58:41Z",
-  "total_commands": 64,
+  "discovered_at": "2026-09-16T15:23:11Z",
+  "total_commands": 65,
   "global_options": [
     {
       "name": "--version",
@@ -482,6 +482,45 @@
             }
           ],
           "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "update": {
+          "help": "Update an existing credential's data on the n8n server. The JSON payload replaces the credential's stored data, so include every field the credential type needs. Use 'n8n credentials schema <type>' to see the fields; the server enforces conditional requirements and rejects fields a type prohibits. Example: $HOME/.local/bin/n8n credentials update qe03iDk3T8FNbNTg --data-stdin --name \"Brickowl Prod\" Supply exactly one of DATA or --data-stdin. Pipe JSON into stdin; do not type secrets into an interactive terminal or put them in command arguments.",
+          "arguments": [
+            {
+              "name": "credential_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Credential ID to update"
+            },
+            {
+              "name": "data",
+              "type": "DATA",
+              "required": false,
+              "help": "Credential data as JSON string; use --data-stdin for secrets"
+            }
+          ],
+          "options": [
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": false,
+              "help": "New display name",
+              "short": "-n"
+            },
+            {
+              "name": "--data-stdin",
+              "type": "bool",
+              "required": false,
+              "help": "Read credential JSON from piped stdin instead of DATA",
+              "takes_value": false
+            },
             {
               "name": "--profile",
               "type": "TEXT",

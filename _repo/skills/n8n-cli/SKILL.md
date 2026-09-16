@@ -32,6 +32,7 @@ $HOME/.local/bin/n8n <command-group> <action> [arguments] [options]
 | Query recent executions | `$HOME/.local/bin/n8n executions list --filter created_at:gte:2026-04-11 --table` |
 | Get execution detail | `$HOME/.local/bin/n8n executions get <execution_id>` |
 | List credentials | `$HOME/.local/bin/n8n credentials list --table` |
+| Update credential data (JSON piped on stdin) | `$HOME/.local/bin/n8n credentials update <credential_id> --data-stdin --name "New Name"` |
 | List data-table rows | `$HOME/.local/bin/n8n data-tables rows <table_id> --table` |
 | Check server version | `$HOME/.local/bin/n8n server version` |
 | Check auth status | `$HOME/.local/bin/n8n auth status` |
@@ -88,7 +89,7 @@ the ones in `usage.json`:
 - **cache** -- manage the local response cache
 - **workflows** -- list, get, create, update, delete, activate, deactivate, export, execute, assign-error-handler, node
 - **nodes** -- test, create, deploy, remove, install, list, get community node packages
-- **credentials** -- list, get, create, delete, rename, schema for server credentials
+- **credentials** -- list, get, create, update, delete, rename, schema for server credentials
 - **data-tables** -- CRUD on n8n Data Tables (list, get, create, delete, columns, rows, insert, update-rows, delete-rows)
 - **executions** -- query execution history (list, get, events via SSH)
 - **server** -- upgrade, version, restart, logs, config

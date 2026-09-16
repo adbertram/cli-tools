@@ -190,6 +190,9 @@ n8n credentials list --table
 # Create a credential from an existing protected JSON input file
 $HOME/.local/bin/n8n credentials create brickowlApi --data-stdin --name "Brickowl Prod" < /private/path/credential.json
 
+# Update an existing credential's data (and optionally its display name)
+$HOME/.local/bin/n8n credentials update CREDENTIAL_ID --data-stdin --name "Brickowl Prod" < /private/path/credential.json
+
 # Get credential type schema
 n8n credentials schema brickowlApi
 
@@ -197,11 +200,16 @@ n8n credentials schema brickowlApi
 n8n credentials delete CREDENTIAL_ID
 ```
 
-Credential creation accepts exactly one input: positional `DATA` JSON (legacy
-compatibility) or `--data-stdin`. Use stdin for secrets so the JSON is absent from
-process arguments and shell history. Pipe a credential producer into the command
+Credential creation and update accept exactly one input: positional `DATA` JSON
+(legacy compatibility) or `--data-stdin`. Use stdin for secrets so the JSON is absent
+from process arguments and shell history. Pipe a credential producer into the command
 or redirect an existing protected file; interactive terminal input is rejected.
-Empty, malformed, and non-object JSON fail before credential creation.
+Empty, malformed, and non-object JSON fail before the API call.
+
+`credentials update` replaces the credential's stored data with the JSON supplied, so
+include every field the credential type needs. A credential type may make fields
+conditionally required or prohibited; the server owns that validation and its rejection
+is reported verbatim.
 
 ### Data Tables
 
