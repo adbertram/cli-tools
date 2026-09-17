@@ -53,7 +53,8 @@ With `--auto-schedule` or `--date` it only schedules. It requires the page to be
 `Ready to Publish` and validates everything the later flagless promotion needs:
 Keywords, Category, Tags, and Excerpt are set, the Notion content has no
 `IMAGE_PLACEHOLDER` marker, the featured image exists, every Category and Tag
-is in `terms.json`, and the slug is not already in the corpus. It then picks
+is in `terms.json`, `Type` is set (and a `Sponsored` type finds the Sponsored
+tag in `terms.json`), and the slug is not already in the corpus. It then picks
 the slot and writes `Status=Scheduled` plus `Publish Date`. Nothing is staged,
 built, deployed, or journaled. The result JSON is `notion_page_id`, `status`
 (`Scheduled`), `scheduled_date`, and `slug`. `--featured-image` and

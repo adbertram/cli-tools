@@ -439,6 +439,17 @@ class AtaBlogClient:
             if name.strip()
         ]
 
+    def _sponsored_tag_ids(self, article: Dict[str, Any], page_id: str) -> List[int]:
+        """Return the Sponsored tag id for a Sponsored `Type`, else no ids."""
+        if not article.get("Type"):
+            raise ClientError(f"Notion page {page_id} has no Type")
+        if not str(article["Type"]).startswith("Sponsored"):
+            return []
+        # corpus.py imports this module, so the name is imported here.
+        from .corpus import SPONSORED_TAG_NAME
+
+        return self._resolve_static_term_ids("tags", [SPONSORED_TAG_NAME])
+
     @staticmethod
     def _validate_publish_markdown(markdown_content: str) -> None:
         placeholder_lines = [
@@ -904,7 +915,13 @@ class AtaBlogClient:
             value = page["Publish Date"]
             if not value:
                 raise ClientError(f"Scheduled Notion page {page['id']} has no Publish Date")
-            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            try:
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise ClientError(
+                    f"Scheduled Notion page {page['id']} has a Publish Date that is "
+                    f"not one ISO 8601 timestamp: {value}"
+                ) from exc
             if parsed.tzinfo is None:
                 raise ClientError(
                     f"Scheduled Notion page {page['id']} has a Publish Date "
@@ -1063,16 +1080,22 @@ class AtaBlogClient:
 
         raise ClientError("Could not find available schedule slot within iteration limit")
 
-    def _require_free_explicit_slot(
-        self, value: str, schedule_window: Optional[Tuple[datetime, datetime]] = None,
-    ) -> str:
-        """Validate an explicit UTC-aware slot no Scheduled page occupies."""
+    @staticmethod
+    def _parse_schedule_date(value: str) -> datetime:
+        """Parse --date, rejecting anything but a UTC-offset-aware timestamp."""
         try:
             parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
         except ValueError as exc:
             raise ClientError(f"--date is not valid ISO 8601: {value}") from exc
         if parsed.tzinfo is None:
             raise ClientError("--date must include a UTC offset")
+        return parsed
+
+    def _require_free_explicit_slot(
+        self, value: str, schedule_window: Optional[Tuple[datetime, datetime]] = None,
+    ) -> str:
+        """Validate an explicit UTC-aware slot no Scheduled page occupies."""
+        parsed = self._parse_schedule_date(value)
         slot = parsed.astimezone(timezone.utc).isoformat()
         self._require_schedule_in_window(slot, schedule_window)
         if parsed in self._read_scheduled_slots():
@@ -1291,8 +1314,7 @@ class AtaBlogClient:
         paths: Dict[str, Path],
     ) -> Dict[str, Any]:
         """Write one deterministic corpus record and preserve its exact preimage."""
-        if not article.get("Type"):
-            raise ClientError(f"Notion page {page_id} has no Type")
+        sponsored_tag_ids = self._sponsored_tag_ids(article, page_id)
         post_root = STATIC_SITE_ROOT / "src" / "data" / "posts"
         post_root.mkdir(parents=True, exist_ok=True)
         # notionPageId is this record's durable identity; slug is a derived
@@ -1380,16 +1402,7 @@ class AtaBlogClient:
             tag_ids = self._resolve_static_term_ids(
                 "tags", self._notion_term_names(article, "Tags")
             )
-        sponsored_ids: List[int] = []
-        if str(article["Type"]).startswith("Sponsored"):
-            # corpus.py imports this module, so the name is imported here.
-            from .corpus import SPONSORED_TAG_NAME
-
-            sponsored_ids = [
-                term_id
-                for term_id in self._resolve_static_term_ids("tags", [SPONSORED_TAG_NAME])
-                if term_id not in tag_ids
-            ]
+        sponsored_ids = [term_id for term_id in sponsored_tag_ids if term_id not in tag_ids]
         if not tag_lines or sponsored_ids:
             replacements["tagIds"] = json.dumps(tag_ids + sponsored_ids)
         if not any(line.startswith("wpId:") for line in frontmatter):
@@ -3526,9 +3539,6 @@ class AtaBlogClient:
         force: bool,
     ) -> Dict[str, Any]:
         """Run or resume the single journaled static publication transaction."""
-        if status not in {"draft", "publish"}:
-            raise ClientError("Static publish status must be draft or publish")
-
         article = self.get_article(page_id)
         title = str(article.get("Title") or article.get("title") or "Untitled")
         self._require_publish_metadata(article)
@@ -3962,35 +3972,41 @@ class AtaBlogClient:
         due publisher's `--status publish` run does all of that later, without
         flags, so every gate it cannot satisfy itself is enforced now.
         """
-        if date and auto_schedule:
+        if date is not None and auto_schedule:
             raise ClientError("Use either --date or --auto-schedule, not both")
         if status == "publish":
             raise ClientError(
                 "--status publish cannot be combined with --date or --auto-schedule: "
                 "scheduling never promotes"
             )
-        article = self.get_article(page_id)
-        if article.get("Status") != "Ready to Publish":
-            raise ClientError(
-                f"Notion page {page_id} must be 'Ready to Publish' to be scheduled; "
-                f"current status is '{article.get('Status')}'"
-            )
-        if not article.get("Title"):
-            raise ClientError(f"Notion page {page_id} has no Title")
-        self._require_publish_metadata(article)
-        self._validate_publish_markdown(self.get_article_markdown(page_id))
-        self._resolve_featured_image(page_id, None)
-        self._resolve_static_term_ids("categories", self._notion_term_names(article, "Category"))
-        self._resolve_static_term_ids("tags", self._notion_term_names(article, "Tags"))
-        final_slug = self._static_slug(
-            str(article["Title"]), self._notion_slug(article, page_id)
-        )
-        if check_duplicates and self._find_static_post(final_slug) is not None:
-            raise ClientError(f"Static post with slug '{final_slug}' already exists")
+        if date is not None:
+            self._parse_schedule_date(date)
 
-        # One lock across read-slots -> pick -> Notion write: the Scheduled page
-        # is the durable slot record, so a second scheduler reads it on entry.
+        # One lock across page read -> read-slots -> pick -> Notion write. The
+        # Scheduled page is the durable record of both facts a second scheduler
+        # needs: this page is no longer Ready to Publish, and its slot is taken.
         with self._exclusive_publisher_lock(self._schedule_lock_path()):
+            article = self.get_article(page_id)
+            if article.get("Status") != "Ready to Publish":
+                raise ClientError(
+                    f"Notion page {page_id} must be 'Ready to Publish' to be scheduled; "
+                    f"current status is '{article.get('Status')}'"
+                )
+            if not article.get("Title"):
+                raise ClientError(f"Notion page {page_id} has no Title")
+            self._require_publish_metadata(article)
+            self._validate_publish_markdown(self.get_article_markdown(page_id))
+            self._resolve_featured_image(page_id, None)
+            self._resolve_static_term_ids(
+                "categories", self._notion_term_names(article, "Category")
+            )
+            self._resolve_static_term_ids("tags", self._notion_term_names(article, "Tags"))
+            self._sponsored_tag_ids(article, page_id)
+            final_slug = self._static_slug(
+                str(article["Title"]), self._notion_slug(article, page_id)
+            )
+            if check_duplicates and self._find_static_post(final_slug) is not None:
+                raise ClientError(f"Static post with slug '{final_slug}' already exists")
             if auto_schedule:
                 slot = self.find_next_schedule_slot(schedule_window)
             else:
@@ -4039,8 +4055,12 @@ class AtaBlogClient:
         or the static transaction result dict (static_url, deployment_id,
         promoted, journal state, effects).
         """
+        if status not in {"draft", "publish"}:
+            raise ClientError("Static publish status must be draft or publish")
         schedule_window = self._parse_schedule_window(schedule_after, schedule_before)
-        if date or auto_schedule:
+        # An empty --date (an unset shell variable) is still a schedule request:
+        # it must fail as a bad date, never fall through to a promotion.
+        if date is not None or auto_schedule:
             if featured_image:
                 raise ClientError(
                     "--featured-image cannot be used when scheduling: the due publisher "

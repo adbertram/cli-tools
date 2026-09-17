@@ -171,6 +171,19 @@ def test_scheduled_page_without_publish_date_raises(monkeypatch, tmp_path):
         client.find_next_schedule_slot()
 
 
+def test_ranged_notion_publish_date_raises_and_names_the_page(monkeypatch, tmp_path):
+    """The notion CLI renders a date with an end as "start - end"; that is invalid here."""
+    utc_now = datetime(2026, 8, 4, 8, 0, 0, tzinfo=timezone.utc)
+    ranged = "2026-09-24T09:00:00.000+00:00 - 2026-09-25T09:00:00.000+00:00"
+    client = _make_client(monkeypatch, tmp_path, utc_now, scheduled_slots=[ranged])
+
+    with pytest.raises(ClientError) as exc_info:
+        client.find_next_schedule_slot()
+
+    assert "page-0" in str(exc_info.value)
+    assert ranged in str(exc_info.value)
+
+
 def test_scheduled_query_at_the_list_limit_raises(monkeypatch, tmp_path):
     """100 rows from a limit-100 query is an incomplete read, never a complete one."""
     utc_now = datetime(2026, 8, 4, 8, 0, 0, tzinfo=timezone.utc)

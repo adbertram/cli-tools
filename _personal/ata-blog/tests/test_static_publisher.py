@@ -1672,13 +1672,7 @@ def test_publish_status_rejected_before_source_or_external_reads(publisher):
     client.get_article = lambda _page_id: pytest.fail("source read must not run")
 
     with pytest.raises(ClientError, match="Static publish status must be draft or publish"):
-        client._publish_static_transaction(
-            page_id=PAGE_ID,
-            status="invalid-status",
-            check_duplicates=False,
-            featured_image="ignored.png",
-            force=False,
-        )
+        client.publish_article(PAGE_ID, status="invalid-status")
 
 
 def test_staging_is_byte_identical_for_same_persisted_publish_date(publisher):
@@ -2477,5 +2471,174 @@ def test_missing_slug_property_raises_client_error_naming_slug(publisher):
 
     with pytest.raises(ClientError, match="has no 'Slug' property"):
         client.publish_article(PAGE_ID, status="publish")
+
+    _assert_nothing_written(client, counters)
+
+
+# --- schedule-request hardening ------------------------------------------------
+
+
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_blank_date_is_rejected_before_any_read_or_write(publisher, blank):
+    client, article, _markdown, _image, _manifest, counters, _token = publisher
+    article["Status"] = "Ready to Publish"
+    client.get_article = lambda _page_id: pytest.fail("source read must not run")
+
+    with pytest.raises(ClientError, match="--date is not valid ISO 8601"):
+        client.publish_article(PAGE_ID, date=blank)
+
+    _assert_nothing_written(client, counters)
+
+
+def test_cli_blank_date_with_status_publish_never_promotes(publisher, monkeypatch):
+    """`--date "$UNSET"` is a schedule request with a bad date, never a promotion."""
+    client, article, _markdown, _image, _manifest, counters, _token = publisher
+    calls, _rollbacks = _arm_promotion(client)
+    article["Status"] = "Ready to Publish"
+    monkeypatch.setattr(notion_page, "get_client", lambda: client)
+
+    result = CliRunner().invoke(
+        notion_page.app, ["publish", PAGE_ID, "--status", "publish", "--date", ""]
+    )
+
+    assert result.exit_code != 0
+    assert calls["promotion_create"] == 0
+    assert article["Status"] == "Ready to Publish"
+    _assert_nothing_written(client, counters)
+
+
+def test_schedule_rejects_an_unknown_status_value(publisher):
+    client, article, _markdown, _image, _manifest, counters, _token = publisher
+    article["Status"] = "Ready to Publish"
+
+    with pytest.raises(ClientError, match="Static publish status must be draft or publish"):
+        client.publish_article(PAGE_ID, status="pubish", date=SLOT)
+
+    _assert_nothing_written(client, counters)
+
+
+def test_two_schedule_requests_for_the_same_page_write_once(publisher, monkeypatch):
+    client, article, *_ = publisher
+    article["Status"] = "Ready to Publish"
+    _freeze_utc_now(monkeypatch, datetime(2026, 8, 4, 7, 15, 0, tzinfo=timezone.utc))  # Tuesday
+    committed = client.update_article
+
+    def update(page_id, *, status, properties):
+        # Hold the write open: a request that checked Status before taking the
+        # lock has already seen "Ready to Publish" by now.
+        time.sleep(0.05)
+        return committed(page_id, status=status, properties=properties)
+
+    client.update_article = update
+    barrier = threading.Barrier(2)
+    outcomes = []
+
+    def schedule():
+        barrier.wait()
+        try:
+            outcomes.append(("ok", client.publish_article(PAGE_ID, auto_schedule=True)["scheduled_date"]))
+        except ClientError as exc:
+            outcomes.append(("error", str(exc)))
+
+    threads = [threading.Thread(target=schedule) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert sorted(outcomes) == [
+        (
+            "error",
+            f"Notion page {PAGE_ID} must be 'Ready to Publish' to be scheduled; "
+            "current status is 'Scheduled'",
+        ),
+        ("ok", "2026-08-04T09:00:00+00:00"),
+    ]
+    assert client.update_calls == [
+        (PAGE_ID, "Scheduled", {"Publish Date": "2026-08-04T09:00:00+00:00"})
+    ]
+
+
+def test_schedule_rejects_missing_title(publisher):
+    client, article, _markdown, _image, _manifest, counters, _token = publisher
+    article["Status"] = "Ready to Publish"
+    article["Title"] = ""
+
+    with pytest.raises(ClientError, match=f"Notion page {PAGE_ID} has no Title"):
+        client.publish_article(PAGE_ID, auto_schedule=True)
+
+    _assert_nothing_written(client, counters)
+
+
+def test_schedule_rejects_unknown_category(publisher):
+    client, article, _markdown, _image, _manifest, counters, _token = publisher
+    article["Status"] = "Ready to Publish"
+    article["Category"] = "Not A Real Category"
+
+    with pytest.raises(
+        ClientError, match="Unknown static corpus categories name: 'Not A Real Category'"
+    ):
+        client.publish_article(PAGE_ID, auto_schedule=True)
+
+    _assert_nothing_written(client, counters)
+
+
+def test_schedule_with_duplicate_check_off_accepts_a_slug_already_in_the_corpus(publisher):
+    client, article, _markdown, _image, _manifest, counters, _token = publisher
+    article["Status"] = "Ready to Publish"
+    existing = (
+        client_module.STATIC_SITE_ROOT / "src" / "data" / "posts" / "journaled-static-publisher.md"
+    )
+    existing.write_text('---\nslug: "journaled-static-publisher"\n---\nAn older post.\n')
+
+    result = client.publish_article(PAGE_ID, date=SLOT, check_duplicates=False)
+
+    assert result["status"] == "Scheduled"
+    assert client.update_calls == [(PAGE_ID, "Scheduled", {"Publish Date": SLOT})]
+    _assert_no_publisher_effects(client, counters, corpus_files=[existing])
+
+
+def test_cli_no_duplicate_check_flag_turns_duplicate_checking_off(monkeypatch):
+    class _Client:
+        def __init__(self):
+            self.kwargs = None
+
+        def publish_article(self, _page_id, **kwargs):
+            self.kwargs = kwargs
+            return {"status": "Scheduled", "scheduled_date": SLOT}
+
+    client = _Client()
+    monkeypatch.setattr(notion_page, "get_client", lambda: client)
+
+    result = CliRunner().invoke(
+        notion_page.app, ["publish", PAGE_ID, "--auto-schedule", "--no-duplicate-check"]
+    )
+
+    assert result.exit_code == 0
+    assert client.kwargs["check_duplicates"] is False
+
+
+def test_schedule_rejects_missing_type(publisher):
+    client, article, _markdown, _image, _manifest, counters, _token = publisher
+    article["Status"] = "Ready to Publish"
+    article["Type"] = None
+
+    with pytest.raises(ClientError, match=f"Notion page {PAGE_ID} has no Type"):
+        client.publish_article(PAGE_ID, auto_schedule=True)
+
+    _assert_nothing_written(client, counters)
+
+
+def test_schedule_rejects_a_sponsored_post_when_terms_lack_the_sponsored_tag(publisher):
+    client, article, _markdown, _image, _manifest, counters, _token = publisher
+    article["Status"] = "Ready to Publish"
+    article["Type"] = "Sponsored Product Review"
+    terms_path = client_module.STATIC_SITE_ROOT / "src" / "data" / "terms.json"
+    terms = json.loads(terms_path.read_text())
+    terms["tags"] = [tag for tag in terms["tags"] if tag["name"] != "Sponsored"]
+    terms_path.write_text(json.dumps(terms) + "\n")
+
+    with pytest.raises(ClientError, match="Unknown static corpus tags name: 'Sponsored'"):
+        client.publish_article(PAGE_ID, auto_schedule=True)
 
     _assert_nothing_written(client, counters)
