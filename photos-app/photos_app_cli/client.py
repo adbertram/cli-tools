@@ -132,21 +132,43 @@ class PhotosClient:
         """Get the primary key for an album by name.
 
         Args:
-            album_name: Album title (case-insensitive)
+            album_name: Album title (case-insensitive, whitespace-insensitive)
 
         Returns:
             Album Z_PK or None if not found
         """
+        identity = self._get_album_identity(album_name)
+        return identity["pk"] if identity else None
+
+    def _get_album_identity(self, album_name: str) -> Optional[dict]:
+        """Resolve a non-trashed album by name to its stable identifiers.
+
+        The stored ``ZTITLE`` can carry incidental leading/trailing whitespace
+        that the list/get commands do not surface, so both sides of the
+        comparison are trimmed (``LOWER(TRIM(ZTITLE)) = LOWER(TRIM(?))``) — the
+        previous query trimmed only the stored side, so no caller input could
+        satisfy both the pre-check and an exact AppleScript name match.
+
+        Returns:
+            Dict with ``pk`` (Z_PK), ``uuid`` (ZUUID), and ``title`` (the exact
+            stored title, whitespace preserved), or None if not found.
+        """
         query = """
-            SELECT Z_PK FROM ZGENERICALBUM
-            WHERE LOWER(TRIM(ZTITLE)) = LOWER(?)
+            SELECT Z_PK, ZUUID, ZTITLE FROM ZGENERICALBUM
+            WHERE LOWER(TRIM(ZTITLE)) = LOWER(TRIM(?))
                 AND ZTRASHEDSTATE = 0
             LIMIT 1
         """
         with self._connect() as conn:
             cursor = conn.execute(query, (album_name,))
             row = cursor.fetchone()
-            return row["Z_PK"] if row else None
+            if not row:
+                return None
+            return {
+                "pk": row["Z_PK"],
+                "uuid": row["ZUUID"],
+                "title": row["ZTITLE"],
+            }
 
     def list_photos(
         self,
@@ -485,83 +507,153 @@ class PhotosClient:
         Raises:
             ClientError: If album not found or operation fails
         """
-        # Validate source album exists
-        existing = self._get_album_pk(album_name)
-        if not existing:
+        # Resolve the source album to its stable identifiers. Matching is
+        # whitespace-insensitive on both sides so a caller can move an album
+        # whose stored title carries incidental leading/trailing whitespace.
+        identity = self._get_album_identity(album_name)
+        if not identity:
             raise ClientError(f"Album '{album_name}' not found")
 
-        # Escape quotes for AppleScript
-        escaped_album = album_name.replace('"', '\\"')
+        # Photos AppleScript album ids have the form "<UUID>/L0/040". Driving
+        # the move by this stable id avoids the "whose name is ..." /
+        # "repeat with a in every album" lookups that intermittently throw
+        # "Invalid index (-1719)" and, worse, that mutate the live "every album"
+        # collection mid-script and leave a duplicate un-trashed album behind.
+        source_id = f"{identity['uuid']}/L0/040"
+        # Preserve the source album's exact stored title (whitespace included)
+        # for the moved copy so the move is faithful.
+        new_album_title = identity["title"]
+
+        escaped_source_id = source_id.replace('"', '\\"')
+        escaped_new_title = new_album_title.replace('"', '\\"')
         escaped_folder = folder_name.replace('"', '\\"')
 
-        script = f'''
+        # Phase 1: create the target folder if needed, create the new album in
+        # it, and copy the source album's media into it. The source album is
+        # referenced only by its stable id. This phase never deletes anything.
+        create_script = f'''
             tell application "Photos"
-                set sourceAlbum to first album whose name is "{escaped_album}"
+                set sourceAlbum to album id "{escaped_source_id}"
                 set sourcePhotos to every media item of sourceAlbum
-                try
-                    set targetFolder to first folder whose name is "{escaped_folder}"
-                on error
+                set targetFolder to missing value
+                repeat with f in every folder
+                    if name of f is "{escaped_folder}" then
+                        set targetFolder to f
+                        exit repeat
+                    end if
+                end repeat
+                if targetFolder is missing value then
                     set targetFolder to make new folder named "{escaped_folder}"
-                end try
-                set newAlbum to make new album named "{escaped_album}" at targetFolder
+                end if
+                set newAlbum to make new album named "{escaped_new_title}" at targetFolder
                 if (count of sourcePhotos) > 0 then
                     add sourcePhotos to newAlbum
                 end if
-                delete sourceAlbum
                 return id of newAlbum
             end tell
         '''
 
+        import time
+
         try:
-            result = subprocess.run(
-                ["osascript", "-e", script],
+            create_result = subprocess.run(
+                ["osascript", "-e", create_script],
                 capture_output=True,
                 text=True,
                 timeout=120,
             )
-
-            if result.returncode != 0:
-                raise ClientError(f"Failed to move album: {result.stderr.strip()}")
-
-            # Give Photos.app a moment to sync
-            import time
-            time.sleep(0.5)
-
-            # Query for the moved album from the database
-            query = """
-                SELECT
-                    ZUUID,
-                    ZTITLE,
-                    ZCACHEDPHOTOSCOUNT,
-                    ZCACHEDVIDEOSCOUNT,
-                    ZCREATIONDATE
-                FROM ZGENERICALBUM
-                WHERE LOWER(ZTITLE) = LOWER(?)
-                    AND ZTRASHEDSTATE = 0
-                ORDER BY ZCREATIONDATE DESC
-                LIMIT 1
-            """
-            with self._connect() as conn:
-                cursor = conn.execute(query, (album_name,))
-                row = cursor.fetchone()
-                if row:
-                    return Album(
-                        uuid=row["ZUUID"],
-                        title=row["ZTITLE"],
-                        photo_count=row["ZCACHEDPHOTOSCOUNT"] or 0,
-                        video_count=row["ZCACHEDVIDEOSCOUNT"] or 0,
-                        date_created=self._apple_to_datetime(row["ZCREATIONDATE"]),
-                    )
-
-            # If we can't find it in the database, return a minimal Album
-            return Album(uuid="", title=album_name)
-
         except subprocess.TimeoutExpired:
             raise ClientError("Album move timed out")
-        except Exception as e:
-            if isinstance(e, ClientError):
-                raise
-            raise ClientError(f"Failed to move album: {e}")
+
+        if create_result.returncode != 0:
+            raise ClientError(f"Failed to move album: {create_result.stderr.strip()}")
+
+        new_album_id = create_result.stdout.strip()
+
+        # Phase 2: delete the source album in a SEPARATE osascript invocation.
+        # Running the delete in a fresh process avoids the mid-script
+        # "every album" collection mutation (from make new album / add photos)
+        # that made the previous single-script delete fail with "Invalid index"
+        # after the copy had already succeeded — the failure mode that left a
+        # duplicate un-trashed album behind. Deleting by stable id avoids the
+        # "whose name is" lookup entirely.
+        escaped_new_album_id = new_album_id.replace('"', '\\"')
+        delete_script = f'''
+            tell application "Photos"
+                delete (album id "{escaped_source_id}")
+            end tell
+        '''
+
+        try:
+            delete_result = subprocess.run(
+                ["osascript", "-e", delete_script],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+        except subprocess.TimeoutExpired:
+            delete_result = None
+
+        if delete_result is None or delete_result.returncode != 0:
+            # The copy succeeded but the source could not be deleted. Roll back
+            # the newly created album so we never leave a duplicate un-trashed
+            # album behind (the worst-case outcome from the original bug). The
+            # source album stays intact, so the caller can safely retry.
+            rollback_script = f'''
+                tell application "Photos"
+                    delete (album id "{escaped_new_album_id}")
+                end tell
+            '''
+            try:
+                subprocess.run(
+                    ["osascript", "-e", rollback_script],
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+            except subprocess.TimeoutExpired:
+                pass
+            detail = (
+                "timed out"
+                if delete_result is None
+                else delete_result.stderr.strip()
+            )
+            raise ClientError(
+                f"Failed to move album: created the copy in '{folder_name}' but could "
+                f"not delete the source album ({detail}); rolled back the copy so no "
+                f"duplicate remains. Retry the move."
+            )
+
+        # Give Photos.app a moment to sync, then read the moved album back.
+        time.sleep(0.5)
+
+        query = """
+            SELECT
+                ZUUID,
+                ZTITLE,
+                ZCACHEDPHOTOSCOUNT,
+                ZCACHEDVIDEOSCOUNT,
+                ZCREATIONDATE
+            FROM ZGENERICALBUM
+            WHERE LOWER(TRIM(ZTITLE)) = LOWER(TRIM(?))
+                AND ZTRASHEDSTATE = 0
+            ORDER BY ZCREATIONDATE DESC
+            LIMIT 1
+        """
+        with self._connect() as conn:
+            cursor = conn.execute(query, (new_album_title,))
+            row = cursor.fetchone()
+            if row:
+                return Album(
+                    uuid=row["ZUUID"],
+                    title=row["ZTITLE"],
+                    photo_count=row["ZCACHEDPHOTOSCOUNT"] or 0,
+                    video_count=row["ZCACHEDVIDEOSCOUNT"] or 0,
+                    date_created=self._apple_to_datetime(row["ZCREATIONDATE"]),
+                )
+
+        # If we can't find it in the database, return a minimal Album.
+        return Album(uuid="", title=new_album_title)
 
     def auto_enhance_photo(self, uuid: str, delay: float = 1.5) -> bool:
         """Auto-enhance a single photo using Photos.app's built-in enhancement.
