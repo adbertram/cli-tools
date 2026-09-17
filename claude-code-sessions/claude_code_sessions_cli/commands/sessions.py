@@ -8,7 +8,7 @@ COMMAND_CREDENTIALS = {
 import typer
 from typing import Optional, List
 from ..client import get_client, ClientError
-from cli_tools_shared.filters import apply_filters, parse_filter_part, split_filter_parts
+from cli_tools_shared.filters import apply_filters, exact_session_ids
 from cli_tools_shared.output import command, print_json, print_table, handle_error
 from ..parsers import (
     format_local_time,
@@ -27,29 +27,6 @@ app = typer.Typer(help="List and query sessions", no_args_is_help=True)
 # fetches every session and applies --limit only after filtering. Without this,
 # `--filter id:eq:X --limit 1` returns [] whenever X is not the newest session.
 UNBOUNDED = 1_000_000
-
-
-def exact_session_ids(filters: List[str]) -> Optional[List[str]]:
-    """Return the session ids pinned by `id:eq:` conditions, or None.
-
-    Filter flags OR together and comma parts AND together, so the result set
-    is bounded to named ids only when every OR group carries an `id:eq:` part.
-    Those ids let the client open just the named transcript files instead of
-    parsing every session on disk.
-    """
-    ids: List[str] = []
-    for filter_string in filters:
-        group_ids = [
-            value
-            for field, operator, value in (
-                parse_filter_part(part) for part in split_filter_parts(filter_string)
-            )
-            if field == "id" and operator == "eq" and value
-        ]
-        if not group_ids:
-            return None
-        ids.extend(group_ids)
-    return ids
 
 
 def _render_session_table(items: List[dict], columns: List[str], headers: List[str]) -> None:

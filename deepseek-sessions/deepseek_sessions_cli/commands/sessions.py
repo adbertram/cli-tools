@@ -10,6 +10,7 @@ from typing import List, Optional
 import typer
 from cli_tools_shared.filters import (
     apply_filters,
+    exact_session_ids,
     parse_filter_part,
     split_filter_parts,
     validate_filters,
@@ -68,29 +69,6 @@ def _session_filters_can_match(filters: List[str]) -> bool:
         if group_can_match:
             return True
     return False
-
-
-def exact_session_ids(filters: List[str]) -> Optional[List[str]]:
-    """Return the session ids pinned by `id:eq:` conditions, or None.
-
-    Filter flags OR together and comma parts AND together, so the result set
-    is bounded to named ids only when every OR group carries an `id:eq:` part.
-    Those ids let the client open just the named session logs instead of
-    parsing every session on disk.
-    """
-    ids: List[str] = []
-    for filter_string in filters:
-        group_ids = [
-            value
-            for field, operator, value in (
-                parse_filter_part(part) for part in split_filter_parts(filter_string)
-            )
-            if field == "id" and operator == "eq" and value
-        ]
-        if not group_ids:
-            return None
-        ids.extend(group_ids)
-    return ids
 
 
 def _render_session_table(items: List[dict], wide: bool) -> None:

@@ -7,8 +7,7 @@ from pydantic import BaseModel
 from cli_tools_shared.filters import (
     FilterValidationError,
     apply_filters,
-    parse_filter_part,
-    split_filter_parts,
+    exact_session_ids,
     validate_filters,
 )
 from cli_tools_shared.output import handle_error, print_error, print_json, print_table
@@ -49,31 +48,6 @@ UNBOUNDED = 1_000_000
 def fetch_limit(limit: int, filter: Optional[List[str]]) -> int:
     """Rows to request from the client, given a possibly-filtered request."""
     return UNBOUNDED if filter else limit
-
-
-def exact_session_ids(filters: Optional[List[str]]) -> Optional[List[str]]:
-    """Return the session ids pinned by `id:eq:` conditions, or None.
-
-    Filter flags OR together and comma parts AND together, so the result set
-    is bounded to named ids only when every OR group carries an `id:eq:` part.
-    Those ids let the client open just the named rollout files instead of
-    parsing every session on disk.
-    """
-    if not filters:
-        return None
-    ids: List[str] = []
-    for filter_string in filters:
-        group_ids = [
-            value
-            for field, operator, value in (
-                parse_filter_part(part) for part in split_filter_parts(filter_string)
-            )
-            if field == "id" and operator == "eq" and value
-        ]
-        if not group_ids:
-            return None
-        ids.extend(group_ids)
-    return ids
 
 
 def emit_list(

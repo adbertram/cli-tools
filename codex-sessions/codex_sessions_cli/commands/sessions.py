@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import typer
+from cli_tools_shared.filters import exact_session_ids
 from cli_tools_shared.output import command
 
 from ..client import get_client
@@ -11,7 +12,7 @@ from ..parsers import (
     parse_include_prompts,
     resolve_date_selector,
 )
-from .common import emit_list, emit_one, exact_session_ids, fetch_limit, model_to_dict
+from .common import emit_list, emit_one, fetch_limit, model_to_dict
 
 app = typer.Typer(help="List, get, and search Codex sessions", no_args_is_help=True)
 COMMAND_CREDENTIALS = {"list": ["custom"], "get": ["custom"], "search": ["custom"]}
