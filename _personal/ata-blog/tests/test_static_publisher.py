@@ -196,8 +196,7 @@ def publisher(tmp_path, monkeypatch):
     client = object.__new__(AtaBlogClient)
     client.config = _Config(profile_dir)
     client._RESERVATION_DIR = tmp_path / "schedule-reservations"
-    # Pre-cutover slot discovery reads the live WordPress future schedule;
-    # these tests pin scheduling to the empty runtime-root state instead.
+    # These tests pin scheduling to the empty runtime-root state.
     client._read_publisher_schedule_slots = lambda: []
     client.get_article = lambda _page_id: dict(article)
     client.get_article_markdown = lambda _page_id: markdown
@@ -564,7 +563,6 @@ def test_cli_renders_static_result_fields(monkeypatch):
     assert result.exit_code == 0
     assert PREVIEW_DEPLOYMENT_ID in result.output
     assert "https://preview.example.pages.dev/post/" in result.output
-    assert "wordpress_post" not in result.output
 
 
 @pytest.mark.parametrize(
@@ -1660,9 +1658,9 @@ def test_staging_is_byte_identical_for_same_persisted_publish_date(publisher):
     assert Path(second["article_path"]).read_bytes() == first_bytes
     # The corpus stores a naive site-local wall clock, because that is what the
     # static site's resolver reads a corpus timestamp as. Staging the UTC form
-    # published the post five hours late unless the harvested Rank Math override
-    # in post_seo.json corrected it -- a record that only ever exists for a post
-    # WordPress already published.
+    # published the post five hours late unless the harvested published-time
+    # override in post_seo.json corrected it -- a record that only ever exists
+    # for an imported post.
     assert b"pubDate: 2026-08-31T07:34:56\n" in first_bytes
     assert b"modDate: 2026-08-31T07:34:56\n" in first_bytes
     assert publish_date.encode() not in first_bytes

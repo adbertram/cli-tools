@@ -1,23 +1,19 @@
-"""Regression tests for per-post R2 mirroring of WordPress media derivatives.
+"""Regression tests for per-post R2 mirroring of media derivatives.
 
 Defect: the static publisher's inline-media mirroring copied only the exact URL
-a post body referenced. WordPress generates a family of resized derivatives per
-attachment (thumbnail, medium, medium_large, large, 1536x1536, 2048x2048, plus
+a post body referenced. Each attachment owns a family of resized derivatives
+(thumbnail, medium, medium_large, large, 1536x1536, 2048x2048, plus
 this theme's featured-small/featured-large) and the built static site emits them
 in `srcset`, so none of them reached R2. The 2026-09-05 media parity audit
 measured 112 missing derivative keys across 15 attachments created since
 2026-08-26, 7 of which were missing even their base file.
 
-Second defect: that owner lookup asked the WordPress media library which
-derivatives an attachment owns. When adamtheautomator.com became the static
-site, WordPress stopped answering there -- every API path returns the static
-404 page -- and the lookup took every publish down with it. The size family is
-now read from the static site's own media inventory, `media_variants.json`,
-which is the same record the built pages generate their `srcset` from, so the
-publish path no longer depends on WordPress at all.
+The size family is read from the static site's own media inventory,
+`media_variants.json`, which is the same record the built pages generate their
+`srcset` from.
 
 These tests pin that every referenced attachment now mirrors its base file plus
-every variant declared in `media_details.sizes`, at the identical
+every variant the inventory declares, at the identical
 `wp-content/uploads/...` key, that an attachment whose owning post is not yet
 public still resolves (the inventory does not model post status at all), and that a key containing a literal `..` is uploaded
 through the R2 S3-compatible transport because Cloudflare's REST edge WAF
@@ -59,9 +55,7 @@ _HUB_SPOKE_KEYS = [
 ]
 
 # An image on a post that has not gone live yet. The inventory records images,
-# not posts, so its owning post's status is irrelevant here -- which is the
-# whole point of moving off the WordPress media library, where a scheduled
-# post's attachment was invisible.
+# not posts, so its owning post's status is irrelevant here.
 _SCHEDULED_POST_INVENTORY = {
     "2026/09/bicep-compile-deploy-flow.png": {
         "w": 1920,
@@ -136,9 +130,9 @@ class _MediaHarness:
         return client
 
     def _fake_fetch(self, url, *, attempts=5):
-        # Nothing in this path may call WordPress: the only network read is the
-        # image bytes, fetched from the static origin.
-        assert "/wp-json/" not in url
+        # The only network read is the image bytes, fetched from the static
+        # origin's uploads path.
+        assert "/wp-content/uploads/" in url
         self.fetched_urls.append(url)
         return b"image-bytes", "image/png; charset=binary"
 
@@ -190,11 +184,8 @@ def test_derivative_reference_resolves_through_its_parent_attachment():
 def test_attachment_on_a_not_yet_public_post_resolves():
     """The pipeline schedules posts, so the owning post is normally non-public.
 
-    An attachment inherits its owning post's status, so while that post is
-    scheduled the WordPress media collection is empty to an anonymous reader --
-    it answers 200 with []. The lookup therefore has to run through the
-    authenticated `wordpress` CLI; an anonymous read here reported every
-    scheduled post's images as missing and failed the static publish.
+    The media inventory records images, not posts, so an image resolves
+    whatever its owning post's status is.
     """
     harness = _MediaHarness(_SCHEDULED_POST_INVENTORY)
     client = harness.build_client()

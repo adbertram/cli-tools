@@ -70,7 +70,7 @@ def test_content_set_command_submits_plain_text_code_fence(tmp_path, monkeypatch
     monkeypatch.setattr(client, "_run_notion", fake_run_notion)
     monkeypatch.setattr(client, "get_article_markdown", lambda _page_id: submitted_markdown)
     monkeypatch.setattr(notion_page, "get_client", lambda: client)
-    monkeypatch.setattr(notion_page, "process_local_images_for_wordpress", fake_process_images)
+    monkeypatch.setattr(notion_page, "upload_local_images", fake_process_images)
 
     result = CliRunner().invoke(
         notion_page.app,

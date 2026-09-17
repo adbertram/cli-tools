@@ -1,52 +1,26 @@
-"""Image processing utilities for Notion to WordPress publishing.
+"""Image utilities for ATA Blog publishing.
 
-Downloads images from Notion CDN and uploads them to WordPress media library,
-replacing Notion URLs with permanent WordPress URLs.
+``upload_to_static_media`` writes a local image straight into the static
+site's Cloudflare R2 media bucket under a content-addressed
+``wp-content/uploads/publisher/`` key. It is what every local image referenced
+by post markdown goes through.
 """
+import hashlib
 import json
+import mimetypes
 import re
 import subprocess
-import tempfile
 from pathlib import Path
-from typing import Callable, List, Tuple
-from urllib.request import urlopen, Request
+from typing import Any, Dict, List, Optional, Tuple
 
+from ..client import STATIC_MEDIA_BUCKET, STATIC_SITE_ORIGIN
 
-# Notion CDN URL prefixes. Add new prefixes here (data), not in control flow.
-NOTION_URL_PREFIXES = [
-    "https://prod-files-secure.s3.us-west-2.amazonaws.com/",
-    "https://prod-files.s3.us-west-2.amazonaws.com/",
-    "https://www.notion.so/image/",
-    "https://s3.us-west-2.amazonaws.com/secure.notion-static.com/",
-]
-
-# Backward-compatible anchored patterns derived from the prefixes above.
-NOTION_URL_PATTERNS = [re.escape(prefix) for prefix in NOTION_URL_PREFIXES]
-
-# A Notion CDN URL runs until a markdown/HTML delimiter. Its query params are
-# URL-encoded, so ')', whitespace, quotes, and angle brackets never appear
-# inside the URL itself and reliably terminate it. Scanning for the URL
-# directly (instead of parsing `![alt](url)` syntax) means image alt text
-# containing nested markdown links or brackets cannot hide the real image URL.
-_NOTION_URL_RE = re.compile(
-    "(?:" + "|".join(re.escape(prefix) for prefix in NOTION_URL_PREFIXES) + r")[^\s)\"'<>]*"
-)
-
-
-def extract_notion_image_urls(markdown: str) -> List[str]:
-    """
-    Return the unique Notion CDN URLs found anywhere in the content.
-
-    Order of first appearance is preserved; duplicates are removed.
-    """
-    seen = set()
-    urls = []
-    for match in _NOTION_URL_RE.finditer(markdown):
-        url = match.group(0)
-        if url not in seen:
-            seen.add(url)
-            urls.append(url)
-    return urls
+# Content-addressed media the publisher owns outright. client.py stages the
+# featured image under this same prefix (`_stage_static_post`), and the inline
+# mirror step deliberately skips it (`_find_inline_static_media_urls`) because
+# a publisher-owned key is already in R2 and has nothing to mirror from.
+# Inline images uploaded here inherit that exclusion.
+STATIC_MEDIA_PUBLISHER_PREFIX = "wp-content/uploads/publisher/"
 
 
 def extract_image_urls(markdown: str) -> List[Tuple[str, str, str]]:
@@ -79,112 +53,133 @@ def extract_image_urls(markdown: str) -> List[Tuple[str, str, str]]:
     return results
 
 
-def is_notion_url(url: str) -> bool:
-    """Check if a URL is a Notion CDN URL that needs migration."""
-    for pattern in NOTION_URL_PATTERNS:
-        if re.match(pattern, url):
-            return True
-    return False
+def _run_cloudflare_json(args: List[str], label: str) -> Any:
+    """Run one `cloudflare` CLI command and decode its JSON stdout."""
+    result = subprocess.run(
+        ["cloudflare", *args],
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    if result.returncode != 0:
+        diagnostic = (
+            result.stderr.strip() or result.stdout.strip() or "no diagnostic output"
+        )
+        raise RuntimeError(f"{label} failed (exit {result.returncode}): {diagnostic}")
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"{label} returned invalid JSON: {exc}") from exc
 
 
-def get_image_extension(url: str, content_type: str = None) -> str:
+def static_media_object_key(image_path: Path) -> str:
+    """Return the content-addressed R2 object key for one local image file.
+
+    The key is the file's SHA-256 under the publisher prefix, so identical
+    bytes always map to one object and re-running an upload is a no-op
+    instead of creating a duplicate.
     """
-    Determine image file extension from URL or content type.
-
-    Args:
-        url: The image URL
-        content_type: Optional MIME type from response headers
-
-    Returns:
-        File extension including dot (e.g., '.png', '.jpg')
-    """
-    # Try to get extension from URL path (before query params)
-    url_path = url.split('?')[0]
-    path_ext = Path(url_path).suffix.lower()
-    if path_ext in ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp']:
-        return path_ext
-
-    # Fall back to content type
-    if content_type:
-        content_type = content_type.lower()
-        if 'png' in content_type:
-            return '.png'
-        if 'jpeg' in content_type or 'jpg' in content_type:
-            return '.jpg'
-        if 'gif' in content_type:
-            return '.gif'
-        if 'webp' in content_type:
-            return '.webp'
-        if 'svg' in content_type:
-            return '.svg'
-
-    # Default to png
-    return '.png'
+    digest = hashlib.sha256()
+    with Path(image_path).open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    suffix = Path(image_path).suffix.lower()
+    if not suffix:
+        raise RuntimeError(f"Image file has no extension: {image_path}")
+    return f"{STATIC_MEDIA_PUBLISHER_PREFIX}{digest.hexdigest()}{suffix}"
 
 
-def download_image(url: str, temp_dir: Path, filename: str) -> Path:
-    """
-    Download an image from URL to temp directory.
-
-    Args:
-        url: The image URL
-        temp_dir: Directory to save the image
-        filename: Base filename (without extension)
-
-    Returns:
-        Path to downloaded file
-
-    Raises:
-        URLError, HTTPError on download failure
-    """
-    # Create request with user agent to avoid blocks
-    request = Request(url, headers={'User-Agent': 'Mozilla/5.0 ATA-Blog-CLI/1.0'})
-
-    with urlopen(request, timeout=30) as response:
-        content_type = response.headers.get('Content-Type', '')
-        ext = get_image_extension(url, content_type)
-
-        file_path = temp_dir / f"{filename}{ext}"
-        file_path.write_bytes(response.read())
-
-        return file_path
+def _existing_static_media_object(key: str) -> Optional[Dict[str, Any]]:
+    """Return the R2 object already stored at this exact key, else None."""
+    objects = _run_cloudflare_json(
+        [
+            "r2",
+            "objects",
+            "list",
+            STATIC_MEDIA_BUCKET,
+            "--prefix",
+            key,
+            "--limit",
+            "2",
+        ],
+        "Static media lookup",
+    )
+    if not isinstance(objects, list):
+        raise RuntimeError("Static media lookup did not return a JSON array")
+    matches = [item for item in objects if item.get("key") == key]
+    if len(matches) > 1:
+        raise RuntimeError(f"Static media lookup returned duplicate keys for {key}")
+    return matches[0] if matches else None
 
 
-def upload_to_wordpress(image_path: Path) -> dict:
-    """
-    Upload an image to WordPress media library.
+def upload_to_static_media(image_path: Path) -> Dict[str, Any]:
+    """Upload one local image into the static site's R2 media bucket.
+
+    The object lands at a content-addressed `wp-content/uploads/publisher/` key in
+    the canonical media bucket, which the site's media edge serves directly, so
+    the returned URL is public the moment the write verifies.
+
+    There is one execution path: the object is either already present with the
+    exact byte count (recovered) or it is written and re-read to prove it
+    landed. Any failure raises; nothing degrades to another destination.
 
     Args:
         image_path: Path to the local image file
 
     Returns:
-        Dict with 'id' and 'source_url' from WordPress
+        Dict with 'key', 'url', 'size', and 'recovered'.
 
     Raises:
-        RuntimeError on upload failure
+        RuntimeError on any lookup, upload, or verification failure.
     """
-    cmd = ["wordpress", "media", "upload", str(image_path)]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    image_path = Path(image_path)
+    if not image_path.is_file():
+        raise RuntimeError(f"Image file does not exist: {image_path}")
+    content_type = mimetypes.guess_type(image_path.name)[0]
+    if not content_type:
+        raise RuntimeError(f"Could not determine image content type: {image_path}")
 
-    if result.returncode != 0:
-        raise RuntimeError(f"WordPress upload failed: {result.stderr.strip()}")
+    key = static_media_object_key(image_path)
+    existing = _existing_static_media_object(key)
+    recovered = existing is not None
+    if not recovered:
+        _run_cloudflare_json(
+            [
+                "r2",
+                "objects",
+                "put",
+                STATIC_MEDIA_BUCKET,
+                key,
+                "--file",
+                str(image_path),
+                "--content-type",
+                content_type,
+            ],
+            "Static media upload",
+        )
+        existing = _existing_static_media_object(key)
+        if existing is None:
+            raise RuntimeError(
+                f"Static media upload for {key} did not verify in R2 after upload"
+            )
 
-    # Parse the JSON output to get media info
-    # The output includes info lines followed by multi-line JSON
-    # Find the JSON block (starts with { and ends with })
-    stdout = result.stdout.strip()
-    json_start = stdout.find('{')
-    json_end = stdout.rfind('}')
+    local_size = image_path.stat().st_size
+    try:
+        stored_size = int(existing["size"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RuntimeError(f"Static media object {key} has no valid size") from exc
+    if stored_size != local_size:
+        raise RuntimeError(
+            f"Static media object {key} is {stored_size} bytes but the local "
+            f"file is {local_size} bytes"
+        )
 
-    if json_start != -1 and json_end != -1:
-        json_str = stdout[json_start:json_end + 1]
-        media = json.loads(json_str)
-        return {
-            'id': media.get('id'),
-            'source_url': media.get('source_url')
-        }
-
-    raise RuntimeError(f"Could not parse WordPress upload response: {result.stdout}")
+    return {
+        "key": key,
+        "url": f"{STATIC_SITE_ORIGIN}/{key}",
+        "size": stored_size,
+        "recovered": recovered,
+    }
 
 
 def is_remote_url(url: str) -> bool:
@@ -240,14 +235,14 @@ def find_local_image_refs(
     return results
 
 
-def process_local_images_for_wordpress(
+def upload_local_images(
     markdown_content: str,
     base_dir: Path,
     verbose: bool = True,
 ) -> Tuple[str, int]:
     """
-    Upload local images referenced by markdown to WordPress media and
-    rewrite the markdown to point at the returned WordPress URLs.
+    Upload local images referenced by markdown to the static site's R2 media
+    bucket and rewrite the markdown to point at the returned public URLs.
 
     Local image refs are markdown `![alt](path)` or HTML `<img src="path">`
     whose path is NOT an http/https URL and which resolves to an existing
@@ -266,7 +261,7 @@ def process_local_images_for_wordpress(
         return markdown_content, 0
 
     if verbose:
-        print(f"Found {len(refs)} local image(s) to upload to WordPress")
+        print(f"Found {len(refs)} local image(s) to upload to static media")
 
     rewritten = markdown_content
     uploaded = 0
@@ -274,85 +269,16 @@ def process_local_images_for_wordpress(
         if verbose:
             print(f"  [{idx}/{len(refs)}] Uploading {resolved_path.name}...")
 
-        media = upload_to_wordpress(resolved_path)
-        wp_url = media.get("source_url")
-        if not wp_url:
-            raise RuntimeError(
-                f"WordPress upload for {resolved_path} returned no source_url"
-            )
+        media = upload_to_static_media(resolved_path)
+        media_url = media["url"]
 
         if verbose:
-            print(f"  [{idx}/{len(refs)}] Uploaded: {wp_url}")
+            print(f"  [{idx}/{len(refs)}] Uploaded: {media_url}")
 
         # Replace the original path string (as it appears in the markdown)
-        # with the returned WordPress URL. The original path is unique
-        # within seen_paths, so a plain str.replace is safe.
-        rewritten = rewritten.replace(original_path, wp_url)
+        # with the returned public URL. The original path is unique within
+        # seen_paths, so a plain str.replace is safe.
+        rewritten = rewritten.replace(original_path, media_url)
         uploaded += 1
 
     return rewritten, uploaded
-
-
-def process_images_for_wordpress(
-    markdown_content: str,
-    article_slug: str,
-    verbose: bool = True
-) -> str:
-    """
-    Process all Notion images in markdown and upload to WordPress.
-
-    Extracts Notion CDN URLs from markdown, downloads each image,
-    uploads to WordPress, and replaces URLs in content.
-
-    Args:
-        markdown_content: The markdown content with image references
-        article_slug: Article slug for naming images (e.g., 'azure-functions-guide')
-        verbose: Whether to print progress messages
-
-    Returns:
-        Updated markdown content with WordPress URLs
-    """
-    # Scan for Notion CDN URLs directly so alt text cannot hide them.
-    notion_urls = extract_notion_image_urls(markdown_content)
-    if not notion_urls:
-        return markdown_content
-
-    if verbose:
-        print(f"Found {len(notion_urls)} Notion image(s) to migrate")
-
-    result = markdown_content
-
-    # Create temp directory for downloads
-    with tempfile.TemporaryDirectory() as temp_dir:
-        temp_path = Path(temp_dir)
-
-        for idx, url in enumerate(notion_urls, 1):
-            filename = f"{article_slug}-{idx}"
-
-            if verbose:
-                print(f"  [{idx}/{len(notion_urls)}] Downloading: {filename}...")
-
-            # Download from Notion. Failures abort publishing (fail fast) —
-            # this runs before the WordPress post is created, so no partial
-            # post is committed, and a Notion URL is never left in the output.
-            local_path = download_image(url, temp_path, filename)
-
-            if verbose:
-                print(f"  [{idx}/{len(notion_urls)}] Uploading to WordPress...")
-
-            media = upload_to_wordpress(local_path)
-            wp_url = media.get("source_url")
-            if not wp_url:
-                raise RuntimeError(
-                    f"WordPress upload for Notion image returned no source_url: {url}"
-                )
-
-            if verbose:
-                print(f"  [{idx}/{len(notion_urls)}] Uploaded: {wp_url}")
-
-            result = result.replace(url, wp_url)
-
-    if verbose:
-        print(f"Migrated {len(notion_urls)} image(s) to WordPress")
-
-    return result

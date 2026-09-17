@@ -4,25 +4,17 @@ Guards against two related production bugs:
 
 1. (Original) auto-schedule snapped `now` down to the current hour and
    returned a slot at or before `now` (e.g. 17:00 when it was 17:46),
-   causing WordPress to publish immediately instead of scheduling.
+   causing the post to publish immediately instead of scheduling.
 
 2. (Root cause behind a later incident) find_next_schedule_slot used
    datetime.now() -- the CLI host machine's naive LOCAL time (e.g. CDT,
    UTC-5) -- instead of true UTC. Publisher runtime records use explicit UTC
    offsets; when the host's local timezone trailed true
    UTC, the naive "now" was read as if it were already UTC, producing a
-   candidate slot hours in the past relative to true UTC now. WordPress
-   silently accepted the resulting timestamp as status "future" anyway,
-   because it genuinely was earlier than the moment WordPress compared it
-   against.
+   candidate slot hours in the past relative to true UTC now.
 
 This is the live code path for `ata-blog notion-page publish --auto-schedule`
-(AtaBlogClient.publish_article -> AtaBlogClient.find_next_schedule_slot),
-which is a separate, independent reimplementation of the same scheduling
-logic that also exists in wordpress_cli.client.WordPressClient (used by
-`wordpress posts update --auto-schedule` / `ata-blog wordpress posts update
---auto-schedule`). Both copies had the identical bug and both are fixed and
-tested independently.
+(AtaBlogClient.publish_article -> AtaBlogClient.find_next_schedule_slot).
 """
 
 from __future__ import annotations
@@ -69,10 +61,7 @@ def _make_client(monkeypatch, tmp_path, utc_now: datetime, local_offset_hours: i
     client = AtaBlogClient.__new__(AtaBlogClient)
     client.config = _Config(tmp_path / "profile")
     # The schedule-slot fixtures populate the publisher runtime records that
-    # own scheduling after the one-time static cutover; pin the completed
-    # cutover so the slots are read from those records instead of the live
-    # WordPress future schedule.
-    client._static_cutover_completed = lambda: True
+    # own scheduling.
     # Isolate the reservation cache from the real ~/.cache directory instead
     # of stubbing the reservation methods, so the real read/write/expiry
     # logic (including the UTC-aware fix in it) is exercised too.

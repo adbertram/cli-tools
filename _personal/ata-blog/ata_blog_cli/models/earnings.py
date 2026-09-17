@@ -9,7 +9,7 @@ from .base import CLIModel
 class PostEarnings(CLIModel):
     """Earnings data for a single post/page.
 
-    Maps to Raptive earnings by-page response fields with WordPress enrichment.
+    Maps to Raptive earnings by-page response fields with static corpus enrichment.
     """
     page_url: Optional[str] = None
     pageviews: int
@@ -23,7 +23,7 @@ class PostEarnings(CLIModel):
     end_date: str
     author: Optional[str] = None
     modified_date: Optional[str] = None
-    # Enriched from WordPress
+    # Enriched from the static site post corpus
     publish_date: Optional[str] = None
     earnings_per_day: Optional[float] = None
 

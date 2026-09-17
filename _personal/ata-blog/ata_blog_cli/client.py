@@ -28,11 +28,9 @@ STATIC_REPOSITORY_ROOT = Path("/Users/adam/Dropbox/GitRepos/Agents/ATABlogger")
 STATIC_SITE_ROOT = STATIC_REPOSITORY_ROOT / "static-site"
 STATIC_RELEASE_MANIFEST = STATIC_SITE_ROOT / "dist" / "release-manifest.json"
 # The static site's own record of every image and the resized variants its
-# pages reference. Replaces the WordPress media library as the authority for
-# which derivative keys a mirrored attachment owns.
+# pages reference: the authority for which derivative keys an attachment owns.
 STATIC_MEDIA_INVENTORY = STATIC_SITE_ROOT / "src" / "data" / "media_variants.json"
-# Author bound to first-time static stagings: Adam Bertram (authors.json id 2),
-# the author the CLI's WordPress publishing account posts as.
+# Author bound to first-time static stagings: Adam Bertram (authors.json id 2).
 STATIC_DEFAULT_AUTHOR_ID = 2
 
 STATIC_PAGES_PROJECT = "ata-blog-static"
@@ -41,16 +39,10 @@ STATIC_PAGES_POLL_INTERVAL_SECONDS = 2
 STATIC_PAGES_PENDING_STATUSES = frozenset({"idle", "active"})
 STATIC_PAGES_TERMINAL_FAILURE_STATUSES = frozenset({"failure", "canceled"})
 STATIC_MEDIA_BUCKET = "ata-blog-media"
-# Every mirrored image lives under this key prefix, the same path WordPress
-# served it from and the same path the built pages still reference.
+# Every image lives under this key prefix: the public media URL path the built
+# pages reference.
 _STATIC_MEDIA_KEY_PREFIX = "wp-content/uploads/"
 STATIC_SITE_ORIGIN = "https://adamtheautomator.com"
-# `media_details.sizes` on a WordPress media record is WordPress's own
-# declaration of which derivative files it generated for one attachment, so it
-# is the authority for what the R2 mirror has to contain.
-# A WordPress derivative filename ends in -<width>x<height>; removing that
-# suffix yields the parent attachment's searchable filename stem.
-_WORDPRESS_SIZE_SUFFIX_RE = re.compile(r"-\d+x\d+$")
 EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 EMPTY_UUID = "00000000-0000-4000-8000-000000000000"
 STATIC_BUILD_TOKEN_RELEASE_ID_STALE = "Build token release_id is stale"
@@ -118,7 +110,7 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-# The time zone every WordPress timestamp in the static corpus is written in.
+# The time zone every naive timestamp in the static corpus is written in.
 # src/lib/routes.js siteLocalIso resolves a corpus timestamp under this zone.
 STATIC_SITE_TIME_ZONE = "America/Chicago"
 
@@ -126,17 +118,16 @@ STATIC_SITE_TIME_ZONE = "America/Chicago"
 def _corpus_wall_clock(instant: str) -> str:
     """Return one instant as the naive site-local wall clock the corpus stores.
 
-    All 1,332 imported posts carry pubDate/modDate as a naive WordPress
-    site-local wall clock, and the static site resolves a corpus timestamp
-    under exactly that rule. Astro normalizes a YAML timestamp to UTC before a
-    route ever sees it, which erases whatever offset the file carried, so a
-    staged post written with a UTC offset came out of the resolver five or six
-    hours later than it publishes. The only thing that had been correcting it
-    was the harvested Rank Math published override in
-    static-site/src/data/post_seo.json -- a record that exists only for posts
-    WordPress had already published. A post the static site originates has no
-    such record and never will, so it is staged in the corpus's own convention
-    and needs no correction.
+    All 1,332 imported posts carry pubDate/modDate as a naive site-local wall
+    clock, and the static site resolves a corpus timestamp under exactly that
+    rule. Astro normalizes a YAML timestamp to UTC before a route ever sees it,
+    which erases whatever offset the file carried, so a staged post written
+    with a UTC offset came out of the resolver five or six hours later than it
+    publishes. The only thing that had been correcting it was the harvested
+    published-time override in static-site/src/data/post_seo.json -- a record
+    that exists only for imported posts. A post the static site originates has
+    no such record and never will, so it is staged in the corpus's own
+    convention and needs no correction.
     """
     parsed = datetime.fromisoformat(instant.replace("Z", "+00:00"))
     if parsed.tzinfo is None:
@@ -149,8 +140,8 @@ def _image_pixel_size(path: Path) -> Tuple[int, int]:
     """Return one image file's real pixel width and height, read from its header.
 
     The static site's head needs og:image:width and og:image:height for every
-    post. For a post migrated from WordPress those values were harvested from
-    the live page; for a post the static site originates there is nothing to
+    post. For an imported post those values were harvested from the live
+    page; for a post the static site originates there is nothing to
     harvest, and the build never sees the image because the file goes straight
     to R2. This publisher is the only component that holds the bytes, so it
     measures them here and stages the result in the post's own frontmatter.
@@ -277,7 +268,7 @@ def _static_corpus_sha256() -> str:
         "src/data/post_seo.json",
         "src/data/page_seo.json",
         "src/data/archive_seo.json",
-        # The guid WordPress stored for each post at publish time. It is content,
+        # The guid each imported post carried at publish time. It is content,
         # not configuration: it decides what every feed emits as an item's
         # identity, so a change here changes the built output and must move the
         # corpus hash. Mirrors release_manifest.mjs hashCorpus() membership.
@@ -353,11 +344,10 @@ def _loads_notion_text_json(raw: str) -> Any:
 
 
 class AtaBlogClient:
-    """Wrapper client for wordpress and notion CLIs."""
+    """Client for the notion CLI and the static site publisher."""
 
     def __init__(self):
         self.config = get_config()
-        self._wordpress_checked = False
         # Cache of {property_name: notion_type} from the live database schema.
         # Populated lazily by get_property_types() so a single CLI invocation
         # fetches the schema at most once.
@@ -366,25 +356,8 @@ class AtaBlogClient:
         # by the mirroring step that enumerates an attachment's size variants.
         self._static_media_inventory_cache: Optional[Dict[str, Any]] = None
 
-        # Only check Notion CLI on init - WordPress is checked lazily when needed
         if not self.config.is_notion_available():
             raise ClientError("notion CLI not found. Install it first.")
-
-    def _ensure_wordpress(self):
-        """Lazily check WordPress CLI availability on first WordPress operation."""
-        if not self._wordpress_checked:
-            if not self.config.is_wordpress_available():
-                raise ClientError("wordpress CLI not found. Install it first.")
-            self._wordpress_checked = True
-
-    def _run_wordpress(self, args: List[str], timeout: int = 60) -> subprocess.CompletedProcess:
-        """Run a wordpress CLI command."""
-        self._ensure_wordpress()
-        cmd = ["wordpress"] + args
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-        if result.returncode != 0:
-            raise ClientError(f"wordpress error: {result.stderr.strip()}")
-        return result
 
     def _run_notion(self, args: List[str], timeout: int = 60) -> subprocess.CompletedProcess:
         """Run a notion CLI command."""
@@ -451,30 +424,6 @@ class AtaBlogClient:
         )
 
     @staticmethod
-    def _prepare_wordpress_excerpt(excerpt: str) -> str:
-        """Return a WordPress-safe SEO excerpt without mutating Notion metadata."""
-        normalized = " ".join(str(excerpt).split())
-        wordpress_limit = 300
-        target_limit = 200
-
-        if len(normalized) <= wordpress_limit:
-            return normalized
-
-        sentence_cutoffs = [
-            normalized.rfind(mark, 0, target_limit + 1)
-            for mark in (".", "!", "?")
-        ]
-        sentence_cutoff = max(sentence_cutoffs)
-        if sentence_cutoff >= 150:
-            return normalized[: sentence_cutoff + 1]
-
-        cutoff = normalized.rfind(" ", 0, target_limit + 1)
-        if cutoff < 150:
-            cutoff = target_limit
-        shortened = normalized[:cutoff].rstrip(" ,;:-")
-        return shortened[:wordpress_limit]
-
-    @staticmethod
     def _validate_publish_markdown(markdown_content: str) -> None:
         placeholder_lines = [
             f"line {line_number}: {line.strip()}"
@@ -487,19 +436,6 @@ class AtaBlogClient:
                 "Run the image-gen phase before publishing.\n"
                 + "\n".join(placeholder_lines)
             )
-
-    # WordPress passthrough methods
-    def wordpress_auth_status(self) -> Dict[str, Any]:
-        result = self._run_wordpress(["auth", "status"])
-        return json.loads(result.stdout)
-
-    def list_posts(self, limit: int = 100, filters: Optional[Dict] = None) -> List[Dict]:
-        args = ["posts", "list", "--limit", str(limit)]
-        if filters:
-            filter_str = ",".join(f"{k}={v}" for k, v in filters.items())
-            args.extend(["--filter", filter_str])
-        result = self._run_wordpress(args)
-        return json.loads(result.stdout)
 
     # Notion article methods
     def list_articles(
@@ -921,59 +857,6 @@ class AtaBlogClient:
             raise ClientError("Notion Status property has no options in the live database schema")
         return statuses
 
-    def resolve_category_by_name(self, name: str) -> int:
-        """Find WordPress category ID by exact name match."""
-        result = self._run_wordpress(["categories", "list"])
-        categories = json.loads(result.stdout)
-        for cat in categories:
-            if cat.get("name", "").lower() == name.lower():
-                return cat["id"]
-        raise ClientError(f"Category not found: {name}")
-
-    def resolve_tag_by_name(self, name: str) -> int:
-        """Find WordPress tag ID by exact name match."""
-        return self.resolve_tags_by_names([name])[0]
-
-    def _resolve_tag_ids_from_filter(self, names: List[str]) -> Dict[str, int]:
-        """Find tag IDs with per-name exact filters so deep tag catalogs work."""
-        found: Dict[str, int] = {}
-        for name in names:
-            normalized_name = name.lower()
-            result = self._run_wordpress([
-                "tags", "list", "--filter", f"name:eq:{name}", "--limit", "1000"
-            ])
-            tags = json.loads(result.stdout)
-            for tag in tags:
-                tag_name = tag.get("name")
-                if tag_name and tag_name.lower() == normalized_name:
-                    found[normalized_name] = tag["id"]
-                    break
-        return found
-
-    def resolve_tags_by_names(self, names: List[str]) -> List[int]:
-        """Find WordPress tag IDs by exact name match, reporting all misses."""
-        unique_names = list(dict.fromkeys(name.strip() for name in names if name.strip()))
-        result = self._run_wordpress(["tags", "list", "--limit", "1000"])
-        tags = json.loads(result.stdout)
-        tags_by_name = {
-            tag.get("name", "").lower(): tag["id"]
-            for tag in tags
-            if tag.get("name")
-        }
-        missing_after_bulk = [name for name in unique_names if name.lower() not in tags_by_name]
-        if missing_after_bulk:
-            tags_by_name.update(self._resolve_tag_ids_from_filter(missing_after_bulk))
-        missing = [name for name in unique_names if name.lower() not in tags_by_name]
-        if missing:
-            raise ClientError(f"WordPress tag(s) not found: {', '.join(missing)}")
-        return [tags_by_name[name.strip().lower()] for name in names if name.strip()]
-
-    def check_duplicate_post(self, slug: str) -> bool:
-        """Check if a WordPress post with this slug already exists."""
-        result = self._run_wordpress(["posts", "list", "--filter", f"slug:eq:{slug}"])
-        posts = json.loads(result.stdout)
-        return len(posts) > 0
-
     # Kept as an override seam for tests; normal runs use the active CLI profile.
     _RESERVATION_DIR: Optional[Path] = None
 
@@ -1158,8 +1041,8 @@ class AtaBlogClient:
         - Pending reservations from concurrent processes
 
         All arithmetic here is in UTC. The host machine's local timezone is
-        never read: the wordpress CLI writes date_gmt (unambiguous UTC), so
-        "now" must be true UTC now, not this process's local wall-clock time.
+        never read: schedule slots are unambiguous UTC, so "now" must be true
+        UTC now, not this process's local wall-clock time.
 
         Returns:
             ISO 8601 UTC datetime string with an explicit +00:00 offset
@@ -1310,7 +1193,7 @@ class AtaBlogClient:
         return document
 
     def _resolve_static_term_ids(self, taxonomy: str, names: List[str]) -> List[int]:
-        """Resolve Notion taxonomy names to WordPress term IDs via terms.json."""
+        """Resolve Notion taxonomy names to static term IDs via terms.json."""
         if not names:
             raise ClientError(
                 f"Cannot stage a static post without {taxonomy}: the Notion "
@@ -1488,9 +1371,9 @@ class AtaBlogClient:
         # The featured image's real pixel size, measured from this exact file.
         # The static build emits og:image:width/height and the JSON-LD
         # ImageObject dimensions for every post. A migrated post takes them
-        # from src/data/post_seo.json, which was harvested from the live
-        # WordPress pages and therefore only ever covers posts WordPress
-        # already published. A post the static site originates has no such
+        # from src/data/post_seo.json, which was harvested once at import
+        # and therefore only ever covers imported posts. A post the static
+        # site originates has no such
         # record and never will, so its dimensions come from the image itself
         # -- and this publisher is the only component that holds the bytes,
         # because the file goes straight to R2 and the build never sees it.
@@ -1509,12 +1392,10 @@ class AtaBlogClient:
             "featuredImageHeight": str(image_height),
         }
         # The corpus loaders require authorId, categoryIds, tagIds, and wpId on
-        # every post. A first-time post has no prior frontmatter and no
-        # WordPress post yet (the classic WordPress leg runs after this
-        # staging in dual-publish), so bind the author the CLI's WordPress
-        # account publishes as, resolve real taxonomy IDs from the post's
-        # Notion metadata against the static corpus terms, and stage wpId 0
-        # until the classic leg creates the WordPress post.
+        # every post. A first-time post has no prior frontmatter, so bind
+        # the default author, resolve real taxonomy IDs from the post's
+        # Notion metadata against the static corpus terms, and stage wpId 0,
+        # the corpus marker for a post the static site originated.
         if not any(line.startswith("authorId:") for line in frontmatter):
             replacements["authorId"] = str(STATIC_DEFAULT_AUTHOR_ID)
         if not any(line.startswith("categoryIds:") for line in frontmatter):
@@ -1671,15 +1552,15 @@ class AtaBlogClient:
         return {"receipt": receipt, "image_url": stage["image_url"]}
 
     def _find_inline_static_media_urls(self, markdown_content: str) -> List[Dict[str, str]]:
-        """Return every WP-uploads URL referenced in a post body, excluding the featured-image path.
+        """Return every uploads-path URL referenced in a post body, excluding the featured-image path.
 
         The featured image is uploaded separately by `_upload_static_media` under
         a content-addressed `wp-content/uploads/publisher/{page_id}/...` key.
-        Inline content images are referenced in post bodies as plain WordPress
+        Inline content images are referenced in post bodies as plain uploads
         paths, e.g. `https://adamtheautomator.com/wp-content/uploads/2026/09/foo.png`.
         Those are never uploaded by the featured-image path, so this discovers
         every one of them so the caller can mirror it into R2 under the
-        identical WordPress-shaped key.
+        identical uploads-path key.
         """
         origin = urlparse(STATIC_SITE_ORIGIN)
         found: Dict[str, str] = {}
@@ -1695,127 +1576,6 @@ class AtaBlogClient:
             found.setdefault(key, f"{STATIC_SITE_ORIGIN}/{key}")
         return [{"key": key, "url": url} for key, url in sorted(found.items())]
 
-    @staticmethod
-    def _same_origin_upload_key(url: Any) -> Optional[str]:
-        """Return the bucket key for a wp-content/uploads URL, else None.
-
-        This is a matching predicate, not a validator: a WordPress media
-        search returns unrelated attachments too, and none of them may make
-        the owner lookup fail. `_static_media_key_from_url` is the strict
-        counterpart used once an attachment has been identified.
-        """
-        if not isinstance(url, str) or not url:
-            return None
-        parsed = urlparse(url)
-        origin = urlparse(STATIC_SITE_ORIGIN)
-        if parsed.scheme != origin.scheme or parsed.netloc != origin.netloc:
-            return None
-        path = unquote(parsed.path.lstrip("/"))
-        return path if path.startswith("wp-content/uploads/") else None
-
-    @staticmethod
-    def _static_media_key_from_url(url: Any) -> str:
-        """Return the bucket key for one same-origin wp-content/uploads URL."""
-        key = AtaBlogClient._same_origin_upload_key(url)
-        if key is None:
-            raise ClientError(
-                "WordPress media URL is not a same-origin wp-content/uploads "
-                f"path: {url!r}"
-            )
-        return key
-
-    def _fetch_wordpress_media_records(self, search: str) -> List[Dict[str, Any]]:
-        """Read the WordPress media library records matching one filename stem.
-
-        This enumeration has to be authenticated. An attachment inherits the
-        status of the post that owns it, and the pipeline schedules posts
-        rather than publishing them on the spot, so for essentially every post
-        the attachment is still non-public when the static mirror runs: an
-        anonymous read of /wp-json/wp/v2/media returns 200 with an empty array
-        and the owner lookup then reports the attachment as missing. The
-        delegated `wordpress` CLI already owns the site's REST credentials, so
-        the search goes through it -- one path, and a credential or transport
-        failure raises rather than degrading to an anonymous read.
-        """
-        result = self._run_wordpress(
-            ["media", "list", "--filter", f"search:eq:{search}", "--limit", "100"]
-        )
-        try:
-            records = json.loads(result.stdout)
-        except json.JSONDecodeError as exc:
-            raise ClientError(
-                f"WordPress media search for {search!r} returned invalid JSON: {exc}"
-            ) from exc
-        if not isinstance(records, list) or any(
-            not isinstance(record, dict) for record in records
-        ):
-            raise ClientError(
-                f"WordPress media search for {search!r} did not return an array of objects"
-            )
-        return records
-
-    @staticmethod
-    def _wordpress_media_size_records(record: Dict[str, Any]) -> Dict[str, Any]:
-        """Return one attachment's declared size map.
-
-        WordPress serializes an attachment with no registered derivatives as
-        an empty PHP array, which reaches JSON as `[]` rather than `{}`.
-        """
-        details = record.get("media_details")
-        if not isinstance(details, dict):
-            raise ClientError(
-                f"WordPress media {record.get('id')!r} has no media_details object"
-            )
-        sizes = details.get("sizes")
-        if sizes == []:
-            return {}
-        if not isinstance(sizes, dict):
-            raise ClientError(
-                f"WordPress media {record.get('id')!r} media_details.sizes is not an object"
-            )
-        return sizes
-
-    @classmethod
-    def _wordpress_media_variant_urls(cls, record: Dict[str, Any]) -> List[str]:
-        """Return one attachment's own file plus every declared size variant."""
-        source_url = record.get("source_url")
-        if not source_url:
-            raise ClientError(
-                f"WordPress media {record.get('id')!r} has no source_url"
-            )
-        urls = [source_url]
-        for name, size in sorted(cls._wordpress_media_size_records(record).items()):
-            if not isinstance(size, dict):
-                raise ClientError(
-                    f"WordPress media {record.get('id')!r} size {name!r} is not an object"
-                )
-            size_url = size.get("source_url")
-            if not size_url:
-                raise ClientError(
-                    f"WordPress media {record.get('id')!r} size {name!r} has no source_url"
-                )
-            urls.append(size_url)
-        return urls
-
-    @classmethod
-    def _wordpress_media_record_owns_key(
-        cls,
-        record: Dict[str, Any],
-        key: str,
-    ) -> bool:
-        """Return True when one media record publishes the given bucket key."""
-        candidates: List[Any] = [record.get("source_url")]
-        details = record.get("media_details")
-        if isinstance(details, dict):
-            sizes = details.get("sizes")
-            if isinstance(sizes, dict):
-                candidates.extend(
-                    size.get("source_url")
-                    for size in sizes.values()
-                    if isinstance(size, dict)
-                )
-        return any(cls._same_origin_upload_key(candidate) == key for candidate in candidates)
-
     def _static_media_keys_for_reference(self, key: str) -> List[str]:
         """Return every bucket key belonging to the attachment that owns `key`.
 
@@ -1830,12 +1590,7 @@ class AtaBlogClient:
 
         The size family is read from the static site's own media inventory,
         `src/data/media_variants.json`, which is the same record the site
-        builds its `srcset` from. It used to be read from the WordPress media
-        library, which stopped being reachable when adamtheautomator.com
-        became the static site: that domain now answers every WordPress API
-        path with the static 404 page, so the lookup failed and took every
-        publish with it. The inventory is the right authority anyway -- it is
-        what the pages actually reference.
+        builds its `srcset` from, so it is exactly what the pages reference.
 
         The reference may itself be a derivative, so an attachment matches
         either by its own path or by declaring this filename among its
@@ -1906,9 +1661,9 @@ class AtaBlogClient:
         return "put-s3" if ".." in key else "put"
 
     def _existing_static_inline_media_key(self, key: str) -> Optional[Dict[str, Any]]:
-        """Return the R2 object for one exact WP-shaped key if it already exists, else None.
+        """Return the R2 object for one exact uploads-path key if it already exists, else None.
 
-        Unlike the featured image's content-addressed key, a WP-shaped key has
+        Unlike the featured image's content-addressed key, an uploads-path key has
         no local source file to re-derive bytes from, so existence is proven by
         exact key presence in the bucket listing rather than by byte identity.
         """
@@ -1937,11 +1692,11 @@ class AtaBlogClient:
 
     @staticmethod
     def _fetch_static_origin_bytes(url: str, *, attempts: int = 5) -> Tuple[bytes, Optional[str]]:
-        """Download one object from the live WordPress origin, retrying on transient failures.
+        """Download one object from the live site origin, retrying on transient failures.
 
         Mirrors static-site/scripts/migrate_wp_media.mjs's fetchWithRetry: retry
         with exponential backoff only on a 5xx/429/network error against this
-        single WordPress origin; any other HTTP status fails immediately. This
+        single site origin; any other HTTP status fails immediately. This
         is a resilience retry against one fixed source, not a fallback to a
         different source.
         """
@@ -1963,7 +1718,7 @@ class AtaBlogClient:
             except HTTPError as exc:
                 if exc.code < 500 and exc.code != 429:
                     raise ClientError(
-                        f"{url}: HTTP {exc.code} fetching inline media from WordPress origin"
+                        f"{url}: HTTP {exc.code} fetching inline media from the site origin"
                     ) from exc
                 last_error = exc
             except URLError as exc:
@@ -1971,12 +1726,12 @@ class AtaBlogClient:
             if attempt < attempts:
                 time.sleep(0.5 * (2 ** (attempt - 1)))
         raise ClientError(
-            f"{url}: failed to fetch inline media from WordPress origin after "
+            f"{url}: failed to fetch inline media from the site origin after "
             f"{attempts} attempts: {last_error}"
         )
 
     def _mirror_static_inline_media_key(self, key: str) -> Dict[str, Any]:
-        """Mirror one WordPress-shaped upload key into R2 and verify it landed.
+        """Mirror one uploads-path key into R2 and verify it landed.
 
         Idempotent: an already-present key is recorded as recovered without
         re-downloading or re-uploading anything.
@@ -2027,18 +1782,18 @@ class AtaBlogClient:
         return {"key": key, "url": url, "recovered": False, "object": receipt}
 
     def _upload_static_inline_media(self, markdown_content: str) -> List[Dict[str, Any]]:
-        """Mirror every inline WP-uploads image referenced in a post body into R2.
+        """Mirror every inline uploads-path image referenced in a post body into R2.
 
-        A post body references one URL per image, but WordPress generates a
-        family of resized derivatives for each attachment and the built static
-        site emits those variants in `srcset`. So each reference is expanded
-        through `media_details.sizes` into the attachment's full key family,
+        A post body references one URL per image, but each attachment owns a
+        family of resized derivatives and the built static site emits those
+        variants in `srcset`. So each reference is expanded through the media
+        inventory into the attachment's full key family,
         and every key in it is mirrored at its identical wp-content/uploads
         path. Mirroring only the referenced URL is the defect the 2026-09-05
         media parity audit measured as 112 missing derivative keys.
 
         For each key not already present in the bucket, the bytes are
-        downloaded from the live WordPress origin, uploaded to R2 under that
+        downloaded from the live site origin, uploaded to R2 under that
         identical key, then re-verified for presence and byte count before the
         receipt is recorded. Idempotent: a resumed run re-checks bucket
         presence per key and skips anything already uploaded.
@@ -4305,78 +4060,14 @@ class AtaBlogClient:
         )
 
     @staticmethod
-    def _is_placeholder_permalink(url: str) -> bool:
-        """Return True for WordPress's slugless `?p=<id>` placeholder link."""
-        return not urlparse(url).path.strip("/")
-
-    def _resolve_wordpress_permalink(self, post_id: Any) -> str:
-        """Return the canonical public permalink for one WordPress post.
-
-        The create response is not trusted. WordPress renders `link` before
-        the post's permalink is settled and hands back the slugless
-        `?p=<id>` placeholder, and storing that verbatim is how four Notion
-        pages ended up with `Published URL:
-        https://adamtheautomator.com/?p=27234` while ten more carried none at
-        all. So the permalink is read back from WordPress after the post is
-        committed.
-
-        The read-back `link` is authoritative rather than reconstructed from
-        the wp/v2 `slug`, because this site runs Permalink Manager and a
-        post's canonical path is not always its slug — post 9234's slug is
-        `recall-email-in-outlook` while its permalink is
-        `/recall-outlook-email/`. Permalink Manager filters `get_permalink()`,
-        so `link` already reflects those overrides and the slug does not.
-
-        A post that is not live yet (draft or future) has no permalink for
-        WordPress to hand out: it reports `?p=<id>` on every read until it
-        publishes. Its canonical path is therefore built from its own slug
-        against this site's `/%postname%/` structure, which is what Permalink
-        Manager itself generates for a newly created post. A post WordPress
-        reports as live that still has no permalink is unresolvable and
-        raises rather than storing the placeholder.
-        """
-        result = self._run_wordpress(["posts", "get", str(post_id)])
-        post = json.loads(result.stdout)
-        if not isinstance(post, dict):
-            raise ClientError(
-                f"WordPress post {post_id} read back as "
-                f"{type(post).__name__}, expected an object"
-            )
-        link = post.get("link")
-        if not link:
-            raise ClientError(
-                f"WordPress post {post_id} returned no link; refusing to "
-                "write an empty Published URL to Notion"
-            )
-        if not self._is_placeholder_permalink(link):
-            return link
-        status = post.get("status")
-        if status == "publish":
-            raise ClientError(
-                f"WordPress post {post_id} is live but reports the placeholder "
-                f"permalink {link}; refusing to write a ?p= URL to Notion"
-            )
-        slug = post.get("slug")
-        if not slug:
-            raise ClientError(
-                f"WordPress post {post_id} (status {status!r}) has neither a "
-                "permalink nor a slug; its Published URL cannot be resolved"
-            )
-        origin = urlparse(link)
-        return f"{origin.scheme}://{origin.netloc}/{slug}/"
-
-    @staticmethod
     def _slug_from_url(url: str, required: bool = True) -> Optional[str]:
-        """Derive a WordPress slug from a post URL.
+        """Derive a post slug from a post URL.
 
         Handles trailing slashes and query/fragment suffixes. Raises if the
-        URL has no usable path segment, unless required=False — a scheduled
-        WordPress post carries a slugless ?p=<id> permalink until it goes
-        live, and callers that only compare slugs pass required=False to get
-        None instead of an error.
+        URL has no usable path segment, unless required=False -- callers that
+        only compare slugs pass required=False to get None instead of an
+        error.
         """
-        from urllib.parse import urlparse
-
         path = urlparse(url).path.strip("/")
         if not path:
             if required:
@@ -4389,39 +4080,28 @@ class AtaBlogClient:
     def detect_id_kind(identifier: str) -> str:
         """Classify an unpublish target identifier.
 
-        Returns one of: "notion_page", "wordpress_id", "wordpress_url",
-        "slug". Detection is deterministic and fails fast for empty input.
+        Returns one of: "notion_page", "url", "slug". Detection is
+        deterministic and fails fast for empty input.
         """
-        import re
-
         value = identifier.strip()
         if not value:
             raise ClientError("Target identifier must not be empty")
 
         if value.lower().startswith(("http://", "https://")):
-            return "wordpress_url"
-
-        # Pure integer -> WordPress post ID.
-        if value.isdigit():
-            return "wordpress_id"
+            return "url"
 
         # 32-hex Notion page ID, dashed or undashed.
         compact = value.replace("-", "")
         if len(compact) == 32 and re.fullmatch(r"[0-9a-fA-F]{32}", compact):
             return "notion_page"
 
-        # Everything else is treated as a WordPress slug.
+        # Everything else is treated as a static post slug.
         return "slug"
 
-    def _wordpress_post_by_slug(self, slug: str) -> Optional[Dict[str, Any]]:
-        """Return the WordPress post matching an exact slug, or None."""
-        result = self._run_wordpress(
-            ["posts", "list", "--filter", f"slug:eq:{slug}", "--limit", "2"]
-        )
-        posts = json.loads(result.stdout)
-        if not posts:
-            return None
-        return posts[0]
+    @staticmethod
+    def _compact_page_id(page_id: str) -> str:
+        """Return the undashed lowercase page id the static corpus records."""
+        return page_id.replace("-", "").lower()
 
     def _notion_page_by_published_url(self, url: str) -> Optional[Dict[str, Any]]:
         """Return the ATA Notion page whose Published URL matches, or None."""
@@ -4439,58 +4119,42 @@ class AtaBlogClient:
         return pages[0]
 
     def resolve_unpublish_target(self, identifier: str) -> Dict[str, Any]:
-        """Resolve an identifier to both the Notion page and WordPress post.
+        """Resolve an identifier to both the Notion page and the static post.
 
         Returns a dict:
             {
               "id_kind": "...",
-              "notion_page": <article dict>,        # required, always resolved
-              "wordpress_post": <post dict> | None, # None if WP side absent
+              "notion_page": <article dict>,   # required, always resolved
+              "static_post": <Path> | None,    # None if absent from the corpus
+              "slug": <str> | None,
             }
 
         Fails fast (ClientError) when the Notion page cannot be resolved. A
-        missing WordPress post is returned as None (already absent), not an
-        error, so the Notion reset can still proceed.
+        Notion page with no corpus record resolves its static post as None
+        (already absent), so the Notion reset can still proceed.
         """
         kind = self.detect_id_kind(identifier)
 
-        notion_page: Optional[Dict[str, Any]] = None
-        wordpress_post: Optional[Dict[str, Any]] = None
-
         if kind == "notion_page":
             notion_page = self.get_article(identifier)
+            page_id = self._compact_page_id(str(notion_page.get("id") or identifier))
             published_url = notion_page.get("Published URL")
-            if published_url:
-                slug = self._slug_from_url(published_url)
-                wordpress_post = self._wordpress_post_by_slug(slug)
-            # No Published URL -> WP post cannot be resolved; treat as absent.
+            slug = self._slug_from_url(published_url) if published_url else None
+            # A post the static site originated is bound to its Notion page
+            # id; an imported post carries no page id and is bound by slug.
+            static_post = self._find_static_post_by_notion_page_id(page_id)
+            if static_post is None and slug:
+                static_post = self._find_static_post(slug)
         else:
-            # WordPress-first kinds: resolve the WP post, then the Notion page
-            # by matching its Published URL.
-            if kind == "wordpress_id":
-                result = self._run_wordpress(["posts", "get", identifier])
-                wordpress_post = json.loads(result.stdout)
-            elif kind == "wordpress_url":
-                slug = self._slug_from_url(identifier)
-                wordpress_post = self._wordpress_post_by_slug(slug)
-            elif kind == "slug":
-                wordpress_post = self._wordpress_post_by_slug(identifier)
-            else:  # pragma: no cover - detect_id_kind enumerates all kinds
-                raise ClientError(f"Unhandled identifier kind: {kind}")
-
-            if not wordpress_post:
+            slug = self._slug_from_url(identifier) if kind == "url" else identifier.strip()
+            static_post = self._find_static_post(slug)
+            if static_post is None:
                 raise ClientError(
-                    f"Could not resolve a WordPress post from {identifier!r} "
-                    f"(kind: {kind})"
+                    f"Could not resolve a static post from {identifier!r} (kind: {kind})"
                 )
-
-            wp_url = wordpress_post.get("link") or wordpress_post.get("url")
-            if not wp_url:
-                raise ClientError(
-                    "Resolved WordPress post has no link/url; cannot match a "
-                    "Notion page"
-                )
-            notion_page = self._notion_page_by_published_url(wp_url)
+            notion_page = self._notion_page_by_published_url(
+                f"{STATIC_SITE_ORIGIN}/{slug}/"
+            )
 
         if not notion_page:
             raise ClientError(
@@ -4501,24 +4165,205 @@ class AtaBlogClient:
         return {
             "id_kind": kind,
             "notion_page": notion_page,
-            "wordpress_post": wordpress_post,
+            "static_post": static_post,
+            "slug": slug,
+        }
+
+    def _unpublish_paths(self, idempotency_key: str) -> Dict[str, Path]:
+        """Return the active-profile paths for one unpublish transaction."""
+        root = self._publisher_runtime_root()
+        return {
+            "build_lock": root / "locks" / "build.lock",
+            "runtime": root / "unpublish" / f"{idempotency_key}.runtime.json",
+            "backup": root / "unpublish" / f"{idempotency_key}.corpus-backup",
+        }
+
+    def _page_publisher_journals(self, page_id: str) -> List[Tuple[Path, Dict[str, Any]]]:
+        """Return every publisher journal recorded for one Notion page."""
+        transaction_root = self._publisher_runtime_root() / "transactions"
+        journals = []
+        if transaction_root.exists():
+            for path in sorted(transaction_root.glob("*.journal.json")):
+                document = self._load_required_json(path, "publisher journal")
+                source = document.get("source")
+                if not isinstance(source, dict) or not isinstance(source.get("page_id"), str):
+                    raise ClientError(f"Corrupt publisher journal: {path}")
+                if self._compact_page_id(source["page_id"]) == page_id:
+                    journals.append((path, document))
+        return journals
+
+    def _retire_publisher_transactions(self, page_id: str) -> List[str]:
+        """Move a page's finished publish transactions out of the replay path.
+
+        A completed journal makes `publish` replay its recorded result for the
+        same source revision. Once the post is removed from the site that
+        result is no longer true, so the records move aside and a later
+        publish of the same revision runs a real transaction.
+        """
+        retired_root = (
+            self._publisher_runtime_root()
+            / "unpublished"
+            / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        )
+        retired = []
+        for journal_path, _document in self._page_publisher_journals(page_id):
+            key = journal_path.name[: -len(".journal.json")]
+            for transaction_file in sorted(journal_path.parent.glob(f"{key}.*")):
+                retired_root.mkdir(parents=True, exist_ok=True)
+                destination = retired_root / transaction_file.name
+                os.replace(transaction_file, destination)
+                retired.append(str(destination))
+        return retired
+
+    def _unpublish_static_transaction(
+        self,
+        *,
+        page_id: str,
+        static_post: Path,
+        status: str,
+    ) -> Dict[str, Any]:
+        """Remove one post from the static site, then reset its Notion page.
+
+        The corpus record is deleted and the site goes through the same
+        build, preview deployment, and production promotion a publish uses.
+        Any failure before the Notion reset commits rolls production back to
+        the prior deployment and restores the exact corpus record.
+        """
+        original = static_post.read_bytes()
+        source_revision = hashlib.sha256(
+            b"unpublish\n" + hashlib.sha256(original).hexdigest().encode("ascii")
+        ).hexdigest()
+        idempotency_key = self._publisher_idempotency_key(page_id, source_revision)
+        paths = self._unpublish_paths(idempotency_key)
+        journal = {
+            "idempotency": {"key": idempotency_key},
+            "source": {"page_id": page_id, "source_revision": source_revision},
+        }
+        runtime: Dict[str, Any] = {
+            "schema_version": "ata-static-unpublish-runtime/v1",
+            "page_id": page_id,
+            "source_revision": source_revision,
+            "idempotency_key": idempotency_key,
+            "article_path": str(static_post),
+            "failure_stage": None,
+            "failure_message": None,
+            "rollback_error": None,
+        }
+
+        with self._exclusive_publisher_lock(self._publisher_page_lock_path(page_id)):
+            for journal_path, document in self._page_publisher_journals(page_id):
+                if document.get("state") not in {"completed", "failed"}:
+                    raise ClientError(
+                        f"A publisher transaction is still active for page {page_id}: "
+                        f"{journal_path}"
+                    )
+            current_stage = "build-lock acquisition"
+            prior_corpus_sha256 = _static_corpus_sha256()
+            try:
+                with self._static_build_lock(paths) as build_token_handle:
+                    current_stage = "corpus removal"
+                    _atomic_write_bytes(paths["backup"], original)
+                    static_post.unlink()
+                    runtime["corpus_sha256"] = _static_corpus_sha256()
+                    _atomic_write_json(paths["runtime"], runtime)
+
+                    current_stage = "build"
+                    build = self._run_static_build(None, runtime["corpus_sha256"])
+                    manifest = build["manifest"]
+                    runtime["release_ref"] = {
+                        "release_id": manifest["release_id"],
+                        "contract_hash": manifest["contract_hash"],
+                    }
+                    runtime["build_sha256"] = build["build_sha256"]
+                    self._sync_build_token(
+                        build_token_handle, build, runtime=runtime, paths=paths
+                    )
+
+                    current_stage = "preview upload"
+                    deployment = self._deploy_static_preview(
+                        idempotency_key,
+                        source_revision,
+                        manifest["release_id"],
+                    )
+                    self._validate_static_deployment_metadata(deployment)
+                    runtime.update(deployment)
+                    _atomic_write_json(paths["runtime"], runtime)
+
+                    current_stage = "promotion"
+                    self._apply_static_promotion(
+                        manifest=manifest,
+                        deployment=deployment,
+                        journal=journal,
+                        runtime=runtime,
+                        paths=paths,
+                    )
+
+                    current_stage = "Notion update"
+                    self.update_article(
+                        page_id,
+                        status=status,
+                        properties=dict(self.UNPUBLISH_ARTIFACT_FIELDS),
+                    )
+            except Exception as exc:
+                failure = exc if isinstance(exc, ClientError) else ClientError(str(exc))
+                runtime["failure_stage"] = current_stage
+                runtime["failure_message"] = str(failure)
+                rollback_errors = []
+                if runtime.get("promotion_applied"):
+                    try:
+                        self._rollback_static_promotion(
+                            runtime["prior_production_deployment_id"]
+                        )
+                    except Exception as rollback_exc:
+                        rollback_errors.append(f"production rollback: {rollback_exc}")
+                    else:
+                        runtime["promotion_applied"] = False
+                        runtime["promotion_rolled_back"] = True
+                try:
+                    if paths["backup"].is_file() and not static_post.exists():
+                        _atomic_write_bytes(static_post, paths["backup"].read_bytes())
+                    restored_corpus_sha256 = _static_corpus_sha256()
+                    if restored_corpus_sha256 != prior_corpus_sha256:
+                        raise ClientError(
+                            "Corpus rollback hash mismatch: "
+                            f"expected {prior_corpus_sha256}, got {restored_corpus_sha256}"
+                        )
+                except Exception as rollback_exc:
+                    rollback_errors.append(f"corpus rollback: {rollback_exc}")
+                if rollback_errors:
+                    runtime["rollback_error"] = "; ".join(rollback_errors)
+                _atomic_write_json(paths["runtime"], runtime)
+                if rollback_errors:
+                    raise ClientError(
+                        f"Static unpublish failed during {current_stage}: {failure}; "
+                        f"rollback failed: {runtime['rollback_error']}"
+                    ) from failure
+                raise ClientError(
+                    f"Static unpublish failed during {current_stage}: {failure}"
+                ) from failure
+
+            retired = self._retire_publisher_transactions(page_id)
+            _atomic_write_json(paths["runtime"], runtime)
+
+        return {
+            "deployment_id": runtime["deployment_id"],
+            "promotion_id": runtime["promotion"]["promotion_id"],
+            "release_ref": runtime["release_ref"],
+            "backup_path": str(paths["backup"]),
+            "retired_transactions": retired,
         }
 
     def unpublish_article(
         self,
         identifier: str,
         status: str = "Draft",
-        force: bool = False,
-        keep_wordpress: bool = False,
         dry_run: bool = False,
     ) -> Dict[str, Any]:
-        """Revert a published article: trash the WP post and reset Notion.
+        """Revert a published article: remove it from the static site, reset Notion.
 
         Args:
-            identifier: Notion page ID, WordPress post ID, URL, or slug.
+            identifier: Notion page ID, post URL, or slug.
             status: Notion status to set (validated against live statuses).
-            force: Permanently delete the WordPress post instead of trashing.
-            keep_wordpress: Skip the WordPress trash/delete step entirely.
             dry_run: Resolve and report planned changes without mutating.
 
         Returns the JSON summary described in the command docstring.
@@ -4534,73 +4379,47 @@ class AtaBlogClient:
 
         resolved = self.resolve_unpublish_target(identifier)
         notion_page = resolved["notion_page"]
-        wordpress_post = resolved["wordpress_post"]
-        page_id = notion_page.get("id")
-        if not page_id:
+        static_post = resolved["static_post"]
+        if not notion_page.get("id"):
             raise ClientError("Resolved Notion page is missing an id")
+        page_id = self._compact_page_id(str(notion_page["id"]))
 
-        cleared_fields = list(self.UNPUBLISH_ARTIFACT_FIELDS.keys())
-
-        # Determine the WordPress action.
-        if keep_wordpress:
-            wp_action = "skipped"
-            wp_post_id = wordpress_post.get("id") if wordpress_post else None
-        elif not wordpress_post:
-            wp_action = "already_absent"
-            wp_post_id = None
-        else:
-            wp_post_id = wordpress_post.get("id")
-            wp_status = wordpress_post.get("status")
-            if wp_status == "trash":
-                wp_action = "already_absent"
-            else:
-                wp_action = "deleted" if force else "trashed"
-
-        if dry_run:
-            return {
-                "dry_run": True,
-                "id_kind": resolved["id_kind"],
-                "wordpress": {"post_id": wp_post_id, "action": wp_action},
-                "notion": {
-                    "page_id": page_id,
-                    "status": status,
-                    "cleared_fields": cleared_fields,
-                },
-            }
-
-        # Execute WordPress trash/delete.
-        if wp_action in ("trashed", "deleted"):
-            delete_args = ["posts", "delete", str(wp_post_id)]
-            if force:
-                delete_args.append("--force")
-            try:
-                self._run_wordpress(delete_args)
-            except ClientError as exc:
-                # If the post is already gone, continue to the Notion reset.
-                if "404" in str(exc) or "not found" in str(exc).lower():
-                    wp_action = "already_absent"
-                else:
-                    raise
-
-        # Reset Notion: status + data-driven artifact field clearing. The
-        # property builder resolves each field's type from the live schema and
-        # emits the correct typed null/empty or checkbox bool.
-        self.update_article(
-            page_id,
-            status=status,
-            properties=dict(self.UNPUBLISH_ARTIFACT_FIELDS),
-        )
-
-        return {
-            "dry_run": False,
+        summary = {
+            "dry_run": dry_run,
             "id_kind": resolved["id_kind"],
-            "wordpress": {"post_id": wp_post_id, "action": wp_action},
+            "static": {
+                "slug": resolved["slug"],
+                "article_path": str(static_post) if static_post else None,
+                "action": "removed" if static_post else "already_absent",
+            },
             "notion": {
                 "page_id": page_id,
                 "status": status,
-                "cleared_fields": cleared_fields,
+                "cleared_fields": list(self.UNPUBLISH_ARTIFACT_FIELDS.keys()),
             },
         }
+        if dry_run:
+            return summary
+
+        if static_post is None:
+            # Nothing on the site to remove: reset Notion through the
+            # data-driven artifact fields. The property builder resolves each
+            # field's type from the live schema.
+            self.update_article(
+                page_id,
+                status=status,
+                properties=dict(self.UNPUBLISH_ARTIFACT_FIELDS),
+            )
+            return summary
+
+        summary["static"].update(
+            self._unpublish_static_transaction(
+                page_id=page_id,
+                static_post=static_post,
+                status=status,
+            )
+        )
+        return summary
 
 
 _client: Optional[AtaBlogClient] = None

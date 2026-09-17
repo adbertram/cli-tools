@@ -7,13 +7,14 @@ post-friendly filtering options.
 import json
 import subprocess
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 import typer
 from cli_tools_shared.output import command
 
 from cli_tools_shared.filters import apply_filters, validate_filters
-from ..models import PostEarnings, create_post_earnings
+from ..corpus import SPONSORED_TAG_NAME, list_posts, list_terms
+from ..models import create_post_earnings
 from cli_tools_shared.output import print_error, print_info, print_json, print_table
 
 COMMAND_CREDENTIALS = {
@@ -23,8 +24,6 @@ COMMAND_CREDENTIALS = {
 
 app = typer.Typer(help="Query ad earnings and revenue data", no_args_is_help=True)
 
-SPONSORED_TAG_ID = 7
-
 
 def _run_raptive(args: list) -> subprocess.CompletedProcess:
     """Run raptive CLI command."""
@@ -32,179 +31,39 @@ def _run_raptive(args: list) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True)
 
 
-def _run_wordpress(args: list) -> subprocess.CompletedProcess:
-    """Run wordpress CLI command."""
-    cmd = ["wordpress"] + args
-    return subprocess.run(cmd, capture_output=True, text=True)
+def _page_slug(item: dict) -> str:
+    """Return the post slug a Raptive page_url addresses."""
+    return (item.get("page_url") or "").strip("/")
 
 
-def _is_post_sponsored(post_id: int) -> bool:
-    """Check if a post has the Sponsored tag.
+def _sponsored_slugs(posts: List[dict]) -> set:
+    """Return the slug of every static site post carrying the Sponsored tag."""
+    sponsored_ids = [
+        term["id"] for term in list_terms("tags") if term["name"] == SPONSORED_TAG_NAME
+    ]
+    if len(sponsored_ids) != 1:
+        raise ValueError(
+            f"Static site terms must contain exactly one {SPONSORED_TAG_NAME!r} tag; "
+            f"found {len(sponsored_ids)}"
+        )
+    return {post["slug"] for post in posts if sponsored_ids[0] in post["tag_ids"]}
 
-    Args:
-        post_id: WordPress post ID
 
-    Returns:
-        True if post has the Sponsored tag
+def _enrich_with_publish_dates(data: List[dict], posts: List[dict]) -> List[dict]:
+    """Add publish_date and earnings_per_day from the static site post corpus.
+
+    A Raptive page that is not a post (the home page, an archive) has no corpus
+    record and carries neither value.
     """
-    result = _run_wordpress(["posts", "get", str(post_id)])
-    if result.returncode != 0:
-        return False
-
-    try:
-        post = json.loads(result.stdout)
-        tags = post.get("tags", [])
-        return SPONSORED_TAG_ID in tags
-    except json.JSONDecodeError:
-        return False
-
-
-def _get_non_sponsored_slugs(slugs: List[str]) -> List[str]:
-    """Filter out slugs that belong to sponsored posts.
-
-    Args:
-        slugs: List of post slugs to check
-
-    Returns:
-        List of slugs that are NOT sponsored
-    """
-    if not slugs:
-        return []
-
-    # Fetch all posts, check which ones have the Sponsored tag
-    result = _run_wordpress(["posts", "list", "--filter", f"tags:notcontains:{SPONSORED_TAG_ID}", "--limit", "1000"])
-    if result.returncode != 0:
-        return slugs  # On failure, return unfiltered
-
-    try:
-        posts = json.loads(result.stdout)
-        non_sponsored_slugs = {p.get("slug") for p in posts if p.get("slug")}
-        return [s for s in slugs if s in non_sponsored_slugs]
-    except json.JSONDecodeError:
-        return slugs
-
-
-def _get_post_slug_by_id(post_id: int) -> Optional[str]:
-    """Look up WordPress post slug by ID.
-
-    Args:
-        post_id: WordPress post ID
-
-    Returns:
-        Post slug or None if not found
-    """
-    result = _run_wordpress(["posts", "get", str(post_id)])
-    if result.returncode != 0:
-        return None
-
-    try:
-        post = json.loads(result.stdout)
-        return post.get("slug")
-    except json.JSONDecodeError:
-        return None
-
-
-def _get_post_slugs_by_title(title: str) -> List[str]:
-    """Look up WordPress post slugs by title search.
-
-    Args:
-        title: Title search term (partial match)
-
-    Returns:
-        List of matching post slugs
-    """
-    result = _run_wordpress([
-        "posts", "list",
-        "--filter", f"title:ilike:%{title}%",
-        "--limit", "100"
-    ])
-    if result.returncode != 0:
-        return []
-
-    try:
-        posts = json.loads(result.stdout)
-        return [p.get("slug") for p in posts if p.get("slug")]
-    except json.JSONDecodeError:
-        return []
-
-
-def _get_posts_by_slugs(slugs: List[str]) -> Dict[str, dict]:
-    """Fetch WordPress posts and return a dict keyed by slug.
-
-    Args:
-        slugs: List of post slugs to look up (without leading /)
-
-    Returns:
-        Dict mapping slug -> post data
-    """
-    if not slugs:
-        return {}
-
-    # Fetch posts with high limit (WordPress slug filter isn't server-side)
-    # Then filter client-side to match the slugs we need
-    result = _run_wordpress([
-        "posts", "list",
-        "--limit", "1000"  # Fetch enough posts to find matches
-    ])
-
-    if result.returncode != 0:
-        return {}
-
-    try:
-        posts = json.loads(result.stdout)
-        # Filter to only the slugs we care about
-        slug_set = set(slugs)
-        return {
-            p.get("slug"): p
-            for p in posts
-            if p.get("slug") in slug_set
-        }
-    except json.JSONDecodeError:
-        return {}
-
-
-def _enrich_with_publish_dates(data: List[dict]) -> List[dict]:
-    """Enrich earnings data with publish dates and earnings_per_day.
-
-    Args:
-        data: List of earnings data dicts
-
-    Returns:
-        Enriched data with publish_date and earnings_per_day fields
-    """
-    # Extract slugs from page_urls (remove leading /)
-    slugs = [(item.get("page_url") or "").lstrip("/") for item in data]
-    slugs = [s for s in slugs if s]  # Filter out empty slugs
-
-    # Fetch posts from WordPress
-    posts_by_slug = _get_posts_by_slugs(slugs)
-
-    # Enrich each earnings record
+    published_by_slug = {post["slug"]: post["published"] for post in posts}
     for item in data:
-        slug = (item.get("page_url") or "").lstrip("/")
-        post = posts_by_slug.get(slug, {})
-
-        # Get publish date from WordPress post
-        publish_date = post.get("date")  # WordPress returns ISO format
-        if publish_date:
-            # Parse and format as date only
-            try:
-                dt = datetime.fromisoformat(publish_date.replace("Z", "+00:00"))
-                item["publish_date"] = dt.strftime("%Y-%m-%d")
-
-                # Calculate earnings_per_day
-                days_since_publish = (datetime.now(dt.tzinfo) - dt).days
-                if days_since_publish > 0 and item.get("earnings"):
-                    item["earnings_per_day"] = round(
-                        item["earnings"] / days_since_publish, 4
-                    )
-            except (ValueError, TypeError):
-                item["publish_date"] = None
-                item["earnings_per_day"] = None
-        else:
-            item["publish_date"] = None
-            item["earnings_per_day"] = None
-
+        published = published_by_slug.get(_page_slug(item))
+        item["publish_date"] = published.strftime("%Y-%m-%d") if published else None
+        item["earnings_per_day"] = None
+        if published:
+            days_since_publish = (datetime.now(published.tzinfo) - published).days
+            if days_since_publish > 0 and item.get("earnings"):
+                item["earnings_per_day"] = round(item["earnings"] / days_since_publish, 4)
     return data
 
 
@@ -259,13 +118,8 @@ def _filter_by_slugs(data: List[dict], slugs: List[str]) -> List[dict]:
     Returns:
         Filtered list
     """
-    # Normalize slugs to URL path format
-    url_patterns = [f"/{slug}" for slug in slugs]
-
-    return [
-        item for item in data
-        if item.get("page_url") in url_patterns
-    ]
+    wanted = set(slugs)
+    return [item for item in data if _page_slug(item) in wanted]
 
 
 def _select_properties(data: List[dict], properties: str) -> List[dict]:
@@ -288,7 +142,7 @@ def _select_properties(data: List[dict], properties: str) -> List[dict]:
 @app.command("get")
 @command
 def get_earnings(
-    identifier: str = typer.Argument(..., help="Post ID or slug to get earnings for"),
+    slug: str = typer.Argument(..., help="Post slug to get earnings for"),
     period: str = typer.Option(
         "last30d", "--period",
         help="Time period: yesterday, last7d, last30d, mtd, lastmonth"
@@ -307,32 +161,19 @@ def get_earnings(
     ),
 ):
     """
-    Get earnings for a specific post by ID or slug.
+    Get earnings for a specific post by slug.
 
     Examples:
-        ata-blog earnings get 26786
+        ata-blog earnings get my-post-slug
         ata-blog earnings get my-post-slug --table
-        ata-blog earnings get 26786 --period last7d
-        ata-blog earnings get 26786 --exclude-sponsored
+        ata-blog earnings get my-post-slug --period last7d
+        ata-blog earnings get my-post-slug --exclude-sponsored
     """
-    # Check if post is sponsored (when using post ID)
-    if exclude_sponsored and identifier.isdigit():
-        if _is_post_sponsored(int(identifier)):
-            print_info(f"Post {identifier} is sponsored, skipping")
-            print_json({})
-            return
-
-    # Determine slug from identifier
-    slug = None
-    if identifier.isdigit():
-        # It's a post ID
-        slug = _get_post_slug_by_id(int(identifier))
-        if not slug:
-            print_error(f"Post ID {identifier} not found")
-            raise typer.Exit(1)
-    else:
-        # Assume it's a slug
-        slug = identifier
+    posts = list_posts()
+    if exclude_sponsored and slug in _sponsored_slugs(posts):
+        print_info(f"Post {slug} is sponsored, skipping")
+        print_json({})
+        return
 
     # Fetch earnings data (fetch more to ensure we find the post)
     data = _fetch_earnings_data(period, start, end, limit=1000)
@@ -346,7 +187,7 @@ def get_earnings(
         return
 
     # Should be a single result - enrich with publish date
-    enriched = _enrich_with_publish_dates(filtered)
+    enriched = _enrich_with_publish_dates(filtered, posts)
     result = enriched[0]
     earnings = create_post_earnings(result)
     output_data = earnings.model_dump()
@@ -361,9 +202,6 @@ def get_earnings(
 @app.command("list")
 @command
 def list_earnings(
-    post_id: Optional[int] = typer.Option(
-        None, "--post-id", help="Filter by WordPress post ID"
-    ),
     post_title: Optional[str] = typer.Option(
         None, "--post-title", help="Filter by post title (partial match)"
     ),
@@ -399,11 +237,10 @@ def list_earnings(
     List post earnings from Raptive ad data.
 
     Query ad revenue, pageviews, RPM, and impressions for your posts.
-    Supports filtering by post ID, title, or numeric thresholds.
+    Supports filtering by post title or numeric thresholds.
 
     Examples:
         ata-blog earnings list --table
-        ata-blog earnings list --post-id 26786
         ata-blog earnings list --post-title "PowerShell"
         ata-blog earnings list --filter "earnings:gt:50"
         ata-blog earnings list --filter "rpm:gt:20" --period last7d
@@ -418,27 +255,18 @@ def list_earnings(
             print_error(f"Invalid filter: {e}")
             raise typer.Exit(1)
 
+    posts = list_posts()
+
     # Determine slugs to filter by
     slugs_to_match: Optional[List[str]] = None
 
-    if post_id:
-        slug = _get_post_slug_by_id(post_id)
-        if not slug:
-            print_error(f"Post ID {post_id} not found")
-            raise typer.Exit(1)
-        slugs_to_match = [slug]
-        print_info(f"Filtering by post: {slug}")
-
     if post_title:
-        slugs = _get_post_slugs_by_title(post_title)
-        if not slugs:
+        slugs_to_match = [
+            post["slug"] for post in posts if post_title.casefold() in post["title"].casefold()
+        ]
+        if not slugs_to_match:
             print_error(f"No posts found matching title: {post_title}")
             raise typer.Exit(1)
-        # If post_id was also provided, intersect the results
-        if slugs_to_match:
-            slugs_to_match = [s for s in slugs_to_match if s in slugs]
-        else:
-            slugs_to_match = slugs
         print_info(f"Found {len(slugs_to_match)} matching post(s)")
 
     # Fetch earnings data
@@ -474,11 +302,9 @@ def list_earnings(
 
     # Exclude sponsored posts
     if exclude_sponsored:
-        slugs_in_data = [(item.get("page_url") or "").lstrip("/") for item in data]
-        non_sponsored = _get_non_sponsored_slugs(slugs_in_data)
-        non_sponsored_urls = {f"/{s}" for s in non_sponsored}
+        sponsored = _sponsored_slugs(posts)
         before_count = len(data)
-        data = [item for item in data if item.get("page_url") in non_sponsored_urls]
+        data = [item for item in data if _page_slug(item) not in sponsored]
         excluded = before_count - len(data)
         if excluded:
             print_info(f"Excluded {excluded} sponsored post(s)")
@@ -490,8 +316,8 @@ def list_earnings(
     # Apply limit after filtering
     data = data[:limit]
 
-    # Enrich with publish dates from WordPress
-    data = _enrich_with_publish_dates(data)
+    # Enrich with publish dates from the static site corpus
+    data = _enrich_with_publish_dates(data, posts)
 
     # Convert to models
     earnings = [create_post_earnings(item) for item in data]

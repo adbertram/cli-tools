@@ -1,4 +1,4 @@
-"""Main entry point for ATA Blog CLI wrapper."""
+"""Main entry point for ATA Blog CLI."""
 from . import __version__
 from cli_tools_shared import create_app, run_app
 from cli_tools_shared.cache_commands import create_cache_app
@@ -14,22 +14,17 @@ app = create_app(
 )
 
 # Register command modules
-from .commands import auth, notion_page, wordpress_post, wordpress_page, wordpress_admin, wordpress_menu, media, categories, tags, raptive, schema, earnings, shoutouts
+from .commands import auth, notion_page, media, categories, tags, earnings
 
 app.add_typer(auth.app, name="auth", help="Manage ata-blog authentication")
 app.add_typer(create_cache_app(get_config), name="cache")
 register_commands(app, get_config, notion_page, name="notion-page", help="Manage Notion pages")
-register_commands(app, get_config, wordpress_post, name="wordpress-post", help="Manage WordPress posts")
-register_commands(app, get_config, wordpress_page, name="wordpress-page", help="Manage WordPress pages")
-register_commands(app, get_config, wordpress_admin, name="wordpress-admin", help="Manage WordPress admin operations")
-register_commands(app, get_config, wordpress_menu, name="wordpress-menu", help="Manage WordPress navigation menus")
-register_commands(app, get_config, media, name="media", help="Manage WordPress media")
-register_commands(app, get_config, categories, name="categories", help="Manage WordPress categories")
-register_commands(app, get_config, tags, name="tags", help="Manage WordPress tags")
-register_commands(app, get_config, raptive, name="raptive", help="Manage Raptive (AdThrive) ad settings")
-register_commands(app, get_config, schema, name="schema", help="Manage Rank Math schema markup")
+register_commands(app, get_config, media, name="media", help="Upload media to the static site")
+register_commands(app, get_config, categories, name="categories", help="Manage static site categories")
+register_commands(app, get_config, tags, name="tags", help="Manage static site tags")
 register_commands(app, get_config, earnings, name="earnings", help="Query ad earnings and revenue data")
-register_commands(app, get_config, shoutouts, name="shoutouts", help="Manage sponsored shoutouts in posts")
+
+
 def main():
     """Main entry point."""
     run_app(app, error_types=ClientError)

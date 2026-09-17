@@ -1,4 +1,4 @@
-"""Configuration management for AtaBlog CLI wrapper."""
+"""Configuration management for AtaBlog CLI."""
 import json
 import subprocess
 from typing import Optional
@@ -64,10 +64,10 @@ def _active_profile_auth_status(cli_command: str) -> tuple[bool, str]:
 
 
 class Config(BaseConfig):
-    """Configuration for AtaBlog CLI wrapper.
+    """Configuration for AtaBlog CLI.
 
-    This is a wrapper CLI that delegates auth to wordpress and notion CLIs.
-    Uses CUSTOM credential type with no local credentials stored.
+    Authentication is delegated to the notion CLI. Uses the CUSTOM credential
+    type with no local credentials stored.
     """
 
     DIST_NAME = "ata-blog-cli"
@@ -78,16 +78,7 @@ class Config(BaseConfig):
     CUSTOM_LOGIN_PROMPTS = []
     CUSTOM_EPHEMERAL_FIELDS = []
     CUSTOM_SENSITIVE_FIELDS = []
-    ROOT_CONFIG_FIELDS = (
-        "NOTION_DATABASE_ID",
-        "DEFAULT_AUTHOR",
-        "DEFAULT_STATUS",
-        "ATABLOGGER_SPONSORS_FILE",
-        "WPENGINE_SSH_HOST",
-        "WPENGINE_SSH_USER",
-        "WPENGINE_SSH_IDENTITY_FILE",
-        "WPENGINE_SITE_PATH",
-    )
+    ROOT_CONFIG_FIELDS = ("NOTION_DATABASE_ID",)
 
     def __init__(self, profile=None):
         super().__init__(
@@ -96,63 +87,9 @@ class Config(BaseConfig):
         )
 
     @property
-    def cli_command(self) -> str:
-        """Get the underlying CLI command name."""
-        return self._get("CLI_COMMAND") or "wordpress"
-
-    @property
     def notion_database_id(self) -> str:
         """Get the Notion database ID for articles."""
         return self._get("NOTION_DATABASE_ID") or "2a317112-d9c8-42ee-a4d4-a2b8a5a20818"
-
-    @property
-    def default_author(self) -> str:
-        """Get the default author for posts."""
-        return self._get("DEFAULT_AUTHOR") or "Adam Bertram"
-
-    @property
-    def default_status(self) -> str:
-        """Get the default status for posts."""
-        return self._get("DEFAULT_STATUS") or "draft"
-
-    def _require(self, key: str) -> str:
-        """Return a required non-secret config value or explain how to set it."""
-        value = self._get(key)
-        if not value:
-            raise ValueError(
-                f"{key} is not set. Add it to ~/.local/share/cli-tools/ata-blog/.env"
-            )
-        return value
-
-    @property
-    def sponsors_file(self) -> str:
-        """Get the path to the sponsor registry (sponsors.json)."""
-        return self._require("ATABLOGGER_SPONSORS_FILE")
-
-    @property
-    def wpengine_ssh_host(self) -> str:
-        """Get the WP Engine SSH host."""
-        return self._require("WPENGINE_SSH_HOST")
-
-    @property
-    def wpengine_ssh_user(self) -> str:
-        """Get the WP Engine SSH user."""
-        return self._require("WPENGINE_SSH_USER")
-
-    @property
-    def wpengine_ssh_identity_file(self) -> str:
-        """Get the SSH identity file registered with WP Engine."""
-        return self._require("WPENGINE_SSH_IDENTITY_FILE")
-
-    @property
-    def wpengine_site_path(self) -> str:
-        """Get the WP Engine site root that holds the WordPress install."""
-        return self._require("WPENGINE_SITE_PATH")
-
-    def is_wordpress_available(self) -> bool:
-        """Check if wordpress CLI is available."""
-        import shutil
-        return shutil.which("wordpress") is not None
 
     def is_notion_available(self) -> bool:
         """Check if notion CLI is available."""
@@ -160,39 +97,27 @@ class Config(BaseConfig):
         return shutil.which("notion") is not None
 
     def has_credentials(self) -> bool:
-        """Check if delegated CLIs have saved credentials in their active profiles."""
+        """Check if the notion CLI has saved credentials in its active profile."""
         try:
-            return (
-                _active_profile_has_credentials("wordpress")
-                and _active_profile_has_credentials("notion")
-            )
+            return _active_profile_has_credentials("notion")
         except Exception:
             return False
 
     def test_connection(self) -> dict:
-        """Test connectivity to underlying CLIs."""
-        results = {}
-
-        try:
-            wp_ok, wp_message = _active_profile_auth_status("wordpress")
-            results["wordpress_auth"] = "passed" if wp_ok else f"failed: {wp_message}"
-        except Exception as e:
-            results["wordpress_auth"] = f"failed: {e}"
-
+        """Test connectivity to the notion CLI."""
         try:
             notion_ok, notion_message = _active_profile_auth_status("notion")
-            results["notion_auth"] = "passed" if notion_ok else f"failed: {notion_message}"
+            notion_auth = "passed" if notion_ok else f"failed: {notion_message}"
         except Exception as e:
-            results["notion_auth"] = f"failed: {e}"
+            notion_auth = f"failed: {e}"
 
-        wp_ok = results.get("wordpress_auth") == "passed"
-        notion_ok = results.get("notion_auth") == "passed"
-        results["api_test"] = (
-            "passed" if (wp_ok and notion_ok)
-            else "failed: one or more CLIs not authenticated"
-        )
-
-        return results
+        return {
+            "notion_auth": notion_auth,
+            "api_test": (
+                "passed" if notion_auth == "passed"
+                else "failed: notion CLI not authenticated"
+            ),
+        }
 
 
 _config: Optional[Config] = None

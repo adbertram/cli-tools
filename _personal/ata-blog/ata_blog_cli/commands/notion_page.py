@@ -7,7 +7,7 @@ import typer
 from typing import Optional, List
 
 from ..client import get_client
-from ..utils.images import process_local_images_for_wordpress
+from ..utils.images import upload_local_images
 from cli_tools_shared.filters import apply_filters, apply_limit, apply_properties_filter
 from cli_tools_shared.output import print_json, print_table, command, print_success, print_info
 from cli_tools_shared import FilterMap
@@ -240,15 +240,9 @@ def articles_publish(
 def articles_unpublish(
     identifier: str = typer.Argument(
         ...,
-        help="Notion page ID, WordPress post ID, post URL, or slug",
+        help="Notion page ID, post URL, or slug",
     ),
     status: str = typer.Option("Draft", "--status", "-s", help="Notion status to set"),
-    force: bool = typer.Option(
-        False, "--force", "-F", help="Permanently delete the WordPress post (vs trash)"
-    ),
-    keep_wordpress: bool = typer.Option(
-        False, "--keep-wordpress", help="Skip the WordPress trash/delete; only reset Notion"
-    ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Resolve and report planned changes without mutating"
     ),
@@ -256,14 +250,16 @@ def articles_unpublish(
         False, "--yes", "-y", help="Skip the confirmation prompt (required non-interactively)"
     ),
 ):
-    """Unpublish an article: revert a published post back to draft.
+    """Unpublish an article: take a published post off the site and back to draft.
 
-    The inverse of `publish`. Resolves both the Notion page and the WordPress
-    post from the identifier, trashes (or permanently deletes with --force) the
-    WordPress post, and resets the Notion page status plus its publication
-    artifact fields (Published URL, X Post URL, LinkedIn Post URL, Publish Date
-    -> cleared; Promoted -> false). Content, Keywords, Tags, Category, Schema
-    Type, Stage Date, and Post Performance Snapshots are left intact.
+    The inverse of `publish`. Resolves both the Notion page and the static
+    site post from the identifier, removes the post from the static site
+    source, rebuilds, deploys, and promotes the site without it, and resets
+    the Notion page status plus its publication artifact fields (Published
+    URL, X Post URL, LinkedIn Post URL, Publish Date -> cleared; Promoted ->
+    false). Content, Keywords, Tags, Category, Schema Type, Stage Date, and
+    Post Performance Snapshots are left intact. The removed post file is kept
+    at the `backup_path` reported in the result.
 
     This is destructive: pass --yes to run non-interactively, or --dry-run to
     preview the resolved post and planned field changes without mutating.
@@ -271,36 +267,22 @@ def articles_unpublish(
     Examples:
         ata-blog notion-page unpublish PAGE_ID --dry-run
         ata-blog notion-page unpublish PAGE_ID --yes
-        ata-blog notion-page unpublish 26985 --yes
         ata-blog notion-page unpublish https://adamtheautomator.com/my-post/ --yes
-        ata-blog notion-page unpublish my-post-slug --force --yes
-        ata-blog notion-page unpublish PAGE_ID --keep-wordpress --yes
+        ata-blog notion-page unpublish my-post-slug --yes
     """
     client = get_client()
 
     if dry_run:
-        summary = client.unpublish_article(
-            identifier,
-            status=status,
-            force=force,
-            keep_wordpress=keep_wordpress,
-            dry_run=True,
-        )
+        summary = client.unpublish_article(identifier, status=status, dry_run=True)
         print_info("Dry run: no changes were made.")
         print_json(summary)
         return
 
     if not yes:
-        preview = client.unpublish_article(
-            identifier,
-            status=status,
-            force=force,
-            keep_wordpress=keep_wordpress,
-            dry_run=True,
-        )
-        wp = preview["wordpress"]
+        preview = client.unpublish_article(identifier, status=status, dry_run=True)
+        static = preview["static"]
         print_info(
-            f"About to unpublish: WordPress post {wp['post_id']} -> {wp['action']}; "
+            f"About to unpublish: static post {static['slug']} -> {static['action']}; "
             f"Notion page {preview['notion']['page_id']} -> status '{status}', "
             f"clear {', '.join(preview['notion']['cleared_fields'])}."
         )
@@ -309,13 +291,7 @@ def articles_unpublish(
             print_info("Aborted.")
             raise typer.Exit(1)
 
-    summary = client.unpublish_article(
-        identifier,
-        status=status,
-        force=force,
-        keep_wordpress=keep_wordpress,
-        dry_run=False,
-    )
+    summary = client.unpublish_article(identifier, status=status, dry_run=False)
     print_success(f"Unpublished {summary['notion']['page_id']}")
     print_json(summary)
 
@@ -446,8 +422,8 @@ def content_set(
     """Replace article content with markdown from file.
 
     Local image references (paths that are not http/https URLs) are uploaded
-    to the WordPress media library before the markdown is pushed to Notion,
-    and the markdown is rewritten to point at the returned WordPress URLs.
+    to the static site media bucket before the markdown is pushed to Notion,
+    and the markdown is rewritten to point at the returned public URLs.
 
     Examples:
         ata-blog notion-page content set PAGE_ID --file ./post.md
@@ -456,11 +432,11 @@ def content_set(
     if not source_path.exists():
         raise typer.BadParameter(f"File not found: {file}")
 
-    # Upload local image references to WordPress, rewriting the markdown
+    # Upload local image references to static media, rewriting the markdown
     # to point at the returned URLs. Paths are resolved relative to the
     # markdown file's parent directory.
     original_markdown = source_path.read_text()
-    rewritten_markdown, uploaded = process_local_images_for_wordpress(
+    rewritten_markdown, uploaded = upload_local_images(
         original_markdown,
         base_dir=source_path.parent,
         verbose=True,
@@ -483,7 +459,7 @@ def content_set(
             result = client.set_article_content(page_id, rewritten_path)
         finally:
             Path(rewritten_path).unlink(missing_ok=True)
-        print_info(f"Uploaded {uploaded} local image(s) to WordPress media.")
+        print_info(f"Uploaded {uploaded} local image(s) to static media.")
     else:
         result = client.set_article_content(page_id, file)
 

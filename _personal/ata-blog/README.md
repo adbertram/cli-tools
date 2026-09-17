@@ -4,44 +4,75 @@
 
 The `ata-blog` CLI provides a unified command-line interface for managing the Adam The Automator blog post production pipeline.
 
-Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows to manage Notion-backed post metadata, WordPress publishing, Raptive ad settings, and Rank Math schema markup.
+Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows to manage Notion-backed post metadata, static-site publishing and unpublishing, media uploads, categories, tags, and ad earnings.
 
 ## Commands
 
 ```bash
 ata-blog auth status
+ata-blog auth login
 ata-blog auth test --verbose
 ata-blog auth profiles list
+ata-blog cache clear
 ata-blog notion-page list --table
 ata-blog notion-page get PAGE_ID
+ata-blog notion-page create --title "My Post" --excerpt "Summary" --category "Cloud"
+ata-blog notion-page search "powershell"
+ata-blog notion-page statuses
 ata-blog notion-page update PAGE_ID --status "Draft"
-ata-blog wordpress-post list --table
-ata-blog wordpress-post get POST_ID
-ata-blog wordpress-post create --status draft --title "Title"
-ata-blog wordpress-post update POST_ID --content-file post.html
-ata-blog wordpress-post schedule POST_ID --auto-schedule
-ata-blog wordpress-page list --table
-ata-blog wordpress-menu list --table
-ata-blog wordpress-menu get MENU_ID --table
-ata-blog wordpress-menu items --menu MENU_ID --table
-ata-blog wordpress-menu add-page PAGE_ID --menu MENU_ID
-ata-blog media upload image.png
+ata-blog notion-page content get PAGE_ID
+ata-blog notion-page content set PAGE_ID --file post.md
+ata-blog notion-page content append PAGE_ID --file more.md
+ata-blog notion-page comments list PAGE_ID
+ata-blog notion-page comments get COMMENT_ID
+ata-blog notion-page comments add PAGE_ID --body "Looks good"
+ata-blog notion-page schema add-property DATABASE_ID --name "Reviewed" --type checkbox
+ata-blog notion-page publish PAGE_ID --status draft      # build + preview deployment
+ata-blog notion-page publish PAGE_ID --status publish    # build + deploy + promote to production
+ata-blog notion-page unpublish PAGE_ID --dry-run
+ata-blog notion-page unpublish my-post-slug --yes
+ata-blog media upload image.png   # uploads to the static site's R2 media bucket
 ata-blog categories list --table
-ata-blog tags list --table
-ata-blog wordpress-admin plugins list --table
-ata-blog wordpress-admin themes list --table
-ata-blog wordpress-admin themes file-push active-theme ./front-page.php front-page.php --remote-root /srv/www/site --host wp-host --dry-run
-ata-blog cache clear
-ata-blog raptive status POST_ID
-ata-blog raptive status PAGE_ID --type page
-ata-blog schema list --limit 10
+ata-blog categories get 5401
+ata-blog categories create "Platform Engineering"
+ata-blog tags list --filter "name:eq:PowerShell"
+ata-blog tags get 7
+ata-blog tags create "Bicep"
 ata-blog earnings list --limit 10
-ata-blog shoutouts list POST_ID
-ata-blog shoutouts site get --table
-ata-blog shoutouts site set --text 'Audit AD with <a href="https://example.com">Example</a>.'
-ata-blog shoutouts site set --logo 27000 --link https://example.com/product
-ata-blog shoutouts site set --no-display --no-cache-clear
+ata-blog earnings get my-post-slug --period last7d
 ```
+
+### Publishing and unpublishing
+
+`notion-page publish` stages the post into the static site source, builds the
+site, uploads a Cloudflare Pages preview, and with `--status publish` promotes
+that build to production. The result JSON carries `static_url`, `promoted`,
+and `deployment_id`.
+
+`notion-page unpublish` is the inverse. It accepts a Notion page ID, a post
+URL, or a slug, removes the post file from the static site source, runs the
+same build, preview deployment, and production promotion, then resets the
+Notion page (status plus Published URL, X Post URL, LinkedIn Post URL, Publish
+Date, and Promoted). A failure before the Notion reset rolls production back
+to the prior deployment and restores the post file. The removed file is kept
+at the `backup_path` in the result. It prompts for confirmation unless `--yes`
+is passed; `--dry-run` previews without mutating.
+
+### Categories and tags
+
+Both groups read and write `static-site/src/data/terms.json`, the static
+site's taxonomy record. Each term is `{id, name, slug, count}`. `create`
+appends a term with the next free id and a slug derived from the name, and
+rejects a name that already exists (case-insensitive). Publishing fails on a
+Notion Category or Tag name that is not in that file.
+
+### Earnings
+
+`earnings list|get` read Raptive ad data through the `raptive` CLI. Post
+identity comes from the static site corpus: `get` takes a post slug,
+`--post-title` matches corpus titles, `--exclude-sponsored` drops posts
+carrying the Sponsored tag, and `publish_date` / `earnings_per_day` come from
+each post's corpus publish date.
 
 ### Frozen scheduling windows
 
@@ -53,37 +84,16 @@ ata-blog notion-page publish PAGE_ID --auto-schedule --schedule-after 2026-09-08
 ```
 
 The locked scheduler keeps weekday, daily-capacity, four-hour spacing, and
-reservation rules. It reads live WordPress future posts before static cutover,
-and static publisher records after completed cutover. If no slot fits, it
-raises an error before reserving or publishing outside the interval. Both
-bounds also validate an explicit `--date` and static transaction replays.
+reservation rules, reading occupied slots from the static publisher's own
+records. If no slot fits, it raises an error before reserving or publishing
+outside the interval. Both bounds also validate an explicit `--date` and
+static transaction replays.
 
-### Body shoutouts vs the site shoutout
+### Authentication
 
-`ata-blog shoutouts list|get|add|remove` manage `wp:quote` blocks inside one
-post body. `ata-blog shoutouts site get|set` manage the sponsor placement that
-the theme prints above every post body from the ACF options record
-`site_ad_settings`. That placement is site-wide: one record serves every post.
-
-`site set` changes only the options you supply, reads the record back, then
-flushes the WP Engine page cache. Pass `--no-cache-clear` to skip the flush.
-Get the `--logo` attachment ID from `ata-blog media upload`.
-
-The `site` commands reach WordPress through wp-cli over the WP Engine SSH
-connection because acf-to-rest-api 3.3.4 cannot write ACF options on ACF Pro 6.8.
-Set these keys in `~/.local/share/cli-tools/ata-blog/.env`:
-
-```
-WPENGINE_SSH_HOST=<environment>.ssh.wpengine.net
-WPENGINE_SSH_USER=<environment>
-WPENGINE_SSH_IDENTITY_FILE=~/.ssh/<key>
-WPENGINE_SITE_PATH=/sites/<environment>
-```
-
-Authentication is owned by the delegated CLIs:
+Authentication is owned by the delegated Notion CLI:
 
 ```bash
-wordpress auth login
 notion auth login
 ```
 
@@ -107,5 +117,5 @@ uv run --project /Users/adam/Dropbox/GitRepos/cli-tools/_personal/ata-blog --wit
 From inside this directory, the equivalent focused form is:
 
 ```bash
-uv run --project . --with pytest python -m pytest tests/test_raptive.py
+uv run --project . --with pytest python -m pytest tests/test_terms.py
 ```

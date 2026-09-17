@@ -21,12 +21,12 @@ _PUBLISH_PROPERTY_TYPES = {
 }
 
 
-def test_notion_page_publish_missing_wordpress_tag_exits_nonzero(monkeypatch):
+def test_notion_page_publish_unknown_tag_exits_nonzero(monkeypatch):
     """CLI publish validation errors must fail the process for shell loops/cron."""
 
     class FakeClient:
         def publish_article(self, *args, **kwargs):
-            raise ClientError("WordPress tag(s) not found: Compliance, SOC 2")
+            raise ClientError("Unknown static corpus tags name: 'SOC 2'")
 
     monkeypatch.setattr(notion_page, "get_client", lambda: FakeClient())
 
@@ -40,7 +40,7 @@ def test_notion_page_publish_missing_wordpress_tag_exits_nonzero(monkeypatch):
     )
 
     assert result.exit_code != 0
-    assert "Error: WordPress tag(s) not found: Compliance, SOC 2" in result.output
+    assert "Error: Unknown static corpus tags name: 'SOC 2'" in result.output
 
 
 def test_resolves_conventional_featured_image_when_option_is_omitted(tmp_path, monkeypatch):
@@ -73,7 +73,7 @@ def test_prefers_conventional_webp_featured_image_when_available(tmp_path, monke
 def test_reports_actionable_blocker_when_no_conventional_featured_image_exists(
     tmp_path, monkeypatch
 ):
-    """Missing pipeline image should block before any WordPress publish attempt."""
+    """Missing pipeline image should block before any publish attempt."""
 
     page_id = "3495d9c85b2b81eebac8e532046b5b58"
     monkeypatch.chdir(tmp_path)
@@ -94,67 +94,3 @@ def test_explicit_featured_image_path_still_validates(tmp_path):
     image_path.write_bytes(b"jpg-bytes")
 
     assert AtaBlogClient._resolve_featured_image("page-id", str(image_path)) == image_path
-
-
-def test_resolve_tags_by_names_reports_all_missing_tags():
-    """Bulk tag validation should report every Notion tag absent from WordPress."""
-
-    client = object.__new__(AtaBlogClient)
-
-    def fake_run_wordpress(args, timeout=60):
-        if args == ["tags", "list", "--limit", "1000"]:
-            tags = [
-                {"id": 10, "name": "DevOps"},
-                {"id": 11, "name": "Kubernetes"},
-            ]
-        else:
-            tags = []
-        return subprocess.CompletedProcess(args, 0, stdout=json.dumps(tags), stderr="")
-
-    client._run_wordpress = fake_run_wordpress
-
-    with pytest.raises(
-        ClientError,
-        match=r"WordPress tag\(s\) not found: Platform Engineering, Internal Developer Platform",
-    ):
-        client.resolve_tags_by_names([
-            "DevOps",
-            "Platform Engineering",
-            "Kubernetes",
-            "Internal Developer Platform",
-        ])
-
-
-def test_resolve_tags_by_names_falls_back_to_exact_filters_for_deep_catalog():
-    """Tags absent from the first 1000-list page should resolve by exact filter."""
-
-    client = object.__new__(AtaBlogClient)
-    calls = []
-
-    def fake_run_wordpress(args, timeout=60):
-        calls.append(args)
-        if args == ["tags", "list", "--limit", "1000"]:
-            tags = [{"id": 10, "name": "DevOps"}]
-        elif args == [
-            "tags", "list", "--filter", "name:eq:Platform Engineering", "--limit", "1000"
-        ]:
-            tags = [{"id": 5649, "name": "Platform Engineering"}]
-        elif args == ["tags", "list", "--filter", "name:eq:Security", "--limit", "1000"]:
-            tags = [{"id": 5487, "name": "Security"}]
-        else:
-            pytest.fail(f"unexpected wordpress call: {args}")
-        return subprocess.CompletedProcess(args, 0, stdout=json.dumps(tags), stderr="")
-
-    client._run_wordpress = fake_run_wordpress
-
-    assert client.resolve_tags_by_names(["DevOps", "Platform Engineering", "Security"]) == [
-        10,
-        5649,
-        5487,
-    ]
-    assert calls == [
-        ["tags", "list", "--limit", "1000"],
-        ["tags", "list", "--filter", "name:eq:Platform Engineering", "--limit", "1000"],
-        ["tags", "list", "--filter", "name:eq:Security", "--limit", "1000"],
-    ]
-

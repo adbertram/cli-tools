@@ -4,10 +4,16 @@ from __future__ import annotations
 
 import json
 import subprocess
+from pathlib import Path
 
 import pytest
+from typer.testing import CliRunner
 
 from ata_blog_cli.client import AtaBlogClient, ClientError
+from ata_blog_cli.commands import notion_page
+
+PAGE_ID = "31b5d9c85b2b812f935cd753aa60315f"
+STATIC_POST = Path("/corpus/notion-31b5d9c85b2b812f935cd753aa60315f-my-post.md")
 
 
 # Live schema property types for the artifact fields under test, mirroring the
@@ -27,12 +33,12 @@ class FakeConfig:
 
 
 def _make_client():
-    """Build a client with a stubbed schema and recorded notion/WP calls."""
+    """Build a client with a stubbed schema, corpus lookups, and recorded calls."""
     client = object.__new__(AtaBlogClient)
     client.config = FakeConfig()
     client._property_types_cache = dict(_SCHEMA_PROPERTY_TYPES)
     client.notion_calls = []
-    client.wordpress_calls = []
+    client.static_transactions = []
 
     def fake_run_notion(args, timeout=60):
         client.notion_calls.append(args)
@@ -40,14 +46,24 @@ def _make_client():
             args, 0, stdout=json.dumps({"ok": True}), stderr=""
         )
 
-    def fake_run_wordpress(args, timeout=60):
-        client.wordpress_calls.append(args)
-        return subprocess.CompletedProcess(
-            args, 0, stdout=json.dumps({"ok": True}), stderr=""
-        )
+    def fake_static_transaction(*, page_id, static_post, status):
+        client.static_transactions.append((page_id, static_post, status))
+        return {
+            "deployment_id": "preview-id",
+            "promotion_id": "production-id",
+            "release_ref": {"release_id": "r", "contract_hash": "c"},
+            "backup_path": "/profile/backup",
+            "retired_transactions": [],
+        }
 
     client._run_notion = fake_run_notion
-    client._run_wordpress = fake_run_wordpress
+    client._unpublish_static_transaction = fake_static_transaction
+    # The corpus binds a static-originated post to its Notion page id and an
+    # imported post to its slug.
+    client._find_static_post_by_notion_page_id = (
+        lambda page_id: STATIC_POST if page_id == PAGE_ID else None
+    )
+    client._find_static_post = lambda slug: STATIC_POST if slug == "my-post" else None
     # Live statuses path (used to validate the target status).
     client.get_valid_statuses = lambda: ["Draft", "Published", "Idea"]
     return client
@@ -61,9 +77,9 @@ def _make_client():
     [
         ("31b5d9c8-5b2b-812f-935c-d753aa60315f", "notion_page"),
         ("31b5d9c85b2b812f935cd753aa60315f", "notion_page"),
-        ("26985", "wordpress_id"),
-        ("https://adamtheautomator.com/my-post/", "wordpress_url"),
-        ("http://example.com/foo", "wordpress_url"),
+        ("26985", "slug"),
+        ("https://adamtheautomator.com/my-post/", "url"),
+        ("http://example.com/foo", "url"),
         ("my-post-slug", "slug"),
         ("identity-proofing-service-desk", "slug"),
     ],
@@ -139,45 +155,73 @@ def test_artifact_field_set_matches_spec():
 # --- resolution --------------------------------------------------------------
 
 
-def test_resolve_from_notion_page_with_published_url():
+def test_resolve_from_notion_page_binds_by_page_id():
     client = _make_client()
+    client.get_article = lambda pid: {"id": "31b5d9c8-5b2b-812f-935c-d753aa60315f"}
+
+    resolved = client.resolve_unpublish_target(PAGE_ID)
+
+    assert resolved["id_kind"] == "notion_page"
+    assert resolved["static_post"] == STATIC_POST
+
+
+def test_resolve_imported_post_binds_by_published_url_slug():
+    """An imported post carries no Notion page id, so its slug identifies it."""
+    client = _make_client()
+    client._find_static_post_by_notion_page_id = lambda page_id: None
     client.get_article = lambda pid: {
         "id": pid,
         "Published URL": "https://adamtheautomator.com/my-post/",
     }
-    client._wordpress_post_by_slug = lambda slug: (
-        {"id": 555, "slug": slug, "status": "publish",
-         "link": "https://adamtheautomator.com/my-post/"}
-        if slug == "my-post"
-        else None
-    )
 
-    resolved = client.resolve_unpublish_target("31b5d9c85b2b812f935cd753aa60315f")
-    assert resolved["id_kind"] == "notion_page"
-    assert resolved["wordpress_post"]["id"] == 555
-    assert resolved["notion_page"]["id"] == "31b5d9c85b2b812f935cd753aa60315f"
+    resolved = client.resolve_unpublish_target(PAGE_ID)
+
+    assert resolved["slug"] == "my-post"
+    assert resolved["static_post"] == STATIC_POST
 
 
-def test_resolve_from_notion_page_without_published_url():
-    """A reverted page (no Published URL) resolves WP side as absent."""
+def test_resolve_from_notion_page_absent_from_corpus():
+    """A reverted page with no corpus record resolves the static side as absent."""
     client = _make_client()
+    client._find_static_post_by_notion_page_id = lambda page_id: None
     client.get_article = lambda pid: {"id": pid, "Published URL": None}
 
-    resolved = client.resolve_unpublish_target("31b5d9c85b2b812f935cd753aa60315f")
-    assert resolved["wordpress_post"] is None
+    resolved = client.resolve_unpublish_target(PAGE_ID)
+
+    assert resolved["static_post"] is None
 
 
-def test_resolve_from_wordpress_id_fails_when_no_notion_match():
+@pytest.mark.parametrize(
+    "identifier", ["https://adamtheautomator.com/my-post/", "my-post"]
+)
+def test_resolve_from_url_or_slug_finds_notion_page_by_published_url(identifier):
     client = _make_client()
-    client._run_wordpress = lambda args, timeout=60: subprocess.CompletedProcess(
-        args, 0,
-        stdout=json.dumps({"id": 26985, "link": "https://x/p/"}),
-        stderr="",
-    )
+    looked_up = []
+
+    def by_url(url):
+        looked_up.append(url)
+        return {"id": PAGE_ID}
+
+    client._notion_page_by_published_url = by_url
+
+    resolved = client.resolve_unpublish_target(identifier)
+
+    assert resolved["static_post"] == STATIC_POST
+    assert looked_up == ["https://adamtheautomator.com/my-post/"]
+
+
+def test_resolve_from_slug_fails_when_corpus_has_no_post():
+    client = _make_client()
+    with pytest.raises(ClientError, match="Could not resolve a static post"):
+        client.resolve_unpublish_target("no-such-post")
+
+
+def test_resolve_from_slug_fails_when_no_notion_match():
+    client = _make_client()
     client._notion_page_by_published_url = lambda url: None
 
     with pytest.raises(ClientError, match="Could not resolve a Notion page"):
-        client.resolve_unpublish_target("26985")
+        client.resolve_unpublish_target("my-post")
 
 
 # --- dry-run makes zero mutating calls --------------------------------------
@@ -185,91 +229,47 @@ def test_resolve_from_wordpress_id_fails_when_no_notion_match():
 
 def test_dry_run_makes_no_mutating_calls():
     client = _make_client()
-    client.get_article = lambda pid: {
-        "id": pid,
-        "Published URL": "https://adamtheautomator.com/my-post/",
-    }
-    client._wordpress_post_by_slug = lambda slug: {
-        "id": 555, "slug": slug, "status": "publish",
-        "link": "https://adamtheautomator.com/my-post/",
-    }
+    client.get_article = lambda pid: {"id": pid}
 
-    summary = client.unpublish_article(
-        "31b5d9c85b2b812f935cd753aa60315f", dry_run=True
-    )
+    summary = client.unpublish_article(PAGE_ID, dry_run=True)
 
     assert summary["dry_run"] is True
-    assert summary["wordpress"] == {"post_id": 555, "action": "trashed"}
+    assert summary["static"] == {
+        "slug": None,
+        "article_path": str(STATIC_POST),
+        "action": "removed",
+    }
     assert summary["notion"]["status"] == "Draft"
     assert summary["notion"]["cleared_fields"] == list(
         AtaBlogClient.UNPUBLISH_ARTIFACT_FIELDS
     )
-    # No notion update and no wordpress delete should have been issued.
     assert client.notion_calls == []
-    assert all(c[:2] != ["posts", "delete"] for c in client.wordpress_calls)
+    assert client.static_transactions == []
 
 
-def test_real_run_trashes_and_resets():
+def test_real_run_removes_the_static_post_through_the_transaction():
     client = _make_client()
-    client.get_article = lambda pid: {
-        "id": pid,
-        "Published URL": "https://adamtheautomator.com/my-post/",
-    }
-    client._wordpress_post_by_slug = lambda slug: {
-        "id": 555, "slug": slug, "status": "publish",
-        "link": "https://adamtheautomator.com/my-post/",
-    }
+    client.get_article = lambda pid: {"id": pid}
 
-    summary = client.unpublish_article(
-        "31b5d9c85b2b812f935cd753aa60315f", dry_run=False
-    )
+    summary = client.unpublish_article(PAGE_ID, status="Draft", dry_run=False)
 
-    assert summary["wordpress"] == {"post_id": 555, "action": "trashed"}
-    # WordPress delete issued (trash, no --force).
-    delete_calls = [c for c in client.wordpress_calls if c[:2] == ["posts", "delete"]]
-    assert delete_calls == [["posts", "delete", "555"]]
-    # Notion update issued with the artifact payload.
-    assert len(client.notion_calls) == 1
+    assert client.static_transactions == [(PAGE_ID, STATIC_POST, "Draft")]
+    assert summary["static"]["action"] == "removed"
+    assert summary["static"]["promotion_id"] == "production-id"
+    assert summary["static"]["backup_path"] == "/profile/backup"
+    # The transaction owns the Notion reset, so it is not issued a second time.
+    assert client.notion_calls == []
 
 
-def test_force_permanently_deletes():
+def test_real_run_with_no_corpus_record_only_resets_notion():
     client = _make_client()
-    client.get_article = lambda pid: {
-        "id": pid,
-        "Published URL": "https://adamtheautomator.com/my-post/",
-    }
-    client._wordpress_post_by_slug = lambda slug: {
-        "id": 555, "slug": slug, "status": "publish",
-        "link": "https://adamtheautomator.com/my-post/",
-    }
+    client._find_static_post_by_notion_page_id = lambda page_id: None
+    client.get_article = lambda pid: {"id": pid, "Published URL": None}
 
-    summary = client.unpublish_article(
-        "31b5d9c85b2b812f935cd753aa60315f", force=True, dry_run=False
-    )
+    summary = client.unpublish_article(PAGE_ID, dry_run=False)
 
-    assert summary["wordpress"]["action"] == "deleted"
-    delete_calls = [c for c in client.wordpress_calls if c[:2] == ["posts", "delete"]]
-    assert delete_calls == [["posts", "delete", "555", "--force"]]
-
-
-def test_keep_wordpress_skips_delete():
-    client = _make_client()
-    client.get_article = lambda pid: {
-        "id": pid,
-        "Published URL": "https://adamtheautomator.com/my-post/",
-    }
-    client._wordpress_post_by_slug = lambda slug: {
-        "id": 555, "slug": slug, "status": "publish",
-        "link": "https://adamtheautomator.com/my-post/",
-    }
-
-    summary = client.unpublish_article(
-        "31b5d9c85b2b812f935cd753aa60315f", keep_wordpress=True, dry_run=False
-    )
-
-    assert summary["wordpress"] == {"post_id": 555, "action": "skipped"}
-    assert all(c[:2] != ["posts", "delete"] for c in client.wordpress_calls)
-    # Notion reset still happens.
+    assert summary["static"]["action"] == "already_absent"
+    assert client.static_transactions == []
     assert len(client.notion_calls) == 1
 
 
@@ -286,3 +286,53 @@ def test_invalid_status_rejected_before_resolution():
     with pytest.raises(ClientError, match="Invalid status"):
         client.unpublish_article("page", status="Bogus", dry_run=True)
     assert called["resolved"] is False
+
+
+# --- command surface ---------------------------------------------------------
+
+
+class _RecordingClient:
+    def __init__(self):
+        self.calls = []
+
+    def unpublish_article(self, identifier, *, status, dry_run):
+        self.calls.append((identifier, status, dry_run))
+        return {
+            "dry_run": dry_run,
+            "id_kind": "slug",
+            "static": {"slug": "my-post", "article_path": "/x.md", "action": "removed"},
+            "notion": {"page_id": PAGE_ID, "status": status, "cleared_fields": []},
+        }
+
+
+def test_command_declined_confirmation_never_mutates(monkeypatch):
+    client = _RecordingClient()
+    monkeypatch.setattr(notion_page, "get_client", lambda: client)
+
+    result = CliRunner().invoke(notion_page.app, ["unpublish", "my-post"], input="n\n")
+
+    assert result.exit_code == 1
+    assert client.calls == [("my-post", "Draft", True)]
+
+
+def test_command_yes_runs_without_prompt(monkeypatch):
+    client = _RecordingClient()
+    monkeypatch.setattr(notion_page, "get_client", lambda: client)
+
+    result = CliRunner().invoke(notion_page.app, ["unpublish", "my-post", "--yes"])
+
+    assert result.exit_code == 0
+    assert client.calls == [("my-post", "Draft", False)]
+
+
+def test_command_rejects_the_removed_force_option(monkeypatch):
+    client = _RecordingClient()
+    monkeypatch.setattr(notion_page, "get_client", lambda: client)
+
+    result = CliRunner().invoke(
+        notion_page.app, ["unpublish", "my-post", "--yes", "--force"]
+    )
+
+    assert result.exit_code == 2
+    assert "No such option" in result.output
+    assert client.calls == []
