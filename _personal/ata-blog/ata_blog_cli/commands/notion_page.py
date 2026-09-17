@@ -191,7 +191,6 @@ def articles_publish(
         "-s",
         help="Publish status (draft/publish). --status publish promotes this one post to the live production deployment",
     ),
-    slug: Optional[str] = typer.Option(None, "--slug", help="Custom URL slug (auto-generated if not provided)"),
     date: Optional[str] = typer.Option(None, "--date", "-d", help="Schedule only, at this slot (ISO 8601 with UTC offset): sets Status=Scheduled and Publish Date; nothing is built or deployed"),
     auto_schedule: bool = typer.Option(False, "--auto-schedule", help="Schedule only, at the next available slot: sets Status=Scheduled and Publish Date; nothing is built or deployed"),
     schedule_after: Optional[str] = typer.Option(None, "--schedule-after", help="Inclusive schedule bound (ISO 8601 with UTC offset; requires --schedule-before)"),
@@ -207,7 +206,6 @@ def articles_publish(
     result = client.publish_article(
         page_id,
         status=status,
-        slug=slug,
         date=date,
         auto_schedule=auto_schedule,
         schedule_after=schedule_after,
@@ -242,7 +240,12 @@ def articles_unpublish(
         ...,
         help="Notion page ID, post URL, or slug",
     ),
-    status: str = typer.Option("Draft", "--status", "-s", help="Notion status to set"),
+    status: Optional[str] = typer.Option(
+        None,
+        "--status",
+        "-s",
+        help="Notion status to set (default: Ready to Publish for a Scheduled page, Draft otherwise)",
+    ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Resolve and report planned changes without mutating"
     ),
@@ -250,7 +253,8 @@ def articles_unpublish(
         False, "--yes", "-y", help="Skip the confirmation prompt (required non-interactively)"
     ),
 ):
-    """Unpublish an article: take a published post off the site and back to draft.
+    """Unpublish an article: take a published post off the site and back to draft,
+    or unschedule a Scheduled post back to Ready to Publish.
 
     The inverse of `publish`. Resolves both the Notion page and the static
     site post from the identifier, removes the post from the static site
@@ -264,8 +268,12 @@ def articles_unpublish(
     This is destructive: pass --yes to run non-interactively, or --dry-run to
     preview the resolved post and planned field changes without mutating.
 
+    A Scheduled page has nothing on the site yet, so unscheduling only resets
+    its Notion status and clears Publish Date.
+
     Examples:
         ata-blog notion-page unpublish PAGE_ID --dry-run
+        ata-blog notion-page unpublish SCHEDULED_PAGE_ID --yes
         ata-blog notion-page unpublish PAGE_ID --yes
         ata-blog notion-page unpublish https://adamtheautomator.com/my-post/ --yes
         ata-blog notion-page unpublish my-post-slug --yes
@@ -283,7 +291,8 @@ def articles_unpublish(
         static = preview["static"]
         print_info(
             f"About to unpublish: static post {static['slug']} -> {static['action']}; "
-            f"Notion page {preview['notion']['page_id']} -> status '{status}', "
+            f"Notion page {preview['notion']['page_id']} -> "
+            f"status '{preview['notion']['status']}', "
             f"clear {', '.join(preview['notion']['cleared_fields'])}."
         )
         confirm = typer.confirm("Proceed?")

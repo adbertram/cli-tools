@@ -65,7 +65,9 @@ def _make_client():
     )
     client._find_static_post = lambda slug: STATIC_POST if slug == "my-post" else None
     # Live statuses path (used to validate the target status).
-    client.get_valid_statuses = lambda: ["Draft", "Published", "Idea"]
+    client.get_valid_statuses = lambda: [
+        "Draft", "Published", "Idea", "Ready to Publish", "Scheduled",
+    ]
     return client
 
 
@@ -273,19 +275,88 @@ def test_real_run_with_no_corpus_record_only_resets_notion():
     assert len(client.notion_calls) == 1
 
 
-def test_invalid_status_rejected_before_resolution():
+def test_invalid_status_rejected_before_any_mutation():
     client = _make_client()
-    called = {"resolved": False}
+    client.get_article = lambda pid: {"id": pid, "Status": "Published"}
 
-    def _resolve(_id):
-        called["resolved"] = True
-        return {}
+    with pytest.raises(ClientError, match="Invalid status 'Bogus'"):
+        client.unpublish_article(PAGE_ID, status="Bogus", dry_run=False)
 
-    client.resolve_unpublish_target = _resolve
+    assert client.notion_calls == []
+    assert client.static_transactions == []
 
-    with pytest.raises(ClientError, match="Invalid status"):
-        client.unpublish_article("page", status="Bogus", dry_run=True)
-    assert called["resolved"] is False
+
+# --- unschedule ---------------------------------------------------------------
+#
+# With no --status, the target status comes from the page: a Scheduled page goes
+# back to Ready to Publish, anything else to Draft.
+
+
+def _unscheduled_client(status):
+    """A client whose page has the given Status and no corpus record."""
+    client = _make_client()
+    client._find_static_post_by_notion_page_id = lambda page_id: None
+    client.get_article = lambda pid: {"id": pid, "Status": status, "Published URL": None}
+    return client
+
+
+def _update_payload(client):
+    assert len(client.notion_calls) == 1
+    args = client.notion_calls[0]
+    return args, json.loads(args[args.index("--properties") + 1])
+
+
+def test_unschedule_returns_a_scheduled_page_to_ready_to_publish_and_clears_publish_date():
+    client = _unscheduled_client("Scheduled")
+
+    summary = client.unpublish_article(PAGE_ID, dry_run=False)
+
+    assert summary["notion"]["status"] == "Ready to Publish"
+    assert summary["static"]["action"] == "already_absent"
+    args, payload = _update_payload(client)
+    assert "Status:Ready to Publish" in args
+    assert payload["Publish Date"] == {"date": None}
+    assert client.static_transactions == []
+
+
+def test_unpublish_without_status_on_a_ready_to_publish_page_with_no_corpus_record_resets_to_draft():
+    client = _unscheduled_client("Ready to Publish")
+
+    summary = client.unpublish_article(PAGE_ID, dry_run=False)
+
+    assert summary["notion"]["status"] == "Draft"
+    args, _payload = _update_payload(client)
+    assert "Status:Draft" in args
+
+
+def test_published_page_without_status_flag_still_resets_to_draft():
+    client = _make_client()
+    client.get_article = lambda pid: {"id": pid, "Status": "Published"}
+
+    client.unpublish_article(PAGE_ID, dry_run=False)
+
+    assert client.static_transactions == [(PAGE_ID, STATIC_POST, "Draft")]
+
+
+def test_dry_run_on_a_scheduled_page_reports_ready_to_publish_and_makes_no_calls():
+    client = _unscheduled_client("Scheduled")
+
+    summary = client.unpublish_article(PAGE_ID, dry_run=True)
+
+    assert summary["notion"]["status"] == "Ready to Publish"
+    assert client.notion_calls == []
+    assert client.static_transactions == []
+
+
+def test_unschedule_fails_before_mutation_when_ready_to_publish_is_not_a_live_status():
+    client = _unscheduled_client("Scheduled")
+    client.get_valid_statuses = lambda: ["Draft", "Published", "Scheduled"]
+
+    with pytest.raises(ClientError, match="Invalid status 'Ready to Publish'"):
+        client.unpublish_article(PAGE_ID, dry_run=False)
+
+    assert client.notion_calls == []
+    assert client.static_transactions == []
 
 
 # --- command surface ---------------------------------------------------------
@@ -312,7 +383,7 @@ def test_command_declined_confirmation_never_mutates(monkeypatch):
     result = CliRunner().invoke(notion_page.app, ["unpublish", "my-post"], input="n\n")
 
     assert result.exit_code == 1
-    assert client.calls == [("my-post", "Draft", True)]
+    assert client.calls == [("my-post", None, True)]
 
 
 def test_command_yes_runs_without_prompt(monkeypatch):
@@ -322,7 +393,7 @@ def test_command_yes_runs_without_prompt(monkeypatch):
     result = CliRunner().invoke(notion_page.app, ["unpublish", "my-post", "--yes"])
 
     assert result.exit_code == 0
-    assert client.calls == [("my-post", "Draft", False)]
+    assert client.calls == [("my-post", None, False)]
 
 
 def test_command_rejects_the_removed_force_option(monkeypatch):

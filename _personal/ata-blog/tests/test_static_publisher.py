@@ -125,7 +125,10 @@ def publisher(tmp_path, monkeypatch):
         "src/data/terms.json": json.dumps(
             {
                 "categories": [{"id": 11, "name": "Automation", "slug": "automation"}],
-                "tags": [{"id": 21, "name": "Cloudflare", "slug": "cloudflare"}],
+                "tags": [
+                    {"id": 21, "name": "Cloudflare", "slug": "cloudflare"},
+                    {"id": 7, "name": "Sponsored", "slug": "sponsored"},
+                ],
             }
         )
         + "\n",
@@ -184,6 +187,8 @@ def publisher(tmp_path, monkeypatch):
     image.write_bytes(_png_bytes(FIXTURE_IMAGE_WIDTH, FIXTURE_IMAGE_HEIGHT))
     article = {
         "Title": "Journaled Static Publisher",
+        "Type": "Standard",
+        "Slug": None,
         "Keywords": "static publisher",
         "Category": "Automation",
         "Tags": "Cloudflare",
@@ -316,7 +321,6 @@ def _publish(client, **kwargs):
     call_kwargs = {
         "page_id": PAGE_ID,
         "status": "draft",
-        "slug": "journaled-static-publisher",
         "check_duplicates": False,
         "featured_image": "ignored.png",
         "force": False,
@@ -1671,7 +1675,6 @@ def test_publish_status_rejected_before_source_or_external_reads(publisher):
         client._publish_static_transaction(
             page_id=PAGE_ID,
             status="invalid-status",
-            slug="journaled-static-publisher",
             check_duplicates=False,
             featured_image="ignored.png",
             force=False,
@@ -2027,7 +2030,7 @@ def test_publish_article_delegates_to_static_transaction(publisher, monkeypatch)
 
     assert len(calls) == 1
     assert set(calls[0]) == {
-        "page_id", "status", "slug", "check_duplicates", "featured_image", "force",
+        "page_id", "status", "check_duplicates", "featured_image", "force",
     }
     assert calls[0]["page_id"] == PAGE_ID
     assert calls[0]["status"] == "publish"
@@ -2197,13 +2200,11 @@ def test_schedule_rejects_image_placeholder_markdown(publisher):
     _assert_nothing_written(client, counters)
 
 
-def test_schedule_rejects_missing_featured_image(publisher, monkeypatch, tmp_path):
+def test_schedule_rejects_missing_featured_image(publisher):
     client, article, _markdown, _image, _manifest, counters, _token = publisher
     article["Status"] = "Ready to Publish"
+    # The fixture repository has no posts/<page-id>/ directory.
     client._resolve_featured_image = AtaBlogClient._resolve_featured_image
-    empty_root = tmp_path / "no-posts-here"
-    empty_root.mkdir()
-    monkeypatch.chdir(empty_root)
 
     with pytest.raises(ClientError, match="Featured image is required for publishing"):
         client.publish_article(PAGE_ID, auto_schedule=True)
@@ -2317,5 +2318,164 @@ def test_schedule_bounds_without_a_schedule_request_are_rejected(publisher):
             schedule_after="2026-08-04T09:00:00+00:00",
             schedule_before="2026-08-04T17:00:00+00:00",
         )
+
+    _assert_nothing_written(client, counters)
+
+
+# --- Sponsored tag by Notion Type --------------------------------------------
+#
+# The site disables ads and marks external links by the post's own Sponsored
+# tag, so the publisher adds that tag from Notion `Type` -- on a first stage and
+# on a restage of a record that already carries a tagIds line.
+
+PUBLISH_DATE = "2026-08-31T12:34:56+00:00"
+
+
+def _stage(client, article, markdown, image, key):
+    return client._stage_static_article(
+        page_id=PAGE_ID,
+        slug="journaled-static-publisher",
+        article=article,
+        markdown_content=markdown,
+        image_path=image,
+        publish_date=PUBLISH_DATE,
+        paths=client._publisher_paths(PAGE_ID, key),
+    )
+
+
+def _tag_ids_line(article_path):
+    lines = [
+        line for line in Path(article_path).read_text().splitlines()
+        if line.startswith("tagIds:")
+    ]
+    assert len(lines) == 1
+    return lines[0]
+
+
+def _existing_record_with_tag_ids(client, article, markdown, image, tag_ids_line):
+    """Stage a record, then give it the tagIds line of an already-published post."""
+    target = Path(_stage(client, article, markdown, image, "a" * 64)["article_path"])
+    target.write_text(target.read_text().replace("tagIds: [21]", tag_ids_line))
+    assert _tag_ids_line(target) == tag_ids_line
+    return target
+
+
+@pytest.mark.parametrize("post_type", ["Sponsored", "Sponsored Product Review"])
+def test_sponsored_type_stages_the_sponsored_tag(publisher, post_type):
+    client, article, markdown, image, *_ = publisher
+    article["Type"] = post_type
+
+    stage = _stage(client, article, markdown, image, "a" * 64)
+
+    assert _tag_ids_line(stage["article_path"]) == "tagIds: [21, 7]"
+
+
+def test_sponsored_restage_appends_the_sponsored_tag_to_existing_tag_ids(publisher):
+    client, article, markdown, image, *_ = publisher
+    target = _existing_record_with_tag_ids(client, article, markdown, image, "tagIds: [5422]")
+    preimage = target.read_text()
+    article["Type"] = "Sponsored"
+
+    _stage(client, article, markdown, image, "b" * 64)
+
+    assert target.read_text() == preimage.replace("tagIds: [5422]", "tagIds: [5422, 7]")
+
+
+def test_sponsored_restage_with_the_sponsored_id_already_present_is_byte_identical(publisher):
+    client, article, markdown, image, *_ = publisher
+    target = _existing_record_with_tag_ids(client, article, markdown, image, "tagIds: [5422,7]")
+    preimage = target.read_bytes()
+    article["Type"] = "Sponsored"
+
+    _stage(client, article, markdown, image, "b" * 64)
+
+    assert target.read_bytes() == preimage
+    assert _tag_ids_line(target) == "tagIds: [5422,7]"
+
+
+def test_non_sponsored_restage_leaves_existing_tag_ids_bytes_unchanged(publisher):
+    client, article, markdown, image, *_ = publisher
+    target = _existing_record_with_tag_ids(client, article, markdown, image, "tagIds: [5422,7]")
+    preimage = target.read_bytes()
+
+    _stage(client, article, markdown, image, "b" * 64)
+
+    assert target.read_bytes() == preimage
+
+
+def test_sponsored_type_without_a_sponsored_term_fails_before_any_corpus_write(publisher):
+    client, article, markdown, image, *_ = publisher
+    terms_path = client_module.STATIC_SITE_ROOT / "src" / "data" / "terms.json"
+    terms = json.loads(terms_path.read_text())
+    terms["tags"] = [tag for tag in terms["tags"] if tag["name"] != "Sponsored"]
+    terms_path.write_text(json.dumps(terms) + "\n")
+    article["Type"] = "Sponsored"
+
+    with pytest.raises(ClientError, match="Unknown static corpus tags name: 'Sponsored'"):
+        _stage(client, article, markdown, image, "a" * 64)
+
+    assert list((client_module.STATIC_SITE_ROOT / "src" / "data" / "posts").iterdir()) == []
+
+
+def test_missing_type_raises_client_error_naming_type(publisher):
+    client, article, markdown, image, *_ = publisher
+    del article["Type"]
+
+    with pytest.raises(ClientError, match=f"Notion page {PAGE_ID} has no Type"):
+        _stage(client, article, markdown, image, "a" * 64)
+
+    assert list((client_module.STATIC_SITE_ROOT / "src" / "data" / "posts").iterdir()) == []
+
+
+# --- Notion `Slug` is the single supplied-slug source -------------------------
+
+
+def test_notion_slug_feeds_the_static_slug(publisher):
+    client, article, *_ = publisher
+    article["Slug"] = "a-slug-chosen-in-notion"
+
+    result = client.publish_article(PAGE_ID)
+
+    assert result["static_url"] == f"{PREVIEW_DEPLOYMENT_URL}/a-slug-chosen-in-notion/"
+
+
+@pytest.mark.parametrize("empty", [None, "", "   "])
+def test_empty_notion_slug_derives_the_slug_from_the_title(publisher, empty):
+    client, article, *_ = publisher
+    article["Slug"] = empty
+
+    result = client.publish_article(PAGE_ID)
+
+    assert result["static_url"] == f"{PREVIEW_DEPLOYMENT_URL}/journaled-static-publisher/"
+
+
+@pytest.mark.parametrize("stored", ["Not Normalized!", "a" * 51])
+def test_schedule_rejects_a_slug_the_publisher_would_alter(publisher, stored):
+    client, article, _markdown, _image, _manifest, counters, _token = publisher
+    article["Status"] = "Ready to Publish"
+    article["Slug"] = stored
+
+    with pytest.raises(ClientError, match="Notion Slug .* is not a normalized slug"):
+        client.publish_article(PAGE_ID, auto_schedule=True)
+
+    _assert_nothing_written(client, counters)
+
+
+def test_promotion_rejects_a_notion_slug_the_publisher_would_alter(publisher):
+    client, article, _markdown, _image, _manifest, counters, _token = publisher
+    article["Slug"] = "Not Normalized!"
+
+    with pytest.raises(ClientError, match="Notion Slug .* is not a normalized slug"):
+        client.publish_article(PAGE_ID, status="publish")
+
+    _assert_nothing_written(client, counters)
+
+
+def test_missing_slug_property_raises_client_error_naming_slug(publisher):
+    client, article, _markdown, _image, _manifest, counters, _token = publisher
+    del article["Slug"]
+
+    with pytest.raises(ClientError, match="has no 'Slug' property"):
+        client.publish_article(PAGE_ID, status="publish")
 
     _assert_nothing_written(client, counters)

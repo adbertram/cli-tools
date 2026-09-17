@@ -8,6 +8,7 @@ import subprocess
 import pytest
 from typer.testing import CliRunner
 
+import ata_blog_cli.client as client_module
 from ata_blog_cli.client import AtaBlogClient, ClientError
 from ata_blog_cli.commands import notion_page
 
@@ -50,7 +51,26 @@ def test_resolves_conventional_featured_image_when_option_is_omitted(tmp_path, m
     image_path = tmp_path / "posts" / page_id / "featured_image.png"
     image_path.parent.mkdir(parents=True)
     image_path.write_bytes(b"png-bytes")
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(client_module, "STATIC_REPOSITORY_ROOT", tmp_path)
+
+    assert AtaBlogClient._resolve_featured_image(page_id, None) == image_path
+
+
+def test_conventional_featured_image_lookup_ignores_cwd(tmp_path, monkeypatch):
+    """The due publisher runs from any directory; the lookup root is the repository."""
+
+    page_id = "3495d9c85b2b81eebac8e532046b5b58"
+    repository = tmp_path / "repository"
+    image_path = repository / "posts" / page_id / "featured_image.png"
+    image_path.parent.mkdir(parents=True)
+    image_path.write_bytes(b"png-bytes")
+    elsewhere = tmp_path / "elsewhere"
+    # A same-named image under the working directory must not be picked up.
+    decoy = elsewhere / "posts" / page_id / "featured_image.webp"
+    decoy.parent.mkdir(parents=True)
+    decoy.write_bytes(b"decoy-bytes")
+    monkeypatch.setattr(client_module, "STATIC_REPOSITORY_ROOT", repository)
+    monkeypatch.chdir(elsewhere)
 
     assert AtaBlogClient._resolve_featured_image(page_id, None) == image_path
 
@@ -65,7 +85,7 @@ def test_prefers_conventional_webp_featured_image_when_available(tmp_path, monke
     webp_path = post_dir / "featured_image.webp"
     png_path.write_bytes(b"png-bytes")
     webp_path.write_bytes(b"webp-bytes")
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(client_module, "STATIC_REPOSITORY_ROOT", tmp_path)
 
     assert AtaBlogClient._resolve_featured_image(page_id, None) == webp_path
 
@@ -76,14 +96,14 @@ def test_reports_actionable_blocker_when_no_conventional_featured_image_exists(
     """Missing pipeline image should block before any publish attempt."""
 
     page_id = "3495d9c85b2b81eebac8e532046b5b58"
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(client_module, "STATIC_REPOSITORY_ROOT", tmp_path)
 
     with pytest.raises(ClientError) as exc_info:
         AtaBlogClient._resolve_featured_image(page_id, None)
 
     message = str(exc_info.value)
     assert "Featured image is required for publishing" in message
-    assert f"posts/{page_id}/featured_image.webp" in message
+    assert f"{tmp_path}/posts/{page_id}/featured_image.webp" in message
     assert "--featured-image PATH" in message
 
 

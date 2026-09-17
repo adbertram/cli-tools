@@ -406,10 +406,8 @@ class AtaBlogClient:
             return AtaBlogClient._validate_featured_image(featured_image)
 
         candidates = [
-            Path("posts") / page_id / "featured_image.webp",
-            Path("posts") / page_id / "featured_image.png",
-            Path("posts") / page_id / "featured_image.jpg",
-            Path("posts") / page_id / "featured_image.jpeg",
+            STATIC_REPOSITORY_ROOT / "posts" / page_id / f"featured_image.{extension}"
+            for extension in ("webp", "png", "jpg", "jpeg")
         ]
         for candidate in candidates:
             if candidate.exists():
@@ -1207,6 +1205,24 @@ class AtaBlogClient:
             raise ClientError("Could not derive a non-empty static post slug")
         return slug
 
+    def _notion_slug(self, article: Dict[str, Any], page_id: str) -> Optional[str]:
+        """Return the Notion `Slug` value, the one supplied-slug source."""
+        if "Slug" not in article:
+            raise ClientError(
+                f"Notion page {page_id} has no 'Slug' property; add a rich_text "
+                "property named Slug to the posts database"
+            )
+        value = str(article["Slug"] or "").strip()
+        if not value:
+            return None
+        normalized = self._static_slug(value, None)
+        if normalized != value:
+            raise ClientError(
+                f"Notion Slug '{value}' on page {page_id} is not a normalized slug; "
+                f"the publisher would change it to '{normalized}'"
+            )
+        return value
+
     @staticmethod
     def _find_static_post(slug: str) -> Optional[Path]:
         """Find the unique corpus record for a slug."""
@@ -1275,6 +1291,8 @@ class AtaBlogClient:
         paths: Dict[str, Path],
     ) -> Dict[str, Any]:
         """Write one deterministic corpus record and preserve its exact preimage."""
+        if not article.get("Type"):
+            raise ClientError(f"Notion page {page_id} has no Type")
         post_root = STATIC_SITE_ROOT / "src" / "data" / "posts"
         post_root.mkdir(parents=True, exist_ok=True)
         # notionPageId is this record's durable identity; slug is a derived
@@ -1350,10 +1368,30 @@ class AtaBlogClient:
                     "categories", self._notion_term_names(article, "Category")
                 )
             )
-        if not any(line.startswith("tagIds:") for line in frontmatter):
-            replacements["tagIds"] = json.dumps(
-                self._resolve_static_term_ids("tags", self._notion_term_names(article, "Tags"))
+        # A restaged record keeps its tagIds bytes; the line is rewritten only
+        # when it is absent or the post's Type adds the Sponsored tag to it.
+        tag_lines = [line for line in frontmatter if line.startswith("tagIds:")]
+        if tag_lines:
+            try:
+                tag_ids = json.loads(tag_lines[0].split(":", 1)[1])
+            except json.JSONDecodeError as exc:
+                raise ClientError(f"Static post has an invalid tagIds line: {target}") from exc
+        else:
+            tag_ids = self._resolve_static_term_ids(
+                "tags", self._notion_term_names(article, "Tags")
             )
+        sponsored_ids: List[int] = []
+        if str(article["Type"]).startswith("Sponsored"):
+            # corpus.py imports this module, so the name is imported here.
+            from .corpus import SPONSORED_TAG_NAME
+
+            sponsored_ids = [
+                term_id
+                for term_id in self._resolve_static_term_ids("tags", [SPONSORED_TAG_NAME])
+                if term_id not in tag_ids
+            ]
+        if not tag_lines or sponsored_ids:
+            replacements["tagIds"] = json.dumps(tag_ids + sponsored_ids)
         if not any(line.startswith("wpId:") for line in frontmatter):
             replacements["wpId"] = "0"
         for key, value in replacements.items():
@@ -3464,7 +3502,6 @@ class AtaBlogClient:
         *,
         page_id: str,
         status: str,
-        slug: Optional[str],
         check_duplicates: bool,
         featured_image: Optional[str],
         force: bool,
@@ -3474,7 +3511,6 @@ class AtaBlogClient:
             return self._publish_static_transaction_locked(
                 page_id=page_id,
                 status=status,
-                slug=slug,
                 check_duplicates=check_duplicates,
                 featured_image=featured_image,
                 force=force,
@@ -3485,7 +3521,6 @@ class AtaBlogClient:
         *,
         page_id: str,
         status: str,
-        slug: Optional[str],
         check_duplicates: bool,
         featured_image: Optional[str],
         force: bool,
@@ -3509,7 +3544,7 @@ class AtaBlogClient:
             "contract_hash": manifest["contract_hash"],
         }
         unbound_release_ref = {"release_id": None, "contract_hash": None}
-        final_slug = self._static_slug(title, slug)
+        final_slug = self._static_slug(title, self._notion_slug(article, page_id))
 
         with nullcontext():
             journal = self._load_existing_publisher_journal(
@@ -3916,7 +3951,6 @@ class AtaBlogClient:
         *,
         page_id: str,
         status: str,
-        slug: Optional[str],
         date: Optional[str],
         auto_schedule: bool,
         check_duplicates: bool,
@@ -3948,7 +3982,9 @@ class AtaBlogClient:
         self._resolve_featured_image(page_id, None)
         self._resolve_static_term_ids("categories", self._notion_term_names(article, "Category"))
         self._resolve_static_term_ids("tags", self._notion_term_names(article, "Tags"))
-        final_slug = self._static_slug(str(article["Title"]), slug)
+        final_slug = self._static_slug(
+            str(article["Title"]), self._notion_slug(article, page_id)
+        )
         if check_duplicates and self._find_static_post(final_slug) is not None:
             raise ClientError(f"Static post with slug '{final_slug}' already exists")
 
@@ -3971,7 +4007,6 @@ class AtaBlogClient:
         self,
         page_id: str,
         status: str = "draft",
-        slug: Optional[str] = None,
         date: Optional[str] = None,
         auto_schedule: bool = False,
         check_duplicates: bool = True,
@@ -3986,11 +4021,12 @@ class AtaBlogClient:
         With date or auto_schedule this only schedules: it validates the post
         and sets Status=Scheduled plus Publish Date. Otherwise it runs the
         static transaction: build, deploy, and (status="publish") promote.
+        The URL slug is the page's Notion `Slug`, or derived from its title
+        when that property is empty.
 
         Args:
             page_id: Notion page ID
             status: draft or publish
-            slug: Optional custom URL slug (auto-generated from title if not provided)
             date: Schedule-only: explicit slot (ISO 8601 with a UTC offset)
             auto_schedule: Schedule-only: pick the next available slot
             check_duplicates: If True, error if slug already exists
@@ -4013,7 +4049,6 @@ class AtaBlogClient:
             return self._schedule_article(
                 page_id=page_id,
                 status=status,
-                slug=slug,
                 date=date,
                 auto_schedule=auto_schedule,
                 check_duplicates=check_duplicates,
@@ -4026,7 +4061,6 @@ class AtaBlogClient:
         return self._publish_static_transaction(
             page_id=page_id,
             status=status,
-            slug=slug,
             check_duplicates=check_duplicates,
             featured_image=featured_image,
             force=force,
@@ -4329,18 +4363,28 @@ class AtaBlogClient:
     def unpublish_article(
         self,
         identifier: str,
-        status: str = "Draft",
+        status: Optional[str] = None,
         dry_run: bool = False,
     ) -> Dict[str, Any]:
-        """Revert a published article: remove it from the static site, reset Notion.
+        """Revert an article: unschedule it, or remove it from the static site.
 
         Args:
             identifier: Notion page ID, post URL, or slug.
             status: Notion status to set (validated against live statuses).
+                When omitted, a Scheduled page returns to Ready to Publish
+                and any other page to Draft.
             dry_run: Resolve and report planned changes without mutating.
 
         Returns the JSON summary described in the command docstring.
         """
+        # Resolution only reads; the target status depends on the page it finds.
+        resolved = self.resolve_unpublish_target(identifier)
+        notion_page = resolved["notion_page"]
+        static_post = resolved["static_post"]
+        if status is None:
+            status = (
+                "Ready to Publish" if notion_page.get("Status") == "Scheduled" else "Draft"
+            )
         # Validate the target Notion status against the live schema before any
         # side effects (fail-fast, reusing the existing status path).
         valid_statuses = self.get_valid_statuses()
@@ -4349,10 +4393,6 @@ class AtaBlogClient:
                 f"Invalid status '{status}'. Valid statuses: "
                 f"{', '.join(valid_statuses)}"
             )
-
-        resolved = self.resolve_unpublish_target(identifier)
-        notion_page = resolved["notion_page"]
-        static_post = resolved["static_post"]
         if not notion_page.get("id"):
             raise ClientError("Resolved Notion page is missing an id")
         page_id = self._compact_page_id(str(notion_page["id"]))
