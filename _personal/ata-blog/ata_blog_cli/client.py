@@ -424,6 +424,24 @@ class AtaBlogClient:
         )
 
     @staticmethod
+    def _require_publish_metadata(article: Dict[str, Any]) -> None:
+        missing = [
+            field for field in ("Keywords", "Category", "Tags", "Excerpt")
+            if not article.get(field)
+        ]
+        if missing:
+            raise ClientError(f"Missing required Notion fields: {', '.join(missing)}")
+
+    @staticmethod
+    def _notion_term_names(article: Dict[str, Any], field: str) -> List[str]:
+        """Split one comma-separated Notion taxonomy field into term names."""
+        return [
+            name.strip()
+            for name in str(article.get(field) or "").split(",")
+            if name.strip()
+        ]
+
+    @staticmethod
     def _validate_publish_markdown(markdown_content: str) -> None:
         placeholder_lines = [
             f"line {line_number}: {line.strip()}"
@@ -857,9 +875,6 @@ class AtaBlogClient:
             raise ClientError("Notion Status property has no options in the live database schema")
         return statuses
 
-    # Kept as an override seam for tests; normal runs use the active CLI profile.
-    _RESERVATION_DIR: Optional[Path] = None
-
     # Minimum lead time a returned slot must have over true UTC now. Acts as
     # a defense-in-depth guard independent of the timezone-correctness of the
     # code above it: if a future bug reintroduces a naive/local "now", this
@@ -873,85 +888,30 @@ class AtaBlogClient:
     _SCHEDULE_WINDOW_START_HOUR = 9
     _SCHEDULE_WINDOW_END_HOUR = 17
 
-    def _schedule_reservation_dir(self) -> Path:
-        """Return the active-profile schedule reservation directory."""
-        if self._RESERVATION_DIR is not None:
-            return self._RESERVATION_DIR
-        return self.config.get_profile_data_dir() / "static-publisher" / "schedule-reservations"
-
     def _schedule_lock_path(self) -> Path:
-        """Return the one lock serializing schedule reads and reservations."""
-        return self._schedule_reservation_dir() / ".schedule.lock"
+        """Return the one lock serializing slot reads, picks, and the Notion write."""
+        return self._publisher_runtime_root() / "schedule.lock"
 
-    def _read_schedule_reservations(self) -> List[datetime]:
-        """Read pending reservations and reject corrupt reservation state."""
-        times = []
-        reservation_dir = self._schedule_reservation_dir()
-        if not reservation_dir.exists():
-            return times
-        for f in reservation_dir.glob("*.json"):
-            try:
-                data = json.loads(f.read_text())
-                expires = datetime.fromisoformat(data["expires"])
-                slot = datetime.fromisoformat(data["slot"])
-                if expires.tzinfo is None or slot.tzinfo is None:
-                    f.unlink()
-                    continue
-                if expires < datetime.now(timezone.utc):
-                    f.unlink()  # Expired reservation
-                else:
-                    times.append(slot.astimezone(timezone.utc))
-            except (json.JSONDecodeError, KeyError, ValueError) as exc:
-                raise ClientError(f"Corrupt schedule reservation {f}: {exc}") from exc
-        return times
-
-    def _create_schedule_reservation(self, slot: str) -> None:
-        """Create one deterministic reservation while the schedule lock is held."""
-        reservation_dir = self._schedule_reservation_dir()
-        reservation_dir.mkdir(parents=True, exist_ok=True)
-        reservation = {
-            "slot": slot,
-            "expires": (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat(),
-            "pid": os.getpid(),
-        }
-        slot_key = hashlib.sha256(slot.encode("utf-8")).hexdigest()
-        path = reservation_dir / f"{slot_key}.json"
-        try:
-            descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        except FileExistsError as exc:
-            raise ClientError(f"Schedule slot is already reserved: {slot}") from exc
-        with os.fdopen(descriptor, "wb") as handle:
-            handle.write(_canonical_json_bytes(reservation) + b"\n")
-            handle.flush()
-            os.fsync(handle.fileno())
-
-    def clear_schedule_reservation(self) -> None:
-        """Clear schedule reservations created by this process."""
-        reservation_dir = self._schedule_reservation_dir()
-        if reservation_dir.exists():
-            with self._exclusive_publisher_lock(self._schedule_lock_path()):
-                for path in reservation_dir.glob("*.json"):
-                    document = self._load_required_json(path, "schedule reservation")
-                    if document.get("pid") == os.getpid():
-                        path.unlink()
-
-    def _read_publisher_schedule_slots(self) -> List[datetime]:
-        """Read committed slots from the static publisher runtime records."""
-        runtime_root = self._publisher_runtime_root()
-        if not runtime_root.exists():
-            return []
+    def _read_scheduled_slots(self) -> List[datetime]:
+        """Read occupied slots from the Notion pages in Status Scheduled."""
+        limit = 100
+        pages = self.list_articles(status="Scheduled", limit=limit)
+        if len(pages) >= limit:
+            raise ClientError(
+                f"Scheduled page query reached the {limit}-page list limit; "
+                "occupied slots cannot be read completely"
+            )
         occupied: List[datetime] = []
-        for path in sorted((runtime_root / "transactions").glob("*.runtime.json")):
-            try:
-                document = json.loads(path.read_text())
-            except json.JSONDecodeError as exc:
-                raise ClientError(f"Corrupt publisher runtime record {path}: {exc}") from exc
-            slot = document.get("scheduled_date")
-            if not slot:
-                continue
-            parsed = datetime.fromisoformat(slot.replace("Z", "+00:00"))
+        for page in pages:
+            value = page["Publish Date"]
+            if not value:
+                raise ClientError(f"Scheduled Notion page {page['id']} has no Publish Date")
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
             if parsed.tzinfo is None:
-                raise ClientError(f"Publisher schedule is not UTC-aware: {path}")
+                raise ClientError(
+                    f"Scheduled Notion page {page['id']} has a Publish Date "
+                    f"without a UTC offset: {value}"
+                )
             occupied.append(parsed.astimezone(timezone.utc))
         return occupied
 
@@ -1013,13 +973,11 @@ class AtaBlogClient:
 
     @staticmethod
     def _require_schedule_in_window(
-        value: Optional[str], schedule_window: Optional[Tuple[datetime, datetime]],
+        value: str, schedule_window: Optional[Tuple[datetime, datetime]],
     ) -> None:
-        """Reject unscheduled or out-of-window dates, including journal replays."""
+        """Reject a slot outside the frozen [start, end) scheduling window."""
         if schedule_window is None:
             return
-        if value is None:
-            raise ClientError("A bounded publication requires a scheduled date")
         try:
             parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
         except ValueError as exc:
@@ -1029,7 +987,7 @@ class AtaBlogClient:
         if not schedule_window[0] <= parsed < schedule_window[1]:
             raise ClientError(f"Schedule date is outside the frozen scheduling window: {value}")
 
-    def _find_next_schedule_slot_unlocked(
+    def find_next_schedule_slot(
         self, schedule_window: Optional[Tuple[datetime, datetime]] = None,
     ) -> str:
         """
@@ -1038,7 +996,9 @@ class AtaBlogClient:
         - 4+ hour gap between posts
         - No weekends (roll to Monday)
         - Posts scheduled between 9am-5pm UTC only
-        - Pending reservations from concurrent processes
+
+        Takes no lock and writes nothing: _schedule_article holds the schedule
+        lock across this read, the pick, and the Notion write.
 
         All arithmetic here is in UTC. The host machine's local timezone is
         never read: schedule slots are unambiguous UTC, so "now" must be true
@@ -1048,8 +1008,7 @@ class AtaBlogClient:
             ISO 8601 UTC datetime string with an explicit +00:00 offset
             (e.g., "2026-01-10T09:00:00+00:00").
         """
-        occupied_times = self._read_publisher_schedule_slots()
-        occupied_times.extend(self._read_schedule_reservations())
+        occupied_times = self._read_scheduled_slots()
 
         # Start from true UTC now, round UP to the next hour boundary so the
         # slot is never earlier than "now" plus a full hour of lead time.
@@ -1100,25 +1059,16 @@ class AtaBlogClient:
                 candidate = self._ceil_to_hour(datetime.now(timezone.utc) + timedelta(hours=1))
                 continue
 
-            # Found valid slot - reserve it before returning
             slot = candidate.isoformat()
             self._require_schedule_in_window(slot, schedule_window)
-            self._create_schedule_reservation(slot)
             return slot
 
         raise ClientError("Could not find available schedule slot within iteration limit")
 
-    def find_next_schedule_slot(
-        self, schedule_window: Optional[Tuple[datetime, datetime]] = None,
-    ) -> str:
-        """Atomically select and reserve the next available UTC schedule slot."""
-        with self._exclusive_publisher_lock(self._schedule_lock_path()):
-            return self._find_next_schedule_slot_unlocked(schedule_window)
-
-    def _reserve_explicit_schedule_slot(
+    def _require_free_explicit_slot(
         self, value: str, schedule_window: Optional[Tuple[datetime, datetime]] = None,
     ) -> str:
-        """Validate and atomically reserve an explicit UTC-aware slot."""
+        """Validate an explicit UTC-aware slot no Scheduled page occupies."""
         try:
             parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
         except ValueError as exc:
@@ -1126,13 +1076,9 @@ class AtaBlogClient:
         if parsed.tzinfo is None:
             raise ClientError("--date must include a UTC offset")
         slot = parsed.astimezone(timezone.utc).isoformat()
-        with self._exclusive_publisher_lock(self._schedule_lock_path()):
-            self._require_schedule_in_window(slot, schedule_window)
-            occupied = self._read_publisher_schedule_slots()
-            occupied.extend(self._read_schedule_reservations())
-            if any(existing == parsed.astimezone(timezone.utc) for existing in occupied):
-                raise ClientError(f"Schedule slot is already occupied: {slot}")
-            self._create_schedule_reservation(slot)
+        self._require_schedule_in_window(slot, schedule_window)
+        if parsed in self._read_scheduled_slots():
+            raise ClientError(f"Schedule slot is already occupied: {slot}")
         return slot
 
     def _publisher_runtime_root(self) -> Path:
@@ -1399,22 +1345,14 @@ class AtaBlogClient:
         if not any(line.startswith("authorId:") for line in frontmatter):
             replacements["authorId"] = str(STATIC_DEFAULT_AUTHOR_ID)
         if not any(line.startswith("categoryIds:") for line in frontmatter):
-            category_names = [
-                name.strip()
-                for name in str(article.get("Category") or "").split(",")
-                if name.strip()
-            ]
             replacements["categoryIds"] = json.dumps(
-                self._resolve_static_term_ids("categories", category_names)
+                self._resolve_static_term_ids(
+                    "categories", self._notion_term_names(article, "Category")
+                )
             )
         if not any(line.startswith("tagIds:") for line in frontmatter):
-            tag_names = [
-                name.strip()
-                for name in str(article.get("Tags") or "").split(",")
-                if name.strip()
-            ]
             replacements["tagIds"] = json.dumps(
-                self._resolve_static_term_ids("tags", tag_names)
+                self._resolve_static_term_ids("tags", self._notion_term_names(article, "Tags"))
             )
         if not any(line.startswith("wpId:") for line in frontmatter):
             replacements["wpId"] = "0"
@@ -2963,7 +2901,6 @@ class AtaBlogClient:
         return {
             "notion_page_id": journal["source"]["page_id"],
             "status": runtime["status"],
-            "scheduled_date": runtime.get("scheduled_date"),
             "static_url": f"{public_base_url}/{slug}/",
             "deployment_id": journal["artifacts"]["deployment_id"],
             "deployment_url": deployment_url,
@@ -3467,8 +3404,6 @@ class AtaBlogClient:
                     )
 
                 if journal["state"] == "notion_updated":
-                    current_stage = "schedule cleanup"
-                    self.clear_schedule_reservation()
                     _atomic_write_json(paths["runtime"], runtime)
                     self._transition_publisher_journal(
                         journal, "completed", journal["effects"], paths["journal"]
@@ -3530,12 +3465,9 @@ class AtaBlogClient:
         page_id: str,
         status: str,
         slug: Optional[str],
-        date: Optional[str],
-        auto_schedule: bool,
         check_duplicates: bool,
         featured_image: Optional[str],
         force: bool,
-        schedule_window: Optional[Tuple[datetime, datetime]] = None,
     ) -> Dict[str, Any]:
         """Serialize source capture and transaction work for one Notion page."""
         with self._exclusive_publisher_lock(self._publisher_page_lock_path(page_id)):
@@ -3543,12 +3475,9 @@ class AtaBlogClient:
                 page_id=page_id,
                 status=status,
                 slug=slug,
-                date=date,
-                auto_schedule=auto_schedule,
                 check_duplicates=check_duplicates,
                 featured_image=featured_image,
                 force=force,
-                schedule_window=schedule_window,
             )
 
     def _publish_static_transaction_locked(
@@ -3557,34 +3486,17 @@ class AtaBlogClient:
         page_id: str,
         status: str,
         slug: Optional[str],
-        date: Optional[str],
-        auto_schedule: bool,
         check_duplicates: bool,
         featured_image: Optional[str],
         force: bool,
-        schedule_window: Optional[Tuple[datetime, datetime]] = None,
     ) -> Dict[str, Any]:
         """Run or resume the single journaled static publication transaction."""
         if status not in {"draft", "publish"}:
             raise ClientError("Static publish status must be draft or publish")
-        if date and auto_schedule:
-            raise ClientError("Use either --date or --auto-schedule, not both")
-        if date:
-            try:
-                parsed_date = datetime.fromisoformat(date.replace("Z", "+00:00"))
-            except ValueError as exc:
-                raise ClientError(f"--date is not valid ISO 8601: {date}") from exc
-            if parsed_date.tzinfo is None:
-                raise ClientError("--date must include a UTC offset")
 
         article = self.get_article(page_id)
         title = str(article.get("Title") or article.get("title") or "Untitled")
-        missing = [
-            field for field in ("Keywords", "Category", "Tags", "Excerpt")
-            if not article.get(field)
-        ]
-        if missing:
-            raise ClientError(f"Missing required Notion fields: {', '.join(missing)}")
+        self._require_publish_metadata(article)
         markdown_content = self.get_article_markdown(page_id)
         self._validate_publish_markdown(markdown_content)
         image_path = self._resolve_featured_image(page_id, featured_image)
@@ -3605,7 +3517,6 @@ class AtaBlogClient:
             )
             if journal and journal["state"] == "completed":
                 runtime = self._load_required_json(paths["runtime"], "publisher runtime")
-                self._require_schedule_in_window(runtime.get("scheduled_date"), schedule_window)
                 self._validate_publisher_runtime(
                     runtime,
                     page_id=page_id,
@@ -3649,7 +3560,6 @@ class AtaBlogClient:
                     "idempotency_key": idempotency_key,
                     "slug": final_slug,
                     "status": status,
-                    "scheduled_date": None,
                     "publish_date": None,
                     "release_ref": unbound_release_ref,
                     "build_token_release_ref": release_ref,
@@ -3659,7 +3569,6 @@ class AtaBlogClient:
                 }
             else:
                 runtime = self._load_required_json(paths["runtime"], "publisher runtime")
-                self._require_schedule_in_window(runtime.get("scheduled_date"), schedule_window)
                 self._validate_publisher_runtime(
                     runtime,
                     page_id=page_id,
@@ -3805,16 +3714,8 @@ class AtaBlogClient:
                             prior_deployment_id=prior_deployment_id,
                         )
                         _atomic_write_json(paths["journal"], journal)
-                        current_stage = "schedule reservation"
-                        scheduled_date = None
-                        if auto_schedule:
-                            scheduled_date = self.find_next_schedule_slot(schedule_window)
-                        elif date:
-                            scheduled_date = self._reserve_explicit_schedule_slot(date, schedule_window)
-                        runtime["scheduled_date"] = scheduled_date
                         runtime["publish_date"] = (
-                            scheduled_date
-                            or datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+                            datetime.now(timezone.utc).replace(microsecond=0).isoformat()
                         )
                         _atomic_write_json(paths["runtime"], runtime)
                     else:
@@ -3953,8 +3854,6 @@ class AtaBlogClient:
                         },
                         paths["journal"],
                     )
-                    current_stage = "schedule cleanup"
-                    self.clear_schedule_reservation()
                     _atomic_write_json(paths["runtime"], runtime)
                     self._transition_publisher_journal(
                         journal,
@@ -4012,6 +3911,62 @@ class AtaBlogClient:
                     f"Static publisher failed during {current_stage}: {failure}"
                 ) from failure
 
+    def _schedule_article(
+        self,
+        *,
+        page_id: str,
+        status: str,
+        slug: Optional[str],
+        date: Optional[str],
+        auto_schedule: bool,
+        check_duplicates: bool,
+        schedule_window: Optional[Tuple[datetime, datetime]],
+    ) -> Dict[str, Any]:
+        """Validate a post, then write Status=Scheduled and its Publish Date.
+
+        Nothing is staged, uploaded, built, deployed, or journaled here: the
+        due publisher's `--status publish` run does all of that later, without
+        flags, so every gate it cannot satisfy itself is enforced now.
+        """
+        if date and auto_schedule:
+            raise ClientError("Use either --date or --auto-schedule, not both")
+        if status == "publish":
+            raise ClientError(
+                "--status publish cannot be combined with --date or --auto-schedule: "
+                "scheduling never promotes"
+            )
+        article = self.get_article(page_id)
+        if article.get("Status") != "Ready to Publish":
+            raise ClientError(
+                f"Notion page {page_id} must be 'Ready to Publish' to be scheduled; "
+                f"current status is '{article.get('Status')}'"
+            )
+        if not article.get("Title"):
+            raise ClientError(f"Notion page {page_id} has no Title")
+        self._require_publish_metadata(article)
+        self._validate_publish_markdown(self.get_article_markdown(page_id))
+        self._resolve_featured_image(page_id, None)
+        self._resolve_static_term_ids("categories", self._notion_term_names(article, "Category"))
+        self._resolve_static_term_ids("tags", self._notion_term_names(article, "Tags"))
+        final_slug = self._static_slug(str(article["Title"]), slug)
+        if check_duplicates and self._find_static_post(final_slug) is not None:
+            raise ClientError(f"Static post with slug '{final_slug}' already exists")
+
+        # One lock across read-slots -> pick -> Notion write: the Scheduled page
+        # is the durable slot record, so a second scheduler reads it on entry.
+        with self._exclusive_publisher_lock(self._schedule_lock_path()):
+            if auto_schedule:
+                slot = self.find_next_schedule_slot(schedule_window)
+            else:
+                slot = self._require_free_explicit_slot(date, schedule_window)
+            self.update_article(page_id, status="Scheduled", properties={"Publish Date": slot})
+        return {
+            "notion_page_id": page_id,
+            "status": "Scheduled",
+            "scheduled_date": slot,
+            "slug": final_slug,
+        }
+
     def publish_article(
         self,
         page_id: str,
@@ -4026,37 +3981,55 @@ class AtaBlogClient:
         schedule_before: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Publish a Notion article to the static site: build, deploy, promote.
+        Schedule a Notion article, or publish it to the static site.
+
+        With date or auto_schedule this only schedules: it validates the post
+        and sets Status=Scheduled plus Publish Date. Otherwise it runs the
+        static transaction: build, deploy, and (status="publish") promote.
 
         Args:
             page_id: Notion page ID
             status: draft or publish
             slug: Optional custom URL slug (auto-generated from title if not provided)
-            date: Optional schedule date (ISO 8601). If auto_schedule, this is ignored.
-            auto_schedule: If True, automatically find next available slot
+            date: Schedule-only: explicit slot (ISO 8601 with a UTC offset)
+            auto_schedule: Schedule-only: pick the next available slot
             check_duplicates: If True, error if slug already exists
             featured_image: Optional path to featured image file to upload and attach
             force: If True, skip the already-published check
+            schedule_after: Inclusive bound for the scheduled slot
+            schedule_before: Exclusive bound for the scheduled slot
 
-        Returns the static transaction result dict (static_url, deployment_id,
+        Returns the schedule result (status "Scheduled", scheduled_date, slug)
+        or the static transaction result dict (static_url, deployment_id,
         promoted, journal state, effects).
         """
         schedule_window = self._parse_schedule_window(schedule_after, schedule_before)
+        if date or auto_schedule:
+            if featured_image:
+                raise ClientError(
+                    "--featured-image cannot be used when scheduling: the due publisher "
+                    "runs without flags and reads posts/<page-id>/featured_image.*"
+                )
+            return self._schedule_article(
+                page_id=page_id,
+                status=status,
+                slug=slug,
+                date=date,
+                auto_schedule=auto_schedule,
+                check_duplicates=check_duplicates,
+                schedule_window=schedule_window,
+            )
         if schedule_window is not None:
-            if date and auto_schedule:
-                raise ClientError("Use either --date or --auto-schedule, not both")
-            if not auto_schedule:
-                self._require_schedule_in_window(date, schedule_window)
+            raise ClientError(
+                "--schedule-after/--schedule-before require --auto-schedule or --date"
+            )
         return self._publish_static_transaction(
             page_id=page_id,
             status=status,
             slug=slug,
-            date=date,
-            auto_schedule=auto_schedule,
             check_duplicates=check_duplicates,
             featured_image=featured_image,
             force=force,
-            schedule_window=schedule_window,
         )
 
     @staticmethod

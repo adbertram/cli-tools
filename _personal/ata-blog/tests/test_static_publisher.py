@@ -7,8 +7,10 @@ import json
 import struct
 import subprocess
 import threading
+import time
 import zlib
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -195,9 +197,22 @@ def publisher(tmp_path, monkeypatch):
 
     client = object.__new__(AtaBlogClient)
     client.config = _Config(profile_dir)
-    client._RESERVATION_DIR = tmp_path / "schedule-reservations"
-    # These tests pin scheduling to the empty runtime-root state.
-    client._read_publisher_schedule_slots = lambda: []
+    # Occupied schedule slots are the Notion pages in Status "Scheduled". The
+    # recording stub stands in for that one query and the guard below fails any
+    # other Notion call, so no test here can reach the real notion CLI.
+    client.scheduled_pages = []
+    client.list_calls = []
+    client.update_calls = []
+
+    def list_articles(status=None, limit=100, filters=None):
+        client.list_calls.append({"status": status, "limit": limit, "filters": filters})
+        return list(client.scheduled_pages)
+
+    def run_notion(args, timeout=60):
+        pytest.fail(f"unexpected notion CLI call: {args}")
+
+    client.list_articles = list_articles
+    client._run_notion = run_notion
     client.get_article = lambda _page_id: dict(article)
     client.get_article_markdown = lambda _page_id: markdown
     client._resolve_featured_image = lambda _page_id, _supplied: image
@@ -240,8 +255,13 @@ def publisher(tmp_path, monkeypatch):
 
     def update(_page_id, *, status, properties):
         counters["notion"] += 1
+        client.update_calls.append((_page_id, status, dict(properties)))
         article["Status"] = status
         article.update(properties)
+        if status == "Scheduled":
+            # Read-after-write: the page the scheduler just wrote is what the
+            # next Scheduled query returns.
+            client.scheduled_pages.append(_scheduled_page(_page_id, properties["Publish Date"]))
         return {"ok": True}
 
     client._upload_static_media = media
@@ -251,16 +271,52 @@ def publisher(tmp_path, monkeypatch):
     return client, article, markdown, image, manifest, counters, build_token
 
 
+def _scheduled_page(page_id, publish_date):
+    """Return one row of the Notion Status=Scheduled query."""
+    return {
+        "id": page_id,
+        "Title": "Scheduled post",
+        "Status": "Scheduled",
+        "Publish Date": publish_date,
+    }
+
+
+def _freeze_utc_now(monkeypatch, utc_now):
+    """Pin the client's clock so an auto-picked slot is one exact value."""
+
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return utc_now.astimezone(tz)
+
+    monkeypatch.setattr(client_module, "datetime", FrozenDatetime)
+
+
+def _assert_no_publisher_effects(client, counters, corpus_files=()):
+    """Scheduling never stages, uploads, builds, deploys, or journals."""
+    assert counters["media"] == counters["build"] == counters["deploy"] == 0
+    transactions = client._publisher_runtime_root() / "transactions"
+    assert list(transactions.glob("*.journal.json")) == []
+    assert list(transactions.glob("*.runtime.json")) == []
+    posts = client_module.STATIC_SITE_ROOT / "src" / "data" / "posts"
+    assert sorted(posts.iterdir()) == sorted(corpus_files)
+
+
+def _assert_nothing_written(client, counters, corpus_files=()):
+    """Every rejected schedule request leaves Notion and the publisher untouched."""
+    assert client.update_calls == []
+    assert counters["notion"] == 0
+    _assert_no_publisher_effects(client, counters, corpus_files)
+
+
 def _publish(client, **kwargs):
     # Journal-mechanics tests target the static leg directly; publish_article
-    # is a thin wrapper that parses the schedule window and delegates
-    # straight to this transaction (covered separately by its own test).
+    # routes a schedule request away and otherwise delegates straight to this
+    # transaction (covered separately by its own test).
     call_kwargs = {
         "page_id": PAGE_ID,
         "status": "draft",
         "slug": "journaled-static-publisher",
-        "date": None,
-        "auto_schedule": False,
         "check_duplicates": False,
         "featured_image": "ignored.png",
         "force": False,
@@ -301,7 +357,7 @@ def test_completed_same_revision_replay_has_zero_effects_and_no_build_token(publ
     first = _publish(client)
     build_token.unlink()
 
-    replay = _publish(client, auto_schedule=True)
+    replay = _publish(client)
 
     assert replay["deployment_id"] == first["deployment_id"]
     assert replay["replayed"] is True
@@ -408,7 +464,6 @@ def test_active_staged_journal_resumes_with_manifest_corpus_hash(publisher):
         "idempotency_key": key,
         "slug": "journaled-static-publisher",
         "status": "draft",
-        "scheduled_date": None,
         "publish_date": "2026-08-31T12:00:00+00:00",
         "release_ref": journal["release_ref"],
         "failure_stage": None,
@@ -525,33 +580,10 @@ def test_staged_corpus_hash_matches_release_manifest_hash_corpus(publisher, tmp_
     assert stage["corpus_sha256"] == result.stdout.strip()
 
 
-def test_explicit_schedule_slot_contention_is_atomic(publisher, monkeypatch):
-    client, *_ = publisher
-    slot = "2026-09-01T13:00:00+00:00"
-    barrier = threading.Barrier(2)
-    outcomes = []
-
-    def reserve():
-        barrier.wait()
-        try:
-            outcomes.append(("ok", client._reserve_explicit_schedule_slot(slot)))
-        except ClientError as exc:
-            outcomes.append(("error", str(exc)))
-
-    threads = [threading.Thread(target=reserve) for _ in range(2)]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
-
-    assert sorted(kind for kind, _ in outcomes) == ["error", "ok"]
-
-
 def test_cli_renders_static_result_fields(monkeypatch):
     class _Client:
         def publish_article(self, *_args, **_kwargs):
             return {
-                "scheduled_date": None,
                 "deployment_id": PREVIEW_DEPLOYMENT_ID,
                 "static_url": "https://preview.example.pages.dev/post/",
                 "journal_state": "completed",
@@ -563,6 +595,26 @@ def test_cli_renders_static_result_fields(monkeypatch):
     assert result.exit_code == 0
     assert PREVIEW_DEPLOYMENT_ID in result.output
     assert "https://preview.example.pages.dev/post/" in result.output
+
+
+def test_cli_renders_scheduled_result(monkeypatch):
+    class _Client:
+        def publish_article(self, *_args, **_kwargs):
+            return {
+                "notion_page_id": PAGE_ID,
+                "status": "Scheduled",
+                "scheduled_date": "2026-09-01T13:00:00+00:00",
+                "slug": "journaled-static-publisher",
+            }
+
+    monkeypatch.setattr(notion_page, "get_client", lambda: _Client())
+    result = CliRunner().invoke(notion_page.app, ["publish", PAGE_ID, "--auto-schedule"])
+
+    assert result.exit_code == 0
+    assert "Scheduled for 2026-09-01T13:00:00+00:00" in result.output
+    assert '"status": "Scheduled"' in result.output
+    assert "Deployment ID" not in result.output
+    assert "Static URL" not in result.output
 
 
 @pytest.mark.parametrize(
@@ -1620,8 +1672,6 @@ def test_publish_status_rejected_before_source_or_external_reads(publisher):
             page_id=PAGE_ID,
             status="invalid-status",
             slug="journaled-static-publisher",
-            date=None,
-            auto_schedule=False,
             check_duplicates=False,
             featured_image="ignored.png",
             force=False,
@@ -1732,33 +1782,6 @@ def test_image_pixel_size_reads_real_headers_and_refuses_anything_else(tmp_path)
     unknown.write_bytes(b"II*\x00not really a tiff")
     with pytest.raises(ClientError, match="unrecognized image format"):
         _image_pixel_size(unknown)
-
-
-def test_schedule_cleanup_failure_never_transitions_completed_to_failed(
-    publisher, monkeypatch
-):
-    client, _article, _markdown, _image, _manifest, counters, _token = publisher
-    original_clear = client.clear_schedule_reservation
-    attempts = 0
-
-    def fail_once():
-        nonlocal attempts
-        attempts += 1
-        if attempts == 1:
-            raise ClientError("injected schedule cleanup failure")
-        return original_clear()
-
-    monkeypatch.setattr(client, "clear_schedule_reservation", fail_once)
-    with pytest.raises(ClientError, match="committed Notion but journal finalization failed"):
-        _publish(client)
-
-    journal_path = next(
-        (client._publisher_runtime_root() / "transactions").glob("*.journal.json")
-    )
-    assert json.loads(journal_path.read_text())["state"] == "notion_updated"
-
-    assert _publish(client)["journal_state"] == "completed"
-    assert counters["notion"] == 1
 
 
 # --- single-post production promotion --------------------------------------
@@ -2003,6 +2026,9 @@ def test_publish_article_delegates_to_static_transaction(publisher, monkeypatch)
     result = client.publish_article(PAGE_ID, status="publish", force=False)
 
     assert len(calls) == 1
+    assert set(calls[0]) == {
+        "page_id", "status", "slug", "check_duplicates", "featured_image", "force",
+    }
     assert calls[0]["page_id"] == PAGE_ID
     assert calls[0]["status"] == "publish"
     assert calls[0]["force"] is False
@@ -2011,3 +2037,285 @@ def test_publish_article_delegates_to_static_transaction(publisher, monkeypatch)
         "deployment_id": "dep-2",
         "promoted": True,
     }
+
+
+# --- schedule-only mode ------------------------------------------------------
+#
+# `publish --auto-schedule` / `publish --date` validates the post, picks a slot
+# under the schedule lock, and writes Status=Scheduled + Publish Date. It never
+# enters the publish transaction: nothing is staged, uploaded, built, deployed,
+# or journaled. Promotion (`--status publish`) stays the only path that does.
+
+SLOT = "2026-09-01T13:00:00+00:00"
+
+
+def test_auto_schedule_writes_scheduled_status_and_publish_date_with_zero_publisher_effects(
+    publisher, monkeypatch
+):
+    client, article, _markdown, _image, _manifest, counters, _token = publisher
+    article["Status"] = "Ready to Publish"
+    _freeze_utc_now(monkeypatch, datetime(2026, 8, 4, 7, 15, 0, tzinfo=timezone.utc))  # Tuesday
+
+    result = client.publish_article(PAGE_ID, auto_schedule=True)
+
+    slot = "2026-08-04T09:00:00+00:00"
+    assert result == {
+        "notion_page_id": PAGE_ID,
+        "status": "Scheduled",
+        "scheduled_date": slot,
+        "slug": "journaled-static-publisher",
+    }
+    assert client.update_calls == [(PAGE_ID, "Scheduled", {"Publish Date": slot})]
+    assert counters["notion"] == 1
+    _assert_no_publisher_effects(client, counters)
+
+
+def test_explicit_date_schedules_without_journal_or_runtime_record(publisher):
+    client, article, _markdown, _image, _manifest, counters, _token = publisher
+    article["Status"] = "Ready to Publish"
+
+    result = client.publish_article(PAGE_ID, date="2026-09-01T08:00:00-05:00")
+
+    assert result["status"] == "Scheduled"
+    assert result["scheduled_date"] == SLOT
+    assert client.update_calls == [(PAGE_ID, "Scheduled", {"Publish Date": SLOT})]
+    _assert_no_publisher_effects(client, counters)
+
+
+def test_schedule_reads_occupancy_with_status_scheduled_and_no_other_notion_read(publisher):
+    client, article, *_ = publisher
+    article["Status"] = "Ready to Publish"
+
+    client.publish_article(PAGE_ID, date=SLOT)
+
+    # The fixture fails any direct notion CLI call, so this one query is the
+    # only Notion read scheduling makes beyond the page and its markdown.
+    assert client.list_calls == [{"status": "Scheduled", "limit": 100, "filters": None}]
+
+
+def test_second_scheduler_blocked_on_the_lock_sees_the_first_pages_slot(publisher):
+    client, article, *_ = publisher
+    article["Status"] = "Ready to Publish"
+    writes = []
+
+    def update(page_id, *, status, properties):
+        # Hold the write open: a scheduler that was not blocked on the lock
+        # would read occupancy now, before this page shows up as Scheduled.
+        time.sleep(0.05)
+        writes.append((page_id, status, dict(properties)))
+        client.scheduled_pages.append(_scheduled_page(page_id, properties["Publish Date"]))
+
+    client.update_article = update
+    barrier = threading.Barrier(2)
+    outcomes = []
+
+    def schedule(page_id):
+        barrier.wait()
+        try:
+            outcomes.append(("ok", client.publish_article(page_id, date=SLOT)["scheduled_date"]))
+        except ClientError as exc:
+            outcomes.append(("error", str(exc)))
+
+    threads = [
+        threading.Thread(target=schedule, args=(page_id,)) for page_id in ("page-a", "page-b")
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert sorted(kind for kind, _ in outcomes) == ["error", "ok"]
+    assert [detail for kind, detail in outcomes if kind == "error"] == [
+        f"Schedule slot is already occupied: {SLOT}"
+    ]
+    assert len(writes) == 1
+    assert writes[0][1:] == ("Scheduled", {"Publish Date": SLOT})
+
+
+def test_promotion_of_a_scheduled_page_writes_published_and_stamps_the_promotion_instant(
+    publisher,
+):
+    client, article, _markdown, _image, _manifest, counters, _token = publisher
+    _arm_promotion(client)
+    article["Status"] = "Scheduled"
+    article["Publish Date"] = SLOT
+    before = datetime.now(timezone.utc).replace(microsecond=0)
+
+    result = client.publish_article(PAGE_ID, status="publish")
+
+    after = datetime.now(timezone.utc)
+    paths = client._publisher_paths(PAGE_ID, result["idempotency_key"])
+    runtime = json.loads(paths["runtime"].read_text())
+    assert before <= datetime.fromisoformat(runtime["publish_date"]) <= after
+    assert "scheduled_date" not in runtime
+    assert "scheduled_date" not in result
+    assert result["promoted"] is True
+    assert client.update_calls == [
+        (
+            PAGE_ID,
+            "Published",
+            {
+                "Published URL": f"{client_module.STATIC_SITE_ORIGIN}/journaled-static-publisher/",
+                "Publish Date": runtime["publish_date"],
+            },
+        )
+    ]
+    staged = Path(runtime["article_path"]).read_text()
+    assert f"pubDate: {_corpus_wall_clock(runtime['publish_date'])}\n" in staged
+    assert counters == {"media": 1, "build": 1, "deploy": 1, "notion": 1}
+
+
+def test_schedule_rejects_page_not_ready_to_publish(publisher):
+    client, _article, _markdown, _image, _manifest, counters, _token = publisher
+
+    with pytest.raises(ClientError, match="must be 'Ready to Publish'.*'Draft'"):
+        client.publish_article(PAGE_ID, auto_schedule=True)
+
+    _assert_nothing_written(client, counters)
+
+
+@pytest.mark.parametrize("field", ["Keywords", "Category", "Tags", "Excerpt"])
+def test_schedule_rejects_missing_required_metadata(publisher, field):
+    client, article, _markdown, _image, _manifest, counters, _token = publisher
+    article["Status"] = "Ready to Publish"
+    article[field] = ""
+
+    with pytest.raises(ClientError, match=f"Missing required Notion fields: {field}$"):
+        client.publish_article(PAGE_ID, auto_schedule=True)
+
+    _assert_nothing_written(client, counters)
+
+
+def test_schedule_rejects_image_placeholder_markdown(publisher):
+    client, article, _markdown, _image, _manifest, counters, _token = publisher
+    article["Status"] = "Ready to Publish"
+    client.get_article_markdown = lambda _page_id: "# Post\n\nIMAGE_PLACEHOLDER: dashboard\n"
+
+    with pytest.raises(ClientError, match="IMAGE_PLACEHOLDER marker"):
+        client.publish_article(PAGE_ID, auto_schedule=True)
+
+    _assert_nothing_written(client, counters)
+
+
+def test_schedule_rejects_missing_featured_image(publisher, monkeypatch, tmp_path):
+    client, article, _markdown, _image, _manifest, counters, _token = publisher
+    article["Status"] = "Ready to Publish"
+    client._resolve_featured_image = AtaBlogClient._resolve_featured_image
+    empty_root = tmp_path / "no-posts-here"
+    empty_root.mkdir()
+    monkeypatch.chdir(empty_root)
+
+    with pytest.raises(ClientError, match="Featured image is required for publishing"):
+        client.publish_article(PAGE_ID, auto_schedule=True)
+
+    _assert_nothing_written(client, counters)
+
+
+def test_schedule_rejects_featured_image_flag(publisher):
+    client, article, _markdown, image, _manifest, counters, _token = publisher
+    article["Status"] = "Ready to Publish"
+
+    with pytest.raises(ClientError, match="--featured-image cannot be used when scheduling"):
+        client.publish_article(PAGE_ID, auto_schedule=True, featured_image=str(image))
+
+    _assert_nothing_written(client, counters)
+
+
+def test_schedule_rejects_unknown_tag(publisher):
+    client, article, _markdown, _image, _manifest, counters, _token = publisher
+    article["Status"] = "Ready to Publish"
+    article["Tags"] = "Cloudflare, Not A Real Tag"
+
+    with pytest.raises(ClientError, match="Unknown static corpus tags name: 'Not A Real Tag'"):
+        client.publish_article(PAGE_ID, auto_schedule=True)
+
+    _assert_nothing_written(client, counters)
+
+
+def test_schedule_rejects_a_slug_already_in_the_corpus(publisher):
+    client, article, _markdown, _image, _manifest, counters, _token = publisher
+    article["Status"] = "Ready to Publish"
+    existing = (
+        client_module.STATIC_SITE_ROOT / "src" / "data" / "posts" / "journaled-static-publisher.md"
+    )
+    existing.write_text('---\nslug: "journaled-static-publisher"\n---\nAn older post.\n')
+
+    with pytest.raises(
+        ClientError, match="Static post with slug 'journaled-static-publisher' already exists"
+    ):
+        client.publish_article(PAGE_ID, auto_schedule=True)
+
+    _assert_nothing_written(client, counters, corpus_files=[existing])
+
+
+def test_schedule_with_exhausted_window_writes_nothing_to_notion(publisher, monkeypatch):
+    client, article, _markdown, _image, _manifest, counters, _token = publisher
+    article["Status"] = "Ready to Publish"
+    _freeze_utc_now(monkeypatch, datetime(2026, 8, 3, 8, 0, 0, tzinfo=timezone.utc))  # Monday
+    client.scheduled_pages.extend(
+        [
+            _scheduled_page("page-a", "2026-08-04T09:00:00+00:00"),
+            _scheduled_page("page-b", "2026-08-04T13:00:00+00:00"),
+        ]
+    )
+
+    with pytest.raises(
+        ClientError, match="No available schedule slot inside the frozen scheduling window"
+    ):
+        client.publish_article(
+            PAGE_ID,
+            auto_schedule=True,
+            schedule_after="2026-08-04T09:00:00+00:00",
+            schedule_before="2026-08-04T17:00:00+00:00",
+        )
+
+    _assert_nothing_written(client, counters)
+
+
+def test_explicit_date_on_an_occupied_slot_leaves_the_page_ready_to_publish(publisher):
+    client, article, _markdown, _image, _manifest, counters, _token = publisher
+    article["Status"] = "Ready to Publish"
+    client.scheduled_pages.append(_scheduled_page("page-a", SLOT))
+
+    with pytest.raises(ClientError, match="Schedule slot is already occupied"):
+        client.publish_article(PAGE_ID, date=SLOT)
+
+    assert article["Status"] == "Ready to Publish"
+    assert article["Publish Date"] is None
+    _assert_nothing_written(client, counters)
+
+
+def test_schedule_rejects_date_combined_with_auto_schedule(publisher):
+    client, article, _markdown, _image, _manifest, counters, _token = publisher
+    article["Status"] = "Ready to Publish"
+
+    with pytest.raises(ClientError, match="Use either --date or --auto-schedule, not both"):
+        client.publish_article(PAGE_ID, date=SLOT, auto_schedule=True)
+
+    _assert_nothing_written(client, counters)
+
+
+def test_schedule_rejects_status_publish_combined_with_a_date(publisher):
+    client, article, _markdown, _image, _manifest, counters, _token = publisher
+    article["Status"] = "Ready to Publish"
+
+    with pytest.raises(ClientError, match="--status publish cannot be combined with"):
+        client.publish_article(PAGE_ID, status="publish", date=SLOT)
+
+    _assert_nothing_written(client, counters)
+
+
+def test_schedule_bounds_without_a_schedule_request_are_rejected(publisher):
+    client, _article, _markdown, _image, _manifest, counters, _token = publisher
+
+    with pytest.raises(
+        ClientError,
+        match="--schedule-after/--schedule-before require --auto-schedule or --date",
+    ):
+        client.publish_article(
+            PAGE_ID,
+            schedule_after="2026-08-04T09:00:00+00:00",
+            schedule_before="2026-08-04T17:00:00+00:00",
+        )
+
+    _assert_nothing_written(client, counters)

@@ -192,15 +192,15 @@ def articles_publish(
         help="Publish status (draft/publish). --status publish promotes this one post to the live production deployment",
     ),
     slug: Optional[str] = typer.Option(None, "--slug", help="Custom URL slug (auto-generated if not provided)"),
-    date: Optional[str] = typer.Option(None, "--date", "-d", help="Schedule date (ISO 8601)"),
-    auto_schedule: bool = typer.Option(False, "--auto-schedule", help="Auto-find next available slot"),
+    date: Optional[str] = typer.Option(None, "--date", "-d", help="Schedule only, at this slot (ISO 8601 with UTC offset): sets Status=Scheduled and Publish Date; nothing is built or deployed"),
+    auto_schedule: bool = typer.Option(False, "--auto-schedule", help="Schedule only, at the next available slot: sets Status=Scheduled and Publish Date; nothing is built or deployed"),
     schedule_after: Optional[str] = typer.Option(None, "--schedule-after", help="Inclusive schedule bound (ISO 8601 with UTC offset; requires --schedule-before)"),
     schedule_before: Optional[str] = typer.Option(None, "--schedule-before", help="Exclusive schedule bound (ISO 8601 with UTC offset; requires --schedule-after)"),
     no_duplicate_check: bool = typer.Option(False, "--no-duplicate-check", help="Skip duplicate slug check"),
-    featured_image: Optional[str] = typer.Option(None, "--featured-image", help="Path to featured image file to upload and attach"),
+    featured_image: Optional[str] = typer.Option(None, "--featured-image", help="Promotion and preview only: path to featured image file to upload and attach"),
     force: bool = typer.Option(False, "--force", "-F", help="Force republish even if already published"),
 ):
-    """Publish a Notion article to the static site: build, deploy, and (with --status publish) promote to production."""
+    """Schedule a Notion article (--auto-schedule or --date), or publish it to the static site: build, deploy, and (with --status publish) promote to production."""
     client = get_client()
 
     print_info(f"Publishing article {page_id}...")
@@ -217,12 +217,12 @@ def articles_publish(
         force=force,
     )
 
-    if result.get("scheduled_date"):
-        print_success(
-            f"Scheduled for {result['scheduled_date']} "
-            f"(Deployment ID: {result['deployment_id']})"
-        )
-    elif result.get("promoted") is True:
+    if result.get("status") == "Scheduled":
+        print_success(f"Scheduled for {result['scheduled_date']}")
+        print_json(result)
+        return
+
+    if result.get("promoted") is True:
         print_success(
             f"Promoted to production (Deployment ID: {result['deployment_id']})"
         )

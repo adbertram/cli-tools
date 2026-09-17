@@ -8,18 +8,18 @@ Guards against two related production bugs:
 
 2. (Root cause behind a later incident) find_next_schedule_slot used
    datetime.now() -- the CLI host machine's naive LOCAL time (e.g. CDT,
-   UTC-5) -- instead of true UTC. Publisher runtime records use explicit UTC
+   UTC-5) -- instead of true UTC. Scheduled Notion pages carry explicit UTC
    offsets; when the host's local timezone trailed true
    UTC, the naive "now" was read as if it were already UTC, producing a
    candidate slot hours in the past relative to true UTC now.
 
 This is the live code path for `ata-blog notion-page publish --auto-schedule`
-(AtaBlogClient.publish_article -> AtaBlogClient.find_next_schedule_slot).
+(AtaBlogClient.publish_article -> AtaBlogClient._schedule_article ->
+AtaBlogClient.find_next_schedule_slot).
 """
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -60,18 +60,24 @@ def _make_client(monkeypatch, tmp_path, utc_now: datetime, local_offset_hours: i
 
     client = AtaBlogClient.__new__(AtaBlogClient)
     client.config = _Config(tmp_path / "profile")
-    # The schedule-slot fixtures populate the publisher runtime records that
-    # own scheduling.
-    # Isolate the reservation cache from the real ~/.cache directory instead
-    # of stubbing the reservation methods, so the real read/write/expiry
-    # logic (including the UTC-aware fix in it) is exercised too.
-    client._RESERVATION_DIR = tmp_path / "schedule-reservations"
-    transaction_root = client._publisher_runtime_root() / "transactions"
-    transaction_root.mkdir(parents=True)
-    for index, slot in enumerate(scheduled_slots or []):
-        (transaction_root / f"{index}.runtime.json").write_text(
-            json.dumps({"scheduled_date": slot})
-        )
+    # Occupied slots are the Notion pages in Status "Scheduled". The recording
+    # stub stands in for that one query, so no test here reaches the notion CLI.
+    client.scheduled_pages = [
+        {
+            "id": f"page-{index}",
+            "Title": f"Scheduled post {index}",
+            "Status": "Scheduled",
+            "Publish Date": slot,
+        }
+        for index, slot in enumerate(scheduled_slots or [])
+    ]
+    client.list_calls = []
+
+    def list_articles(status=None, limit=100, filters=None):
+        client.list_calls.append({"status": status, "limit": limit, "filters": filters})
+        return list(client.scheduled_pages)
+
+    client.list_articles = list_articles
     return client
 
 
@@ -124,8 +130,8 @@ def test_slot_uses_true_utc_now_not_host_local_time(monkeypatch, tmp_path):
     assert slot_utc == datetime(2026, 8, 10, 9, 0, 0, tzinfo=timezone.utc)
 
 
-def test_occupied_times_use_static_publisher_runtime(monkeypatch, tmp_path):
-    """Occupancy math must include committed static publisher runtime slots."""
+def test_occupied_times_come_from_notion_scheduled_pages(monkeypatch, tmp_path):
+    """Occupancy math must read the Notion pages in Status Scheduled."""
     utc_now = datetime(2026, 8, 4, 8, 0, 0, tzinfo=timezone.utc)  # Tuesday
     client = _make_client(
         monkeypatch,
@@ -136,14 +142,15 @@ def test_occupied_times_use_static_publisher_runtime(monkeypatch, tmp_path):
 
     slot_dt = datetime.fromisoformat(client.find_next_schedule_slot())
 
+    assert client.list_calls == [{"status": "Scheduled", "limit": 100, "filters": None}]
     # 09:00 (1.5h from 10:30) and 13:00 (2.5h from 10:30) both violate the
-    # 4h gap rule against the real date_gmt conflict; 17:00 rolls to the
-    # next day at 09:00, which finally clears the gap.
+    # 4h gap rule against the scheduled page; 17:00 rolls to the next day at
+    # 09:00, which finally clears the gap.
     assert slot_dt.astimezone(timezone.utc) == datetime(2026, 8, 5, 9, 0, 0, tzinfo=timezone.utc)
 
 
-def test_naive_runtime_schedule_raises_instead_of_silently_ignoring(monkeypatch, tmp_path):
-    """A runtime slot without a UTC offset is a data-integrity bug."""
+def test_naive_notion_publish_date_raises_and_names_the_page(monkeypatch, tmp_path):
+    """A Scheduled page whose Publish Date has no UTC offset is a data-integrity bug."""
     utc_now = datetime(2026, 8, 4, 8, 0, 0, tzinfo=timezone.utc)
     client = _make_client(
         monkeypatch,
@@ -152,8 +159,91 @@ def test_naive_runtime_schedule_raises_instead_of_silently_ignoring(monkeypatch,
         scheduled_slots=["2026-08-04T10:00:00"],
     )
 
-    with pytest.raises(ClientError):
+    with pytest.raises(ClientError, match=r"page-0.*UTC offset"):
         client.find_next_schedule_slot()
+
+
+def test_scheduled_page_without_publish_date_raises(monkeypatch, tmp_path):
+    utc_now = datetime(2026, 8, 4, 8, 0, 0, tzinfo=timezone.utc)
+    client = _make_client(monkeypatch, tmp_path, utc_now, scheduled_slots=[None])
+
+    with pytest.raises(ClientError, match=r"page-0.*no Publish Date"):
+        client.find_next_schedule_slot()
+
+
+def test_scheduled_query_at_the_list_limit_raises(monkeypatch, tmp_path):
+    """100 rows from a limit-100 query is an incomplete read, never a complete one."""
+    utc_now = datetime(2026, 8, 4, 8, 0, 0, tzinfo=timezone.utc)
+    client = _make_client(
+        monkeypatch,
+        tmp_path,
+        utc_now,
+        scheduled_slots=["2027-01-04T09:00:00+00:00"] * 100,
+    )
+
+    with pytest.raises(ClientError, match="reached the 100-page list limit"):
+        client.find_next_schedule_slot()
+
+
+def test_window_with_two_scheduled_pages_per_day_raises_no_available_slot(monkeypatch, tmp_path):
+    utc_now = datetime(2026, 8, 3, 8, 0, 0, tzinfo=timezone.utc)  # Monday
+    client = _make_client(
+        monkeypatch,
+        tmp_path,
+        utc_now,
+        scheduled_slots=["2026-08-04T09:00:00+00:00", "2026-08-04T13:00:00+00:00"],
+    )
+    window = (
+        datetime(2026, 8, 4, 9, 0, 0, tzinfo=timezone.utc),  # Tuesday
+        datetime(2026, 8, 4, 17, 0, 0, tzinfo=timezone.utc),
+    )
+
+    with pytest.raises(
+        ClientError, match="No available schedule slot inside the frozen scheduling window"
+    ):
+        client.find_next_schedule_slot(window)
+
+
+def test_explicit_date_equal_to_a_scheduled_pages_publish_date_is_rejected(monkeypatch, tmp_path):
+    utc_now = datetime(2026, 8, 4, 8, 0, 0, tzinfo=timezone.utc)
+    client = _make_client(
+        monkeypatch, tmp_path, utc_now, scheduled_slots=["2026-09-01T13:00:00+00:00"]
+    )
+
+    # The same instant written with another offset is still the occupied slot.
+    with pytest.raises(ClientError, match="Schedule slot is already occupied"):
+        client._require_free_explicit_slot("2026-09-01T08:00:00-05:00")
+
+    assert client.list_calls == [{"status": "Scheduled", "limit": 100, "filters": None}]
+
+
+def test_explicit_date_without_utc_offset_is_rejected(monkeypatch, tmp_path):
+    utc_now = datetime(2026, 8, 4, 8, 0, 0, tzinfo=timezone.utc)
+    client = _make_client(monkeypatch, tmp_path, utc_now)
+
+    with pytest.raises(ClientError, match="--date must include a UTC offset"):
+        client._require_free_explicit_slot("2026-09-01T13:00:00")
+
+
+def test_explicit_date_outside_the_frozen_window_is_rejected(monkeypatch, tmp_path):
+    utc_now = datetime(2026, 8, 4, 8, 0, 0, tzinfo=timezone.utc)
+    client = _make_client(monkeypatch, tmp_path, utc_now)
+    window = (
+        datetime(2026, 9, 1, 9, 0, 0, tzinfo=timezone.utc),
+        datetime(2026, 9, 1, 17, 0, 0, tzinfo=timezone.utc),
+    )
+
+    # The window is [start, end): its end and the second before its start are out.
+    for outside in ("2026-09-01T17:00:00+00:00", "2026-09-01T08:59:59+00:00"):
+        with pytest.raises(
+            ClientError, match="Schedule date is outside the frozen scheduling window"
+        ):
+            client._require_free_explicit_slot(outside, window)
+
+    assert (
+        client._require_free_explicit_slot("2026-09-01T09:00:00+00:00", window)
+        == "2026-09-01T09:00:00+00:00"
+    )
 
 
 def test_min_lead_guard_rejects_a_would_be_past_slot(monkeypatch, tmp_path):
@@ -192,27 +282,6 @@ def test_ceil_to_hour_rounds_up_not_down():
     assert AtaBlogClient._ceil_to_hour(just_after) == datetime(2026, 1, 1, 10, 0, 0, tzinfo=timezone.utc)
 
 
-def test_read_schedule_reservations_discards_legacy_naive_entries(tmp_path):
-    """Reservations written before the UTC-aware fix are naive datetimes;
-    mixing them with the new aware comparisons would raise TypeError, so
-    they must be treated as stale and dropped instead.
-    """
-    client = AtaBlogClient.__new__(AtaBlogClient)
-    client._RESERVATION_DIR = tmp_path / "reservations"
-    client._RESERVATION_DIR.mkdir()
-    legacy = client._RESERVATION_DIR / "legacy.json"
-    legacy.write_text(json.dumps({
-        "slot": "2026-08-07T21:00:00",  # naive, pre-fix format
-        "expires": "2026-08-07T20:10:00",  # naive, pre-fix format
-        "pid": 1,
-    }))
-
-    times = client._read_schedule_reservations()
-
-    assert times == []
-    assert not legacy.exists()
-
-
 def test_evening_seed_rolls_into_the_next_weekday_window(monkeypatch, tmp_path):
     """A candidate seeded after the window closes must not be handed back.
 
@@ -238,10 +307,20 @@ def test_consecutive_slots_all_land_inside_the_publishing_window(monkeypatch, tm
     utc_now = datetime(2026, 9, 7, 19, 3, 0, tzinfo=timezone.utc)  # Monday evening
     client = _make_client(monkeypatch, tmp_path, utc_now)
 
-    slots = [
-        datetime.fromisoformat(client.find_next_schedule_slot()).astimezone(timezone.utc)
-        for _ in range(20)
-    ]
+    slots = []
+    for index in range(20):
+        slot = client.find_next_schedule_slot()
+        # What the Notion write does: the picked slot becomes a Scheduled page
+        # the next pick reads back.
+        client.scheduled_pages.append(
+            {
+                "id": f"picked-{index}",
+                "Title": f"Picked post {index}",
+                "Status": "Scheduled",
+                "Publish Date": slot,
+            }
+        )
+        slots.append(datetime.fromisoformat(slot).astimezone(timezone.utc))
 
     for slot in slots:
         assert slot.weekday() < 5, f"{slot.isoformat()} falls on a weekend"
