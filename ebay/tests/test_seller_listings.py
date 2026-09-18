@@ -691,3 +691,66 @@ def test_should_keep_sold_history_separate_from_current_draft(monkeypatch):
         ("178374156402", "draft", "auction", "75.0", 0),
         ("178374167880", "sold", "auction", "17.5", 1),
     ]
+
+
+# --- listing_from_offer pricing (agent-issues #610) ---------------------------
+
+from ebay_cli.models.listing import listing_from_offer
+
+
+def _offer_with_pricing(*, offer_format: str, pricing: dict) -> dict:
+    return {
+        "offerId": "offer-1",
+        "sku": "EBAY-20260915185427",
+        "status": "PUBLISHED",
+        "format": offer_format,
+        "listing": {"listingId": "266884257011"},
+        "pricingSummary": pricing,
+        "availableQuantity": 1,
+    }
+
+
+def test_auction_with_bin_reports_starting_bid_as_price():
+    # Regression for #610: AUCTION+BIN offers carry both price (Buy It Now) and
+    # auctionStartPrice (starting bid). The headline price must be the starting
+    # bid, and the Buy It Now price must be preserved as bin_price.
+    offer = _offer_with_pricing(
+        offer_format="AUCTION",
+        pricing={
+            "price": {"value": "99.0", "currency": "USD"},
+            "auctionStartPrice": {"value": "24.99", "currency": "USD"},
+        },
+    )
+
+    listing = listing_from_offer(offer)
+
+    assert listing.format == "auction"
+    assert listing.price == "24.99"
+    assert listing.bin_price == "99.0"
+
+
+def test_plain_auction_reports_starting_bid_and_no_bin_price():
+    offer = _offer_with_pricing(
+        offer_format="AUCTION",
+        pricing={"auctionStartPrice": {"value": "24.99", "currency": "USD"}},
+    )
+
+    listing = listing_from_offer(offer)
+
+    assert listing.price == "24.99"
+    assert listing.bin_price is None
+    # bin_price is None -> excluded from JSON output.
+    assert "bin_price" not in listing.to_dict()
+
+
+def test_fixed_price_reports_price_and_no_bin_price():
+    offer = _offer_with_pricing(
+        offer_format="FIXED_PRICE",
+        pricing={"price": {"value": "99.0", "currency": "USD"}},
+    )
+
+    listing = listing_from_offer(offer)
+
+    assert listing.format == "fixed_price"
+    assert listing.price == "99.0"
+    assert listing.bin_price is None

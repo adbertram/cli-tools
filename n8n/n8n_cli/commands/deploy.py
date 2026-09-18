@@ -173,14 +173,13 @@ def deploy_node(
     pkg_json = json.loads(pkg_json_path.read_text())
     package_name = pkg_json["name"]
 
-    # Auto-increment patch version
+    # Compute the next patch version but DEFER writing it to package.json until
+    # after the build step succeeds, so a failed deploy never consumes a version
+    # number (previously a failed `npm run build` still left the version bumped).
     old_version = pkg_json.get("version", "0.0.0")
     parts = old_version.split(".")
     parts[-1] = str(int(parts[-1]) + 1)
     new_version = ".".join(parts)
-    pkg_json["version"] = new_version
-    pkg_json_path.write_text(json.dumps(pkg_json, indent=2) + "\n")
-    print_info(f"Version: {old_version} → {new_version}")
 
     # Detect bundled CLI
     has_bundled_cli = (Path(package_dir) / "cli" / "pyproject.toml").exists()
@@ -223,14 +222,29 @@ def deploy_node(
             print_error(f"npm install failed: {result.stderr or result.stdout}")
             raise typer.Exit(1)
 
-        result = _run_local(["npm", "run", "build"], cwd=package_dir)
-        if result.returncode != 0:
-            print_error(f"npm run build failed: {result.stderr or result.stdout}")
-            raise typer.Exit(1)
-
-        print_success("Build complete")
+        # Only run `npm run build` when the package actually defines a build
+        # script. Hand-written-JS CommonJS node packages (e.g. n8n-nodes-claudecode)
+        # ship checked-in runtime JS and have no build script, so `npm run build`
+        # would fail with "Missing script: build". Skip it automatically for
+        # those instead of requiring --skip-build.
+        has_build_script = bool(pkg_json.get("scripts", {}).get("build"))
+        if has_build_script:
+            result = _run_local(["npm", "run", "build"], cwd=package_dir)
+            if result.returncode != 0:
+                print_error(f"npm run build failed: {result.stderr or result.stdout}")
+                raise typer.Exit(1)
+            print_success("Build complete")
+        else:
+            print_info("No build script in package.json; skipping npm run build")
     else:
         print_info("[2/8] Skipping build")
+
+    # The build step did not fail (it succeeded, had no build script, or was
+    # skipped), so it is now safe to bump the version. Doing it here means a
+    # failed build above raises before consuming a version number.
+    pkg_json["version"] = new_version
+    pkg_json_path.write_text(json.dumps(pkg_json, indent=2) + "\n")
+    print_info(f"Version: {old_version} → {new_version}")
 
     # Step 2: Rsync to server temp dir
     print_info(f"[3/8] Syncing {package_name} to server...")

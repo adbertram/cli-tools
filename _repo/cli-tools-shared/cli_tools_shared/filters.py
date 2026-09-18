@@ -363,6 +363,34 @@ def parse_filter_string(filter_string: str) -> List[Tuple[str, str, Optional[str
         conditions.append(parse_filter_part(part))
     return conditions
 
+
+def exact_session_ids(filters: Optional[List[str]]) -> Optional[List[str]]:
+    """Return the ids pinned by ``id:eq:`` conditions across every filter group,
+    or ``None`` when the result set is not bounded to named ids.
+
+    Filter flags OR together and comma parts AND together, so the result set is
+    bounded to named ids only when every OR group carries an ``id:eq:`` part.
+    Callers use the returned ids to open just the named session files instead of
+    parsing every session on disk. Returns ``None`` when there are no filters or
+    when any OR group lacks an ``id:eq:`` part.
+    """
+    if not filters:
+        return None
+    ids: List[str] = []
+    for filter_string in filters:
+        group_ids = [
+            value
+            for field, operator, value in (
+                parse_filter_part(part) for part in split_filter_parts(filter_string)
+            )
+            if field == "id" and operator == "eq" and value
+        ]
+        if not group_ids:
+            return None
+        ids.extend(group_ids)
+    return ids
+
+
 def _cast_value(value: str, target_type: type) -> Any:
     """Attempts to cast string value to target type."""
     try:
