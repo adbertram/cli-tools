@@ -16,7 +16,7 @@ if [ "${1:-}" = "--force-refresh" ]; then
 fi
 
 CLI_NAME="${1:-}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLI_TOOLS_DIR="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 
 if [ -z "$CLI_NAME" ] || [ $# -ne 1 ]; then
