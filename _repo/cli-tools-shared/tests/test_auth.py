@@ -1336,3 +1336,90 @@ def test_check_auth_settled_gives_up_after_the_configured_attempts():
     assert _SettlingBrowser()._check_auth_settled(page) is False
     assert page.checks == 4
     assert page.waits == [10, 10, 10]
+
+
+# --- auto backend mode with allowlist ---------------------------------------
+
+
+class _PoshmarkBrowser(BrowserAutomation):
+    SESSION_NAME = "poshmark"
+
+    def __init__(self, config):
+        super().__init__(config)
+
+
+class _MercariBrowser(BrowserAutomation):
+    SESSION_NAME = "mercari"
+
+    def __init__(self, config):
+        super().__init__(config)
+
+
+def test_auto_mode_uses_lightpanda_for_allowlisted_session(tmp_path, monkeypatch):
+    """When CLI_TOOLS_BROWSER_BACKEND=auto, allowlisted SESSION_NAME gets Lightpanda."""
+    monkeypatch.setenv("CLI_TOOLS_BROWSER_BACKEND", "auto")
+    
+    browser = _PoshmarkBrowser(_TestConfig(tmp_path))
+    service = browser._get_service()
+    
+    # Should be LightpandaBrowserService (check the class name)
+    assert service.__class__.__name__ == "LightpandaBrowserService"
+    assert browser._lightpanda_backend is True
+
+
+def test_auto_mode_uses_chrome_for_non_allowlisted_session(tmp_path, monkeypatch):
+    """When CLI_TOOLS_BROWSER_BACKEND=auto, non-allowlisted SESSION_NAME gets Chrome."""
+    monkeypatch.setenv("CLI_TOOLS_BROWSER_BACKEND", "auto")
+    
+    browser = _MercariBrowser(_TestConfig(tmp_path))
+    service = browser._get_service()
+    
+    # Should be BrowserHarnessService (Chrome)
+    assert service.__class__.__name__ == "BrowserHarnessService"
+    assert not getattr(browser, '_lightpanda_backend', False)
+
+
+def test_auto_mode_allowlist_override_via_env_var(tmp_path, monkeypatch):
+    """CLI_TOOLS_LIGHTPANDA_SESSIONS replaces the default allowlist."""
+    monkeypatch.setenv("CLI_TOOLS_BROWSER_BACKEND", "auto")
+    monkeypatch.setenv("CLI_TOOLS_LIGHTPANDA_SESSIONS", "mercari,depop")
+    
+    # Mercari is in custom allowlist → Lightpanda
+    mercari_browser = _MercariBrowser(_TestConfig(tmp_path))
+    mercari_service = mercari_browser._get_service()
+    assert mercari_service.__class__.__name__ == "LightpandaBrowserService"
+    
+    # Poshmark is NOT in custom allowlist → Chrome
+    poshmark_browser = _PoshmarkBrowser(_TestConfig(tmp_path))
+    poshmark_service = poshmark_browser._get_service()
+    assert poshmark_service.__class__.__name__ == "BrowserHarnessService"
+
+
+def test_auto_mode_handles_whitespace_in_env_var(tmp_path, monkeypatch):
+    """CLI_TOOLS_LIGHTPANDA_SESSIONS with whitespace should be trimmed."""
+    monkeypatch.setenv("CLI_TOOLS_BROWSER_BACKEND", "auto")
+    monkeypatch.setenv("CLI_TOOLS_LIGHTPANDA_SESSIONS", " poshmark , mercari ")
+    
+    browser = _MercariBrowser(_TestConfig(tmp_path))
+    service = browser._get_service()
+    assert service.__class__.__name__ == "LightpandaBrowserService"
+
+
+def test_explicit_lightpanda_mode_still_works(tmp_path, monkeypatch):
+    """Explicit 'lightpanda' mode should work regardless of SESSION_NAME."""
+    monkeypatch.setenv("CLI_TOOLS_BROWSER_BACKEND", "lightpanda")
+    
+    # Even non-allowlisted session gets Lightpanda when explicitly set
+    browser = _MercariBrowser(_TestConfig(tmp_path))
+    service = browser._get_service()
+    assert service.__class__.__name__ == "LightpandaBrowserService"
+    assert browser._lightpanda_backend is True
+
+
+def test_default_mode_uses_chrome(tmp_path, monkeypatch):
+    """When CLI_TOOLS_BROWSER_BACKEND is unset, Chrome is used."""
+    monkeypatch.delenv("CLI_TOOLS_BROWSER_BACKEND", raising=False)
+    
+    browser = _PoshmarkBrowser(_TestConfig(tmp_path))
+    service = browser._get_service()
+    assert service.__class__.__name__ == "BrowserHarnessService"
