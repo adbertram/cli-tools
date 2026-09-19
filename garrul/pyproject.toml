@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "garrul-cli"
+version = "0.1.0"
+description = "Moderate and operate a self-hosted Garrul comment system"
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.9.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.31.0",
+    "beautifulsoup4>=4.12.0",
+    "cli-tools-shared",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+]
+
+[project.scripts]
+"garrul" = "garrul_cli.main:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["garrul_cli*"]
+
+[tool.uv.sources]
+cli-tools-shared = { path = "../_repo/cli-tools-shared", editable = true }

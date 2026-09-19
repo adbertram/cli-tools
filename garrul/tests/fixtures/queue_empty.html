@@ -1,0 +1,888 @@
+
+<!doctype html>
+<html lang="en"
+      x-data="{
+        theme: localStorage.getItem('garrul.theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
+        helpOpen: false,
+        navOpen: false,
+        setTheme(t) { this.theme = t; localStorage.setItem('garrul.theme', t); document.documentElement.setAttribute('data-theme', t); },
+        typing(e) { const t = e.target; return !!(t && t.closest && t.closest('input, textarea, select, [contenteditable]')); },
+        onKey(e) {
+          if (e.key === 'Escape') { this.helpOpen = false; return; }
+          if (e.ctrlKey || e.metaKey || e.altKey) return;
+          if (this.typing(e)) return;
+          if (e.key === '?') { e.preventDefault(); this.helpOpen = !this.helpOpen; return; }
+          if (e.key === '/') { const el = Array.from(document.querySelectorAll('input[type=text],input[type=search]')).find(n => n.offsetParent !== null); if (el) { e.preventDefault(); el.focus(); } }
+        }
+      }"
+      x-init="document.documentElement.setAttribute('data-theme', theme)"
+      @keydown.window="onKey($event)">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Queue — Garrul Admin</title>
+<style>
+/* ── Design tokens ──────────────────────────────────────────────────────
+   Light is the default (:root). Dark is opt-in via [data-theme="dark"] on
+   <html>. When the operator has made no explicit choice, the OS preference
+   wins via the prefers-color-scheme block below (scoped to :not([data-theme])
+   so an explicit data-theme="light" always beats a dark OS). */
+:root {
+  --bg: #f6f8fa; --surface: #ffffff; --surface-2: #f0f3f6;
+  --border: #e2e7ec; --border-strong: #cdd5dd;
+  --text: #1b2733; --muted: #5c6b7a;
+  --accent: #2563eb; --accent-fg: #ffffff; --accent-weak: #e8f0fe;
+  --ok: #15803d; --ok-weak: #e7f6ec;
+  --warn: #b45309; --warn-weak: #fdf2e3;
+  --bad: #dc2626; --bad-weak: #fdeaea;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.10);
+  --shadow-lg: 0 8px 28px rgba(16,24,40,.16);
+  --radius: 10px; --radius-sm: 7px;
+}
+[data-theme="dark"] {
+  --bg: #0b0d10; --surface: #131820; --surface-2: #0f141b;
+  --border: #1e2530; --border-strong: #2a3340;
+  --text: #e7eaf0; --muted: #8a93a6;
+  --accent: #6aa9ff; --accent-fg: #0b0d10; --accent-weak: #16243a;
+  --ok: #4ad295; --ok-weak: #11251c;
+  --warn: #f7b955; --warn-weak: #2a2113;
+  --bad: #ef6a6a; --bad-weak: #2a1717;
+  --shadow: 0 1px 2px rgba(0,0,0,.4);
+  --shadow-lg: 0 8px 28px rgba(0,0,0,.55);
+  --radius: 10px; --radius-sm: 7px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --bg: #0b0d10; --surface: #131820; --surface-2: #0f141b;
+    --border: #1e2530; --border-strong: #2a3340;
+    --text: #e7eaf0; --muted: #8a93a6;
+    --accent: #6aa9ff; --accent-fg: #0b0d10; --accent-weak: #16243a;
+    --ok: #4ad295; --ok-weak: #11251c;
+    --warn: #f7b955; --warn-weak: #2a2113;
+    --bad: #ef6a6a; --bad-weak: #2a1717;
+    --shadow: 0 1px 2px rgba(0,0,0,.4);
+    --shadow-lg: 0 8px 28px rgba(0,0,0,.55);
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+       font: 14px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+/* Consistent keyboard focus ring across all interactive chrome. The switch
+   input manages its own ring (it's visually hidden), so exclude it here. */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px;
+                 border-radius: var(--radius-sm); }
+.switch input:focus-visible { outline: none; }
+/* ── App shell: fixed sidebar + scrolling content ───────────────────────── */
+.app-shell { display: flex; min-height: 100vh; }
+.sidebar { position: sticky; top: 0; align-self: flex-start; flex: 0 0 240px;
+           width: 240px; height: 100vh; background: var(--surface);
+           border-right: 1px solid var(--border); display: flex;
+           flex-direction: column; overflow-y: auto; z-index: 50; }
+.brand { display: flex; align-items: center; gap: 0.5rem; padding: 1rem 1.1rem;
+         font-size: 1.1rem; font-weight: 700; color: var(--text);
+         text-decoration: none; }
+.brand:hover { text-decoration: none; }
+.brand .icon { color: var(--accent); }
+.sidebar-nav { flex: 1; padding: 0.25rem 0.6rem; }
+.nav-section { margin-bottom: 1rem; }
+.nav-heading { margin: 0.5rem 0.6rem 0.35rem; font-size: 0.68rem; font-weight: 600;
+               text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.nav-link { display: flex; align-items: center; gap: 0.6rem; padding: 0.45rem 0.6rem;
+            border-radius: var(--radius-sm); color: var(--text); font-size: 0.9rem;
+            text-decoration: none; }
+.nav-link .icon { color: var(--muted); transition: color 0.12s; }
+.nav-link:hover { background: var(--surface-2); text-decoration: none; }
+.nav-link.active { background: var(--accent-weak); color: var(--accent); font-weight: 600; }
+.nav-link.active .icon { color: var(--accent); }
+.sidebar-footer { display: flex; align-items: center; gap: 0.5rem;
+                  padding: 0.75rem 1.1rem; border-top: 1px solid var(--border); }
+.sidebar-footer .me { color: var(--muted); font-size: 0.85rem; flex: 1; min-width: 0;
+                      display: flex; align-items: center; gap: 0.4rem; }
+.footer-actions { display: flex; gap: 0.3rem; flex: 0 0 auto; }
+.icon-btn { display: inline-flex; align-items: center; justify-content: center;
+            min-width: 30px; height: 30px; padding: 0 0.4rem; background: transparent;
+            border: 1px solid transparent; border-radius: var(--radius-sm); color: var(--muted); }
+.icon-btn:hover { background: var(--surface-2); color: var(--text); border-color: transparent; }
+.content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.topbar { display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 1.25rem;
+          border-bottom: 1px solid var(--border); background: var(--surface);
+          position: sticky; top: 0; z-index: 40; }
+.topbar h1 { font-size: 1.05rem; margin: 0; font-weight: 600; }
+.hamburger { display: none; }
+.scrim { display: none; }
+main { width: 100%; margin: 1.5rem auto; padding: 0 1.25rem; }
+.card { background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius); padding: 1rem 1.25rem; margin-bottom: 1rem;
+        box-shadow: var(--shadow); }
+.card h2, .card h3 { margin-top: 0; }
+.card-head { display: flex; align-items: center; justify-content: space-between;
+             gap: 1rem; margin-bottom: 0.5rem; }
+.card-head h2, .card-head h3 { margin: 0; }
+.embed-snippet { background: var(--surface-2); border: 1px solid var(--border);
+                 border-radius: var(--radius-sm); padding: 0.75rem 0.9rem; margin: 0;
+                 overflow-x: auto; font-size: 0.82rem; line-height: 1.5; }
+.embed-snippet code { background: transparent; padding: 0; }
+.stat-grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.stat { background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius); padding: 0.85rem 1.1rem; box-shadow: var(--shadow); }
+.stat .v { font-size: 2rem; font-weight: 700; line-height: 1.1;
+           font-variant-numeric: tabular-nums; color: var(--text); }
+.stat .l { color: var(--muted); font-size: 0.8rem; margin-top: 0.15rem; }
+/* Status variants: tinted wash + colored value. */
+.stat.ok { background: var(--ok-weak); border-color: transparent; }
+.stat.ok .v { color: var(--ok); }
+.stat.warn { background: var(--warn-weak); border-color: transparent; }
+.stat.warn .v { color: var(--warn); }
+.stat.bad { background: var(--bad-weak); border-color: transparent; }
+.stat.bad .v { color: var(--bad); }
+.stat.accent { background: var(--accent-weak); border-color: transparent; }
+.stat.accent .v { color: var(--accent); }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 0.55rem 0.5rem; border-bottom: 1px solid var(--border);
+         text-align: left; vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 0.72rem; text-transform: uppercase;
+     letter-spacing: 0.04em; position: sticky; top: 0; background: var(--surface);
+     z-index: 1; }
+tbody tr:nth-child(even) { background: var(--surface-2); }
+tbody tr:hover { background: var(--accent-weak); }
+.row-body { color: var(--text); width: 45%; min-width: 340px; overflow-wrap: anywhere; }
+.row-body .md { font-size: 0.9rem; }
+/* A fenced code block does not wrap, so one comment containing a <pre> would
+   widen the whole queue table past the viewport and the auto-layout would
+   collapse the meta column to one character per line. overflow-x alone does not
+   help — the table sizes columns from intrinsic content, which ignores both the
+   scroll container and a percentage max-width — so take the block's inline size
+   out of that calculation and let it scroll in place instead. */
+.md pre { contain: inline-size; overflow-x: auto; }
+.meta-cell { max-width: 200px; }
+.meta-cell code { overflow-wrap: anywhere; }
+.meta-cell a { color: inherit; text-decoration: none; }
+.meta-cell a:hover code { text-decoration: underline; }
+.meta-title { font-weight: 600; font-size: 0.82rem; overflow-wrap: anywhere; }
+.meta-ext { font-size: 0.7rem; }
+.cid { display: inline-block; font-size: 0.72rem; cursor: pointer; overflow-wrap: anywhere; }
+.cid:hover { color: var(--text); text-decoration: underline; }
+.pill { display: inline-block; padding: 0.12rem 0.5rem; border-radius: 999px;
+        font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+        border: 1px solid transparent; background: var(--surface-2); color: var(--muted); }
+.pill.approved { color: var(--ok); background: var(--ok-weak); }
+.pill.pending { color: var(--warn); background: var(--warn-weak); }
+.pill.spam, .pill.deleted, .pill.banned { color: var(--bad); background: var(--bad-weak); }
+.pill.admin { color: var(--accent); background: var(--accent-weak); }
+.pill.mod { color: var(--warn); background: var(--warn-weak); }
+button, .btn { display: inline-flex; align-items: center; gap: 0.4rem;
+               background: var(--surface); color: var(--text); border: 1px solid var(--border);
+               padding: 0.35rem 0.7rem; border-radius: var(--radius-sm); cursor: pointer;
+               font-size: 0.85rem; font-weight: 500; transition: background 0.12s, border-color 0.12s; }
+button:hover, .btn:hover { border-color: var(--border-strong); background: var(--surface-2); }
+/* Primary: filled accent. */
+button.btn-primary, .btn-primary { background: var(--accent); color: var(--accent-fg);
+                                   border-color: var(--accent); }
+button.btn-primary:hover, .btn-primary:hover { filter: brightness(1.05);
+                                               border-color: var(--accent); background: var(--accent); }
+/* Secondary alias keeps existing class="secondary" markup working. */
+button.btn-secondary, .btn-secondary, button.secondary, .secondary {
+  background: var(--surface-2); color: var(--text); border-color: var(--border); }
+/* Danger; .bad is the historical alias used in <td class="actions"> rows. */
+button.btn-danger, .btn-danger, button.bad, .btn.bad { color: var(--bad); }
+button.btn-danger:hover, .btn-danger:hover, button.bad:hover, .btn.bad:hover {
+  border-color: var(--bad); background: var(--bad-weak); }
+button:disabled, .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.actions { display: flex; gap: 0.4rem; flex-wrap: wrap; max-width: 168px; }
+.actions button { padding: 0.28rem 0.55rem; font-size: 0.8rem; }
+.author-cell { display: flex; gap: 0.5rem; align-items: center; color: inherit;
+               text-decoration: none; max-width: 180px; }
+.author-cell:hover .author-name { text-decoration: underline; }
+.author-avatar { display: inline-block; width: 28px; height: 28px;
+                 border-radius: 50%; overflow: hidden; flex: 0 0 auto;
+                 background: var(--surface-2); }
+.author-avatar img, .author-avatar svg { width: 100%; height: 100%;
+                                          display: block; border-radius: 50%; }
+.author-meta { display: flex; flex-direction: column; min-width: 0;
+               line-height: 1.15; }
+.author-name { font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis;
+               white-space: nowrap; }
+.author-sub { font-size: 0.7rem; }
+.filter-bar { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 1rem; }
+.filter-bar input[type=text], .filter-bar input[type=date] {
+                                background: var(--surface); border: 1px solid var(--border);
+                                color: var(--text); padding: 0.4rem 0.6rem;
+                                border-radius: var(--radius-sm); }
+.filter-bar input[type=text]:focus, .filter-bar input[type=date]:focus {
+                                outline: 2px solid var(--accent); outline-offset: 1px;
+                                border-color: var(--accent); }
+.filter-bar input[type=text] { min-width: 200px; }
+.filter-bar.queue-filter { flex-wrap: wrap; }
+.filter-bar.queue-filter input[type=text] { min-width: 140px; }
+.muted { color: var(--muted); }
+.pager { display: flex; justify-content: space-between; margin-top: 1rem; }
+.bulk-cell { width: 32px; }
+.score-cell { width: 70px; text-align: center; font-variant-numeric: tabular-nums; }
+.score { font-weight: 600; }
+.score-pos { color: var(--ok); }
+.score-neg { color: var(--bad); }
+.bulk-bar { position: sticky; bottom: 0; display: flex; align-items: center;
+            gap: 0.5rem; padding: 0.75rem 1rem; background: var(--surface);
+            border-top: 1px solid var(--border); margin: 1rem -1rem -1rem;
+            border-radius: 0 0 var(--radius) var(--radius); box-shadow: var(--shadow-lg); }
+.bulk-bar span:first-child { font-weight: 600; margin-right: auto; }
+/* The keyboard cursor. An outline and no background tint, because the tint has
+   nowhere to land: tbody tr:nth-child(even) is already surface-2, so tinting
+   the cursor row surface-2 marked odd rows and left even ones looking exactly
+   as they did.
+   Drawn on the <tr>, which border-collapse: collapse makes paintable, and not
+   on the cells: .actions is display:flex, so that td is out of table layout
+   and sizes to its buttons — per-cell edges came up short there and the
+   rectangle didn't close. scroll-margin keeps the row clear of the sticky bulk
+   bar when j/k scrolls it into view. */
+.row-cursor { border: 2px solid var(--accent); scroll-margin: 4rem 0; }
+.shortcut-strip { display: flex; flex-wrap: wrap; gap: 0.25rem 0.75rem;
+                  font-size: 0.8rem; margin: 0 0 0.75rem; }
+/* Moderator notes. Bodies are plain text, so pre-wrap is what makes a note
+   someone typed with line breaks read back the way they typed it — nothing
+   else in this admin renders unparsed operator input. */
+.note-list { list-style: none; margin: 0; padding: 0;
+             display: flex; flex-direction: column; gap: 0.5rem; }
+.note { border-left: 3px solid var(--border); padding: 0.25rem 0 0.25rem 0.6rem; }
+.note-meta { font-size: 0.8rem; display: flex; align-items: center;
+             gap: 0.4rem; flex-wrap: wrap; }
+.note-body { white-space: pre-wrap; overflow-wrap: anywhere; }
+.note-del { font-size: 0.75rem; padding: 0.05rem 0.35rem; }
+/* Queue note badge. Neutral on purpose — it says "read before you act",
+   not "this is bad", which is what the report and spam pills already say. */
+.note-badge { background: var(--surface-2); color: var(--text);
+              border: 1px solid var(--border-strong); }
+[x-cloak] { display: none !important; }
+.reply-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+               display: flex; align-items: flex-start; justify-content: center;
+               padding-top: 6vh; z-index: 1100; }
+.reply-modal-inner { background: var(--surface); border: 1px solid var(--border);
+                     border-radius: var(--radius); padding: 1.25rem; width: min(560px, 92vw);
+                     max-height: 85vh; overflow: auto; box-shadow: var(--shadow-lg); }
+.reply-list { list-style: none; padding: 0; margin: 0 0 0.75rem; max-height: 30vh;
+              overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
+.reply-list li { border-bottom: 1px solid var(--border); }
+.reply-list li:last-child { border-bottom: none; }
+.reply-pick { display: flex; justify-content: space-between; gap: 0.75rem;
+              width: 100%; padding: 0.5rem 0.75rem; background: transparent;
+              border: none; color: var(--text); text-align: left; cursor: pointer; }
+.reply-pick:hover { background: var(--surface-2); }
+.reply-pick.active { background: var(--accent); color: var(--accent-fg); }
+.reply-pick.active .muted { color: var(--accent-fg); opacity: 0.85; }
+/* Preview renders the same allowlisted HTML a posted comment would store, so it
+   is boxed to read as output rather than as more of the form. */
+.reply-preview { border: 1px solid var(--border); border-radius: 6px;
+                 padding: 0.5rem 0.75rem; background: var(--surface-2); }
+.reply-preview > div > :first-child { margin-top: 0; }
+.reply-preview > div > :last-child { margin-bottom: 0; }
+.comment-card { border: 1px solid var(--border); border-radius: 6px;
+                padding: 0.75rem; margin: 0.5rem 0; }
+.comment-card-head { display: flex; justify-content: space-between;
+                     align-items: center; gap: 1rem; margin-bottom: 0.25rem; }
+.comment-card .md { margin-top: 0.5rem; font-size: 0.9rem; }
+.user-head { display: flex; gap: 1rem; align-items: center; }
+.user-meta { flex: 1; min-width: 0; }
+.user-stats { display: flex; gap: 2rem; margin-top: 1rem;
+              padding-top: 1rem; border-top: 1px solid var(--border); }
+code { background: var(--surface-2); padding: 0.1rem 0.3rem; border-radius: 3px;
+       font-family: ui-monospace, monospace; font-size: 0.85em; }
+.toast-tray { position: fixed; right: 1rem; bottom: 1rem; display: flex;
+              flex-direction: column; gap: 0.5rem; z-index: 1000;
+              pointer-events: none; }
+.toast { background: var(--surface); border: 1px solid var(--border);
+         border-left: 3px solid var(--ok); border-radius: var(--radius-sm);
+         padding: 0.6rem 0.9rem; box-shadow: var(--shadow-lg);
+         max-width: 320px; font-size: 0.85rem; }
+.toast.bad { border-left-color: var(--bad); }
+.help-popover { position: fixed; bottom: 1rem; left: 1rem;
+                background: var(--surface); border: 1px solid var(--border);
+                border-radius: var(--radius); padding: 1rem 1.25rem; min-width: 220px;
+                z-index: 900; box-shadow: var(--shadow-lg); }
+.help-popover dl { display: grid; grid-template-columns: auto 1fr;
+                   gap: 0.4rem 0.8rem; margin: 0; }
+.help-popover dt { font-weight: 500; }
+.help-popover dd { margin: 0; color: var(--muted); }
+kbd { background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: 4px; padding: 0.05rem 0.4rem;
+      font-family: ui-monospace, monospace; font-size: 0.8em; }
+.dash-cols { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.dash-list { list-style: none; margin: 0; padding: 0; }
+.dash-list li { padding: 0.25rem 0; border-bottom: 1px dashed var(--border); }
+.dash-list li:last-child { border-bottom: 0; }
+.banner { display: flex; gap: 1rem; align-items: center; justify-content: space-between;
+          padding: 0.6rem 1rem; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+.banner.update { background: var(--warn-weak); color: var(--warn); border-bottom-color: var(--border-strong); }
+.banner.update a { color: var(--warn); text-decoration: underline; }
+.banner.update code { background: rgba(0,0,0,0.08); color: inherit; }
+.banner.update button { background: transparent; color: inherit; border-color: var(--border-strong); }
+.banner.update button:hover { border-color: var(--warn); }
+.link-list { list-style: none; padding: 0; margin: 0.5rem 0; display: grid;
+             gap: 0.25rem; }
+.link-list li { padding: 0.15rem 0; }
+.release-card { border: 1px solid var(--border); border-radius: 6px;
+                padding: 0.75rem 1rem; margin: 0.75rem 0; }
+.release-card:last-child { margin-bottom: 0; }
+.release-head { margin: 0 0 0.25rem; font-size: 1rem;
+                display: flex; gap: 0.5rem; align-items: baseline;
+                flex-wrap: wrap; }
+.release-head a { font-family: ui-monospace, monospace; }
+.release-name { color: var(--muted); font-weight: 400; font-size: 0.9rem; }
+.release-body { font-size: 0.9rem; }
+.release-body p:first-child { margin-top: 0; }
+.release-body p:last-child { margin-bottom: 0; }
+/* ── Shared controls (icons, switches, steppers, tabs, charts) ──────────── */
+.icon { display: inline-block; vertical-align: -0.18em; flex: 0 0 auto; }
+.field-row, .switch-row { display: flex; gap: 0.75rem; align-items: flex-start;
+                          padding: 0.6rem 0; border-bottom: 1px solid var(--border); }
+.field-row:last-child, .switch-row:last-child { border-bottom: 0; }
+/* Same row rhythm as .field-row, but label above and control below, for
+   controls too wide to sit in the narrow column (see renderTextarea). */
+.field-stack { display: flex; flex-direction: column; gap: 0.4rem;
+               padding: 0.6rem 0; border-bottom: 1px solid var(--border); }
+.field-stack:last-child { border-bottom: 0; }
+.switch-row { cursor: pointer; }
+.field-text { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+.field-text .muted { font-size: 0.8rem; }
+.switch { position: relative; display: inline-flex; flex: 0 0 auto; margin-top: 0.1rem; }
+.switch input { position: absolute; inset: 0; width: 100%; height: 100%;
+                margin: 0; opacity: 0; cursor: pointer; }
+.switch-track { width: 38px; height: 22px; border-radius: 999px;
+                background: var(--border-strong); transition: background 0.15s;
+                display: inline-block; position: relative; }
+.switch-thumb { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+                border-radius: 50%; background: #fff; transition: transform 0.15s;
+                box-shadow: 0 1px 2px rgba(0,0,0,0.35); }
+.switch input:checked + .switch-track { background: var(--accent); }
+.switch input:checked + .switch-track .switch-thumb { transform: translateX(16px); }
+.switch input:focus-visible + .switch-track { outline: 2px solid var(--accent); outline-offset: 2px; }
+.stepper { display: inline-flex; align-items: stretch; flex: 0 0 auto;
+           border: 1px solid var(--border); border-radius: var(--radius-sm);
+           overflow: hidden; background: var(--surface-2); }
+.stepper-btn { background: transparent; border: 0; border-radius: 0;
+               padding: 0 0.6rem; font-size: 1rem; line-height: 1; color: var(--muted); }
+.stepper-btn:hover { background: var(--accent-weak); color: var(--text); border-color: transparent; }
+.stepper input[type=number] { width: 3.5rem; border: 0; border-left: 1px solid var(--border);
+                              border-right: 1px solid var(--border); background: var(--surface);
+                              color: var(--text); text-align: center; padding: 0.35rem 0.25rem;
+                              font-variant-numeric: tabular-nums; }
+.tabs { display: flex; gap: 0.25rem; border-bottom: 1px solid var(--border);
+        margin-bottom: 1rem; flex-wrap: wrap; }
+.tab { background: transparent; border: 0; border-bottom: 2px solid transparent;
+       border-radius: 0; padding: 0.5rem 0.75rem; color: var(--muted);
+       font-size: 0.9rem; cursor: pointer; }
+.tab:hover { color: var(--text); border-color: transparent; }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.chart { display: block; width: 100%; }
+.settings-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem; }
+/* Usage page bars (Cloudflare dashboard) and the queue audit strip. */
+.usage-row { margin: 0.75rem 0; }
+.usage-row:first-of-type { margin-top: 0.25rem; }
+.usage-label { display: flex; justify-content: space-between; align-items: baseline;
+               gap: 0.5rem; margin-bottom: 0.3rem; font-size: 0.9rem; }
+.usage-label .muted { font-variant-numeric: tabular-nums; }
+.audit-strip { font-size: 0.8rem; margin-top: 0.4rem; }
+
+/* Below 880px the sidebar becomes an off-canvas drawer toggled by the
+   hamburger; a scrim covers the content behind it. navOpen drives both. */
+@media (max-width: 880px) {
+  .sidebar { position: fixed; top: 0; left: 0; height: 100vh;
+             transform: translateX(-100%); transition: transform 0.2s ease;
+             box-shadow: var(--shadow-lg); }
+  .sidebar.open { transform: translateX(0); }
+  .scrim { display: block; position: fixed; inset: 0; z-index: 45;
+           background: rgba(0,0,0,0.45); }
+  .hamburger { display: inline-flex; }
+}
+
+@media (max-width: 720px) {
+  .topbar { padding: 0.5rem 0.75rem; }
+  .topbar h1 { font-size: 0.95rem; }
+  main { margin: 0.75rem auto; padding: 0 0.6rem; }
+  .card { padding: 0.75rem 0.85rem; border-radius: 6px; }
+  .card table { display: block; overflow-x: auto; }
+  .author-cell { max-width: 140px; }
+  .row-body { width: auto; min-width: 240px; max-width: 280px; }
+  .bulk-bar { flex-wrap: wrap; }
+  .filter-bar.queue-filter { gap: 0.35rem; }
+  .filter-bar.queue-filter input[type=text] { min-width: 120px; }
+  .toast-tray { left: 0.5rem; right: 0.5rem; align-items: stretch; }
+  .toast { max-width: none; }
+}
+</style>
+</head>
+<body>
+
+<div x-data="{ shown: localStorage.getItem(&quot;garrul.dismissed.update.v2.27.0&quot;) !== '1' }"
+     x-show="shown"
+     class="banner update">
+  <span>Update available: <strong>v2.27.0</strong> —
+    <a href="https://github.com/KingPin/Garrul/releases/tag/v2.27.0" target="_blank" rel="noopener">release notes</a>.
+    Run <code>npm run upgrade</code>.</span>
+  <button @click="localStorage.setItem(&quot;garrul.dismissed.update.v2.27.0&quot;,'1'); shown=false"
+          aria-label="Dismiss update notice">Dismiss</button>
+</div>
+<div class="app-shell">
+  <div class="scrim" x-show="navOpen" x-cloak @click="navOpen = false"></div>
+  <aside class="sidebar" :class="navOpen && 'open'">
+    <a href="/admin" class="brand" @click="navOpen = false"><svg class="icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg><span>Garrul</span></a>
+    <nav class="sidebar-nav">
+<div class="nav-section">
+  <p class="nav-heading">Moderation</p>
+  <a href="/admin" class="nav-link"
+       
+       @click="navOpen = false"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg><span>Dashboard</span></a><a href="/admin/queue" class="nav-link active"
+       aria-current="page"
+       @click="navOpen = false"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg><span>Queue</span></a><a href="/admin/saved-replies" class="nav-link"
+       
+       @click="navOpen = false"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg><span>Replies</span></a>
+</div>
+<div class="nav-section">
+  <p class="nav-heading">Manage</p>
+  <a href="/admin/users" class="nav-link"
+       
+       @click="navOpen = false"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>Users</span></a><a href="/admin/subscriptions" class="nav-link"
+       
+       @click="navOpen = false"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span>Subscriptions</span></a><a href="/admin/webhooks" class="nav-link"
+       
+       @click="navOpen = false"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 16.98h-5.99c-1.1 0-1.95.94-2.48 1.9A4 4 0 1 1 2 17"/><path d="m6 17 3.13-5.78c.53-.97.1-2.18-.5-3.1a4 4 0 1 1 6.89-4.06"/><path d="m12 6 3.13 5.73C15.66 12.7 16.9 13 18 13a4 4 0 0 1 0 8"/></svg><span>Webhooks</span></a>
+</div>
+<div class="nav-section">
+  <p class="nav-heading">System</p>
+  <a href="/admin/audit" class="nav-link"
+       
+       @click="navOpen = false"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6"/><path d="M9 16h6"/></svg><span>Audit</span></a><a href="/admin/operator" class="nav-link"
+       
+       @click="navOpen = false"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg><span>Operator</span></a><a href="/admin/telegram" class="nav-link"
+       
+       @click="navOpen = false"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4Z"/></svg><span>Telegram</span></a><a href="/admin/settings" class="nav-link"
+       
+       @click="navOpen = false"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Settings</span></a>
+</div>
+<div class="nav-section">
+  <p class="nav-heading">Help</p>
+  <a href="/admin/about" class="nav-link"
+       
+       @click="navOpen = false"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg><span>About</span></a>
+</div>
+    </nav>
+    <div class="sidebar-footer">
+      <span class="me">CLI Test Admin <span class="pill admin">admin</span></span>
+      <span class="footer-actions">
+        <button class="icon-btn" @click="setTheme(theme === 'dark' ? 'light' : 'dark')"
+                aria-label="Toggle theme"
+                :aria-label="theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'">
+          <span x-show="theme === 'dark'" x-cloak><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg></span>
+          <span x-show="theme !== 'dark'" x-cloak><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg></span>
+        </button>
+        <button class="icon-btn" @click="helpOpen = !helpOpen" aria-label="Keyboard shortcuts">?</button>
+      </span>
+    </div>
+  </aside>
+  <div class="content">
+    <div class="topbar">
+      <button class="icon-btn hamburger" @click="navOpen = !navOpen" aria-label="Toggle navigation"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+      <h1>Queue</h1>
+    </div>
+    <main>
+
+<div class="filter-bar"><span class="muted">filter:</span> <a href="/admin/queue?status=all&post_slug=no-such-post-slug" >all</a> · <a href="/admin/queue?status=approved&post_slug=no-such-post-slug" >approved</a> · <a href="/admin/queue?post_slug=no-such-post-slug" style="font-weight:600">pending</a> · <a href="/admin/queue?status=spam&post_slug=no-such-post-slug" >spam</a> · <a href="/admin/queue?status=deleted&post_slug=no-such-post-slug" >deleted</a> · <a href="/admin/queue?reported=1&post_slug=no-such-post-slug" >reported</a></div>
+
+<form class="filter-bar queue-filter" method="get" action="/admin/queue">
+  <input type="hidden" name="status" value="pending">
+  <input type="text" name="q" placeholder="search body" value="">
+  <input type="text" name="post_slug" placeholder="post slug" value="no-such-post-slug">
+  <select name="host" title="filter by domain"><option value="" selected>all domains</option><option value="adamtheautomator.com">adamtheautomator.com</option></select>
+  <input type="date" name="from" value="" title="from (UTC)">
+  <input type="date" name="to" value="" title="to (UTC, inclusive)">
+  
+  <button type="submit">Filter</button>
+  <a href="/admin/queue?status=pending" class="muted">clear</a>
+</form>
+
+<div class="filter-bar post-lifecycle" x-data="{ closed: false, busy: false,
+  async toggle() {
+    this.busy = true;
+    try {
+      const r = await fetch('/admin/api/posts/close', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ slug: &quot;no-such-post-slug&quot;, closed: !this.closed }),
+      });
+      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || ('Failed: ' + r.status)); }
+      const j = await r.json();
+      this.closed = !!j.closed;
+      this.$dispatch('toast', { text: this.closed ? 'Comments closed for this thread' : 'Comments reopened for this thread' });
+    } catch (e) {
+      this.$dispatch('toast', { text: e.message || 'Action failed', kind: 'bad' });
+    } finally { this.busy = false; }
+  }
+}">
+  <span class="muted">thread <code>no-such-post-slug</code>:</span>
+  <span class="pill" :class="closed ? 'spam' : 'approved'" x-text="closed ? 'closed' : 'open'"></span>
+  <button :disabled="busy" @click="toggle()" x-text="closed ? 'Open comments' : 'Close comments'"></button>
+</div>
+<p class="muted shortcut-strip"><span><kbd>j</kbd> <kbd>k</kbd> move the row cursor</span> · <span><kbd>a</kbd> approve the row under the cursor</span> · <span><kbd>s</kbd> mark it as spam</span> · <span><kbd>d</kbd> delete it (asks first)</span> · <span><kbd>r</kbd> reply to it</span> · <span><kbd>Esc</kbd> clear the cursor</span></p>
+<div x-data="{ open: false, commentId: null, authorName: '', postTitle: '' }"
+@open-reply.window="open = true; commentId = $event.detail.id; authorName = $event.detail.name || ''; postTitle = $event.detail.post || '';"
+@reply-posted="open = false"
+@keydown.escape.window="open = false">
+<div class="card" x-data="{
+  selected: [],
+  bulkBusy: false,
+  allIds: [],
+  rowCtx: {},
+  rowActions: {&quot;pending&quot;:{&quot;approve&quot;:&quot;Approved&quot;,&quot;spam&quot;:&quot;Marked as spam&quot;,&quot;delete&quot;:&quot;Deleted&quot;},&quot;approved&quot;:{&quot;spam&quot;:&quot;Marked as spam&quot;,&quot;delete&quot;:&quot;Deleted&quot;},&quot;spam&quot;:{&quot;approve&quot;:&quot;Restored&quot;,&quot;delete&quot;:&quot;Deleted&quot;},&quot;deleted&quot;:{&quot;approve&quot;:&quot;Restored&quot;}},
+  cursor: -1,
+  done: {},
+  openReply(id) {
+    const ctx = this.rowCtx[id] || {};
+    this.$dispatch('open-reply', { id: id, name: ctx.name || '', post: ctx.post || '' });
+  },
+  // --- keyboard driving ------------------------------------------------
+  // The cursor is an index into allIds, not a DOM pointer: rows leave the
+  // table by going x-show=false, so 'the next row' means the next index
+  // this page hasn't already acted on, not the next visible <tr>.
+  nextLive(from, dir) {
+    for (let i = from; i >= 0 && i < this.allIds.length; i += dir) {
+      if (!this.done[this.allIds[i]]) return i;
+    }
+    return -1;
+  },
+  move(dir) {
+    const start = this.cursor < 0 ? (dir > 0 ? 0 : this.allIds.length - 1) : this.cursor + dir;
+    const next = this.nextLive(start, dir);
+    if (next < 0) return;
+    this.cursor = next;
+    const row = this.$el.querySelectorAll('tbody tr')[next];
+    if (row && row.scrollIntoView) row.scrollIntoView({ block: 'nearest' });
+  },
+  advance() {
+    const fwd = this.nextLive(this.cursor + 1, 1);
+    this.cursor = fwd >= 0 ? fwd : this.nextLive(this.cursor - 1, -1);
+  },
+  keyAct(action) {
+    const id = this.allIds[this.cursor];
+    if (!id || this.done[id]) return;
+    // The row's own buttons suppress transitions that don't apply to its
+    // status; a shortcut that didn't would be the only way to re-approve an
+    // approved comment or spam a deleted one. Same table, same answer.
+    const ctx = this.rowCtx[id] || {};
+    const label = (this.rowActions[ctx.status] || {})[action];
+    if (!label) {
+      this.$dispatch('toast', { text: 'Cannot ' + action + ' a comment that is already ' + ctx.status, kind: 'bad' });
+      return;
+    }
+    if (action === 'delete' && !confirm('Delete this comment?')) return;
+    // Marked done up front so a fast repeat can't fire twice on one row;
+    // rolled back if the request fails, which also puts the cursor's path
+    // back the way it was.
+    this.done[id] = true;
+    this.act(id, action).then(() => {
+      this.$dispatch('toast', { text: label });
+      this.$dispatch('bulk-done', { ids: [id] });
+      this.advance();
+    }).catch(e => {
+      this.done[id] = false;
+      this.$dispatch('toast', { text: e.message || 'Action failed', kind: 'bad' });
+    });
+  },
+  keyReply() {
+    const id = this.allIds[this.cursor];
+    if (!id) return;
+    const ctx = this.rowCtx[id] || {};
+    if (ctx.status === 'deleted' || ctx.status === 'spam') {
+      this.$dispatch('toast', { text: 'Nothing to reply to on a ' + ctx.status + ' comment', kind: 'bad' });
+      return;
+    }
+    this.openReply(id);
+  },
+  onKey(e) {
+    // A shortcut that fires while someone is typing a search term is worse
+    // than no shortcut at all, so the filter inputs, the reply composer and
+    // any open modal all keep the keyboard to themselves. Modifier combos
+    // belong to the browser.
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (this.open) return;
+    const t = e.target;
+    if (t && t.closest && t.closest('input, textarea, select, [contenteditable]')) return;
+    if (e.key === 'Escape') { this.cursor = -1; return; }
+    if (e.key === 'j') { e.preventDefault(); this.move(1); return; }
+    if (e.key === 'k') { e.preventDefault(); this.move(-1); return; }
+    if (this.cursor < 0) return;
+    if (e.key === 'a') { e.preventDefault(); this.keyAct('approve'); }
+    else if (e.key === 's') { e.preventDefault(); this.keyAct('spam'); }
+    else if (e.key === 'd') { e.preventDefault(); this.keyAct('delete'); }
+    else if (e.key === 'r') { e.preventDefault(); this.keyReply(); }
+  },
+  toggleAll(e) {
+    this.selected = e.target.checked ? this.allIds.slice() : [];
+  },
+  act(id, action) {
+    return fetch('/admin/api/comments/' + id, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action }),
+    }).then(r => {
+      if (!r.ok) throw new Error('action failed: ' + r.status);
+      return r.json();
+    });
+  },
+  bulk(action) {
+    if (this.selected.length === 0) return;
+    if (!confirm(action + ' ' + this.selected.length + ' comment(s)?')) return;
+    this.bulkBusy = true;
+    const ids = this.selected.slice();
+    return fetch('/admin/api/comments/bulk', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ids, action }),
+    }).then(r => {
+      if (!r.ok) throw new Error('bulk action failed: ' + r.status);
+      return r.json();
+    }).then(j => {
+      const doneIds = (j && Array.isArray(j.touched)) ? j.touched : ids;
+      this.$dispatch('toast', { text: action + ' ' + doneIds.length + ' comment(s)' });
+      this.$dispatch('bulk-done', { ids: doneIds });
+      this.selected = [];
+    }).catch(e => {
+      this.$dispatch('toast', { text: e.message || 'Bulk failed', kind: 'bad' });
+    }).finally(() => { this.bulkBusy = false; });
+  }
+}" @keydown.window="onKey($event)"
+   @bulk-done.window="$event.detail.ids.forEach(i => { done[i] = true; })">
+  <table>
+    <thead><tr>
+      <th class="bulk-cell"><input type="checkbox" @change="toggleAll($event)" :checked="selected.length > 0 && selected.length === allIds.length"></th>
+      <th>Status</th><th>Author</th><th title="Vote score">Score</th><th>Meta</th><th>Body</th><th>Actions</th>
+    </tr></thead>
+    <tbody><tr><td colspan="7" class="muted">No comments match.</td></tr></tbody>
+  </table>
+  <div class="pager"><span class="muted">end</span></div>
+  <div class="bulk-bar" x-show="selected.length > 0" x-cloak>
+    <span><span x-text="selected.length"></span> selected</span>
+    <button :disabled="bulkBusy" @click="bulk('approve')">Approve</button>
+    <button :disabled="bulkBusy" class="bad" @click="bulk('spam')">Spam</button>
+    <button :disabled="bulkBusy" class="bad" @click="bulk('delete')">Delete</button>
+    <button :disabled="bulkBusy" @click="selected = []">Clear</button>
+  </div>
+</div>
+<div class="reply-modal" x-show="open" x-cloak role="dialog" aria-label="Reply to this comment"
+     @click.self="open=false">
+  <div class="reply-modal-inner">
+    <h3 style="margin-top:0">Reply to this comment</h3>
+    <!-- x-if rather than x-show so each open mounts a fresh composer: closing
+         the modal must not leave last time's draft, preview or notify choice
+         sitting in the next reply. -->
+    <template x-if="open">
+<div class="reply-composer" x-data="{
+  body: '',
+  notify: true,
+  busy: false,
+  previewing: false,
+  previewHtml: '',
+  savedReplyId: null,
+  pickedBody: '',
+  pickerOpen: false,
+  replies: [],
+  loadedReplies: false,
+  saveOpen: false,
+  saveTitle: '',
+  saveScope: 'private',
+  saving: false,
+  get tooLongToSave() { return this.body.length > 8000; },
+  onEdit(v) {
+    this.body = v;
+    // Editing away from the preset drops the provenance claim, so the audit row
+    // never credits a saved reply for text the mod actually wrote.
+    if (this.savedReplyId && v !== this.pickedBody) this.savedReplyId = null;
+    if (this.previewing) this.previewing = false;
+  },
+  async loadReplies() {
+    if (this.loadedReplies) return;
+    try {
+      const r = await fetch('/admin/api/saved-replies', { headers: { accept: 'application/json' } });
+      if (!r.ok) throw new Error('Could not load saved replies');
+      const j = await r.json();
+      this.replies = Array.isArray(j.replies) ? j.replies : [];
+      this.loadedReplies = true;
+    } catch (e) {
+      this.$dispatch('toast', { text: e.message || 'Load failed', kind: 'bad' });
+    }
+  },
+  applyVars: function (s, v) { return String(s).replace(/\{(name|post|mod)\}/g, function (m, k) { return v[k] || m; }); },
+  pick(r) {
+    // Variables resolve here, on insert, so the mod edits and previews the
+    // real text. `savedReplyId` still stands afterwards: the reply *was*
+    // prefilled from that preset, and the audit row says prefilled-from, not
+    // posted-verbatim. Typing over it drops the claim, as before.
+    const filled = this.applyVars(r.body_md, {
+      name: authorName, post: postTitle, mod: &quot;CLI Test Admin&quot;,
+    });
+    this.body = filled;
+    this.pickedBody = filled;
+    this.savedReplyId = r.id;
+    this.pickerOpen = false;
+    this.previewing = false;
+  },
+  async togglePreview() {
+    if (this.previewing) { this.previewing = false; return; }
+    if (!this.body.trim()) return;
+    this.busy = true;
+    try {
+      const r = await fetch('/admin/api/preview', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ body_md: this.body }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.error || ('Preview failed: ' + r.status));
+      }
+      const j = await r.json();
+      this.previewHtml = j.html || '';
+      this.previewing = true;
+    } catch (e) {
+      this.$dispatch('toast', { text: e.message || 'Preview failed', kind: 'bad' });
+    } finally { this.busy = false; }
+  },
+  async send() {
+    if (this.busy || !this.body.trim()) return;
+    this.busy = true;
+    try {
+      const r = await fetch('/admin/api/comments/' + commentId + '/reply', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ body_md: this.body, saved_reply_id: this.savedReplyId, notify: this.notify }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.error || ('Post failed: ' + r.status));
+      }
+      this.$dispatch('toast', { text: this.notify ? 'Reply posted — subscribers notified' : 'Reply posted' });
+      this.body = ''; this.savedReplyId = null; this.previewing = false;
+      this.$dispatch('reply-posted');
+    } catch (e) {
+      this.$dispatch('toast', { text: e.message || 'Post failed', kind: 'bad' });
+    } finally { this.busy = false; }
+  },
+  async saveForReuse() {
+    if (this.saving || !this.saveTitle.trim() || !this.body.trim() || this.tooLongToSave) return;
+    this.saving = true;
+    try {
+      const r = await fetch('/admin/api/saved-replies', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ title: this.saveTitle, body_md: this.body, scope: this.saveScope }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.error || ('Save failed: ' + r.status));
+      }
+      this.$dispatch('toast', { text: 'Saved for reuse' });
+      this.saveOpen = false; this.saveTitle = '';
+      this.loadedReplies = false; this.replies = [];
+    } catch (e) {
+      this.$dispatch('toast', { text: e.message || 'Save failed', kind: 'bad' });
+    } finally { this.saving = false; }
+  }
+}">
+  <p class="muted" style="margin:0 0 0.5rem">Posting as <strong>CLI Test Admin</strong> — published immediately, no spam check.</p>
+  <p style="margin:0 0 0.5rem">
+    <button type="button" class="btn" @click="pickerOpen = !pickerOpen; loadReplies()"
+            x-text="pickerOpen ? 'Hide saved replies' : 'Insert a saved reply'"></button>
+  </p>
+  <div x-show="pickerOpen" x-cloak style="margin-bottom:0.5rem">
+    <ul class="reply-list" x-show="replies.length">
+      <template x-for="r in replies" :key="r.id">
+        <li>
+          <button type="button"
+                  :class="savedReplyId === r.id ? 'reply-pick active' : 'reply-pick'"
+                  @click="pick(r)">
+            <strong x-text="r.title"></strong>
+            <span class="muted" x-text="r.scope"></span>
+          </button>
+        </li>
+      </template>
+    </ul>
+    <p class="muted" x-show="loadedReplies && !replies.length">
+      No saved replies yet. Write the reply below — you can save it for reuse afterwards.
+    </p>
+    <p class="muted" style="font-size:0.75rem">{name} — comment author · {post} — post title (or slug) · {mod} — you. Filled in when you insert the reply; anything else is left as typed.</p>
+  </div>
+  <label>Reply (markdown)<br>
+    <textarea :value="body" @input="onEdit($event.target.value)" rows="8" maxlength="10000"
+              placeholder="Write a reply…"
+              style="width:100%;min-height:160px;font-family:ui-monospace,monospace"></textarea>
+  </label>
+  <div x-show="previewing" x-cloak class="reply-preview" style="margin:0.5rem 0">
+    <p class="muted" style="margin:0 0 0.25rem">Preview</p>
+    <div x-html="previewHtml"></div>
+  </div>
+  <p style="margin:0.5rem 0">
+    <label><input type="checkbox" x-model="notify"> Notify thread subscribers by email</label>
+  </p>
+  <p>
+    <button :disabled="busy || !body.trim()" @click="send()">Post reply</button>
+    <button :disabled="busy || !body.trim()" class="btn" @click="togglePreview()"
+            x-text="previewing ? 'Hide preview' : 'Preview'"></button>
+    <button :disabled="!body.trim()" class="btn" @click="saveOpen = !saveOpen">Save for reuse</button>
+  </p>
+  <div x-show="saveOpen" x-cloak style="margin-top:0.5rem">
+    <p class="muted" x-show="tooLongToSave" style="margin:0 0 0.25rem">
+      Too long to save as a preset (over 8000 characters). It can still be posted.
+    </p>
+    <label>Title<br>
+      <input type="text" x-model="saveTitle" maxlength="120" style="width:100%">
+    </label>
+    <label style="display:block;margin-top:0.25rem">Scope<br>
+      <select x-model="saveScope">
+        <option value="private">private</option>
+        <option value="shared">shared</option>
+      </select>
+    </label>
+    <p style="margin-top:0.5rem">
+      <button :disabled="saving || !saveTitle.trim() || !body.trim() || tooLongToSave" @click="saveForReuse()">Save</button>
+      <button :disabled="saving" class="btn" @click="saveOpen = false">Cancel</button>
+    </p>
+  </div>
+</div>
+    </template>
+    <p><button class="btn" @click="open=false">Cancel</button></p>
+  </div>
+</div>
+</div>
+    </main>
+  </div>
+</div>
+<div class="toast-tray" role="status" aria-live="polite" aria-atomic="true"
+     x-data="{ items: [] }"
+     @toast.window="items.push({ id: Date.now() + Math.random(), text: $event.detail.text, kind: $event.detail.kind || 'ok' }); setTimeout(() => { items.shift(); }, 4000)">
+  <template x-for="t in items" :key="t.id">
+    <div :class="'toast ' + t.kind" x-text="t.text"></div>
+  </template>
+</div>
+<div class="help-popover" x-show="helpOpen" x-cloak @click.away="helpOpen = false" role="dialog" aria-label="Keyboard shortcuts">
+  <h4 style="margin-top:0">Shortcuts</h4>
+  <dl>
+    <dt><kbd>/</kbd></dt><dd>Focus search</dd>
+    <dt><kbd>?</kbd></dt><dd>Toggle this help</dd>
+    <dt><kbd>Esc</kbd></dt><dd>Close help</dd>
+  </dl>
+  <h4>This page</h4>
+  <dl>
+    <dt><kbd>j</kbd> <kbd>k</kbd></dt><dd>Move the row cursor</dd>
+    <dt><kbd>a</kbd></dt><dd>Approve the row under the cursor</dd>
+    <dt><kbd>s</kbd></dt><dd>Mark it as spam</dd>
+    <dt><kbd>d</kbd></dt><dd>Delete it (asks first)</dd>
+    <dt><kbd>r</kbd></dt><dd>Reply to it</dd>
+    <dt><kbd>Esc</kbd></dt><dd>Clear the cursor</dd>
+  </dl>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.5/dist/cdn.min.js"
+        integrity="sha384-BxpSbjbDhVKwnC1UfcjsNEuMuxg4af5IXOaSi1Iq5rASQ/9a7uslhEXbP9UI/fXo"
+        crossorigin="anonymous"
+        defer></script>
+</body>
+</html>

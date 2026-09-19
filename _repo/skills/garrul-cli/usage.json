@@ -1,0 +1,2727 @@
+{
+  "tool": "garrul",
+  "description": "CLI interface for garrul",
+  "discovered_at": "2026-09-17T20:23:48Z",
+  "total_commands": 72,
+  "global_options": [],
+  "commands": {
+    "audit": {
+      "help": "Read the moderation audit log",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "list": {
+          "help": "List audit rows, newest first. Garrul renders no row id, so there is no `audit get`.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--admin-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Only actions by this moderator's user id"
+            },
+            {
+              "name": "--action",
+              "type": "TEXT",
+              "required": false,
+              "help": "Only this action, for example approve or bulk.spam"
+            },
+            {
+              "name": "--target-kind",
+              "type": "TEXT",
+              "required": false,
+              "help": "comment, user, subscription or system"
+            },
+            {
+              "name": "--target-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Only actions on this full target id"
+            },
+            {
+              "name": "--from",
+              "type": "TEXT",
+              "required": false,
+              "help": "Earliest day, YYYY-MM-DD (UTC)"
+            },
+            {
+              "name": "--to",
+              "type": "TEXT",
+              "required": false,
+              "help": "Latest day, YYYY-MM-DD (UTC, inclusive)"
+            },
+            {
+              "name": "--host",
+              "type": "TEXT",
+              "required": false,
+              "help": "Only actions on comments from this site host"
+            },
+            {
+              "name": "--before",
+              "type": "TEXT",
+              "required": false,
+              "help": "Cursor from a previous page"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of audit rows",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "auth": {
+      "help": "Manage garrul authentication",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing ephemeral auth state and re-authenticate",
+              "short": "-F",
+              "takes_value": false
+            }
+          ]
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show their auth types and active state.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
+        }
+      }
+    },
+    "comments": {
+      "help": "Moderate comments and read threads",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "approve": {
+          "help": "Approve a comment so it is published.",
+          "arguments": [
+            {
+              "name": "comment_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Comment id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--reason",
+              "type": "TEXT",
+              "required": false,
+              "help": "Reason recorded in the audit log"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Apply the change",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "bulk": {
+          "help": "Apply one moderation action to up to 100 comments in a single request.",
+          "arguments": [
+            {
+              "name": "action",
+              "type": "TEXT",
+              "required": true,
+              "help": "approve, spam, delete or restore"
+            },
+            {
+              "name": "comment_ids",
+              "type": "TEXT",
+              "required": true,
+              "help": "Comment ids (at most 100)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Apply the change",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "counts": {
+          "help": "Get approved-comment counts for one or more post slugs.",
+          "arguments": [
+            {
+              "name": "slugs",
+              "type": "TEXT",
+              "required": true,
+              "help": "One or more post slugs"
+            }
+          ],
+          "options": [
+            {
+              "name": "--include",
+              "type": "TEXT",
+              "required": false,
+              "help": "Also return votes and/or reactions"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Delete a comment. It stays restorable with `comments restore`.",
+          "arguments": [
+            {
+              "name": "comment_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Comment id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--reason",
+              "type": "TEXT",
+              "required": false,
+              "help": "Reason recorded in the audit log"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Apply the change",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "feed": {
+          "help": "Print the Atom feed of a post's latest approved comments.",
+          "arguments": [
+            {
+              "name": "slug",
+              "type": "TEXT",
+              "required": true,
+              "help": "Post slug"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get one comment with its markdown source, parent, replies, reports and audit history.",
+          "arguments": [
+            {
+              "name": "comment_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Comment id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List the moderation queue, newest first.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "pending, approved, spam, deleted or all (default: all)",
+              "short": "-s"
+            },
+            {
+              "name": "--q",
+              "type": "TEXT",
+              "required": false,
+              "help": "Search comment bodies",
+              "short": "-q"
+            },
+            {
+              "name": "--post-slug",
+              "type": "TEXT",
+              "required": false,
+              "help": "Only this post slug"
+            },
+            {
+              "name": "--user-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Only comments by this user id"
+            },
+            {
+              "name": "--from",
+              "type": "TEXT",
+              "required": false,
+              "help": "Earliest day, YYYY-MM-DD (UTC)"
+            },
+            {
+              "name": "--to",
+              "type": "TEXT",
+              "required": false,
+              "help": "Latest day, YYYY-MM-DD (UTC, inclusive)"
+            },
+            {
+              "name": "--host",
+              "type": "TEXT",
+              "required": false,
+              "help": "Only comments posted on this site host"
+            },
+            {
+              "name": "--reported",
+              "type": "bool",
+              "required": false,
+              "help": "Only comments with open reader reports, any status",
+              "takes_value": false
+            },
+            {
+              "name": "--before",
+              "type": "TEXT",
+              "required": false,
+              "help": "Cursor from a previous page"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of comments",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "permalink": {
+          "help": "Resolve a published comment's permalink to the page URL it lives on.",
+          "arguments": [
+            {
+              "name": "comment_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Comment id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "preview": {
+          "help": "Render markdown exactly as Garrul would store it. Nothing is saved.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--body-md",
+              "type": "TEXT",
+              "required": true,
+              "help": "Markdown to render",
+              "short": "-b"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "reply": {
+          "help": "Post a public reply as the signed-in moderator. It publishes immediately.",
+          "arguments": [
+            {
+              "name": "comment_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Comment id to answer"
+            }
+          ],
+          "options": [
+            {
+              "name": "--body-md",
+              "type": "TEXT",
+              "required": true,
+              "help": "Reply text in markdown",
+              "short": "-b"
+            },
+            {
+              "name": "--notify",
+              "type": "bool",
+              "required": false,
+              "help": "Email the thread's subscribers",
+              "takes_value": false,
+              "secondary": "--no-notify",
+              "default": "notify"
+            },
+            {
+              "name": "--saved-reply-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved reply this text came from (audit only)"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Post the reply",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "resolve-reports": {
+          "help": "Dismiss every open reader report on a comment. The comment itself is unchanged.",
+          "arguments": [
+            {
+              "name": "comment_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Comment id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Apply the change",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "restore": {
+          "help": "Restore a deleted or spam comment to approved.",
+          "arguments": [
+            {
+              "name": "comment_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Comment id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--reason",
+              "type": "TEXT",
+              "required": false,
+              "help": "Reason recorded in the audit log"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Apply the change",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "spam": {
+          "help": "Mark a comment as spam.",
+          "arguments": [
+            {
+              "name": "comment_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Comment id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--reason",
+              "type": "TEXT",
+              "required": false,
+              "help": "Reason recorded in the audit log"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Apply the change",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "thread": {
+          "help": "Read a post's public comment tree, as the widget sees it (approved comments only).",
+          "arguments": [
+            {
+              "name": "slug",
+              "type": "TEXT",
+              "required": true,
+              "help": "Post slug"
+            }
+          ],
+          "options": [
+            {
+              "name": "--sort",
+              "type": "TEXT",
+              "required": false,
+              "help": "new, top or old. Default: the instance setting"
+            },
+            {
+              "name": "--before",
+              "type": "TEXT",
+              "required": false,
+              "help": "next_cursor from a previous page"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "instance": {
+      "help": "Inspect the Garrul instance",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "config": {
+          "help": "Show the public widget configuration the instance serves to embedding pages.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "health": {
+          "help": "Check that the instance is up. Needs no sign-in.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "statistics": {
+          "help": "Show dashboard totals: comments, pending, spam, users, and per-domain counts.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "status": {
+          "help": "Show the running Garrul version and the releases the instance knows about.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "whoami": {
+          "help": "Show which Garrul user this CLI is signed in as.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "notes": {
+      "help": "Write and remove internal moderator notes",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "create": {
+          "help": "Attach a note to a comment or a user. Read notes with `comments get` or `users get`.",
+          "arguments": [
+            {
+              "name": "target_kind",
+              "type": "TEXT",
+              "required": true,
+              "help": "comment or user"
+            },
+            {
+              "name": "target_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Id of the comment or user the note is about"
+            }
+          ],
+          "options": [
+            {
+              "name": "--body",
+              "type": "TEXT",
+              "required": true,
+              "help": "Plain-text note, visible to moderators only",
+              "short": "-b"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Save the note",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Permanently delete a note.",
+          "arguments": [
+            {
+              "name": "note_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Note id, from the notes list in `comments get` or `users get`"
+            }
+          ],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Delete the note. This cannot be undone",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "ops": {
+      "help": "Run operator maintenance jobs",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "audit-retention": {
+          "help": "Irreversibly delete one batch of audit rows older than the configured window.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Delete the expired rows. This cannot be undone",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "import": {
+          "help": "Import comments from another comment system. Re-uploading the same file inserts nothing new.",
+          "arguments": [
+            {
+              "name": "source",
+              "type": "TEXT",
+              "required": true,
+              "help": "disqus, remark42, comentario, isso or cusdis"
+            },
+            {
+              "name": "file",
+              "type": "PATH",
+              "required": true,
+              "help": "Export file, gzipped or not"
+            }
+          ],
+          "options": [
+            {
+              "name": "--plan",
+              "type": "bool",
+              "required": false,
+              "help": "Ask Garrul for the import plan only. Nothing is inserted",
+              "takes_value": false
+            },
+            {
+              "name": "--include-deleted",
+              "type": "bool",
+              "required": false,
+              "help": "Also import deleted comments",
+              "takes_value": false
+            },
+            {
+              "name": "--include-spam",
+              "type": "bool",
+              "required": false,
+              "help": "Also import spam comments",
+              "takes_value": false
+            },
+            {
+              "name": "--domain",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comentario domain or Cusdis project id to import"
+            },
+            {
+              "name": "--site",
+              "type": "TEXT",
+              "required": false,
+              "help": "Site origin for isso and Cusdis page paths"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Send the file",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "ip-retention": {
+          "help": "Irreversibly clear one batch of stored IP hashes older than the configured window.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Destroy the expired hashes. This cannot be undone",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "rerender": {
+          "help": "Re-render one batch of comments stored under an older markdown renderer.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--batch",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Comments to rerender in this call, 1 to 100",
+              "default": "50"
+            },
+            {
+              "name": "--cursor-created-at",
+              "type": "INTEGER",
+              "required": false,
+              "help": "next_cursor.created_at from the previous call"
+            },
+            {
+              "name": "--cursor-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "next_cursor.id from the previous call"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Run the batch",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "seed-demo": {
+          "help": "Insert the demo `welcome` thread. Garrul refuses this unless the instance runs with ENV=dev.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Insert the demo post and comments",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "status": {
+          "help": "Show rerender backlog and the state of both retention sweeps.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "posts": {
+      "help": "Open or close a post's comment thread",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "close": {
+          "help": "Stop a post from accepting new comments. Works before the first comment arrives.",
+          "arguments": [
+            {
+              "name": "slug",
+              "type": "TEXT",
+              "required": true,
+              "help": "Post slug"
+            }
+          ],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Apply the change",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "open": {
+          "help": "Let a closed post accept comments again.",
+          "arguments": [
+            {
+              "name": "slug",
+              "type": "TEXT",
+              "required": true,
+              "help": "Post slug"
+            }
+          ],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Apply the change",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "saved-replies": {
+      "help": "Manage saved replies",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "create": {
+          "help": "Create a saved reply.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--title",
+              "type": "TEXT",
+              "required": true,
+              "help": "Title, at most 120 characters"
+            },
+            {
+              "name": "--body-md",
+              "type": "TEXT",
+              "required": true,
+              "help": "Reply text in markdown, at most 8000 characters",
+              "short": "-b"
+            },
+            {
+              "name": "--scope",
+              "type": "TEXT",
+              "required": true,
+              "help": "private (only you) or shared (every moderator)"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Create the saved reply",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Permanently delete a saved reply you own.",
+          "arguments": [
+            {
+              "name": "reply_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Saved reply id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Delete the saved reply. This cannot be undone",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get one saved reply.",
+          "arguments": [
+            {
+              "name": "reply_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Saved reply id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List your saved replies plus every shared one. Garrul returns them all in one response.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of saved replies",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "update": {
+          "help": "Replace a saved reply you own. Garrul requires all three fields on every update.",
+          "arguments": [
+            {
+              "name": "reply_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Saved reply id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--title",
+              "type": "TEXT",
+              "required": true,
+              "help": "Title, at most 120 characters"
+            },
+            {
+              "name": "--body-md",
+              "type": "TEXT",
+              "required": true,
+              "help": "Reply text in markdown, at most 8000 characters",
+              "short": "-b"
+            },
+            {
+              "name": "--scope",
+              "type": "TEXT",
+              "required": true,
+              "help": "private or shared"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Apply the change",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "settings": {
+      "help": "Read and change runtime settings",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get one runtime setting.",
+          "arguments": [
+            {
+              "name": "key",
+              "type": "TEXT",
+              "required": true,
+              "help": "Setting key, for example comments_enabled"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List every runtime setting with its resolved value. Garrul renders them all on one page.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of settings",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "reset": {
+          "help": "Clear every settings override so all values return to the instance defaults.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Clear every override. This cannot be undone",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "update": {
+          "help": "Override runtime settings. Each key belongs to one group; `settings list` shows which.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--flag",
+              "type": "TEXT",
+              "required": false,
+              "help": "Boolean setting as key=true or key=false (repeatable)"
+            },
+            {
+              "name": "--number",
+              "type": "TEXT",
+              "required": false,
+              "help": "Numeric setting as key=123 (repeatable)"
+            },
+            {
+              "name": "--string",
+              "type": "TEXT",
+              "required": false,
+              "help": "Enumerated setting as key=value (repeatable)"
+            },
+            {
+              "name": "--text",
+              "type": "TEXT",
+              "required": false,
+              "help": "Free-text setting as key=value (repeatable)"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Apply the change",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "subscriptions": {
+      "help": "Manage email subscriptions",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get one active subscription. Garrul has no single-subscription read, so this walks the active list until the id appears. Unsubscribed rows carry no id and cannot be fetched this way.",
+          "arguments": [
+            {
+              "name": "subscription_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Subscription id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List subscriptions, newest first. Unsubscribed rows have no id (Garrul does not render one).",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--q",
+              "type": "TEXT",
+              "required": false,
+              "help": "Search by email address",
+              "short": "-q"
+            },
+            {
+              "name": "--post-slug",
+              "type": "TEXT",
+              "required": false,
+              "help": "Only this post slug"
+            },
+            {
+              "name": "--confirmed",
+              "type": "TEXT",
+              "required": false,
+              "help": "yes or no"
+            },
+            {
+              "name": "--unsubscribed",
+              "type": "TEXT",
+              "required": false,
+              "help": "yes or no"
+            },
+            {
+              "name": "--host",
+              "type": "TEXT",
+              "required": false,
+              "help": "Only threads on this site host"
+            },
+            {
+              "name": "--before",
+              "type": "TEXT",
+              "required": false,
+              "help": "Cursor from a previous page"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of subscriptions",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "resend": {
+          "help": "Email a fresh confirmation link to a subscriber who has not confirmed yet.",
+          "arguments": [
+            {
+              "name": "subscription_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Subscription id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--reason",
+              "type": "TEXT",
+              "required": false,
+              "help": "Reason recorded in the audit log"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Send the email",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "unsubscribe": {
+          "help": "Stop emailing a subscriber about a thread.",
+          "arguments": [
+            {
+              "name": "subscription_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Subscription id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--reason",
+              "type": "TEXT",
+              "required": false,
+              "help": "Reason recorded in the audit log"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Apply the change",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "telegram": {
+      "help": "Manage your Telegram operator link",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "digest": {
+          "help": "Turn the daily operator digest on or off for your linked account.",
+          "arguments": [
+            {
+              "name": "state",
+              "type": "TEXT",
+              "required": true,
+              "help": "on or off"
+            }
+          ],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Apply the change",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "link": {
+          "help": "Issue a one-time link code. Send `/start <code>` to the bot within 10 minutes.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Issue the code",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "status": {
+          "help": "Show bot configuration and whether your account is linked.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "unlink": {
+          "help": "Unlink your Telegram account.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Remove the link",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "users": {
+      "help": "Manage commenter accounts",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "ban": {
+          "help": "Ban a user. For an anonymous author this blocks their hashed IP.",
+          "arguments": [
+            {
+              "name": "user_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "User id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--reason",
+              "type": "TEXT",
+              "required": false,
+              "help": "Reason recorded in the audit log"
+            },
+            {
+              "name": "--from-comment",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comment id that prompted the ban (audit only)"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Apply the change",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "erase": {
+          "help": "Irreversibly erase a user's personal data (GDPR erasure request).",
+          "arguments": [
+            {
+              "name": "user_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "User id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--redact-bodies",
+              "type": "bool",
+              "required": false,
+              "help": "Also blank their comment text and mark it deleted",
+              "takes_value": false
+            },
+            {
+              "name": "--reason",
+              "type": "TEXT",
+              "required": false,
+              "help": "Reason recorded in the audit log"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Erase the data. This cannot be undone",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "export": {
+          "help": "Print everything the instance holds about a user (GDPR access request). Writes an audit row.",
+          "arguments": [
+            {
+              "name": "user_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "User id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get one user with role, ban state, notes, audit history and their latest 50 comments.",
+          "arguments": [
+            {
+              "name": "user_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "User id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--before",
+              "type": "TEXT",
+              "required": false,
+              "help": "comments_next_before from a previous call"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List users, newest first.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--q",
+              "type": "TEXT",
+              "required": false,
+              "help": "Search by display name",
+              "short": "-q"
+            },
+            {
+              "name": "--before",
+              "type": "TEXT",
+              "required": false,
+              "help": "Cursor from a previous page"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of users",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "revoke-sessions": {
+          "help": "Sign a user out everywhere. Aimed at your own id, it also ends this CLI's session.",
+          "arguments": [
+            {
+              "name": "user_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "User id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Apply the change",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "role": {
+          "help": "Change a user's role. Garrul refuses to change your own role or remove the last admin.",
+          "arguments": [
+            {
+              "name": "user_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "User id"
+            },
+            {
+              "name": "role",
+              "type": "TEXT",
+              "required": true,
+              "help": "user, mod or admin"
+            }
+          ],
+          "options": [
+            {
+              "name": "--reason",
+              "type": "TEXT",
+              "required": false,
+              "help": "Reason recorded in the audit log"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Apply the change",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "unban": {
+          "help": "Lift a ban.",
+          "arguments": [
+            {
+              "name": "user_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "User id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--reason",
+              "type": "TEXT",
+              "required": false,
+              "help": "Reason recorded in the audit log"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Apply the change",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "webhooks": {
+      "help": "Manage webhook endpoints",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "create": {
+          "help": "Create a webhook endpoint.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--url",
+              "type": "TEXT",
+              "required": true,
+              "help": "https URL, or a Telegram chat id for the telegram adapter"
+            },
+            {
+              "name": "--adapter",
+              "type": "TEXT",
+              "required": true,
+              "help": "generic, slack, discord or telegram"
+            },
+            {
+              "name": "--event",
+              "type": "TEXT",
+              "required": false,
+              "help": "Event to deliver (repeatable). None means every event"
+            },
+            {
+              "name": "--enabled",
+              "type": "bool",
+              "required": false,
+              "help": "Whether the endpoint delivers",
+              "takes_value": false,
+              "secondary": "--disabled",
+              "default": "enabled"
+            },
+            {
+              "name": "--secret-stdin",
+              "type": "bool",
+              "required": false,
+              "help": "Read a 16 to 256 character signing secret from stdin",
+              "takes_value": false
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Create the endpoint",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Permanently delete a webhook endpoint.",
+          "arguments": [
+            {
+              "name": "webhook_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Webhook endpoint id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Delete the endpoint. This cannot be undone",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get one webhook endpoint. The signing secret is write-only and never returned.",
+          "arguments": [
+            {
+              "name": "webhook_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Webhook endpoint id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List webhook endpoints. Garrul renders them all on one page.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of endpoints",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "update": {
+          "help": "Replace a webhook endpoint's url, adapter, events and enabled state. Garrul treats an update as a full replacement of those four fields. The signing secret is the exception: it is kept unless you rotate or clear it.",
+          "arguments": [
+            {
+              "name": "webhook_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Webhook endpoint id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--url",
+              "type": "TEXT",
+              "required": true,
+              "help": "https URL, or a Telegram chat id for the telegram adapter"
+            },
+            {
+              "name": "--adapter",
+              "type": "TEXT",
+              "required": true,
+              "help": "generic, slack, discord or telegram"
+            },
+            {
+              "name": "--event",
+              "type": "TEXT",
+              "required": false,
+              "help": "Event to deliver (repeatable). None means every event"
+            },
+            {
+              "name": "--enabled",
+              "type": "bool",
+              "required": false,
+              "help": "Whether the endpoint delivers",
+              "takes_value": false,
+              "secondary": "--disabled",
+              "default": "enabled"
+            },
+            {
+              "name": "--secret-stdin",
+              "type": "bool",
+              "required": false,
+              "help": "Rotate the signing secret to the value read from stdin",
+              "takes_value": false
+            },
+            {
+              "name": "--clear-secret",
+              "type": "bool",
+              "required": false,
+              "help": "Remove signing from this endpoint",
+              "takes_value": false
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Apply the change",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "usage_instructions": "Use the `garrul` CLI. Run `garrul --help` to discover command groups and `--help` on any subcommand for its options."
+}
