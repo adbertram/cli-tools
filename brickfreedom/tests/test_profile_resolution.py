@@ -1,6 +1,10 @@
 from pathlib import Path
 
+import pytest
+
+from brickfreedom_cli.client import BrickfreedomClient
 from brickfreedom_cli.config import get_config
+from cli_tools_shared.exceptions import ClientError
 
 
 def test_get_config_reads_root_config_and_default_profile(tmp_path, monkeypatch):
@@ -20,3 +24,18 @@ def test_get_config_reads_root_config_and_default_profile(tmp_path, monkeypatch)
     assert config.config_env_file_path == config_env_file
     assert config.env_file_path == env_file
     assert config._get("BASE_URL") == "https://example.com"
+
+
+def test_browser_auth_error_does_not_advertise_unsupported_credential_type():
+    class UnauthenticatedBrowser:
+        def is_authenticated(self):
+            return False
+
+    client = object.__new__(BrickfreedomClient)
+    client._auth_checked = False
+    client._browser = UnauthenticatedBrowser()
+
+    with pytest.raises(ClientError, match="brickfreedom auth login") as error:
+        client.get_page()
+
+    assert "-c browser_session" not in str(error.value)

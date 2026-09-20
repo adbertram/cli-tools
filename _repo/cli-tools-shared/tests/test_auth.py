@@ -222,6 +222,36 @@ def test_get_page_opens_persistent_profile_without_storage_state_load(tmp_path, 
     assert service.goto_calls == []
 
 
+def test_second_tool_browser_open_close_preserves_first_profile_session(tmp_path, monkeypatch):
+    """Browser lifecycle operations stay scoped to the owning persistent profile."""
+    bricklink_profile = tmp_path / "bricklink" / "chromium-profile"
+    bricklink_cookies = bricklink_profile / "Default" / "Cookies"
+    bricklink_cookies.parent.mkdir(parents=True)
+    bricklink_cookies.write_text("bricklink-session")
+    brickowl_profile = tmp_path / "brickowl" / "chromium-profile"
+
+    bricklink = _TestBrowser(
+        _TestConfig(tmp_path / "bricklink", persistent_profile_dir=bricklink_profile)
+    )
+    brickowl = _TestBrowser(
+        _TestConfig(tmp_path / "brickowl", persistent_profile_dir=brickowl_profile)
+    )
+    bricklink_service = _Service()
+    brickowl_service = _Service()
+    monkeypatch.setattr(bricklink, "_get_service", lambda: bricklink_service)
+    monkeypatch.setattr(brickowl, "_get_service", lambda: brickowl_service)
+
+    bricklink.get_page()
+    bricklink.close()
+    brickowl.get_page()
+    brickowl.close()
+
+    assert bricklink_service.browser_open_calls[0][1]["persistent_profile_dir"] == bricklink_profile
+    assert brickowl_service.browser_open_calls[0][1]["persistent_profile_dir"] == brickowl_profile
+    assert brickowl_service.browser_close_calls == 1
+    assert bricklink_cookies.read_text() == "bricklink-session"
+
+
 def test_get_page_honors_automation_headed_hook(tmp_path, monkeypatch):
     browser = _HeadedAutomationBrowser(_TestConfig(tmp_path))
     service = _Service()

@@ -5,6 +5,7 @@ import os
 import subprocess
 import shutil
 import sys
+import tempfile
 import time
 from contextvars import ContextVar
 from pathlib import Path
@@ -1334,9 +1335,103 @@ class BaseConfig:
         Chrome auto-creates ``Default/`` inside this directory and stores
         cookies (``Default/Cookies`` SQLite), localStorage, IndexedDB,
         service workers, and cache there. Single source of truth for
-        browser session state.
+        browser session state. A legacy symlink is migrated to a private copy
+        so another CLI cannot reopen the same Chromium user-data-dir and
+        replace session-only cookies.
         """
-        return self.get_browser_data_dir() / "chromium-profile"
+        profile_dir = self.get_browser_data_dir() / "chromium-profile"
+        if profile_dir.is_symlink():
+            self._isolate_legacy_shared_chromium_profile(profile_dir)
+        return profile_dir
+
+    def _isolate_legacy_shared_chromium_profile(self, profile_dir: Path) -> None:
+        """Replace a legacy shared Chromium-profile symlink with a private copy.
+
+        Older cli-tools installs linked per-tool browser data to a shared
+        Chromium user-data-dir. Chrome session cookies can be session-only, so
+        opening that profile for a second service overwrites the first
+        service's restored browser state. Copying the legacy data preserves
+        the current session while giving this tool/profile sole ownership.
+        """
+        try:
+            legacy_target = os.readlink(profile_dir)
+            shared_profile = profile_dir.resolve(strict=True)
+        except OSError as exc:
+            raise ConfigError(
+                f"Cannot isolate legacy Chromium profile link {profile_dir}: {exc}"
+            ) from exc
+
+        if not shared_profile.is_dir():
+            raise ConfigError(
+                f"Legacy Chromium profile link does not target a directory: {profile_dir}"
+            )
+
+        from .browser.processes import (
+            ProcessTableUnavailableError,
+            list_process_commands,
+            profile_process_pids,
+        )
+
+        try:
+            profile_pids = profile_process_pids(
+                shared_profile,
+                processes=list_process_commands(),
+            )
+        except ProcessTableUnavailableError as exc:
+            raise ConfigError(
+                "Cannot safely isolate a legacy shared Chromium profile because "
+                "browser process ownership cannot be inspected. Close every CLI "
+                "browser using the shared profile, then retry from a shell allowed "
+                "to inspect local processes."
+            ) from exc
+
+        if profile_pids:
+            raise ConfigError(
+                "Cannot safely isolate a legacy shared Chromium profile while it "
+                f"is in use by Chrome process(es) {', '.join(str(pid) for pid in profile_pids)}. "
+                "Close those browser windows and retry."
+            )
+
+        temporary_dir = Path(
+            tempfile.mkdtemp(
+                prefix=".chromium-profile-isolating-",
+                dir=profile_dir.parent,
+            )
+        )
+        try:
+            shutil.copytree(
+                shared_profile,
+                temporary_dir,
+                dirs_exist_ok=True,
+                symlinks=True,
+            )
+            for lock_name in (
+                "SingletonCookie",
+                "SingletonLock",
+                "SingletonSocket",
+                "DevToolsActivePort",
+            ):
+                lock_path = temporary_dir / lock_name
+                if lock_path.exists() or lock_path.is_symlink():
+                    lock_path.unlink()
+
+            profile_dir.unlink()
+            temporary_dir.replace(profile_dir)
+        except (OSError, shutil.Error) as exc:
+            if not profile_dir.exists() and not profile_dir.is_symlink():
+                try:
+                    profile_dir.symlink_to(legacy_target, target_is_directory=True)
+                except OSError as restore_exc:
+                    raise ConfigError(
+                        f"Failed to isolate legacy Chromium profile {profile_dir}: {exc}; "
+                        f"also failed to restore its symlink: {restore_exc}"
+                    ) from restore_exc
+            raise ConfigError(
+                f"Failed to isolate legacy Chromium profile {profile_dir}: {exc}"
+            ) from exc
+        finally:
+            if temporary_dir.exists():
+                shutil.rmtree(temporary_dir)
 
     def has_saved_session(self) -> bool:
         """Return True when the persistent Chromium profile has a session.

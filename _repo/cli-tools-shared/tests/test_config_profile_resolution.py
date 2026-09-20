@@ -366,6 +366,50 @@ def test_get_persistent_profile_dir_resolves_under_browser_data_dir(tmp_path, is
     assert persistent == expected
 
 
+def test_persistent_profiles_replace_legacy_shared_symlinks_per_tool(
+    tmp_path, isolated_data_home, monkeypatch
+):
+    """A legacy shared Chrome link cannot let one tool mutate another's session."""
+    shared_profile = tmp_path / "legacy-shared-chromium-profile"
+    shared_cookies = shared_profile / "Default" / "Cookies"
+    shared_cookies.parent.mkdir(parents=True)
+    shared_cookies.write_text("legacy-cookie")
+    (shared_profile / "SingletonLock").write_text("stale-lock")
+
+    from cli_tools_shared.browser import processes as browser_processes
+
+    monkeypatch.setattr(browser_processes, "list_process_commands", lambda: [])
+
+    configs = []
+    for tool_name in ("bricklink", "brickowl"):
+        tool_dir = _tool_dir(tmp_path, tool_name)
+        profile = get_profiles_base_dir(tool_name) / "default" / ".env"
+        _write_profile(profile, active=True, api_url="https://x")
+        config = CustomConfig(tool_dir=tool_dir)
+        legacy_link = config.get_browser_data_dir() / "chromium-profile"
+        legacy_link.symlink_to(shared_profile, target_is_directory=True)
+        configs.append(config)
+
+    bricklink, brickowl = configs
+    bricklink_profile = bricklink.get_persistent_profile_dir()
+    brickowl_profile = brickowl.get_persistent_profile_dir()
+
+    assert bricklink_profile != brickowl_profile
+    assert not bricklink_profile.is_symlink()
+    assert not brickowl_profile.is_symlink()
+    assert (bricklink_profile / "Default" / "Cookies").read_text() == "legacy-cookie"
+    assert (brickowl_profile / "Default" / "Cookies").read_text() == "legacy-cookie"
+    assert not (bricklink_profile / "SingletonLock").exists()
+    assert not (brickowl_profile / "SingletonLock").exists()
+
+    # Simulate BrickOwl persisting browser state after its own launch/close.
+    (brickowl_profile / "Default" / "Cookies").write_text("brickowl-cookie")
+
+    assert (bricklink_profile / "Default" / "Cookies").read_text() == "legacy-cookie"
+    assert bricklink.has_saved_session() is True
+    assert shared_cookies.read_text() == "legacy-cookie"
+
+
 def test_has_saved_session_requires_chromium_profile_default_cookies(tmp_path, isolated_data_home):
     """Single source of truth: only the Chrome cookies DB counts.
 
