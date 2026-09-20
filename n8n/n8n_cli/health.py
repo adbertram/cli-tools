@@ -15,6 +15,7 @@ Checks are registered as `Check` entries in `CHECK_REGISTRY` (data-driven
 """
 from __future__ import annotations
 
+import ast
 import re
 from dataclasses import dataclass, field, asdict
 from typing import Any, Callable, Dict, List, Optional
@@ -515,8 +516,22 @@ def check_type_version_valid(workflow: Dict, api) -> List[Finding]:
     return findings
 
 
+def _constant_workflow_id_expression(value: str) -> Optional[str]:
+    """Return the string literal from one constant n8n expression, without evaluating it."""
+    match = re.fullmatch(r"^=\s*\{\{\s*(.*?)\s*\}\}\s*$", value, re.DOTALL)
+    if not match:
+        return None
+    try:
+        parsed = ast.parse(match.group(1), mode="eval")
+    except SyntaxError:
+        return None
+    if not isinstance(parsed.body, ast.Constant) or not isinstance(parsed.body.value, str):
+        return None
+    return parsed.body.value or None
+
+
 def check_subworkflow_refs_valid(workflow: Dict, api) -> List[Finding]:
-    """executeWorkflow nodes must reference an existing AND active sub-workflow."""
+    """Validate literal references strictly and inspect expression targets when statically known."""
     findings: List[Finding] = []
     # Only the dispatcher type — executeWorkflowTrigger is the RECEIVING side
     # and has no workflowId to validate.
@@ -538,6 +553,16 @@ def check_subworkflow_refs_valid(workflow: Dict, api) -> List[Finding]:
                 "executeWorkflow node has no workflowId",
             ))
             continue
+        is_expression = isinstance(wf_id, str) and wf_id.startswith("=")
+        if is_expression:
+            constant_workflow_id = _constant_workflow_id_expression(wf_id)
+            if constant_workflow_id is None:
+                findings.append(_finding(
+                    node, "subworkflow_refs_valid", "warn",
+                    "dynamic workflowId expression cannot be validated statically",
+                ))
+                continue
+            wf_id = constant_workflow_id
         try:
             sub_wf = api.get_workflow(str(wf_id))
         except Exception as e:
@@ -552,7 +577,7 @@ def check_subworkflow_refs_valid(workflow: Dict, api) -> List[Finding]:
                 f"referenced workflow id={wf_id} does not exist",
             ))
             continue
-        if not sub_wf.get("active"):
+        if not is_expression and not sub_wf.get("active"):
             findings.append(_finding(
                 node, "subworkflow_refs_valid", "fail",
                 f"referenced workflow '{sub_wf.get('name')}' (id={wf_id}) is not active",
