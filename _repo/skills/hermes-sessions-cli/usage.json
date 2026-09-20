@@ -1,0 +1,1689 @@
+{
+  "tool": "hermes-sessions",
+  "description": "CLI interface for hermes-sessions",
+  "discovered_at": "2026-09-19T22:19:11Z",
+  "total_commands": 22,
+  "global_options": [],
+  "commands": {
+    "auth": {
+      "help": "Check local Hermes state access",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "status": {
+          "help": "Check local Hermes state access without writing configuration.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (default only)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        }
+      }
+    },
+    "conversations": {
+      "help": "List conversations within sessions",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get one context segment, addressed as <session-id>:<number>. Example: hermes-sessions conversations get 20260909_202443_f329bcd3:2 --table",
+          "arguments": [
+            {
+              "name": "reference",
+              "type": "TEXT",
+              "required": true,
+              "help": "Conversation reference: <session-id>:<number>"
+            }
+          ],
+          "options": [
+            {
+              "name": "--max-chars",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Bound on each text preview",
+              "default": "200"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List context segments. A session that was never compacted has exactly one. Example: hermes-sessions conversations list --project LegoScout --table hermes-sessions conversations list -S 20260909_202443_f329bcd3 hermes-sessions conversations list --filter \"started_by:eq:compaction\"",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session ID or title",
+              "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session title (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project name or absolute path",
+              "short": "-p"
+            },
+            {
+              "name": "--source",
+              "type": "TEXT",
+              "required": false,
+              "help": "Gateway/runtime source"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sessions started within this window",
+              "short": "-s"
+            },
+            {
+              "name": "--date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sessions started on this local date (YYYY-MM-DD)"
+            },
+            {
+              "name": "--date-range",
+              "type": "TEXT",
+              "required": false,
+              "help": "Inclusive local range START..END"
+            },
+            {
+              "name": "--date-alias",
+              "type": "TEXT",
+              "required": false,
+              "help": "today, yesterday, this_week, last_week"
+            },
+            {
+              "name": "--max-chars",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Bound on each text preview",
+              "default": "200"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., started_by:eq:compaction)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "projects": {
+      "help": "List and query projects",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get details for one workspace. Example: hermes-sessions projects get LegoScout hermes-sessions projects get /Users/adam/Dropbox/GitRepos/Agents/LegoScout --table",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Project name, absolute path, or (no-workspace)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List every workspace that has Hermes sessions. Example: hermes-sessions projects list hermes-sessions projects list --table hermes-sessions projects list --filter \"session_count:gt:5\"",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., session_count:gt:5)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "search": {
+      "help": "Search keywords across session transcripts",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "run": {
+          "help": "Search message content through the Hermes FTS5 index. Example: hermes-sessions search run \"timeout\" --limit 10 --table hermes-sessions search run \"legoscout\" --since 7d hermes-sessions search run \"rate limit\" --project CryptoTrader --table",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "FTS5 query (e.g., timeout, \"rate limit\", legoscout*)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session ID or title",
+              "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session title (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project name or absolute path",
+              "short": "-p"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Messages newer than this window: 30m, 5h, 7d",
+              "short": "-s"
+            },
+            {
+              "name": "--max-chars",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Bound on each snippet",
+              "default": "200"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "sessions": {
+      "help": "List, get, and search sessions",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get one session's metadata and counts. Never prints message bodies. Example: hermes-sessions sessions get cron_f2913088764d_20260919_130521 --table hermes-sessions sessions get --session-name \"ATA Blog daily comment management\"",
+          "arguments": [
+            {
+              "name": "session_id",
+              "type": "SESSION_ID",
+              "required": false,
+              "help": "Session ID or title; omit when using --session-name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session title (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--max-chars",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Bound on each text preview",
+              "default": "200"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List sessions newest-first. With no --project, covers every workspace. Example: hermes-sessions sessions list --table hermes-sessions sessions list --source cron --limit 5 hermes-sessions sessions list --project LegoScout --no-subagents hermes-sessions sessions list --date-alias yesterday --table hermes-sessions sessions list --filter \"tool_call_count:gt:10\"",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project name or absolute path",
+              "short": "-p"
+            },
+            {
+              "name": "--source",
+              "type": "TEXT",
+              "required": false,
+              "help": "Gateway/runtime source: cli, cron, slack, subagent, webui, email"
+            },
+            {
+              "name": "--subagents",
+              "type": "bool",
+              "required": false,
+              "help": "Include delegated subagent sessions",
+              "takes_value": false,
+              "secondary": "--no-subagents",
+              "default": "subagents"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Started within this window: 30m, 5h, 7d, 2w",
+              "short": "-s"
+            },
+            {
+              "name": "--date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sessions started on this local date (YYYY-MM-DD)"
+            },
+            {
+              "name": "--date-range",
+              "type": "TEXT",
+              "required": false,
+              "help": "Inclusive local range START..END (YYYY-MM-DD..YYYY-MM-DD)"
+            },
+            {
+              "name": "--date-alias",
+              "type": "TEXT",
+              "required": false,
+              "help": "One of today, yesterday, this_week, last_week"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., source:eq:cron)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "search": {
+          "help": "Search session titles. Use `search run` for full-text transcript search. Example: hermes-sessions sessions search \"comment management\" --table hermes-sessions sessions search \"legoscout\" --since 7d",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Substring to match against session titles"
+            }
+          ],
+          "options": [
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project name or absolute path",
+              "short": "-p"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Started within this window: 30m, 5h, 7d",
+              "short": "-s"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "skills": {
+      "help": "Query skill loads and slash commands",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get one skill load or slash command by its record ID. Example: hermes-sessions skills get cron_f2913088764d_20260919_130521:304951:0 --table",
+          "arguments": [
+            {
+              "name": "reference",
+              "type": "TEXT",
+              "required": true,
+              "help": "Skill record ID: <session-id>:<message-id>:<position>"
+            }
+          ],
+          "options": [
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session ID or title to search within",
+              "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session title (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project name or absolute path",
+              "short": "-p"
+            },
+            {
+              "name": "--max-chars",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Bound on each text preview",
+              "default": "200"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List skill loads (kind=skill) and slash commands (kind=command). Example: hermes-sessions skills list --source cron --table hermes-sessions skills list -S cron_f2913088764d_20260919_130521 hermes-sessions skills list --filter \"kind:eq:command\" --table",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session ID or title",
+              "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session title (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project name or absolute path",
+              "short": "-p"
+            },
+            {
+              "name": "--source",
+              "type": "TEXT",
+              "required": false,
+              "help": "Gateway/runtime source"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sessions started within this window",
+              "short": "-s"
+            },
+            {
+              "name": "--date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sessions started on this local date (YYYY-MM-DD)"
+            },
+            {
+              "name": "--date-range",
+              "type": "TEXT",
+              "required": false,
+              "help": "Inclusive local range START..END"
+            },
+            {
+              "name": "--date-alias",
+              "type": "TEXT",
+              "required": false,
+              "help": "today, yesterday, this_week, last_week"
+            },
+            {
+              "name": "--max-chars",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Bound on each text preview",
+              "default": "200"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., kind:eq:command)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "subagent-activity": {
+      "help": "Query subagent invocations",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get one subagent run by its child session ID. Example: hermes-sessions subagent-activity get 20260918_090230_c0952c --table",
+          "arguments": [
+            {
+              "name": "child_session_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Subagent (child) session ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--max-chars",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Bound on each text preview",
+              "default": "200"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List delegated subagent runs. With -S, only the children of that parent. Example: hermes-sessions subagent-activity list --table hermes-sessions subagent-activity list -S cron_b03d38d15003_20260918_090207 hermes-sessions subagent-activity list --filter \"tool_call_count:gt:5\" --table",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Parent session ID or title",
+              "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Parent session title (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project name or absolute path",
+              "short": "-p"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Started within this window",
+              "short": "-s"
+            },
+            {
+              "name": "--date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Started on this local date (YYYY-MM-DD)"
+            },
+            {
+              "name": "--date-range",
+              "type": "TEXT",
+              "required": false,
+              "help": "Inclusive local range START..END"
+            },
+            {
+              "name": "--date-alias",
+              "type": "TEXT",
+              "required": false,
+              "help": "today, yesterday, this_week, last_week"
+            },
+            {
+              "name": "--max-chars",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Bound on each text preview",
+              "default": "200"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., status:eq:agent_close)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "timeline": {
+      "help": "View unified activity timeline",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "consolidated": {
+          "help": "Merge a session and its subagent runs into one bounded chronological view. The view is bounded twice: --limit caps the merged event count and --max-chars caps every event summary, so it never becomes a transcript dump. Example: hermes-sessions timeline consolidated cron_b03d38d15003_20260918_090207 --table hermes-sessions timeline consolidated cron_b03d38d15003_20260918_090207 --limit 40 --max-chars 80",
+          "arguments": [
+            {
+              "name": "session_id",
+              "type": "SESSION_ID",
+              "required": false,
+              "help": "Session ID or title; omit when using --session-name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session title (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--subagents",
+              "type": "bool",
+              "required": false,
+              "help": "Merge in the session's subagent runs",
+              "takes_value": false,
+              "secondary": "--no-subagents",
+              "default": "subagents"
+            },
+            {
+              "name": "--max-chars",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Bound on each event summary",
+              "default": "200"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum merged events",
+              "short": "-l",
+              "default": "200"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get the full event timeline of one session. Example: hermes-sessions timeline get cron_f2913088764d_20260919_130521 --table hermes-sessions timeline get --session-name \"ATA Blog daily comment management\" --errors-only",
+          "arguments": [
+            {
+              "name": "session_id",
+              "type": "SESSION_ID",
+              "required": false,
+              "help": "Session ID or title; omit when using --session-name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session title (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--errors-only",
+              "type": "bool",
+              "required": false,
+              "help": "Only failed tool calls and error events",
+              "takes_value": false
+            },
+            {
+              "name": "--max-chars",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Bound on each event summary",
+              "default": "200"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum events",
+              "short": "-l",
+              "default": "200"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List activity events across the scoped sessions. Event types: user_message, assistant_message, command, skill_load, tool_call, todo_write, subagent_start, compaction, notice, error. Example: hermes-sessions timeline list --source cron --limit 20 --table hermes-sessions timeline list -S cron_f2913088764d_20260919_130521 --table hermes-sessions timeline list --project CryptoTrader --errors-only --table",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session ID or title",
+              "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session title (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project name or absolute path",
+              "short": "-p"
+            },
+            {
+              "name": "--source",
+              "type": "TEXT",
+              "required": false,
+              "help": "Gateway/runtime source"
+            },
+            {
+              "name": "--errors-only",
+              "type": "bool",
+              "required": false,
+              "help": "Only failed tool calls and error events",
+              "takes_value": false
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sessions started within this window",
+              "short": "-s"
+            },
+            {
+              "name": "--date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sessions started on this local date (YYYY-MM-DD)"
+            },
+            {
+              "name": "--date-range",
+              "type": "TEXT",
+              "required": false,
+              "help": "Inclusive local range START..END"
+            },
+            {
+              "name": "--date-alias",
+              "type": "TEXT",
+              "required": false,
+              "help": "today, yesterday, this_week, last_week"
+            },
+            {
+              "name": "--max-chars",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Bound on each event summary",
+              "default": "200"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., event_type:eq:tool_call)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "todos": {
+      "help": "Query todo items from sessions",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get one todo item, addressed as <session-id>:<position>. Example: hermes-sessions todos get cron_f2913088764d_20260919_130521:0 --table",
+          "arguments": [
+            {
+              "name": "reference",
+              "type": "TEXT",
+              "required": true,
+              "help": "Todo reference: <session-id>:<position>"
+            }
+          ],
+          "options": [
+            {
+              "name": "--max-chars",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Bound on the todo's content preview",
+              "default": "200"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List todo items. Hermes rewrites the whole list per call, so this is the final state of each session's list. Example: hermes-sessions todos list --source cron --table hermes-sessions todos list -S cron_f2913088764d_20260919_130521 hermes-sessions todos list --filter \"status:eq:pending\" --table hermes-sessions todos list -S cron_f2913088764d_20260919_130521 --max-chars 60",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session ID or title",
+              "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session title (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project name or absolute path",
+              "short": "-p"
+            },
+            {
+              "name": "--source",
+              "type": "TEXT",
+              "required": false,
+              "help": "Gateway/runtime source"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sessions started within this window",
+              "short": "-s"
+            },
+            {
+              "name": "--date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sessions started on this local date (YYYY-MM-DD)"
+            },
+            {
+              "name": "--date-range",
+              "type": "TEXT",
+              "required": false,
+              "help": "Inclusive local range START..END"
+            },
+            {
+              "name": "--date-alias",
+              "type": "TEXT",
+              "required": false,
+              "help": "today, yesterday, this_week, last_week"
+            },
+            {
+              "name": "--max-chars",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Bound on each todo's content preview",
+              "default": "200"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., status:eq:completed)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "tool-calls": {
+      "help": "Query tool call history",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get one tool call by its call ID. Example: hermes-sessions tool-calls get call_Ss71SJT8IxHnorchZLfLMffY -S cron_f2913088764d_20260919_130521 --table",
+          "arguments": [
+            {
+              "name": "call_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Tool call ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session ID or title to search within",
+              "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session title (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project name or absolute path",
+              "short": "-p"
+            },
+            {
+              "name": "--max-chars",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Bound on each text preview",
+              "default": "200"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List tool calls across the scoped sessions. Example: hermes-sessions tool-calls list -S cron_f2913088764d_20260919_130521 --table hermes-sessions tool-calls list --project CryptoTrader --tool terminal hermes-sessions tool-calls list --source cron --filter \"status:eq:error\" --table",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session ID or title",
+              "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session title (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project name or absolute path",
+              "short": "-p"
+            },
+            {
+              "name": "--tool",
+              "type": "TEXT",
+              "required": false,
+              "help": "Only this tool name (e.g., terminal, read_file)"
+            },
+            {
+              "name": "--source",
+              "type": "TEXT",
+              "required": false,
+              "help": "Gateway/runtime source"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sessions started within this window",
+              "short": "-s"
+            },
+            {
+              "name": "--date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sessions started on this local date (YYYY-MM-DD)"
+            },
+            {
+              "name": "--date-range",
+              "type": "TEXT",
+              "required": false,
+              "help": "Inclusive local range START..END"
+            },
+            {
+              "name": "--date-alias",
+              "type": "TEXT",
+              "required": false,
+              "help": "today, yesterday, this_week, last_week"
+            },
+            {
+              "name": "--max-chars",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Bound on each text preview",
+              "default": "200"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., status:eq:error)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "turns": {
+      "help": "Query agent turns",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get one turn, addressed as <session-id>:<number>. Example: hermes-sessions turns get cron_f2913088764d_20260919_130521:2 --table",
+          "arguments": [
+            {
+              "name": "reference",
+              "type": "TEXT",
+              "required": true,
+              "help": "Turn reference: <session-id>:<number>"
+            }
+          ],
+          "options": [
+            {
+              "name": "--max-chars",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Bound on each text preview",
+              "default": "200"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List turns across the scoped sessions. Example: hermes-sessions turns list -S cron_f2913088764d_20260919_130521 --table hermes-sessions turns list --project CryptoTrader --filter \"tool_call_count:gt:3\"",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session ID or title",
+              "short": "-S"
+            },
+            {
+              "name": "--session-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Session title (exact, case-insensitive)",
+              "short": "-N"
+            },
+            {
+              "name": "--project",
+              "type": "TEXT",
+              "required": false,
+              "help": "Project name or absolute path",
+              "short": "-p"
+            },
+            {
+              "name": "--source",
+              "type": "TEXT",
+              "required": false,
+              "help": "Gateway/runtime source"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sessions started within this window",
+              "short": "-s"
+            },
+            {
+              "name": "--date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sessions started on this local date (YYYY-MM-DD)"
+            },
+            {
+              "name": "--date-range",
+              "type": "TEXT",
+              "required": false,
+              "help": "Inclusive local range START..END"
+            },
+            {
+              "name": "--date-alias",
+              "type": "TEXT",
+              "required": false,
+              "help": "today, yesterday, this_week, last_week"
+            },
+            {
+              "name": "--max-chars",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Bound on each text preview",
+              "default": "200"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--wide",
+              "type": "bool",
+              "required": false,
+              "help": "Show every column in table mode",
+              "short": "-w",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., has_errors:eq:true)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "usage_instructions": "Use the `hermes-sessions` CLI. Run `hermes-sessions --help` to discover command groups and `--help` on any subcommand for its options."
+}
