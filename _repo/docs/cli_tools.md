@@ -30,6 +30,7 @@
 | `codex-sessions` | The `codex-sessions` CLI lets you query and analyze OpenAI Codex session transcripts from ~/.codex. Use it when you need scriptable reads, exports, or evidence collection without opening the service UI. |
 | `copilot` | The `copilot` CLI provides a command-line interface for Microsoft Copilot Studio agents via Dataverse API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `crowdgen` | CrowdGen by Appen worker portal (browser automation, worker side) |
+| `coursecraft` | Manage CourseCraft course content, including courses, modules, clips, demos, slides, artifacts, feedback, and voice recordings. |
 | `cryptocom` | The `cryptocom` CLI provides command-line access to Crypto.com Exchange API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `cvs` | The `cvs` CLI is a command-line interface for CVS Health pharmacy — prescriptions, orders, and refill eligibility across all linked family members. Use it for scriptable, JSON-first access from agents, automation, or terminal workflows. Authentication is a real browser login that the CLI then reuses for read-only commands. |
 | `deepseek-sessions` | The `deepseek-sessions` CLI queries DeepSeek Harness (`dsh`) session transcripts in `~/.dsh`. Use it to audit what a `dsh` run did — sessions, turns, tool calls, subagents, retries, approvals, goals, and token cost — with the same command shape as `claude-code-sessions` and `codex-sessions`. |

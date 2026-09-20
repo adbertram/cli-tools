@@ -67,7 +67,7 @@ def _profile_store_for_command(get_config_fn, config_cls, cli_name: str) -> Prof
         from .config import resolve_tool_dir
 
         tool_dir = resolve_tool_dir(config_cls.DIST_NAME)
-        tool_name = tool_dir.name
+        tool_name = getattr(config_cls, "RUNTIME_DATA_NAME", "") or tool_dir.name
     return ProfileStore(tool_name, tool_dir=tool_dir, profile_auth_settings=profile_auth_settings)
 
 

@@ -852,6 +852,9 @@ class BaseConfig:
 
     CREDENTIAL_TYPES: list = None           # List of CredentialType values (AND)
     DEFAULT_BASE_URL: str = ""
+    # Public runtime data namespace. Defaults to the technical source directory
+    # name, but tools with a distinct command identity may override it.
+    RUNTIME_DATA_NAME: str = ""
 
     # OAuth 2.0 configuration (set by subclasses that use OAuth)
     OAUTH_AUTH_URL: str = ""              # Authorization endpoint
@@ -1001,7 +1004,7 @@ class BaseConfig:
                 "Subclass must set CREDENTIAL_TYPES (list of CredentialType values)."
             )
         self.tool_dir = tool_dir
-        self._tool_name = tool_dir.name
+        self._tool_name = self.RUNTIME_DATA_NAME or tool_dir.name
         self.profile = profile
         self.profile_auth_type = profile_auth_type
         self.config_env_file_path = config_env_path_for_tool(self._tool_name)
