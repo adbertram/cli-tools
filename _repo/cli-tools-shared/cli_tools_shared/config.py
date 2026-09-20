@@ -1373,10 +1373,7 @@ class BaseConfig:
         )
 
         try:
-            profile_pids = profile_process_pids(
-                shared_profile,
-                processes=list_process_commands(),
-            )
+            processes = list_process_commands()
         except ProcessTableUnavailableError as exc:
             raise ConfigError(
                 "Cannot safely isolate a legacy shared Chromium profile because "
@@ -1385,6 +1382,16 @@ class BaseConfig:
                 "to inspect local processes."
             ) from exc
 
+        # Chrome keeps ``--user-data-dir`` verbatim in its own command line, and
+        # a browser started through this tool's symlink is not distinguishable
+        # from one started against the shared target, so both forms are checked.
+        profile_pids = sorted(
+            {
+                *profile_process_pids(profile_dir, processes=processes),
+                *profile_process_pids(shared_profile, processes=processes),
+            }
+        )
+
         if profile_pids:
             raise ConfigError(
                 "Cannot safely isolate a legacy shared Chromium profile while it "
@@ -1392,12 +1399,17 @@ class BaseConfig:
                 "Close those browser windows and retry."
             )
 
-        temporary_dir = Path(
-            tempfile.mkdtemp(
-                prefix=".chromium-profile-isolating-",
-                dir=profile_dir.parent,
+        try:
+            temporary_dir = Path(
+                tempfile.mkdtemp(
+                    prefix=".chromium-profile-isolating-",
+                    dir=profile_dir.parent,
+                )
             )
-        )
+        except OSError as exc:
+            raise ConfigError(
+                f"Failed to isolate legacy Chromium profile {profile_dir}: {exc}"
+            ) from exc
         try:
             shutil.copytree(
                 shared_profile,
@@ -1418,6 +1430,10 @@ class BaseConfig:
             profile_dir.unlink()
             temporary_dir.replace(profile_dir)
         except (OSError, shutil.Error) as exc:
+            if profile_dir.exists() and not profile_dir.is_symlink():
+                # A concurrent invocation of this profile finished the same
+                # migration first; its result is the private profile.
+                return
             if not profile_dir.exists() and not profile_dir.is_symlink():
                 try:
                     profile_dir.symlink_to(legacy_target, target_is_directory=True)

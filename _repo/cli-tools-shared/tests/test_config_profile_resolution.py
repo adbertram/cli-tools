@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 import cli_tools_shared.config as config_module
+from cli_tools_shared.auth import BrowserAutomation
 from cli_tools_shared.config import BaseConfig, config_env_path_for_tool, get_profiles_base_dir
 from cli_tools_shared.credentials import CredentialType
 from cli_tools_shared.exceptions import ConfigError
@@ -408,6 +409,308 @@ def test_persistent_profiles_replace_legacy_shared_symlinks_per_tool(
     assert (bricklink_profile / "Default" / "Cookies").read_text() == "legacy-cookie"
     assert bricklink.has_saved_session() is True
     assert shared_cookies.read_text() == "legacy-cookie"
+
+
+def test_second_tool_browser_lifecycle_preserves_first_legacy_session(
+    tmp_path, isolated_data_home, monkeypatch
+):
+    """Migrated profiles keep BrowserAutomation open/close state tool-private."""
+    shared_profile = tmp_path / "legacy-shared-chromium-profile"
+    shared_cookies = shared_profile / "Default" / "Cookies"
+    shared_cookies.parent.mkdir(parents=True)
+    shared_cookies.write_text("legacy-session")
+
+    from cli_tools_shared.browser import processes as browser_processes
+
+    monkeypatch.setattr(browser_processes, "list_process_commands", lambda: [])
+
+    configs = {}
+    for tool_name in ("bricklink", "brickowl"):
+        tool_dir = _tool_dir(tmp_path, tool_name)
+        profile = get_profiles_base_dir(tool_name) / "default" / ".env"
+        _write_profile(profile, active=True, api_url="https://x")
+        config = CustomConfig(tool_dir=tool_dir)
+        legacy_link = config.get_browser_data_dir() / "chromium-profile"
+        legacy_link.symlink_to(shared_profile, target_is_directory=True)
+        configs[tool_name] = config
+
+    class LifecycleBrowser(BrowserAutomation):
+        AUTH_CHECK_URL = "https://example.test/dashboard"
+
+    class SessionWritingService:
+        def __init__(self, session: str):
+            self.session = session
+            self.opened_profiles = []
+            self.profile = None
+
+        def browser_open(self, _url, **kwargs):
+            self.profile = kwargs["persistent_profile_dir"]
+            self.opened_profiles.append(self.profile)
+
+        def browser_close(self):
+            cookies = self.profile / "Default" / "Cookies"
+            cookies.parent.mkdir(parents=True, exist_ok=True)
+            cookies.write_text(self.session)
+
+    bricklink = LifecycleBrowser(configs["bricklink"])
+    brickowl = LifecycleBrowser(configs["brickowl"])
+    bricklink_service = SessionWritingService("bricklink-session")
+    brickowl_service = SessionWritingService("brickowl-session")
+    monkeypatch.setattr(bricklink, "_get_service", lambda: bricklink_service)
+    monkeypatch.setattr(brickowl, "_get_service", lambda: brickowl_service)
+
+    bricklink.get_page()
+    bricklink.close()
+    brickowl.get_page()
+    brickowl.close()
+
+    bricklink_profile = bricklink_service.opened_profiles[0]
+    brickowl_profile = brickowl_service.opened_profiles[0]
+    assert bricklink_profile != brickowl_profile
+    assert not bricklink_profile.is_symlink()
+    assert not brickowl_profile.is_symlink()
+    assert (bricklink_profile / "Default" / "Cookies").read_text() == "bricklink-session"
+    assert (brickowl_profile / "Default" / "Cookies").read_text() == "brickowl-session"
+    assert configs["bricklink"].has_saved_session() is True
+    assert shared_cookies.read_text() == "legacy-session"
+
+
+# ---------------------------------------------------------------------------
+# Migrating a legacy shared Chromium profile must never damage the legacy link
+# or copy a live profile: every refusal path is exercised here.
+# ---------------------------------------------------------------------------
+
+
+def _seed_legacy_shared_profile(tmp_path: Path) -> Path:
+    shared_profile = tmp_path / "legacy-shared-chromium-profile"
+    cookies = shared_profile / "Default" / "Cookies"
+    cookies.parent.mkdir(parents=True, exist_ok=True)
+    cookies.write_text("legacy-cookie")
+    return shared_profile
+
+
+def _config_with_legacy_link(
+    tmp_path: Path, shared_profile: Path, name: str = "exampletool"
+) -> tuple[CustomConfig, Path]:
+    """Return a config whose Chromium profile is a legacy symlink."""
+    tool_dir = _tool_dir(tmp_path, name)
+    profile = get_profiles_base_dir(name) / "default" / ".env"
+    _write_profile(profile, active=True, api_url="https://x")
+    config = CustomConfig(tool_dir=tool_dir)
+    legacy_link = config.get_browser_data_dir() / "chromium-profile"
+    legacy_link.symlink_to(shared_profile, target_is_directory=True)
+    return config, legacy_link
+
+
+def _chrome_process_row(pid: int, user_data_dir: Path):
+    from cli_tools_shared.browser.processes import ProcessCommand
+
+    return ProcessCommand(
+        pid=pid,
+        ppid=1,
+        stat="S",
+        command=(
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome "
+            f"--user-data-dir={user_data_dir} --no-first-run"
+        ),
+    )
+
+
+def _isolating_temp_dirs(config) -> list[Path]:
+    return list(config.get_browser_data_dir().glob(".chromium-profile-isolating-*"))
+
+
+@pytest.mark.parametrize("command_target", ["per_tool_link", "shared_target"])
+def test_legacy_profile_in_use_refuses_migration(
+    tmp_path, isolated_data_home, monkeypatch, command_target
+):
+    """A live browser on the shared profile blocks migration, however it was launched."""
+    from cli_tools_shared.browser import processes as browser_processes
+
+    shared_profile = _seed_legacy_shared_profile(tmp_path)
+    config, legacy_link = _config_with_legacy_link(tmp_path, shared_profile)
+    in_use_path = legacy_link if command_target == "per_tool_link" else shared_profile
+    monkeypatch.setattr(
+        browser_processes,
+        "list_process_commands",
+        lambda: [_chrome_process_row(424242, in_use_path)],
+    )
+
+    with pytest.raises(ConfigError, match=r"in use by Chrome process\(es\) 424242"):
+        config.get_persistent_profile_dir()
+
+    assert legacy_link.is_symlink()
+    assert (shared_profile / "Default" / "Cookies").read_text() == "legacy-cookie"
+    assert _isolating_temp_dirs(config) == []
+
+
+def test_legacy_profile_migration_ignores_unrelated_browser_profiles(
+    tmp_path, isolated_data_home, monkeypatch
+):
+    """A Chrome window on some other profile does not block this tool's migration."""
+    from cli_tools_shared.browser import processes as browser_processes
+
+    shared_profile = _seed_legacy_shared_profile(tmp_path)
+    config, legacy_link = _config_with_legacy_link(tmp_path, shared_profile)
+    monkeypatch.setattr(
+        browser_processes,
+        "list_process_commands",
+        lambda: [_chrome_process_row(424242, tmp_path / "unrelated-profile")],
+    )
+
+    profile = config.get_persistent_profile_dir()
+
+    assert profile == legacy_link
+    assert not profile.is_symlink()
+    assert (profile / "Default" / "Cookies").read_text() == "legacy-cookie"
+
+
+def test_legacy_profile_migration_refuses_without_process_table(
+    tmp_path, isolated_data_home, monkeypatch
+):
+    """Sandboxes that forbid process inspection cannot be migrated blindly."""
+    from cli_tools_shared.browser import processes as browser_processes
+    from cli_tools_shared.browser.processes import ProcessTableUnavailableError
+
+    shared_profile = _seed_legacy_shared_profile(tmp_path)
+    config, legacy_link = _config_with_legacy_link(tmp_path, shared_profile)
+
+    def _unavailable():
+        raise ProcessTableUnavailableError("sandbox blocks ps")
+
+    monkeypatch.setattr(browser_processes, "list_process_commands", _unavailable)
+
+    with pytest.raises(ConfigError, match="cannot be inspected"):
+        config.get_persistent_profile_dir()
+
+    assert legacy_link.is_symlink()
+
+
+def test_legacy_profile_dangling_link_raises_config_error(
+    tmp_path, isolated_data_home, monkeypatch
+):
+    """A symlink whose shared target is gone reports a clear config error."""
+    from cli_tools_shared.browser import processes as browser_processes
+
+    monkeypatch.setattr(browser_processes, "list_process_commands", lambda: [])
+    tool_dir = _tool_dir(tmp_path)
+    profile = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
+    _write_profile(profile, active=True, api_url="https://x")
+    config = CustomConfig(tool_dir=tool_dir)
+    legacy_link = config.get_browser_data_dir() / "chromium-profile"
+    legacy_link.symlink_to(tmp_path / "missing-shared-profile", target_is_directory=True)
+
+    with pytest.raises(ConfigError, match="Cannot isolate legacy Chromium profile link"):
+        config.get_persistent_profile_dir()
+
+    assert legacy_link.is_symlink()
+
+
+def test_legacy_profile_link_to_non_directory_raises_config_error(
+    tmp_path, isolated_data_home, monkeypatch
+):
+    """Only a shared Chromium DIRECTORY can be migrated."""
+    from cli_tools_shared.browser import processes as browser_processes
+
+    monkeypatch.setattr(browser_processes, "list_process_commands", lambda: [])
+    shared_file = tmp_path / "legacy-shared-chromium-profile"
+    shared_file.write_text("not a directory")
+    config, legacy_link = _config_with_legacy_link(tmp_path, shared_file)
+
+    with pytest.raises(ConfigError, match="does not target a directory"):
+        config.get_persistent_profile_dir()
+
+    assert legacy_link.is_symlink()
+
+
+def test_legacy_profile_link_survives_failed_migration_copy(
+    tmp_path, isolated_data_home, monkeypatch
+):
+    """A failed copy leaves the legacy link usable and the shared data untouched."""
+    from cli_tools_shared.browser import processes as browser_processes
+
+    shared_profile = _seed_legacy_shared_profile(tmp_path)
+    config, legacy_link = _config_with_legacy_link(tmp_path, shared_profile)
+    monkeypatch.setattr(browser_processes, "list_process_commands", lambda: [])
+
+    def _fail_copy(*args, **kwargs):
+        raise OSError("no space left on device")
+
+    monkeypatch.setattr(config_module.shutil, "copytree", _fail_copy)
+
+    with pytest.raises(ConfigError, match="Failed to isolate legacy Chromium profile"):
+        config.get_persistent_profile_dir()
+
+    assert legacy_link.is_symlink()
+    assert (shared_profile / "Default" / "Cookies").read_text() == "legacy-cookie"
+    assert _isolating_temp_dirs(config) == []
+
+
+def test_legacy_profile_migration_reports_config_error_when_scratch_dir_unavailable(
+    tmp_path, isolated_data_home, monkeypatch
+):
+    """An unwritable browser-data dir is reported as a config error, not a traceback."""
+    from cli_tools_shared.browser import processes as browser_processes
+
+    shared_profile = _seed_legacy_shared_profile(tmp_path)
+    config, legacy_link = _config_with_legacy_link(tmp_path, shared_profile)
+    monkeypatch.setattr(browser_processes, "list_process_commands", lambda: [])
+    browser_data_dir = config.get_browser_data_dir()
+    browser_data_dir.chmod(0o500)
+    try:
+        with pytest.raises(ConfigError, match="Failed to isolate legacy Chromium profile"):
+            config.get_persistent_profile_dir()
+    finally:
+        browser_data_dir.chmod(0o700)
+
+    assert legacy_link.is_symlink()
+
+
+def test_concurrent_migration_by_sibling_process_is_not_an_error(
+    tmp_path, isolated_data_home, monkeypatch
+):
+    """Losing the migration race to another invocation reuses its private profile."""
+    from cli_tools_shared.browser import processes as browser_processes
+
+    shared_profile = _seed_legacy_shared_profile(tmp_path)
+    config, legacy_link = _config_with_legacy_link(tmp_path, shared_profile)
+    monkeypatch.setattr(browser_processes, "list_process_commands", lambda: [])
+
+    def _race(*args, **kwargs):
+        legacy_link.unlink()
+        (legacy_link / "Default").mkdir(parents=True)
+        (legacy_link / "Default" / "Cookies").write_text("sibling-cookie")
+        raise OSError("profile already migrated by a sibling invocation")
+
+    monkeypatch.setattr(config_module.shutil, "copytree", _race)
+
+    profile = config.get_persistent_profile_dir()
+
+    assert profile == legacy_link
+    assert not profile.is_symlink()
+    assert (profile / "Default" / "Cookies").read_text() == "sibling-cookie"
+    assert _isolating_temp_dirs(config) == []
+
+
+def test_migrated_profile_is_not_reisolated_on_next_access(
+    tmp_path, isolated_data_home, monkeypatch
+):
+    """Once private, the profile is returned without further copies."""
+    from cli_tools_shared.browser import processes as browser_processes
+
+    shared_profile = _seed_legacy_shared_profile(tmp_path)
+    config, legacy_link = _config_with_legacy_link(tmp_path, shared_profile)
+    monkeypatch.setattr(browser_processes, "list_process_commands", lambda: [])
+    first = config.get_persistent_profile_dir()
+
+    copies = []
+    monkeypatch.setattr(
+        config_module.shutil, "copytree", lambda *args, **kwargs: copies.append(args)
+    )
+    second = config.get_persistent_profile_dir()
+
+    assert first == second == legacy_link
+    assert copies == []
 
 
 def test_has_saved_session_requires_chromium_profile_default_cookies(tmp_path, isolated_data_home):

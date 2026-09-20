@@ -3,6 +3,26 @@
 ## Unreleased
 
 ### Fixes
+- Legacy shared Chromium profiles are now migrated per tool, so one CLI's
+  browser login can no longer invalidate another CLI's live session. Where a
+  tool's `browser-data/chromium-profile` was a symlink to a shared
+  user-data-dir (the layout that made `CLI_TOOLS_ISOLATE_CHROME_PROFILE=1` a
+  no-op on Adam's Mac), `BaseConfig.get_persistent_profile_dir()` replaces the
+  link with a private copy of the profile — cookies preserved, Chrome lock
+  files (`SingletonLock`/`SingletonCookie`/`SingletonSocket`/
+  `DevToolsActivePort`) dropped — so `bricklink messages list` keeps working
+  after `brickowl`/`brickfreedom` open and close the profile they used to
+  share. Migration refuses with a PID-naming `ConfigError` while a browser
+  still holds the shared profile (matched on the per-tool link path and on the
+  shared target path), when the process table cannot be inspected, and when the
+  link is dangling or points at a non-directory; a failed copy leaves the
+  legacy link and the shared data untouched, and losing the migration race to a
+  concurrent invocation reuses the winner's private profile. Tests:
+  `tests/test_config_profile_resolution.py`, `tests/test_auth.py`.
+- Brickfreedom's browser auth error no longer tells users to run
+  `brickfreedom auth login -c browser_session`. `brickfreedom` declares a single
+  credential type, so its `auth login` exposes no `--credential-type`/`-c`
+  option. Tests: `brickfreedom/tests/test_profile_resolution.py`.
 - `press()` no longer double-types every printable character.
   `browser_harness.helpers.press_key` dispatched `text` on BOTH the `keyDown`
   event and a separate `char` event; Chrome inserts the character once for each,
