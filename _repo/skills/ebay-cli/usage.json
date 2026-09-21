@@ -1,8 +1,8 @@
 {
   "tool": "ebay",
   "description": "eBay CLI — seller tools, marketplace categories, and account management",
-  "discovered_at": "2026-09-09T20:50:18Z",
-  "total_commands": 76,
+  "discovered_at": "2026-09-21T23:11:14Z",
+  "total_commands": 78,
   "global_options": [
     {
       "name": "--version",
@@ -947,6 +947,12 @@
                   "help": "Comma-separated list of image URLs (HTTPS)"
                 },
                 {
+                  "name": "--video-id",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Media API video ID to attach to the item"
+                },
+                {
                   "name": "--aspects",
                   "type": "TEXT",
                   "required": false,
@@ -1086,7 +1092,7 @@
               ]
             },
             "update": {
-              "help": "Update an existing inventory item. Fetches the current item and merges with provided updates.",
+              "help": "Update an existing inventory item. Fetches the current item and merges with provided updates. --video-id attaches an already-uploaded Media API video to this SKU without re-uploading it; create videos with `ebay seller videos create`.",
               "arguments": [
                 {
                   "name": "sku",
@@ -1128,6 +1134,12 @@
                   "type": "TEXT",
                   "required": false,
                   "help": "New comma-separated list of image URLs"
+                },
+                {
+                  "name": "--video-id",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Media API video ID to attach to this SKU (replaces any existing video)"
                 },
                 {
                   "name": "--aspects",
@@ -1239,10 +1251,11 @@
           ],
           "commands": {
             "create": {
-              "help": "Create and publish an active Inventory API listing. Draft creation uses `ebay seller listings drafts create`.",
+              "help": "Create and publish an active Inventory API listing. Draft creation uses `ebay seller listings drafts create`. A video attached with --video or --video-folder is uploaded to the Media API and referenced from the inventory item's videoIds, which is how a video reaches a listing. eBay videos expire 30 days after upload and are only viewable in eBay's iOS and Android apps.",
               "examples": [
                 "ebay seller listings create --sku SKU123 --template vintage-camera --publish --price 149.99",
-                "ebay seller listings create --sku SKU123 --title \"Item\" --price 99 --category 175673 --publish"
+                "ebay seller listings create --sku SKU123 --title \"Item\" --price 99 --category 175673 --publish",
+                "ebay seller listings create --sku SKU123 --template lego-bulk-auction --video ./clip.mov --publish --price 149.99"
               ],
               "arguments": [],
               "options": [
@@ -1373,6 +1386,18 @@
                   "type": "TEXT",
                   "required": false,
                   "help": "macOS Photos app album name"
+                },
+                {
+                  "name": "--video",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Local video file to attach (.mov, .mp4, .m4v)"
+                },
+                {
+                  "name": "--video-folder",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Folder to scan for the first video file"
                 },
                 {
                   "name": "--aspects",
@@ -1549,7 +1574,7 @@
                     },
                     {
                       "name": "--format",
-                      "type": "AUCTION|FIXEDPRICE",
+                      "type": "Auction|FixedPrice",
                       "required": false,
                       "help": "Draft format",
                       "short": "-f"
@@ -3844,6 +3869,96 @@
                 }
               ],
               "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        },
+        "videos": {
+          "help": "Manage eBay listing videos",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
+          "commands": {
+            "create": {
+              "help": "Create a video resource and upload its bytes to eBay. Files that are not already H.264 in an MP4/MOV container are transcoded to a temporary H.264 MP4 first; the original file is never modified. The byte size sent to eBay is the size of the file that is actually uploaded. Videos expire 30 days after upload, and shoppers can only view them in eBay's iOS and Android apps.",
+              "examples": [
+                "ebay seller videos create ./clip.mov",
+                "ebay seller videos create ./clip.mov --title \"Bulk LEGO lot walkthrough\"",
+                "ebay seller videos create ./clip.mov --description \"Close-up of the minifigures\" --table"
+              ],
+              "arguments": [
+                {
+                  "name": "path",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Local video file to upload (.m4v, .mov, .mp4)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--title",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Video title (default: derived from the file name)"
+                },
+                {
+                  "name": "--description",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Optional video description",
+                  "short": "-d"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display result as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get video metadata and processing status from eBay. Status moves PENDING_UPLOAD -> PROCESSING -> LIVE; failures appear as PROCESSING_FAILED or BLOCKED with a statusMessage explaining why.",
+              "examples": [
+                "ebay seller videos get 1a2b3c4d",
+                "ebay seller videos get 1a2b3c4d --table"
+              ],
+              "arguments": [
+                {
+                  "name": "video_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The eBay video ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
                 {
                   "name": "--profile",
                   "type": "TEXT",

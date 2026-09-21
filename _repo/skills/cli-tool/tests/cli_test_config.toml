@@ -29,6 +29,17 @@ no_auth_clis = [
     "powerpoint-slide-recorder",
     "harmony",
     "weather",
+    # Read-only local state readers: `auth status` reports whether the local
+    # store is readable, and login/logout/profile-write commands are
+    # deliberately not exposed.
+    "hermes-sessions",
+]
+
+# Local readers that expose only `auth status` as a conventional readiness
+# surface. They own no credentials and deliberately must not mount
+# create_auth_app(), because doing so would add profile/config mutation paths.
+read_only_status_auth_clis = [
+    "hermes-sessions",
 ]
 
 # Orchestration/framework CLIs that don't follow standard resource patterns
@@ -95,7 +106,9 @@ max_nested_depth = 4
 # listings without a query, and `listings search` is the documented ID-discovery
 # command. `time-away` is a single store setting (get/enable/disable) with no ID
 # space at all. Neither has anything a `list` command could return.
-excluded_from_list_required = ["listings", "time-away"]
+# `videos` is the Media API video resource: eBay exposes createVideo, uploadVideo,
+# and getVideo only, so there is no endpoint that could back a `videos list`.
+excluded_from_list_required = ["listings", "time-away", "videos"]
 
 [cli_specific.vinted]
 # `listings` is marketplace-wide search: Vinted's catalog endpoint answers a
@@ -110,16 +123,6 @@ list_commands = ["listings search"]
 [cli_specific.vinted.param_fixtures]
 "listings search" = { "_pos1" = "search_query" }
 "listings get" = { "_pos1" = "item_id" }
-
-[cli_specific.wordpress]
-# Profiles is a utility command from cli_tools_shared, not a resource list command
-# Exclude it from list command tests that require --limit/--filter/--properties
-list_commands = [
-    "posts list",
-    "media list",
-    "categories list",
-    "tags list",
-]
 
 [cli_specific.buttondown]
 # Automations and feeds are feature-gated by the live Buttondown account.
@@ -136,18 +139,10 @@ list_commands = [
 ]
 
 [cli_specific.ata-blog]
-# `shoutouts site` is the one site-wide shoutout slot: `get` reads it and `set`
-# writes it. There is no ID space, so a `list` command would have nothing to
-# enumerate.
-excluded_from_list_required = ["site"]
 list_commands = [
     "notion-page list",
-    "wordpress-post list",
-    "wordpress-page list",
-    "media list",
     "categories list",
     "tags list",
-    "schema list",
 ]
 
 [cli_specific.gemini]
@@ -311,11 +306,6 @@ max_nested_depth = 4
 "messages list" = { "_pos1" = "channel_id" }
 "messages threads" = { "_pos1" = "channel_id" }
 
-# AtaBlog fixtures: shoutouts commands require post_id positional arg
-[cli_specific.ata-blog.param_fixtures]
-"shoutouts list" = { "_pos1" = "post_id" }
-"shoutouts get" = { "_pos1" = "post_id", "--position" = "shoutout_position" }
-
 # Globiflow: `flows list` walks every app with flows via one full-page
 # navigation each (--limit is client-side), measured live at ~45s.
 [cli_specific.globiflow]
@@ -356,3 +346,9 @@ list_commands = [
 
 [cli_specific.depop.param_fixtures]
 "search" = { "_pos1" = "query" }
+
+[cli_specific.garrul]
+# Garrul renders no id on an audit row (and only an 8-character prefix of most
+# target ids), so there is no record a `get` could address. `audit list` returns
+# every field the page exposes.
+excluded_from_get_required = ["audit"]
