@@ -112,6 +112,33 @@ def test_service_router_requires_wrapper_contract_before_raw_syntax():
     assert "prove the wrapper command shape first" in text_words
 
 
+def test_service_router_resolves_bare_name_project_scoped_service_skill():
+    """A project-scoped service CLI is registered under its bare tool name.
+
+    `coursecraft` is registered in `_repo/docs/cli_tools.md` with
+    `<cli-tools-root>/coursecraft` linked into the CourseCraft project, and its
+    repo-owned service skill is `_repo/skills/coursecraft` with an adjacent
+    `usage.json`. A router that resolves only `<tool>-cli` demands a directory
+    the repo does not have, so a `coursecraft` service operation dead-ends on
+    `_repo/skills/coursecraft-cli/SKILL.md` and reports it missing.
+    """
+    text = _read("workflows/skill-router.md")
+    skills_root = SKILL_ROOT.parent
+
+    assert "<service-skill-dir>" in text
+    assert "`<normalized-name>-cli`" in text
+    assert "for a project-scoped service CLI that cli-tools" in text
+    assert "registers under the bare tool name" in text
+    assert (
+        "Resolve exactly to `<cli-tools-root>/_repo/skills/<normalized-name>/SKILL.md`"
+        not in text
+    )
+
+    coursecraft_skill = skills_root / "coursecraft"
+    assert (coursecraft_skill / "SKILL.md").is_file()
+    assert (coursecraft_skill / "usage.json").is_file()
+
+
 def test_notion_pages_get_out_file_is_not_json_stdout():
     notion_skill = (SKILL_ROOT.parent / "notion-cli" / "SKILL.md").read_text()
     notion_words = _words(notion_skill)

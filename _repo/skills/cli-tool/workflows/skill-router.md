@@ -4,9 +4,14 @@ Route an existing cli-tools service operation to the repo-owned service skill th
 
 <skill_locations>
 - Router skill: `<cli-tools-root>/_repo/skills/cli-tool/SKILL.md`
-- Service skills: `<cli-tools-root>/_repo/skills/<tool>-cli/SKILL.md`
-- Command maps: `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json`
+- Service skills: `<cli-tools-root>/_repo/skills/<service-skill-dir>/SKILL.md`
+- Command maps: `<cli-tools-root>/_repo/skills/<service-skill-dir>/usage.json`
 - Lifecycle scripts: `<cli-tools-root>/_repo/skills/cli-tool/scripts/`
+
+`<service-skill-dir>` is the repo-owned directory that exists for the requested
+tool: `<tool>-cli` for a CLI-tools-owned tool, or the bare registered tool name
+for a project-scoped service CLI. Resolve the directory that exists; never
+require a directory the repo does not register. See Step 3.
 </skill_locations>
 
 <process>
@@ -30,12 +35,23 @@ If the request is lifecycle work, return to `SKILL.md` routing and use the lifec
 
 ## Step 3: Resolve The Service Skill
 
+Resolve the service skill from the skill directories that exist under
+`<cli-tools-root>/_repo/skills`. The repo owns the directory name; the router
+matches it. A service skill directory is a directory under `_repo/skills` that
+holds both `SKILL.md` and an adjacent `usage.json`; a directory without
+`usage.json` is not a service skill.
+
 From the user's requested CLI command or service name:
 
 1. Lowercase the tool name.
 2. Convert spaces and underscores to hyphens.
-3. Append `-cli` if the name does not already end in `-cli`.
-4. Resolve exactly to `<cli-tools-root>/_repo/skills/<normalized-name>/SKILL.md`.
+3. Match the normalized name against the existing service skill directories, in
+   this order, and stop at the first match:
+   - `<normalized-name>` when it already ends in `-cli`
+   - `<normalized-name>-cli`
+   - `<normalized-name>`, for a project-scoped service CLI that cli-tools
+     registers under the bare tool name
+4. Resolve to `<cli-tools-root>/_repo/skills/<matched-dir>/SKILL.md`.
 
 For example:
 
@@ -45,21 +61,36 @@ For example:
 | `dev_to` | `<cli-tools-root>/_repo/skills/dev-to-cli/SKILL.md` |
 | `microsoft 365` | `<cli-tools-root>/_repo/skills/microsoft-365-cli/SKILL.md` |
 | `n8n node` | `<cli-tools-root>/_repo/skills/n8n-node-cli/SKILL.md` |
+| `coursecraft` | `<cli-tools-root>/_repo/skills/coursecraft/SKILL.md` |
 
-If the exact path does not exist, list available service skills and ask one targeted question for the intended tool. Do not guess from a nearby name.
+`coursecraft` is the worked project-scoped case. cli-tools registers the tool as
+`coursecraft`: `<cli-tools-root>/coursecraft` links to
+`Agents/CourseCraft/tools/coursecraft`, `_repo/docs/cli_tools.md` carries its
+row, and its repo-owned service skill is
+`<cli-tools-root>/_repo/skills/coursecraft/SKILL.md` with the adjacent
+`usage.json`. Do not require `_repo/skills/coursecraft-cli`, and do not stop the
+operation because that directory is absent. An absent `<tool>-cli` directory is
+a resolution failure only when no existing directory matches either form.
+
+List the service skill directories that exist before matching:
 
 ```bash
-find /Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills \
-  -maxdepth 1 -mindepth 1 -type d -name '*-cli' -exec basename {} \; | sort
+for dir in /Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills/*/; do
+  if [ -f "${dir}SKILL.md" ] && [ -f "${dir}usage.json" ]; then basename "$dir"; fi
+done | sort
 ```
+
+If no existing directory matches the requested tool, list the available service
+skills and ask one targeted question for the intended tool. Do not guess from a
+nearby name.
 
 ## Step 4: Load The Selected Skill And Command Map
 
 Read both files before running any command:
 
 ```bash
-sed -n '1,220p' /Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills/<tool>-cli/SKILL.md
-sed -n '1,260p' /Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills/<tool>-cli/usage.json
+sed -n '1,220p' /Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills/<service-skill-dir>/SKILL.md
+sed -n '1,260p' /Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills/<service-skill-dir>/usage.json
 ```
 
 Follow the selected skill's principles. Use `usage.json` as the command syntax contract. Do not infer flags, argument order, output formats, or auth behavior from memory.
