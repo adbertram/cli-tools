@@ -9,9 +9,11 @@ Use it when you need scriptable, JSON-first access from agents, automation, or t
 ## Installation
 
 ```bash
-uv tool install -e <cli-tools-root>/cryptocom --force --refresh
+<cli-tools-root>/_repo/skills/cli-tool/scripts/install-cli-tool.sh --force-refresh cryptocom
 ```
 
+The installer pins the tool venv to the system `python3` and installs the
+repo-local editable `cli-tools-shared` dependency before creating the launcher.
 The `cryptocom` command is installed into `~/.local/bin`.
 
 ## Quick Start
@@ -227,14 +229,28 @@ cryptocom trades list BTCUSD-PERP --limit 5 --properties "p,q,s,t"
 
 ## Configuration
 
-Credentials are stored in profile-aware `.env` files.
+Non-authentication configuration is stored in `~/.local/share/cli-tools/cryptocom/.env`. CLI-managed runtime auth state is stored in the active profile at `~/.local/share/cli-tools/cryptocom/authentication_profiles/<profile>/.env`. The source repo only carries `.env.example`.
+
+Reusable CLI credentials that agents or scripts need to store/retrieve are governed by the user-level `cli-tool` skill's `references/secrets.md`.
+
+Do not put reusable credentials in any `.env` file. Store and retrieve them through `<cli-tools-root>/_repo/_secret-manager/secrets.sh`. `.env` files are limited to non-secret config and CLI-managed runtime auth state.
+
+Root config variables:
+
+```bash
+# API base URL (optional - defaults to production)
+BASE_URL=https://api.crypto.com/exchange/v1
+```
+
+Authentication profile variables (CLI-managed runtime auth state):
 
 ```bash
 ACTIVE=true
-API_KEY=your_exchange_api_key
-API_SECRET=your_exchange_api_secret
-BASE_URL=https://api.crypto.com/exchange/v1
+API_KEY=secret://cryptocom-api-key
+API_SECRET=secret://cryptocom-api-secret
 ```
+
+`API_KEY` and `API_SECRET` are sensitive credential fields. `auth login` writes the entered values to the CLI-tools secret manager and leaves only those `secret://` references in the profile `.env`; a plain-text value in either field is rejected when the profile loads. A named profile uses `secret://cryptocom-<profile>-api-key` and `secret://cryptocom-<profile>-api-secret`. To rotate a stored credential, run `cryptocom auth login --force` rather than editing the profile.
 
 Sandbox profile example:
 
@@ -273,8 +289,9 @@ Models preserve extra API response fields so JSON output does not discard fields
 
 ## Requirements
 
-- Python 3.9+
+- Python 3.11+
+- `typer`
+- `python-dotenv`
 - `requests`
 - `pydantic`
-- `typer`
 - `cli-tools-shared`
