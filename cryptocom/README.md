@@ -251,7 +251,7 @@ API_KEY=secret://cryptocom-api-key
 API_SECRET=secret://cryptocom-api-secret
 ```
 
-`API_KEY` and `API_SECRET` are sensitive credential fields. `auth login` writes the entered values to the CLI-tools secret manager and leaves only those `secret://` references in the profile `.env`; a plain-text value in either field is rejected when the profile loads. A named profile uses `secret://cryptocom-<profile>-api-key` and `secret://cryptocom-<profile>-api-secret`. To rotate a stored credential, run `cryptocom auth login --force` rather than editing the profile.
+`API_KEY` and `API_SECRET` are sensitive credential fields. `auth login` writes the entered values to the CLI-tools secret manager and leaves only those `secret://` references in the profile `.env`; a plain-text value in either field is rejected when the profile loads. A named profile uses `secret://cryptocom-<profile>-api-key` and `secret://cryptocom-<profile>-api-secret`. To rotate a stored credential, run `<cli-tools-root>/_repo/_secret-manager/secrets.sh set cryptocom-api-key` (or `... set cryptocom-<profile>-api-key` for a named profile). `cryptocom auth login --force` clears only ephemeral auth state and cannot replace an already-stored secret, so it does not rotate a credential.
 
 Sandbox profile example:
 
@@ -260,7 +260,7 @@ cryptocom auth profiles create sandbox
 cryptocom auth profiles select sandbox
 ```
 
-Then set `BASE_URL=https://uat-api.3ona.co/exchange/v1` in that profile.
+`BASE_URL` is a root config variable, not a profile setting. Point the CLI at the UAT sandbox by setting `BASE_URL=https://uat-api.3ona.co/exchange/v1` in `~/.local/share/cli-tools/cryptocom/.env`, and restore `https://api.crypto.com/exchange/v1` before trading against production. A profile `.env` that carries `BASE_URL` is rejected when the profile loads.
 
 ## Exit Codes
 

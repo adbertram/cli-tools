@@ -11,10 +11,18 @@ actually enforce:
   dependency declared in ``pyproject.toml``, and
 * the order that installer is documented to follow is the order it actually
   performs: install the tool (creating the venv and launcher) before the shared
-  overlay.
+  overlay,
+* ``BASE_URL`` is root config rather than profile state: the shared field
+  splitter routes it to the tool root ``.env`` because the tool does not declare
+  it as an authentication field, and a profile ``.env`` carrying it is rejected
+  at load, and
+* credential rotation goes through the CLI-tools secret manager:
+  ``auth login --force`` clears only ephemeral auth state.
 """
+import ast
 import re
 import tomllib
+import types
 from pathlib import Path
 
 TOOL_ROOT = Path(__file__).resolve().parents[1]
@@ -156,4 +164,182 @@ def test_installation_documents_installer_step_order():
     assert DOCUMENTED_ORDER in installation, (
         "Installation must state that the repo-local editable cli-tools-shared "
         "overlay runs after the tool install"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Configuration scoping: BASE_URL is root config, credentials are profile state
+# ---------------------------------------------------------------------------
+
+CONFIG_PATH = TOOL_ROOT / "cryptocom_cli" / "config.py"
+SHARED_ROOT = TOOL_ROOT.parent / "_repo/cli-tools-shared/cli_tools_shared"
+AUTH_COMMANDS_PATH = SHARED_ROOT / "auth_commands.py"
+ENV_EXAMPLE_PATH = TOOL_ROOT / ".env.example"
+PRODUCTION_BASE_URL = "https://api.crypto.com/exchange/v1"
+UAT_BASE_URL = "https://uat-api.3ona.co/exchange/v1"
+
+# The sentence the review found wrong: `auth login --force` cannot rotate a
+# stored secret, so it must not be presented as the rotation path.
+ROTATION_WRONG = (
+    "To rotate a stored credential, run `cryptocom auth login --force` "
+    "rather than editing the profile."
+)
+ROTATION_RIGHT = (
+    "`cryptocom auth login --force` clears only ephemeral auth state and "
+    "cannot replace an already-stored secret"
+)
+# The sentence the review found wrong: BASE_URL is root config, and a profile
+# `.env` carrying it fails profile validation.
+SANDBOX_WRONG = f"Then set `BASE_URL={UAT_BASE_URL}` in that profile."
+SANDBOX_RIGHT = "`BASE_URL` is a root config variable, not a profile setting"
+
+
+def declared_fields():
+    """Return the field names ``config.py`` declares, read with ``ast``.
+
+    The declarations are read from the source of the tool under test rather
+    than from an installed copy, so the contract tracks the config the loader
+    actually uses.
+    """
+    declared = {
+        "CUSTOM_REQUIRED_FIELDS": [],
+        "CUSTOM_ALL_FIELDS": [],
+        "ROOT_CONFIG_FIELDS": [],
+    }
+    tree = ast.parse(CONFIG_PATH.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        if not isinstance(node.value, (ast.List, ast.Tuple)):
+            continue
+        for target in node.targets:
+            if isinstance(target, ast.Name) and target.id in declared:
+                declared[target.id] = [
+                    element.value
+                    for element in node.value.elts
+                    if isinstance(element, ast.Constant)
+                    and isinstance(element.value, str)
+                ]
+    return declared
+
+
+def env_example_split():
+    """Split ``.env.example`` the way the profile bootstrap splits it."""
+    from cli_tools_shared.config import (
+        _read_env_values,
+        _split_env_values,
+        root_config_field_names_for,
+    )
+
+    declared = declared_fields()
+    root_config_fields = root_config_field_names_for(
+        types.SimpleNamespace(ROOT_CONFIG_FIELDS=tuple(declared["ROOT_CONFIG_FIELDS"]))
+    )
+    auth_fields = set(declared["CUSTOM_ALL_FIELDS"]) | set(
+        declared["CUSTOM_REQUIRED_FIELDS"]
+    )
+    auth_values, config_values = _split_env_values(
+        _read_env_values(ENV_EXAMPLE_PATH),
+        auth_fields,
+        root_config_fields,
+    )
+    return root_config_fields, auth_fields, auth_values, config_values
+
+
+def test_base_url_is_root_config_and_credentials_are_profile_state():
+    """``BASE_URL`` splits into the root config ``.env``, never a profile."""
+    root_config_fields, auth_fields, auth_values, config_values = env_example_split()
+
+    assert "BASE_URL" in root_config_fields, (
+        "the shared root-config defaults must keep BASE_URL"
+    )
+    assert "BASE_URL" not in auth_fields, (
+        "config.py declares BASE_URL as an authentication field, so the loader "
+        "rejects it in the root config .env, the profile bootstrap writes it "
+        "into the profile it is mounted on, and the profile is then refused at "
+        "load with 'Root config .env contains authentication fields'"
+    )
+    assert config_values == {"BASE_URL": PRODUCTION_BASE_URL}, (
+        f"the split sent {sorted(config_values)} to the root config .env; "
+        "BASE_URL must be the root config value"
+    )
+    assert sorted(auth_values) == ["ACTIVE", "API_KEY", "API_SECRET"], (
+        f"the split sent {sorted(auth_values)} to the profile .env; only "
+        "ACTIVE and the credential fields belong there"
+    )
+
+
+def test_configuration_documents_base_url_in_the_root_config_block():
+    """Each Configuration block lists only fields the loader accepts there."""
+    root_config_fields, auth_fields, _auth_values, _config_values = env_example_split()
+    configuration = section("Configuration")
+    root_block, _, profile_block = configuration.partition(
+        "Authentication profile variables"
+    )
+
+    assert "BASE_URL=" in root_block, (
+        "BASE_URL is root config for this tool, so the root config block must "
+        "document it"
+    )
+    documented_root = re.findall(r"^([A-Z_][A-Z0-9_]*)=", root_block, re.MULTILINE)
+    for name in documented_root:
+        assert name in root_config_fields, (
+            f"Configuration documents {name} as root config, but the loader "
+            "does not accept it in the root config .env"
+        )
+        assert name not in auth_fields, (
+            f"Configuration documents {name} as root config, but this tool "
+            "declares it as an authentication field"
+        )
+
+    documented_profile = re.findall(r"^([A-Z_][A-Z0-9_]*)=", profile_block, re.MULTILINE)
+    for name in documented_profile:
+        assert name == "ACTIVE" or name in auth_fields, (
+            f"Configuration documents {name} in the profile block, but the "
+            "loader rejects non-authentication fields in a profile .env"
+        )
+
+    assert SANDBOX_WRONG not in README, (
+        "Configuration tells the reader to set BASE_URL in a profile .env, "
+        "which profile validation rejects"
+    )
+    assert SANDBOX_RIGHT in " ".join(configuration.split()), (
+        "Configuration must state that BASE_URL is a root config variable"
+    )
+
+
+def test_configuration_routes_credential_rotation_to_the_secret_manager():
+    """``auth login --force`` clears ephemeral state and cannot rotate a secret.
+
+    The shared ``--force`` branch clears exactly ``combined_ephemeral_fields``,
+    this tool declares no ephemeral fields, and ``_prompt_and_save`` skips a
+    field that already holds a value.
+    """
+    shared = AUTH_COMMANDS_PATH.read_text(encoding="utf-8")
+    force_branch = shared.split("if force:", 1)[1].split("\n\n", 1)[0]
+    assert "_clear_login_state" in force_branch, (
+        "the shared --force branch no longer clears login state; update this "
+        "contract with the rotation path the CLI actually takes"
+    )
+    clear_body = shared.split("def _clear_login_state", 1)[1].split("\ndef ", 1)[0]
+    assert "combined_ephemeral_fields" in clear_body, (
+        "the shared --force branch no longer clears ephemeral fields only"
+    )
+    assert "CUSTOM_EPHEMERAL_FIELDS" not in CONFIG_PATH.read_text(encoding="utf-8"), (
+        "this tool declares no ephemeral auth fields, so --force clears nothing "
+        "and cannot rotate a stored secret"
+    )
+
+    configuration = " ".join(section("Configuration").split())
+    assert ROTATION_WRONG not in README, (
+        "Configuration still presents `cryptocom auth login --force` as the "
+        "credential rotation path"
+    )
+    assert ROTATION_RIGHT in configuration, (
+        "Configuration must state that `auth login --force` cannot replace an "
+        "already-stored secret"
+    )
+    assert "secrets.sh set cryptocom-api-key" in configuration, (
+        "Configuration must name the secret-manager command that rotates the "
+        "stored credential"
     )
