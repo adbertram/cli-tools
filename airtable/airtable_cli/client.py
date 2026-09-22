@@ -53,6 +53,25 @@ UNSUPPORTED_FIELD_CREATE_TYPE_MESSAGES = {
     "lookup": LOOKUP_CREATE_TYPE_MESSAGE,
 }
 
+# Airtable's create-field schema rejects a checkbox without complete options:
+# omitting options fails with "options is missing", and an empty object fails
+# with "options.icon is required" / "options.color is required". Both values are
+# Airtable's own defaults for the type, so the CLI fills them in instead of
+# forwarding a payload the API always refuses.
+CHECKBOX_FIELD_TYPE = "checkbox"
+CHECKBOX_DEFAULT_OPTIONS = {"icon": "check", "color": "greenBright"}
+
+
+def checkbox_create_options(options: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Return complete Airtable checkbox options, filling in missing defaults.
+
+    Airtable requires both ``icon`` and ``color`` for a checkbox, so a bare
+    create or a partial payload is completed from ``CHECKBOX_DEFAULT_OPTIONS``
+    (Airtable's own defaults for the type). Caller-supplied keys win.
+    """
+    return {**CHECKBOX_DEFAULT_OPTIONS, **(options or {})}
+
+
 # Airtable exposes no delete-field endpoint (DELETE /v0/meta/bases/{base}/
 # tables/{table}/fields/{id} returns 404), and PATCH on a field accepts only
 # name and description, so a lookup's recordLinkFieldId/fieldIdInLinkedTable
@@ -511,6 +530,8 @@ class AirtableClient:
         """Create a field in an Airtable table."""
         if field_type in UNSUPPORTED_FIELD_CREATE_TYPE_MESSAGES:
             raise ClientError(UNSUPPORTED_FIELD_CREATE_TYPE_MESSAGES[field_type])
+        if field_type == CHECKBOX_FIELD_TYPE:
+            options = checkbox_create_options(options)
 
         resolved_table_id = self._resolve_table_id(base_id, table_id)
         endpoint = f"/meta/bases/{base_id}/tables/{resolved_table_id}/fields"

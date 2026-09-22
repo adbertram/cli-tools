@@ -1,6 +1,8 @@
 """Tests for fields create preflight guards."""
 
+import copy
 import json
+from pathlib import Path
 
 import pytest
 import requests
@@ -8,9 +10,11 @@ from typer.testing import CliRunner
 
 from airtable_cli.client import (
     AirtableClient,
+    CHECKBOX_DEFAULT_OPTIONS,
     FIELD_CREATE_PERMANENCE_NOTE,
     LOOKUP_CREATE_TYPE_MESSAGE,
     UNSUPPORTED_FIELD_CREATE_TYPE_MESSAGES,
+    checkbox_create_options,
 )
 from airtable_cli.commands import fields
 from cli_tools_shared.exceptions import ClientError
@@ -248,3 +252,131 @@ def test_lookup_create_type_message_names_the_working_type():
 def test_field_create_permanence_note_states_the_api_facts():
     assert "no delete-field API endpoint" in FIELD_CREATE_PERMANENCE_NOTE
     assert "name and description" in FIELD_CREATE_PERMANENCE_NOTE
+
+
+CHECKBOX_DEFAULTS = {"icon": "check", "color": "greenBright"}
+
+
+def test_checkbox_create_options_fills_airtable_defaults():
+    """A checkbox create is completed with Airtable's own icon and color."""
+    assert CHECKBOX_DEFAULT_OPTIONS == CHECKBOX_DEFAULTS
+    assert checkbox_create_options(None) == CHECKBOX_DEFAULTS
+    assert checkbox_create_options({}) == CHECKBOX_DEFAULTS
+    assert checkbox_create_options({"icon": "star"}) == {"icon": "star", "color": "greenBright"}
+    assert checkbox_create_options({"color": "red"}) == {"icon": "check", "color": "red"}
+    assert checkbox_create_options({"icon": "star", "color": "red"}) == {"icon": "star", "color": "red"}
+
+
+def test_checkbox_create_options_does_not_mutate_caller_payload():
+    caller_options = {"icon": "star"}
+
+    completed = checkbox_create_options(caller_options)
+
+    assert caller_options == {"icon": "star"}
+    assert CHECKBOX_DEFAULT_OPTIONS == CHECKBOX_DEFAULTS
+    assert completed is not caller_options
+
+
+@pytest.mark.parametrize(
+    "options",
+    [None, {}, {"icon": "star"}, {"color": "red"}],
+)
+def test_create_field_never_sends_an_incomplete_checkbox(monkeypatch, options):
+    """Options absent, empty, or partial all reach the API with both keys."""
+    posts = []
+
+    def fake_request(**kwargs):
+        if kwargs["method"] == "GET":
+            return _Response({"tables": [{"id": "tblDemos", "name": "Demos"}]})
+        posts.append(kwargs["json"])
+        return _Response({"id": "fldDone", "name": "Done", "type": "checkbox"})
+
+    monkeypatch.setattr(requests, "request", fake_request)
+
+    _client().create_field(
+        base_id="appBase",
+        table_id="Demos",
+        name="Done",
+        field_type="checkbox",
+        options=copy.deepcopy(options),
+    )
+
+    assert len(posts) == 1
+    sent = posts[0]
+    assert sent["type"] == "checkbox"
+    assert set(sent["options"]) == {"icon", "color"}
+    assert all(sent["options"][key] for key in ("icon", "color"))
+    assert sent["options"] == {**CHECKBOX_DEFAULTS, **(options or {})}
+
+
+@pytest.mark.parametrize("options", [None, {}, {"icon": "star"}])
+def test_fields_create_command_creates_a_bare_checkbox(monkeypatch, options):
+    """The report's failing invocation now creates the field."""
+    monkeypatch.setattr(fields, "resolve_base_id", lambda base_id: "appBase")
+    monkeypatch.setattr(fields, "get_client", _client)
+    posts = []
+
+    def fake_request(**kwargs):
+        if kwargs["method"] == "GET":
+            return _Response({"tables": [{"id": "tblDemos", "name": "Demos"}]})
+        posts.append(kwargs["json"])
+        return _Response({
+            "id": "fldRecorded",
+            "name": "Unpaced Action Video Recorded",
+            "type": "checkbox",
+        })
+
+    monkeypatch.setattr(requests, "request", fake_request)
+
+    description = "Marks that the first, unpaced action-video take has been recorded."
+    argv = [
+        "create",
+        "Demos",
+        "Unpaced Action Video Recorded",
+        "checkbox",
+        "--description",
+        description,
+    ]
+    if options is not None:
+        argv += ["--options", json.dumps(options)]
+
+    result = runner.invoke(fields.app, argv)
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout)["id"] == "fldRecorded"
+    assert posts[0]["description"] == description
+    assert posts[0]["options"] == {**CHECKBOX_DEFAULTS, **(options or {})}
+
+
+@pytest.mark.parametrize("field_type", ["singleLineText", "multilineText"])
+def test_non_checkbox_create_invents_no_options(monkeypatch, field_type):
+    """Only checkbox creation fills defaults; other types forward nothing extra."""
+    posts = []
+
+    def fake_request(**kwargs):
+        if kwargs["method"] == "GET":
+            return _Response({"tables": [{"id": "tblDemos", "name": "Demos"}]})
+        posts.append(kwargs["json"])
+        return _Response({"id": "fldNotes", "name": "Notes", "type": field_type})
+
+    monkeypatch.setattr(requests, "request", fake_request)
+
+    _client().create_field(
+        base_id="appBase",
+        table_id="Demos",
+        name="Notes",
+        field_type=field_type,
+    )
+
+    assert posts == [{"name": "Notes", "type": field_type}]
+
+
+def test_checkbox_guidance_documents_the_working_values():
+    """README and the repo-owned skill both show the explicit checkbox options."""
+    tool_root = Path(__file__).resolve().parents[1]
+    readme = (tool_root / "README.md").read_text(encoding="utf-8")
+    assert '"icon":"check","color":"greenBright"' in readme
+
+    skill = tool_root.parent / "_repo" / "skills" / "airtable-cli" / "SKILL.md"
+    if skill.is_file():
+        assert '"icon":"check","color":"greenBright"' in skill.read_text(encoding="utf-8")

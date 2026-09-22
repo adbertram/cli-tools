@@ -151,10 +151,17 @@ def fields_create(
     Examples:
         airtable fields create "Tasks" "Status" singleLineText
         airtable fields create tblXXXXXXXXXXXXXX "Status" singleLineText
+        airtable fields create "Tasks" "Done" checkbox
         airtable fields create "Tasks" "Done" checkbox --options '{"icon":"check","color":"greenBright"}'
 
         airtable fields create "Clips" "Module Status" multipleLookupValues --options '{"recordLinkFieldId":"fldLink","fieldIdInLinkedTable":"fldSource"}'
         airtable fields create "Clips" "Slide Count" rollup --options '{"recordLinkFieldId":"fldLink","fieldIdInLinkedTable":"fldSource","formula":"COUNTA(values)"}'
+
+    Checkbox fields always send required options: Airtable rejects a checkbox
+    create whose options are absent (422 "options is missing") or incomplete
+    (422 "options.icon is required" / "options.color is required"), so the CLI
+    fills in Airtable's defaults {"icon":"check","color":"greenBright"} when
+    --options omits them or leaves them out. Explicit --options values win.
 
     Lookup fields are created with the schema-read type multipleLookupValues.
     Airtable rejects the documented write type lookup with HTTP 422; the CLI
