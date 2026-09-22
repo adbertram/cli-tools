@@ -1799,10 +1799,21 @@ class AtaBlogClient:
 
     @staticmethod
     def _validate_recorded_static_media(runtime: Dict[str, Any]) -> None:
-        """Require the persisted receipt before skipping a recorded media effect."""
+        """Require the persisted receipt before skipping a recorded media effect.
+
+        A record written before inline mirroring existed carries no `inline`
+        key at all: that is a pre-`inline` record, not a corrupt one, and the
+        media stage completes it with `_migrate_recorded_static_media` before
+        the effect is accepted as recorded. An `inline` key that is *present*
+        is always held to the receipt contract.
+        """
         media = runtime.get("media")
         receipt = media.get("receipt") if isinstance(media, dict) else None
         inline = media.get("inline") if isinstance(media, dict) else None
+        inline_is_valid = isinstance(inline, list) and all(
+            isinstance(item, dict) and isinstance(item.get("key"), str) and item["key"]
+            for item in inline
+        )
         if (
             not isinstance(media, dict)
             or not isinstance(receipt, dict)
@@ -1811,13 +1822,42 @@ class AtaBlogClient:
             or not receipt["key"]
             or receipt["key"] != runtime.get("object_key")
             or media.get("image_url") != runtime.get("image_url")
-            or not isinstance(inline, list)
-            or any(
-                not isinstance(item, dict) or not isinstance(item.get("key"), str) or not item["key"]
-                for item in inline
-            )
+            or ("inline" in media and not inline_is_valid)
         ):
             raise ClientError("Corrupt publisher runtime: recorded media receipt is invalid")
+
+    @staticmethod
+    def _recorded_static_media_predates_inline(runtime: Dict[str, Any]) -> bool:
+        """Return whether the recorded media receipt predates inline mirroring.
+
+        Only the featured image was uploaded then, so the record holds its
+        receipt and `image_url` and nothing else.
+        """
+        media = runtime.get("media")
+        return isinstance(media, dict) and bool(media) and "inline" not in media
+
+    def _migrate_recorded_static_media(
+        self,
+        runtime: Dict[str, Any],
+        markdown_content: str,
+        runtime_path: Path,
+    ) -> bool:
+        """Complete a pre-`inline` recorded media effect with its inline receipts.
+
+        Such a record cannot prove the post body's images ever reached the
+        bucket -- the inline half did not exist when it was written -- so
+        accepting the record as-is would publish a page whose inline images
+        are missing. The migration re-runs the inline mirroring (idempotent
+        per key) and writes the receipts back, leaving the featured image's
+        own content-addressed receipt untouched.
+        """
+        if not self._recorded_static_media_predates_inline(runtime):
+            return False
+        media = dict(runtime["media"])
+        media["inline"] = self._upload_static_inline_media(markdown_content)
+        runtime["media"] = media
+        _atomic_write_json(runtime_path, runtime)
+        return True
 
     def _recover_static_build(
         self,
@@ -3351,6 +3391,10 @@ class AtaBlogClient:
                         _atomic_write_json(paths["runtime"], runtime)
                         _atomic_write_json(paths["journal"], journal)
                     else:
+                        current_stage = "media"
+                        self._migrate_recorded_static_media(
+                            runtime, markdown_content, paths["runtime"]
+                        )
                         self._validate_recorded_static_media(runtime)
                     self._transition_publisher_journal(
                         journal,
@@ -3799,6 +3843,10 @@ class AtaBlogClient:
                         _atomic_write_json(paths["runtime"], runtime)
                         _atomic_write_json(paths["journal"], journal)
                     else:
+                        current_stage = "media"
+                        self._migrate_recorded_static_media(
+                            runtime, markdown_content, paths["runtime"]
+                        )
                         self._validate_recorded_static_media(runtime)
                     self._transition_publisher_journal(
                         journal,

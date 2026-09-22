@@ -1088,6 +1088,174 @@ def test_failed_unbuilt_journal_requires_matching_recorded_media_key(
     assert counters["notion"] == effects_before_retry["notion"] == 0
 
 
+def _pre_inline_media_record(stage):
+    """Return the media record shape written before the `inline` half existed.
+
+    Records from that era carry the featured image's receipt and `image_url`
+    and nothing else, which is what made the media effect unprovable to
+    `_validate_recorded_static_media`.
+    """
+    return {"receipt": {"key": stage["object_key"]}, "image_url": stage["image_url"]}
+
+
+def test_retry_completes_the_inline_half_of_a_pre_inline_recorded_media_receipt(
+    publisher, monkeypatch
+):
+    """A retry migrates a pre-`inline` record instead of failing closed on it.
+
+    Regression guard for agent-issues#343, second defect: the recorded-media
+    validation required `media.inline` to be a list, so every transaction
+    runtime written before inline mirroring existed aborted the retry with
+    "Corrupt publisher runtime: recorded media receipt is invalid" instead of
+    completing the half the record predates.
+    """
+    client, _article, markdown, _image, _manifest, counters, _token = publisher
+    original_build = client._run_static_build
+    build_attempts = 0
+
+    def fail_first_build(*args, **kwargs):
+        nonlocal build_attempts
+        build_attempts += 1
+        if build_attempts == 1:
+            raise ClientError("injected build failure")
+        return original_build(*args, **kwargs)
+
+    monkeypatch.setattr(client, "_run_static_build", fail_first_build)
+    with pytest.raises(ClientError, match="failed during build"):
+        _publish(client)
+
+    journal_path = next(
+        (client._publisher_runtime_root() / "transactions").glob("*.journal.json")
+    )
+    runtime_path = journal_path.with_name(
+        journal_path.name.replace(".journal.json", ".runtime.json")
+    )
+    runtime = json.loads(runtime_path.read_text())
+    featured_receipt = runtime["media"]["receipt"]
+    assert runtime["media"]["inline"] == []
+    del runtime["media"]["inline"]
+    _atomic_write_json(runtime_path, runtime)
+
+    mirrored = []
+
+    def mirror(markdown_content):
+        mirrored.append(markdown_content)
+        return [{"key": "wp-content/uploads/2026/09/pre-inline.png"}]
+
+    monkeypatch.setattr(client, "_upload_static_inline_media", mirror)
+
+    result = _publish(client)
+
+    assert result["journal_state"] == "completed"
+    assert mirrored == [markdown]
+    assert counters["media"] == 1
+    migrated = json.loads(runtime_path.read_text())
+    assert migrated["media"] == {
+        "receipt": featured_receipt,
+        "image_url": runtime["image_url"],
+        "inline": [{"key": "wp-content/uploads/2026/09/pre-inline.png"}],
+    }
+
+
+def test_resume_completes_the_inline_half_of_a_pre_inline_recorded_media_receipt(
+    publisher, monkeypatch
+):
+    """The resume path migrates a pre-`inline` record the same way a retry does."""
+    client, article, markdown, image, manifest, counters, _token = publisher
+    revision = client._source_revision(article, markdown, image)
+    key = client._publisher_idempotency_key(PAGE_ID, revision)
+    paths = client._publisher_paths(PAGE_ID, key)
+    journal = client._new_publisher_journal(
+        page_id=PAGE_ID,
+        source_revision=revision,
+        article=article,
+        manifest=manifest,
+        prior_deployment_id=PRIOR_DEPLOYMENT_ID,
+    )
+    runtime = {
+        "schema_version": "ata-static-publisher-runtime/v1",
+        "page_id": PAGE_ID,
+        "source_revision": revision,
+        "idempotency_key": key,
+        "slug": "journaled-static-publisher",
+        "status": "draft",
+        "publish_date": "2026-08-31T12:00:00+00:00",
+        "release_ref": journal["release_ref"],
+        "failure_stage": None,
+        "failure_message": None,
+        "rollback_error": None,
+    }
+    stage = client._stage_static_article(
+        page_id=PAGE_ID,
+        slug=runtime["slug"],
+        article=article,
+        markdown_content=markdown,
+        image_path=image,
+        publish_date=runtime["publish_date"],
+        paths=paths,
+    )
+    runtime.update(stage)
+    runtime["media"] = _pre_inline_media_record(stage)
+    journal["artifacts"]["staged_corpus_sha256"] = stage["corpus_sha256"]
+    journal["effects"]["corpus_writes"] = 1
+    journal["effects"]["media_upload_sets"] = 1
+    _atomic_write_json(paths["runtime"], runtime)
+    _atomic_write_json(paths["journal"], journal)
+
+    mirrored = []
+
+    def mirror(markdown_content):
+        mirrored.append(markdown_content)
+        return [{"key": "wp-content/uploads/2026/09/pre-inline.png"}]
+
+    monkeypatch.setattr(client, "_upload_static_inline_media", mirror)
+
+    result = _publish(client)
+
+    assert result["journal_state"] == "completed"
+    assert mirrored == [markdown]
+    # The recorded featured-image receipt still proves its own upload, so the
+    # migration only completes the inline half.
+    assert counters["media"] == 0
+    assert counters["build"] == counters["deploy"] == counters["notion"] == 1
+    migrated = json.loads(paths["runtime"].read_text())
+    assert migrated["media"] == {
+        "receipt": {"key": stage["object_key"]},
+        "image_url": stage["image_url"],
+        "inline": [{"key": "wp-content/uploads/2026/09/pre-inline.png"}],
+    }
+
+
+def test_pre_inline_media_record_with_a_mismatched_receipt_still_fails_closed(
+    publisher, monkeypatch
+):
+    """Dropping the `inline` requirement must not accept an unproven receipt."""
+    client, _article, _markdown, _image, _manifest, counters, _token = publisher
+
+    def fail_build(*_args, **_kwargs):
+        raise ClientError("injected build failure")
+
+    monkeypatch.setattr(client, "_run_static_build", fail_build)
+    with pytest.raises(ClientError, match="failed during build"):
+        _publish(client)
+
+    journal_path = next(
+        (client._publisher_runtime_root() / "transactions").glob("*.journal.json")
+    )
+    runtime_path = journal_path.with_name(
+        journal_path.name.replace(".journal.json", ".runtime.json")
+    )
+    runtime = json.loads(runtime_path.read_text())
+    del runtime["media"]["inline"]
+    runtime["media"]["receipt"] = {"key": "wp-content/uploads/publisher/other.png"}
+    _atomic_write_json(runtime_path, runtime)
+
+    with pytest.raises(ClientError, match="recorded media receipt is invalid"):
+        _publish(client)
+    assert counters["media"] == 1
+    assert counters["deploy"] == counters["notion"] == 0
+
+
 def test_build_token_failure_precedes_journal_and_is_retryable(publisher):
     client, _article, _markdown, _image, manifest, _counters, build_token = publisher
     token = json.loads(build_token.read_text())
