@@ -139,6 +139,48 @@ def test_service_router_resolves_bare_name_project_scoped_service_skill():
     assert (coursecraft_skill / "usage.json").is_file()
 
 
+def test_service_router_resolves_bare_tool_name_skill_bundles():
+    """`coursecraft` ships no `<name>-cli` bundle, so the router must accept the bare name.
+
+    A router that only probes `<name>-cli` reports a real repo-owned service
+    skill as missing.
+    """
+    text = _read("workflows/skill-router.md")
+    text_words = _words(text)
+
+    assert "<cli-tools-root>/_repo/skills/<name>-cli/SKILL.md" in text
+    assert "<cli-tools-root>/_repo/skills/<name>/SKILL.md" in text
+    assert "Some repo-owned service skills use the bare CLI name instead" in text_words
+    assert "<cli-tools-root>/_repo/skills/coursecraft/SKILL.md" in text
+    assert "<cli-tools-root>/_repo/skills/coursecraft/usage.json" in text
+    assert "no `<cli-tools-root>/_repo/skills/coursecraft-cli` folder exists" in text
+    assert (
+        "A bare-name bundle is a first-class contract location, not a fallback"
+        in text_words
+    )
+    assert "Check both candidates before reporting a service skill as missing" in text_words
+    assert "| `coursecraft` | `<cli-tools-root>/_repo/skills/coursecraft/SKILL.md` |" in text
+
+
+def test_service_router_lists_bundles_by_command_map_not_cli_suffix():
+    """Service-skill discovery must find every bundle, including bare-name ones."""
+    text = _read("workflows/skill-router.md")
+
+    assert "-maxdepth 2 -mindepth 2 -type f -name usage.json" in text
+    assert "-name '*-cli'" not in text
+    assert "holds both `SKILL.md` and an adjacent `usage.json`" in text
+
+    skills_root = SKILL_ROOT.parent
+
+    assert (skills_root / "coursecraft" / "SKILL.md").is_file()
+    assert (skills_root / "coursecraft" / "usage.json").is_file()
+    assert not (skills_root / "coursecraft-cli").exists()
+
+    discovered = sorted(path.parent.name for path in skills_root.glob("*/usage.json"))
+    assert "coursecraft" in discovered
+    assert "cli-tool" not in discovered
+
+
 def test_notion_pages_get_out_file_is_not_json_stdout():
     notion_skill = (SKILL_ROOT.parent / "notion-cli" / "SKILL.md").read_text()
     notion_words = _words(notion_skill)

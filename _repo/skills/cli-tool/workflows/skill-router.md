@@ -51,7 +51,13 @@ From the user's requested CLI command or service name:
    - `<normalized-name>-cli`
    - `<normalized-name>`, for a project-scoped service CLI that cli-tools
      registers under the bare tool name
-4. Resolve to `<cli-tools-root>/_repo/skills/<matched-dir>/SKILL.md`.
+4. Resolve to the matched directory's `SKILL.md`, which is either
+   `<cli-tools-root>/_repo/skills/<name>-cli/SKILL.md` or
+   `<cli-tools-root>/_repo/skills/<name>/SKILL.md`, and treat that bundle's
+   adjacent `usage.json` as the command map. Some repo-owned service skills use
+   the bare CLI name instead of the `<name>-cli` bundle name. A bare-name bundle
+   is a first-class contract location, not a fallback. Check both candidates
+   before reporting a service skill as missing.
 
 For example:
 
@@ -67,17 +73,19 @@ For example:
 `coursecraft`: `<cli-tools-root>/coursecraft` links to
 `Agents/CourseCraft/tools/coursecraft`, `_repo/docs/cli_tools.md` carries its
 row, and its repo-owned service skill is
-`<cli-tools-root>/_repo/skills/coursecraft/SKILL.md` with the adjacent
-`usage.json`. Do not require `_repo/skills/coursecraft-cli`, and do not stop the
-operation because that directory is absent. An absent `<tool>-cli` directory is
-a resolution failure only when no existing directory matches either form.
+`<cli-tools-root>/_repo/skills/coursecraft/SKILL.md` with the adjacent command
+map at `<cli-tools-root>/_repo/skills/coursecraft/usage.json`. Do not require
+`_repo/skills/coursecraft-cli`, and do not stop the operation because that
+directory is absent: no `<cli-tools-root>/_repo/skills/coursecraft-cli` folder exists.
+An absent `<tool>-cli` directory is a resolution failure only when no
+existing directory matches either form.
 
 List the service skill directories that exist before matching:
 
 ```bash
-for dir in /Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills/*/; do
-  if [ -f "${dir}SKILL.md" ] && [ -f "${dir}usage.json" ]; then basename "$dir"; fi
-done | sort
+find /Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills \
+  -maxdepth 2 -mindepth 2 -type f -name usage.json -exec dirname {} \; |
+  sed 's|.*/||' | sort
 ```
 
 If no existing directory matches the requested tool, list the available service
@@ -86,7 +94,7 @@ nearby name.
 
 ## Step 4: Load The Selected Skill And Command Map
 
-Read both files before running any command:
+Read both files before running any command, where `<service-skill-dir>` is the candidate directory resolved in Step 3:
 
 ```bash
 sed -n '1,220p' /Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills/<service-skill-dir>/SKILL.md
@@ -136,6 +144,7 @@ Report the selected service skill path, the command run, and the outcome. If blo
 <success_criteria>
 - Existing CLI requests route through this workflow before service-skill loading.
 - The selected service skill path is under `<cli-tools-root>/_repo/skills`.
+- Service-skill resolution accepts both the `<name>-cli` bundle name and the bare `<name>` bundle name, and reports a skill missing only after both candidates are checked.
 - The selected service skill's `SKILL.md` and adjacent `usage.json` are read before command execution.
 - CLI lifecycle work is routed back to the lifecycle workflows instead of service-operation skills.
 - No duplicate repo-owned skill root is created.
