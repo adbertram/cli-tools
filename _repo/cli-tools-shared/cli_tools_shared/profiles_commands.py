@@ -6,7 +6,12 @@ import click
 
 import typer
 
-from .config import ConfigError, get_profile_auth_settings, resolve_tool_dir
+from .config import (
+    ConfigError,
+    get_profile_auth_settings,
+    resolve_tool_dir,
+    root_config_field_names_for,
+)
 from .filters import apply_filters, apply_limit, apply_properties_filter
 from .profiles import (
     ProfileStore,
@@ -59,7 +64,12 @@ def _get_profile_store(get_config_fn, tool_name: str, probe_config=None) -> Prof
         tool_dir = _tool_dir_from_closure(get_config_fn)
     if tool_dir is None and config_cls is not None and getattr(config_cls, "DIST_NAME", None):
         tool_dir = resolve_tool_dir(config_cls.DIST_NAME)
-    return ProfileStore(tool_name, tool_dir=tool_dir, profile_auth_settings=profile_auth_settings)
+    return ProfileStore(
+        tool_name,
+        tool_dir=tool_dir,
+        profile_auth_settings=profile_auth_settings,
+        root_config_fields=root_config_field_names_for(config_cls),
+    )
 
 
 def _parse_auth_params(raw_params: Optional[List[str]]) -> dict[str, str]:

@@ -213,6 +213,20 @@ _DEFAULT_ROOT_CONFIG_FIELDS = {
 }
 
 
+def root_config_field_names_for(config_or_cls) -> set[str]:
+    """Return every non-authentication root config field name a tool declares.
+
+    The shared defaults always apply; a tool adds its own names through
+    ``ROOT_CONFIG_FIELDS`` (for example airtable's ``BASE_ID``). Any code that
+    splits ``.env.example`` between root config and a profile must use this, or
+    a tool-declared name lands in the profile ``.env`` and
+    :meth:`BaseConfig._validate_profile_env_files` rejects the profile.
+    """
+    fields = set(_DEFAULT_ROOT_CONFIG_FIELDS)
+    fields.update(getattr(config_or_cls, "ROOT_CONFIG_FIELDS", ()) or ())
+    return fields
+
+
 def get_profile_auth_settings(config_or_cls) -> Optional[tuple[str, dict]]:
     """Return profile auth-type metadata declared by the config, if any."""
     sentinel = object()
@@ -907,9 +921,7 @@ class BaseConfig:
         return fields
 
     def _root_config_field_names(self) -> set[str]:
-        fields = set(_DEFAULT_ROOT_CONFIG_FIELDS)
-        fields.update(getattr(self, "ROOT_CONFIG_FIELDS", ()) or ())
-        return fields
+        return root_config_field_names_for(self)
 
     def _sensitive_auth_field_names(self) -> set[str]:
         fields = set(combined_sensitive_fields(self.CREDENTIAL_TYPES, config=self))

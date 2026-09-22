@@ -32,6 +32,7 @@ from .config import (
     get_profile_auth_settings,
     implicit_profile_auth_type,
     reset_runtime_profile_resolution,
+    root_config_field_names_for,
     set_runtime_profile_resolution,
 )
 from .credentials import CredentialType
@@ -68,7 +69,12 @@ def _profile_store_for_command(get_config_fn, config_cls, cli_name: str) -> Prof
 
         tool_dir = resolve_tool_dir(config_cls.DIST_NAME)
         tool_name = getattr(config_cls, "RUNTIME_DATA_NAME", "") or tool_dir.name
-    return ProfileStore(tool_name, tool_dir=tool_dir, profile_auth_settings=profile_auth_settings)
+    return ProfileStore(
+        tool_name,
+        tool_dir=tool_dir,
+        profile_auth_settings=profile_auth_settings,
+        root_config_fields=root_config_field_names_for(config_cls),
+    )
 
 
 def _command_profile_auth_type(
