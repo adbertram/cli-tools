@@ -88,7 +88,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [x>=1]  Maximum number of accounts to return",
+              "help": "[x>=1]  Maximum number of accounts to return",
               "short": "-l",
               "default": "1"
             },
@@ -434,7 +434,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [x>=1]  Maximum number of boards to return",
+              "help": "[x>=1]  Maximum number of boards to return",
               "short": "-l",
               "default": "25"
             },
@@ -551,7 +551,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [x>=1]  Maximum number of pins to return",
+              "help": "[x>=1]  Maximum number of pins to return",
               "short": "-l",
               "default": "25"
             },
