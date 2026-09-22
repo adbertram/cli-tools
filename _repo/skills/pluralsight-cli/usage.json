@@ -1,7 +1,7 @@
 {
   "tool": "pluralsight",
   "description": "CLI interface for pluralsight",
-  "discovered_at": "2026-08-23T18:58:25Z",
+  "discovered_at": "2026-09-22T20:11:47Z",
   "total_commands": 6,
   "global_options": [],
   "commands": {
@@ -66,11 +66,10 @@
         },
         {
           "name": "--page",
-          "type": "bool",
+          "type": "INTEGER",
           "required": false,
-          "help": "<int range> [x>=1]  Result page number",
+          "help": "[x>=1]  Result page number",
           "short": "-P",
-          "takes_value": false,
           "default": "1"
         },
         {
@@ -176,11 +175,10 @@
         },
         {
           "name": "--page",
-          "type": "bool",
+          "type": "INTEGER",
           "required": false,
-          "help": "<int range> [x>=1]  Result page number",
+          "help": "[x>=1]  Result page number",
           "short": "-P",
-          "takes_value": false,
           "default": "1"
         },
         {

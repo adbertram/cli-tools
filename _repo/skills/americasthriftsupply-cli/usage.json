@@ -1,7 +1,7 @@
 {
   "tool": "americasthriftsupply",
   "description": "CLI interface for americasthriftsupply",
-  "discovered_at": "2026-07-25T15:07:30Z",
+  "discovered_at": "2026-09-22T20:11:54Z",
   "total_commands": 5,
   "global_options": [],
   "commands": {
@@ -45,7 +45,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -77,9 +78,9 @@
             },
             {
               "name": "--page-delay",
-              "type": "bool",
+              "type": "FLOAT",
               "required": false,
-              "help": "<float range> [x>=0.0]  Seconds to wait between consecutive live page requests during a crawl. Only applies when more than one page is fetched; cached pages never wait. Raise this (e.g. 30) if the storefront rate-limits a full-catalog crawl",
+              "help": "[x>=0.0]  Seconds to wait between consecutive live page requests during a crawl. Only applies when more than one page is fetched; cached pages never wait. Raise this (e.g. 30) if the storefront rate-limits a full-catalog crawl",
               "default": "5.0"
             },
             {
@@ -87,7 +88,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -121,7 +123,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -149,7 +152,8 @@
               "type": "bool",
               "required": false,
               "help": "Reverse the sort field's natural direction (newest->oldest; price low->high becomes high->low)",
-              "short": "-d"
+              "short": "-d",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -175,9 +179,9 @@
             },
             {
               "name": "--page-delay",
-              "type": "bool",
+              "type": "FLOAT",
               "required": false,
-              "help": "<float range> [x>=0.0]  Seconds to wait between consecutive live page requests during a crawl. Only applies when more than one page is fetched; cached pages never wait. Raise this (e.g. 30) if the storefront rate-limits a full-catalog crawl",
+              "help": "[x>=0.0]  Seconds to wait between consecutive live page requests during a crawl. Only applies when more than one page is fetched; cached pages never wait. Raise this (e.g. 30) if the storefront rate-limits a full-catalog crawl",
               "default": "5.0"
             },
             {
@@ -185,7 +189,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",

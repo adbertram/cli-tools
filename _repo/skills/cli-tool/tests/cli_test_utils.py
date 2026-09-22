@@ -233,15 +233,27 @@ _HELP_METAVAR_TYPES = {
     "path": "PATH",
     "str": "TEXT",
     "int": "INTEGER",
+    "integer": "INTEGER",
     "float": "FLOAT",
 }
 
 
 def _normalize_help_metavar(metavar: str) -> str:
-    """Return the canonical usage.json type for a Typer angle metavar."""
-    if metavar in {"int range", "float range"}:
-        metavar = metavar.removesuffix(" range")
-    return _HELP_METAVAR_TYPES.get(metavar, metavar)
+    """Return the canonical usage.json type for a Typer angle metavar.
+
+    Typer renders a constrained numeric parameter's metavar as ``<int
+    range>``/``<float range>``, and some installed Typer versions spell the
+    same metavar in caps (``<INTEGER RANGE>``), so the metavar is matched
+    case-insensitively after an optional trailing ``range`` word is dropped.
+    Metavars with no canonical mapping are returned verbatim, so choice
+    metavars such as ``<1:1|16:9>`` keep their original spelling.
+    """
+    key = metavar.strip().lower()
+    if key.endswith(" range"):
+        key = key.removesuffix(" range").strip()
+    if key in _HELP_METAVAR_TYPES:
+        return _HELP_METAVAR_TYPES[key]
+    return metavar
 
 
 _ARGUMENT_START_RE = re.compile(
@@ -432,12 +444,18 @@ def parse_help_options(section_text: str) -> List[Dict]:
             rest = secondary_match.group(3).strip()
 
         metavar_match = re.match(r"^<([^<>]+)>\s+(.*)", rest)
-        type_match = re.match(r"^([A-Z][A-Z_0-9]+)\s+(.*)", rest)
+        # A constrained numeric parameter whose metavar is not angle-wrapped
+        # renders as "<TYPE> RANGE [<constraint>]" -- the live facebook
+        # ("INTEGER RANGE [1<=x<=50]") and google ("INTEGER RANGE [x>=1]")
+        # CLIs both do -- so the RANGE token belongs to the metavar, not to
+        # the help text. Drop it only when a bracketed constraint follows, so
+        # help text that legitimately opens with the word RANGE survives.
+        type_match = re.match(r"^([A-Z][A-Z_0-9]+)(?:\s+RANGE(?=\s*\[))?\s+(.*)", rest)
         if metavar_match:
             opt_type = _normalize_help_metavar(metavar_match.group(1))
             help_text = metavar_match.group(2).strip()
         elif type_match:
-            opt_type = type_match.group(1)
+            opt_type = _normalize_help_metavar(type_match.group(1))
             help_text = type_match.group(2).strip()
         else:
             opt_type = "bool"

@@ -151,3 +151,85 @@ def test_parse_help_options_numeric_range_takes_value():
         'required': False, 'help': '[1<=x<=100] Maximum page rows', 'default': '100',
     }
     assert option.get('takes_value', True) is True
+
+
+# A constrained numeric parameter can also reach the parser with its metavar
+# unwrapped and upper-cased -- the live facebook CLI renders "groups posts
+# list --limit" as "INTEGER RANGE [1<=x<=50]" and the live google CLI renders
+# "searchconsole sitemaps list --limit" as "INTEGER RANGE [x>=1]", while
+# americasthriftsupply renders "--page-delay" as "FLOAT RANGE [x>=0.0]". In
+# that shape the RANGE word belongs to the metavar, so it must never be
+# recorded as the start of the option's help text.
+
+
+def test_parse_help_options_float_range_takes_value():
+    section = "--threshold  -t  <float range> [0<=x<=1] Maximum similarity [default: 0.5]\n"
+
+    option, = cli_test_utils.parse_help_options(section)
+
+    assert option == {
+        "name": "--threshold", "short": "-t", "type": "FLOAT",
+        "required": False, "help": "[0<=x<=1] Maximum similarity", "default": "0.5",
+    }
+    assert option.get("takes_value", True) is True
+
+
+def test_parse_help_options_bare_integer_range_metavar_takes_value():
+    section = "--limit  -l  INTEGER RANGE [1<=x<=50]  Maximum number of results [default: 20]\n"
+
+    option, = cli_test_utils.parse_help_options(section)
+
+    assert option == {
+        "name": "--limit", "short": "-l", "type": "INTEGER",
+        "required": False, "help": "[1<=x<=50]  Maximum number of results", "default": "20",
+    }
+    assert option.get("takes_value", True) is True
+
+
+def test_parse_help_options_bare_integer_range_open_ended_metavar_takes_value():
+    section = "--limit  -l  INTEGER RANGE [x>=1]  Maximum number of sitemaps [default: 100]\n"
+
+    option, = cli_test_utils.parse_help_options(section)
+
+    assert option == {
+        "name": "--limit", "short": "-l", "type": "INTEGER",
+        "required": False, "help": "[x>=1]  Maximum number of sitemaps", "default": "100",
+    }
+    assert option.get("takes_value", True) is True
+
+
+def test_parse_help_options_bare_float_range_metavar_takes_value():
+    section = (
+        "--page-delay  FLOAT RANGE [x>=0.0]  Seconds to wait between consecutive "
+        "live page requests [default: 1.0]\n"
+    )
+
+    option, = cli_test_utils.parse_help_options(section)
+
+    assert option == {
+        "name": "--page-delay", "type": "FLOAT", "required": False,
+        "help": "[x>=0.0]  Seconds to wait between consecutive live page requests",
+        "default": "1.0",
+    }
+    assert option.get("takes_value", True) is True
+
+
+def test_parse_help_options_uppercase_range_metavar_takes_value():
+    section = "--limit  -l  <INTEGER RANGE> [1<=x<=100]  Maximum page rows [default: 100]\n"
+
+    option, = cli_test_utils.parse_help_options(section)
+
+    assert option["type"] == "INTEGER"
+    assert option["help"] == "[1<=x<=100]  Maximum page rows"
+    assert option.get("takes_value", True) is True
+
+
+def test_parse_help_options_plain_range_word_in_help_is_kept():
+    """Only a bracketed "TYPE RANGE [x]" metavar is stripped, never help text."""
+
+    section = "--mode  -m  TEXT  RANGE settings for the crawler\n"
+
+    option, = cli_test_utils.parse_help_options(section)
+
+    assert option["type"] == "TEXT"
+    assert option["help"] == "RANGE settings for the crawler"
