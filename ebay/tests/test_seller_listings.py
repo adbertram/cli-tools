@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from ebay_cli.client import ClientError
+from ebay_cli.client import EbayClient, ClientError
 from ebay_cli.commands import listings
 from ebay_cli.main import app
 
@@ -425,6 +425,7 @@ def test_should_return_unique_current_draft_for_sku(monkeypatch):
     client = MagicMock()
     client.get_offers.return_value = {"offers": [_draft_offer()], "size": 1}
     client.get_inventory_item.return_value = _inventory_item()
+    monkeypatch.setattr(listings, "_fetch_all_active_listings", lambda client, limit: [])
 
     listing = listings._get_listing_by_sku(client, "EBAY-20260804130425")
 
@@ -448,6 +449,7 @@ def test_should_emit_unique_current_draft_at_seller_get_command_boundary(
     client.get_offers.return_value = {"offers": [_draft_offer()], "size": 1}
     client.get_inventory_item.return_value = _inventory_item()
     monkeypatch.setattr(listings, "get_client", lambda: client)
+    monkeypatch.setattr(listings, "_fetch_all_active_listings", lambda client, limit: [])
 
     result = runner.invoke(
         app,
@@ -588,7 +590,10 @@ def test_should_emit_distinct_active_item_ids_at_list_command_boundary(
     ]
 
 
-def test_should_not_merge_active_data_by_sku_in_single_get(monkeypatch):
+def test_should_reject_sku_when_published_offer_and_active_listing_differ(monkeypatch):
+    # Agent-issues #226: the same SKU on an Inventory API offer and on a
+    # different Trading API active listing is two records. Preferring the offer
+    # silently (the old behaviour) is what let `update` write to the wrong one.
     client = MagicMock()
     client.get_offers.return_value = {
         "offers": [_active_offer(item_id="current-item")],
@@ -603,11 +608,15 @@ def test_should_not_merge_active_data_by_sku_in_single_get(monkeypatch):
         ],
     )
 
-    listing = listings._get_listing_by_sku(client, "EBAY-20260804130425")
-
-    assert listing.item_id == "current-item"
-    assert listing.price == "75.0"
-    assert listing.quantity_sold == 0
+    with pytest.raises(
+        ClientError,
+        match=(
+            "^SKU EBAY-20260804130425 resolves to different records: "
+            r"Inventory API offer offer-auction \(item current-item\) "
+            "and Trading API active listing different-item$"
+        ),
+    ):
+        listings._get_listing_by_sku(client, "EBAY-20260804130425")
 
 
 def test_should_surface_active_lookup_failure_for_published_offer(monkeypatch):
@@ -695,7 +704,7 @@ def test_should_keep_sold_history_separate_from_current_draft(monkeypatch):
 
 # --- listing_from_offer pricing (agent-issues #610) ---------------------------
 
-from ebay_cli.models.listing import listing_from_offer
+from ebay_cli.models.listing import Listing, listing_from_offer
 
 
 def _offer_with_pricing(*, offer_format: str, pricing: dict) -> dict:
@@ -754,3 +763,298 @@ def test_fixed_price_reports_price_and_no_bin_price():
     assert listing.format == "fixed_price"
     assert listing.price == "99.0"
     assert listing.bin_price is None
+
+
+# --- SKU collisions across the two APIs, and legacy writes (agent-issues #226) --
+
+# The report's records: one SKU naming an orphaned, unpublished Inventory API
+# offer (item 188900455705) and a live legacy Trading API listing (item
+# 188900460802) at the same time.
+COLLIDING_SKU = "EBAY-20260907153633"
+COLLIDING_OFFER_ID = "258713810011"
+COLLIDING_OFFER_ITEM_ID = "188900455705"
+COLLIDING_LEGACY_ITEM_ID = "188900460802"
+
+REVISE_SUCCESS_XML = """<?xml version="1.0" encoding="utf-8"?>
+<ReviseFixedPriceItemResponse xmlns="urn:ebay:apis:eBLBaseComponents">
+  <Ack>Success</Ack>
+  <ItemID>188900460802</ItemID>
+</ReviseFixedPriceItemResponse>
+"""
+
+REVISE_FAILURE_XML = """<?xml version="1.0" encoding="utf-8"?>
+<ReviseFixedPriceItemResponse xmlns="urn:ebay:apis:eBLBaseComponents">
+  <Ack>Failure</Ack>
+  <Errors>
+    <ShortMessage>Invalid item ID</ShortMessage>
+    <LongMessage>Invalid item ID 188900460802.</LongMessage>
+    <ErrorCode>17</ErrorCode>
+  </Errors>
+</ReviseFixedPriceItemResponse>
+"""
+
+
+def _colliding_draft_offer() -> dict:
+    offer = _draft_offer(
+        offer_id=COLLIDING_OFFER_ID,
+        item_id=COLLIDING_OFFER_ITEM_ID,
+        format_type="FIXED_PRICE",
+    )
+    offer["sku"] = COLLIDING_SKU
+    return offer
+
+
+def _colliding_legacy_active_item() -> dict:
+    item = _active_trading_item(item_id=COLLIDING_LEGACY_ITEM_ID, price="79.99")
+    item["sku"] = COLLIDING_SKU
+    item["listing_type"] = "FixedPriceItem"
+    return item
+
+
+def _legacy_active_listing() -> Listing:
+    return Listing(
+        sku=COLLIDING_SKU,
+        item_id=COLLIDING_LEGACY_ITEM_ID,
+        title="Wood LEGO Brick Sorter 6-Tray Piece Sorting Box Graduated Holes Large",
+        price="79.99",
+        currency="USD",
+        quantity=1,
+        status="active",
+        format="fixed_price",
+    )
+
+
+def _client_with_colliding_sku() -> MagicMock:
+    client = MagicMock()
+    client.get_offers.return_value = {"offers": [_colliding_draft_offer()], "size": 1}
+    client.get_inventory_item.return_value = _inventory_item()
+    return client
+
+
+def test_should_reject_sku_that_names_an_offer_and_a_legacy_active_listing(monkeypatch):
+    client = _client_with_colliding_sku()
+    monkeypatch.setattr(
+        listings,
+        "_fetch_all_active_listings",
+        lambda client, limit: [_colliding_legacy_active_item()],
+    )
+
+    with pytest.raises(
+        ClientError,
+        match=(
+            "^SKU EBAY-20260907153633 resolves to different records: Inventory API offer "
+            r"258713810011 \(item 188900455705\) and Trading API active listing 188900460802$"
+        ),
+    ):
+        listings._get_listing_by_sku(client, COLLIDING_SKU)
+
+
+def test_should_emit_cross_api_sku_collision_at_seller_get_command_boundary(monkeypatch, runner):
+    client = _client_with_colliding_sku()
+    monkeypatch.setattr(listings, "get_client", lambda: client)
+    monkeypatch.setattr(
+        listings,
+        "_fetch_all_active_listings",
+        lambda client, limit: [_colliding_legacy_active_item()],
+    )
+
+    result = runner.invoke(app, ["seller", "listings", "get", COLLIDING_SKU])
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert result.stderr == (
+        "Error: SKU EBAY-20260907153633 resolves to different records: Inventory API offer "
+        "258713810011 (item 188900455705) and Trading API active listing 188900460802\n"
+    )
+
+
+def test_should_refuse_update_when_sku_collides_across_apis(monkeypatch, runner):
+    client = _client_with_colliding_sku()
+    monkeypatch.setattr(listings, "get_client", lambda: client)
+    monkeypatch.setattr(
+        listings,
+        "_fetch_all_active_listings",
+        lambda client, limit: [_colliding_legacy_active_item()],
+    )
+
+    result = runner.invoke(
+        app,
+        ["seller", "listings", "update", COLLIDING_SKU, "--price", "69.99"],
+    )
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "resolves to different records" in result.stderr
+    client.update_offer.assert_not_called()
+    client.create_or_update_inventory_item.assert_not_called()
+    client.revise_fixed_price_item.assert_not_called()
+
+
+def test_should_build_revise_fixed_price_item_request_for_legacy_listing():
+    client = MagicMock()
+
+    EbayClient.revise_fixed_price_item(
+        client,
+        COLLIDING_LEGACY_ITEM_ID,
+        title="Wood LEGO Brick Sorter",
+        description="Tray & <b>holes</b>",
+        start_price="69.99",
+        currency="USD",
+        quantity=3,
+        best_offer_enabled=True,
+    )
+
+    call_name, request_xml = client._make_trading_api_request.call_args.args
+    assert call_name == "ReviseFixedPriceItem"
+    assert f"<ItemID>{COLLIDING_LEGACY_ITEM_ID}</ItemID>" in request_xml
+    assert "<Title>Wood LEGO Brick Sorter</Title>" in request_xml
+    assert "<Description>Tray &amp; &lt;b&gt;holes&lt;/b&gt;</Description>" in request_xml
+    assert '<StartPrice currencyID="USD">69.99</StartPrice>' in request_xml
+    assert "<Quantity>3</Quantity>" in request_xml
+    assert (
+        "<BestOfferDetails><BestOfferEnabled>true</BestOfferEnabled></BestOfferDetails>"
+        in request_xml
+    )
+
+
+def test_should_send_only_requested_fields_in_revise_fixed_price_item():
+    client = MagicMock()
+
+    EbayClient.revise_fixed_price_item(
+        client,
+        COLLIDING_LEGACY_ITEM_ID,
+        best_offer_enabled=False,
+    )
+
+    request_xml = client._make_trading_api_request.call_args.args[1]
+    assert "<BestOfferDetails><BestOfferEnabled>false</BestOfferEnabled></BestOfferDetails>" in request_xml
+    for absent in ("<Title>", "<Description>", "<StartPrice", "<Quantity>"):
+        assert absent not in request_xml
+
+
+def test_should_revise_legacy_listing_through_trading_api(monkeypatch, runner):
+    client = MagicMock()
+    client.revise_fixed_price_item.return_value = REVISE_SUCCESS_XML
+    monkeypatch.setattr(listings, "get_client", lambda: client)
+    monkeypatch.setattr(
+        listings,
+        "_get_listing_by_sku",
+        lambda _client, _sku: _legacy_active_listing(),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "seller",
+            "listings",
+            "update",
+            COLLIDING_SKU,
+            "--title",
+            "Wood LEGO Brick Sorter 6-Tray",
+            "--description",
+            "Sorted trays.",
+            "--price",
+            "69.99",
+            "--quantity",
+            "3",
+            "--best-offer",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    client.revise_fixed_price_item.assert_called_once_with(
+        COLLIDING_LEGACY_ITEM_ID,
+        title="Wood LEGO Brick Sorter 6-Tray",
+        description="Sorted trays.",
+        start_price="69.99",
+        currency="USD",
+        quantity=3,
+        best_offer_enabled=True,
+    )
+    client.update_offer.assert_not_called()
+    client.create_or_update_inventory_item.assert_not_called()
+    assert json.loads(result.stdout)["item_id"] == COLLIDING_LEGACY_ITEM_ID
+
+
+def test_should_refuse_options_a_legacy_listing_cannot_carry(monkeypatch, runner):
+    client = MagicMock()
+    monkeypatch.setattr(listings, "get_client", lambda: client)
+    monkeypatch.setattr(
+        listings,
+        "_get_listing_by_sku",
+        lambda _client, _sku: _legacy_active_listing(),
+    )
+
+    result = runner.invoke(
+        app,
+        ["seller", "listings", "update", COLLIDING_SKU, "--category", "261329", "--price", "69.99"],
+    )
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert result.stderr == (
+        "Error: Legacy Trading API listing EBAY-20260907153633 supports --title, --description, "
+        "--price, --quantity and --best-offer only; unsupported: --category\n"
+    )
+    client.revise_fixed_price_item.assert_not_called()
+
+
+def test_should_warn_without_revising_when_legacy_update_requests_nothing(monkeypatch, runner):
+    client = MagicMock()
+    monkeypatch.setattr(listings, "get_client", lambda: client)
+    monkeypatch.setattr(
+        listings,
+        "_get_listing_by_sku",
+        lambda _client, _sku: _legacy_active_listing(),
+    )
+
+    result = runner.invoke(app, ["seller", "listings", "update", COLLIDING_SKU])
+
+    assert result.exit_code == 0
+    assert result.stderr == "Warning: No updates provided.\n"
+    client.revise_fixed_price_item.assert_not_called()
+
+
+def test_should_surface_revise_failure_for_legacy_listing(monkeypatch, runner):
+    client = MagicMock()
+    client.revise_fixed_price_item.return_value = REVISE_FAILURE_XML
+    monkeypatch.setattr(listings, "get_client", lambda: client)
+    monkeypatch.setattr(
+        listings,
+        "_get_listing_by_sku",
+        lambda _client, _sku: _legacy_active_listing(),
+    )
+
+    result = runner.invoke(
+        app,
+        ["seller", "listings", "update", COLLIDING_SKU, "--best-offer"],
+    )
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert result.stderr == (
+        f"Revising legacy Trading API listing {COLLIDING_LEGACY_ITEM_ID}...\n"
+        "Error: ReviseFixedPriceItem failed: 17: Invalid item ID 188900460802.\n"
+    )
+
+
+def test_should_refuse_best_offer_for_inventory_backed_listing(monkeypatch, runner):
+    client = MagicMock()
+    client.get_offers.return_value = {"offers": [_draft_offer()], "size": 1}
+    client.get_inventory_item.return_value = _inventory_item()
+    monkeypatch.setattr(listings, "get_client", lambda: client)
+    monkeypatch.setattr(listings, "_fetch_all_active_listings", lambda client, limit: [])
+
+    result = runner.invoke(
+        app,
+        ["seller", "listings", "update", "EBAY-20260804130425", "--best-offer"],
+    )
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert result.stderr == (
+        "Error: Best Offer is not supported for Inventory API listing EBAY-20260804130425 "
+        "(offer offer-auction); --best-offer applies to legacy Trading API listings only\n"
+    )
+    client.update_offer.assert_not_called()
+    client.create_or_update_inventory_item.assert_not_called()

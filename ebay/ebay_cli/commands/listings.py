@@ -896,6 +896,37 @@ def _get_merged_listings(client, limit: int = 100, status_filter: Optional[str] 
     return listings[:limit]
 
 
+def _reject_cross_api_sku_collision(
+    sku: str,
+    offer_listing: Listing,
+    active_items: list[dict],
+) -> None:
+    """Refuse a SKU that names both an Inventory API offer and another listing.
+
+    The multiple-offers guard in ``_get_listing_by_sku`` only catches collisions
+    inside the Inventory API's own results. A SKU whose custom label also carries
+    a legacy Trading API active listing is a second record: ``update`` would
+    write to the Inventory offer and report success while the live listing kept
+    its old values (agent-issues #226). A published offer and its own listing
+    share the item ID, so only differing item IDs count as a collision.
+    """
+    offer_item_id = offer_listing.item_id or ""
+    colliding_item_ids = sorted(
+        str(item.get("item_id") or "<missing item_id>")
+        for item in active_items
+        if item.get("sku") == sku and (item.get("item_id") or "") != offer_item_id
+    )
+    if not colliding_item_ids:
+        return
+
+    raise ClientError(
+        f"SKU {sku} resolves to different records: Inventory API offer "
+        f"{offer_listing.offer_id or '<missing offerId>'} "
+        f"(item {offer_item_id or 'unpublished'}) and Trading API active listing "
+        f"{', '.join(colliding_item_ids)}"
+    )
+
+
 def _get_listing_by_sku(client, sku: str) -> Optional[Listing]:
     """Get a single listing by SKU, merging data from all APIs."""
     inventory_item = None
@@ -930,9 +961,13 @@ def _get_listing_by_sku(client, sku: str) -> Optional[Listing]:
         if listing is None:
             return None
 
+        # One Trading API read serves both the cross-API collision guard and,
+        # for a published offer, the merge of its own listing instance.
+        active_items = _fetch_all_active_listings(client, 500)
+        _reject_cross_api_sku_collision(sku, listing, active_items)
+
         # If published, get additional data for this exact listing instance.
         if listing.is_active and listing.item_id:
-            active_items = _fetch_all_active_listings(client, 500)
             for item in active_items:
                 if item.get("item_id") == listing.item_id:
                     trading_listing = listing_from_trading_api(item)
@@ -2019,6 +2054,107 @@ def listings_create(
             shutil.rmtree(photos_temp_dir, ignore_errors=True)
 
 
+# =============================================================================
+# Helper Functions: Legacy Trading API Listing Updates
+# =============================================================================
+
+LEGACY_REVISE_OPTIONS = "--title, --description, --price, --quantity and --best-offer"
+
+
+def _parse_revise_fixed_price_item_xml(xml_response: str) -> dict[str, str]:
+    """Validate a ReviseFixedPriceItem response.
+
+    eBay rejects a revision with Ack=Failure and per-error codes; that has to
+    surface instead of being reported as a successful update.
+    """
+    try:
+        root = ET.fromstring(xml_response)
+    except ET.ParseError as error:
+        raise ClientError(f"Invalid ReviseFixedPriceItem XML: {error}") from error
+
+    ack = _get_text(root, "Ack")
+    if ack not in {"Success", "Warning"}:
+        messages = []
+        for error_element in root.findall("ebay:Errors", NS):
+            code = _get_text(error_element, "ErrorCode").strip()
+            message = (
+                _get_text(error_element, "LongMessage")
+                or _get_text(error_element, "ShortMessage")
+            ).strip()
+            if message:
+                messages.append(f"{code}: {message}" if code else message)
+        detail = "; ".join(messages) or f"Ack={ack or 'missing'}"
+        raise ClientError(f"ReviseFixedPriceItem failed: {detail}")
+
+    return {"item_id": _get_text(root, "ItemID"), "ack": ack}
+
+
+def _revise_legacy_listing(
+    client,
+    listing: Listing,
+    *,
+    title: Optional[str],
+    description: Optional[str],
+    price: Optional[str],
+    quantity: Optional[int],
+    best_offer: Optional[bool],
+    currency: Optional[str],
+    unsupported_options: list[str],
+) -> bool:
+    """Revise a legacy Trading API listing, which has no Inventory API offer.
+
+    Such listings were read-only through this CLI before (agent-issues #226):
+    they carry no inventory item and no offer for the Inventory paths to write,
+    so ReviseFixedPriceItem is their only write path.
+
+    Returns:
+        True when a revision was sent, False when nothing was requested.
+    """
+    if unsupported_options:
+        raise ClientError(
+            f"Legacy Trading API listing {listing.sku} supports "
+            f"{LEGACY_REVISE_OPTIONS} only; unsupported: "
+            f"{', '.join(unsupported_options)}"
+        )
+
+    if not listing.item_id:
+        raise ClientError(
+            f"Cannot revise legacy Trading API listing {listing.sku}: the Trading "
+            "API returned no item ID for this SKU"
+        )
+
+    if listing.format != ListingFormat.FIXED_PRICE:
+        raise ClientError(
+            f"Cannot revise legacy Trading API listing {listing.sku} "
+            f"(item {listing.item_id}): ReviseFixedPriceItem covers fixed-price "
+            f"listings only, and this one is {listing.format.value}"
+        )
+
+    if currency and not price:
+        raise ClientError(
+            f"--currency requires --price for legacy Trading API listing {listing.sku}"
+        )
+
+    revision: dict[str, Any] = {
+        "title": title,
+        "description": description,
+        "start_price": price,
+        "currency": currency or (listing.currency if price else None),
+        "quantity": quantity,
+        "best_offer_enabled": best_offer,
+    }
+    if all(value is None for value in revision.values()):
+        print_warning("No updates provided.")
+        return False
+
+    print_info(f"Revising legacy Trading API listing {listing.item_id}...")
+    _parse_revise_fixed_price_item_xml(
+        client.revise_fixed_price_item(listing.item_id, **revision)
+    )
+    print_success(f"Listing updated: {listing.sku}")
+    return True
+
+
 @app.command("update")
 @command
 def listings_update(
@@ -2035,17 +2171,26 @@ def listings_update(
     return_policy_id: Optional[str] = typer.Option(None, "--return-policy", help="Update return policy"),
     location_key: Optional[str] = typer.Option(None, "--location", help="Update location"),
     from_json: Optional[str] = typer.Option(None, "--from-json", help="Updates from JSON file"),
+    best_offer: Optional[bool] = typer.Option(
+        None,
+        "--best-offer/--no-best-offer",
+        help="Enable or disable Best Offer (legacy Trading API listings only)",
+    ),
     table: bool = typer.Option(False, "--table", "-t", help="Display result as table"),
 ):
     """
     Update an existing listing.
 
-    Updates both the inventory item and offer as needed.
+    Inventory API listings are updated through their inventory item and offer.
+    A legacy Trading API listing (no offer ID) is revised through the Trading
+    API instead, which covers --title, --description, --price, --quantity and
+    --best-offer.
 
     Examples:
         ebay listings update SKU123 --price 39.99
         ebay listings update SKU123 --quantity 5
         ebay listings update SKU123 --title "New Title" --price 29.99
+        ebay listings update SKU123 --best-offer
     """
     try:
         client = get_client()
@@ -2057,103 +2202,133 @@ def listings_update(
             raise typer.Exit(1)
 
         if not listing.offer_id:
-            print_error(f"Cannot update legacy listing (no offer ID): {sku}")
-            raise typer.Exit(1)
+            # Legacy Trading API listing: no inventory item or offer to write.
+            if not _revise_legacy_listing(
+                client,
+                listing,
+                title=title,
+                description=description,
+                price=price,
+                quantity=quantity,
+                best_offer=best_offer,
+                currency=currency,
+                unsupported_options=[
+                    flag
+                    for flag, value in (
+                        ("--category", category_id),
+                        ("--condition", condition),
+                        ("--fulfillment-policy", fulfillment_policy_id),
+                        ("--payment-policy", payment_policy_id),
+                        ("--return-policy", return_policy_id),
+                        ("--location", location_key),
+                        ("--from-json", from_json),
+                    )
+                    if value is not None
+                ],
+            ):
+                return
+        else:
+            if best_offer is not None:
+                raise ClientError(
+                    f"Best Offer is not supported for Inventory API listing {listing.sku} "
+                    f"(offer {listing.offer_id}); --best-offer applies to legacy Trading API "
+                    "listings only"
+                )
 
-        # Track if we need to update inventory item or offer
-        update_inventory = False
-        update_offer = False
+            # Track if we need to update inventory item or offer
+            update_inventory = False
+            update_offer = False
 
-        # Update inventory item
-        try:
-            current_inventory = client.get_inventory_item(sku)
-        except Exception:
-            current_inventory = {}
+            # Update inventory item
+            try:
+                current_inventory = client.get_inventory_item(sku)
+            except Exception:
+                current_inventory = {}
 
-        inventory_payload = current_inventory.copy()
-        for field in ["sku", "locale", "groupIds", "inventoryItemGroupKeys"]:
-            inventory_payload.pop(field, None)
+            inventory_payload = current_inventory.copy()
+            for field in ["sku", "locale", "groupIds", "inventoryItemGroupKeys"]:
+                inventory_payload.pop(field, None)
 
-        if title or description:
-            if "product" not in inventory_payload:
-                inventory_payload["product"] = {}
-            if title:
-                inventory_payload["product"]["title"] = title
+            if title or description:
+                if "product" not in inventory_payload:
+                    inventory_payload["product"] = {}
+                if title:
+                    inventory_payload["product"]["title"] = title
+                    update_inventory = True
+                if description:
+                    inventory_payload["product"]["description"] = description
+                    update_inventory = True
+
+            if condition:
+                # Validate condition against category before updating
+                effective_category = category_id or listing.category_id
+                if effective_category:
+                    _validate_condition_for_category(client, condition, effective_category)
+                inventory_payload["condition"] = condition.upper()
                 update_inventory = True
-            if description:
-                inventory_payload["product"]["description"] = description
-                update_inventory = True
 
-        if condition:
-            # Validate condition against category before updating
-            effective_category = category_id or listing.category_id
-            if effective_category:
-                _validate_condition_for_category(client, condition, effective_category)
-            inventory_payload["condition"] = condition.upper()
-            update_inventory = True
+            if update_inventory:
+                print_info("Updating inventory item...")
+                client.create_or_update_inventory_item(sku, inventory_payload)
 
-        if update_inventory:
-            print_info("Updating inventory item...")
-            client.create_or_update_inventory_item(sku, inventory_payload)
+            # Update offer
+            current_offer = client.get_offer(listing.offer_id)
+            offer_payload = current_offer.copy()
+            for field in ["offerId", "status", "listing", "sku", "marketplaceId", "format"]:
+                offer_payload.pop(field, None)
 
-        # Update offer
-        current_offer = client.get_offer(listing.offer_id)
-        offer_payload = current_offer.copy()
-        for field in ["offerId", "status", "listing", "sku", "marketplaceId", "format"]:
-            offer_payload.pop(field, None)
+            if price or currency:
+                if "pricingSummary" not in offer_payload:
+                    offer_payload["pricingSummary"] = current_offer.get("pricingSummary", {})
+                if "price" not in offer_payload["pricingSummary"]:
+                    offer_payload["pricingSummary"]["price"] = current_offer.get("pricingSummary", {}).get("price", {})
+                if price:
+                    offer_payload["pricingSummary"]["price"]["value"] = price
+                    update_offer = True
+                if currency:
+                    offer_payload["pricingSummary"]["price"]["currency"] = currency
+                    update_offer = True
 
-        if price or currency:
-            if "pricingSummary" not in offer_payload:
-                offer_payload["pricingSummary"] = current_offer.get("pricingSummary", {})
-            if "price" not in offer_payload["pricingSummary"]:
-                offer_payload["pricingSummary"]["price"] = current_offer.get("pricingSummary", {}).get("price", {})
-            if price:
-                offer_payload["pricingSummary"]["price"]["value"] = price
-                update_offer = True
-            if currency:
-                offer_payload["pricingSummary"]["price"]["currency"] = currency
+            if quantity is not None:
+                offer_payload["availableQuantity"] = quantity
                 update_offer = True
 
-        if quantity is not None:
-            offer_payload["availableQuantity"] = quantity
-            update_offer = True
-
-        if category_id:
-            offer_payload["categoryId"] = category_id
-            update_offer = True
-
-        if fulfillment_policy_id or payment_policy_id or return_policy_id:
-            if "listingPolicies" not in offer_payload:
-                offer_payload["listingPolicies"] = current_offer.get("listingPolicies", {})
-            if fulfillment_policy_id:
-                offer_payload["listingPolicies"]["fulfillmentPolicyId"] = fulfillment_policy_id
-                update_offer = True
-            if payment_policy_id:
-                offer_payload["listingPolicies"]["paymentPolicyId"] = payment_policy_id
-                update_offer = True
-            if return_policy_id:
-                offer_payload["listingPolicies"]["returnPolicyId"] = return_policy_id
+            if category_id:
+                offer_payload["categoryId"] = category_id
                 update_offer = True
 
-        if location_key:
-            offer_payload["merchantLocationKey"] = location_key
-            update_offer = True
+            if fulfillment_policy_id or payment_policy_id or return_policy_id:
+                if "listingPolicies" not in offer_payload:
+                    offer_payload["listingPolicies"] = current_offer.get("listingPolicies", {})
+                if fulfillment_policy_id:
+                    offer_payload["listingPolicies"]["fulfillmentPolicyId"] = fulfillment_policy_id
+                    update_offer = True
+                if payment_policy_id:
+                    offer_payload["listingPolicies"]["paymentPolicyId"] = payment_policy_id
+                    update_offer = True
+                if return_policy_id:
+                    offer_payload["listingPolicies"]["returnPolicyId"] = return_policy_id
+                    update_offer = True
 
-        if from_json:
-            with open(from_json, "r") as f:
-                updates = json.load(f)
-                offer_payload.update(updates)
+            if location_key:
+                offer_payload["merchantLocationKey"] = location_key
                 update_offer = True
 
-        if update_offer:
-            print_info("Updating offer...")
-            client.update_offer(listing.offer_id, offer_payload)
+            if from_json:
+                with open(from_json, "r") as f:
+                    updates = json.load(f)
+                    offer_payload.update(updates)
+                    update_offer = True
 
-        if not update_inventory and not update_offer:
-            print_warning("No updates provided.")
-            return
+            if update_offer:
+                print_info("Updating offer...")
+                client.update_offer(listing.offer_id, offer_payload)
 
-        print_success(f"Listing updated: {sku}")
+            if not update_inventory and not update_offer:
+                print_warning("No updates provided.")
+                return
+
+            print_success(f"Listing updated: {sku}")
 
         # Fetch and display updated listing
         updated = _get_listing_by_sku(client, sku)

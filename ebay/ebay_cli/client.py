@@ -3,6 +3,7 @@ import random
 import re
 import time
 from typing import Dict, List, Optional, Any
+from xml.sax.saxutils import escape
 import requests
 
 from cli_tools_shared.token_manager import TokenManager
@@ -1490,6 +1491,83 @@ class EbayClient:
 </GetSellerListRequest>"""
 
         return self._make_trading_api_request("GetSellerList", request_xml)
+
+    def revise_fixed_price_item(
+        self,
+        item_id: str,
+        *,
+        title: Optional[str] = None,
+        description: Optional[str] = None,
+        start_price: Optional[str] = None,
+        currency: Optional[str] = None,
+        quantity: Optional[int] = None,
+        best_offer_enabled: Optional[bool] = None,
+    ) -> str:
+        """
+        Revise a legacy fixed-price listing through the Trading API.
+
+        Inventory API listings are revised through their offer; this is the only
+        write path for a listing that exists on the Trading side alone (no
+        offer). Only the fields passed in are sent, so a revision cannot
+        overwrite a value the caller did not ask to change.
+
+        Args:
+            item_id: eBay listing ID of the legacy listing
+            title: New listing title
+            description: New listing description (XML-escaped here)
+            start_price: New fixed price
+            currency: Currency of start_price (defaults to eBay's site currency)
+            quantity: New available quantity
+            best_offer_enabled: Enable or disable the Best Offer feature
+
+        Returns:
+            Response XML as string
+
+        Raises:
+            ClientError: If the request is incomplete or the call fails
+        """
+        if not item_id:
+            raise ClientError("ReviseFixedPriceItem requires an item ID")
+        if currency and start_price is None:
+            raise ClientError("ReviseFixedPriceItem currency requires a start price")
+
+        fields = []
+        if title is not None:
+            fields.append(f"<Title>{escape(title)}</Title>")
+        if description is not None:
+            fields.append(f"<Description>{escape(description)}</Description>")
+        if start_price is not None:
+            currency_attribute = (
+                f' currencyID="{escape(currency)}"' if currency else ""
+            )
+            fields.append(
+                f"<StartPrice{currency_attribute}>{start_price}</StartPrice>"
+            )
+        if quantity is not None:
+            fields.append(f"<Quantity>{quantity}</Quantity>")
+        if best_offer_enabled is not None:
+            fields.append(
+                "<BestOfferDetails>"
+                f"<BestOfferEnabled>{str(best_offer_enabled).lower()}</BestOfferEnabled>"
+                "</BestOfferDetails>"
+            )
+
+        if not fields:
+            raise ClientError("ReviseFixedPriceItem requires at least one field to revise")
+
+        request_xml = (
+            '<?xml version="1.0" encoding="utf-8"?>\n'
+            '<ReviseFixedPriceItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">\n'
+            "  <Item>\n"
+            f"    <ItemID>{escape(item_id)}</ItemID>\n"
+            + "".join(f"    {field}\n" for field in fields)
+            + "  </Item>\n"
+            "  <ErrorLanguage>en_US</ErrorLanguage>\n"
+            "  <WarningLevel>High</WarningLevel>\n"
+            "</ReviseFixedPriceItemRequest>"
+        )
+
+        return self._make_trading_api_request("ReviseFixedPriceItem", request_xml)
 
     def get_member_messages(
         self,
