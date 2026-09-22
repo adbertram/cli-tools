@@ -158,7 +158,9 @@ cryptocom orders list --properties "order_id,instrument_name,side,quantity,limit
 
 `--tif` accepts `GTC`, `IOC`, `FOK` aliases plus the full names
 `GOOD_TILL_CANCEL`, `IMMEDIATE_OR_CANCEL`, `FILL_OR_KILL`. `--price` is required
-for LIMIT orders and rejected for MARKET orders. stdout carries only the API
+for LIMIT orders and rejected for MARKET orders. `--quantity` and `--price` must
+be positive finite decimal numbers: `Infinity`, `-Infinity` and `NaN` are
+rejected before any request is signed. stdout carries only the API
 result (for example `{"order_id": ...}`); messages go to stderr.
 
 `--spot-margin` accepts `SPOT` or `MARGIN` (case-insensitive). Use `SPOT` to
