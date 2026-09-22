@@ -2,7 +2,8 @@
 
 Runs a data-driven registry of node-level checks against a workflow JSON to
 catch configuration problems BEFORE activation: broken loadOptions, missing
-required parameters, deleted credentials, version mismatches, dead webhook
+required parameters, resource/operation values that do not match the schema's
+options exactly, deleted credentials, version mismatches, dead webhook
 paths, orphan pinData, etc.
 
 Public surface:
@@ -395,6 +396,75 @@ def check_required_params_set(workflow: Dict, api) -> List[Finding]:
     return findings
 
 
+# `resource` and `operation` are the two parameters n8n resolves by exact string
+# equality against the node schema's option values. A value that differs only in
+# case is not the declared option — nothing downstream normalizes it, so the node
+# takes an unknown branch and fails mid-execution.
+_EXACT_OPTION_PARAMS = ("resource", "operation")
+
+_MAX_DECLARED_OPTIONS_IN_MESSAGE = 12
+
+
+def _declared_option_values(schema: Dict, name: str, params: Dict) -> List[str]:
+    """Option values the schema declares for `name`, given the node's parameters.
+
+    Only properties whose displayOptions match the current parameters contribute,
+    so a per-resource `operation` list is judged against the resource the node
+    actually sets. Returns [] when no property declares static options, which is
+    the dynamic loadOptions case: there is no static list to compare against.
+    """
+    values: List[str] = []
+    for p in schema.get("properties") or []:
+        if p.get("name") != name:
+            continue
+        if not _display_options_match(p.get("displayOptions"), params):
+            continue
+        for opt in p.get("options") or []:
+            if isinstance(opt, dict) and "value" in opt and opt["value"] not in values:
+                values.append(opt["value"])
+    return values
+
+
+def _option_mismatch_message(name: str, value: str, declared: List[str]) -> str:
+    """Name the rejected value, the declared values, and the case-variant fix."""
+    shown = declared[:_MAX_DECLARED_OPTIONS_IN_MESSAGE]
+    listing = ", ".join(repr(v) for v in shown)
+    if len(declared) > len(shown):
+        listing += f" (+{len(declared) - len(shown)} more)"
+    close = next(
+        (d for d in declared if isinstance(d, str) and d.lower() == value.lower()),
+        None,
+    )
+    hint = f" did you mean '{close}'?" if close is not None else ""
+    return (
+        f"parameter '{name}' value {value!r} is not one of the node schema's option "
+        f"values ({listing}). Values are case-sensitive.{hint}"
+    )
+
+
+def check_option_values_exact(workflow: Dict, api) -> List[Finding]:
+    """`resource` / `operation` must hold a value the schema declares exactly."""
+    findings: List[Finding] = []
+    for node in workflow.get("nodes") or []:
+        schema = _cache().get_schema(node.get("type", ""))
+        if not schema:
+            continue
+        params = node.get("parameters") or {}
+        for name in _EXACT_OPTION_PARAMS:
+            value = params.get(name)
+            # An expression cannot be judged statically; an empty value means unset.
+            if not isinstance(value, str) or not value or value.startswith("="):
+                continue
+            declared = _declared_option_values(schema, name, params)
+            if not declared or value in declared:
+                continue
+            findings.append(_finding(
+                node, "option_values_exact", "fail",
+                _option_mismatch_message(name, value, declared),
+            ))
+    return findings
+
+
 def check_credentials_exist(workflow: Dict, api) -> List[Finding]:
     """Every credential referenced by a node must exist on the server."""
     findings: List[Finding] = []
@@ -707,6 +777,7 @@ def check_pin_data_orphans(workflow: Dict, api) -> List[Finding]:
 CHECK_REGISTRY: List[Check] = [
     Check("load_options_resolves",          "Load options method resolves",         "fail", check_load_options_resolves),
     Check("required_params_set",            "Required parameters set",              "fail", check_required_params_set),
+    Check("option_values_exact",            "Option values match schema exactly",   "fail", check_option_values_exact),
     Check("credentials_exist",              "Credentials exist on server",          "fail", check_credentials_exist),
     Check("credential_type_matches",        "Credential type matches node schema",  "fail", check_credential_type_matches),
     Check("type_version_valid",             "typeVersion within schema range",      "fail", check_type_version_valid),
