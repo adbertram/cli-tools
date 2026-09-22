@@ -80,12 +80,22 @@ def _resolve_time_in_force(value: Optional[str]) -> Optional[str]:
 
 
 def _validated_amount(value: str, label: str) -> str:
-    """Validate a decimal CLI amount and return the exact text."""
+    """Validate a decimal CLI amount and return the exact text.
+
+    Non-finite values are refused before the positivity comparison. ``Decimal``
+    accepts ``Infinity``, ``-Infinity`` and ``NaN`` as text, and each one breaks
+    the positivity check in a different way: ``Infinity`` compares greater than
+    zero and would reach the venue as ``"Infinity"``, while ``NaN`` makes ``<=``
+    raise ``decimal.InvalidOperation`` and surfaces as an unhelpful
+    ``[<class 'decimal.InvalidOperation'>]`` error. Neither is a tradable amount.
+    """
     text = value.strip()
     try:
         number = Decimal(text)
     except InvalidOperation:
         raise ClientError(f"{label} must be a decimal number, got: {value}")
+    if not number.is_finite():
+        raise ClientError(f"{label} must be a finite decimal number, got: {value}")
     if number <= 0:
         raise ClientError(f"{label} must be positive, got: {value}")
     return text

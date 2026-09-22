@@ -279,6 +279,61 @@ def test_orders_create_maps_gtc_alias_and_rejects_bad_decimal(monkeypatch):
     client.create_order.assert_not_called()
 
 
+NON_FINITE_AMOUNTS = [
+    ("--quantity", "Quantity"),
+    ("--price", "Price"),
+]
+
+
+def _create_args_with_amount(flag: str, value: str):
+    """Build the report's invocation shape with one amount replaced."""
+    args = [
+        "create",
+        "--symbol", "SOL_USD",
+        "--side", "BUY",
+        "--spot-margin", "SPOT",
+        "--quantity", "0.1",
+        "--price", "100",
+    ]
+    args[args.index(flag) + 1] = value
+    return args
+
+
+@pytest.mark.parametrize("flag,label", NON_FINITE_AMOUNTS)
+@pytest.mark.parametrize("value", ["Infinity", "-Infinity", "NaN"])
+def test_orders_create_non_finite_amount_makes_no_client_call(
+    monkeypatch, flag, label, value
+):
+    """Infinity, -Infinity and NaN are refused before the client is asked."""
+    client = MagicMock()
+    monkeypatch.setattr(orders, "get_client", lambda: client)
+
+    result = CliRunner().invoke(orders.app, _create_args_with_amount(flag, value))
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert f"{label} must be a finite decimal number, got: {value}" in result.stderr
+    client.create_order.assert_not_called()
+
+
+@pytest.mark.parametrize("flag,label", NON_FINITE_AMOUNTS)
+@pytest.mark.parametrize("value", ["Infinity", "-Infinity", "NaN"])
+def test_orders_create_non_finite_amount_makes_no_transport_call(
+    monkeypatch, flag, label, value
+):
+    """The real client issues no HTTP request for a non-finite amount."""
+    client = make_client()
+    calls = patch_transport(monkeypatch, client, [ENVELOPE_OK({"order_id": "NEVER"})])
+    monkeypatch.setattr(orders, "get_client", lambda: client)
+
+    result = CliRunner().invoke(orders.app, _create_args_with_amount(flag, value))
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert f"{label} must be a finite decimal number, got: {value}" in result.stderr
+    assert calls == []
+
+
 def test_orders_create_invalid_tif_is_clean_cli_error(monkeypatch):
     client = MagicMock()
     monkeypatch.setattr(orders, "get_client", lambda: client)
