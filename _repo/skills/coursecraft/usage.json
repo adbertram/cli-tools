@@ -1,7 +1,7 @@
 {
   "tool": "coursecraft",
   "description": "CLI interface for coursecraft",
-  "discovered_at": "2026-09-20T16:51:30Z",
+  "discovered_at": "2026-09-22T18:17:49Z",
   "total_commands": 67,
   "global_options": [],
   "commands": {
@@ -677,12 +677,12 @@
               "help": "Course-update lineage: the clip in the base course version this record derives from"
             },
             {
-              "name": "--slide-narration-complete",
+              "name": "--slide-voiceover-complete",
               "type": "bool",
               "required": false,
-              "help": "Set or clear the slide narration complete flag",
+              "help": "Set or clear the slide voiceover complete flag",
               "takes_value": false,
-              "secondary": "--no-slide-narration-complete"
+              "secondary": "--no-slide-voiceover-complete"
             },
             {
               "name": "--profile",
@@ -1668,7 +1668,7 @@
       ],
       "commands": {
         "create": {
-          "help": "Create demo record(s) in Airtable linked to a clip. Supports two modes: 1. Single demo mode: Use optional fields to create one demo 2. Batch mode: Use --json or --file to create multiple demos The --clip-order is required and specifies the position of the demo within the clip, alongside slides which also have a clip order. In batch mode the per-demo JSON keys \"name\", \"clip_order\", \"target_length\", \"learner_takeaway\", \"demo_intent\", \"script\", \"performer\", \"voiceover_method\", and \"notes\" set each demo's values. Every one of those keys except \"name\" falls back to the matching CLI option when the key is absent, so --clip-order, --target-length, --demo-intent, --script, --performer, and --notes act as per-demo defaults. --name is never a batch default: two demos in one clip cannot share a name. A batch object carrying the retired \"discovery_performer\", \"recording_performer\", or \"recording_dictation_method\" key is refused by name. Action Summary cannot be set on create.",
+          "help": "Create demo record(s) in Airtable linked to a clip. Supports two modes: 1. Single demo mode: Use optional fields to create one demo 2. Batch mode: Use --json or --file to create multiple demos The --clip-order is required and specifies the position of the demo within the clip, alongside slides which also have a clip order. In batch mode the per-demo JSON keys \"name\", \"clip_order\", \"target_length\", \"learner_takeaway\", \"demo_intent\", \"script\", \"performer\", \"voiceover_performer\", and \"notes\" set each demo's values. Every one of those keys except \"name\" falls back to the matching CLI option when the key is absent, so --clip-order, --target-length, --demo-intent, --script, --performer, --voiceover-performer, and --notes act as per-demo defaults. --name is never a batch default: two demos in one clip cannot share a name. A batch object carrying the retired \"discovery_performer\", \"recording_performer\", or \"recording_dictation_method\" key is refused by name. Action Summary cannot be set on create.",
           "examples": [
             "coursecraft demos create --clip recXXX --clip-order 1 --name \"Setup Demo\"",
             "coursecraft demos create --clip recXXX --clip-order 1 --name \"Setup Demo\" --performer Adam",
@@ -1732,11 +1732,11 @@
               "default": "Agent"
             },
             {
-              "name": "--voiceover-method",
-              "type": "Manual Instructor|AI Generated",
+              "name": "--voiceover-performer",
+              "type": "Agent|Adam",
               "required": false,
-              "help": "How this demo's voiceover is produced: 'Manual Instructor' (Adam reads the Demo Script) or 'AI Generated' (ElevenLabs generates it). Set per demo -- it is the only level that carries this field",
-              "default": "Manual Instructor"
+              "help": "Who performs this demo's voiceover: 'Agent' routes generation to ElevenLabs; 'Adam' keeps the manual recording workflow",
+              "default": "Adam"
             },
             {
               "name": "--notes",
@@ -1886,7 +1886,6 @@
             "coursecraft demos update recXXX --clip \"\"  # unlink the demo from its clip",
             "coursecraft demos update recXXX --clip-order 2",
             "coursecraft demos update recXXX --demo-intent \"What the demo teaches and why...\"",
-            "coursecraft demos update recXXX --performer Adam",
             "coursecraft demos update recXXX --voiceover-recorded",
             "coursecraft demos update recXXX --voiceover-verified"
           ],
@@ -1982,10 +1981,10 @@
               "help": "Who performs this demo's recording in Ronin: 'Agent' or 'Adam'"
             },
             {
-              "name": "--voiceover-method",
-              "type": "Manual Instructor|AI Generated",
+              "name": "--voiceover-performer",
+              "type": "Agent|Adam",
               "required": false,
-              "help": "How this demo's voiceover is produced: 'Manual Instructor' (Adam reads the Demo Script) or 'AI Generated' (ElevenLabs generates it). Set per demo -- it is the only level that carries this field"
+              "help": "Who performs this demo's voiceover: 'Agent' routes generation to ElevenLabs; 'Adam' keeps the manual recording workflow"
             },
             {
               "name": "--action-summary-review-ai",
@@ -2094,12 +2093,16 @@
               "help": "Demo authoring notes addressed to the model"
             },
             {
-              "name": "--demo-edited",
-              "type": "bool",
+              "name": "--unpaced-run-id",
+              "type": "TEXT",
               "required": false,
-              "help": "Set or clear the demo edited flag",
-              "takes_value": false,
-              "secondary": "--no-demo-edited"
+              "help": "Run id of this demo's current unpaced action capture; a different value clears the four action-video recording states"
+            },
+            {
+              "name": "--paced-run-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Run id of this demo's current paced action capture; a different value clears the paced action-video recording states"
             },
             {
               "name": "--base-record",
@@ -3034,28 +3037,28 @@
               "help": "AI review of the slide build"
             },
             {
-              "name": "--slide-narration-approved",
+              "name": "--slide-voiceover-approved",
               "type": "bool",
               "required": false,
-              "help": "Set or clear the slide-narration-approved flag, the gate that releases the slide-narration phase (Review Slide Narration) to recording",
+              "help": "Set or clear the slide-voiceover-approved flag, the gate that releases the slide-voiceover phase (Review Slide Voiceover) to recording",
               "takes_value": false,
-              "secondary": "--no-slide-narration-approved"
+              "secondary": "--no-slide-voiceover-approved"
             },
             {
-              "name": "--slide-narration-recorded",
+              "name": "--slide-voiceover-recorded",
               "type": "bool",
               "required": false,
-              "help": "Set or clear the slide-narration-recorded flag, marking the module's slide narration take as recorded",
+              "help": "Set or clear the slide-voiceover-recorded flag, marking the module's slide voiceover take as recorded",
               "takes_value": false,
-              "secondary": "--no-slide-narration-recorded"
+              "secondary": "--no-slide-voiceover-recorded"
             },
             {
-              "name": "--slide-narration-complete",
+              "name": "--slide-voiceover-complete",
               "type": "bool",
               "required": false,
-              "help": "Set or clear the module slide-narration-complete flag and sync every child clip and slide",
+              "help": "Set or clear the module slide-voiceover-complete flag and sync every child clip and slide",
               "takes_value": false,
-              "secondary": "--no-slide-narration-complete"
+              "secondary": "--no-slide-voiceover-complete"
             },
             {
               "name": "--feedback-requested",
@@ -3704,12 +3707,12 @@
               "help": "Estimated slide length in minutes"
             },
             {
-              "name": "--clip-slide-narration-complete",
+              "name": "--clip-slide-voiceover-complete",
               "type": "bool",
               "required": false,
-              "help": "Set or clear the clip slide-narration-complete flag",
+              "help": "Set or clear the clip slide-voiceover-complete flag",
               "takes_value": false,
-              "secondary": "--no-clip-slide-narration-complete"
+              "secondary": "--no-clip-slide-voiceover-complete"
             },
             {
               "name": "--base-record",
