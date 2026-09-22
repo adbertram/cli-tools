@@ -31,6 +31,7 @@ airtable <command-group> <action> [arguments] [options]
 | Update a table | `airtable tables update tblXXX --name "New Name"` |
 | List fields in a table | `airtable fields list "Table Name"` |
 | Create a field | `airtable fields create "Table Name" "Field Name" singleLineText` |
+| Create a checkbox field | `airtable fields create "Table Name" "Field Name" checkbox --options '{"icon":"check","color":"greenBright"}'` |
 | Update a field | `airtable fields update "Table Name" fldXXX --name "New Name"` |
 | Check auth status | `airtable auth status` |
 | List profiles | `airtable auth profiles list` |
@@ -135,3 +136,18 @@ Measured live against base `app9uzzru5KZOImYQ` on 2026-09-11: `multipleLookupVal
 **Cause:** Airtable exposes no delete-field endpoint, and the update-field endpoint accepts only `name` and `description`. Verified in the same live pass on 2026-09-11.
 
 **Correct path:** Verify the `--options` payload before creating — field IDs resolved from `airtable fields list <linked table>` — because the only way to remove a mistake is Airtable's web UI. `airtable fields create` prints this warning on every successful create, and `airtable fields delete` refuses before making a request.
+
+### 5. Checkbox fields need `options.icon` and `options.color`, which the CLI now supplies
+
+**Symptom:** `airtable fields create "Demos" "Unpaced Action Video Recorded" checkbox --base app... --description "..."` failed with 422 `Invalid options for Demos.Unpaced Action Video Recorded: Failed schema validation: Unpaced Action Video Recorded.options is missing`, and the `--options '{}'` workaround failed with `... options.icon is required`.
+
+**Cause:** Airtable's create-field schema requires both `icon` and `color` on a checkbox. The CLI sent no `options` object at all when `--options` was absent, and forwarded an empty object unchanged when it was empty.
+
+**Correct path:** the bare and empty-options forms now work: `fields create` fills in Airtable's defaults `{"icon":"check","color":"greenBright"}` whenever a checkbox create receives no `options`, an empty object, or an object missing either key. Explicit `--options` values win, so `--options '{"icon":"star","color":"red"}'` still creates that exact checkbox:
+
+```bash
+airtable fields create "Demos" "Unpaced Action Video Recorded" checkbox \
+  --base app... --description "Marks that the first, unpaced action-video take has been recorded."
+```
+
+**Scope:** only checkbox creation is defaulted. Other field types still forward `--options` exactly as given, and a checkbox created with the wrong icon or color cannot be corrected later over the API — see issue 4 above.

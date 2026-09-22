@@ -2,7 +2,7 @@
   "tool": "airtable",
   "description": "CLI interface for Airtable API",
   "usage_instructions": "Use `airtable auth login` first to configure credentials for the default or named profile, then use `tables list`, `tables get`, `fields list`, `fields get`, and `records list` against the configured base. Base ID defaults to `AIRTABLE_BASE_ID`; override with `--base/-b` when the target base matters. Table-name arguments are Airtable table names inside the selected base, not project CLI resource names such as CourseCraft `modules`.",
-  "discovered_at": "2026-09-11T16:10:17Z",
+  "discovered_at": "2026-09-22T14:28:50Z",
   "total_commands": 29,
   "global_options": [
     {
@@ -414,11 +414,12 @@
           "examples": [
             "airtable fields create \"Tasks\" \"Status\" singleLineText",
             "airtable fields create tblXXXXXXXXXXXXXX \"Status\" singleLineText",
+            "airtable fields create \"Tasks\" \"Done\" checkbox",
             "airtable fields create \"Tasks\" \"Done\" checkbox --options '{\"icon\":\"check\",\"color\":\"greenBright\"}'",
             "airtable fields create \"Clips\" \"Module Status\" multipleLookupValues --options '{\"recordLinkFieldId\":\"fldLink\",\"fieldIdInLinkedTable\":\"fldSource\"}'",
             "airtable fields create \"Clips\" \"Slide Count\" rollup --options '{\"recordLinkFieldId\":\"fldLink\",\"fieldIdInLinkedTable\":\"fldSource\",\"formula\":\"COUNTA(values)\"}'"
           ],
-          "usage_instructions": "Create a field in TABLE_ID with NAME and FIELD_TYPE positional arguments. Use --description/-d for a field description, --options/-o with a JSON object for type-specific options, --base/-b to override BASE_ID, and --table/-t for table output. Lookup fields use the schema-read type `multipleLookupValues`, which the create-field API accepts: `airtable fields create Clips \"Module Status\" multipleLookupValues --options '{\"recordLinkFieldId\":\"fld...\",\"fieldIdInLinkedTable\":\"fld...\"}'`. The documented write type `lookup` is rejected by Airtable with HTTP 422 UNSUPPORTED_FIELD_TYPE_FOR_CREATE, so the CLI refuses that spelling before the request and names `multipleLookupValues` instead. Rollup creation works the same way, with recordLinkFieldId, fieldIdInLinkedTable, and formula options. A created field is permanent through the API: Airtable exposes no delete-field endpoint and field updates accept only name and description, so verify the --options payload before creating; removing a field requires the Airtable web UI.",
+          "usage_instructions": "Create a field in TABLE_ID with NAME and FIELD_TYPE positional arguments. Use --description/-d for a field description, --options/-o with a JSON object for type-specific options, --base/-b to override BASE_ID, and --table/-t for table output. Lookup fields use the schema-read type `multipleLookupValues`, which the create-field API accepts: `airtable fields create Clips \"Module Status\" multipleLookupValues --options '{\"recordLinkFieldId\":\"fld...\",\"fieldIdInLinkedTable\":\"fld...\"}'`. The documented write type `lookup` is rejected by Airtable with HTTP 422 UNSUPPORTED_FIELD_TYPE_FOR_CREATE, so the CLI refuses that spelling before the request and names `multipleLookupValues` instead. Checkbox fields always send required options: when --options is omitted, empty, or missing icon/color, the CLI fills in Airtable's defaults {\"icon\":\"check\",\"color\":\"greenBright\"} before the request, so a bare `airtable fields create Demos \"Unpaced Action Video Recorded\" checkbox --base app...` succeeds; explicit values win. Rollup creation works the same way, with recordLinkFieldId, fieldIdInLinkedTable, and formula options. A created field is permanent through the API: Airtable exposes no delete-field endpoint and field updates accept only name and description, so verify the --options payload before creating; removing a field requires the Airtable web UI.",
           "arguments": [
             {
               "name": "table_id",

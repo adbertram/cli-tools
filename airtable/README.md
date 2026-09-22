@@ -71,6 +71,10 @@ airtable records create "Tasks" "Name=New Task" "Status=Todo"
 # Create a new field
 airtable fields create "Tasks" "Status" singleLineText
 
+# Create a checkbox field (required options are supplied automatically)
+airtable fields create "Tasks" "Done" checkbox \
+  --options '{"icon":"check","color":"greenBright"}'
+
 # Use a different base with --base
 airtable records list "Tasks" --base appOTHERBASE
 ```
@@ -247,11 +251,21 @@ airtable fields create tblXXXXXXXXXXXXXX "Status" singleLineText
 airtable fields create "Tasks" "Done" checkbox \
   --options '{"icon":"check","color":"greenBright"}'
 
+# Create a checkbox field with the CLI defaults
+airtable fields create "Tasks" "Done" checkbox
+
 # Create with a description
 airtable fields create "Tasks" "Notes" multilineText \
   --description "Internal notes for this record"
 
 ```
+
+A checkbox requires options: Airtable refuses a create whose options are
+missing (422 `options is missing`) or incomplete (422 `options.icon is required`
+/ `options.color is required`). The CLI therefore fills in Airtable's defaults
+`{"icon":"check","color":"greenBright"}` whenever `--options` is omitted, empty,
+or leaves either key out; values you pass explicitly win. Both forms above
+create the same field.
 
 Lookup and rollup fields are created through `fields create` like any other
 type:
