@@ -8,7 +8,10 @@ actually enforce:
   rejects a plain-text value in a sensitive field), and
 * installation goes through the repo-owned installer, which pins the
   interpreter and overlays the repo-local editable ``cli-tools-shared``
-  dependency declared in ``pyproject.toml``.
+  dependency declared in ``pyproject.toml``, and
+* the order that installer is documented to follow is the order it actually
+  performs: install the tool (creating the venv and launcher) before the shared
+  overlay.
 """
 import re
 import tomllib
@@ -27,6 +30,18 @@ INSTALL_COMMAND = (
     "<cli-tools-root>/_repo/skills/cli-tool/scripts/install-cli-tool.sh "
     "--force-refresh cryptocom"
 )
+INSTALLER_PATH = (
+    TOOL_ROOT.parent / "_repo/skills/cli-tool/scripts/install-cli-tool.sh"
+)
+# The installer's two ordering steps: the tool install (which creates the venv
+# and the launcher) and the repo-local editable cli-tools-shared overlay.
+INSTALLER_TOOL_STEP = 'uv tool install -e "$TOOL_DIR" --force --refresh'
+INSTALLER_SHARED_OVERLAY_STEP = (
+    'uv pip install --python "$UV_VENV/bin/python3" '
+    '--editable "$LOCAL_SHARED_DIR" --reinstall'
+)
+DOCUMENTED_WRONG_ORDER = "before creating the launcher"
+DOCUMENTED_ORDER = "then overlays the repo-local editable `cli-tools-shared`"
 
 
 def section(title):
@@ -106,4 +121,39 @@ def test_installation_uses_canonical_installer_with_shared_dependency():
     ), "pyproject.toml must declare the cli-tools-shared dependency"
     assert "cli-tools-shared" in installation, (
         "Installation must say the shared dependency is installed"
+    )
+
+
+def test_installation_documents_installer_step_order():
+    """The documented order is the installer's order: tool first, then overlay."""
+    assert INSTALLER_PATH.is_file(), (
+        f"installer not found at {INSTALLER_PATH}; the documented install "
+        "order cannot be checked against the script that performs it"
+    )
+    installer = INSTALLER_PATH.read_text(encoding="utf-8")
+
+    tool_step_at = installer.find(INSTALLER_TOOL_STEP)
+    assert tool_step_at != -1, (
+        f"installer no longer runs {INSTALLER_TOOL_STEP!r}; update this contract "
+        "with the installer's real step"
+    )
+    overlay_step_at = installer.find(INSTALLER_SHARED_OVERLAY_STEP)
+    assert overlay_step_at != -1, (
+        f"installer no longer runs {INSTALLER_SHARED_OVERLAY_STEP!r}; update "
+        "this contract with the installer's real step"
+    )
+    assert tool_step_at < overlay_step_at, (
+        "installer no longer installs the tool before the cli-tools-shared "
+        "overlay"
+    )
+
+    installation = " ".join(section("Installation").split())
+    assert DOCUMENTED_WRONG_ORDER not in installation, (
+        "Installation says cli-tools-shared is installed before the launcher "
+        "exists; the installer creates the venv and launcher with the tool "
+        "install and overlays cli-tools-shared afterwards"
+    )
+    assert DOCUMENTED_ORDER in installation, (
+        "Installation must state that the repo-local editable cli-tools-shared "
+        "overlay runs after the tool install"
     )

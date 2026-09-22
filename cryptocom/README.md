@@ -12,8 +12,9 @@ Use it when you need scriptable, JSON-first access from agents, automation, or t
 <cli-tools-root>/_repo/skills/cli-tool/scripts/install-cli-tool.sh --force-refresh cryptocom
 ```
 
-The installer pins the tool venv to the system `python3` and installs the
-repo-local editable `cli-tools-shared` dependency before creating the launcher.
+The installer pins the tool venv to the system `python3` and installs the tool
+first, which creates the venv and the `~/.local/bin` launcher, then overlays the
+repo-local editable `cli-tools-shared` dependency into that venv.
 The `cryptocom` command is installed into `~/.local/bin`.
 
 ## Quick Start
