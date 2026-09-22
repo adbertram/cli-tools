@@ -2,7 +2,7 @@
 
 import shutil
 from pathlib import Path
-from typing import Callable, Optional, Union
+from typing import Callable, Iterable, Optional, Union
 
 from .config import (
     _DEFAULT_ROOT_CONFIG_FIELDS,
@@ -24,6 +24,7 @@ from .config import (
     profile_name_from_path,
     read_cli_tool_secret,
     read_profile_active,
+    root_config_field_names_for,
 )
 from .exceptions import ConfigError
 
@@ -37,10 +38,17 @@ class ProfileStore:
         *,
         tool_dir: Optional[Path] = None,
         profile_auth_settings: Optional[tuple[str, dict]] = None,
+        root_config_fields: Optional[Iterable[str]] = None,
     ):
         self.tool_dir = tool_dir
         self._tool_name = tool_name
         self._profile_auth_settings = profile_auth_settings
+        # The tool's own non-authentication root config names, when the caller
+        # knows the config class. ``create_profile`` reads them through
+        # ``_root_config_field_names`` so a tool-declared name (airtable's
+        # ``BASE_ID``) is written to the tool's root config .env instead of the
+        # profile .env that BaseConfig validation rejects.
+        self.ROOT_CONFIG_FIELDS = tuple(root_config_fields or ())
 
     def list_profile_paths(self):
         return list_env_files(self._tool_name)
@@ -56,6 +64,9 @@ class ProfileStore:
 
     def get_profile_auth_settings(self):
         return self._profile_auth_settings
+
+    def _root_config_field_names(self) -> set[str]:
+        return root_config_field_names_for(self)
 
 
 class _ToolDirShim(ProfileStore):

@@ -499,6 +499,69 @@ def test_login_bootstraps_default_profile_when_none_exist(tmp_path, monkeypatch)
     assert "API_KEY=" in content
 
 
+def test_login_bootstrap_keeps_declared_root_config_field_out_of_profile_env(tmp_path, monkeypatch):
+    """agent-issues #436: a tool-declared ``ROOT_CONFIG_FIELDS`` name must land
+    in the tool's root config ``.env``, never in the profile ``.env`` that the
+    login bootstrap creates.
+
+    ``create_profile`` resolves root config field names from the subject it is
+    handed, and ``_bootstrap_profile_if_missing`` hands it a ``ProfileStore``.
+    While ``ProfileStore`` declared none, airtable's ``BASE_ID`` was written
+    into ``authentication_profiles/default/.env`` and the next ``Config(...)``
+    construction raised "Authentication profile .env files contain
+    non-authentication configuration fields" — which failed ``airtable auth
+    login`` and every CourseCraft login delegated to it.
+    """
+    from cli_tools_shared.config import (
+        BaseConfig,
+        config_env_path_for_tool,
+        get_profiles_base_dir,
+    )
+
+    # BaseConfig mirrors instance config values into os.environ and never
+    # removes them, so claim the names this test seeds: monkeypatch restores
+    # the real environment afterwards, and an empty value keeps BaseConfig
+    # from treating the leaked value as already-set.
+    for field_name in ("BASE_ID", "BASE_URL", "PERSONAL_ACCESS_TOKEN"):
+        monkeypatch.setenv(field_name, "")
+
+    class _Cfg(BaseConfig):
+        CREDENTIAL_TYPES = [CredentialType.PERSONAL_ACCESS_TOKEN]
+        ROOT_CONFIG_FIELDS = ("BASE_ID",)
+
+    tool_dir = tmp_path / "tool"
+    tool_dir.mkdir()
+    (tool_dir / ".env.example").write_text(
+        "ACTIVE=true\n"
+        "PERSONAL_ACCESS_TOKEN=\n"
+        "BASE_URL=https://api.example.com\n"
+        "BASE_ID=\n"
+    )
+
+    def get_config(profile=None):
+        return _Cfg(tool_dir=tool_dir, profile=profile)
+
+    app = create_auth_app(get_config, tool_name="tool")
+    result = CliRunner().invoke(app, ["login"], input="test-token\n")
+
+    assert result.exit_code == 0, result.output
+
+    profile_body = (get_profiles_base_dir("tool") / "default" / ".env").read_text()
+    assert "ACTIVE=true" in profile_body
+    assert "PERSONAL_ACCESS_TOKEN=" in profile_body
+    assert "BASE_ID" not in profile_body
+    assert "BASE_URL" not in profile_body
+
+    root_body = config_env_path_for_tool("tool").read_text()
+    assert "BASE_ID=" in root_body
+    assert "BASE_URL=https://api.example.com" in root_body
+
+    # The reported failure itself: with the profile on disk, building the
+    # config must not raise the non-authentication-fields ConfigError.
+    config = _Cfg(tool_dir=tool_dir)
+    assert config.env_file_path == get_profiles_base_dir("tool") / "default" / ".env"
+
+
 def test_oauth_login_skips_redirect_uri_prompt_when_not_required(tmp_path, monkeypatch):
     from cli_tools_shared.config import BaseConfig
 
