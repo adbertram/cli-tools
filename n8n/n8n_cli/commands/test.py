@@ -261,12 +261,16 @@ def test_node(
         except subprocess.TimeoutExpired:
             print_info("Skipping UI visibility check (SSH timeout)")
 
-        # Build node parameters — use lowercase values to match n8n option values
+        # Build node parameters. n8n matches `resource` and `operation` against the
+        # node schema's option values by exact string equality, so the requested
+        # values are transmitted verbatim — never lowercased. A value the schema
+        # does not declare is caught by the pre-activation health check below
+        # (`option_values_exact`) instead of being silently rewritten.
         node_params = {}
         if resource:
-            node_params["resource"] = resource.lower()
+            node_params["resource"] = resource
         if operation:
-            node_params["operation"] = operation.lower()
+            node_params["operation"] = operation
         if params:
             node_params.update(json_mod.loads(params))
 
