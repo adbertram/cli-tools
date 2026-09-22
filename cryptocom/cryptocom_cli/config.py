@@ -12,7 +12,11 @@ class Config(BaseConfig):
         ("API_SECRET", "Crypto.com Exchange API secret", True),
     ]
     CUSTOM_REQUIRED_FIELDS = ["API_KEY", "API_SECRET"]
-    CUSTOM_ALL_FIELDS = ["API_KEY", "API_SECRET", "BASE_URL"]
+    # BASE_URL is root config (``cli_tools_shared.config._DEFAULT_ROOT_CONFIG_FIELDS``),
+    # not profile state: declaring it here makes the loader treat it as an
+    # authentication field, so the root config .env is rejected and the profile
+    # bootstrap writes it into a profile the loader then refuses to load.
+    CUSTOM_ALL_FIELDS = ["API_KEY", "API_SECRET"]
     CUSTOM_LOGIN_PROMPTS = CREDENTIAL_PROMPTS
     AUTH_EXTRA_PROMPTS = CREDENTIAL_PROMPTS
     CUSTOM_SENSITIVE_FIELDS = ["API_KEY", "API_SECRET"]
