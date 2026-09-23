@@ -14,6 +14,11 @@ from urllib.parse import quote
 
 GLOBAL_ERROR_HANDLER_ID = "F79g2nlj6f1glf8u"
 
+# Seconds a single n8n HTTP request may take before the CLI reports a timeout.
+# Shared by the session-auth and REST paths so error messages name the value
+# that was actually used.
+DEFAULT_REQUEST_TIMEOUT = 30
+
 
 class N8nApiError(Exception):
     """Custom exception for n8n API errors."""
@@ -325,7 +330,11 @@ class N8nApiClient:
             Session cookie string (e.g., "n8n-auth=...")
 
         Raises:
-            N8nApiError: If login fails or credentials not configured
+            N8nApiError: If credentials are not configured, if the server rejects
+                the configured credentials, or if the server cannot be reached.
+                A server that never answers is reported as a transport failure
+                (timeout or connection error), never as a credential rejection:
+                an unanswered request produced no credential verdict.
         """
         email = os.environ.get("EMAIL", "")
         password = os.environ.get("PASSWORD", "")
@@ -333,15 +342,45 @@ class N8nApiClient:
             raise N8nApiError("EMAIL and PASSWORD required in .env for session-based operations")
 
         server_url = self._get_server_url()
+        login_url = f"{server_url}/rest/login"
+
         try:
             resp = requests.post(
-                f"{server_url}/rest/login",
+                login_url,
                 json={"emailOrLdapLoginId": email, "password": password},
-                timeout=30,
+                timeout=DEFAULT_REQUEST_TIMEOUT,
             )
             resp.raise_for_status()
+        except requests.exceptions.Timeout as e:
+            raise N8nApiError(
+                f"Timed out after {DEFAULT_REQUEST_TIMEOUT}s waiting for the n8n server to "
+                f"answer the login request to {login_url} ({e}). No credentials were "
+                "rejected: the server returned no response at all. Check that the n8n "
+                "process is healthy and listening (n8n server version), then retry."
+            )
+        except requests.exceptions.ConnectionError as e:
+            raise N8nApiError(
+                f"Could not reach the n8n server at {login_url} ({e}). No credentials were "
+                "rejected: the server is unreachable. Check that n8n is running, then retry."
+            )
+        except requests.exceptions.HTTPError as e:
+            status = getattr(e.response, "status_code", None)
+            if status in (401, 403):
+                raise N8nApiError(
+                    f"Login failed: the n8n server rejected the configured EMAIL/PASSWORD "
+                    f"(HTTP {status}) at {login_url}. Run 'n8n auth login' to store valid "
+                    "credentials."
+                )
+            detail = (getattr(e.response, "text", "") or "").strip()[:200]
+            raise N8nApiError(
+                f"Login request to {login_url} failed with HTTP {status}: {detail} "
+                "Server-side failure, not a credential rejection."
+            )
         except requests.exceptions.RequestException as e:
-            raise N8nApiError(f"Login failed: {e}")
+            raise N8nApiError(
+                f"Login request to {login_url} failed before the server answered ({e}). "
+                "No credentials were rejected."
+            )
 
         cookie = resp.cookies.get("n8n-auth")
         if not cookie:
@@ -367,14 +406,20 @@ class N8nApiClient:
         headers = kwargs.pop("headers", {})
         headers["cookie"] = cookie
         headers.setdefault("Content-Type", "application/json")
+        timeout = kwargs.pop("timeout", DEFAULT_REQUEST_TIMEOUT)
 
         try:
             resp = requests.request(
                 method,
                 f"{server_url}{path}",
                 headers=headers,
-                timeout=kwargs.pop("timeout", 30),
+                timeout=timeout,
                 **kwargs,
+            )
+        except requests.exceptions.Timeout as e:
+            raise N8nApiError(
+                f"REST request {method} {path} timed out after {timeout}s ({e}). The n8n "
+                "server did not answer; retry once the server is healthy."
             )
         except requests.exceptions.RequestException as e:
             raise N8nApiError(f"REST request failed: {e}")
