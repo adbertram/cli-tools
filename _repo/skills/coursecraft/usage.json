@@ -1,7 +1,7 @@
 {
   "tool": "coursecraft",
   "description": "CLI interface for coursecraft",
-  "discovered_at": "2026-09-22T18:17:49Z",
+  "discovered_at": "2026-09-23T21:24:09Z",
   "total_commands": 67,
   "global_options": [],
   "commands": {
@@ -1262,7 +1262,7 @@
           ]
         },
         "mark-requirements-update-received": {
-          "help": "[OPTIONS] {course} Record the external return of corrected Pluralsight requirements.",
+          "help": "Record the external return of corrected Pluralsight requirements.",
           "arguments": [
             {
               "name": "course",
@@ -1668,7 +1668,7 @@
       ],
       "commands": {
         "create": {
-          "help": "Create demo record(s) in Airtable linked to a clip. Supports two modes: 1. Single demo mode: Use optional fields to create one demo 2. Batch mode: Use --json or --file to create multiple demos The --clip-order is required and specifies the position of the demo within the clip, alongside slides which also have a clip order. In batch mode the per-demo JSON keys \"name\", \"clip_order\", \"target_length\", \"learner_takeaway\", \"demo_intent\", \"script\", \"performer\", \"voiceover_performer\", and \"notes\" set each demo's values. Every one of those keys except \"name\" falls back to the matching CLI option when the key is absent, so --clip-order, --target-length, --demo-intent, --script, --performer, --voiceover-performer, and --notes act as per-demo defaults. --name is never a batch default: two demos in one clip cannot share a name. A batch object carrying the retired \"discovery_performer\", \"recording_performer\", or \"recording_dictation_method\" key is refused by name. Action Summary cannot be set on create.",
+          "help": "Create demo record(s) in Airtable linked to a clip. Supports two modes: 1. Single demo mode: Use optional fields to create one demo 2. Batch mode: Use --json or --file to create multiple demos The --clip-order is required and specifies the position of the demo within the clip, alongside slides which also have a clip order. In batch mode the per-demo JSON keys \"name\", \"clip_order\", \"target_length\", \"learner_takeaway\", \"demo_intent\", \"script\", \"performer\", \"voiceover_performer\", \"provider\", \"app\", and \"notes\" set each demo's values. Every one of those keys except \"name\" falls back to the matching CLI option when the key is absent, so --clip-order, --target-length, --demo-intent, --script, --performer, --voiceover-performer, --provider, --app, and --notes act as per-demo defaults. Provider and App have no default: when neither the key nor the option is given, the field is not written. --name is never a batch default: two demos in one clip cannot share a name. A batch object carrying the retired \"discovery_performer\", \"recording_performer\", or \"recording_dictation_method\" key is refused by name. Action Summary cannot be set on create.",
           "examples": [
             "coursecraft demos create --clip recXXX --clip-order 1 --name \"Setup Demo\"",
             "coursecraft demos create --clip recXXX --clip-order 1 --name \"Setup Demo\" --performer Adam",
@@ -1737,6 +1737,18 @@
               "required": false,
               "help": "Who performs this demo's voiceover: 'Agent' routes generation to ElevenLabs; 'Adam' keeps the manual recording workflow",
               "default": "Adam"
+            },
+            {
+              "name": "--provider",
+              "type": "local-vm|remote-vm|remote-bare",
+              "required": false,
+              "help": "Ronin demo host provider (ronin demo create --provider). Omitted = not written"
+            },
+            {
+              "name": "--app",
+              "type": "TEXT",
+              "required": false,
+              "help": "Application on screen during the demo (ronin demo create --app). Omitted = not written; an empty value is refused"
             },
             {
               "name": "--notes",
@@ -1886,8 +1898,10 @@
             "coursecraft demos update recXXX --clip \"\"  # unlink the demo from its clip",
             "coursecraft demos update recXXX --clip-order 2",
             "coursecraft demos update recXXX --demo-intent \"What the demo teaches and why...\"",
+            "coursecraft demos update recXXX --provider remote-vm --app \"Cursor\"",
             "coursecraft demos update recXXX --voiceover-recorded",
-            "coursecraft demos update recXXX --voiceover-verified"
+            "coursecraft demos update recXXX --voiceover-verified",
+            "`coursecraft demos update recXXX --script <after> --rehearsed --rehearsal-run-id <id>`"
           ],
           "arguments": [
             {
@@ -1957,24 +1971,6 @@
               "help": "Adam-route best-guess click/type/see list the draft Script is written from; mints no revision and has no AI review"
             },
             {
-              "name": "--environment-spec",
-              "type": "TEXT",
-              "required": false,
-              "help": "Declarative environment spec (WHAT the demo environment must be) for the demo"
-            },
-            {
-              "name": "--environment-spec-review-ai",
-              "type": "TEXT",
-              "required": false,
-              "help": "AI review of the environment spec"
-            },
-            {
-              "name": "--environment-prep-review-ai",
-              "type": "TEXT",
-              "required": false,
-              "help": "AI review of the environment prep"
-            },
-            {
               "name": "--performer",
               "type": "Agent|Adam",
               "required": false,
@@ -1985,6 +1981,18 @@
               "type": "Agent|Adam",
               "required": false,
               "help": "Who performs this demo's voiceover: 'Agent' routes generation to ElevenLabs; 'Adam' keeps the manual recording workflow"
+            },
+            {
+              "name": "--provider",
+              "type": "local-vm|remote-vm|remote-bare",
+              "required": false,
+              "help": "Ronin demo host provider (ronin demo create --provider). Omitted = not written"
+            },
+            {
+              "name": "--app",
+              "type": "TEXT",
+              "required": false,
+              "help": "Application on screen during the demo (ronin demo create --app). Omitted = not written; an empty value is refused"
             },
             {
               "name": "--action-summary-review-ai",
@@ -2103,6 +2111,20 @@
               "type": "TEXT",
               "required": false,
               "help": "Run id of this demo's current paced action capture; a different value clears the paced action-video recording states"
+            },
+            {
+              "name": "--rehearsed",
+              "type": "bool",
+              "required": false,
+              "help": "Mark this demo as rehearsed for its current Script and performer",
+              "takes_value": false,
+              "secondary": "--no-rehearsed"
+            },
+            {
+              "name": "--rehearsal-run-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Run id of this demo's current rehearsal"
             },
             {
               "name": "--base-record",
@@ -2822,7 +2844,7 @@
           ]
         },
         "mark-slide-deck-changes-requested": {
-          "help": "[OPTIONS] {module} Record external Slide Deck changes requested.",
+          "help": "Record external Slide Deck changes requested.",
           "arguments": [
             {
               "name": "module",
@@ -3788,7 +3810,7 @@
       ],
       "commands": {
         "generate": {
-          "help": "Generate the authoritative voiceover take for one demo Script. Voice, model, output format, tuning, and output location all come from the CourseCraft production voiceover contract; the command takes no overrides.",
+          "help": "Produce the demo's voiceover with Ronin, then register its receipt. CourseCraft owns the Script and the record; Ronin owns the narration -- generation and assembly (docs/contracts.md section 8.1, PRD R7.1). This command is the CourseCraft side of that boundary and does three things: it resolves the demo folder with `ronin demo resolve <identity>`, runs the one `ronin voice` phase with the demo's own course folder as the destination, and writes the receipt -- `Voice Recording ID` from the run plus the eight voiceover metadata values the run returned and `Voiceover Recorded`. It never sets or clears `Voiceover Verified`; only Adam sets that field, and a failed run writes no receipt at all.",
           "arguments": [],
           "options": [
             {
