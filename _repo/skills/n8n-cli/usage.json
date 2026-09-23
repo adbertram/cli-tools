@@ -2383,7 +2383,7 @@
                 "n8n workflows node update WF_ID \"My Node\" --name \"Renamed Node\"",
                 "n8n workflows node update WF_ID \"My Node\" --credential \"New API Key\""
               ],
-              "usage_instructions": "Update an existing node's parameters, name, or credentials. Merges provided parameters into the node's existing parameters (deep merge). Required arguments: workflow_id, node_name. Notable options: --params/-p, --name/-n, --credential/-c. Example: `n8n workflows node update WF_ID \"Susan\" --params '{\"options\": {\"systemMessage\": \"new prompt\"}}'`.",
+              "usage_instructions": "Update an existing node's parameters, name, or credentials. Merges provided parameters into the node's existing parameters (deep merge). Required arguments: workflow_id, node_name. Notable options: --params/-p, --name/-n, --credential/-c. Example: `n8n workflows node update WF_ID \"My Node\" --params '{\"options\": {\"systemMessage\": \"new prompt\"}}'`.",
               "arguments": [
                 {
                   "name": "workflow_id",
