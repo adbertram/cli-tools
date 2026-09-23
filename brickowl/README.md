@@ -60,6 +60,14 @@ brickowl auth login --force
 # Login with a specific profile
 brickowl auth login --profile staging
 
+# Log in to the browser session (messages, refunds, coupons, quotes, store)
+# Brick Owl is Cloudflare-fronted, so the login leg runs headed; the form is
+# filled and submitted by the CLI -- no prompt, no human at the terminal.
+HEADLESS=false brickowl auth login -c browser_session
+
+# Repair an expired browser session
+HEADLESS=false brickowl auth login -c browser_session --force
+
 # Check authentication status
 brickowl auth status
 brickowl auth status --table
@@ -85,6 +93,15 @@ brickowl auth logout
 |--------|-------|-------------|
 | `--force` | `-F` | Clear existing credentials and re-authenticate |
 | `--profile` | `-p` | Profile name to save credentials to |
+| `--credential-type` | `-c` | Authenticate only this credential type (`api_key`, `browser_session`) |
+
+The `browser_session` login is fully non-interactive: the username and password
+come from the CLI-tools secret manager (`brickowl-legacy-username`,
+`brickowl-legacy-password`) and the CLI fills and submits the login form itself.
+Brick Owl is Cloudflare-fronted and the headless fingerprint is served the
+`Just a moment...` interstitial, so run the login leg headed
+(`HEADLESS=false brickowl auth login -c browser_session`). Normal commands stay
+headless.
 
 **status options:**
 
@@ -712,7 +729,9 @@ Get your API key from your [Brick Owl account settings](https://www.brickowl.com
 # API base URL (defaults to production)
 BASE_URL=https://api.brickowl.com/v1
 
-# Browser automation settings
+# Browser automation settings. Commands run headless by default; the
+# browser-session login leg needs HEADLESS=false because Brick Owl's
+# Cloudflare fingerprint serves the "Just a moment..." interstitial headless.
 HEADLESS=true
 ```
 
