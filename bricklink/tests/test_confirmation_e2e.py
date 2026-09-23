@@ -67,6 +67,14 @@ def test_messages_list_uses_managed_confirmation_code_and_retries(tmp_path, monk
         browser_session=True,
     )
     monkeypatch.setenv("XDG_DATA_HOME", str(data_home))
+    # `default` is a browser-session profile, so the credential gate resolves
+    # its saved session from the SHARED Chromium profile directory rather than
+    # the per-profile one `seed_auth_profile` writes. Isolate the Chromium
+    # profile (a supported runtime switch — see
+    # `BaseConfig.uses_shared_chromium_profile`) so the seeded session is the
+    # one `config.has_saved_session()` consults. Without this the CLI exits 2
+    # at the auth gate and never reaches the confirmation-code flow below.
+    monkeypatch.setenv("CLI_TOOLS_ISOLATE_CHROME_PROFILE", "1")
 
     from bricklink_cli.main import app
     from bricklink_cli.browser_runtime import BricklinkRuntimeBrowser
@@ -93,7 +101,22 @@ def test_messages_list_uses_managed_confirmation_code_and_retries(tmp_path, monk
     assert result.exit_code == 0
     assert page.entered_code == "123456"
     assert requested_after_values == [1_774_000_000]
+    # Exactly three navigations to the same URL, each from a distinct code
+    # path this scenario deliberately puts in play:
+    #   1. `list_messages` -> `_get_page_for`: the initial navigation.
+    #   2. `_submit_confirmation_code`: BrickLink answered the first request
+    #      with the confirmation-code gate instead of the messages page, so
+    #      the requested URL is re-navigated once after the emailed code is
+    #      submitted (the gate page cannot be parsed as a message list).
+    #   3. `list_messages`'s render-retry loop: the fake page never renders a
+    #      message-link row (it always raises on
+    #      'a[href*="myMsg.asp?msgID="]'), which fires the documented
+    #      "retry once on a slow navigation" re-navigation before the empty
+    #      inbox is reported.
+    # Two navigations would mean one of those retries stopped happening;
+    # four would mean one of them double-navigated.
     assert page.goto_calls == [
+        "https://www.bricklink.com/myMsg.asp?pg=1&a=i",
         "https://www.bricklink.com/myMsg.asp?pg=1&a=i",
         "https://www.bricklink.com/myMsg.asp?pg=1&a=i",
     ]

@@ -3540,11 +3540,10 @@
                 },
                 {
                   "name": "--limit",
-                  "type": "bool",
+                  "type": "INTEGER",
                   "required": false,
-                  "help": "<int range> [x>=1]  Maximum number of sitemaps",
+                  "help": "[x>=1]  Maximum number of sitemaps",
                   "short": "-l",
-                  "takes_value": false,
                   "default": "100"
                 },
                 {

@@ -128,7 +128,7 @@
                   "name": "--limit",
                   "type": "INTEGER",
                   "required": false,
-                  "help": "RANGE [1<=x<=1000]  Maximum records to return",
+                  "help": "[1<=x<=1000]  Maximum records to return",
                   "short": "-l",
                   "default": "100"
                 },
@@ -172,7 +172,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [1<=x<=1000]  Maximum records to return",
+              "help": "[1<=x<=1000]  Maximum records to return",
               "short": "-l",
               "default": "100"
             },
@@ -319,7 +319,7 @@
                   "name": "--limit",
                   "type": "INTEGER",
                   "required": false,
-                  "help": "RANGE [1<=x<=1000]  Maximum records to return",
+                  "help": "[1<=x<=1000]  Maximum records to return",
                   "short": "-l",
                   "default": "100"
                 },
@@ -422,7 +422,7 @@
                   "name": "--limit",
                   "type": "INTEGER",
                   "required": false,
-                  "help": "RANGE [1<=x<=1000]  Maximum records to return",
+                  "help": "[1<=x<=1000]  Maximum records to return",
                   "short": "-l",
                   "default": "100"
                 },
@@ -492,7 +492,7 @@
                   "name": "--limit",
                   "type": "INTEGER",
                   "required": false,
-                  "help": "RANGE [1<=x<=1000]  Maximum records to return",
+                  "help": "[1<=x<=1000]  Maximum records to return",
                   "short": "-l",
                   "default": "100"
                 },
@@ -689,7 +689,7 @@
                   "name": "--limit",
                   "type": "INTEGER",
                   "required": false,
-                  "help": "RANGE [1<=x<=1000]  Maximum records to return",
+                  "help": "[1<=x<=1000]  Maximum records to return",
                   "short": "-l",
                   "default": "100"
                 },
@@ -773,7 +773,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [1<=x<=1000]  Maximum records to return",
+              "help": "[1<=x<=1000]  Maximum records to return",
               "short": "-l",
               "default": "100"
             },
@@ -815,7 +815,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [1<=x<=1000]  Maximum records to return",
+              "help": "[1<=x<=1000]  Maximum records to return",
               "short": "-l",
               "default": "100"
             },
@@ -890,7 +890,7 @@
                   "name": "--limit",
                   "type": "INTEGER",
                   "required": false,
-                  "help": "RANGE [1<=x<=1000]  Maximum records to return",
+                  "help": "[1<=x<=1000]  Maximum records to return",
                   "short": "-l",
                   "default": "100"
                 },
@@ -1030,7 +1030,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [1<=x<=1000]  Maximum records to return",
+              "help": "[1<=x<=1000]  Maximum records to return",
               "short": "-l",
               "default": "100"
             },
@@ -1410,7 +1410,7 @@
                   "name": "--limit",
                   "type": "INTEGER",
                   "required": false,
-                  "help": "RANGE [1<=x<=1000]  Maximum records to return",
+                  "help": "[1<=x<=1000]  Maximum records to return",
                   "short": "-l",
                   "default": "100"
                 },
@@ -1527,7 +1527,7 @@
                   "name": "--limit",
                   "type": "INTEGER",
                   "required": false,
-                  "help": "RANGE [1<=x<=1000]  Maximum records to return",
+                  "help": "[1<=x<=1000]  Maximum records to return",
                   "short": "-l",
                   "default": "100"
                 },
@@ -1598,7 +1598,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [1<=x<=1000]  Maximum records to return",
+              "help": "[1<=x<=1000]  Maximum records to return",
               "short": "-l",
               "default": "100"
             },
@@ -1700,7 +1700,7 @@
                   "name": "--limit",
                   "type": "INTEGER",
                   "required": false,
-                  "help": "RANGE [1<=x<=1000]  Maximum records to return",
+                  "help": "[1<=x<=1000]  Maximum records to return",
                   "short": "-l",
                   "default": "100"
                 },
@@ -1805,7 +1805,7 @@
                   "name": "--limit",
                   "type": "INTEGER",
                   "required": false,
-                  "help": "RANGE [1<=x<=1000]  Maximum records to return",
+                  "help": "[1<=x<=1000]  Maximum records to return",
                   "short": "-l",
                   "default": "100"
                 },
@@ -1943,7 +1943,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [1<=x<=1000]  Maximum records to return",
+              "help": "[1<=x<=1000]  Maximum records to return",
               "short": "-l",
               "default": "100"
             },
@@ -1985,7 +1985,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [1<=x<=1000]  Maximum records to return",
+              "help": "[1<=x<=1000]  Maximum records to return",
               "short": "-l",
               "default": "100"
             },
@@ -2040,7 +2040,7 @@
                   "name": "--limit",
                   "type": "INTEGER",
                   "required": false,
-                  "help": "RANGE [1<=x<=1000]  Maximum records to return",
+                  "help": "[1<=x<=1000]  Maximum records to return",
                   "short": "-l",
                   "default": "100"
                 },
@@ -2111,7 +2111,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [1<=x<=1000]  Maximum records to return",
+              "help": "[1<=x<=1000]  Maximum records to return",
               "short": "-l",
               "default": "100"
             },
@@ -2199,7 +2199,7 @@
                   "name": "--limit",
                   "type": "INTEGER",
                   "required": false,
-                  "help": "RANGE [1<=x<=1000]  Maximum records to return",
+                  "help": "[1<=x<=1000]  Maximum records to return",
                   "short": "-l",
                   "default": "100"
                 },
@@ -2241,7 +2241,7 @@
                   "name": "--limit",
                   "type": "INTEGER",
                   "required": false,
-                  "help": "RANGE [1<=x<=1000]  Maximum records to return",
+                  "help": "[1<=x<=1000]  Maximum records to return",
                   "short": "-l",
                   "default": "100"
                 },
@@ -2395,7 +2395,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [1<=x<=1000]  Maximum records to return",
+              "help": "[1<=x<=1000]  Maximum records to return",
               "short": "-l",
               "default": "100"
             },
@@ -2664,7 +2664,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [1<=x<=1000]  Maximum records to return",
+              "help": "[1<=x<=1000]  Maximum records to return",
               "short": "-l",
               "default": "100"
             },
@@ -2740,7 +2740,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [1<=x<=1000]  Maximum records to return",
+              "help": "[1<=x<=1000]  Maximum records to return",
               "short": "-l",
               "default": "100"
             },
@@ -2884,7 +2884,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [1<=x<=1000]  Maximum records to return",
+              "help": "[1<=x<=1000]  Maximum records to return",
               "short": "-l",
               "default": "100"
             },

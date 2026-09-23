@@ -372,7 +372,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [x>=1]        Maximum history items to return",
+              "help": "[x>=1]        Maximum history items to return",
               "short": "-l",
               "default": "100"
             },
@@ -394,7 +394,7 @@
               "name": "--page-size",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [1<=x<=1000]  Items requested per API page",
+              "help": "[1<=x<=1000]  Items requested per API page",
               "default": "100"
             },
             {
@@ -495,7 +495,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [x>=1]  Maximum models to return",
+              "help": "[x>=1]  Maximum models to return",
               "short": "-l",
               "default": "100"
             },
@@ -769,7 +769,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [1<=x<=100]  Maximum dictionaries to return",
+              "help": "[1<=x<=100]  Maximum dictionaries to return",
               "short": "-l",
               "default": "30"
             },
@@ -1006,19 +1006,19 @@
               "name": "--stability",
               "type": "FLOAT",
               "required": false,
-              "help": "RANGE [0<=x<=1]             Voice stability"
+              "help": "[0<=x<=1]             Voice stability"
             },
             {
               "name": "--similarity-boost",
               "type": "FLOAT",
               "required": false,
-              "help": "RANGE [0<=x<=1]             Similarity boost"
+              "help": "[0<=x<=1]             Similarity boost"
             },
             {
               "name": "--style",
               "type": "FLOAT",
               "required": false,
-              "help": "RANGE [0<=x<=1]             Style exaggeration"
+              "help": "[0<=x<=1]             Style exaggeration"
             },
             {
               "name": "--speaker-boost",
@@ -1030,13 +1030,13 @@
               "name": "--speed",
               "type": "FLOAT",
               "required": false,
-              "help": "RANGE [0.7<=x<=1.2]         Voice speed"
+              "help": "[0.7<=x<=1.2]         Voice speed"
             },
             {
               "name": "--seed",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [0<=x<=4294967295]  Generation seed"
+              "help": "[0<=x<=4294967295]  Generation seed"
             },
             {
               "name": "--text-normalization",
@@ -1179,7 +1179,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [1<=x<=1000]  Maximum voices to return",
+              "help": "[1<=x<=1000]  Maximum voices to return",
               "short": "-l",
               "default": "10"
             },

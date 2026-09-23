@@ -614,7 +614,7 @@
               "name": "--page-size",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [1<=x<=500]  Number of records to request per PayPal page (max 500)",
+              "help": "[1<=x<=500]  Number of records to request per PayPal page (max 500)",
               "default": "100"
             },
             {
@@ -658,7 +658,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [x>=1]       Maximum number of transactions to return",
+              "help": "[x>=1]       Maximum number of transactions to return",
               "short": "-l",
               "default": "100"
             },
@@ -680,7 +680,7 @@
               "name": "--page-size",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [1<=x<=500]  Number of records to request per PayPal page (max 500)",
+              "help": "[1<=x<=500]  Number of records to request per PayPal page (max 500)",
               "default": "100"
             },
             {
