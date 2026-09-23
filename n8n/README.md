@@ -346,6 +346,23 @@ SSH_HOST=          # SSH host for server commands (e.g., localhost)
                    # Set to "localhost" when running on the n8n server itself (skips SSH)
 ```
 
+## Failure Diagnosis
+
+Commands that use n8n's internal REST API (`data-tables`, `credentials`, `nodes`,
+and `executions stop`) log in first with the configured `EMAIL`/`PASSWORD`. The
+CLI keeps the two failure modes apart instead of reporting both as a login
+problem:
+
+- **The server never answered** (read or connect timeout, or connection
+  refused): the error names the endpoint and the timeout, states that no
+  credentials were rejected, and exits `1`. A heap-exhausted or restarting n8n
+  process shows this symptom; check `n8n server version` and retry.
+- **The server answered and rejected the credentials** (`HTTP 401`/`403`): the
+  error starts with `Login failed:` and points at `n8n auth login`.
+
+Both modes exit non-zero and write nothing to stdout, so a monitor that checks
+the exit status fails closed instead of continuing with stale or missing data.
+
 ## Exit Codes
 
 | Code | Meaning |
