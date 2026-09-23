@@ -121,14 +121,29 @@ def help_text(cli_executable: str, command_path: str, timeout: int) -> str:
 
 
 def extract_help_line(text: str) -> str:
+    """The command's one-line description: the prose between the `Usage:` block and the
+    first `Examples:` or options panel.
+
+    Rich wraps a long `Usage:` line onto continuation lines even at a wide COLUMNS, so a
+    line that continues the usage block is skipped too: one indented deeper than the
+    `Usage:` line itself, or one that opens with a usage token (`[`, `{`, `<`, `-`). A
+    plain-argparse or hand-printed help puts its description on the very next line with
+    no blank line in between, so the block is NOT skipped to the next blank line -- the
+    first line that is neither blank nor a continuation is the description's start.
+    """
     lines: list[str] = []
+    usage_indent: int | None = None
     for line in text.splitlines():
         stripped = line.strip()
-        if (
-            not stripped
-            or stripped.startswith("Usage:")
-            or stripped.startswith("─")
-        ):
+        if stripped.startswith("Usage:"):
+            usage_indent = len(line) - len(line.lstrip())
+            continue
+        if usage_indent is not None:
+            indent = len(line) - len(line.lstrip())
+            if stripped and (indent > usage_indent or stripped[0] in "[{<-"):
+                continue
+            usage_indent = None
+        if not stripped or stripped.startswith("─"):
             continue
         if stripped == "Examples:":
             break
@@ -136,7 +151,6 @@ def extract_help_line(text: str) -> str:
             break
         lines.append(stripped)
     return " ".join(lines)
-
 
 def node_package(cli_executable: str) -> tuple[Path, dict] | None:
     """Return the npm package that owns an executable, when one exists."""
