@@ -1,7 +1,7 @@
 {
   "tool": "n8n",
   "description": "Manage n8n server - workflows, nodes, executions, credentials, data tables, and logs",
-  "discovered_at": "2026-09-16T16:54:53Z",
+  "discovered_at": "2026-09-24T00:03:20Z",
   "total_commands": 66,
   "global_options": [
     {
@@ -1013,7 +1013,7 @@
           ]
         },
         "list": {
-          "help": "Query execution history by timeframe via the n8n API. Paginates through all executions and filters by startedAt client-side (the API has no date filter parameter; running executions have no stoppedAt). The n8n public API omits currently-running executions unless status=running is requested, so when no --status is given the command also fetches running executions and merges them in.",
+          "help": "Query execution history by timeframe via the n8n API. Paginates through all executions and filters by startedAt client-side (the API has no date filter parameter; running executions have no stoppedAt; executions that never started, such as queued ones, have no startedAt and are excluded, matching n8n's own date filter). The n8n public API omits currently-running executions unless status=running is requested, so when no --status is given the command also fetches running executions and merges them in.",
           "examples": [
             "n8n executions list --from 2026-02-12 --status error",
             "n8n executions list --from \"2026-02-12T08:00\" --to \"2026-02-12T09:00\" --table",

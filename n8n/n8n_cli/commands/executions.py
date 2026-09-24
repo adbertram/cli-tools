@@ -23,7 +23,10 @@ def _fetch_executions_in_range(client, status, workflow_id, include_data, start_
     """Paginate /executions and keep executions whose startedAt falls in [start_utc, end_utc].
 
     Date filtering must use startedAt: a running execution has no stoppedAt yet.
-    Unknown timestamps cannot establish inclusion and must fail explicitly.
+    A null startedAt means the execution never started (queued "new", or
+    "canceled" while queued); n8n's own startedAfter/startedBefore filters are
+    SQL comparisons on startedAt, so such rows are never in a date range.
+    Any other non-timezone-aware startedAt fails explicitly.
     Read every page rather than infer completeness from row ordering.
     """
     results = []
@@ -54,6 +57,8 @@ def _fetch_executions_in_range(client, status, workflow_id, include_data, start_
             if not isinstance(ex, dict):
                 raise ValueError("Invalid execution inventory: expected execution object")
             started = ex.get("startedAt")
+            if started is None:
+                continue
             try:
                 if not isinstance(started, str):
                     raise ValueError
@@ -61,7 +66,10 @@ def _fetch_executions_in_range(client, status, workflow_id, include_data, start_
                 if timestamp.tzinfo is None:
                     raise ValueError
             except ValueError:
-                raise ValueError("Invalid execution inventory: startedAt cannot establish date-filter inclusion") from None
+                raise ValueError(
+                    f"Invalid execution inventory: execution {ex.get('id')} startedAt {started!r} "
+                    "cannot establish date-filter inclusion"
+                ) from None
             ex_utc = timestamp.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
             if start_utc <= ex_utc <= end_utc:
                 results.append(ex)
@@ -109,7 +117,9 @@ def executions_list(
 
     Paginates through all executions and filters by startedAt client-side
     (the API has no date filter parameter; running executions have no
-    stoppedAt). The n8n public API omits currently-running executions
+    stoppedAt; executions that never started, such as queued ones, have no
+    startedAt and are excluded, matching n8n's own date filter). The n8n
+    public API omits currently-running executions
     unless status=running is requested, so when no --status is given the
     command also fetches running executions and merges them in.
 

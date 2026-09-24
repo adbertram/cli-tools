@@ -125,7 +125,7 @@ def test_default_list_dedupes_overlapping_running_executions(monkeypatch):
     {"data": [None], "nextCursor": None},
 ] + [
     {"data": [_execution("42", "running", value, None)], "nextCursor": None}
-    for value in [None, "", 42, "invalid", "2026-06-12T12:00:00"]
+    for value in ["", 42, "invalid", "2026-06-12T12:00:00"]
 ])
 def test_inventory_rejects_unknown_upstream_data(monkeypatch, page):
     api = FakeExecutionsApi({"running": [page]})
@@ -134,6 +134,33 @@ def test_inventory_rejects_unknown_upstream_data(monkeypatch, page):
     assert result.exit_code == 1
     assert result.stdout == ""
     assert "Invalid execution inventory" in result.stderr
+
+
+def test_invalid_started_at_error_names_execution():
+    api = FakeExecutionsApi({"running": [
+        {"data": [_execution("42", "running", "invalid", None)], "nextCursor": None},
+    ]})
+    with pytest.raises(ValueError, match="execution 42 startedAt 'invalid'"):
+        executions_module._fetch_executions_in_range(
+            api, "running", None, False, "1970-01-01T00:00:00", "2100-01-01T00:00:00"
+        )
+
+
+def test_default_list_excludes_executions_that_never_started(monkeypatch):
+    # Live n8n 2.10 shapes: a queued execution is status "new" and a queued
+    # execution stopped before running is "canceled" (stopBeforeRun); both keep
+    # startedAt null. n8n's own startedAt range filter never matches NULL.
+    started = _execution(3048, "success", "2026-06-12T11:00:00.000Z", "2026-06-12T11:00:05.000Z")
+    queued = _execution("50299", "new", None, None)
+    canceled_queued = _execution("50300", "canceled", None, "2026-06-12T11:30:00.000Z")
+    api = FakeExecutionsApi({
+        None: [{"data": [queued, canceled_queued, started], "nextCursor": None}],
+        "running": [{"data": [], "nextCursor": None}],
+    })
+
+    output = _invoke(monkeypatch, api, IN_RANGE_ARGS)
+
+    assert [ex["id"] for ex in output] == [3048]
 
 
 def test_inventory_paginates_valid_rows_and_empty_final_page(monkeypatch):
