@@ -1,0 +1,23 @@
+name: ATA Blog Source Export
+
+on:
+  push:
+    branches:
+      - sync/ata-blog-preview-files-20260925
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package ATA Blog source
+        uses: actions/upload-artifact@v4
+        with:
+          name: ata-blog-preview-source
+          path: |
+            _personal/ata-blog/ata_blog_cli/client.py
+            _personal/ata-blog/ata_blog_cli/commands/notion_page.py
+            _personal/ata-blog/tests/test_static_publisher.py
+            _personal/ata-blog/README.md
+          if-no-files-found: error
+          retention-days: 1
