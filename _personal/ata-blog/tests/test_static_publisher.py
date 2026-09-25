@@ -356,6 +356,51 @@ def test_p05_idempotency_encoding_is_exact():
     assert AtaBlogClient._publisher_idempotency_key(PAGE_ID, source_revision) == expected
 
 
+def test_preview_status_deploys_without_notion_write_and_restores_corpus(publisher):
+    client, article, _markdown, _image, _manifest, counters, _token = publisher
+    article["Status"] = "Ready to Publish"
+    prior_corpus_sha256 = client_module._static_corpus_sha256()
+
+    result = client.publish_article(
+        PAGE_ID,
+        status="preview",
+        check_duplicates=False,
+        featured_image="ignored.png",
+    )
+
+    assert result["status"] == "preview"
+    assert result["preview_url"] == (
+        f"{PREVIEW_DEPLOYMENT_URL}/journaled-static-publisher/"
+    )
+    assert result["static_url"] == result["preview_url"]
+    assert result["promoted"] is False
+    assert result["notion_updated"] is False
+    assert result["corpus_restored"] is True
+    assert counters["media"] == 1
+    assert counters["deploy"] == 1
+    assert counters["build"] == 2
+    assert counters["notion"] == 0
+    assert client.update_calls == []
+    assert article["Status"] == "Ready to Publish"
+    assert article["Published URL"] is None
+    assert article["Publish Date"] is None
+    assert client_module._static_corpus_sha256() == prior_corpus_sha256
+    assert client._find_static_post("journaled-static-publisher") is None
+
+
+def test_preview_status_cannot_be_combined_with_scheduling(publisher):
+    client, article, _markdown, _image, _manifest, counters, _token = publisher
+    article["Status"] = "Ready to Publish"
+
+    with pytest.raises(
+        ClientError,
+        match=r"--status preview cannot be combined with --date or --auto-schedule",
+    ):
+        client.publish_article(PAGE_ID, status="preview", auto_schedule=True)
+
+    _assert_nothing_written(client, counters)
+
+
 def test_completed_same_revision_replay_has_zero_effects_and_no_build_token(publisher):
     client, _article, _markdown, _image, _manifest, counters, build_token = publisher
     first = _publish(client)
@@ -1839,7 +1884,10 @@ def test_publish_status_rejected_before_source_or_external_reads(publisher):
     client, *_ = publisher
     client.get_article = lambda _page_id: pytest.fail("source read must not run")
 
-    with pytest.raises(ClientError, match="Static publish status must be draft or publish"):
+    with pytest.raises(
+        ClientError,
+        match="Static publish status must be draft, preview, or publish",
+    ):
         client.publish_article(PAGE_ID, status="invalid-status")
 
 
@@ -2679,7 +2727,10 @@ def test_schedule_rejects_an_unknown_status_value(publisher):
     client, article, _markdown, _image, _manifest, counters, _token = publisher
     article["Status"] = "Ready to Publish"
 
-    with pytest.raises(ClientError, match="Static publish status must be draft or publish"):
+    with pytest.raises(
+        ClientError,
+        match="Static publish status must be draft, preview, or publish",
+    ):
         client.publish_article(PAGE_ID, status="pubish", date=SLOT)
 
     _assert_nothing_written(client, counters)
