@@ -189,7 +189,7 @@ def articles_publish(
         "draft",
         "--status",
         "-s",
-        help="Publish status (draft/publish). --status publish promotes this one post to the live production deployment",
+        help="Static operation (draft/preview/publish). preview deploys a hosted Cloudflare Pages preview without publishing; publish promotes production",
     ),
     date: Optional[str] = typer.Option(None, "--date", "-d", help="Schedule only, at this slot (ISO 8601 with UTC offset): sets Status=Scheduled and Publish Date; nothing is built or deployed"),
     auto_schedule: bool = typer.Option(False, "--auto-schedule", help="Schedule only, at the next available slot: sets Status=Scheduled and Publish Date; nothing is built or deployed"),
@@ -199,7 +199,7 @@ def articles_publish(
     featured_image: Optional[str] = typer.Option(None, "--featured-image", help="Promotion and preview only: path to featured image file to upload and attach"),
     force: bool = typer.Option(False, "--force", "-F", help="Force republish even if already published"),
 ):
-    """Schedule a Notion article (--auto-schedule or --date), or publish it to the static site: build, deploy, and (with --status publish) promote to production."""
+    """Schedule a Notion article, deploy a hosted preview, or publish it to production."""
     client = get_client()
 
     print_info(f"Publishing article {page_id}...")
@@ -217,6 +217,14 @@ def articles_publish(
 
     if result.get("status") == "Scheduled":
         print_success(f"Scheduled for {result['scheduled_date']}")
+        print_json(result)
+        return
+
+    if result.get("status") == "preview":
+        print_success(
+            f"Cloudflare Pages preview deployed (Deployment ID: {result['deployment_id']})"
+        )
+        print_info(f"Preview URL: {result['preview_url']}")
         print_json(result)
         return
 
