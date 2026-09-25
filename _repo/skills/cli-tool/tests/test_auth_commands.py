@@ -789,6 +789,15 @@ def test_auth_uses_shared_package(cli_name, cli_dir, help_cache, test_config, co
     if not _cli_has_auth(help_cache):
         pytest.skip(f"{cli_name} has no auth subcommand (auth infrastructure not required)")
 
+    read_only_status_auth_clis = test_config["exclusions"].get(
+        "read_only_status_auth_clis", []
+    )
+    if cli_name in read_only_status_auth_clis:
+        pytest.skip(
+            f"{cli_name} exposes read-only local status and must not mount "
+            "credential/profile mutation commands"
+        )
+
     wrapper_clis = test_config["exclusions"].get("wrapper_clis", [])
     custom_auth_clis = test_config["exclusions"].get("custom_auth_clis", wrapper_clis)
     if cli_name in custom_auth_clis:
@@ -816,6 +825,36 @@ def test_auth_uses_shared_package(cli_name, cli_dir, help_cache, test_config, co
         f"from cli_tools_shared. Fix: Use create_auth_app(get_config, tool_name='{cli_name}') "
         f"and set OAUTH_* class vars on Config for OAuth flows, or pass a login_handler for "
         f"custom flows."
+    )
+
+
+def test_read_only_status_auth_exemption_is_status_only(
+    cli_name, cli_dir, help_cache, test_config, command_filter
+):
+    """The factory exemption is valid only for a no-credential status-only CLI."""
+    if command_filter and command_filter not in ("auth",):
+        pytest.skip(f"Skipping auth tests (filtering to '{command_filter}')")
+
+    read_only_status_auth_clis = test_config["exclusions"].get(
+        "read_only_status_auth_clis", []
+    )
+    if cli_name not in read_only_status_auth_clis:
+        pytest.skip(f"{cli_name} does not use the read-only status auth exemption")
+
+    assert cli_name in test_config["exclusions"]["no_auth_clis"], (
+        f"'{cli_name}' is exempt from create_auth_app() but is not declared no-auth"
+    )
+    assert parse_help_commands(help_cache("auth")) == ["status"], (
+        f"'{cli_name}' uses the read-only auth exemption but exposes commands other "
+        "than status"
+    )
+
+    cli_pkg = cli_dir / f"{cli_name.replace('-', '_')}_cli"
+    auth_file = cli_pkg / "commands" / "auth.py"
+    assert auth_file.is_file(), f"'{cli_name}' has no commands/auth.py"
+    assert "create_auth_app" not in auth_file.read_text(), (
+        f"'{cli_name}' uses the read-only auth exemption but mounts create_auth_app(), "
+        "which exposes credential/profile mutation commands"
     )
 
 

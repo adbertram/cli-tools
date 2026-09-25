@@ -15,6 +15,7 @@ import random
 import time
 import zlib
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Optional, Sequence
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlparse
@@ -95,8 +96,21 @@ class RequestsRetryPolicy:
         return min(delay, self.max_delay)
 
     def is_retryable_response(self, response: requests.Response) -> bool:
-        """True when ``response`` carries a retryable HTTP status code."""
-        return response.status_code in self.retryable_status_codes
+        """True when response carries a retryable HTTP status code.
+
+        Also treats an **empty HTTP 403** as retryable. BrickLink marketplace
+        ajax endpoints throttle with 403 + zero-byte body (no Retry-After).
+        """
+        if response.status_code in self.retryable_status_codes:
+            return True
+        if response.status_code == 403 and len(response.content or b"") == 0:
+            return True
+        return False
+
+    @staticmethod
+    def is_empty_forbidden(response: requests.Response) -> bool:
+        """True when response is BrickLink's empty-403 throttle signal."""
+        return response.status_code == 403 and len(response.content or b"") == 0
 
     def is_retryable_exception(self, exception: BaseException) -> bool:
         """True when a transport ``exception`` is safe to retry."""
@@ -812,3 +826,50 @@ def _decode_response_body(raw_body: bytes, content_encoding: str | None) -> byte
     if normalized == "deflate":
         return zlib.decompress(raw_body)
     raise ClientError(f"Unsupported HTTP content encoding: {content_encoding}")
+
+
+def build_requests_session(
+    *,
+    auth_state: "BrowserAuthState | None" = None,
+    allowed_domains: Sequence[str] = (),
+    headers: Mapping[str, str] | None = None,
+    cookie_jar_path: str | Path | None = None,
+) -> requests.Session:
+    """Create a long-lived requests.Session with optional browser cookies."""
+    from http.cookiejar import MozillaCookieJar
+
+    session = requests.Session()
+    session.headers.update(DEFAULT_BROWSER_HEADERS)
+    if headers:
+        session.headers.update(dict(headers))
+
+    if cookie_jar_path is not None:
+        jar_path = Path(cookie_jar_path)
+        jar_path.parent.mkdir(parents=True, exist_ok=True)
+        jar = MozillaCookieJar(str(jar_path))
+        if jar_path.exists():
+            try:
+                jar.load(ignore_discard=True, ignore_expires=True)
+            except OSError:
+                pass
+        session.cookies = jar  # type: ignore[assignment]
+
+    if auth_state is not None:
+        if not allowed_domains:
+            raise BrowserAuthStateError(
+                "allowed_domains is required when loading BrowserAuthState cookies."
+            )
+        now = time.time()
+        for domain in allowed_domains:
+            for cookie in auth_state.cookies_for_host(
+                domain.lstrip("."),
+                allowed_domains,
+                now=now,
+            ):
+                session.cookies.set(
+                    cookie.name,
+                    cookie.value,
+                    domain=cookie.domain,
+                    path=cookie.path,
+                )
+    return session

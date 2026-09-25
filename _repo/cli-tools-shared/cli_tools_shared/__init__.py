@@ -45,6 +45,7 @@ from .http_session import (
     DEFAULT_REQUESTS_RETRYABLE_STATUS_CODES,
     RequestsRetryPolicy,
     request_with_retry,
+    build_requests_session,
 )
 from .auth_commands import create_auth_app
 from .cache_commands import create_cache_app
@@ -160,6 +161,7 @@ __all__ = [
     "DEFAULT_BROWSER_HEADERS",
     "RequestsRetryPolicy",
     "request_with_retry",
+    "build_requests_session",
     "DEFAULT_REQUESTS_MAX_RETRIES",
     "DEFAULT_REQUESTS_BASE_DELAY",
     "DEFAULT_REQUESTS_MAX_DELAY",

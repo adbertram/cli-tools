@@ -557,3 +557,20 @@ def test_request_with_retry_max_retries_zero_makes_single_attempt():
     assert response.status_code == 503
     assert send.calls == 1
     assert sleeps == []
+
+
+def test_requests_retry_policy_treats_empty_403_as_retryable():
+    import requests
+    from cli_tools_shared.http_session import RequestsRetryPolicy
+
+    policy = RequestsRetryPolicy()
+    empty = requests.Response()
+    empty.status_code = 403
+    empty._content = b""
+    assert policy.is_retryable_response(empty)
+    assert RequestsRetryPolicy.is_empty_forbidden(empty)
+
+    body = requests.Response()
+    body.status_code = 403
+    body._content = b"forbidden"
+    assert not policy.is_retryable_response(body)

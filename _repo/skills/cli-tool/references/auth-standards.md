@@ -349,7 +349,9 @@ Wrapper CLIs that wrap local tools with no auth (e.g., `cliclick`, `ffmpeg`, `im
 - The underlying CLI has no authentication concept
 - The wrapper is purely a convenience/formatting layer
 
-**Hard rule (applies to every CLI, not just wrappers):** every `commands/auth.py` must be a thin `create_auth_app(...)` mount. Hand-rolled `@app.command("status")` / `@app.command("login")` / `@app.command("logout")` functions are disallowed unless the CLI is genuinely exceptional (document the exception when introducing it).
+**Hard rule (applies to every credential-owning CLI, not just wrappers):** every `commands/auth.py` must be a thin `create_auth_app(...)` mount. Hand-rolled `@app.command("status")` / `@app.command("login")` / `@app.command("logout")` functions are disallowed unless the CLI is genuinely exceptional (document the exception when introducing it).
+
+A read-only local-state inspector may expose a hand-written `auth status` solely as a conventional readiness check when it owns no credentials and must never create profiles or configuration. Such a CLI must expose no `login`, `logout`, `refresh`, `test`, or `profiles` mutation surface; must return the canonical `{profiles: [...]}` status shape; and must be named in both `no_auth_clis` and `read_only_status_auth_clis` in `tests/cli_test_config.toml`. The latter list is the narrow exemption from the `create_auth_app()` source check; it must not be used for remote services, wrappers over authenticated tools, or legacy custom authentication.
 
 **Wrapper pattern (recommended):**
 

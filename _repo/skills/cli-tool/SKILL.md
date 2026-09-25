@@ -819,6 +819,12 @@ Omit local models when parsed/API records can flow straight to the documented ou
 **Gotchas:** If the warning appears while installing one CLI, inspect both that CLI and `cli-tools-shared`; transitive package metadata can be the source. After changing shared dependency metadata, refresh the dependent CLI install with `install-cli-tool.sh --force-refresh <name>` so it resolves the new `cli-tools-shared` commit.
 </topic>
 
+<topic name="Venv Disk Accounting (macOS APFS Clones)">
+**Context:** Use when assessing or reporting disk usage of `uv tool` venvs (e.g. "N venvs, duplicated deps, X GB").
+**Key Facts:** On macOS, uv installs tools into `~/.local/share/uv/tools/<tool>` using APFS copy-on-write clones (`--link-mode clone` is the default), not hardlinks or copies. Clone copies share physical blocks with the uv cache and with each other; `du` and per-tool sums count every clone at full size and overstate physical usage (measured ~2.6x on this fleet). `uv cache clean` frees only cache bytes not referenced by surviving venvs; deleting one of several same-content venvs frees ~nothing, deleting the last frees the content. Clones inherit identical mtime/birthtime from their cache source, so grouping duplicate files by timestamp pairs yields lineage counts = physical copy counts (calibrated forensics method).
+**Gotchas:** Never report a `du` total as physical disk usage for uv tool venvs; do not expect `uv cache clean` to reclaim space while venvs hold references; uninstalling a tool reclaims only bytes exclusive to it.
+</topic>
+
 </domain_knowledge>
 
 <success_criteria>

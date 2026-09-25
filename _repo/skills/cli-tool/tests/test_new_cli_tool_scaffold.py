@@ -264,11 +264,11 @@ def test_new_cli_tool_bounds_readme_description_and_moves_docs_to_docs_section(
     env = os.environ.copy()
     description = textwrap.dedent(
         """\
-        Command-line access to the WP Engine Hosting Platform API.
+        Command-line access to the Example Hosting Platform API.
 
         Docs:
-        - API overview: https://developers.wpengine.com/docs/managed-hosting-platform/api/
-        - API reference: https://api.wpengineapi.com/
+        - API overview: https://developers.example.com/docs/hosting-platform/api/
+        - API reference: https://api.example.com/
         """
     )
 
@@ -281,9 +281,9 @@ def test_new_cli_tool_bounds_readme_description_and_moves_docs_to_docs_section(
                 "--type",
                 "api",
                 "--base-url",
-                "https://api.wpengineapi.com",
+                "https://api.example.com",
                 "--docs-url",
-                "https://developers.wpengine.com/docs/managed-hosting-platform/api/",
+                "https://developers.example.com/docs/hosting-platform/api/",
                 "--description",
                 description,
                 "--no-install",
@@ -305,8 +305,8 @@ def test_new_cli_tool_bounds_readme_description_and_moves_docs_to_docs_section(
         assert "https://" not in description_block
         assert readme_text.index("## DESCRIPTION") < readme_text.index("## Docs")
         assert readme_text.index("## Docs") < readme_text.index("## Installation")
-        assert "- API documentation: https://developers.wpengine.com/docs/managed-hosting-platform/api/" in docs_block
-        assert "- Base URL: https://api.wpengineapi.com" in docs_block
+        assert "- API documentation: https://developers.example.com/docs/hosting-platform/api/" in docs_block
+        assert "- Base URL: https://api.example.com" in docs_block
     finally:
         CLI_TOOLS_DOC.write_text(original_cli_tools_doc)
         shutil.rmtree(tool_dir, ignore_errors=True)

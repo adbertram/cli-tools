@@ -252,7 +252,7 @@ def invalidate(instance: Any, method_name: str, *args, **kwargs) -> None:
             cache_file.unlink(missing_ok=True)
 
 
-def cached(fn=None, *, credential_type=None):
+def cached(fn=None, *, credential_type=None, ttl: int | None = None):
     """Decorator that caches method return values as JSON files.
 
     Usage::
@@ -275,7 +275,7 @@ def cached(fn=None, *, credential_type=None):
     Cache is skipped when CACHE_ENABLED=false or method raises an exception.
     """
     if fn is None:
-        return functools.partial(cached, credential_type=credential_type)
+        return functools.partial(cached, credential_type=credential_type, ttl=ttl)
 
     @functools.wraps(fn)
     def wrapper(self, *args, **kwargs):
@@ -289,7 +289,7 @@ def cached(fn=None, *, credential_type=None):
         cache_dir = _get_cache_dir(self)
         cache_file = cache_dir / f"{method_name}_{key_hash}.json"
 
-        ttl = get_cache_ttl()
+        effective_ttl = get_cache_ttl() if ttl is None else ttl
 
         # Check cache. A missing, empty, truncated, or otherwise unreadable
         # entry is a MISS, never an error: another process may be mid-write
@@ -303,7 +303,7 @@ def cached(fn=None, *, credential_type=None):
                 age = None
             if (
                 age is not None
-                and age < ttl
+                and age < effective_ttl
                 and _cache_allowed_for_instance(self, credential_type)
             ):
                 cached_data = _read_cache_entry(cache_file)
