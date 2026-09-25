@@ -30,3 +30,8 @@ include = ["facebook_cli*"]
 
 [tool.uv.sources]
 cli-tools-shared = { path = "../_repo/cli-tools-shared", editable = true }
+
+[tool.pytest.ini_options]
+markers = [
+    "e2e: live Facebook Graph API tests; opt in with FACEBOOK_E2E=1",
+]

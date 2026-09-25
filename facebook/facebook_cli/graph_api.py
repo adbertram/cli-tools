@@ -130,6 +130,18 @@ class FacebookGraphClient:
             "status": payload.get("status"),
         }
 
+    def delete_reel(self, page_id: str, video_id: str) -> dict:
+        page = self._page_context(page_id)
+        payload = self._request("DELETE", f"/{video_id}", token=page["access_token"])
+        if payload.get("success") is not True:
+            raise ClientError(f"Facebook did not confirm deletion of video {video_id}: {payload}")
+        return {
+            "page_id": page["id"],
+            "page_name": page["name"],
+            "video_id": video_id,
+            "deleted": True,
+        }
+
     def publish_reel(
         self,
         page_id: str,
@@ -137,6 +149,7 @@ class FacebookGraphClient:
         *,
         title: str = "",
         description: str = "",
+        draft: bool = False,
     ) -> dict:
         path = Path(file_path)
         if not path.is_file():
@@ -156,51 +169,57 @@ class FacebookGraphClient:
         if not video_id or not upload_url:
             raise ClientError("Facebook Reels start response omitted video_id or upload_url.")
 
-        file_size = path.stat().st_size
-        with path.open("rb") as fh:
-            upload_response = self.session.post(
-                upload_url,
-                headers={
-                    "Authorization": f"OAuth {page_token}",
-                    "offset": "0",
-                    "file_size": str(file_size),
-                    "Content-Type": "application/octet-stream",
-                },
-                data=fh,
-                timeout=300,
-            )
-        if not upload_response.ok:
-            raise ClientError(
-                f"Facebook Reels upload HTTP {upload_response.status_code}: "
-                f"{upload_response.text[:1000]}"
-            )
+        video_state = "DRAFT" if draft else "PUBLISHED"
+        # Name the created video in any later failure so callers can delete it.
+        try:
+            file_size = path.stat().st_size
+            with path.open("rb") as fh:
+                upload_response = self.session.post(
+                    upload_url,
+                    headers={
+                        "Authorization": f"OAuth {page_token}",
+                        "offset": "0",
+                        "file_size": str(file_size),
+                        "Content-Type": "application/octet-stream",
+                    },
+                    data=fh,
+                    timeout=300,
+                )
+            if not upload_response.ok:
+                raise ClientError(
+                    f"Facebook Reels upload HTTP {upload_response.status_code}: "
+                    f"{upload_response.text[:1000]}"
+                )
 
-        finish_data = {
-            "upload_phase": "finish",
-            "video_id": video_id,
-            "video_state": "PUBLISHED",
-        }
-        if title:
-            finish_data["title"] = title
-        if description:
-            finish_data["description"] = description
+            finish_data = {
+                "upload_phase": "finish",
+                "video_id": video_id,
+                "video_state": video_state,
+            }
+            if title:
+                finish_data["title"] = title
+            if description:
+                finish_data["description"] = description
 
-        finish = self._request(
-            "POST",
-            "/me/video_reels",
-            token=page_token,
-            data=finish_data,
-        )
-        status = self._request(
-            "GET",
-            f"/{video_id}",
-            token=page_token,
-            params={"fields": "id,status"},
-        )
+            finish = self._request(
+                "POST",
+                "/me/video_reels",
+                token=page_token,
+                data=finish_data,
+            )
+            status = self._request(
+                "GET",
+                f"/{video_id}",
+                token=page_token,
+                params={"fields": "id,status"},
+            )
+        except (ClientError, requests.RequestException) as exc:
+            raise ClientError(f"{exc} [video_id={video_id}]") from exc
         return {
             "page_id": page["id"],
             "page_name": page["name"],
             "video_id": video_id,
-            "published": bool(finish.get("success", True)),
+            "video_state": video_state,
+            "published": not draft and bool(finish.get("success", True)),
             "status": status.get("status"),
         }

@@ -18,9 +18,9 @@ FACEBOOK_OAUTH_SCOPES = [
 ]
 
 
-def _migrate_legacy_profiles(tool_name: str) -> None:
+def migrate_legacy_profiles() -> None:
     """Mark pre-Graph-API profiles as browser-session profiles."""
-    profiles_dir = get_profiles_base_dir(tool_name)
+    profiles_dir = get_profiles_base_dir(resolve_tool_dir(Config.DIST_NAME).name)
     if not profiles_dir.exists():
         return
     for env_path in profiles_dir.glob("*/.env"):
@@ -66,10 +66,9 @@ class Config(BaseConfig):
     ADDITIONAL_SENSITIVE_AUTH_FIELDS = ("USERNAME", "PASSWORD")
 
     def __init__(self, profile=None, profile_auth_type=None):
-        tool_dir = resolve_tool_dir(self.DIST_NAME)
-        _migrate_legacy_profiles(tool_dir.name)
+        migrate_legacy_profiles()
         super().__init__(
-            tool_dir=tool_dir,
+            tool_dir=resolve_tool_dir(self.DIST_NAME),
             profile=profile,
             profile_auth_type=profile_auth_type,
         )
@@ -80,7 +79,7 @@ class Config(BaseConfig):
 
     @property
     def graph_version(self) -> str:
-        return self._get("FACEBOOK_GRAPH_VERSION") or DEFAULT_GRAPH_VERSION
+        return self._get("GRAPH_VERSION") or DEFAULT_GRAPH_VERSION
 
     @property
     def graph_base_url(self) -> str:

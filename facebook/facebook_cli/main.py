@@ -12,8 +12,11 @@ def create_facebook_app():
     from cli_tools_shared.cache_commands import create_cache_app
     from cli_tools_shared.command_registry import register_commands
 
-    from .config import get_config
+    from .config import get_config, migrate_legacy_profiles
     from .commands import groups, marketplace, messenger, pages, reels
+
+    # Auth/profile commands validate AUTH_TYPE without constructing Config.
+    migrate_legacy_profiles()
 
     app = create_app(
         name="facebook",

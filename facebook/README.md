@@ -624,8 +624,36 @@ facebook auth login --profile graph --credential-type oauth_authorization_code
 facebook pages list --profile graph --table
 facebook pages get PAGE_ID --profile graph
 facebook reels publish short.mp4 --page PAGE_ID --description "Caption" --profile graph
+facebook reels publish short.mp4 --page PAGE_ID --draft --profile graph
 facebook reels status VIDEO_ID --page PAGE_ID --profile graph
+facebook reels delete VIDEO_ID --page PAGE_ID --yes --profile graph
 ```
+
+`reels publish --draft` finishes the upload with `video_state=DRAFT`, so the Reel
+is saved as an unpublished Page draft instead of appearing on the Page. The JSON
+output includes `video_state` and `published` (false for drafts). If publishing
+fails after Facebook has created the video, the error ends with
+`[video_id=<id>]` so the partial upload can be removed with `reels delete`.
+
+`reels delete` calls Graph API `DELETE /{video-id}` with the Page access token and
+prints `{"page_id", "page_name", "video_id", "deleted": true}`. It refuses to run
+in non-interactive contexts without `--yes`/`-y`.
+
+### Live Reels e2e test
+
+`tests/test_e2e_reels_live.py` uploads a 5-second 1080x1920 ffmpeg-generated clip
+as a Page Reel draft, polls `reels status` until `video_status` is `ready` (failing
+on `error`, `expired`, or `upload_failed`), deletes the Reel in a `finally` block
+even when the test fails, and verifies `reels status` then reports that the video
+does not exist. It is marked `e2e` and skipped unless `FACEBOOK_E2E=1`:
+
+```bash
+FACEBOOK_E2E=1 FACEBOOK_E2E_PAGE_ID=PAGE_ID \
+  uv run --project facebook pytest facebook/tests/test_e2e_reels_live.py -m e2e -v -s
+```
+
+`FACEBOOK_E2E_PROFILE` selects the Graph API auth profile (default `graph`).
+Requires `ffmpeg` on PATH.
 
 The CLI obtains Page access tokens through the authenticated user token and never
 prints those Page tokens in command output.

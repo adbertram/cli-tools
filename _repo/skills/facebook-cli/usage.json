@@ -1,8 +1,8 @@
 {
   "tool": "facebook",
   "description": "Facebook CLI - Marketplace, Messenger, and more via browser automation",
-  "discovered_at": "2026-09-25T22:09:22Z",
-  "total_commands": 31,
+  "discovered_at": "2026-09-25T23:32:05Z",
+  "total_commands": 32,
   "global_options": [
     {
       "name": "--version",
@@ -20,220 +20,1250 @@
   ],
   "commands": {
     "auth": {
-      "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook auth [OPTIONS] COMMAND [ARGS]...\u001b[0m\u001b[1m                                                                                                                                                      \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Manage Facebook authentication \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m          Show this message and exit.                                                                                                                                                          \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Commands \u001b[0m\u001b[2m──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1mlogin   \u001b[0m\u001b[1m \u001b[0m Configure authentication credentials.                                                                                                                                                      \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1mlogout  \u001b[0m\u001b[1m \u001b[0m Clear stored credentials and browser sessions.                                                                                                                                             \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1mstatus  \u001b[0m\u001b[1m \u001b[0m Check authentication status across profiles.                                                                                                                                               \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1mrefresh \u001b[0m\u001b[1m \u001b[0m Refresh OAuth access token using stored refresh token.                                                                                                                                     \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1mtest    \u001b[0m\u001b[1m \u001b[0m Test authentication by verifying credentials work across profiles.                                                                                                                         \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1mprofiles\u001b[0m\u001b[1m \u001b[0m Manage authentication profiles                                                                                                                                                             \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
+      "help": "Manage Facebook authentication",
       "arguments": [],
       "options": [],
       "commands": {
         "login": {
-          "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook auth login [OPTIONS]\u001b[0m\u001b[1m                                                                                                                                                                  \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Configure authentication credentials. \u001b[2mPrompts for required credentials based on the tool's authentication type.\u001b[0m \u001b[2mFor OAuth authorization code flows, opens a browser for user consent.\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-profile\u001b[0m                       \u001b[1m-p\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Profile name to save credentials to                                                                                                                   \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-force\u001b[0m                         \u001b[1m-F\u001b[0m      \u001b[1m     \u001b[0m  Clear existing ephemeral auth state and re-authenticate                                                                                               \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-credential\u001b[0m\u001b[1m-type\u001b[0m,\u001b[1m-\u001b[0m\u001b[1m-credential\u001b[0m  \u001b[1m-c\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Authenticate only this credential type (e.g., 'oauth_authorization_code', 'browser_session')                                                          \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m                                  \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                           \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing ephemeral auth state and re-authenticate",
+              "short": "-F",
+              "takes_value": false
+            },
+            {
+              "name": "--credential-type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authenticate only this credential type (e.g., 'oauth_authorization_code', 'browser_session')",
+              "short": "-c"
+            }
+          ]
         },
         "logout": {
-          "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook auth logout [OPTIONS]\u001b[0m\u001b[1m                                                                                                                                                                 \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Clear stored credentials and browser sessions. \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-profile\u001b[0m  \u001b[1m-p\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Profile name to clear credentials from                                                                                                                                     \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m             \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                                                \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
+          "help": "Clear stored credentials and browser sessions.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
         },
         "profiles": {
-          "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook auth profiles [OPTIONS] COMMAND [ARGS]...\u001b[0m\u001b[1m                                                                                                                                             \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Manage authentication profiles \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m          Show this message and exit.                                                                                                                                                          \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Commands \u001b[0m\u001b[2m──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1mlist  \u001b[0m\u001b[1m \u001b[0m List all profiles and show their auth types and active state.                                                                                                                                \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1mget   \u001b[0m\u001b[1m \u001b[0m Get details for a specific profile.                                                                                                                                                          \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1mcreate\u001b[0m\u001b[1m \u001b[0m Create a new profile from .env.example template.                                                                                                                                             \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1mselect\u001b[0m\u001b[1m \u001b[0m Activate a profile within its auth type.                                                                                                                                                     \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1mdelete\u001b[0m\u001b[1m \u001b[0m Delete a profile and its data.                                                                                                                                                               \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1mremove\u001b[0m\u001b[1m \u001b[0m Delete a profile and its data.                                                                                                                                                               \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1mrename\u001b[0m\u001b[1m \u001b[0m Rename a profile, re-keying its secrets to the new profile name.                                                                                                                             \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
+          "help": "Manage authentication profiles",
           "arguments": [],
           "options": [],
           "commands": {
             "create": {
-              "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook auth profiles create [OPTIONS] {name}\u001b[0m\u001b[1m                                                                                                                                                 \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Create a new profile from .env.example template. \u001b[2m╭─\u001b[0m\u001b[2m Arguments \u001b[0m\u001b[2m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m *    name      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Profile name (e.g., staging, production) \u001b[2m[required]\u001b[0m                                                                                                                            \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m *  \u001b[1m-\u001b[0m\u001b[1m-auth\u001b[0m\u001b[1m-type\u001b[0m         \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Authentication type for this profile. Valid values: oauth_authorization_code, browser_session \u001b[2m[required]\u001b[0m                                                               \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m    \u001b[1m-\u001b[0m\u001b[1m-auth\u001b[0m\u001b[1m-param\u001b[0m        \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Auth parameter as FIELD=VALUE. Repeat for additional required values.                                                                                                  \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m    \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m              \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                                            \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
-              "arguments": [],
-              "options": []
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--auth-type",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Authentication type for this profile. Valid values: oauth_authorization_code, browser_session"
+                },
+                {
+                  "name": "--auth-param",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth parameter as FIELD=VALUE. Repeat for additional required values"
+                }
+              ]
             },
             "delete": {
-              "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook auth profiles delete [OPTIONS] {name}\u001b[0m\u001b[1m                                                                                                                                                 \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Delete a profile and its data. \u001b[2m╭─\u001b[0m\u001b[2m Arguments \u001b[0m\u001b[2m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m *    name      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Profile name to delete \u001b[2m[required]\u001b[0m                                                                                                                                              \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-force\u001b[0m  \u001b[1m-F\u001b[0m        Skip confirmation                                                                                                                                                                 \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m             Show this message and exit.                                                                                                                                                       \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
-              "arguments": [],
-              "options": []
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
             },
             "get": {
-              "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook auth profiles get [OPTIONS] {name}\u001b[0m\u001b[1m                                                                                                                                                    \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Get details for a specific profile. \u001b[2m╭─\u001b[0m\u001b[2m Arguments \u001b[0m\u001b[2m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m *    name      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Profile name to get details for \u001b[2m[required]\u001b[0m                                                                                                                                     \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-table\u001b[0m  \u001b[1m-t\u001b[0m        Display as table                                                                                                                                                                  \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m             Show this message and exit.                                                                                                                                                       \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
-              "arguments": [],
-              "options": []
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                }
+              ]
             },
             "list": {
-              "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook auth profiles list [OPTIONS]\u001b[0m\u001b[1m                                                                                                                                                          \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m List all profiles and show their auth types and active state. \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-table\u001b[0m       \u001b[1m-t\u001b[0m      \u001b[1m     \u001b[0m  Display as table                                                                                                                                                        \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-limit\u001b[0m       \u001b[1m-l\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mint\u001b[0m\u001b[1;2m>\u001b[0m  Maximum number of profiles to return                                                                                                                                    \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-filter\u001b[0m      \u001b[1m-f\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Filter: field:op:value (e.g., active:eq:True)                                                                                                                           \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-properties\u001b[0m  \u001b[1m-p\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Comma-separated list of fields to include                                                                                                                               \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m                \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                                             \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
+              "help": "List all profiles and show their auth types and active state.",
               "arguments": [],
-              "options": []
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
             },
             "remove": {
-              "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook auth profiles remove [OPTIONS] {name}\u001b[0m\u001b[1m                                                                                                                                                 \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Delete a profile and its data. \u001b[2m╭─\u001b[0m\u001b[2m Arguments \u001b[0m\u001b[2m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m *    name      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Profile name to delete \u001b[2m[required]\u001b[0m                                                                                                                                              \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-force\u001b[0m  \u001b[1m-F\u001b[0m        Skip confirmation                                                                                                                                                                 \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m             Show this message and exit.                                                                                                                                                       \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
-              "arguments": [],
-              "options": []
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
             },
             "rename": {
-              "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook auth profiles rename [OPTIONS] {old} {new}\u001b[0m\u001b[1m                                                                                                                                            \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Rename a profile, re-keying its secrets to the new profile name. \u001b[2m╭─\u001b[0m\u001b[2m Arguments \u001b[0m\u001b[2m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m *    old      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Existing profile name to rename \u001b[2m[required]\u001b[0m                                                                                                                                      \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m *    new      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  New profile name (must not already exist) \u001b[2m[required]\u001b[0m                                                                                                                            \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-keep\u001b[0m\u001b[1m-old\u001b[0m            Build and activate the new profile but leave the old profile dir and old secrets intact.                                                                                       \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-force\u001b[0m     \u001b[1m-F\u001b[0m        Skip confirmation                                                                                                                                                              \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m                Show this message and exit.                                                                                                                                                    \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
-              "arguments": [],
-              "options": []
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
             },
             "select": {
-              "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook auth profiles select [OPTIONS] {name}\u001b[0m\u001b[1m                                                                                                                                                 \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Activate a profile within its auth type. \u001b[2m╭─\u001b[0m\u001b[2m Arguments \u001b[0m\u001b[2m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m *    name      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Profile name to activate within its auth type \u001b[2m[required]\u001b[0m                                                                                                                       \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m          Show this message and exit.                                                                                                                                                          \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
-              "arguments": [],
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
               "options": []
             }
           }
         },
         "refresh": {
-          "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook auth refresh [OPTIONS]\u001b[0m\u001b[1m                                                                                                                                                                \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Refresh OAuth access token using stored refresh token. \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-profile\u001b[0m  \u001b[1m-p\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Profile name                                                                                                                                                               \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-table\u001b[0m    \u001b[1m-t\u001b[0m      \u001b[1m     \u001b[0m  Display as table                                                                                                                                                           \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m             \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                                                \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
+          "help": "Refresh OAuth access token using stored refresh token.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
         },
         "status": {
-          "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook auth status [OPTIONS]\u001b[0m\u001b[1m                                                                                                                                                                 \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Check authentication status across profiles. \u001b[2mPerforms a live round-trip for every configured credential type so\u001b[0m \u001b[2mthe report reflects ground truth — not on-disk belief. Saved\u001b[0m \u001b[2mcredentials whose live verification fails are reported as\u001b[0m \u001b[2m``authenticated: false`` with the failure reason in\u001b[0m \u001b[2m``api_test`` (API/OAuth) or via the live browser check\u001b[0m \u001b[2m(browser_session).\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-profile\u001b[0m  \u001b[1m-p\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Profile name to check (defaults to all profiles)                                                                                                                           \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-table\u001b[0m    \u001b[1m-t\u001b[0m      \u001b[1m     \u001b[0m  Display as table                                                                                                                                                           \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m             \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                                                \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
         },
         "test": {
-          "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook auth test [OPTIONS]\u001b[0m\u001b[1m                                                                                                                                                                   \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Test authentication by verifying credentials work across profiles. \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-table\u001b[0m    \u001b[1m-t\u001b[0m      \u001b[1m     \u001b[0m  Display as table                                                                                                                                                           \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-verbose\u001b[0m  \u001b[1m-v\u001b[0m      \u001b[1m     \u001b[0m  Show detailed checks                                                                                                                                                       \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-profile\u001b[0m  \u001b[1m-p\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Profile name (defaults to all profiles)                                                                                                                                    \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m             \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                                                \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
+          "help": "Test authentication by verifying credentials work across profiles.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
         }
       }
     },
     "cache": {
-      "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook cache [OPTIONS] COMMAND [ARGS]...\u001b[0m\u001b[1m                                                                                                                                                     \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Manage response cache \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m          Show this message and exit.                                                                                                                                                          \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Commands \u001b[0m\u001b[2m──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1mclear\u001b[0m\u001b[1m \u001b[0m Remove all cached responses.                                                                                                                                                                  \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
+      "help": "Manage response cache",
       "arguments": [],
       "options": [],
       "commands": {
         "clear": {
-          "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook cache clear [OPTIONS]\u001b[0m\u001b[1m                                                                                                                                                                 \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Remove all cached responses. \u001b[2mDeletes every file in the cache directory\u001b[0m \u001b[2m({storage_dir}/cache/) and reports how many files\u001b[0m \u001b[2mand bytes were freed.\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-profile\u001b[0m        \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Profile name                                                                                                                                                                 \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m           \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                                                  \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
     "groups": {
-      "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook groups [OPTIONS] COMMAND [ARGS]...\u001b[0m\u001b[1m                                                                                                                                                    \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Manage Facebook Groups \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-profile\u001b[0m        \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Auth profile name                                                                                                                                                            \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m           \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                                                  \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Commands \u001b[0m\u001b[2m──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1mlist \u001b[0m\u001b[1m \u001b[0m List Facebook Groups the logged-in user has joined or requested to join.                                                                                                                      \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1mget  \u001b[0m\u001b[1m \u001b[0m Get a specific Facebook Group by ID, slug, or URL.                                                                                                                                            \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1mposts\u001b[0m\u001b[1m \u001b[0m Manage posts in Facebook Groups                                                                                                                                                               \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
+      "help": "Manage Facebook Groups",
       "arguments": [],
-      "options": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "get": {
-          "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook groups get [OPTIONS] {group_id}\u001b[0m\u001b[1m                                                                                                                                                       \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Get a specific Facebook Group by ID, slug, or URL. \u001b[2mReports the group's privacy (\"public\"/\"private\"), this session's membership\u001b[0m \u001b[2m(\"member\"/\"pending\"/\"non_member\"), and posts_readable - whether this session\u001b[0m \u001b[2mcan actually read the group's posts. All three are read from the live group\u001b[0m \u001b[2mpage and never inferred.\u001b[0m \u001b[2mExamples:\u001b[0m \u001b[2m    facebook groups get 123456789\u001b[0m \u001b[2m    facebook groups get 123456789 \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-table\u001b[0m \u001b[2m    facebook groups get 123456789 \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-properties\u001b[0m\u001b[2m group_id,privacy,membership,posts_readable\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Arguments \u001b[0m\u001b[2m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m *    group_id      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Group ID \u001b[2m[required]\u001b[0m                                                                                                                                                        \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-table\u001b[0m       \u001b[1m-t\u001b[0m      \u001b[1m     \u001b[0m  Display as table                                                                                                                                                        \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-properties\u001b[0m  \u001b[1m-p\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Comma-separated fields to include                                                                                                                                       \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-profile\u001b[0m             \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Auth profile name                                                                                                                                                       \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m                \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                                             \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
-          "arguments": [],
-          "options": []
+          "help": "Get a specific Facebook Group by ID, slug, or URL. Reports the group's privacy (\"public\"/\"private\"), this session's membership (\"member\"/\"pending\"/\"non_member\"), and posts_readable - whether this session can actually read the group's posts. All three are read from the live group page and never inferred.",
+          "examples": [
+            "facebook groups get 123456789",
+            "facebook groups get 123456789 --table",
+            "facebook groups get 123456789 --properties group_id,privacy,membership,posts_readable"
+          ],
+          "arguments": [
+            {
+              "name": "group_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Group ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "list": {
-          "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook groups list [OPTIONS]\u001b[0m\u001b[1m                                                                                                                                                                 \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m List Facebook Groups the logged-in user has joined or requested to join. \u001b[2mEvery row carries group_id, name, url, and membership (\"member\" or\u001b[0m \u001b[2m\"pending\"); joined groups are listed before pending requests. Facebook does\u001b[0m \u001b[2mnot render privacy or member counts on this page, so those stay null - use\u001b[0m \u001b[2m'facebook groups get \u001b[0m\u001b[1;2m<group_id>\u001b[0m\u001b[2m' for them.\u001b[0m \u001b[2mExamples:\u001b[0m \u001b[2m    facebook groups list\u001b[0m \u001b[2m    facebook groups list \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-table\u001b[0m\u001b[2m \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-limit\u001b[0m\u001b[2m 50\u001b[0m \u001b[2m    facebook groups list \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-filter\u001b[0m\u001b[2m \"membership:eq:member\"\u001b[0m \u001b[2m    facebook groups list \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-filter\u001b[0m\u001b[2m \"name:contains:Python\"\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-table\u001b[0m       \u001b[1m-t\u001b[0m      \u001b[1m     \u001b[0m  Display as table                                                                                                                                                        \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-limit\u001b[0m       \u001b[1m-l\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mint\u001b[0m\u001b[1;2m>\u001b[0m  Maximum number of results \u001b[2m[default: 20]\u001b[0m                                                                                                                                 \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-filter\u001b[0m      \u001b[1m-f\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)                                                                                                   \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-properties\u001b[0m  \u001b[1m-p\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Comma-separated fields to include                                                                                                                                       \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-profile\u001b[0m             \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Auth profile name                                                                                                                                                       \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m                \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                                             \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
+          "help": "List Facebook Groups the logged-in user has joined or requested to join. Every row carries group_id, name, url, and membership (\"member\" or \"pending\"); joined groups are listed before pending requests. Facebook does not render privacy or member counts on this page, so those stay null - use 'facebook groups get <group_id>' for them.",
+          "examples": [
+            "facebook groups list",
+            "facebook groups list --table --limit 50",
+            "facebook groups list --filter \"membership:eq:member\"",
+            "facebook groups list --filter \"name:contains:Python\""
+          ],
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "20"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "posts": {
-          "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook groups posts [OPTIONS] COMMAND [ARGS]...\u001b[0m\u001b[1m                                                                                                                                              \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Manage posts in Facebook Groups \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m          Show this message and exit.                                                                                                                                                          \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Commands \u001b[0m\u001b[2m──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1mlist   \u001b[0m\u001b[1m \u001b[0m List posts from a Facebook Group.                                                                                                                                                           \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1mget    \u001b[0m\u001b[1m \u001b[0m Get a specific post from a Facebook Group.                                                                                                                                                  \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1mcreate \u001b[0m\u001b[1m \u001b[0m Create a new post in a Facebook Group.                                                                                                                                                      \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1mcomment\u001b[0m\u001b[1m \u001b[0m Comment on a Facebook Group post.                                                                                                                                                           \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1mreply  \u001b[0m\u001b[1m \u001b[0m Reply to a comment on a Facebook Group post.                                                                                                                                                \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
+          "help": "Manage posts in Facebook Groups",
           "arguments": [],
           "options": [],
           "commands": {
             "comment": {
-              "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook groups posts comment [OPTIONS] {post_url}\u001b[0m\u001b[1m                                                                                                                                             \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Comment on a Facebook Group post. \u001b[2mExamples:\u001b[0m \u001b[2mfacebook groups posts comment https://www.facebook.com/groups/123/posts/456 \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-text\u001b[0m\u001b[2m \"Great post!\"\u001b[0m \u001b[2mfacebook groups posts comment 123/posts/456 \u001b[0m\u001b[1;2m-m\u001b[0m\u001b[2m \"Thanks for sharing\"\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Arguments \u001b[0m\u001b[2m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m *    post_url      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Post URL or 'group_id/posts/post_id' \u001b[2m[required]\u001b[0m                                                                                                                            \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m *  \u001b[1m-\u001b[0m\u001b[1m-text\u001b[0m     \u001b[1m-m\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Comment text \u001b[2m[required]\u001b[0m                                                                                                                                                 \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m    \u001b[1m-\u001b[0m\u001b[1m-profile\u001b[0m          \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Auth profile name                                                                                                                                                       \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m    \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m             \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                                             \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
-              "arguments": [],
-              "options": []
+              "help": "Comment on a Facebook Group post.",
+              "examples": [
+                "facebook groups posts comment https://www.facebook.com/groups/123/posts/456 --text \"Great post!\"",
+                "facebook groups posts comment 123/posts/456 -m \"Thanks for sharing\""
+              ],
+              "arguments": [
+                {
+                  "name": "post_url",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Post URL or 'group_id/posts/post_id'"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--text",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Comment text",
+                  "short": "-m"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
             },
             "create": {
-              "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook groups posts create [OPTIONS] {group_id}\u001b[0m\u001b[1m                                                                                                                                              \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Create a new post in a Facebook Group. \u001b[2mExamples:\u001b[0m \u001b[2mfacebook groups posts create 123456789 \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-text\u001b[0m\u001b[2m \"Hello everyone!\"\u001b[0m \u001b[2mfacebook groups posts create 123456789 \u001b[0m\u001b[1;2m-m\u001b[0m\u001b[2m \"Looking for advice on shipping\"\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Arguments \u001b[0m\u001b[2m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m *    group_id      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Group ID \u001b[2m[required]\u001b[0m                                                                                                                                                        \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m *  \u001b[1m-\u001b[0m\u001b[1m-text\u001b[0m     \u001b[1m-m\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Post content text \u001b[2m[required]\u001b[0m                                                                                                                                            \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m    \u001b[1m-\u001b[0m\u001b[1m-profile\u001b[0m          \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Auth profile name                                                                                                                                                       \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m    \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m             \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                                             \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
-              "arguments": [],
-              "options": []
+              "help": "Create a new post in a Facebook Group.",
+              "examples": [
+                "facebook groups posts create 123456789 --text \"Hello everyone!\"",
+                "facebook groups posts create 123456789 -m \"Looking for advice on shipping\""
+              ],
+              "arguments": [
+                {
+                  "name": "group_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Group ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--text",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Post content text",
+                  "short": "-m"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
             },
             "get": {
-              "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook groups posts get [OPTIONS] {post_url}\u001b[0m\u001b[1m                                                                                                                                                 \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Get a specific post from a Facebook Group. \u001b[2mAccepts a full post URL or a path like 'group_id/posts/post_id'.\u001b[0m \u001b[2mExamples:\u001b[0m \u001b[2m    facebook groups posts get https://www.facebook.com/groups/123/posts/456\u001b[0m \u001b[2m    facebook groups posts get 123/posts/456\u001b[0m \u001b[2m    facebook groups posts get 123/posts/456 \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-table\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Arguments \u001b[0m\u001b[2m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m *    post_url      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Post permalink URL or 'group_id/posts/post_id' \u001b[2m[required]\u001b[0m                                                                                                                  \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-table\u001b[0m       \u001b[1m-t\u001b[0m      \u001b[1m     \u001b[0m  Display as table                                                                                                                                                        \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-properties\u001b[0m  \u001b[1m-p\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Comma-separated fields to include                                                                                                                                       \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-profile\u001b[0m             \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Auth profile name                                                                                                                                                       \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m                \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                                             \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
-              "arguments": [],
-              "options": []
+              "help": "Get a specific post from a Facebook Group. Accepts a full post URL or a path like 'group_id/posts/post_id'.",
+              "examples": [
+                "facebook groups posts get https://www.facebook.com/groups/123/posts/456",
+                "facebook groups posts get 123/posts/456",
+                "facebook groups posts get 123/posts/456 --table"
+              ],
+              "arguments": [
+                {
+                  "name": "post_url",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Post permalink URL or 'group_id/posts/post_id'"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to include",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
             },
             "list": {
-              "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook groups posts list [OPTIONS] {group_id}\u001b[0m\u001b[1m                                                                                                                                                \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m List posts from a Facebook Group. \u001b[2mZero posts on stdout at exit 0 means one thing only: this readable group's\u001b[0m \u001b[2mfeed really is empty. Every other outcome is a distinct non-zero exit with a\u001b[0m \u001b[2mgreppable stderr marker, so a caller never has to guess:\u001b[0m \u001b[2m  exit 0  []                        readable group, no posts\u001b[0m \u001b[2m  exit 1  \"UNREADABLE_GROUP: ...\"   private group not joined, or join pending\u001b[0m \u001b[2m  exit 2  \"LOGGED_OUT_HTML: ...\"    the saved session is signed out; re-login\u001b[0m \u001b[2m  exit 3  \"FEED_EXTRACTION_FAILED:\" readable group whose feed could not be parsed\u001b[0m \u001b[2mUse 'facebook groups get \u001b[0m\u001b[1;2m<group_id>\u001b[0m\u001b[2m' to check posts_readable before crawling.\u001b[0m \u001b[2mExamples:\u001b[0m \u001b[2m    facebook groups posts list 123456789\u001b[0m \u001b[2m    facebook groups posts list my-group-name \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-table\u001b[0m\u001b[2m \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-limit\u001b[0m\u001b[2m 10\u001b[0m \u001b[2m    facebook groups posts list 2318028917 \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-limit\u001b[0m\u001b[2m 25 \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-full\u001b[0m\u001b[1;2m-threads\u001b[0m \u001b[2m    facebook groups posts list 123456789 \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-filter\u001b[0m\u001b[2m \"author:contains:John\"\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Arguments \u001b[0m\u001b[2m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m *    group_id      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Group ID or name/slug \u001b[2m[required]\u001b[0m                                                                                                                                           \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-table\u001b[0m         \u001b[1m-t\u001b[0m      \u001b[1m                      \u001b[0m  Display as table                                                                                                                                     \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-limit\u001b[0m         \u001b[1m-l\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mint range> [1<=x<=50\u001b[0m\u001b[1;2m]\u001b[0m  Maximum number of results \u001b[2m[default: 20]\u001b[0m                                                                                                              \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-full\u001b[0m\u001b[1m-threads\u001b[0m          \u001b[1m                      \u001b[0m  Fetch full thread metadata for each returned post                                                                                                    \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-filter\u001b[0m        \u001b[1m-f\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m\u001b[1m                 \u001b[0m  Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)                                                                                \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-properties\u001b[0m    \u001b[1m-p\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m\u001b[1m                 \u001b[0m  Comma-separated fields to include                                                                                                                    \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-profile\u001b[0m               \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m\u001b[1m                 \u001b[0m  Auth profile name                                                                                                                                    \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m                  \u001b[1m                      \u001b[0m  Show this message and exit.                                                                                                                          \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
-              "arguments": [],
-              "options": []
+              "help": "List posts from a Facebook Group. Zero posts on stdout at exit 0 means one thing only: this readable group's feed really is empty. Every other outcome is a distinct non-zero exit with a greppable stderr marker, so a caller never has to guess: exit 0  []                        readable group, no posts exit 1  \"UNREADABLE_GROUP: ...\"   private group not joined, or join pending exit 2  \"LOGGED_OUT_HTML: ...\"    the saved session is signed out; re-login exit 3  \"FEED_EXTRACTION_FAILED:\" readable group whose feed could not be parsed Use 'facebook groups get <group_id>' to check posts_readable before crawling.",
+              "examples": [
+                "facebook groups posts list 123456789",
+                "facebook groups posts list my-group-name --table --limit 10",
+                "facebook groups posts list 2318028917 --limit 25 --full-threads",
+                "facebook groups posts list 123456789 --filter \"author:contains:John\""
+              ],
+              "arguments": [
+                {
+                  "name": "group_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Group ID or name/slug"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "[1<=x<=50]  Maximum number of results",
+                  "short": "-l",
+                  "default": "20"
+                },
+                {
+                  "name": "--full-threads",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Fetch full thread metadata for each returned post",
+                  "takes_value": false
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to include",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
             },
             "reply": {
-              "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook groups posts reply [OPTIONS] {post_url}\u001b[0m\u001b[1m                                                                                                                                               \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Reply to a comment on a Facebook Group post. \u001b[2mExamples:\u001b[0m \u001b[2mfacebook groups posts reply https://www.facebook.com/groups/123/posts/456 \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-comment\u001b[0m\u001b[1;2m-index\u001b[0m\u001b[2m 1 \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-text\u001b[0m\u001b[2m \"Good point!\"\u001b[0m \u001b[2mfacebook groups posts reply 123/posts/456 \u001b[0m\u001b[1;2m-c\u001b[0m\u001b[2m 2 \u001b[0m\u001b[1;2m-m\u001b[0m\u001b[2m \"I agree\"\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Arguments \u001b[0m\u001b[2m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m *    post_url      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Post URL or 'group_id/posts/post_id' \u001b[2m[required]\u001b[0m                                                                                                                            \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m *  \u001b[1m-\u001b[0m\u001b[1m-text\u001b[0m           \u001b[1m-m\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Reply text \u001b[2m[required]\u001b[0m                                                                                                                                             \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m *  \u001b[1m-\u001b[0m\u001b[1m-comment\u001b[0m\u001b[1m-index\u001b[0m  \u001b[1m-c\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mint\u001b[0m\u001b[1;2m>\u001b[0m  1-based index of the comment to reply to \u001b[2m[required]\u001b[0m                                                                                                               \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m    \u001b[1m-\u001b[0m\u001b[1m-profile\u001b[0m                \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Auth profile name                                                                                                                                                 \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m    \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m                   \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                                       \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
-              "arguments": [],
-              "options": []
+              "help": "Reply to a comment on a Facebook Group post.",
+              "examples": [
+                "facebook groups posts reply https://www.facebook.com/groups/123/posts/456 --comment-index 1 --text \"Good point!\"",
+                "facebook groups posts reply 123/posts/456 -c 2 -m \"I agree\""
+              ],
+              "arguments": [
+                {
+                  "name": "post_url",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Post URL or 'group_id/posts/post_id'"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--text",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Reply text",
+                  "short": "-m"
+                },
+                {
+                  "name": "--comment-index",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "1-based index of the comment to reply to",
+                  "short": "-c"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
             }
           }
         }
       }
     },
     "marketplace": {
-      "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook marketplace [OPTIONS] COMMAND [ARGS]...\u001b[0m\u001b[1m                                                                                                                                               \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Search and browse Facebook Marketplace \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-profile\u001b[0m        \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Auth profile name                                                                                                                                                            \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m           \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                                                  \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Commands \u001b[0m\u001b[2m──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1mlist  \u001b[0m\u001b[1m \u001b[0m List Facebook Marketplace listings.                                                                                                                                                          \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1mget   \u001b[0m\u001b[1m \u001b[0m Get details for a specific Facebook Marketplace listing.                                                                                                                                     \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1mstatus\u001b[0m\u001b[1m \u001b[0m Get current availability without requiring full listing details.                                                                                                                             \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
+      "help": "Search and browse Facebook Marketplace",
       "arguments": [],
-      "options": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "get": {
-          "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook marketplace get [OPTIONS] {item_id}\u001b[0m\u001b[1m                                                                                                                                                   \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Get details for a specific Facebook Marketplace listing. \u001b[2mExamples:\u001b[0m \u001b[2mfacebook marketplace get 123456789\u001b[0m \u001b[2mfacebook marketplace get 123456789 \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-table\u001b[0m \u001b[2mfacebook marketplace get 123456789 \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-properties\u001b[0m\u001b[2m title,price,location\u001b[0m \u001b[2mfacebook marketplace get 123456789 \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-download\u001b[0m\u001b[1;2m-images\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Arguments \u001b[0m\u001b[2m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m *    item_id      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Marketplace listing item ID \u001b[2m[required]\u001b[0m                                                                                                                                      \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-table\u001b[0m            \u001b[1m-t\u001b[0m      \u001b[1m     \u001b[0m  Display as table                                                                                                                                                   \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-properties\u001b[0m       \u001b[1m-p\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Comma-separated fields to include                                                                                                                                  \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-download\u001b[0m\u001b[1m-images\u001b[0m          \u001b[1m     \u001b[0m  Also save the listing images to the local cache. Image URLs are returned either way.                                                                               \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-profile\u001b[0m                  \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Auth profile name                                                                                                                                                  \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m                     \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                                        \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
-          "arguments": [],
-          "options": []
+          "help": "Get details for a specific Facebook Marketplace listing.",
+          "examples": [
+            "facebook marketplace get 123456789",
+            "facebook marketplace get 123456789 --table",
+            "facebook marketplace get 123456789 --properties title,price,location",
+            "facebook marketplace get 123456789 --download-images"
+          ],
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Marketplace listing item ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--download-images",
+              "type": "bool",
+              "required": false,
+              "help": "Also save the listing images to the local cache. Image URLs are returned either way",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "list": {
-          "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook marketplace list [OPTIONS]\u001b[0m\u001b[1m                                                                                                                                                            \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m List Facebook Marketplace listings. \u001b[2mWithout \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-query\u001b[0m\u001b[2m, browses \"Today's picks\" for the location.\u001b[0m \u001b[2mWith \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-query\u001b[0m\u001b[2m, searches by keyword.\u001b[0m \u001b[2mScrolls automatically to load enough listings to satisfy \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-limit\u001b[0m\u001b[2m.\u001b[0m \u001b[2mResults are ordered by \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-sort\u001b[0m\u001b[2m (default 'newest' = most recently listed\u001b[0m \u001b[2mfirst), mapped to Facebook's `sortBy` URL parameter. Use \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-desc\u001b[0m\u001b[2m to reverse a\u001b[0m \u001b[2mfield's natural direction ('price \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-desc\u001b[0m\u001b[2m' = high to low). Facebook\u001b[0m \u001b[2mMarketplace has no oldest-first ordering, so 'newest \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-desc\u001b[0m\u001b[2m' is rejected.\u001b[0m \u001b[1;2m-\u001b[0m\u001b[1;2m-delivery\u001b[0m\u001b[1;2m-method\u001b[0m\u001b[2m shipping searches NATIONWIDE: it returns only listings\u001b[0m \u001b[2mthat ship, from sellers anywhere in the country, and the \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-location\u001b[0m\u001b[2m slug\u001b[0m \u001b[2mhas no effect on that pool.\u001b[0m \u001b[2mAn unrecognized \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-location\u001b[0m\u001b[2m slug fails instead of returning results.\u001b[0m \u001b[2mFacebook silently substitutes the account's own home city for a slug it\u001b[0m \u001b[2mdoes not know, so a clean-looking result set would describe the wrong city.\u001b[0m \u001b[2mExamples:\u001b[0m \u001b[2m    facebook marketplace list\u001b[0m \u001b[2m    facebook marketplace list \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-query\u001b[0m\u001b[2m \"LEGO\"\u001b[0m \u001b[2m    facebook marketplace list \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-query\u001b[0m\u001b[2m \"LEGO\" \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-sort\u001b[0m\u001b[2m price\u001b[0m \u001b[2m    facebook marketplace list \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-query\u001b[0m\u001b[2m \"LEGO\" \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-sort\u001b[0m\u001b[2m price \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-desc\u001b[0m \u001b[2m    facebook marketplace list \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-query\u001b[0m\u001b[2m \"couch\" \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-min\u001b[0m\u001b[1;2m-price\u001b[0m\u001b[2m 50 \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-max\u001b[0m\u001b[1;2m-price\u001b[0m\u001b[2m 500\u001b[0m \u001b[2m    facebook marketplace list \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-location\u001b[0m\u001b[2m chicago \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-table\u001b[0m\u001b[2m \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-limit\u001b[0m\u001b[2m 20\u001b[0m \u001b[2m    facebook marketplace list \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-query\u001b[0m\u001b[2m \"LEGO\" \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-delivery\u001b[0m\u001b[1;2m-method\u001b[0m\u001b[2m shipping\u001b[0m \u001b[2m    facebook marketplace list \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-query\u001b[0m\u001b[2m \"LEGO\" \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-delivery\u001b[0m\u001b[1;2m-method\u001b[0m\u001b[2m local\u001b[0m \u001b[2m    facebook marketplace list \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-query\u001b[0m\u001b[2m \"LEGO\" \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-include\u001b[0m\u001b[1;2m-detail\u001b[0m \u001b[2m    facebook marketplace list \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-query\u001b[0m\u001b[2m \"LEGO\" \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-download\u001b[0m\u001b[1;2m-images\u001b[0m \u001b[2m    facebook marketplace list \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-query\u001b[0m\u001b[2m \"LEGO\" \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-limit\u001b[0m\u001b[2m 75\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-query\u001b[0m            \u001b[1m-q\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Search query (e.g., 'LEGO', 'couch')                                                                                                                               \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-location\u001b[0m         \u001b[1m-L\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Location slug (e.g., 'evansville', 'chicago', 'seattle', 'nyc'). A slug Facebook does not recognize is an error, not a fallback: Facebook silently serves the      \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m                                   account's own home-city inventory for an unknown slug, so the command fails instead. Ignored by '\u001b[1m-\u001b[0m\u001b[1m-delivery\u001b[0m\u001b[1m-method\u001b[0m shipping', which returns the same nationwide    \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m                                   pool from any slug.                                                                                                                                                \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m                                   \u001b[2m[default: evansville]                                                                                                                                             \u001b[0m \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-min\u001b[0m\u001b[1m-price\u001b[0m                \u001b[1;2m<\u001b[0m\u001b[1mint\u001b[0m\u001b[1;2m>\u001b[0m  Minimum price                                                                                                                                                      \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-max\u001b[0m\u001b[1m-price\u001b[0m                \u001b[1;2m<\u001b[0m\u001b[1mint\u001b[0m\u001b[1;2m>\u001b[0m  Maximum price                                                                                                                                                      \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-sort\u001b[0m             \u001b[1m-s\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Sort field: 'newest' (default, most recently listed first) or 'price' (low to high). \u001b[2m[default: newest]\u001b[0m                                                             \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-desc\u001b[0m             \u001b[1m-d\u001b[0m      \u001b[1m     \u001b[0m  Reverse the sort field's natural direction (e.g. 'price \u001b[1m-\u001b[0m\u001b[1m-desc\u001b[0m' = high to low). Not supported for 'newest' (Facebook has no oldest-first order).                   \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-delivery\u001b[0m\u001b[1m-method\u001b[0m  \u001b[1m-D\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Fulfillment filter, requires \u001b[1m-\u001b[0m\u001b[1m-query\u001b[0m: 'all' (default, Facebook's own unfiltered default), 'shipping' (NATIONWIDE -- only listings that ship, from sellers anywhere \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m                                   in the country), or 'local' (local pickup only). With 'shipping' the \u001b[1m-\u001b[0m\u001b[1m-location\u001b[0m slug does not change the results; Facebook serves one nationwide shipping pool     \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m                                   from any city slug.                                                                                                                                                \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m                                   \u001b[2m[default: all]                                                                                                                                                    \u001b[0m \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-table\u001b[0m            \u001b[1m-t\u001b[0m      \u001b[1m     \u001b[0m  Display as table                                                                                                                                                   \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-limit\u001b[0m            \u001b[1m-l\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mint\u001b[0m\u001b[1;2m>\u001b[0m  Maximum number of listings \u001b[2m[default: 50]\u001b[0m                                                                                                                           \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-filter\u001b[0m           \u001b[1m-f\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)                                                                                              \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-properties\u001b[0m       \u001b[1m-p\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Comma-separated fields to include                                                                                                                                  \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-include\u001b[0m\u001b[1m-detail\u001b[0m           \u001b[1m     \u001b[0m  Navigate to each listing for description and full details                                                                                                          \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-download\u001b[0m\u001b[1m-images\u001b[0m          \u001b[1m     \u001b[0m  Also save the listing images to the local cache (implies \u001b[1m-\u001b[0m\u001b[1m-include\u001b[0m\u001b[1m-detail\u001b[0m). Image URLs are returned either way.                                                    \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-profile\u001b[0m                  \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Auth profile name                                                                                                                                                  \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m                     \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                                        \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
+          "help": "List Facebook Marketplace listings. Without --query, browses \"Today's picks\" for the location. With --query, searches by keyword. Scrolls automatically to load enough listings to satisfy --limit. Results are ordered by --sort (default 'newest' = most recently listed first), mapped to Facebook's `sortBy` URL parameter. Use --desc to reverse a field's natural direction ('price --desc' = high to low). Facebook Marketplace has no oldest-first ordering, so 'newest --desc' is rejected. --delivery-method shipping searches NATIONWIDE: it returns only listings that ship, from sellers anywhere in the country, and the --location slug has no effect on that pool. An unrecognized --location slug fails instead of returning results. Facebook silently substitutes the account's own home city for a slug it does not know, so a clean-looking result set would describe the wrong city.",
+          "examples": [
+            "facebook marketplace list",
+            "facebook marketplace list --query \"LEGO\"",
+            "facebook marketplace list --query \"LEGO\" --sort price",
+            "facebook marketplace list --query \"LEGO\" --sort price --desc",
+            "facebook marketplace list --query \"couch\" --min-price 50 --max-price 500",
+            "facebook marketplace list --location chicago --table --limit 20",
+            "facebook marketplace list --query \"LEGO\" --delivery-method shipping",
+            "facebook marketplace list --query \"LEGO\" --delivery-method local",
+            "facebook marketplace list --query \"LEGO\" --include-detail",
+            "facebook marketplace list --query \"LEGO\" --download-images",
+            "facebook marketplace list --query \"LEGO\" --limit 75"
+          ],
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--query",
+              "type": "TEXT",
+              "required": false,
+              "help": "Search query (e.g., 'LEGO', 'couch')",
+              "short": "-q"
+            },
+            {
+              "name": "--location",
+              "type": "TEXT",
+              "required": false,
+              "help": "Location slug (e.g., 'evansville', 'chicago', 'seattle', 'nyc'). A slug Facebook does not recognize is an error, not a fallback: Facebook silently serves the account's own home-city inventory for an unknown slug, so the command fails instead. Ignored by '--delivery-method shipping', which returns the same nationwide pool from any slug",
+              "short": "-L",
+              "default": "evansville"
+            },
+            {
+              "name": "--min-price",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Minimum price"
+            },
+            {
+              "name": "--max-price",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum price"
+            },
+            {
+              "name": "--sort",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sort field: 'newest' (default, most recently listed first) or 'price' (low to high)",
+              "short": "-s",
+              "default": "newest"
+            },
+            {
+              "name": "--desc",
+              "type": "bool",
+              "required": false,
+              "help": "Reverse the sort field's natural direction (e.g. 'price --desc' = high to low). Not supported for 'newest' (Facebook has no oldest-first order)",
+              "short": "-d",
+              "takes_value": false
+            },
+            {
+              "name": "--delivery-method",
+              "type": "TEXT",
+              "required": false,
+              "help": "Fulfillment filter, requires --query: 'all' (default, Facebook's own unfiltered default), 'shipping' (NATIONWIDE -- only listings that ship, from sellers anywhere in the country), or 'local' (local pickup only). With 'shipping' the --location slug does not change the results; Facebook serves one nationwide shipping pool from any city slug",
+              "short": "-D",
+              "default": "all"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of listings",
+              "short": "-l",
+              "default": "50"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--include-detail",
+              "type": "bool",
+              "required": false,
+              "help": "Navigate to each listing for description and full details",
+              "takes_value": false
+            },
+            {
+              "name": "--download-images",
+              "type": "bool",
+              "required": false,
+              "help": "Also save the listing images to the local cache (implies --include-detail). Image URLs are returned either way",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "status": {
-          "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook marketplace status [OPTIONS] {item_id}\u001b[0m\u001b[1m                                                                                                                                                \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Get current availability without requiring full listing details. \u001b[2mThis command reads Facebook's structured sold, pending, and live values.\u001b[0m \u001b[2mIt does not require delivery types, prices, descriptions, or images.\u001b[0m \u001b[2mExamples:\u001b[0m \u001b[2m    facebook marketplace status 123456789\u001b[0m \u001b[2m    facebook marketplace status 123456789 \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-table\u001b[0m \u001b[2m    facebook marketplace status 123456789 \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-properties\u001b[0m\u001b[2m item_id,availability\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Arguments \u001b[0m\u001b[2m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m *    item_id      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Marketplace listing item ID \u001b[2m[required]\u001b[0m                                                                                                                                      \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-table\u001b[0m       \u001b[1m-t\u001b[0m      \u001b[1m     \u001b[0m  Display as table                                                                                                                                                        \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-properties\u001b[0m  \u001b[1m-p\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Comma-separated fields to include                                                                                                                                       \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-profile\u001b[0m             \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Auth profile name                                                                                                                                                       \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m                \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                                             \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
-          "arguments": [],
-          "options": []
+          "help": "Get current availability without requiring full listing details. This command reads Facebook's structured sold, pending, and live values. It does not require delivery types, prices, descriptions, or images.",
+          "examples": [
+            "facebook marketplace status 123456789",
+            "facebook marketplace status 123456789 --table",
+            "facebook marketplace status 123456789 --properties item_id,availability"
+          ],
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Marketplace listing item ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       }
     },
     "messenger": {
-      "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook messenger [OPTIONS] COMMAND [ARGS]...\u001b[0m\u001b[1m                                                                                                                                                 \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Facebook Messenger conversations and messages \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-profile\u001b[0m        \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Auth profile name                                                                                                                                                            \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m           \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                                                  \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Commands \u001b[0m\u001b[2m──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1mlist    \u001b[0m\u001b[1m \u001b[0m List Messenger conversations.                                                                                                                                                              \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1mget     \u001b[0m\u001b[1m \u001b[0m Get a conversation with its messages.                                                                                                                                                      \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1msend    \u001b[0m\u001b[1m \u001b[0m Send a message to a conversation.                                                                                                                                                          \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1mrequests\u001b[0m\u001b[1m \u001b[0m List message requests.                                                                                                                                                                     \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
+      "help": "Facebook Messenger conversations and messages",
       "arguments": [],
-      "options": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "get": {
-          "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook messenger get [OPTIONS] {conversation_id}\u001b[0m\u001b[1m                                                                                                                                             \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Get a conversation with its messages. \u001b[2mExamples:\u001b[0m \u001b[2mfacebook messenger get 123456789\u001b[0m \u001b[2mfacebook messenger get 123456789 \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-table\u001b[0m \u001b[2mfacebook messenger get 123456789 \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-limit\u001b[0m\u001b[2m 20\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Arguments \u001b[0m\u001b[2m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m *    conversation_id      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Conversation/thread ID \u001b[2m[required]\u001b[0m                                                                                                                                   \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-table\u001b[0m    \u001b[1m-t\u001b[0m      \u001b[1m     \u001b[0m  Display as table                                                                                                                                                           \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-limit\u001b[0m    \u001b[1m-l\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mint\u001b[0m\u001b[1;2m>\u001b[0m  Maximum number of messages \u001b[2m[default: 50]\u001b[0m                                                                                                                                   \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-profile\u001b[0m          \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Auth profile name                                                                                                                                                          \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m             \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                                                \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
-          "arguments": [],
-          "options": []
+          "help": "Get a conversation with its messages.",
+          "examples": [
+            "facebook messenger get 123456789",
+            "facebook messenger get 123456789 --table",
+            "facebook messenger get 123456789 --limit 20"
+          ],
+          "arguments": [
+            {
+              "name": "conversation_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Conversation/thread ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of messages",
+              "short": "-l",
+              "default": "50"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "list": {
-          "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook messenger list [OPTIONS]\u001b[0m\u001b[1m                                                                                                                                                              \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m List Messenger conversations. \u001b[2mExamples:\u001b[0m \u001b[2mfacebook messenger list\u001b[0m \u001b[2mfacebook messenger list \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-table\u001b[0m\u001b[2m \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-limit\u001b[0m\u001b[2m 10\u001b[0m \u001b[2mfacebook messenger list \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-filter\u001b[0m\u001b[2m \"name:contains:John\"\u001b[0m \u001b[2mfacebook messenger list \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-properties\u001b[0m\u001b[2m id,name\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-table\u001b[0m       \u001b[1m-t\u001b[0m      \u001b[1m     \u001b[0m  Display as table                                                                                                                                                        \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-limit\u001b[0m       \u001b[1m-l\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mint\u001b[0m\u001b[1;2m>\u001b[0m  Maximum number of conversations \u001b[2m[default: 20]\u001b[0m                                                                                                                           \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-filter\u001b[0m      \u001b[1m-f\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)                                                                                                   \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-properties\u001b[0m  \u001b[1m-p\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Comma-separated fields to include                                                                                                                                       \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-profile\u001b[0m             \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Auth profile name                                                                                                                                                       \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m                \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                                             \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
+          "help": "List Messenger conversations.",
+          "examples": [
+            "facebook messenger list",
+            "facebook messenger list --table --limit 10",
+            "facebook messenger list --filter \"name:contains:John\"",
+            "facebook messenger list --properties id,name"
+          ],
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of conversations",
+              "short": "-l",
+              "default": "20"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "requests": {
-          "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook messenger requests [OPTIONS]\u001b[0m\u001b[1m                                                                                                                                                          \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m List message requests. \u001b[2mExamples:\u001b[0m \u001b[2mfacebook messenger requests\u001b[0m \u001b[2mfacebook messenger requests \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-table\u001b[0m \u001b[2mfacebook messenger requests \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-limit\u001b[0m\u001b[2m 10\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-table\u001b[0m       \u001b[1m-t\u001b[0m      \u001b[1m     \u001b[0m  Display as table                                                                                                                                                        \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-limit\u001b[0m       \u001b[1m-l\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mint\u001b[0m\u001b[1;2m>\u001b[0m  Maximum number of requests \u001b[2m[default: 20]\u001b[0m                                                                                                                                \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-filter\u001b[0m      \u001b[1m-f\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)                                                                                                   \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-properties\u001b[0m  \u001b[1m-p\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Comma-separated fields to include                                                                                                                                       \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-profile\u001b[0m             \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Auth profile name                                                                                                                                                       \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m                \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                                             \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
+          "help": "List message requests.",
+          "examples": [
+            "facebook messenger requests",
+            "facebook messenger requests --table",
+            "facebook messenger requests --limit 10"
+          ],
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of requests",
+              "short": "-l",
+              "default": "20"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "send": {
-          "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook messenger send [OPTIONS] {conversation_id}\u001b[0m\u001b[1m                                                                                                                                            \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Send a message to a conversation. \u001b[2mExamples:\u001b[0m \u001b[2mfacebook messenger send 123456789 \u001b[0m\u001b[1;2m-\u001b[0m\u001b[1;2m-text\u001b[0m\u001b[2m \"Hello!\"\u001b[0m \u001b[2mfacebook messenger send 123456789 \u001b[0m\u001b[1;2m-m\u001b[0m\u001b[2m \"Thanks for your message\"\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Arguments \u001b[0m\u001b[2m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m *    conversation_id      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Conversation/thread ID \u001b[2m[required]\u001b[0m                                                                                                                                   \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m *  \u001b[1m-\u001b[0m\u001b[1m-text\u001b[0m     \u001b[1m-m\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Message text to send \u001b[2m[required]\u001b[0m                                                                                                                                         \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m    \u001b[1m-\u001b[0m\u001b[1m-profile\u001b[0m          \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Auth profile name                                                                                                                                                       \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m    \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m             \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                                             \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
-          "arguments": [],
-          "options": []
+          "help": "Send a message to a conversation.",
+          "examples": [
+            "facebook messenger send 123456789 --text \"Hello!\"",
+            "facebook messenger send 123456789 -m \"Thanks for your message\""
+          ],
+          "arguments": [
+            {
+              "name": "conversation_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Conversation/thread ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--text",
+              "type": "TEXT",
+              "required": true,
+              "help": "Message text to send",
+              "short": "-m"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       }
     },
     "pages": {
-      "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook pages [OPTIONS] COMMAND [ARGS]...\u001b[0m\u001b[1m                                                                                                                                                     \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Manage Facebook Pages through the Graph API \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-profile\u001b[0m        \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Auth profile name                                                                                                                                                            \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m           \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                                                  \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Commands \u001b[0m\u001b[2m──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1mlist\u001b[0m\u001b[1m \u001b[0m List Pages managed by the authenticated Facebook user.                                                                                                                                         \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1mget \u001b[0m\u001b[1m \u001b[0m Get a Page available to the authenticated Facebook user.                                                                                                                                       \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
+      "help": "Manage Facebook Pages through the Graph API",
       "arguments": [],
-      "options": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "get": {
-          "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook pages get [OPTIONS] {page_id}\u001b[0m\u001b[1m                                                                                                                                                         \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Get a Page available to the authenticated Facebook user. \u001b[2m╭─\u001b[0m\u001b[2m Arguments \u001b[0m\u001b[2m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m *    page_id      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Facebook Page ID \u001b[2m[required]\u001b[0m                                                                                                                                                 \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-table\u001b[0m       \u001b[1m-t\u001b[0m      \u001b[1m     \u001b[0m  Display as table                                                                                                                                                        \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-properties\u001b[0m  \u001b[1m-p\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Comma-separated fields to display                                                                                                                                       \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-profile\u001b[0m             \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Auth profile name                                                                                                                                                       \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m                \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                                             \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
-          "arguments": [],
-          "options": []
+          "help": "Get a Page available to the authenticated Facebook user.",
+          "arguments": [
+            {
+              "name": "page_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Facebook Page ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "list": {
-          "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook pages list [OPTIONS]\u001b[0m\u001b[1m                                                                                                                                                                  \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m List Pages managed by the authenticated Facebook user. \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-table\u001b[0m       \u001b[1m-t\u001b[0m      \u001b[1m     \u001b[0m  Display as table                                                                                                                                                        \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-limit\u001b[0m       \u001b[1m-l\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mint\u001b[0m\u001b[1;2m>\u001b[0m  Maximum Pages to return \u001b[2m[default: 100]\u001b[0m                                                                                                                                  \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-filter\u001b[0m      \u001b[1m-f\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Filter: field:op:value                                                                                                                                                  \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-properties\u001b[0m  \u001b[1m-p\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Comma-separated fields to display                                                                                                                                       \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-profile\u001b[0m             \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Auth profile name                                                                                                                                                       \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m                \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                                             \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
+          "help": "List Pages managed by the authenticated Facebook user.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=1]  Maximum Pages to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       }
     },
     "reels": {
-      "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook reels [OPTIONS] COMMAND [ARGS]...\u001b[0m\u001b[1m                                                                                                                                                     \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Publish and inspect Facebook Page Reels \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-profile\u001b[0m        \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Auth profile name                                                                                                                                                            \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m           \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                                                  \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Commands \u001b[0m\u001b[2m──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m \u001b[1mpublish\u001b[0m\u001b[1m \u001b[0m Upload a local video and publish it as a Facebook Page Reel.                                                                                                                                \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m \u001b[1mstatus \u001b[0m\u001b[1m \u001b[0m Get the processing/publishing status of a Facebook Page Reel.                                                                                                                               \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
+      "help": "Publish and inspect Facebook Page Reels",
       "arguments": [],
-      "options": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
+        "delete": {
+          "help": "Permanently delete a Facebook Page Reel.",
+          "arguments": [
+            {
+              "name": "video_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Facebook Reel/video ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--page",
+              "type": "TEXT",
+              "required": true,
+              "help": "Facebook Page ID that owns the Reel"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation prompt",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "publish": {
-          "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook reels publish [OPTIONS] {file}\u001b[0m\u001b[1m                                                                                                                                                        \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Upload a local video and publish it as a Facebook Page Reel. \u001b[2m╭─\u001b[0m\u001b[2m Arguments \u001b[0m\u001b[2m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m *    file      \u001b[1;2m<\u001b[0m\u001b[1mfile\u001b[0m\u001b[1;2m>\u001b[0m  Video file to publish \u001b[2m[required]\u001b[0m                                                                                                                                              \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m *  \u001b[1m-\u001b[0m\u001b[1m-page\u001b[0m                 \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Facebook Page ID \u001b[2m[required]\u001b[0m                                                                                                                                         \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m    \u001b[1m-\u001b[0m\u001b[1m-title\u001b[0m                \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Reel title                                                                                                                                                          \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m    \u001b[1m-\u001b[0m\u001b[1m-description\u001b[0m          \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Reel description/caption                                                                                                                                            \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m    \u001b[1m-\u001b[0m\u001b[1m-table\u001b[0m        \u001b[1m-t\u001b[0m      \u001b[1m     \u001b[0m  Display as table                                                                                                                                                    \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m    \u001b[1m-\u001b[0m\u001b[1m-profile\u001b[0m              \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Auth profile name                                                                                                                                                   \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m    \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m                 \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                                         \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
-          "arguments": [],
-          "options": []
+          "help": "Upload a local video and publish it (or save it as a draft) as a Facebook Page Reel.",
+          "arguments": [
+            {
+              "name": "file",
+              "type": "file",
+              "required": true,
+              "help": "Video file to publish"
+            }
+          ],
+          "options": [
+            {
+              "name": "--page",
+              "type": "TEXT",
+              "required": true,
+              "help": "Facebook Page ID"
+            },
+            {
+              "name": "--title",
+              "type": "TEXT",
+              "required": false,
+              "help": "Reel title"
+            },
+            {
+              "name": "--description",
+              "type": "TEXT",
+              "required": false,
+              "help": "Reel description/caption"
+            },
+            {
+              "name": "--draft",
+              "type": "bool",
+              "required": false,
+              "help": "Save the Reel as an unpublished Page draft instead of publishing it",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "status": {
-          "help": "\u001b[1m                                                                                                                                                                                                        \u001b[0m \u001b[1m \u001b[0m\u001b[1mUsage: \u001b[0m\u001b[1mfacebook reels status [OPTIONS] {video_id}\u001b[0m\u001b[1m                                                                                                                                                     \u001b[0m\u001b[1m \u001b[0m \u001b[1m                                                                                                                                                                                                        \u001b[0m Get the processing/publishing status of a Facebook Page Reel. \u001b[2m╭─\u001b[0m\u001b[2m Arguments \u001b[0m\u001b[2m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m *    video_id      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Facebook Reel/video ID \u001b[2m[required]\u001b[0m                                                                                                                                          \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m \u001b[2m╭─\u001b[0m\u001b[2m Options \u001b[0m\u001b[2m───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\u001b[0m\u001b[2m─╮\u001b[0m \u001b[2m│\u001b[0m *  \u001b[1m-\u001b[0m\u001b[1m-page\u001b[0m                \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Facebook Page ID \u001b[2m[required]\u001b[0m                                                                                                                                          \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m    \u001b[1m-\u001b[0m\u001b[1m-table\u001b[0m       \u001b[1m-t\u001b[0m      \u001b[1m     \u001b[0m  Display as table                                                                                                                                                     \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m    \u001b[1m-\u001b[0m\u001b[1m-properties\u001b[0m  \u001b[1m-p\u001b[0m      \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Comma-separated fields to display                                                                                                                                    \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m    \u001b[1m-\u001b[0m\u001b[1m-profile\u001b[0m             \u001b[1;2m<\u001b[0m\u001b[1mstr\u001b[0m\u001b[1;2m>\u001b[0m  Auth profile name                                                                                                                                                    \u001b[2m│\u001b[0m \u001b[2m│\u001b[0m    \u001b[1m-\u001b[0m\u001b[1m-help\u001b[0m                \u001b[1m     \u001b[0m  Show this message and exit.                                                                                                                                          \u001b[2m│\u001b[0m \u001b[2m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯\u001b[0m",
-          "arguments": [],
-          "options": []
+          "help": "Get the processing/publishing status of a Facebook Page Reel.",
+          "arguments": [
+            {
+              "name": "video_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Facebook Reel/video ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--page",
+              "type": "TEXT",
+              "required": true,
+              "help": "Facebook Page ID"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       }
     }

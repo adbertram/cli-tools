@@ -3,8 +3,8 @@ name: facebook-cli
 description: >-
   Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
   Execute facebook operations using the `facebook` CLI tool.
-  Facebook CLI via Playwright browser automation -- Marketplace search, Messenger conversations, Groups posts, and caching.
-  Triggers: facebook, facebook cli, facebook marketplace, facebook messenger, facebook groups, search facebook marketplace, facebook messages, send facebook message, facebook message requests, facebook group posts, read facebook group, list facebook groups
+  Facebook CLI via Playwright browser automation -- Marketplace search, Messenger conversations, Groups posts, and caching -- plus Graph API Page Reels publishing, status, and deletion.
+  Triggers: facebook, facebook cli, facebook marketplace, facebook messenger, facebook groups, search facebook marketplace, facebook messages, send facebook message, facebook message requests, facebook group posts, read facebook group, list facebook groups, facebook pages, facebook reels, publish facebook reel, delete facebook reel
 ---
 
 <objective>
@@ -31,6 +31,11 @@ facebook <command-group> <action> [arguments] [options]
 | List conversations | `facebook messenger list --table` |
 | Read messages | `facebook messenger get CONVERSATION_ID` |
 | Send message | `facebook messenger send CONVERSATION_ID --text "Hello"` |
+| List Pages (Graph API profile) | `facebook pages list --profile graph --table` |
+| Publish a Page Reel | `facebook reels publish short.mp4 --page PAGE_ID --description "Caption" --profile graph` |
+| Save a Page Reel as an unpublished draft | `facebook reels publish short.mp4 --page PAGE_ID --draft --profile graph` |
+| Check Reel processing/publish status | `facebook reels status VIDEO_ID --page PAGE_ID --profile graph` |
+| Delete a Page Reel | `facebook reels delete VIDEO_ID --page PAGE_ID --yes --profile graph` |
 | Check auth status | `facebook auth status` |
 </quick_start>
 
@@ -44,6 +49,8 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **groups** — Enumerate your groups and pending join requests (`groups list`), read one group's privacy/membership/readability (`groups get`), and read or write its posts (`groups posts list|get|create|comment|reply`)
 - **marketplace** — Search, browse, inspect, and check Facebook Marketplace listings (list, get, status)
 - **messenger** — Messenger conversations (list, get, send, requests)
+- **pages** — Graph API Page discovery (list, get); requires an `oauth_authorization_code` profile
+- **reels** — Graph API Page Reels (publish, status, delete); `publish --draft` keeps the Reel unpublished, and a failed publish names the created video as `[video_id=<id>]` so it can be deleted
 - **auth** — Manage authentication via headed browser (login, logout, status, test)
 - **auth** -- Authentication commands and nested `auth profiles` management
 - **cache** — Manage response cache (clear)
