@@ -5,7 +5,7 @@
 
 set -o pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLI_TOOLS_DIR="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 
 CLI_NAME="$1"

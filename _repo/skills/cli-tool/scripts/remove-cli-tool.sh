@@ -12,7 +12,7 @@ if [ -z "$TOOL_NAME" ]; then
     exit 1
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLI_TOOLS_DIR="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 TOOL_DIR="$CLI_TOOLS_DIR/$TOOL_NAME"
 SYMLINK_PATH="$HOME/.local/bin/$TOOL_NAME"
