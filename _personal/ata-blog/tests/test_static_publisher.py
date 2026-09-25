@@ -1839,7 +1839,7 @@ def test_publish_status_rejected_before_source_or_external_reads(publisher):
     client, *_ = publisher
     client.get_article = lambda _page_id: pytest.fail("source read must not run")
 
-    with pytest.raises(ClientError, match="Static publish status must be draft or publish"):
+    with pytest.raises(ClientError, match="Static publish status must be draft, preview, or publish"):
         client.publish_article(PAGE_ID, status="invalid-status")
 
 
@@ -2679,7 +2679,7 @@ def test_schedule_rejects_an_unknown_status_value(publisher):
     client, article, _markdown, _image, _manifest, counters, _token = publisher
     article["Status"] = "Ready to Publish"
 
-    with pytest.raises(ClientError, match="Static publish status must be draft or publish"):
+    with pytest.raises(ClientError, match="Static publish status must be draft, preview, or publish"):
         client.publish_article(PAGE_ID, status="pubish", date=SLOT)
 
     _assert_nothing_written(client, counters)
@@ -2810,3 +2810,99 @@ def test_schedule_rejects_a_sponsored_post_when_terms_lack_the_sponsored_tag(pub
         client.publish_article(PAGE_ID, auto_schedule=True)
 
     _assert_nothing_written(client, counters)
+
+
+def test_preview_status_deploys_without_notion_and_restores_corpus(publisher):
+    client, article, _markdown, _image, _manifest, counters, build_token = publisher
+    posts = client_module.STATIC_SITE_ROOT / "src" / "data" / "posts"
+    prior_corpus_sha256 = client_module._static_corpus_sha256()
+    prior_status = article["Status"]
+    prior_published_url = article["Published URL"]
+
+    result = client.publish_article(
+        PAGE_ID,
+        status="preview",
+        check_duplicates=False,
+        featured_image="ignored.png",
+    )
+
+    assert result["status"] == "preview"
+    assert result["preview_url"] == (
+        f"{PREVIEW_DEPLOYMENT_URL}/journaled-static-publisher/"
+    )
+    assert result["static_url"] == result["preview_url"]
+    assert result["promoted"] is False
+    assert result["notion_updated"] is False
+    assert result["corpus_restored"] is True
+    assert result["deployment_id"] == PREVIEW_DEPLOYMENT_ID
+    assert counters == {"media": 1, "build": 2, "deploy": 1, "notion": 0}
+    assert client.update_calls == []
+    assert article["Status"] == prior_status
+    assert article["Published URL"] == prior_published_url
+    assert list(posts.iterdir()) == []
+    assert client_module._static_corpus_sha256() == prior_corpus_sha256
+
+    preview_paths = client._publisher_preview_paths(
+        PAGE_ID, result["idempotency_key"]
+    )
+    runtime = json.loads(preview_paths["runtime"].read_text())
+    assert runtime["schema_version"] == "ata-static-preview-runtime/v1"
+    assert runtime["preview_url"] == result["preview_url"]
+    assert runtime["corpus_restored"] is True
+    assert runtime["preview_release_ref"] == result["release_ref"]
+    assert runtime["restored_release_ref"] != runtime["preview_release_ref"]
+
+    token = json.loads(build_token.read_text())
+    assert token["release_id"] == runtime["restored_release_ref"]["release_id"]
+    assert token["contract_hash"] == runtime["restored_release_ref"]["contract_hash"]
+
+    transactions = client._publisher_runtime_root() / "transactions"
+    assert list(transactions.glob("*.journal.json")) == []
+
+
+def test_preview_status_rejects_schedule_flags_without_effects(publisher):
+    client, _article, _markdown, _image, _manifest, counters, _token = publisher
+
+    with pytest.raises(
+        ClientError,
+        match=r"--status preview cannot be combined with --date or --auto-schedule",
+    ):
+        client.publish_article(
+            PAGE_ID,
+            status="preview",
+            auto_schedule=True,
+        )
+
+    _assert_nothing_written(client, counters)
+
+
+def test_preview_failure_restores_corpus_and_reseals_build_token(
+    publisher, monkeypatch
+):
+    client, _article, _markdown, _image, _manifest, counters, build_token = publisher
+    prior_corpus_sha256 = client_module._static_corpus_sha256()
+
+    def fail_preview(*_args, **_kwargs):
+        counters["deploy"] += 1
+        raise ClientError("injected preview failure")
+
+    monkeypatch.setattr(client, "_deploy_static_preview", fail_preview)
+
+    with pytest.raises(ClientError, match="injected preview failure"):
+        client.publish_article(
+            PAGE_ID,
+            status="preview",
+            check_duplicates=False,
+            featured_image="ignored.png",
+        )
+
+    assert client_module._static_corpus_sha256() == prior_corpus_sha256
+    assert counters["media"] == 1
+    assert counters["build"] == 2
+    assert counters["deploy"] == 1
+    assert counters["notion"] == 0
+    token = json.loads(build_token.read_text())
+    manifest = json.loads(client_module.STATIC_RELEASE_MANIFEST.read_text())
+    assert token["release_id"] == manifest["release_id"]
+    assert token["contract_hash"] == manifest["contract_hash"]
+    assert manifest["inputs"]["corpus_sha256"] == prior_corpus_sha256
