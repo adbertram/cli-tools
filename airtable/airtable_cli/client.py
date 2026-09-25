@@ -3,9 +3,11 @@ import base64
 import mimetypes
 import os
 import random
+import re
 import time
 from datetime import datetime
 from typing import Dict, List, Optional, Any
+from urllib.parse import quote
 
 import requests
 
@@ -81,6 +83,26 @@ FIELD_CREATE_PERMANENCE_NOTE = (
     "name and description. This field cannot be removed or repointed through "
     "the API; removing it requires the Airtable web UI."
 )
+
+
+# An Airtable record ID is always "rec" plus alphanumeric characters. Every
+# get/update/replace/delete/upload call interpolates the caller-supplied
+# record_id directly into the REST path, so a value like
+# "recABC.../../../OtherTable/recXYZ..." reaches Airtable, which normalizes
+# the ".." segments server-side and reads or writes a record in a different
+# table than the one requested. Reject anything that isn't a plain record ID
+# before it ever reaches the endpoint builder.
+RECORD_ID_RE = re.compile(r"^rec[A-Za-z0-9]+$")
+
+
+def _validate_record_id(record_id: str) -> str:
+    """Reject a record ID that isn't a plain 'rec...' token (e.g. path traversal)."""
+    if not record_id or not RECORD_ID_RE.match(record_id):
+        raise ClientError(
+            f"Invalid record ID: {record_id!r}. "
+            "Record IDs must match 'rec' followed by alphanumeric characters."
+        )
+    return record_id
 
 
 class AirtableClient:
@@ -373,7 +395,8 @@ class AirtableClient:
 
     def get_record(self, base_id: str, table_id: str, record_id: str) -> Dict:
         """Get a specific record by ID."""
-        endpoint = f"/{base_id}/{table_id}/{record_id}"
+        _validate_record_id(record_id)
+        endpoint = f"/{base_id}/{table_id}/{quote(record_id, safe='')}"
         return self._make_request("GET", endpoint)
 
     def update_record(
@@ -385,7 +408,8 @@ class AirtableClient:
         typecast: bool = False,
     ) -> Dict:
         """Update a record (PATCH - only updates specified fields)."""
-        endpoint = f"/{base_id}/{table_id}/{record_id}"
+        _validate_record_id(record_id)
+        endpoint = f"/{base_id}/{table_id}/{quote(record_id, safe='')}"
         data = {"fields": fields}
         if typecast:
             data["typecast"] = True
@@ -400,7 +424,8 @@ class AirtableClient:
         typecast: bool = False,
     ) -> Dict:
         """Replace a record (PUT - clears unspecified fields)."""
-        endpoint = f"/{base_id}/{table_id}/{record_id}"
+        _validate_record_id(record_id)
+        endpoint = f"/{base_id}/{table_id}/{quote(record_id, safe='')}"
         data = {"fields": fields}
         if typecast:
             data["typecast"] = True
@@ -422,7 +447,8 @@ class AirtableClient:
 
     def delete_record(self, base_id: str, table_id: str, record_id: str) -> Dict:
         """Delete a record."""
-        endpoint = f"/{base_id}/{table_id}/{record_id}"
+        _validate_record_id(record_id)
+        endpoint = f"/{base_id}/{table_id}/{quote(record_id, safe='')}"
         return self._make_request("DELETE", endpoint)
 
     def upload_attachment(
@@ -458,6 +484,8 @@ class AirtableClient:
                 base64 limit, has an undetectable content type, or the API
                 request fails.
         """
+        _validate_record_id(record_id)
+
         if not os.path.isfile(file_path):
             raise ClientError(f"Attachment file not found: {file_path}")
 
@@ -486,7 +514,10 @@ class AirtableClient:
             )
 
         filename = os.path.basename(file_path)
-        url = f"{self.CONTENT_BASE_URL}/{base_id}/{record_id}/{field_name}/uploadAttachment"
+        url = (
+            f"{self.CONTENT_BASE_URL}/{base_id}/{quote(record_id, safe='')}/"
+            f"{quote(field_name, safe='')}/uploadAttachment"
+        )
         payload = {
             "contentType": resolved_content_type,
             "filename": filename,
