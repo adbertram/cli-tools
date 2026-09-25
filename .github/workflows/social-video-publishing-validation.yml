@@ -25,7 +25,8 @@ jobs:
           python-version: "3.11"
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v8
+        shell: bash
+        run: python -m pip install uv
 
       - name: Install, test, and refresh usage maps
         shell: bash
