@@ -261,3 +261,20 @@ For full list of supported languages, check yt-dlp documentation.
 ## License
 
 MIT
+
+
+## Content Posting API
+
+Use a separate custom auth profile for Direct Post. Existing favorites-list browser
+profiles remain independent. Transcript downloads and favorites get need no CLI auth.
+
+```bash
+tiktok auth profiles create posting --auth-type custom
+tiktok auth login --profile posting --credential-type custom
+
+tiktok videos publish short.mp4 --title "Caption" --privacy SELF_ONLY --profile posting
+tiktok videos status PUBLISH_ID --profile posting
+```
+
+The Direct Post API requires video.publish. TikTok can restrict unaudited apps to
+private visibility until the app passes TikTok review.
