@@ -1,7 +1,7 @@
 {
   "tool": "ebay",
   "description": "eBay CLI — seller tools, marketplace categories, and account management",
-  "discovered_at": "2026-09-21T23:11:14Z",
+  "discovered_at": "2026-09-25T22:56:02Z",
   "total_commands": 78,
   "global_options": [
     {
@@ -1761,7 +1761,7 @@
               ]
             },
             "update": {
-              "help": "Update an existing listing. Updates both the inventory item and offer as needed.",
+              "help": "Update an existing listing. Inventory API listings are updated through their inventory item and offer. A legacy Trading API listing (no offer ID) is revised through the Trading API instead, which covers --title, --description, --price, --quantity and --best-offer.",
               "arguments": [
                 {
                   "name": "sku",
@@ -1846,6 +1846,14 @@
                   "type": "TEXT",
                   "required": false,
                   "help": "Updates from JSON file"
+                },
+                {
+                  "name": "--best-offer",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Enable or disable Best Offer (legacy Trading API listings only)",
+                  "takes_value": false,
+                  "secondary": "--no-best-offer"
                 },
                 {
                   "name": "--table",

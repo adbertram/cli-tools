@@ -394,10 +394,19 @@ ebay seller inventory create SKU123 --from-json payload.json
 ebay seller inventory update SKU123 --quantity 20
 ebay seller inventory update SKU123 --title "New Title"
 
+# Attach an already-uploaded video to an existing SKU (no re-upload)
+ebay seller inventory update SKU123 --video-id VIDEO_ID
+ebay seller inventory create SKU456 --title "Widget" --video-id VIDEO_ID
+
 # Delete an inventory item
 ebay seller inventory delete SKU123
 ebay seller inventory delete SKU123 --force
 ```
+
+A listing's video lives on the inventory item (`product.videoIds`), never on the
+offer. `--video-id` attaches a video created with `ebay seller videos create`;
+`ebay seller inventory update` re-reads the item afterwards and fails if the
+video is not actually present.
 
 #### Listings
 
@@ -488,6 +497,12 @@ ebay seller listings create --sku SKU123 --template lego-bulk-auction \
 ebay seller listings create --sku SKU123 --template lego-bulk-auction \
   --weight 5 --dimensions 12x10x8 --photos-album "eBay Listing" --publish
 
+# Create with a video (attached to the inventory item's videoIds)
+ebay seller listings create --sku SKU123 --template lego-bulk-auction \
+  --weight 5 --dimensions 12x10x8 --video "/path/to/clip.mov" --publish
+ebay seller listings create --sku SKU123 --template lego-bulk-auction \
+  --weight 5 --dimensions 12x10x8 --video-folder "/tmp/ebay-videos" --publish
+
 # Update a listing
 ebay seller listings update SKU123 --price 39.99
 ebay seller listings update SKU123 --quantity 5
@@ -529,6 +544,30 @@ The command returns an error when multiple current offers use the same SKU.
 - Upload failures produce warnings but don't stop listing creation
 - Uploaded images are stored locally in `~/.ebay/images.json`
 - Photos album feature requires the `photos-app` CLI to be installed
+
+**Video Attach Notes:**
+- Use `--video` for one local video file; eBay listings carry a single video
+- Use `--video-folder` to scan a directory and attach the first video file
+  (`.mov`, `.mp4`, `.m4v`); photo files in the same folder are ignored
+- Files that are not already H.264 in an MP4/MOV container (including `.m4v`
+  files, which are accepted only when their stream reports `mov`/`mp4`) are
+  transcoded to a temporary H.264 MP4 with `ffmpeg` before upload; the original
+  file is never modified
+- `ffprobe` and `ffmpeg` are required for any `--video`/`--video-folder` listing,
+  and for `ebay seller videos create`
+- The upload's title defaults to the file name, cleaned of separators and
+  truncated to 80 characters
+- The byte size sent to eBay is the size of the file that is actually uploaded,
+  which must match exactly or eBay rejects the upload
+- Videos must be 150 MB (157,286,400 bytes) or smaller
+- The video ID is written to the inventory item's `product.videoIds`
+- **eBay videos expire 30 days after upload, whether or not they are attached to
+  a live listing.** A video attached to an unpublished draft is no longer
+  available if the listing is published after that window
+- **eBay videos are only viewable in eBay's iOS and Android apps**, not on
+  desktop web
+- Attaching an already-uploaded video to an existing SKU needs no re-upload:
+  `ebay seller inventory update SKU123 --video-id VIDEO_ID`
 
 **Description Options:**
 - Use `--description` for short inline descriptions (overrides template)
@@ -575,6 +614,46 @@ ebay seller images get IMAGE_ID
 **Available fields:** image_id, imageUrl, expirationDate, source, original, uploaded_at
 
 **Note:** Uploaded image metadata is stored locally in `~/.ebay/images.json` for easy retrieval.
+
+#### Videos
+
+Create and inspect eBay listing videos using the Media API.
+A video reaches a listing through the inventory item's `product.videoIds`.
+
+```bash
+# Create a video resource and upload its bytes (title defaults to the file name)
+ebay seller videos create /path/to/clip.mov
+ebay seller videos create /path/to/clip.mov --title "Bulk lot walkthrough"
+ebay seller videos create /path/to/clip.mov --description "Close-up of minifigures" --table
+
+# Check processing status: PENDING_UPLOAD -> PROCESSING -> LIVE
+ebay seller videos get VIDEO_ID
+ebay seller videos get VIDEO_ID --table
+
+# Attach that video to a listing at creation time
+ebay seller listings create --sku SKU123 --template lego-bulk-auction \
+  --weight 5 --dimensions 12x10x8 --video /path/to/clip.mov --publish
+
+# Attach it to a SKU that already exists, without re-uploading
+ebay seller inventory update SKU123 --video-id VIDEO_ID
+```
+
+`videos create` prints the new `videoId` as JSON on stdout (`size` is the exact
+byte count sent to eBay, and `transcoded`/`sourceCodec`/`outputCodec` report
+whether an H.264 transcode ran). Files that are not already H.264 in an MP4/MOV
+container are transcoded to a temporary H.264 MP4, and the user's original file
+is never modified. A title derived from the file name is truncated to 80
+characters. `ffprobe` and `ffmpeg` must be installed; the command fails with a
+clear message rather than uploading a file eBay may reject.
+
+Failure statuses are `PROCESSING_FAILED` and `BLOCKED`, and `statusMessage`
+explains why. There is no `videos list`: the Media API only exposes create,
+upload, and get.
+
+**Videos expire 30 days after upload regardless of when the listing is
+published, and shoppers can only view them in eBay's iOS and Android apps — not
+on desktop web.** A video attached to an unpublished draft is no longer
+available if the listing is published after the 30-day window.
 
 #### Templates
 
@@ -786,6 +865,9 @@ Order ID         Status        Buyer        Total   Created
 | `--order-ids` | | Comma-separated list of order IDs |
 | `--weight` | `-w` | Package weight in pounds (required for listings) |
 | `--dimensions` | | Package dimensions as LxWxH in inches, e.g., 12x10x8 (required for listings) |
+| `--video` | | Local video file to attach to a listing (`.mov`, `.mp4`, `.m4v`) |
+| `--video-folder` | | Folder to scan for the first video file to attach |
+| `--video-id` | | Media API video ID to attach to an inventory item's SKU |
 | `--version` | `-v` | Show version and exit |
 
 ## Configuration

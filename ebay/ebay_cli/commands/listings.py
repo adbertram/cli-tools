@@ -79,6 +79,14 @@ from cli_tools_shared.filters import validate_filters, apply_filters, FilterVali
 from ..properties import validate_and_filter_properties, PropertyValidationError
 from ..storage import TemplateStorage, DraftStorage
 from ..template_validation import validate_template_data
+from ..video import (
+    VIDEO_EXTENSIONS,
+    PreparedVideo,
+    default_title_for,
+    prepare_video_for_upload,
+    upload_prepared_video,
+    video_prep_message,
+)
 
 app = typer.Typer(help="Manage eBay listings (drafts and active)")
 drafts_app = typer.Typer(help="Manage Seller Hub drafts", no_args_is_help=True)
@@ -98,7 +106,8 @@ TRADING_LISTING_FORMATS = {
 }
 FEED_WAIT_TIMEOUT_SECONDS = 300.0
 
-# Supported image extensions for --image-folder scanning
+# Supported image extensions for --image-folder scanning. A video extension is
+# never part of this set: album exports put photos and videos in one folder.
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 
 # eBay XML namespace for Trading API parsing
@@ -265,21 +274,30 @@ def _parse_seller_list_xml(xml_content: str) -> tuple[list[dict], int, int]:
 # =============================================================================
 
 
-def _scan_folder_for_images(folder_path: str) -> list[str]:
-    """Scan a folder for image files."""
+def _media_files_in_folder(folder_path: str, extensions: set[str]) -> list[str]:
+    """Return the absolute paths of files in a folder matching ``extensions``."""
     folder = Path(folder_path)
     if not folder.exists():
         raise FileNotFoundError(f"Folder not found: {folder_path}")
     if not folder.is_dir():
         raise NotADirectoryError(f"Not a directory: {folder_path}")
 
-    image_files = []
-    for file in folder.iterdir():
-        if file.is_file() and file.suffix.lower() in IMAGE_EXTENSIONS:
-            image_files.append(str(file.absolute()))
+    return sorted(
+        str(file.absolute())
+        for file in folder.iterdir()
+        if file.is_file() and file.suffix.lower() in extensions
+    )
 
-    image_files.sort()
-    return image_files
+
+def _scan_folder_for_images(folder_path: str) -> list[str]:
+    """Scan a folder for image files. Videos are never returned as images."""
+    return _media_files_in_folder(folder_path, IMAGE_EXTENSIONS)
+
+
+def _scan_folder_for_video(folder_path: str) -> Optional[str]:
+    """Return the first video file in a folder, or None when none exists."""
+    video_files = _media_files_in_folder(folder_path, VIDEO_EXTENSIONS)
+    return video_files[0] if video_files else None
 
 
 def _export_photos_from_album(
@@ -399,6 +417,51 @@ def _upload_images_for_listing(
             print_warning(f"Failed to update inventory item images: {e}")
 
     return uploaded_urls, errors
+
+
+def _attach_video_to_product(
+    client,
+    product: dict,
+    video: Optional[str],
+    video_folder: Optional[str],
+) -> Optional[PreparedVideo]:
+    """Upload a listing video and record its ID on the inventory item product.
+
+    eBay keeps video IDs on the inventory item (``product.videoIds``), never on
+    the offer. Returns the ``PreparedVideo`` so the caller can clean up any
+    temporary transcode output in its ``finally`` block.
+    """
+    video_path = video
+    if not video_path and video_folder:
+        video_path = _scan_folder_for_video(video_folder)
+        if not video_path:
+            print_warning(f"No video found in folder: {video_folder}")
+
+    if not video_path:
+        return None
+
+    prepared = prepare_video_for_upload(video_path)
+    print_info(video_prep_message(prepared))
+
+    video_id = upload_prepared_video(
+        client,
+        prepared,
+        title=default_title_for(video_path),
+    )
+    product["videoIds"] = [video_id]
+    print_success(f"Uploaded video: {video_id}")
+
+    print_warning(
+        "eBay videos expire 30 days after upload; a video attached to an "
+        "unpublished draft will no longer be available if the listing is "
+        "published after that window."
+    )
+    print_warning(
+        "eBay videos are only viewable in eBay's iOS and Android apps, "
+        "not on desktop web."
+    )
+
+    return prepared
 
 
 # =============================================================================
@@ -1444,6 +1507,8 @@ def listings_create(
     image_folder: Optional[str] = typer.Option(None, "--image-folder", help="Folder to scan for images"),
     image_url: Optional[str] = typer.Option(None, "--image-url", help="Remote image URL(s), comma-separated"),
     photos_album: Optional[str] = typer.Option(None, "--photos-album", help="macOS Photos app album name"),
+    video: Optional[str] = typer.Option(None, "--video", help="Local video file to attach (.mov, .mp4, .m4v)"),
+    video_folder: Optional[str] = typer.Option(None, "--video-folder", help="Folder to scan for the first video file"),
     aspects: Optional[str] = typer.Option(None, "--aspects", help="Item specifics as JSON (e.g., '{\"Sport\": [\"Football\"]}'"),
     fulfillment_policy_id: Optional[str] = typer.Option(None, "--fulfillment-policy", help="Fulfillment policy ID"),
     payment_policy_id: Optional[str] = typer.Option(None, "--payment-policy", help="Payment policy ID"),
@@ -1459,11 +1524,18 @@ def listings_create(
 
     Draft creation uses `ebay seller listings drafts create`.
 
+    A video attached with --video or --video-folder is uploaded to the Media API
+    and referenced from the inventory item's videoIds, which is how a video
+    reaches a listing. eBay videos expire 30 days after upload and are only
+    viewable in eBay's iOS and Android apps.
+
     Examples:
         ebay seller listings create --sku SKU123 --template vintage-camera --publish --price 149.99
         ebay seller listings create --sku SKU123 --title "Item" --price 99 --category 175673 --publish
+        ebay seller listings create --sku SKU123 --template lego-bulk-auction --video ./clip.mov --publish --price 149.99
     """
     photos_temp_dir = None
+    prepared_video = None
 
     if not publish:
         print_error("This command no longer creates drafts without --publish.")
@@ -1795,6 +1867,11 @@ def listings_create(
             weight_str = str(int(weight)) if weight == int(weight) else str(weight)
             product["aspects"]["Unit Quantity"] = [weight_str]
 
+        # Attach a listing video. eBay keeps video IDs on the inventory item
+        # (product.videoIds), never on the offer, so the video must exist before
+        # the inventory item is written below.
+        prepared_video = _attach_video_to_product(client, product, video, video_folder)
+
         if product:
             inventory_payload["product"] = product
 
@@ -2052,6 +2129,8 @@ def listings_create(
     finally:
         if photos_temp_dir and Path(photos_temp_dir).exists():
             shutil.rmtree(photos_temp_dir, ignore_errors=True)
+        if prepared_video:
+            prepared_video.cleanup()
 
 
 # =============================================================================

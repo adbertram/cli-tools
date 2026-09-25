@@ -2,7 +2,7 @@
 import random
 import re
 import time
-from typing import Dict, List, Optional, Any
+from typing import Callable, Dict, List, Optional, Any
 from xml.sax.saxutils import escape
 import requests
 
@@ -19,12 +19,28 @@ DEFAULT_BASE_DELAY = 1.0  # seconds
 DEFAULT_MAX_DELAY = 30.0  # seconds
 DEFAULT_JITTER = 0.1  # 10% jitter
 DEFAULT_REQUEST_TIMEOUT = (10.0, 30.0)  # (connect, read) seconds
+# Media API uploads can take a while for eBay to acknowledge after the last byte.
+MEDIA_REQUEST_TIMEOUT = (10.0, 300.0)  # (connect, read) seconds
 
 # HTTP status codes that trigger retry
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 STORE_CATEGORIES_ENDPOINT = "/sell/stores/v1/store/categories"
 
 PLAIN_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+# Content types for Media API image uploads, keyed by file extension.
+IMAGE_CONTENT_TYPES = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".gif": "image/gif",
+    ".bmp": "image/bmp",
+    ".tiff": "image/tiff",
+    ".tif": "image/tiff",
+    ".webp": "image/webp",
+    ".avif": "image/avif",
+    ".heic": "image/heic",
+}
 
 
 def expand_plain_date(val: str, end_of_day: bool) -> str:
@@ -44,6 +60,27 @@ def expand_plain_date(val: str, end_of_day: bool) -> str:
 class ClientError(Exception):
     """Custom exception for eBay API errors."""
     pass
+
+
+def _error_message(response: requests.Response) -> str:
+    """Extract eBay's error message text, expanding {param} placeholders."""
+    try:
+        errors = response.json().get("errors", [])
+        if errors:
+            message = errors[0].get("message", response.text)
+            for param in errors[0].get("parameters", []):
+                message = message.replace(
+                    "{" + param.get("name", "") + "}", param.get("value", "")
+                )
+            return message
+    except Exception:
+        pass
+    return response.text
+
+
+def _resource_id_from_location(location: str) -> str:
+    """Parse the created resource ID out of a Media API Location header."""
+    return location.rstrip("/").split("/")[-1] if location else ""
 
 
 class EbayClient:
@@ -348,23 +385,9 @@ class EbayClient:
             raise ClientError("Request failed: no response received")
 
         if not last_response.ok:
-            # Try to get error details from response
-            try:
-                error_data = last_response.json()
-                errors = error_data.get("errors", [])
-                if errors:
-                    error_msg = errors[0].get("message", last_response.text)
-                    # Substitute template parameters (e.g. {fieldName} -> actual value)
-                    for param in errors[0].get("parameters", []):
-                        error_msg = error_msg.replace(
-                            "{" + param.get("name", "") + "}",
-                            param.get("value", ""),
-                        )
-                else:
-                    error_msg = last_response.text
-            except Exception:
-                error_msg = last_response.text
-            raise ClientError(f"API request failed ({last_response.status_code}): {error_msg}")
+            raise ClientError(
+                f"API request failed ({last_response.status_code}): {_error_message(last_response)}"
+            )
 
         if raw_response:
             return {
@@ -879,7 +902,48 @@ class EbayClient:
         endpoint = f"/sell/inventory/v1/offer/{offer_id}/withdraw"
         return self._make_request("POST", endpoint)
 
-    # Media API Methods - Image Upload
+    # Media API Methods - Images and Videos
+    def _media_base_url(self) -> str:
+        """Media API resources are served from the apim. host."""
+        return self.config.api_base_url.replace("api.", "apim.")
+
+    def _ensure_media_token(self):
+        """Refresh the access token when it is already known to be expired."""
+        if self.tokens.is_expired():
+            try:
+                self.tokens.force_refresh()
+            except Exception:
+                pass
+
+    def _media_request(
+        self,
+        error_label: str,
+        send: Callable[[Dict[str, str]], requests.Response],
+        headers: Dict[str, str],
+    ) -> requests.Response:
+        """Send one Media API request, refreshing the token once on a 401.
+
+        ``send`` receives the headers to use, so a file or JSON body can be
+        replayed after a token refresh.
+        """
+        self._ensure_media_token()
+
+        response = send(headers)
+        if response.status_code == 401:
+            try:
+                self.tokens.force_refresh()
+                headers["Authorization"] = f"Bearer {self.config.access_token}"
+                response = send(headers)
+            except Exception as e:
+                raise ClientError(f"Authentication failed: {e}")
+
+        if not response.ok:
+            raise ClientError(
+                f"{error_label} ({response.status_code}): {_error_message(response)}"
+            )
+
+        return response
+
     def upload_image_from_file(self, file_path: str) -> Dict:
         """
         Upload an image file to eBay Media API.
@@ -895,82 +959,38 @@ class EbayClient:
         """
         from pathlib import Path
 
+        file_path_obj = Path(file_path)
+        if not file_path_obj.exists():
+            raise ClientError(f"File not found: {file_path}")
+
         endpoint = "/commerce/media/v1_beta/image/create_image_from_file"
-        # Media API uses apim.ebay.com
-        base_url = self.config.api_base_url.replace("api.", "apim.")
-        url = f"{base_url}{endpoint}"
+        url = f"{self._media_base_url()}{endpoint}"
+        content_type = IMAGE_CONTENT_TYPES.get(
+            file_path_obj.suffix.lower(), "application/octet-stream"
+        )
 
-        # Check if token needs refresh
-        if self.tokens.is_expired():
-            try:
-                self.tokens.force_refresh()
-            except Exception:
-                pass
-
-        # Prepare headers (no Content-Type - requests sets it for multipart)
+        # No Content-Type header: requests sets the multipart boundary itself.
         headers = {
             "Authorization": f"Bearer {self.config.access_token}",
             "Accept": "application/json",
         }
 
-        # Read file and detect content type
-        file_path_obj = Path(file_path)
-        if not file_path_obj.exists():
-            raise ClientError(f"File not found: {file_path}")
+        def send(request_headers: Dict[str, str]) -> requests.Response:
+            with open(file_path, "rb") as f:
+                return requests.post(
+                    url,
+                    headers=request_headers,
+                    files={"image": (file_path_obj.name, f, content_type)},
+                    timeout=MEDIA_REQUEST_TIMEOUT,
+                )
 
-        # Determine content type from extension
-        ext = file_path_obj.suffix.lower()
-        content_types = {
-            ".jpg": "image/jpeg",
-            ".jpeg": "image/jpeg",
-            ".png": "image/png",
-            ".gif": "image/gif",
-            ".bmp": "image/bmp",
-            ".tiff": "image/tiff",
-            ".tif": "image/tiff",
-            ".webp": "image/webp",
-            ".avif": "image/avif",
-            ".heic": "image/heic",
-        }
-        content_type = content_types.get(ext, "application/octet-stream")
+        response = self._media_request("Image upload failed", send, headers)
 
-        with open(file_path, "rb") as f:
-            files = {
-                "image": (file_path_obj.name, f, content_type)
-            }
-            response = requests.post(url, headers=headers, files=files)
-
-        # Handle 401 - token refresh
-        if response.status_code == 401:
-            try:
-                self.tokens.force_refresh()
-                headers["Authorization"] = f"Bearer {self.config.access_token}"
-                with open(file_path, "rb") as f:
-                    files = {"image": (file_path_obj.name, f, content_type)}
-                    response = requests.post(url, headers=headers, files=files)
-            except Exception as e:
-                raise ClientError(f"Authentication failed: {e}")
-
-        if not response.ok:
-            try:
-                error_data = response.json()
-                errors = error_data.get("errors", [])
-                if errors:
-                    error_msg = errors[0].get("message", response.text)
-                else:
-                    error_msg = response.text
-            except Exception:
-                error_msg = response.text
-            raise ClientError(f"Image upload failed ({response.status_code}): {error_msg}")
-
-        # Extract image_id from Location header
-        location = response.headers.get("Location", "")
         # Format: https://apim.ebay.com/commerce/media/v1_beta/image/{image_id}
-        image_id = location.rstrip("/").split("/")[-1]
-
         result = response.json()
-        result["image_id"] = image_id
-
+        result["image_id"] = _resource_id_from_location(
+            response.headers.get("Location", "")
+        )
         return result
 
     def upload_image_from_url(self, image_url: str) -> Dict:
@@ -987,54 +1007,29 @@ class EbayClient:
             ClientError: If upload fails
         """
         endpoint = "/commerce/media/v1_beta/image/create_image_from_url"
-        base_url = self.config.api_base_url.replace("api.", "apim.")
-        url = f"{base_url}{endpoint}"
-
-        # Check if token needs refresh
-        if self.tokens.is_expired():
-            try:
-                self.tokens.force_refresh()
-            except Exception:
-                pass
+        url = f"{self._media_base_url()}{endpoint}"
 
         headers = {
             "Authorization": f"Bearer {self.config.access_token}",
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
-
         data = {"imageUrl": image_url}
 
-        response = requests.post(url, headers=headers, json=data)
+        def send(request_headers: Dict[str, str]) -> requests.Response:
+            return requests.post(
+                url,
+                headers=request_headers,
+                json=data,
+                timeout=MEDIA_REQUEST_TIMEOUT,
+            )
 
-        # Handle 401
-        if response.status_code == 401:
-            try:
-                self.tokens.force_refresh()
-                headers["Authorization"] = f"Bearer {self.config.access_token}"
-                response = requests.post(url, headers=headers, json=data)
-            except Exception as e:
-                raise ClientError(f"Authentication failed: {e}")
-
-        if not response.ok:
-            try:
-                error_data = response.json()
-                errors = error_data.get("errors", [])
-                if errors:
-                    error_msg = errors[0].get("message", response.text)
-                else:
-                    error_msg = response.text
-            except Exception:
-                error_msg = response.text
-            raise ClientError(f"Image upload failed ({response.status_code}): {error_msg}")
-
-        # Extract image_id from Location header
-        location = response.headers.get("Location", "")
-        image_id = location.rstrip("/").split("/")[-1]
+        response = self._media_request("Image upload failed", send, headers)
 
         result = response.json()
-        result["image_id"] = image_id
-
+        result["image_id"] = _resource_id_from_location(
+            response.headers.get("Location", "")
+        )
         return result
 
     def get_image(self, image_id: str) -> Dict:
@@ -1051,45 +1046,155 @@ class EbayClient:
             ClientError: If request fails
         """
         endpoint = f"/commerce/media/v1_beta/image/{image_id}"
-        base_url = self.config.api_base_url.replace("api.", "apim.")
-        url = f"{base_url}{endpoint}"
-
-        # Check if token needs refresh
-        if self.tokens.is_expired():
-            try:
-                self.tokens.force_refresh()
-            except Exception:
-                pass
+        url = f"{self._media_base_url()}{endpoint}"
 
         headers = {
             "Authorization": f"Bearer {self.config.access_token}",
             "Accept": "application/json",
         }
 
-        response = requests.get(url, headers=headers)
+        def send(request_headers: Dict[str, str]) -> requests.Response:
+            return requests.get(
+                url, headers=request_headers, timeout=MEDIA_REQUEST_TIMEOUT
+            )
 
-        # Handle 401
-        if response.status_code == 401:
-            try:
-                self.tokens.force_refresh()
-                headers["Authorization"] = f"Bearer {self.config.access_token}"
-                response = requests.get(url, headers=headers)
-            except Exception as e:
-                raise ClientError(f"Authentication failed: {e}")
+        return self._media_request("Failed to get image", send, headers).json()
 
-        if not response.ok:
-            try:
-                error_data = response.json()
-                errors = error_data.get("errors", [])
-                if errors:
-                    error_msg = errors[0].get("message", response.text)
-                else:
-                    error_msg = response.text
-            except Exception:
-                error_msg = response.text
-            raise ClientError(f"Failed to get image ({response.status_code}): {error_msg}")
+    def create_video(
+        self,
+        title: str,
+        size: int,
+        description: Optional[str] = None,
+    ) -> str:
+        """
+        Create a Media API video resource.
 
-        return response.json()
+        Args:
+            title: Text-only video title
+            size: Exact byte size of the file that will be uploaded
+            description: Optional text-only description
+
+        Returns:
+            The new video ID, parsed from the Location response header
+
+        Raises:
+            ClientError: If creation fails or no video ID is returned
+        """
+        endpoint = "/commerce/media/v1_beta/video"
+        url = f"{self._media_base_url()}{endpoint}"
+
+        headers = {
+            "Authorization": f"Bearer {self.config.access_token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+
+        # The Media API schema types classification as an array of enum strings;
+        # ITEM is the only value it currently accepts. Sending a bare string is
+        # rejected with "Could not serialize field [classification]".
+        payload: Dict[str, Any] = {
+            "title": title,
+            "size": size,
+            "classification": ["ITEM"],
+        }
+        if description:
+            payload["description"] = description
+
+        def send(request_headers: Dict[str, str]) -> requests.Response:
+            return requests.post(
+                url,
+                headers=request_headers,
+                json=payload,
+                timeout=MEDIA_REQUEST_TIMEOUT,
+            )
+
+        response = self._media_request("Video creation failed", send, headers)
+
+        video_id = _resource_id_from_location(response.headers.get("Location", ""))
+        if not video_id:
+            raise ClientError("Video creation returned no video ID in the Location header")
+
+        return video_id
+
+    def upload_video(self, video_id: str, file_path: str) -> Dict:
+        """
+        Upload video bytes to an existing Media API video resource.
+
+        The uploaded byte count must exactly match the ``size`` sent to
+        ``create_video`` or eBay rejects the upload, so the Content-Length
+        header is always taken from the file being sent.
+
+        Args:
+            video_id: The video ID returned by create_video
+            file_path: Local path to the video file to upload
+
+        Returns:
+            Dict with video_id, status_code, and the uploaded size
+
+        Raises:
+            ClientError: If the file is missing or the upload fails
+        """
+        from pathlib import Path
+
+        file_path_obj = Path(file_path)
+        if not file_path_obj.is_file():
+            raise ClientError(f"File not found: {file_path}")
+
+        size = file_path_obj.stat().st_size
+
+        endpoint = f"/commerce/media/v1_beta/video/{video_id}/upload"
+        url = f"{self._media_base_url()}{endpoint}"
+
+        headers = {
+            "Authorization": f"Bearer {self.config.access_token}",
+            "Content-Type": "application/octet-stream",
+            "Content-Length": str(size),
+            "Accept": "application/json",
+        }
+
+        def send(request_headers: Dict[str, str]) -> requests.Response:
+            with open(file_path, "rb") as f:
+                return requests.post(
+                    url,
+                    headers=request_headers,
+                    data=f,
+                    timeout=MEDIA_REQUEST_TIMEOUT,
+                )
+
+        response = self._media_request("Video upload failed", send, headers)
+
+        return {"video_id": video_id, "status_code": response.status_code, "size": size}
+
+    def get_video(self, video_id: str) -> Dict:
+        """
+        Get video metadata and processing status from eBay Media API.
+
+        Args:
+            video_id: The eBay video ID
+
+        Returns:
+            Dict with videoId, status, statusMessage, size, title,
+            expirationDate, and thumbnail details
+
+        Raises:
+            ClientError: If the request fails
+        """
+        endpoint = f"/commerce/media/v1_beta/video/{video_id}"
+        url = f"{self._media_base_url()}{endpoint}"
+
+        headers = {
+            "Authorization": f"Bearer {self.config.access_token}",
+            "Accept": "application/json",
+        }
+
+        def send(request_headers: Dict[str, str]) -> requests.Response:
+            return requests.get(
+                url, headers=request_headers, timeout=MEDIA_REQUEST_TIMEOUT
+            )
+
+        result = self._media_request("Failed to get video", send, headers).json()
+        result.setdefault("videoId", video_id)
+        return result
 
     # Account/Policy Methods - Fulfillment
     def get_fulfillment_policies(self, marketplace_id: str = "EBAY_US") -> Dict:
@@ -1325,21 +1430,12 @@ class EbayClient:
 
         if response.status_code == 202:
             # Extract task_id from Location header
-            location = response.headers.get("Location", "")
             # Location format: /sell/feed/v1/inventory_task/{task_id}
-            task_id = location.rstrip("/").split("/")[-1]
-            return task_id
-        else:
-            try:
-                error_data = response.json()
-                errors = error_data.get("errors", [])
-                if errors:
-                    error_msg = errors[0].get("message", response.text)
-                else:
-                    error_msg = response.text
-            except Exception:
-                error_msg = response.text
-            raise ClientError(f"Failed to create inventory task ({response.status_code}): {error_msg}")
+            return _resource_id_from_location(response.headers.get("Location", ""))
+
+        raise ClientError(
+            f"Failed to create inventory task ({response.status_code}): {_error_message(response)}"
+        )
 
     def get_inventory_task(self, task_id: str) -> Dict:
         """

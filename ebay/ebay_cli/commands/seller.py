@@ -16,4 +16,5 @@ COMMAND_CREDENTIALS = {
     "shipping-quote": ["oauth_authorization_code"],
     "store": ["oauth_authorization_code", "browser_session"],
     "templates": ["oauth_authorization_code"],
+    "videos": ["oauth_authorization_code"],
 }

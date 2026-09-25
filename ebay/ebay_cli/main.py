@@ -36,6 +36,7 @@ from .commands import (
     shipping_labels,
     store,
     templates,
+    videos,
 )
 
 # Admin/agnostic — top-level
@@ -75,6 +76,7 @@ SELLER_GROUPS = (
         SimpleNamespace(app=policies.return_app, COMMAND_CREDENTIALS=return_policies.COMMAND_CREDENTIALS),
     ),
     ("images", "Manage eBay images", images),
+    ("videos", "Manage eBay listing videos", videos),
     ("locations", "Manage eBay merchant locations", locations),
     ("messages", "Manage eBay seller messages", messages),
     ("store", "Manage eBay store", store),
