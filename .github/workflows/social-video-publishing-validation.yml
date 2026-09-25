@@ -36,6 +36,11 @@ jobs:
             echo "=== $tool: install ==="
             ./_repo/_scripts/install-cli-tool.sh "$tool"
 
+            if [[ "$tool" == "facebook" ]]; then
+              echo "=== facebook: install Playwright Chromium ==="
+              uv run --project facebook python -m playwright install chromium
+            fi
+
             echo "=== $tool: unit tests ==="
             (
               cd "$tool"
