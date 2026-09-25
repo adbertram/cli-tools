@@ -378,3 +378,14 @@ For full list of supported languages, check yt-dlp documentation.
 ## License
 
 MIT
+
+
+## YouTube Shorts
+
+Shorts use the same YouTube Data API video upload endpoint as ordinary videos. The
+shorts command is a thin interface over the authenticated channel uploader so the
+metadata and OAuth behavior stay in one implementation.
+
+```bash
+youtube shorts upload short.mp4 --title "Title" --description "Description" --privacy public --profile CHANNEL_PROFILE
+```
