@@ -66,3 +66,17 @@ def test_two_independent_commands_sections_track_columns_separately():
     )
 
     assert cli_test_utils.parse_help_commands(help_text) == ["longcommandname", "get"]
+
+
+
+def test_indented_ansi_commands_box_is_discovered():
+    help_text = "\n".join(
+        [
+            "  \x1b[1m╭─ Commands ───────────────╮\x1b[0m",
+            "  \x1b[2m│\x1b[0m auth    Auth commands.   \x1b[2m│\x1b[0m",
+            "  \x1b[2m│\x1b[0m items   Manage items.    \x1b[2m│\x1b[0m",
+            "  \x1b[2m╰──────────────────────────╯\x1b[0m",
+        ]
+    )
+
+    assert cli_test_utils.parse_help_commands(help_text) == ["auth", "items"]
