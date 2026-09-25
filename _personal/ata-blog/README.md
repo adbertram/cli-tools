@@ -29,7 +29,8 @@ ata-blog notion-page comments add PAGE_ID --body "Looks good"
 ata-blog notion-page schema add-property DATABASE_ID --name "Reviewed" --type checkbox
 ata-blog notion-page publish PAGE_ID --auto-schedule     # schedule only: Status=Scheduled + Publish Date
 ata-blog notion-page publish PAGE_ID --date 2026-09-24T15:00:00+00:00   # schedule only, explicit slot
-ata-blog notion-page publish PAGE_ID --status draft      # build + preview deployment
+ata-blog notion-page publish PAGE_ID --status draft      # legacy static transaction behavior
+ata-blog notion-page publish PAGE_ID --status preview    # hosted Pages preview; no Notion publication write
 ata-blog notion-page publish PAGE_ID --status publish    # build + deploy + promote to production
 ata-blog notion-page unpublish PAGE_ID --dry-run
 ata-blog notion-page unpublish SCHEDULED_PAGE_ID --yes   # unschedule: back to Ready to Publish
@@ -47,7 +48,7 @@ ata-blog earnings get my-post-slug --period last7d
 
 ### Publishing and unpublishing
 
-`notion-page publish` has two modes.
+`notion-page publish` supports scheduling, hosted preview, and static publication.
 
 With `--auto-schedule` or `--date` it only schedules. It requires the page to be
 `Ready to Publish` and validates everything the later flagless promotion needs:
@@ -60,12 +61,21 @@ built, deployed, or journaled. The result JSON is `notion_page_id`, `status`
 (`Scheduled`), `scheduled_date`, and `slug`. `--featured-image` and
 `--status publish` are rejected in this mode.
 
-Without those flags it stages the post into the static site source, builds the
-site, uploads a Cloudflare Pages preview, and with `--status publish` promotes
-that build to production and writes `Status=Published`, `Published URL`, and
-`Publish Date` (the promotion instant). The result JSON carries `static_url`,
-`promoted`, and `deployment_id`. A post whose Notion `Type` starts with
-`Sponsored` is staged with the Sponsored tag.
+With `--status preview`, the CLI stages the exact current post, builds the
+Astro site, deploys the candidate to Cloudflare Pages, and returns a hosted
+`preview_url`. The preview path performs **no Notion publication write**. Before
+releasing the global build lock it restores the pre-preview static corpus and
+rebuilds that restored corpus so the local release manifest/build token no
+longer describe the unpublished candidate. A successful preview result includes
+`status: "preview"`, `preview_url`, `deployment_id`, `promoted: false`,
+`notion_updated: false`, and `corpus_restored: true`.
+
+Without scheduling flags, the existing `draft` and `publish` static transaction
+behavior remains backward compatible. Both stage, build, and upload a Cloudflare
+Pages candidate; `--status publish` additionally promotes that build to
+production. Existing callers that use `draft` are unchanged by the new preview
+status. A post whose Notion `Type` starts with `Sponsored` is staged with the
+Sponsored tag.
 
 The URL slug comes from the page's Notion `Slug` property, or from the title
 when that property is empty. A `Slug` value the publisher would have to alter
