@@ -131,6 +131,13 @@ def run_live_cli_command(
     return run_cli_command(cli_executable, args, timeout=timeout, check=check)
 
 
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI_ESCAPE_RE.sub("", text)
+
+
 def parse_help_commands(help_text: str) -> List[str]:
     """Extract command names from Rich CLI help output.
 
@@ -161,7 +168,7 @@ def parse_help_commands(help_text: str) -> List[str]:
     but the ``│`` may be preceded by other chars in some terminals, so measure
     from the ``│`` rather than from column 0).
     """
-    pattern = r'^│(\s+)([a-z][a-z0-9_-]*)\s+'
+    pattern = r'^\s*│(\s+)([a-z][a-z0-9_-]*)\s+'
     commands = []
     in_commands_section = False
     # Command-name column for the current Commands section, learned from its
@@ -171,6 +178,7 @@ def parse_help_commands(help_text: str) -> List[str]:
     command_column = None
 
     for line in help_text.split('\n'):
+        line = _strip_ansi(line)
         # Detect Commands section header
         if 'Commands' in line and '─' in line:
             in_commands_section = True
