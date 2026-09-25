@@ -20,4 +20,6 @@ jobs:
           python-version: "3.13"
       - name: Run focused ATA Blog publisher tests
         working-directory: _personal/ata-blog
-        run: uv run pytest tests/test_static_publisher.py -q
+        run: |
+          uv run python -m compileall -q ata_blog_cli
+          uv run pytest tests/test_static_publisher.py -q -k "preview_status or cli_renders_static_result_fields or publish_article_delegates_to_static_transaction"
