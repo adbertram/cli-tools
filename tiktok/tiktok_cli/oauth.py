@@ -11,7 +11,7 @@ from urllib.parse import parse_qs, urlencode, unquote, urlparse
 import requests
 import typer
 
-from cli_tools_shared.output import print_error, print_info, print_success
+from cli_tools_shared.output import print_error, print_info, print_success, prompt_text
 
 _UNRESERVED = string.ascii_letters + string.digits + "-._~"
 
@@ -54,7 +54,7 @@ def _save_token_response(config, payload: dict) -> None:
     if payload.get("open_id"):
         config._set("OPEN_ID", str(payload["open_id"]))
     if payload.get("scope"):
-        config._set("TIKTOK_GRANTED_SCOPES", str(payload["scope"]))
+        config._set("GRANTED_SCOPES", str(payload["scope"]))
 
 
 def tiktok_oauth_login(config, force: bool) -> None:
@@ -87,7 +87,7 @@ def tiktok_oauth_login(config, force: bool) -> None:
     print_info(f"If the browser does not open, visit:\n{url}")
     webbrowser.open(url)
     print_info("After authorization, paste the full redirect URL or authorization code.")
-    raw = typer.prompt("Code or URL")
+    raw = prompt_text("Code or URL")
     try:
         code = _authorization_code(raw, state)
     except ValueError as exc:

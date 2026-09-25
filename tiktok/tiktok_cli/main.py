@@ -18,7 +18,7 @@ from .commands import favorites, transcripts, videos
 
 register_commands(app, get_config, transcripts, name="transcripts", help="Download TikTok video transcripts")
 register_commands(app, get_config, favorites, name="favorites", help="Manage saved (favorited) TikTok videos")
-register_commands(app, get_config, videos, name="videos", help="Publish and inspect TikTok videos")
+register_commands(app, get_config, videos, name="videos", help="Publish, inspect, list, and delete TikTok videos")
 app.add_typer(
     create_auth_app(
         get_config,

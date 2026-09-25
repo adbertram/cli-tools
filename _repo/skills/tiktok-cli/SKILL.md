@@ -2,8 +2,10 @@
 name: tiktok-cli
 description: >-
   Execute tiktok operations using the `tiktok` CLI tool.
-  TikTok transcript downloader using yt-dlp, plus saved (favorited) video listing.
-  Triggers: tiktok, tiktok cli, tiktok transcripts, tiktok favorites, tiktok auth
+  TikTok transcript downloader using yt-dlp, saved (favorited) video listing,
+  and publishing, status, listing, and deleting your own TikTok videos.
+  Triggers: tiktok, tiktok cli, tiktok transcripts, tiktok favorites, tiktok videos,
+  tiktok publish, delete tiktok video, tiktok auth
 ---
 
 <objective>
@@ -21,6 +23,11 @@ tiktok <command-group> <action> [arguments] [options]
 | Download transcripts for one or more TikTok videos. | `tiktok transcripts download` |
 | List all of the logged-in account's saved (favorited) TikTok videos. Needs a `browser_session` login first (`tiktok auth login --credential-type browser_session`). | `tiktok favorites list` |
 | Get one saved video's details (id, url, caption, author) by id or URL. No login required. | `tiktok favorites get` |
+| Publish a video through the Content Posting API (custom API profile). | `tiktok videos publish` |
+| Check a Direct Post's status by `publish_id` (custom API profile). | `tiktok videos status` |
+| List a profile's posted videos; your own private posts need your `browser_session`. | `tiktok videos list` |
+| Get one posted video by id (`browser_session`). | `tiktok videos get` |
+| Permanently delete one of your videos by id; requires `--yes` (`browser_session`). | `tiktok videos delete` |
 | Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent. | `tiktok auth login` |
 | Clear stored credentials. | `tiktok auth logout` |
 | Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``. | `tiktok auth status` |
@@ -40,6 +47,7 @@ After every `tiktok` command, inspect stdout. If it is JSON with `type: "ai_inst
 <principle name="Command Groups">
 - **transcripts** -- Download TikTok video transcripts
 - **favorites** -- List and look up saved (favorited) TikTok videos. `list` needs a `browser_session` login (`tiktok auth login --credential-type browser_session`); `get` does not.
+- **videos** -- `publish`/`status` use the custom Content Posting API profile (`--profile posting`). `list`/`get`/`delete` use the `browser_session` profile because no official TikTok API lists private posts or deletes videos. A `SELF_ONLY` publish returns no post id; find it with `videos list --username <creator_username>` (publish output includes `creator_username`).
 - **auth** -- Manage tiktok authentication
 </principle>
 </essential_principles>

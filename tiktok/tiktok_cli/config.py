@@ -22,8 +22,8 @@ TIKTOK_API_ALL_FIELDS = [
     "REFRESH_TOKEN",
     "TOKEN_EXPIRES_AT",
     "OPEN_ID",
-    "TIKTOK_SCOPES",
-    "TIKTOK_GRANTED_SCOPES",
+    "SCOPES",
+    "GRANTED_SCOPES",
 ]
 TIKTOK_API_LOGIN_PROMPTS = [
     ("CLIENT_KEY", "TikTok Client key", False),
@@ -40,7 +40,7 @@ TIKTOK_API_EPHEMERAL_FIELDS = [
     "REFRESH_TOKEN",
     "TOKEN_EXPIRES_AT",
     "OPEN_ID",
-    "TIKTOK_GRANTED_SCOPES",
+    "GRANTED_SCOPES",
 ]
 DEFAULT_TIKTOK_SCOPES = ["user.info.basic", "video.publish"]
 
@@ -82,10 +82,8 @@ class Config(BaseConfig):
         profile: Optional[str] = None,
         profile_auth_type: Optional[str] = None,
     ):
-        tool_dir = resolve_tool_dir(self.DIST_NAME)
-        _migrate_legacy_profiles(tool_dir.name)
         super().__init__(
-            tool_dir=tool_dir,
+            tool_dir=resolve_tool_dir(self.DIST_NAME),
             profile=profile,
             profile_auth_type=profile_auth_type,
         )
@@ -138,7 +136,7 @@ class Config(BaseConfig):
 
     @property
     def requested_scopes(self) -> list[str]:
-        raw = self._get("TIKTOK_SCOPES")
+        raw = self._get("SCOPES")
         if raw:
             return [scope.strip() for scope in raw.split(",") if scope.strip()]
         return list(DEFAULT_TIKTOK_SCOPES)
@@ -223,6 +221,10 @@ class Config(BaseConfig):
             "version": result.stdout.strip(),
         }
 
+
+# Runs at import, not in Config.__init__: shared auth commands (status,
+# profiles list) validate every profile's AUTH_TYPE before any Config exists.
+_migrate_legacy_profiles(resolve_tool_dir(Config.DIST_NAME).name)
 
 _configs: dict = {}
 

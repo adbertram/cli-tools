@@ -68,7 +68,7 @@ class TikTokPostingClient:
         if payload.get("open_id"):
             self.config._set("OPEN_ID", str(payload["open_id"]))
         if payload.get("scope"):
-            self.config._set("TIKTOK_GRANTED_SCOPES", str(payload["scope"]))
+            self.config._set("GRANTED_SCOPES", str(payload["scope"]))
 
     def _ensure_access_token(self) -> str:
         token = self.config.access_token
@@ -258,4 +258,4 @@ class TikTokPostingClient:
             raise ClientError("TikTok Direct Post init response omitted publish_id or upload_url.")
 
         self._upload_file(upload_url, path, mime_type, ranges)
-        return self.status(publish_id)
+        return {**self.status(publish_id), "creator_username": creator.get("creator_username")}

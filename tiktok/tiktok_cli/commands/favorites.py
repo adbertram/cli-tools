@@ -20,7 +20,7 @@ from ..client import (
     favorite_from_video_metadata,
     favorite_id_to_url,
     get_client,
-    get_favorites_client,
+    get_web_client,
 )
 
 app = typer.Typer(help="Manage saved (favorited) TikTok videos")
@@ -45,7 +45,7 @@ def list_favorites(
         except FilterValidationError as e:
             raise ClientError(str(e)) from e
 
-    favorites = get_favorites_client().list_favorites(limit=limit)
+    favorites = get_web_client().list_favorites(limit=limit)
     if filter:
         favorites = apply_filters(favorites, filter)
     if properties:

@@ -2,7 +2,7 @@
 
 ## DESCRIPTION
 
-The `tiktok` CLI provides tikTok transcript downloader using yt-dlp, plus commands to list and look up your saved (favorited) TikTok videos.
+The `tiktok` CLI provides a TikTok transcript downloader using yt-dlp, commands to list and look up your saved (favorited) TikTok videos, and commands to publish, check, list, and delete your own TikTok videos.
 
 Use it when you need scriptable reads, exports, or evidence collection without opening the service UI.
 
@@ -67,9 +67,10 @@ tiktok auth profiles get default
 tiktok auth test
 ```
 
-This CLI does not store TikTok credentials itself. The shared `auth` commands
-exist so the wrapper exposes the standard profile surface and can report whether
-the upstream `yt-dlp` dependency is available.
+TikTok has two profile types: `browser_session` (favorites list and the
+`videos list/get/delete` commands) and `custom` (Content Posting API publish and
+status; see below). `auth status` checks a browser session against TikTok's own
+account endpoint, so an expired session reports `authenticated: false`.
 
 ### Transcripts Download
 
@@ -277,4 +278,68 @@ tiktok videos status PUBLISH_ID --profile posting
 ```
 
 The Direct Post API requires video.publish. TikTok can restrict unaudited apps to
-private visibility until the app passes TikTok review.
+private visibility until the app passes TikTok review. `videos publish` returns the
+`publish_id`, upload status, and the posting account's `creator_username`.
+
+## Listing and Deleting Videos
+
+TikTok's official APIs cannot delete videos (no scope grants it), and a private
+(`SELF_ONLY`) Direct Post never returns a post id. `videos list`, `videos get`, and
+`videos delete` therefore use TikTok's own web API inside the logged-in
+`browser_session` profile, the same way the favorites commands do.
+
+```bash
+tiktok auth login --credential-type browser_session
+
+# List a profile's posts (your own private posts appear only for your own session)
+tiktok videos list --username yourhandle
+tiktok videos list --username yourhandle --table --limit 10
+tiktok videos list --username yourhandle --filter "caption:contains:launch" --properties id,caption
+
+# Get one post by id
+tiktok videos get 7300000000000000001 --username yourhandle
+tiktok videos get 7300000000000000001 --username yourhandle --table
+
+# Permanently delete one of your videos (refuses to run without --yes)
+tiktok videos delete 7300000000000000001 --yes
+```
+
+`videos list`/`videos get` records have this shape:
+
+```json
+{
+  "id": "7300000000000000001",
+  "url": "https://www.tiktok.com/@yourhandle/video/7300000000000000001",
+  "caption": "video description text",
+  "author": "yourhandle",
+  "created_at": 1700000000
+}
+```
+
+`videos delete` prints `{"video_id": "<id>", "deleted": true}`.
+
+### Videos Command Options
+
+| Command | Option | Short | Description |
+|---------|--------|-------|-------------|
+| `list`, `get` | `--username` | `-u` | Profile whose posts to read (required) |
+| `list` | `--table` | `-t` | Display results as a table |
+| `list` | `--limit` | `-l` | Maximum number of results (default `100`) |
+| `list` | `--filter` | `-f` | Filter: `field:op:value` (repeatable) |
+| `list`, `get` | `--properties` | `-p` | Comma-separated fields to display |
+| `get` | `--table` | `-t` | Display result as a table |
+| `delete` | `--yes` | `-y` | Confirm permanent deletion (required) |
+
+## Live E2E Test
+
+`tests/test_videos_e2e.py` publishes a generated 5-second private clip, polls
+`videos status` until `PUBLISH_COMPLETE`, finds the post id with `videos list`,
+and always deletes it (and proves it is gone) in fixture teardown, pass or fail.
+It is skipped unless `TIKTOK_E2E=1` and needs `ffmpeg`, an authenticated custom
+API profile (`TIKTOK_E2E_API_PROFILE`, default `posting`), and an authenticated
+browser profile (`TIKTOK_E2E_BROWSER_PROFILE`, default `default`). It checks the
+browser profile can list videos before publishing anything.
+
+```bash
+TIKTOK_E2E=1 uv run --project tiktok --with pytest python -m pytest tiktok/tests/test_videos_e2e.py -v -s
+```

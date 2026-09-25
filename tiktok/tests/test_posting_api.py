@@ -109,6 +109,7 @@ def test_publish_video_uses_creator_info_init_upload_and_status(tmp_path):
 
     assert result["publish_id"] == "PUB1"
     assert result["status"] == "PUBLISH_COMPLETE"
+    assert result["creator_username"] == "adam"
 
     init_call = next(
         call for call in session.calls

@@ -1,10 +1,11 @@
-"""TikTok transcript downloader using yt-dlp, plus the favorites (saved
-videos) client described in the module docstring below FavoritesClient."""
+"""TikTok transcript downloader using yt-dlp, plus the tiktok.com web client
+(favorites, own posted videos, delete) described above TikTokWebClient."""
 import subprocess
 import time
 import json
 from pathlib import Path
 from typing import Dict, List, Optional
+from urllib.parse import quote
 
 from cli_tools_shared.http_session import (
     DEFAULT_REQUESTS_BASE_DELAY,
@@ -224,7 +225,7 @@ def get_client() -> TiktokClient:
 # automatically) with a clean ``HTTP 200`` and empty body — proving the route
 # and signing both work without any client-side signature code of our own,
 # and that the empty result is the server's private-endpoint gate, not a
-# signing failure. ``FavoritesClient`` therefore runs the exact same fetch
+# signing failure. ``TikTokWebClient`` therefore runs the exact same fetch
 # INSIDE the live tiktok.com page through ``page.evaluate()`` (the same
 # in-page-fetch pattern this repo already uses for OfferUp), carrying the
 # real browser's cookies via ``credentials: 'include'``, so once
@@ -243,28 +244,71 @@ def get_client() -> TiktokClient:
 # if the raw item happens to carry a ``collectTime`` key (TikTok's own naming
 # convention, mirroring ``createTime``), and is otherwise ``None`` rather than
 # guessed.
+#
+# Posted videos and delete
+# ------------------------
+# The Content Posting API cannot list or delete the caller's videos: Display
+# API ``video.list`` returns only public posts, a SELF_ONLY Direct Post never
+# gets a ``publicaly_available_post_id``, and no TikTok scope grants delete.
+# TikTok's own web app does both through the same signed in-page ``/api/*``
+# surface used for favorites, so ``TikTokWebClient`` reuses it:
+#
+# - Own posts: ``GET /api/post/item_list/?secUid=...`` — the call TikTok's
+#   profile page makes (``userPostList`` in its webapp bundle). ``secUid``
+#   comes from the profile page's ``webapp.user-detail`` rehydration data
+#   (``userInfo.user.secUid``), confirmed live.
+# - Delete: ``POST /api/aweme/delete/?aweme_id=...`` with ``tt_csrf_token``
+#   in the query and the ``tt-csrf-token`` header, both set to
+#   ``webapp.app-context.csrfToken`` — exactly how the webapp's
+#   ``postVideoDelete`` issues it. The endpoint answers
+#   ``{"status_code": 0}`` on success and, confirmed live,
+#   ``{"status_code": 8, "status_msg": "Login expired"}`` without a session.
 
-ITEM_LIST_PATH = "/api/user/collect/item_list/"
+FAVORITES_PATH = "/api/user/collect/item_list/?aid=1988"
+POSTS_PATH = "/api/post/item_list/?aid=1988"
+DELETE_PATH = "/api/aweme/delete/?aid=1988"
 
 # Page size TikTok's own web app requests, and the paging ceiling this client
 # walks before giving up on reaching --limit.
-FAVORITES_PAGE_SIZE = 30
-FAVORITES_MAX_PAGES = 50
+ITEM_PAGE_SIZE = 30
+ITEM_MAX_PAGES = 50
 
-_FAVORITES_FETCH_JS = """async (opts) => {
-    const resp = await fetch(opts.path, { credentials: 'include' });
-    const text = await resp.text();
+_LOGIN_HINT = (
+    "Run 'tiktok auth login --credential-type browser_session' "
+    "(or '--force' to refresh a stale session) and retry."
+)
+
+_WEB_FETCH_JS = """async (opts) => {
+    const init = { method: opts.method, credentials: 'include', headers: {} };
+    let path = opts.path;
+    if (opts.csrf) {
+        const el = document.getElementById('__UNIVERSAL_DATA_FOR_REHYDRATION__');
+        const scope = el ? (JSON.parse(el.textContent).__DEFAULT_SCOPE__ || {}) : {};
+        const token = (scope['webapp.app-context'] || {}).csrfToken;
+        if (!token) {
+            return { status: 0, statusText: 'page has no webapp.app-context csrfToken', body: '' };
+        }
+        path += '&tt_csrf_token=' + encodeURIComponent(token);
+        init.headers['tt-csrf-token'] = token;
+    }
+    const resp = await fetch(path, init);
     return {
         status: resp.status,
         statusText: resp.statusText,
         retryAfter: resp.headers.get('retry-after'),
-        body: text,
+        body: await resp.text(),
     };
 }"""
 
+_SEC_UID_JS = """() => {
+    const el = document.getElementById('__UNIVERSAL_DATA_FOR_REHYDRATION__');
+    if (!el) return null;
+    const detail = (JSON.parse(el.textContent).__DEFAULT_SCOPE__ || {})['webapp.user-detail'] || {};
+    return ((detail.userInfo || {}).user || {}).secUid || null;
+}"""
 
-def normalize_favorite(raw: dict) -> Dict:
-    """Normalize one TikTok aweme item into the favorites output contract."""
+
+def _aweme_record(raw: dict) -> Dict:
     video_id = str(raw.get("id") or "")
     author = raw.get("author") or raw.get("authorInfo") or {}
     author_id = author.get("uniqueId") or "_"
@@ -273,8 +317,17 @@ def normalize_favorite(raw: dict) -> Dict:
         "url": f"https://www.tiktok.com/@{author_id}/video/{video_id}",
         "caption": raw.get("desc"),
         "author": author.get("uniqueId"),
-        "saved_at": raw.get("collectTime"),
     }
+
+
+def normalize_favorite(raw: dict) -> Dict:
+    """Normalize one TikTok aweme item into the favorites output contract."""
+    return {**_aweme_record(raw), "saved_at": raw.get("collectTime")}
+
+
+def normalize_posted_video(raw: dict) -> Dict:
+    """Normalize one TikTok aweme item into the videos list output contract."""
+    return {**_aweme_record(raw), "created_at": raw.get("createTime")}
 
 
 def favorite_id_to_url(item: str) -> str:
@@ -311,8 +364,8 @@ def favorite_from_video_metadata(metadata: dict) -> Dict:
     }
 
 
-class FavoritesClient:
-    """Drives a live tiktok.com page and calls its own favorites feed API."""
+class TikTokWebClient:
+    """Drives a live tiktok.com page and calls its own signed web API."""
 
     def __init__(
         self,
@@ -342,9 +395,8 @@ class FavoritesClient:
             self._browser.close()
             self._browser = None
 
-    @property
-    def _home_url(self) -> str:
-        return f"{self.config.base_url.rstrip('/')}/"
+    def _page(self, path: str = "/"):
+        return self._get_browser().get_page(f"{self.config.base_url.rstrip('/')}{path}")
 
     def _retry_after_seconds(self, raw: Optional[str]) -> Optional[float]:
         if raw is None:
@@ -354,24 +406,24 @@ class FavoritesClient:
         except (TypeError, ValueError):
             return None
 
-    def _fetch_page(self, cursor: int, count: int) -> dict:
-        """Run the in-page GET for one page of favorites, with retry."""
-        page = self._get_browser().get_page(self._home_url)
+    def _fetch_json(self, page, path: str, *, method: str = "GET", csrf: bool = False) -> dict:
+        """Run one in-page request with retry and return its JSON payload."""
         policy = self._retry_policy
         last_exception: Optional[Exception] = None
         last_status = None
-        path = f"{ITEM_LIST_PATH}?aid=1988&count={count}&cursor={cursor}"
 
         for attempt in range(policy.max_retries + 1):
             try:
-                result = page.evaluate(_FAVORITES_FETCH_JS, {"path": path})
+                result = page.evaluate(
+                    _WEB_FETCH_JS, {"path": path, "method": method, "csrf": csrf}
+                )
             except Exception as exc:  # browser-harness / network failure
                 last_exception = exc
                 if attempt < policy.max_retries:
                     time.sleep(policy.calculate_delay(attempt))
                     continue
                 raise ClientError(
-                    f"TikTok favorites fetch failed after {attempt + 1} attempts: {exc}"
+                    f"TikTok web request {path} failed after {attempt + 1} attempts: {exc}"
                 ) from exc
 
             status = int(result.get("status") or 0)
@@ -386,56 +438,50 @@ class FavoritesClient:
                 continue
             if status != 200:
                 raise ClientError(
-                    f"TikTok favorites fetch HTTP {status} "
+                    f"TikTok web request {path} HTTP {status} "
                     f"{result.get('statusText', '')}: {body[:300]}"
                 )
             if not body:
                 raise ClientError(
-                    "TikTok favorites fetch returned an empty response. "
-                    "This endpoint only returns data for the logged-in account's "
-                    "own saved videos — run "
-                    "'tiktok auth login --credential-type browser_session' "
-                    "(or '--force' to refresh a stale session) and retry."
+                    f"TikTok web request {path} returned an empty response. "
+                    "This endpoint only returns data for the logged-in account. "
+                    + _LOGIN_HINT
                 )
             try:
                 payload = json.loads(body)
             except (ValueError, TypeError) as exc:
                 raise ClientError(
-                    f"TikTok favorites fetch returned a non-JSON body: {exc}"
+                    f"TikTok web request {path} returned a non-JSON body: {exc}"
                 ) from exc
             status_code = payload.get("statusCode", payload.get("status_code"))
             if status_code not in (0, None):
                 raise ClientError(
-                    f"TikTok favorites fetch returned statusCode {status_code}: "
+                    f"TikTok web request {path} returned status code {status_code}: "
                     f"{payload.get('statusMsg') or payload.get('status_msg')}"
                 )
             return payload
 
         raise ClientError(
-            f"TikTok favorites fetch failed after retries "
+            f"TikTok web request {path} failed after retries "
             f"(last status={last_status}): {last_exception}"
         )
 
-    def list_favorites(self, limit: int = 100) -> List[Dict]:
-        """List the logged-in account's saved (favorited) TikTok videos.
-
-        ``limit`` drives cursor pagination against TikTok's own page size
-        rather than slicing a client-side list.
-        """
-        favorites: List[Dict] = []
+    def _list_items(self, page, path: str, normalize, limit: int) -> List[Dict]:
+        """Walk an ``itemList``/``hasMore``/``cursor`` feed up to ``limit`` items."""
+        items: List[Dict] = []
         seen = set()
         cursor = 0
         pages = 0
 
-        while len(favorites) < limit and pages < FAVORITES_MAX_PAGES:
-            page_size = min(FAVORITES_PAGE_SIZE, max(limit - len(favorites), 1))
-            payload = self._fetch_page(cursor, page_size)
+        while len(items) < limit and pages < ITEM_MAX_PAGES:
+            page_size = min(ITEM_PAGE_SIZE, max(limit - len(items), 1))
+            payload = self._fetch_json(page, f"{path}&count={page_size}&cursor={cursor}")
             for item in payload.get("itemList") or []:
                 video_id = item.get("id")
                 if not video_id or video_id in seen:
                     continue
                 seen.add(video_id)
-                favorites.append(normalize_favorite(item))
+                items.append(normalize(item))
             pages += 1
             if not payload.get("hasMore"):
                 break
@@ -444,16 +490,56 @@ class FavoritesClient:
                 break
             cursor = next_cursor
 
-        return favorites[:limit]
+        return items[:limit]
+
+    def list_favorites(self, limit: int = 100) -> List[Dict]:
+        """List the logged-in account's saved (favorited) TikTok videos."""
+        return self._list_items(self._page(), FAVORITES_PATH, normalize_favorite, limit)
+
+    def list_posted_videos(self, username: str, limit: int = 100) -> List[Dict]:
+        """List a profile's posted videos; private posts appear only for the
+        logged-in owner's own profile."""
+        handle = (username or "").strip().lstrip("@")
+        if not handle:
+            raise ClientError("A TikTok username is required.")
+        page = self._page(f"/@{quote(handle)}")
+        sec_uid = page.evaluate(_SEC_UID_JS)
+        if not sec_uid:
+            raise ClientError(
+                f"TikTok profile page for @{handle} did not expose "
+                "webapp.user-detail userInfo.user.secUid."
+            )
+        path = f"{POSTS_PATH}&secUid={quote(sec_uid, safe='')}"
+        return self._list_items(page, path, normalize_posted_video, limit)
+
+    def get_posted_video(self, username: str, video_id: str) -> Dict:
+        """Find one of a profile's posted videos by id."""
+        for video in self.list_posted_videos(username, limit=ITEM_PAGE_SIZE * ITEM_MAX_PAGES):
+            if video["id"] == str(video_id):
+                return video
+        raise ClientError(f"Video {video_id} not found in @{username.lstrip('@')}'s posts.")
+
+    def delete_video(self, video_id: str) -> Dict:
+        """Delete one of the logged-in account's videos."""
+        value = str(video_id or "").strip()
+        if not value.isdigit():
+            raise ClientError(f"TikTok video id must be numeric, got {video_id!r}.")
+        self._fetch_json(
+            self._page(),
+            f"{DELETE_PATH}&aweme_id={value}",
+            method="POST",
+            csrf=True,
+        )
+        return {"video_id": value, "deleted": True}
 
 
-# Module-level favorites client instance - singleton pattern
-_favorites_client: Optional[FavoritesClient] = None
+# Module-level web client instance - singleton pattern
+_web_client: Optional[TikTokWebClient] = None
 
 
-def get_favorites_client() -> FavoritesClient:
-    """Get or create the global favorites client instance."""
-    global _favorites_client
-    if _favorites_client is None:
-        _favorites_client = FavoritesClient()
-    return _favorites_client
+def get_web_client() -> TikTokWebClient:
+    """Get or create the global TikTok web client instance."""
+    global _web_client
+    if _web_client is None:
+        _web_client = TikTokWebClient()
+    return _web_client
