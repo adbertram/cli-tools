@@ -89,6 +89,12 @@ list_commands = [
 # `workers get` returns raw script content; there is no single record to
 # render as a table.
 excluded_from_table_flag_required = ["workers"]
+# `email-routing settings` is singular aggregate data (one settings object per
+# zone, enabled/disabled status), not a collection with an ID space to
+# enumerate -- there is nothing for a `list` command to return. `get` is the
+# correct and only read command per the command-standards.md "Singular
+# Aggregate Data" exception.
+excluded_from_list_required = ["settings"]
 
 [cli_specific.copilot]
 # Copilot has deep command trees: tool mcp tools <list|get|invoke> and
