@@ -4,7 +4,7 @@
 # Example: create-cli-tool-skill stripe
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLI_TOOLS_DIR="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
 SKILLS_DIR="${CLI_TOOLS_DIR}/_repo/skills"
 

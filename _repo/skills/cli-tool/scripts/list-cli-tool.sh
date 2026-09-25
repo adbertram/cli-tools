@@ -2,7 +2,7 @@
 # List all CLI tools in the cli-tools repository
 # Usage: list-cli-tool.sh
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLI_TOOLS_DIR="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 SYMLINK_DIR="$HOME/.local/bin"
 
