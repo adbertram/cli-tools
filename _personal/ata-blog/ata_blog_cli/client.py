@@ -4181,6 +4181,8 @@ class AtaBlogClient:
                 "deployment_id": deployment["deployment_id"],
                 "deployment_url": deployment["deployment_url"],
                 "promoted": False,
+                "notion_updated": False,
+                "corpus_restored": True,
                 "source_revision": source_revision,
                 "preview_key": preview_key,
                 "warnings": [],
