@@ -1,0 +1,23 @@
+name: ATA Blog Preview Validation
+
+on:
+  pull_request:
+    paths:
+      - "_personal/ata-blog/**"
+      - "_repo/cli-tools-shared/**"
+      - ".github/workflows/ata-blog-preview-validation.yml"
+
+jobs:
+  publisher-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "latest"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Run focused ATA Blog publisher tests
+        working-directory: _personal/ata-blog
+        run: uv run pytest tests/test_static_publisher.py -q
