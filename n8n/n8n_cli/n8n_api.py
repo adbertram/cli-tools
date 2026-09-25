@@ -153,6 +153,36 @@ class N8nApiClient:
 
         raise N8nApiError(f"n8n not ready after {timeout}s (last error: {last_error})")
 
+    def wait_for_node_registry(self, timeout: int = 60, poll_interval: float = 2.0) -> bool:
+        """Poll until the authenticated node registry is available after restart.
+
+        n8n can serve health and settings routes before it finishes registering
+        community nodes. Deployment verification consumes this exact endpoint,
+        so readiness must be based on the same boundary.
+        """
+        registry_url = f"{self._get_server_url()}/types/nodes.json"
+        cookie = self._get_session_cookie()
+        deadline = time.time() + timeout
+        last_error = None
+
+        while time.time() < deadline:
+            try:
+                response = requests.get(
+                    registry_url,
+                    headers={"cookie": cookie},
+                    timeout=5,
+                )
+                response.raise_for_status()
+                return True
+            except requests.exceptions.RequestException as error:
+                status = getattr(error.response, "status_code", None)
+                last_error = f"node registry HTTP {status}" if status else str(error)
+            time.sleep(poll_interval)
+
+        raise N8nApiError(
+            f"n8n node registry not ready after {timeout}s (last error: {last_error})"
+        )
+
     def create_workflow(
         self,
         name: str,

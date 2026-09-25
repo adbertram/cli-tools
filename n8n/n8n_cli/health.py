@@ -61,6 +61,9 @@ def _node_name(node: Dict) -> str:
     return str(node.get("name") or "")
 
 
+_NON_EXECUTABLE_NODE_TYPES = {"n8n-nodes-base.stickyNote"}
+
+
 def _finding(node: Dict, check_id: str, severity: str, message: str) -> Finding:
     return Finding(
         node=_node_name(node),
@@ -711,6 +714,8 @@ def check_non_trigger_connected(workflow: Dict, api) -> List[Finding]:
                         destinations.add(link["node"])
     connected = destinations | sources
     for node in workflow.get("nodes") or []:
+        if node.get("type") in _NON_EXECUTABLE_NODE_TYPES:
+            continue
         if _is_trigger(node):
             continue
         if _node_name(node) not in connected:

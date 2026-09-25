@@ -401,6 +401,7 @@ def deploy_node(
         try:
             api = get_n8n_api_client()
             api.wait_for_ready(timeout=60)
+            api.wait_for_node_registry(timeout=60)
         except N8nApiError as e:
             print_error(f"n8n failed to start: {e}")
             print_info("Check logs on the configured n8n server.")
