@@ -37,7 +37,7 @@ def _authorization_code(user_input: str, expected_state: str) -> str:
         if not code:
             raise ValueError("TikTok redirect URL did not contain an authorization code.")
         return unquote(code)
-    return unquote(value)
+    raise ValueError("Paste the full TikTok redirect URL so the OAuth state can be verified.")
 
 
 def _save_token_response(config, payload: dict) -> None:
