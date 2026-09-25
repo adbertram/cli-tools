@@ -226,7 +226,7 @@ def rules_update(
         cloudflare email-routing rules update example.com RULE_ID --disabled
         cloudflare email-routing rules update example.com RULE_ID --forward-to new-dest@example.net
     """
-    if all(v in (None, False) for v in [address, catch_all, forward_to, drop, name, priority, enabled, matchers_json, actions_json]):
+    if not any([address, catch_all, forward_to, drop, name, matchers_json, actions_json]) and priority is None and enabled is None:
         typer.echo("Error: At least one field to update must be specified", err=True)
         raise typer.Exit(1)
 

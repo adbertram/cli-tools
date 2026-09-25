@@ -351,6 +351,33 @@ def test_cli_addresses_delete_without_force_refuses_noninteractive(monkeypatch, 
     assert "--force" in result.output
 
 
+def test_cli_rules_update_disabled_alone_sends_enabled_false(monkeypatch, transport):
+    monkeypatch.setattr(email_routing, "get_client", CloudflareClient)
+    transport.return_value = response(dict(RULE, enabled=False))
+    runner = CliRunner()
+    result = runner.invoke(email_routing.app, ["rules", "update", ZONE_ID, RULE["id"], "--disabled"])
+    assert result.exit_code == 0, result.output
+    assert transport.call_args.kwargs["json"] == {"enabled": False}
+
+
+def test_cli_rules_update_priority_zero_alone_sends_priority_zero(monkeypatch, transport):
+    monkeypatch.setattr(email_routing, "get_client", CloudflareClient)
+    transport.return_value = response(dict(RULE, priority=0))
+    runner = CliRunner()
+    result = runner.invoke(email_routing.app, ["rules", "update", ZONE_ID, RULE["id"], "--priority", "0"])
+    assert result.exit_code == 0, result.output
+    assert transport.call_args.kwargs["json"] == {"priority": 0}
+
+
+def test_cli_rules_update_with_no_fields_still_errors(monkeypatch, transport):
+    monkeypatch.setattr(email_routing, "get_client", CloudflareClient)
+    runner = CliRunner()
+    result = runner.invoke(email_routing.app, ["rules", "update", ZONE_ID, RULE["id"]])
+    assert result.exit_code != 0
+    assert transport.call_count == 0
+    assert "At least one field to update must be specified" in result.output
+
+
 def test_public_groups_exist():
     result = CliRunner().invoke(app, ["email-routing", "--help"])
     assert result.exit_code == 0, result.output
