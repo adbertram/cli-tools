@@ -1141,6 +1141,22 @@ class AtaBlogClient:
             "backup": transaction_root / f"{idempotency_key}.corpus-backup",
         }
 
+    def _publisher_preview_paths(
+        self,
+        page_id: str,
+        idempotency_key: str,
+    ) -> Dict[str, Path]:
+        """Return isolated sidecar paths for one hosted preview deployment."""
+        root = self._publisher_runtime_root()
+        preview_root = root / "previews"
+        return {
+            "page_lock": self._publisher_page_lock_path(page_id),
+            "build_lock": root / "locks" / "build.lock",
+            "runtime": preview_root / f"{idempotency_key}.runtime.json",
+            "stage_plan": preview_root / f"{idempotency_key}.stage-plan.json",
+            "backup": preview_root / f"{idempotency_key}.corpus-backup",
+        }
+
     def _publisher_page_lock_path(self, page_id: str) -> Path:
         """Return a filesystem-safe lock path for one Notion page identity."""
         page_key = hashlib.sha256(page_id.encode("utf-8")).hexdigest()
@@ -4004,6 +4020,255 @@ class AtaBlogClient:
                     f"Static publisher failed during {current_stage}: {failure}"
                 ) from failure
 
+    def _preview_static_transaction(
+        self,
+        *,
+        page_id: str,
+        check_duplicates: bool,
+        featured_image: Optional[str],
+        force: bool,
+    ) -> Dict[str, Any]:
+        """Deploy a hosted Pages preview without publishing or mutating Notion."""
+        with self._exclusive_publisher_lock(self._publisher_page_lock_path(page_id)):
+            return self._preview_static_transaction_locked(
+                page_id=page_id,
+                check_duplicates=check_duplicates,
+                featured_image=featured_image,
+                force=force,
+            )
+
+    def _preview_static_transaction_locked(
+        self,
+        *,
+        page_id: str,
+        check_duplicates: bool,
+        featured_image: Optional[str],
+        force: bool,
+    ) -> Dict[str, Any]:
+        """Build and deploy one reversible Cloudflare Pages preview.
+
+        The source post is staged into the static corpus only while the global
+        build token is held. After the preview deployment succeeds (or fails),
+        the exact corpus preimage is restored and the restored corpus is built
+        again before the lock is released. No Notion property is written.
+        """
+        article = self.get_article(page_id)
+        title = str(article.get("Title") or article.get("title") or "Untitled")
+        self._require_publish_metadata(article)
+        markdown_content = self.get_article_markdown(page_id)
+        self._validate_publish_markdown(markdown_content)
+        image_path = self._resolve_featured_image(page_id, featured_image)
+        source_revision = self._source_revision(article, markdown_content, image_path)
+        idempotency_key = self._publisher_idempotency_key(page_id, source_revision)
+        paths = self._publisher_preview_paths(page_id, idempotency_key)
+        paths["runtime"].parent.mkdir(parents=True, exist_ok=True)
+        final_slug = self._static_slug(title, self._notion_slug(article, page_id))
+
+        manifest = self._load_static_release_manifest()
+        self._reject_competing_publisher_revision(
+            manifest=manifest,
+            page_id=page_id,
+            idempotency_key=idempotency_key,
+        )
+        publisher_paths = self._publisher_paths(page_id, idempotency_key)
+        if publisher_paths["journal"].is_file():
+            current_journal = self._load_existing_publisher_journal(
+                publisher_paths["journal"],
+                manifest,
+                page_id,
+                source_revision,
+            )
+            if current_journal is not None and current_journal["state"] != "completed":
+                raise ClientError(
+                    "Cannot deploy preview while the same-revision publisher "
+                    "transaction is incomplete"
+                )
+
+        if not force and article.get("Published URL"):
+            raise ClientError(
+                f"Post already published at: {article['Published URL']}. "
+                "Use --force to preview the current source anyway."
+            )
+        existing_post = self._find_static_post(final_slug)
+        article_url_slug = None
+        if article.get("Published URL"):
+            article_url_slug = self._slug_from_url(
+                str(article["Published URL"]), required=False
+            )
+        if (
+            check_duplicates
+            and existing_post is not None
+            and article_url_slug != final_slug
+            and not force
+        ):
+            raise ClientError(f"Static post with slug '{final_slug}' already exists")
+
+        prior_corpus_sha256 = _static_corpus_sha256()
+        runtime = {
+            "schema_version": "ata-static-preview-runtime/v1",
+            "page_id": page_id,
+            "source_revision": source_revision,
+            "idempotency_key": idempotency_key,
+            "slug": final_slug,
+            "status": "preview",
+            "publish_date": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+            "failure_stage": None,
+            "failure_message": None,
+            "rollback_error": None,
+            "corpus_restored": False,
+        }
+        rollback_state = {
+            "prior_state": {"corpus_sha256": prior_corpus_sha256},
+            "effects": {"corpus_writes": 0},
+        }
+        _atomic_write_json(paths["runtime"], runtime)
+
+        current_stage = "build-lock acquisition"
+        failure: Optional[ClientError] = None
+        cleanup_errors: List[str] = []
+        deployment: Optional[Dict[str, Any]] = None
+        preview_release_ref: Optional[Dict[str, str]] = None
+        staging_attempted = False
+
+        try:
+            with self._static_build_lock(paths, token_release_ref=None) as build_token_handle:
+                try:
+                    current_stage = "staging"
+                    staging_attempted = True
+                    stage = self._stage_static_article(
+                        page_id=page_id,
+                        slug=final_slug,
+                        article=article,
+                        markdown_content=markdown_content,
+                        image_path=image_path,
+                        publish_date=runtime["publish_date"],
+                        paths=paths,
+                    )
+                    rollback_state["effects"]["corpus_writes"] = 1
+                    runtime.update(stage)
+                    _atomic_write_json(paths["runtime"], runtime)
+
+                    current_stage = "media"
+                    media = self._upload_static_media(stage)
+                    media["inline"] = self._upload_static_inline_media(markdown_content)
+                    runtime["media"] = media
+                    _atomic_write_json(paths["runtime"], runtime)
+
+                    current_stage = "build"
+                    build = self._run_static_build(None, stage["corpus_sha256"])
+                    preview_release_ref = {
+                        "release_id": build["manifest"]["release_id"],
+                        "contract_hash": build["manifest"]["contract_hash"],
+                    }
+                    runtime["preview_release_ref"] = preview_release_ref
+                    runtime["preview_build_sha256"] = build["build_sha256"]
+                    self._sync_build_token(
+                        build_token_handle,
+                        build,
+                        runtime=runtime,
+                        paths=paths,
+                    )
+
+                    current_stage = "preview upload"
+                    deployment = self._deploy_static_preview(
+                        idempotency_key,
+                        source_revision,
+                        preview_release_ref["release_id"],
+                    )
+                    self._validate_static_deployment_metadata(deployment)
+                    runtime.update(deployment)
+                    _atomic_write_json(paths["runtime"], runtime)
+                except Exception as exc:
+                    failure = exc if isinstance(exc, ClientError) else ClientError(str(exc))
+                    runtime["failure_stage"] = current_stage
+                    runtime["failure_message"] = str(failure)
+                    _atomic_write_json(paths["runtime"], runtime)
+                finally:
+                    if staging_attempted:
+                        try:
+                            current_stage = "corpus restore"
+                            self._restore_static_corpus(runtime, rollback_state, paths)
+                            actual_corpus_sha256 = _static_corpus_sha256()
+                            if actual_corpus_sha256 != prior_corpus_sha256:
+                                raise ClientError(
+                                    "Preview corpus restore hash mismatch: "
+                                    f"expected {prior_corpus_sha256}, got {actual_corpus_sha256}"
+                                )
+                            runtime["corpus_restored"] = True
+                            _atomic_write_json(paths["runtime"], runtime)
+                        except Exception as exc:
+                            cleanup_errors.append(f"corpus restore: {exc}")
+
+                        if runtime.get("corpus_restored") is True:
+                            try:
+                                current_stage = "restored corpus build"
+                                restored_build = self._run_static_build(
+                                    None,
+                                    prior_corpus_sha256,
+                                )
+                                runtime["restored_release_ref"] = {
+                                    "release_id": restored_build["manifest"]["release_id"],
+                                    "contract_hash": restored_build["manifest"]["contract_hash"],
+                                }
+                                runtime["restored_build_sha256"] = restored_build[
+                                    "build_sha256"
+                                ]
+                                self._sync_build_token(
+                                    build_token_handle,
+                                    restored_build,
+                                    runtime=runtime,
+                                    paths=paths,
+                                )
+                                _atomic_write_json(paths["runtime"], runtime)
+                            except Exception as exc:
+                                cleanup_errors.append(f"restored corpus build: {exc}")
+        except Exception as exc:
+            if failure is None:
+                failure = exc if isinstance(exc, ClientError) else ClientError(str(exc))
+
+        if cleanup_errors:
+            runtime["rollback_error"] = "; ".join(cleanup_errors)
+            _atomic_write_json(paths["runtime"], runtime)
+            if failure is not None:
+                raise ClientError(
+                    f"Static preview failed during {runtime.get('failure_stage') or current_stage}: "
+                    f"{failure}; preview cleanup failed: {runtime['rollback_error']}"
+                ) from failure
+            raise ClientError(
+                "Static preview deployed but cleanup failed: "
+                f"{runtime['rollback_error']}"
+            )
+
+        if failure is not None:
+            raise ClientError(
+                f"Static preview failed during {runtime.get('failure_stage') or current_stage}: "
+                f"{failure}"
+            ) from failure
+        if deployment is None or preview_release_ref is None:
+            raise ClientError("Static preview completed without a deployment receipt")
+
+        preview_url = f"{deployment['deployment_url']}/{final_slug}/"
+        runtime["preview_url"] = preview_url
+        runtime["completed_at"] = (
+            datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+        )
+        _atomic_write_json(paths["runtime"], runtime)
+        return {
+            "notion_page_id": page_id,
+            "status": "preview",
+            "preview_url": preview_url,
+            "static_url": preview_url,
+            "deployment_id": deployment["deployment_id"],
+            "deployment_url": deployment["deployment_url"],
+            "promoted": False,
+            "release_ref": preview_release_ref,
+            "source_revision": source_revision,
+            "idempotency_key": idempotency_key,
+            "notion_updated": False,
+            "corpus_restored": True,
+            "warnings": [],
+        }
+
     def _schedule_article(
         self,
         *,
@@ -4022,10 +4287,10 @@ class AtaBlogClient:
         """
         if date is not None and auto_schedule:
             raise ClientError("Use either --date or --auto-schedule, not both")
-        if status == "publish":
+        if status in {"publish", "preview"}:
             raise ClientError(
-                "--status publish cannot be combined with --date or --auto-schedule: "
-                "scheduling never promotes"
+                f"--status {status} cannot be combined with --date or --auto-schedule: "
+                "scheduling never deploys or promotes"
             )
         if date is not None:
             self._parse_schedule_date(date)
@@ -4083,14 +4348,17 @@ class AtaBlogClient:
         Schedule a Notion article, or publish it to the static site.
 
         With date or auto_schedule this only schedules: it validates the post
-        and sets Status=Scheduled plus Publish Date. Otherwise it runs the
-        static transaction: build, deploy, and (status="publish") promote.
+        and sets Status=Scheduled plus Publish Date. status="preview" stages,
+        builds, and deploys a hosted Cloudflare Pages preview, then restores
+        the local corpus without writing Notion. The remaining static path
+        preserves the existing draft/publish transaction behavior; publish
+        additionally promotes the candidate to production.
         The URL slug is the page's Notion `Slug`, or derived from its title
         when that property is empty.
 
         Args:
             page_id: Notion page ID
-            status: draft or publish
+            status: draft, preview, or publish
             date: Schedule-only: explicit slot (ISO 8601 with a UTC offset)
             auto_schedule: Schedule-only: pick the next available slot
             check_duplicates: If True, error if slug already exists
@@ -4103,8 +4371,10 @@ class AtaBlogClient:
         or the static transaction result dict (static_url, deployment_id,
         promoted, journal state, effects).
         """
-        if status not in {"draft", "publish"}:
-            raise ClientError("Static publish status must be draft or publish")
+        if status not in {"draft", "preview", "publish"}:
+            raise ClientError(
+                "Static publish status must be draft, preview, or publish"
+            )
         schedule_window = self._parse_schedule_window(schedule_after, schedule_before)
         # An empty --date (an unset shell variable) is still a schedule request:
         # it must fail as a bad date, never fall through to a promotion.
@@ -4125,6 +4395,13 @@ class AtaBlogClient:
         if schedule_window is not None:
             raise ClientError(
                 "--schedule-after/--schedule-before require --auto-schedule or --date"
+            )
+        if status == "preview":
+            return self._preview_static_transaction(
+                page_id=page_id,
+                check_duplicates=check_duplicates,
+                featured_image=featured_image,
+                force=force,
             )
         return self._publish_static_transaction(
             page_id=page_id,
