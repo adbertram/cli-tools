@@ -9,6 +9,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: social-video-publishing-validation
+  cancel-in-progress: true
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -32,6 +36,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          uv run --project _repo/skills/cli-tool --with pytest python -m pytest             _repo/skills/cli-tool/tests/test_parse_help_commands.py -q
+
           for tool in facebook tiktok youtube; do
             echo "=== $tool: install ==="
             ./_repo/_scripts/install-cli-tool.sh "$tool"
@@ -63,4 +69,6 @@ jobs:
             exit 0
           fi
           git commit -m "chore: refresh social video CLI metadata"
+          git fetch origin feat/social-video-publishing
+          git rebase origin/feat/social-video-publishing
           git push origin HEAD:feat/social-video-publishing
