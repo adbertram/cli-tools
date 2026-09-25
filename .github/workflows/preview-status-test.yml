@@ -17,7 +17,8 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
-      - uses: astral-sh/setup-uv@v8
+      - name: Install uv
+        run: python -m pip install uv
       - name: Install ata-blog
         run: ./_repo/_scripts/install-cli-tool.sh _personal/ata-blog
       - name: Run static publisher tests
