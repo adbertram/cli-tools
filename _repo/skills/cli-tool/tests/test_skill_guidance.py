@@ -112,73 +112,26 @@ def test_service_router_requires_wrapper_contract_before_raw_syntax():
     assert "prove the wrapper command shape first" in text_words
 
 
-def test_service_router_resolves_bare_name_project_scoped_service_skill():
-    """A project-scoped service CLI is registered under its bare tool name.
+def test_service_router_resolves_exact_cli_bundle_including_symlinks():
+    """Every service skill bundle is `<tool>-cli`; project-scoped ones are symlinks.
 
-    `coursecraft` is registered in `_repo/docs/cli_tools.md` with
-    `<cli-tools-root>/coursecraft` linked into the CourseCraft project, and its
-    repo-owned service skill is `_repo/skills/coursecraft` with an adjacent
-    `usage.json`. A router that resolves only `<tool>-cli` demands a directory
-    the repo does not have, so a `coursecraft` service operation dead-ends on
-    `_repo/skills/coursecraft-cli/SKILL.md` and reports it missing.
+    `coursecraft-cli` links into the CourseCraft project, so the router resolves
+    exactly `<normalized-name>-cli` and its fallback listing must follow
+    symlinks (`find -L`) or it hides that bundle.
     """
     text = _read("workflows/skill-router.md")
     skills_root = SKILL_ROOT.parent
 
-    assert "<service-skill-dir>" in text
-    assert "`<normalized-name>-cli`" in text
-    assert "for a project-scoped service CLI that cli-tools" in text
-    assert "registers under the bare tool name" in text
-    assert (
-        "Resolve exactly to `<cli-tools-root>/_repo/skills/<normalized-name>/SKILL.md`"
-        not in text
-    )
+    assert "Resolve exactly to `<cli-tools-root>/_repo/skills/<normalized-name>/SKILL.md`" in text
+    assert "find -L" in text
+    assert "-name '*-cli'" in text
 
-    coursecraft_skill = skills_root / "coursecraft"
+    coursecraft_skill = skills_root / "coursecraft-cli"
     assert (coursecraft_skill / "SKILL.md").is_file()
     assert (coursecraft_skill / "usage.json").is_file()
 
-
-def test_service_router_resolves_bare_tool_name_skill_bundles():
-    """`coursecraft` ships no `<name>-cli` bundle, so the router must accept the bare name.
-
-    A router that only probes `<name>-cli` reports a real repo-owned service
-    skill as missing.
-    """
-    text = _read("workflows/skill-router.md")
-    text_words = _words(text)
-
-    assert "<cli-tools-root>/_repo/skills/<name>-cli/SKILL.md" in text
-    assert "<cli-tools-root>/_repo/skills/<name>/SKILL.md" in text
-    assert "Some repo-owned service skills use the bare CLI name instead" in text_words
-    assert "<cli-tools-root>/_repo/skills/coursecraft/SKILL.md" in text
-    assert "<cli-tools-root>/_repo/skills/coursecraft/usage.json" in text
-    assert "no `<cli-tools-root>/_repo/skills/coursecraft-cli` folder exists" in text
-    assert (
-        "A bare-name bundle is a first-class contract location, not a fallback"
-        in text_words
-    )
-    assert "Check both candidates before reporting a service skill as missing" in text_words
-    assert "| `coursecraft` | `<cli-tools-root>/_repo/skills/coursecraft/SKILL.md` |" in text
-
-
-def test_service_router_lists_bundles_by_command_map_not_cli_suffix():
-    """Service-skill discovery must find every bundle, including bare-name ones."""
-    text = _read("workflows/skill-router.md")
-
-    assert "-maxdepth 2 -mindepth 2 -type f -name usage.json" in text
-    assert "-name '*-cli'" not in text
-    assert "holds both `SKILL.md` and an adjacent `usage.json`" in text
-
-    skills_root = SKILL_ROOT.parent
-
-    assert (skills_root / "coursecraft" / "SKILL.md").is_file()
-    assert (skills_root / "coursecraft" / "usage.json").is_file()
-    assert not (skills_root / "coursecraft-cli").exists()
-
     discovered = sorted(path.parent.name for path in skills_root.glob("*/usage.json"))
-    assert "coursecraft" in discovered
-    assert "cli-tool" not in discovered
+    assert all(name.endswith("-cli") for name in discovered)
 
 
 def test_notion_pages_get_out_file_is_not_json_stdout():
