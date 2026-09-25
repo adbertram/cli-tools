@@ -192,11 +192,63 @@ def test_new_cli_tool_creates_runtime_default_profile_without_source_env(
         config_env = config_env_path_for_tool(tool_name)
         assert config_env.exists()
         assert _read_env_file(config_env)["BASE_URL"] == "https://api.example.test"
+
+        pyproject = tomllib.loads((tool_dir / "pyproject.toml").read_text())
+        assert pyproject["tool"]["uv"]["sources"]["cli-tools-shared"]["path"] == "../_repo/cli-tools-shared"
     finally:
         CLI_TOOLS_DOC.write_text(original_cli_tools_doc)
         shutil.rmtree(tool_dir, ignore_errors=True)
         shutil.rmtree(data_home / "cli-tools" / tool_name, ignore_errors=True)
 
+
+def test_new_cli_tool_personal_creates_under_personal_with_correct_shared_path(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    tool_name = "scaffold-personal-regression"
+    root_tool_dir = REPO_ROOT / tool_name
+    tool_dir = REPO_ROOT / "_personal" / tool_name
+    data_home = tmp_path / "data"
+    home = tmp_path / "home"
+    original_cli_tools_doc = CLI_TOOLS_DOC.read_text()
+    monkeypatch.setenv("XDG_DATA_HOME", str(data_home))
+    monkeypatch.setenv("HOME", str(home))
+    env = os.environ.copy()
+
+    try:
+        result = subprocess.run(
+            [
+                str(SKILL_ROOT / "scripts/new-cli-tool"),
+                "--name",
+                tool_name,
+                "--type",
+                "api",
+                "--base-url",
+                "https://api.example.test",
+                "--personal",
+                "--no-install",
+            ],
+            cwd=REPO_ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert tool_dir.is_dir()
+        assert not root_tool_dir.exists()
+
+        pyproject = tomllib.loads((tool_dir / "pyproject.toml").read_text())
+        assert (
+            pyproject["tool"]["uv"]["sources"]["cli-tools-shared"]["path"]
+            == "../../_repo/cli-tools-shared"
+        )
+    finally:
+        CLI_TOOLS_DOC.write_text(original_cli_tools_doc)
+        shutil.rmtree(tool_dir, ignore_errors=True)
+        shutil.rmtree(root_tool_dir, ignore_errors=True)
+        shutil.rmtree(data_home / "cli-tools" / tool_name, ignore_errors=True)
 
 def test_new_cli_tool_bounds_readme_description_and_moves_docs_to_docs_section(
     tmp_path: Path,

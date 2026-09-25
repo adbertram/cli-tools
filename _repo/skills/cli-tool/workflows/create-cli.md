@@ -260,6 +260,10 @@ Execute the appropriate command:
   --base-url <url> \
   --description "<description>"
 
+# Add --personal to any scaffold command when the tool belongs under _personal/<name>.
+# The generated pyproject.toml automatically uses the correct relative path to
+# _repo/cli-tools-shared for personal tools.
+
 # For Wrapper CLI:
 <cli-tools-root>/_repo/skills/cli-tool/scripts/new-cli-tool \
   --name <name> \
@@ -270,6 +274,7 @@ Execute the appropriate command:
 ```
 
 **Script options:**
+- `--personal` - Create the CLI under `<cli-tools-root>/_personal/<name>` instead of the repo root
 - `--auth-type` - Authentication type (repeatable for multiple types, AND semantics): `none`, `api_key` (default), `personal_access_token`, `oauth`, `oauth_authorization_code`, `username_password`, `browser_session`. Use `none` to skip auth scaffolding entirely. Example: `--auth-type api_key --auth-type browser_session`
 - `--no-venv` - Skip virtual environment creation
 - `--no-aliases` - Skip symlink/PowerShell setup

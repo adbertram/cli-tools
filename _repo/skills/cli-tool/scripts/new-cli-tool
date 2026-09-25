@@ -7,6 +7,7 @@ Creates a new CLI tool from templates with all scaffolding in place.
 Usage:
     new-cli-tool --name myservice --type api --base-url https://api.myservice.com
     new-cli-tool --name shopsite --type browser --base-url https://shopsite.com
+    new-cli-tool --name internal --type api --base-url https://api.internal.example --personal
 """
 
 import argparse
@@ -421,6 +422,7 @@ Examples:
   %(prog)s --name lastpass --type wrapper --cli-command lpass --docs-url https://github.com/lastpass/lastpass-cli
   %(prog)s --name myapi --type api --base-url https://api.example.com --description "My API client"
   %(prog)s --name mytool --type wrapper --cli-command mytool --auth-type none --description "Wrapper with no auth"
+  %(prog)s --name internal --type api --base-url https://api.internal.example --personal
         """,
     )
     
@@ -466,6 +468,11 @@ Examples:
         "--no-install",
         action="store_true",
         help="Skip uv tool install",
+    )
+    parser.add_argument(
+        "--personal",
+        action="store_true",
+        help="Create the CLI under _personal/<name> instead of the repo root",
     )
     args = parser.parse_args()
 
@@ -526,7 +533,8 @@ Examples:
     
     # Set paths
     template_dir = TEMPLATES_DIR / args.type
-    output_dir = CLI_TOOLS_DIR / name
+    output_root = CLI_TOOLS_DIR / "_personal" if args.personal else CLI_TOOLS_DIR
+    output_dir = output_root / name
     
     # Check template exists
     if not template_dir.exists():
@@ -686,6 +694,9 @@ PASSWORD=secret://{name}-password
         "{{AUTH_PROFILES_SECTION}}": auth_profiles_section,
         "{{AUTH_CONFIG_SECTION}}": auth_config_section,
         "{{CACHE_SECTION}}": cache_section,
+        "{{cli_tools_shared_path}}": (
+            "../../_repo/cli-tools-shared" if args.personal else "../_repo/cli-tools-shared"
+        ),
     }
     
     print(f"\n\033[1m Creating CLI tool: {name}\033[0m")

@@ -80,7 +80,7 @@ These principles apply to ALL CLI tool operations. They cannot be skipped.
 <principle name="Always Use new-cli-tool Script">
 **Never create CLI files manually.** Use the scaffolding script:
 ```bash
-<cli-tools-root>/_repo/skills/cli-tool/scripts/new-cli-tool --name <name> --type <api|browser|wrapper> [options]
+<cli-tools-root>/_repo/skills/cli-tool/scripts/new-cli-tool --name <name> --type <api|browser|wrapper> [--personal] [options]
 ```
 This handles: directory structure, uv tool installation (isolated venv + symlink), and placement inside the parent cli-tools monorepo.
 </principle>
@@ -803,6 +803,7 @@ Omit local models when parsed/API records can flow straight to the documented ou
 **Common Commands:**
 ```
 <cli-tools-root>/_repo/skills/cli-tool/scripts/new-cli-tool --name myservice --type api --base-url https://api.example.com
+<cli-tools-root>/_repo/skills/cli-tool/scripts/new-cli-tool --name internal-tool --type api --base-url https://api.example.com --personal
 <cli-tools-root>/_repo/skills/cli-tool/scripts/new-cli-tool --name myservice --type api --base-url https://api.example.com --auth-type personal_access_token
 <cli-tools-root>/_repo/skills/cli-tool/scripts/new-cli-tool --name mysite --type browser --base-url https://mysite.com
 <cli-tools-root>/_repo/skills/cli-tool/scripts/new-cli-tool --name mysite --type browser --base-url https://mysite.com --auth-type oauth --auth-type browser_session
