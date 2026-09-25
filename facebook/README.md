@@ -610,3 +610,22 @@ CLI_COMMAND=playwright
 ## License
 
 MIT
+
+
+## Page Reels Publishing
+
+Use a Graph API OAuth profile for Page discovery and Reels publishing. Existing
+Marketplace, Groups, and Messenger commands continue to use browser-session profiles.
+
+```bash
+facebook auth profiles create graph --auth-type oauth_authorization_code
+facebook auth login --profile graph --credential-type oauth_authorization_code
+
+facebook pages list --profile graph --table
+facebook pages get PAGE_ID --profile graph
+facebook reels publish short.mp4 --page PAGE_ID --description "Caption" --profile graph
+facebook reels status VIDEO_ID --page PAGE_ID --profile graph
+```
+
+The CLI obtains Page access tokens through the authenticated user token and never
+prints those Page tokens in command output.

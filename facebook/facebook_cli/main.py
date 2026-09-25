@@ -13,16 +13,18 @@ def create_facebook_app():
     from cli_tools_shared.command_registry import register_commands
 
     from .config import get_config
-    from .commands import groups, marketplace, messenger
+    from .commands import groups, marketplace, messenger, pages, reels
 
     app = create_app(
         name="facebook",
-        help="Facebook CLI - Marketplace, Messenger, and more via browser automation",
+        help="Facebook CLI - browser workflows plus Graph API Page/Reels publishing",
         version=__version__,
     )
     register_commands(app, get_config, groups, name="groups", help="Manage Facebook Groups")
     register_commands(app, get_config, marketplace, name="marketplace", help="Search and browse Facebook Marketplace")
     register_commands(app, get_config, messenger, name="messenger", help="Facebook Messenger conversations and messages")
+    register_commands(app, get_config, pages, name="pages", help="Manage Facebook Pages through the Graph API")
+    register_commands(app, get_config, reels, name="reels", help="Publish and inspect Facebook Page Reels")
     app.add_typer(create_auth_app(get_config, tool_name="facebook"), name="auth", help="Manage Facebook authentication")
     app.add_typer(create_cache_app(get_config), name="cache")
     return app
