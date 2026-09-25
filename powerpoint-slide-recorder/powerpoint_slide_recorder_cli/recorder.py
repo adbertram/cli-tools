@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import os
 import posixpath
 import re
 import shlex
@@ -143,9 +144,14 @@ VOLUMEDETECT_MAX_VOLUME_PATTERN = re.compile(r"max_volume:\s*(-?\d+(?:\.\d+)?)\s
 OSASCRIPT_TIMEOUT_SECONDS = 30
 DEMO_ENVIRONMENT_RECORDING_PREP_TIMEOUT_SECONDS = 120
 DEMO_ENVIRONMENT_PWSH_PATH = Path("/usr/local/bin/pwsh")
+# The generic macOS host-automation module has exactly one home: ``prep/DemoEnvironmentAutomation``
+# inside RONIN's checkout ($RONIN_HOME on the recording host, the local GitRepos/ronin clone on
+# the laptop). This relative path resolves against that checkout root, never against a
+# CourseCraft repo — CourseCraft's skill tree no longer holds a copy of the module.
 DEMO_ENVIRONMENT_AUTOMATION_MODULE_RELATIVE_PATH = Path(
-    ".agents/skills/demo-environment-automation/tools/DemoEnvironmentAutomation/DemoEnvironmentAutomation.psd1"
+    "prep/DemoEnvironmentAutomation/DemoEnvironmentAutomation.psd1"
 )
+RONIN_HOME_ENV_VAR = "RONIN_HOME"
 # Bounded number of open/dismiss/recheck cycles open_deck() runs so a transient
 # benign PowerPoint startup dialog cannot block the recording indefinitely.
 OPEN_DECK_DISMISS_ATTEMPTS = 8
@@ -728,40 +734,72 @@ def require_path(path, description):
     return resolved_path
 
 
-def resolve_coursecraft_repo_root(start_path=None):
-    """Find the CourseCraft repo root that owns the demo-environment automation module.
+def demo_environment_automation_manifest_path(ronin_home):
+    return Path(ronin_home).expanduser() / DEMO_ENVIRONMENT_AUTOMATION_MODULE_RELATIVE_PATH
 
-    ``start_path`` is the recorder's ``--coursecraft-repo-root``. When it is omitted the
-    search starts at the current working directory, which is the only implicit input the
-    recorder takes; the failure names that flag so a caller outside the repo tree does not
-    have to guess which directory the message is about.
+
+def is_demo_environment_automation_module_present(ronin_home):
+    return demo_environment_automation_manifest_path(ronin_home).is_file()
+
+
+def resolve_ronin_home(start_path=None, env=None):
+    """Find the Ronin checkout that owns the demo-environment automation module.
+
+    Resolution order, first hit wins:
+
+    1. ``RONIN_HOME`` — the recording host exports it, so a remote run needs no flag.
+    2. ``start_path`` — the recorder's ``--ronin-home`` (``--coursecraft-repo-root`` is
+       still accepted as a deprecated alias for the same value).
+    3. An upward search from the current working directory for a checkout that holds
+       ``prep/DemoEnvironmentAutomation/DemoEnvironmentAutomation.psd1``.
+
+    The failure names the flag and the environment variable instead of a directory the
+    caller never passed, so a run launched outside any checkout gets an actionable error.
     """
-    path = Path.cwd() if start_path is None else Path(start_path).expanduser()
+    environment = os.environ if env is None else env
+    attempted = []
+
+    env_home = environment.get(RONIN_HOME_ENV_VAR)
+    if env_home:
+        if is_demo_environment_automation_module_present(env_home):
+            return Path(env_home).expanduser().resolve()
+        attempted.append(f"{RONIN_HOME_ENV_VAR}={Path(env_home).expanduser()}")
+
+    if start_path is not None:
+        if is_demo_environment_automation_module_present(start_path):
+            return Path(start_path).expanduser().resolve()
+        attempted.append(f"--ronin-home={Path(start_path).expanduser()}")
+
+    path = Path.cwd()
     if path.is_file():
         path = path.parent
     path = path.resolve()
     for candidate in [path, *path.parents]:
-        if (candidate / "course-pipeline.json").is_file():
+        if is_demo_environment_automation_module_present(candidate):
             return candidate
+
+    tried = f" (tried {', '.join(attempted)})" if attempted else ""
     raise FileNotFoundError(
-        f"CourseCraft repo root not found from: {path} "
-        "(no course-pipeline.json in that directory or any parent). "
-        "Pass --coursecraft-repo-root PATH, or run the command from inside the CourseCraft repo."
+        f"Demo environment automation module not found: "
+        f"{DEMO_ENVIRONMENT_AUTOMATION_MODULE_RELATIVE_PATH} is missing from the Ronin checkouts searched{tried} "
+        f"and from {path} and its parents. "
+        f"Set {RONIN_HOME_ENV_VAR} to the Ronin checkout, pass --ronin-home RONIN_HOME, "
+        f"or run the command from inside the Ronin checkout."
     )
 
 
-def resolve_demo_environment_automation_module_path(coursecraft_repo_root=None):
-    return resolve_coursecraft_repo_root(coursecraft_repo_root) / DEMO_ENVIRONMENT_AUTOMATION_MODULE_RELATIVE_PATH
+def resolve_demo_environment_automation_module_path(ronin_home=None):
+    return demo_environment_automation_manifest_path(resolve_ronin_home(ronin_home))
 
 
 def powershell_single_quoted(value):
     return "'" + str(value).replace("'", "''") + "'"
 
 
-def run_demo_environment_recording_prep(coursecraft_repo_root=None):
+def run_demo_environment_recording_prep(ronin_home=None):
     pwsh_path = require_path(DEMO_ENVIRONMENT_PWSH_PATH, "PowerShell executable for demo environment prep")
     module_path = require_path(
-        resolve_demo_environment_automation_module_path(coursecraft_repo_root),
+        resolve_demo_environment_automation_module_path(ronin_home),
         "Demo environment automation manifest",
     )
     script = "\n".join([
@@ -1199,9 +1237,9 @@ def build_config(args):
     items = load_items(args.items)
     requested_slide_numbers(items)
     prepared_items = validate_items(items, args.cue_marker)
-    coursecraft_repo_root = None
-    if args.coursecraft_repo_root is not None:
-        coursecraft_repo_root = str(Path(args.coursecraft_repo_root).expanduser().resolve())
+    ronin_home = None
+    if args.ronin_home is not None:
+        ronin_home = str(Path(args.ronin_home).expanduser().resolve())
     return {
         "deck_path": str(deck_path),
         "items": prepared_items,
@@ -1217,7 +1255,7 @@ def build_config(args):
         "slide_pause_seconds": args.slide_pause_seconds,
         "slideshow_start_seconds": args.slideshow_start_seconds,
         "cue_marker": args.cue_marker,
-        "coursecraft_repo_root": coursecraft_repo_root,
+        "ronin_home": ronin_home,
     }
 
 
@@ -2151,7 +2189,7 @@ def record(config):
             config["ffmpeg_video_input"],
         )
 
-        run_demo_environment_recording_prep(config["coursecraft_repo_root"])
+        run_demo_environment_recording_prep(config["ronin_home"])
 
         # Measure the live click steps BEFORE anything is captured. The probe opens the
         # deck and plays the requested range once, so PowerPoint state is recorded first

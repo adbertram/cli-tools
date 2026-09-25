@@ -49,14 +49,20 @@ Optional options:
 - `--recording-lead-seconds 1.0`
 - `--slide-pause-seconds 0.25`
 - `--slideshow-start-seconds 2.0`
-- `--coursecraft-repo-root PATH`; see Demo Environment Prep
+- `--ronin-home PATH`; the Ronin checkout holding the demo environment automation module; see Demo Environment Prep. `--coursecraft-repo-root` is a deprecated alias for the same option
 - `--table`
 
 ## Demo Environment Prep
 
-Before capture the recorder imports the CourseCraft `DemoEnvironmentAutomation` PowerShell module to enable Do Not Disturb and clear notifications. It finds that module by locating the CourseCraft repo root — the nearest directory containing `course-pipeline.json`.
+Before capture the recorder imports the shared `DemoEnvironmentAutomation` PowerShell module to enable Do Not Disturb and clear notifications. That module has exactly one home: `prep/DemoEnvironmentAutomation/` inside Ronin's checkout, so the recorder resolves the Ronin checkout — never a CourseCraft repo.
 
-Pass `--coursecraft-repo-root /path/to/CourseCraft` to name that root explicitly. When the option is omitted the recorder searches upward from the current working directory, so the command only works from inside the CourseCraft repo tree; otherwise it fails before recording with `CourseCraft repo root not found from: <cwd>`.
+Resolution order, first hit wins:
+
+1. `$RONIN_HOME`, when it is set and holds `prep/DemoEnvironmentAutomation/DemoEnvironmentAutomation.psd1`. The recording host exports it, so remote runs need no flag.
+2. `--ronin-home /path/to/ronin`, the explicit checkout root. `--coursecraft-repo-root` is still accepted as a deprecated alias for the same value, so existing callers keep working.
+3. A search upward from the current working directory for a checkout that holds `prep/DemoEnvironmentAutomation/DemoEnvironmentAutomation.psd1`, so a run started anywhere inside the Ronin checkout needs no flag.
+
+When none of the three finds the module the command fails before recording with `Demo environment automation module not found: prep/DemoEnvironmentAutomation/DemoEnvironmentAutomation.psd1 ... Set RONIN_HOME to the Ronin checkout, pass --ronin-home RONIN_HOME, or run the command from inside the Ronin checkout.`
 
 ## Resolution Guard
 

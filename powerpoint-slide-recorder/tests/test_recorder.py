@@ -1,6 +1,7 @@
 import contextlib
 import io
 import json
+import os
 import subprocess
 import tempfile
 import time
@@ -64,53 +65,95 @@ def slide_config(root, **overrides):
         "recording_lead_seconds": 1.0,
         "slide_pause_seconds": 0.75,
         "cue_marker": "||",
-        "coursecraft_repo_root": None,
+        "ronin_home": None,
     }
     config.update(overrides)
     return config
 
 
+def ronin_env(**overrides):
+    """Process environment for a resolution test, never carrying an ambient RONIN_HOME."""
+    env = {key: value for key, value in os.environ.items() if key != record.RONIN_HOME_ENV_VAR}
+    env.update(overrides)
+    return mock.patch.dict(record.os.environ, env, clear=True)
+
+
+def write_ronin_module(ronin_home):
+    """Create the DemoEnvironmentAutomation manifest in a checkout and return its path."""
+    manifest = ronin_home / record.DEMO_ENVIRONMENT_AUTOMATION_MODULE_RELATIVE_PATH
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text("@{}\n", encoding="utf-8")
+    return manifest
+
+
 class DemoEnvironmentPrepTests(unittest.TestCase):
-    def test_demo_environment_manifest_resolves_from_coursecraft_projection(self):
+    def test_demo_environment_manifest_resolves_from_ronin_checkout_above_cwd(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            manifest = root / record.DEMO_ENVIRONMENT_AUTOMATION_MODULE_RELATIVE_PATH
-            manifest.parent.mkdir(parents=True)
-            manifest.write_text("@{}", encoding="utf-8")
-            (root / "course-pipeline.json").write_text("{}", encoding="utf-8")
+            manifest = write_ronin_module(root)
 
-            with mock.patch.object(record.Path, "cwd", return_value=root / "nested"):
+            with ronin_env(), mock.patch.object(record.Path, "cwd", return_value=root / "prep" / "nested"):
                 self.assertEqual(record.resolve_demo_environment_automation_module_path(), manifest.resolve())
 
-    def test_demo_environment_manifest_requires_coursecraft_projection_root(self):
+    def test_demo_environment_manifest_requires_a_ronin_checkout(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            with mock.patch.object(record.Path, "cwd", return_value=Path(temp_dir)):
-                with self.assertRaisesRegex(FileNotFoundError, "CourseCraft repo root not found"):
+            with ronin_env(), mock.patch.object(record.Path, "cwd", return_value=Path(temp_dir)):
+                with self.assertRaisesRegex(FileNotFoundError, "Demo environment automation module not found"):
                     record.resolve_demo_environment_automation_module_path()
 
-    def test_demo_environment_manifest_resolves_from_explicit_repo_root_outside_cwd(self):
-        # The recorder is otherwise fully path-explicit; --coursecraft-repo-root must let a
+    def test_demo_environment_manifest_resolves_from_ronin_home_env_var(self):
+        # The recording host exports RONIN_HOME, so an unattended run resolves the
+        # module even though its working directory is nowhere near the checkout.
+        with tempfile.TemporaryDirectory() as temp_dir, tempfile.TemporaryDirectory() as unrelated_cwd:
+            manifest = write_ronin_module(Path(temp_dir))
+
+            with ronin_env(**{record.RONIN_HOME_ENV_VAR: temp_dir}), \
+                    mock.patch.object(record.Path, "cwd", return_value=Path(unrelated_cwd)):
+                resolved = record.resolve_demo_environment_automation_module_path()
+
+        self.assertEqual(resolved, manifest.resolve())
+
+    def test_ronin_home_env_var_wins_over_the_explicit_option(self):
+        with tempfile.TemporaryDirectory() as env_dir, tempfile.TemporaryDirectory() as explicit_dir:
+            env_manifest = write_ronin_module(Path(env_dir))
+            write_ronin_module(Path(explicit_dir))
+
+            with ronin_env(**{record.RONIN_HOME_ENV_VAR: env_dir}):
+                resolved = record.resolve_demo_environment_automation_module_path(explicit_dir)
+
+        self.assertEqual(resolved, env_manifest.resolve())
+
+    def test_stale_ronin_home_env_var_falls_through_to_the_explicit_option(self):
+        with tempfile.TemporaryDirectory() as stale_dir, tempfile.TemporaryDirectory() as explicit_dir:
+            explicit_manifest = write_ronin_module(Path(explicit_dir))
+
+            with ronin_env(**{record.RONIN_HOME_ENV_VAR: stale_dir}):
+                resolved = record.resolve_demo_environment_automation_module_path(explicit_dir)
+
+        self.assertEqual(resolved, explicit_manifest.resolve())
+
+    def test_demo_environment_manifest_resolves_from_explicit_ronin_home_outside_cwd(self):
+        # The recorder is otherwise fully path-explicit; --ronin-home must let a
         # caller record from any working directory without the cwd walk finding anything.
         with tempfile.TemporaryDirectory() as temp_dir, tempfile.TemporaryDirectory() as unrelated_cwd:
             root = Path(temp_dir)
-            manifest = root / record.DEMO_ENVIRONMENT_AUTOMATION_MODULE_RELATIVE_PATH
-            manifest.parent.mkdir(parents=True)
-            manifest.write_text("@{}", encoding="utf-8")
-            (root / "course-pipeline.json").write_text("{}", encoding="utf-8")
+            manifest = write_ronin_module(root)
 
-            with mock.patch.object(record.Path, "cwd", return_value=Path(unrelated_cwd)):
+            with ronin_env(), mock.patch.object(record.Path, "cwd", return_value=Path(unrelated_cwd)):
                 resolved = record.resolve_demo_environment_automation_module_path(root)
 
             self.assertEqual(resolved, manifest.resolve())
 
-    def test_coursecraft_repo_root_failure_names_the_explicit_option(self):
+    def test_ronin_home_failure_names_the_flag_and_env_var(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            with mock.patch.object(record.Path, "cwd", return_value=Path(temp_dir)):
-                with self.assertRaisesRegex(FileNotFoundError, "--coursecraft-repo-root"):
-                    record.resolve_coursecraft_repo_root()
+            with ronin_env(), mock.patch.object(record.Path, "cwd", return_value=Path(temp_dir)):
+                with self.assertRaisesRegex(FileNotFoundError, "--ronin-home"):
+                    record.resolve_ronin_home()
+                with self.assertRaisesRegex(FileNotFoundError, record.RONIN_HOME_ENV_VAR):
+                    record.resolve_ronin_home()
 
-    def test_demo_environment_prep_passes_explicit_repo_root_to_the_manifest_lookup(self):
-        root = Path("/tmp/course")
+    def test_demo_environment_prep_passes_explicit_ronin_home_to_the_manifest_lookup(self):
+        root = Path("/tmp/ronin")
         module_path = root / record.DEMO_ENVIRONMENT_AUTOMATION_MODULE_RELATIVE_PATH
 
         with mock.patch.object(
@@ -123,7 +166,7 @@ class DemoEnvironmentPrepTests(unittest.TestCase):
         self.assertEqual(resolve_manifest.call_args.args[0], root)
 
     def test_demo_environment_prep_runs_existing_focus_and_notification_helpers(self):
-        module_path = Path("/tmp/course/.agents/skills/demo-environment-automation/tools/DemoEnvironmentAutomation/DemoEnvironmentAutomation.psd1")
+        module_path = Path("/tmp/ronin/prep/DemoEnvironmentAutomation/DemoEnvironmentAutomation.psd1")
 
         with mock.patch.object(record, "resolve_demo_environment_automation_module_path", return_value=module_path), \
                 mock.patch.object(record, "require_path", side_effect=lambda path, description: Path(path)), \
@@ -143,7 +186,7 @@ class DemoEnvironmentPrepTests(unittest.TestCase):
         )
 
     def test_demo_environment_prep_failure_is_clear(self):
-        module_path = Path("/tmp/course/.agents/skills/demo-environment-automation/tools/DemoEnvironmentAutomation/DemoEnvironmentAutomation.psd1")
+        module_path = Path("/tmp/ronin/prep/DemoEnvironmentAutomation/DemoEnvironmentAutomation.psd1")
 
         with mock.patch.object(record, "resolve_demo_environment_automation_module_path", return_value=module_path), \
                 mock.patch.object(record, "require_path", side_effect=lambda path, description: Path(path)), \
@@ -927,7 +970,7 @@ Input #0, avfoundation, from '3':
                 return audio_process
             raise AssertionError(command)
 
-        self.demo_environment_prep.side_effect = lambda coursecraft_repo_root: events.append("demo_prep")
+        self.demo_environment_prep.side_effect = lambda ronin_home: events.append("demo_prep")
 
         with mock.patch.object(record, "probe_capture_dimensions", return_value=(1920, 1080)), \
                 mock.patch.object(record, "prepare", side_effect=fake_prepare), \
@@ -944,12 +987,12 @@ Input #0, avfoundation, from '3':
         self.assertEqual(events[:4], ["demo_prep", "state", "prepare", "slideshow"])
         self.assertEqual(events[4], "ffmpeg")
 
-    def test_record_forwards_configured_coursecraft_repo_root_to_demo_environment_prep(self):
+    def test_record_forwards_configured_ronin_home_to_demo_environment_prep(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             config = slide_config(
                 Path(temp_dir),
                 work_dir="/tmp/work",
-                coursecraft_repo_root="/tmp/coursecraft",
+                ronin_home="/tmp/ronin",
             )
         ffmpeg_process = FakeProcess([None, None, None], 0)
         audio_process = FakeProcess([None, 0], 0)
@@ -977,7 +1020,7 @@ Input #0, avfoundation, from '3':
                 mock.patch.object(subprocess, "Popen", side_effect=fake_popen):
             record.record(config)
 
-        self.assertEqual(self.demo_environment_prep.call_args.args[0], "/tmp/coursecraft")
+        self.assertEqual(self.demo_environment_prep.call_args.args[0], "/tmp/ronin")
 
     def test_record_aborts_clearly_when_demo_environment_prep_fails(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1749,7 +1792,7 @@ Input #0, avfoundation, from '3':
                     output_height=1080,
                     force_resolution=True,
                     force_aspect_ratio=(16, 9),
-                    coursecraft_repo_root=root,
+                    ronin_home=root,
                 )
 
         self.assertEqual(result.output_path, str(output))
@@ -1759,9 +1802,31 @@ Input #0, avfoundation, from '3':
         self.assertEqual(build_config.call_args.args[0].output_height, 1080)
         self.assertIs(build_config.call_args.args[0].force_resolution, True)
         self.assertEqual(build_config.call_args.args[0].force_aspect_ratio, (16, 9))
-        self.assertEqual(build_config.call_args.args[0].coursecraft_repo_root, root)
+        self.assertEqual(build_config.call_args.args[0].ronin_home, root)
 
-    def test_public_cli_forwards_coursecraft_repo_root(self):
+    def test_public_cli_forwards_ronin_home(self):
+        runner = CliRunner()
+
+        with mock.patch("powerpoint_slide_recorder_cli.commands.get_client") as get_client, \
+                mock.patch("powerpoint_slide_recorder_cli.commands.print_json"):
+            get_client.return_value.record.return_value = mock.Mock()
+            result = runner.invoke(app, [
+                "record",
+                "--deck", "/tmp/deck.pptx",
+                "--items", "/tmp/items.json",
+                "--output", "/tmp/out.mp4",
+                "--work-dir", "/tmp/work",
+                "--video-input", "3",
+                "--ronin-home", "/tmp/ronin",
+            ])
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(
+            get_client.return_value.record.call_args.kwargs["ronin_home"],
+            Path("/tmp/ronin"),
+        )
+
+    def test_public_cli_still_accepts_the_deprecated_coursecraft_repo_root_alias(self):
         runner = CliRunner()
 
         with mock.patch("powerpoint_slide_recorder_cli.commands.get_client") as get_client, \
@@ -1779,11 +1844,11 @@ Input #0, avfoundation, from '3':
 
         self.assertEqual(result.exit_code, 0)
         self.assertEqual(
-            get_client.return_value.record.call_args.kwargs["coursecraft_repo_root"],
+            get_client.return_value.record.call_args.kwargs["ronin_home"],
             Path("/tmp/coursecraft"),
         )
 
-    def test_public_cli_defaults_coursecraft_repo_root_to_cwd_discovery(self):
+    def test_public_cli_defaults_ronin_home_to_environment_and_cwd_discovery(self):
         runner = CliRunner()
 
         with mock.patch("powerpoint_slide_recorder_cli.commands.get_client") as get_client, \
@@ -1799,7 +1864,7 @@ Input #0, avfoundation, from '3':
             ])
 
         self.assertEqual(result.exit_code, 0)
-        self.assertIsNone(get_client.return_value.record.call_args.kwargs["coursecraft_repo_root"])
+        self.assertIsNone(get_client.return_value.record.call_args.kwargs["ronin_home"])
 
 
     def test_build_config_prepares_items_without_touching_powerpoint(self):
@@ -1837,17 +1902,17 @@ Input #0, avfoundation, from '3':
                 output_height=1080,
                 force_resolution=False,
                 force_aspect_ratio=None,
-                coursecraft_repo_root=root / "coursecraft",
+                ronin_home=root / "ronin",
             )
             config = record.build_config(args)
-            resolved_repo_root = str((root / "coursecraft").resolve())
+            resolved_ronin_home = str((root / "ronin").resolve())
 
         self.assertEqual(config["items"][0]["cue_count"], 2)
         self.assertEqual(config["output_width"], 1920)
         self.assertEqual(config["output_height"], 1080)
-        self.assertEqual(config["coursecraft_repo_root"], resolved_repo_root)
+        self.assertEqual(config["ronin_home"], resolved_ronin_home)
 
-    def test_build_config_leaves_coursecraft_repo_root_unset_for_cwd_discovery(self):
+    def test_build_config_leaves_ronin_home_unset_for_environment_and_cwd_discovery(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             transcript = root / "transcript.txt"
@@ -1880,11 +1945,11 @@ Input #0, avfoundation, from '3':
                 output_height=1080,
                 force_resolution=False,
                 force_aspect_ratio=None,
-                coursecraft_repo_root=None,
+                ronin_home=None,
             )
             config = record.build_config(args)
 
-        self.assertIsNone(config["coursecraft_repo_root"])
+        self.assertIsNone(config["ronin_home"])
 
 
 class LiveClickStepProbeTests(unittest.TestCase):
