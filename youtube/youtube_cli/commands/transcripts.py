@@ -4,6 +4,7 @@ COMMAND_CREDENTIALS = {
 }
 
 import typer
+from cli_tools_shared.output import command
 from typing import List
 from pathlib import Path
 
@@ -33,6 +34,7 @@ def _format_size(bytes: int) -> str:
 
 
 @app.command("download")
+@command
 def download(
     urls: List[str] = typer.Argument(..., help="YouTube video URL(s)"),
     output_dir: str = typer.Option(

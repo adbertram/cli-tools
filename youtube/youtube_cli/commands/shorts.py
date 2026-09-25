@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import typer
+from cli_tools_shared.output import command
 
 from ..models import PrivacyStatus
 from . import channel
@@ -20,6 +21,7 @@ COMMAND_CREDENTIALS = {
 
 
 @app.command("upload")
+@command
 def shorts_upload(
     file: Path = typer.Argument(..., exists=True, dir_okay=False, help="Short video file"),
     title: str = typer.Option(..., "--title", help="Video title"),

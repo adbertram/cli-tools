@@ -7,6 +7,7 @@ COMMAND_CREDENTIALS = {
 }
 
 import typer
+from cli_tools_shared.output import command
 from typing import List, Optional
 from pathlib import Path
 
@@ -76,6 +77,7 @@ def _format_upload_date(date_str: str) -> str:
 
 
 @chapters_app.command("validate")
+@command
 def chapters_validate(
     description: str = typer.Option(
         ...,
@@ -117,6 +119,7 @@ def chapters_validate(
 
 
 @app.command("list")
+@command
 def list_videos(
     channel: str = typer.Argument(..., help="Channel handle or URL"),
     table: bool = typer.Option(
@@ -183,6 +186,7 @@ def list_videos(
 
 
 @app.command("get")
+@command
 def get_video(
     url: str = typer.Argument(..., help="YouTube video URL"),
     table: bool = typer.Option(
@@ -219,6 +223,7 @@ def get_video(
 
 
 @app.command("download")
+@command
 def download(
     urls: Optional[List[str]] = typer.Argument(None, help="YouTube video URL(s)"),
     channel: Optional[str] = typer.Option(

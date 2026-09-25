@@ -18,6 +18,7 @@ from typing import List, Optional
 from urllib.parse import urlsplit, urlunsplit
 
 import typer
+from cli_tools_shared.output import command
 from cli_tools_shared.filters import apply_filters, apply_properties_filter
 from cli_tools_shared.output import (
     handle_error,
@@ -103,6 +104,7 @@ def _require_description_for_recommended_chapters(description: Optional[str]) ->
 
 
 @posts_app.command("create")
+@command
 def posts_create(
     message: str = typer.Option(..., "--message", "-m", help="Text message to post"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Fill the composer but do not click Post"),
@@ -212,6 +214,7 @@ def _video_detail_from_api(item: dict) -> VideoDetail:
 
 
 @videos_app.command("list")
+@command
 def videos_list(
     limit: int = typer.Option(50, "--limit", "-l", help="Maximum number of videos to list"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -304,6 +307,7 @@ def videos_list(
 
 
 @videos_app.command("get")
+@command
 def videos_get(
     video_id: str = typer.Argument(..., help="YouTube video ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -343,6 +347,7 @@ def videos_get(
 
 
 @videos_app.command("upload")
+@command
 def videos_upload(
     file: Path = typer.Argument(..., help="Path to video file to upload", exists=True, dir_okay=False),
     title: str = typer.Option(..., "--title", help="Video title"),
@@ -470,6 +475,7 @@ def videos_upload(
 
 
 @videos_app.command("update")
+@command
 def videos_update(
     video_id: str = typer.Argument(..., help="YouTube video ID"),
     title: Optional[str] = typer.Option(None, "--title", help="New video title"),
@@ -573,6 +579,7 @@ def videos_update(
 
 
 @videos_app.command("delete")
+@command
 def videos_delete(
     video_id: str = typer.Argument(..., help="YouTube video ID"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
