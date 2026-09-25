@@ -80,6 +80,25 @@ PERMISSION_GROUPS = (
         "Zone > Firewall Services > Edit",
     ),
     ("/purge_cache", "Zone > Cache Purge > Purge", "Zone > Cache Purge > Purge"),
+    (
+        "/email/routing/rules",
+        "Zone > Email Routing Rules > Read",
+        "Zone > Email Routing Rules > Edit",
+    ),
+    (
+        "/email/routing/addresses",
+        "Account > Email Routing Addresses > Read",
+        "Account > Email Routing Addresses > Edit",
+    ),
+    # Settings GET/enable/disable (/zones/{id}/email/routing[,/enable,/disable])
+    # authenticate with the Zone Settings permission group per Cloudflare's API
+    # docs, not a dedicated Email Routing group. Must stay after the two
+    # fragments above since "/email/routing" is their substring.
+    (
+        "/email/routing",
+        "Zone > Zone Settings > Read",
+        "Zone > Zone Settings > Edit",
+    ),
     ("/settings/", "Zone > Zone Settings > Read", "Zone > Zone Settings > Edit"),
     (
         "/r2/",
@@ -1240,6 +1259,323 @@ class CloudflareClient:
         )
 
         return response.get("result", {})
+
+    # ==================== Email Routing ====================
+    # Settings/enable/disable and rules are zone-scoped
+    # (/zones/{zone_id}/email/routing...). Destination addresses are
+    # account-scoped (/accounts/{account_id}/email/routing/addresses...)
+    # because one verified address can be reused as a forwarding target
+    # across every zone in the account. Rules and addresses return native
+    # Cloudflare dicts, matching the account_tokens/queues pattern used for
+    # every other resource group added after the original Pydantic-model DNS
+    # commands.
+
+    EMAIL_ROUTING_MAX_PER_PAGE = 50
+
+    @staticmethod
+    def _email_routing_result(response: Dict, resource: str) -> Dict:
+        """Require an identified object from an Email Routing envelope response."""
+        result = response.get("result")
+        if not isinstance(result, dict) or not result.get("id"):
+            raise ClientError(f"Invalid Email Routing {resource} response: expected result object with id")
+        return result
+
+    def _list_email_routing_collection(
+        self,
+        endpoint: str,
+        resource: str,
+        limit: int,
+        filters: Optional[List[str]],
+        base_params: Dict,
+    ) -> List[Dict]:
+        """Page an Email Routing list endpoint, applying filters before limit.
+
+        Shared by list_email_routing_rules and list_email_routing_addresses,
+        which are the same page/result_info/total_pages loop over different
+        endpoints, optional server-side filter params, and error text.
+        """
+        _validate_list_query(limit, filters, f"Email Routing {resource}")
+        items: List[Dict] = []
+        page = 1
+        while True:
+            response = self._envelope(
+                "GET",
+                endpoint,
+                params={**base_params, "page": page, "per_page": self.EMAIL_ROUTING_MAX_PER_PAGE},
+            )
+            rows = response.get("result")
+            if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+                raise ClientError(f"Invalid Email Routing {resource} response: expected result array of objects")
+            items.extend(apply_filters(rows, filters) if filters else rows)
+            if limit and len(items) >= limit:
+                return items[:limit]
+            info = response.get("result_info")
+            if not isinstance(info, dict) or info.get("page") != page or not isinstance(info.get("total_pages"), int):
+                raise ClientError(f"Invalid Email Routing {resource} pagination: expected page and total_pages")
+            if page >= info["total_pages"]:
+                return items
+            if not rows:
+                raise ClientError(f"Invalid Email Routing {resource} pagination: unexpectedly empty page")
+            page += 1
+
+    def get_email_routing_settings(self, zone_id: str) -> Dict:
+        """
+        Get Email Routing settings (enabled/disabled status) for a zone.
+
+        Args:
+            zone_id: The zone ID
+
+        Returns:
+            dict with id, enabled, name, status, created, modified, ...
+        """
+        response = self._envelope("GET", f"/zones/{zone_id}/email/routing")
+        return self._email_routing_result(response, "settings")
+
+    def enable_email_routing(self, zone_id: str) -> Dict:
+        """
+        Enable Email Routing for a zone.
+
+        Cloudflare adds and locks the MX and SPF records Email Routing needs.
+
+        Args:
+            zone_id: The zone ID
+
+        Returns:
+            dict with the updated settings (id, enabled, status, ...)
+        """
+        response = self._envelope("POST", f"/zones/{zone_id}/email/routing/enable")
+        return self._email_routing_result(response, "settings")
+
+    def disable_email_routing(self, zone_id: str) -> Dict:
+        """
+        Disable Email Routing for a zone.
+
+        Cloudflare removes the additional MX records Email Routing required.
+
+        Args:
+            zone_id: The zone ID
+
+        Returns:
+            dict with the updated settings (id, enabled, status, ...)
+        """
+        response = self._envelope("POST", f"/zones/{zone_id}/email/routing/disable")
+        return self._email_routing_result(response, "settings")
+
+    def list_email_routing_rules(
+        self,
+        zone_id: str,
+        limit: int = DEFAULT_LIST_LIMIT,
+        filters: Optional[List[str]] = None,
+        enabled: Optional[bool] = None,
+    ) -> List[Dict]:
+        """
+        List Email Routing rules for a zone, filtering before the result limit.
+
+        Args:
+            zone_id: The zone ID
+            limit: Maximum matching rules to return; 0 returns all
+            filters: Client-side filter strings (field:op:value)
+            enabled: Optional server-side filter by rule enabled status
+
+        Returns:
+            List of rule dicts (id, name, enabled, priority, matchers, actions, ...)
+        """
+        base_params: Dict = {} if enabled is None else {"enabled": enabled}
+        return self._list_email_routing_collection(
+            f"/zones/{zone_id}/email/routing/rules", "rule", limit, filters, base_params
+        )
+
+    def get_email_routing_rule(self, zone_id: str, rule_id: str) -> Dict:
+        """
+        Get a single Email Routing rule.
+
+        Args:
+            zone_id: The zone ID
+            rule_id: The rule ID
+
+        Returns:
+            dict with the rule (id, name, enabled, priority, matchers, actions, ...)
+        """
+        response = self._envelope("GET", f"/zones/{zone_id}/email/routing/rules/{rule_id}")
+        return self._email_routing_result(response, "rule")
+
+    def create_email_routing_rule(
+        self,
+        zone_id: str,
+        matchers: List[Dict],
+        actions: List[Dict],
+        name: Optional[str] = None,
+        enabled: Optional[bool] = None,
+        priority: Optional[int] = None,
+    ) -> Dict:
+        """
+        Create an Email Routing rule (custom address matcher -> action).
+
+        Args:
+            zone_id: The zone ID
+            matchers: Matcher objects, e.g. [{"type": "literal", "field": "to", "value": "sales@example.com"}]
+            actions: Action objects, e.g. [{"type": "forward", "value": ["dest@example.net"]}]
+            name: Optional rule name/description
+            enabled: Optional initial enabled status
+            priority: Optional priority (lower runs first)
+
+        Returns:
+            Created rule dict
+        """
+        data: Dict = {"matchers": matchers, "actions": actions}
+        if name is not None:
+            data["name"] = name
+        if enabled is not None:
+            data["enabled"] = enabled
+        if priority is not None:
+            data["priority"] = priority
+
+        response = self._envelope("POST", f"/zones/{zone_id}/email/routing/rules", data=data)
+        return self._email_routing_result(response, "rule")
+
+    def update_email_routing_rule(
+        self,
+        zone_id: str,
+        rule_id: str,
+        matchers: Optional[List[Dict]] = None,
+        actions: Optional[List[Dict]] = None,
+        name: Optional[str] = None,
+        enabled: Optional[bool] = None,
+        priority: Optional[int] = None,
+    ) -> Dict:
+        """
+        Update an Email Routing rule. Cloudflare's PUT edit endpoint accepts a
+        partial body; only the fields provided here are changed.
+
+        Args:
+            zone_id: The zone ID
+            rule_id: The rule ID
+            matchers: New matcher objects (if changing)
+            actions: New action objects (if changing)
+            name: New rule name (if changing)
+            enabled: New enabled status (if changing)
+            priority: New priority (if changing)
+
+        Returns:
+            Updated rule dict
+        """
+        data: Dict = {}
+        if matchers is not None:
+            data["matchers"] = matchers
+        if actions is not None:
+            data["actions"] = actions
+        if name is not None:
+            data["name"] = name
+        if enabled is not None:
+            data["enabled"] = enabled
+        if priority is not None:
+            data["priority"] = priority
+
+        response = self._envelope("PUT", f"/zones/{zone_id}/email/routing/rules/{rule_id}", data=data)
+        return self._email_routing_result(response, "rule")
+
+    def delete_email_routing_rule(self, zone_id: str, rule_id: str) -> Dict:
+        """
+        Delete an Email Routing rule.
+
+        Args:
+            zone_id: The zone ID
+            rule_id: The rule ID
+
+        Returns:
+            dict with the deleted rule ID
+        """
+        response = self._envelope("DELETE", f"/zones/{zone_id}/email/routing/rules/{rule_id}")
+        result = response.get("result")
+        return result if isinstance(result, dict) else {}
+
+    def list_email_routing_addresses(
+        self,
+        account_id: str,
+        limit: int = DEFAULT_LIST_LIMIT,
+        filters: Optional[List[str]] = None,
+        verified: Optional[bool] = None,
+    ) -> List[Dict]:
+        """
+        List Email Routing destination addresses for an account, filtering
+        before the result limit.
+
+        Args:
+            account_id: The account ID
+            limit: Maximum matching addresses to return; 0 returns all
+            filters: Client-side filter strings (field:op:value)
+            verified: Optional server-side filter by verification status
+
+        Returns:
+            List of address dicts (id, email, verified, created, modified, ...)
+        """
+        base_params: Dict = {} if verified is None else {"verified": verified}
+        return self._list_email_routing_collection(
+            f"/accounts/{account_id}/email/routing/addresses", "address", limit, filters, base_params
+        )
+
+    def get_email_routing_address(self, account_id: str, address_id: str) -> Dict:
+        """
+        Get a single Email Routing destination address.
+
+        Args:
+            account_id: The account ID
+            address_id: The destination address ID
+
+        Returns:
+            dict with the address (id, email, verified, created, modified, ...)
+        """
+        response = self._envelope("GET", f"/accounts/{account_id}/email/routing/addresses/{address_id}")
+        return self._email_routing_result(response, "address")
+
+    def create_email_routing_address(self, account_id: str, email: str) -> Dict:
+        """
+        Add an Email Routing destination address.
+
+        Cloudflare emails the address a verification link out of band; the
+        address cannot be used as a forward target until verified. There is no
+        documented API endpoint to resend that verification email or to mark
+        an address verified from the API, so this create is one POST attempt,
+        never replayed.
+
+        Args:
+            account_id: The account ID
+            email: The destination email address to add
+
+        Returns:
+            Created address dict (verified is null until the link is clicked)
+        """
+        if not email.strip():
+            raise ClientError("Destination email address must not be empty")
+        try:
+            response = self._envelope(
+                "POST",
+                f"/accounts/{account_id}/email/routing/addresses",
+                data={"email": email},
+                retry=False,
+            )
+        except ClientError as exc:
+            raise ClientError(
+                f"{exc}\nCreate was attempted once. Check "
+                f"'cloudflare email-routing addresses list {account_id} --limit 0' "
+                "for the requested address before retrying."
+            ) from exc
+        return self._email_routing_result(response, "address")
+
+    def delete_email_routing_address(self, account_id: str, address_id: str) -> Dict:
+        """
+        Delete an Email Routing destination address.
+
+        Args:
+            account_id: The account ID
+            address_id: The destination address ID
+
+        Returns:
+            dict with the deleted address ID
+        """
+        response = self._envelope("DELETE", f"/accounts/{account_id}/email/routing/addresses/{address_id}")
+        result = response.get("result")
+        return result if isinstance(result, dict) else {}
 
     # ==================== Account Workers Scripts ====================
     # Account-level endpoints need an account ID; scripts are listed,

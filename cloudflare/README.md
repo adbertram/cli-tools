@@ -199,6 +199,106 @@ cloudflare dns records update ZONE_ID RECORD_ID --content 5.6.7.8
 cloudflare dns records delete ZONE_ID RECORD_ID --force
 ```
 
+### Email Routing
+
+Custom-address-to-destination email forwarding for a zone (e.g. `sales@example.com`
+forwards to your personal inbox). Settings and rules are zone-scoped
+(`/zones/{zone_id}/email/routing...`); destination addresses are account-scoped
+(`/accounts/{account_id}/email/routing/addresses...`) because one verified
+address can be reused as a forward target across every zone in the account.
+
+#### Settings
+
+```bash
+# Check whether Email Routing is enabled for a zone
+cloudflare email-routing settings get example.com
+cloudflare email-routing settings get ZONE_ID --table
+
+# Enable Email Routing (Cloudflare adds and locks the required MX/SPF records)
+cloudflare email-routing settings enable example.com
+
+# Disable Email Routing (Cloudflare removes the MX records it added)
+cloudflare email-routing settings disable example.com
+```
+
+#### Rules
+
+Each rule matches a custom address (or every address, with `--catch-all`) and
+either forwards matched mail to a verified destination address or drops it.
+
+```bash
+# List rules for a zone
+cloudflare email-routing rules list example.com
+cloudflare email-routing rules list ZONE_ID --limit 0
+cloudflare email-routing rules list ZONE_ID --filter "name:contains:Support" --table
+cloudflare email-routing rules list ZONE_ID --enabled true
+
+# Get a single rule
+cloudflare email-routing rules get example.com RULE_ID
+
+# Create a rule: custom address -> forward
+cloudflare email-routing rules create example.com --address sales@example.com --forward-to me@gmail.com
+cloudflare email-routing rules create example.com --address sales@example.com --forward-to me@gmail.com --name "Sales inbox" --priority 0
+
+# Create a catch-all rule that drops everything not matched elsewhere
+cloudflare email-routing rules create example.com --catch-all --drop --name "Catch-all drop" --disabled
+
+# Advanced: pass raw matchers/actions JSON (e.g. for a "worker" action)
+cloudflare email-routing rules create example.com \
+  --matchers-json '[{"type":"literal","field":"to","value":"hooks@example.com"}]' \
+  --actions-json '[{"type":"worker","value":["my-worker"]}]'
+
+# Update a rule (only the fields provided are changed)
+cloudflare email-routing rules update example.com RULE_ID --disabled
+cloudflare email-routing rules update example.com RULE_ID --forward-to new-dest@example.net
+
+# Delete a rule
+cloudflare email-routing rules delete example.com RULE_ID --force
+```
+
+`rules list` follows Cloudflare page metadata (5-50 rows per page); `--filter`
+runs client-side before `--limit` (default 100; `--limit 0` returns all pages).
+`--enabled` is a server-side filter. Forward actions require exactly one
+already-verified destination address (see Destination Addresses below); create
+sends one POST attempt and is never replayed on failure.
+
+#### Destination Addresses
+
+Account-scoped. Cloudflare emails a verification link when an address is
+added; the address cannot be used as a forward target until that link is
+clicked.
+
+```bash
+# List destination addresses for an account
+cloudflare email-routing addresses list --limit 0
+cloudflare email-routing addresses list ACCOUNT_ID --verified false --table
+cloudflare email-routing addresses list ACCOUNT_ID --filter "email:contains:gmail"
+
+# Get a single address
+cloudflare email-routing addresses get ADDRESS_ID ACCOUNT_ID
+
+# Add a destination address (one POST attempt, never replayed)
+cloudflare email-routing addresses create me@gmail.com
+cloudflare email-routing addresses create me@gmail.com ACCOUNT_ID
+
+# Delete a destination address
+cloudflare email-routing addresses delete ADDRESS_ID ACCOUNT_ID --force
+```
+
+The `ACCOUNT` argument is optional on every address/rule command that accepts
+it; it defaults to the single account visible to the token.
+
+**API gap:** Cloudflare's Email Routing API has no documented endpoint to
+resend a destination address's verification email or to mark an address
+verified programmatically (only the dashboard offers "resend verification").
+No `verify`/`resend-verification` command is provided for this reason; resend
+from the Cloudflare dashboard if the link is lost.
+
+Read commands need the `Zone > Email Routing Rules > Read` (rules), `Zone >
+Zone Settings > Read` (settings), or `Account > Email Routing Addresses >
+Read` (addresses) permission group on the API token; writes need the matching
+`Edit` group.
+
 ### Analytics
 
 Zone traffic analytics from the Cloudflare GraphQL Analytics API. The `ZONE`
