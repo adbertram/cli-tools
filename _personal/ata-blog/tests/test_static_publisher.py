@@ -374,6 +374,8 @@ def test_preview_status_deploys_without_notion_write_and_restores_corpus(publish
     )
     assert result["static_url"] == result["preview_url"]
     assert result["promoted"] is False
+    assert result["notion_updated"] is False
+    assert result["corpus_restored"] is True
     assert counters["media"] == 1
     assert counters["deploy"] == 1
     assert counters["build"] == 2
