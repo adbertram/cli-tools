@@ -1,12 +1,7 @@
-"""Favorites (saved/bookmarked TikTok videos) commands for TikTok CLI.
-
-``list`` needs a logged-in TikTok session (see ``FavoritesClient`` in
-``client.py`` for why); ``get`` looks up one video's details by id or URL via
-the existing yt-dlp-backed client, which needs no login.
-"""
+"""Favorites (saved/bookmarked TikTok videos) commands for TikTok CLI."""
 COMMAND_CREDENTIALS = {
     "list": ["browser_session"],
-    "get": ["custom"],
+    "get": ["no_auth"],
 }
 
 from typing import List, Optional
@@ -29,7 +24,6 @@ from ..client import (
 )
 
 app = typer.Typer(help="Manage saved (favorited) TikTok videos")
-
 _COLUMNS = ["id", "url", "caption", "author", "saved_at"]
 
 
@@ -39,13 +33,12 @@ def list_favorites(
     table: bool = typer.Option(False, "--table", "-t", help="Display results as a table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of results"),
     filter: Optional[List[str]] = typer.Option(
-        None, "--filter", "-f", help="Filter: field:op:value (e.g., author:eq:someuser)"
+        None, "--filter", "-f", help="Filter: field:op:value"
     ),
     properties: Optional[str] = typer.Option(
         None, "--properties", "-p", help="Comma-separated fields to display"
     ),
 ):
-    """List all of the logged-in account's saved (favorited) TikTok videos."""
     if filter:
         try:
             validate_filters(filter)
@@ -53,7 +46,6 @@ def list_favorites(
             raise ClientError(str(e)) from e
 
     favorites = get_favorites_client().list_favorites(limit=limit)
-
     if filter:
         favorites = apply_filters(favorites, filter)
     if properties:
@@ -75,11 +67,9 @@ def get_favorite(
         None, "--properties", "-p", help="Comma-separated fields to display"
     ),
 ):
-    """Get one saved video's details by id or URL."""
     url = favorite_id_to_url(item)
     metadata = get_client().get_video_metadata(url)
     favorite = favorite_from_video_metadata(metadata)
-
     if properties:
         favorite = apply_properties_filter([favorite], properties)[0]
 
