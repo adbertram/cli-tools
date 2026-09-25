@@ -16,7 +16,7 @@ class AspectRatio(str, Enum):
     PORTRAIT = "9:16"
     STANDARD = "4:3"
     STANDARD_PORTRAIT = "3:4"
-    SOCIAL = "1.91:1"  # WordPress/Facebook optimized
+    SOCIAL = "1.91:1"  # Open Graph / Facebook link-preview optimized
 
 
 class ImageSize(str, Enum):

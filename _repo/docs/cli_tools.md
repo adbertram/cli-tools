@@ -11,7 +11,7 @@
 | `americasthriftsupply` | America's Thrift Supply Shopify storefront catalog - browse LEGO mystery boxes and other liquidation products |
 | `apple` | The `apple` CLI provides a command-line interface for Apple purchase and subscription history. Use it when you need scriptable reads, exports, or evidence collection without opening the service UI. |
 | `asana` | The `asana` CLI provides a command-line interface for Asana API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
-| `ata-blog` | The `ata-blog` CLI provides a unified command-line interface for managing the Adam The Automator blog post production pipeline. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows to manage Notion-backed post metadata, WordPress publishing, Raptive ad settings, and Rank Math schema markup. |
+| `ata-blog` | The `ata-blog` CLI provides a unified command-line interface for managing the Adam The Automator blog post production pipeline. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows to manage Notion-backed post metadata, static-site publishing and unpublishing, media uploads, categories, tags, and ad earnings. |
 | `atlas-capture` | Atlas Capture annotation/audit worker portal (browser automation, worker side) |
 | `atlassian` | The `atlassian` CLI provides a command-line interface for Atlassian (browser automation). Use it when you need repeatable access to atlassian workflows that are only available through a signed-in website. |
 | `auctionzip` | AuctionZip auction search and lot detail via a Cloudflare-cleared browser session (Invaluable-powered) |
@@ -29,8 +29,8 @@
 | `codex-helper` | Codex local app-server helper commands |
 | `codex-sessions` | The `codex-sessions` CLI lets you query and analyze OpenAI Codex session transcripts from ~/.codex. Use it when you need scriptable reads, exports, or evidence collection without opening the service UI. |
 | `copilot` | The `copilot` CLI provides a command-line interface for Microsoft Copilot Studio agents via Dataverse API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
-| `crowdgen` | CrowdGen by Appen worker portal (browser automation, worker side) |
 | `coursecraft` | Manage CourseCraft course content, including courses, modules, clips, demos, slides, artifacts, feedback, and voice recordings. |
+| `crowdgen` | CrowdGen by Appen worker portal (browser automation, worker side) |
 | `cryptocom` | The `cryptocom` CLI provides command-line access to Crypto.com Exchange API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `cvs` | The `cvs` CLI is a command-line interface for CVS Health pharmacy — prescriptions, orders, and refill eligibility across all linked family members. Use it for scriptable, JSON-first access from agents, automation, or terminal workflows. Authentication is a real browser login that the CLI then reuses for read-only commands. |
 | `deepseek-sessions` | The `deepseek-sessions` CLI queries DeepSeek Harness (`dsh`) session transcripts in `~/.dsh`. Use it to audit what a `dsh` run did — sessions, turns, tool calls, subagents, retries, approvals, goals, and token cost — with the same command shape as `claude-code-sessions` and `codex-sessions`. |
@@ -45,6 +45,7 @@
 | `fitnesspal` | The `fitnesspal` CLI provides a command-line interface for Fitnesspal API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `freshbooks` | The `freshbooks` CLI provides a command-line interface for FreshBooks accounting API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `g2` | The `g2` CLI provides a command-line interface for G2 API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `garrul` | Moderate and operate a self-hosted Garrul comment system |
 | `gemini` | The `gemini` CLI provides a command-line interface for Gemini API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `globiflow` | The `globiflow` CLI provides a command-line interface for Globiflow (browser automation). Use it when you need repeatable access to globiflow workflows that are only available through a signed-in website. |
 | `google` | The `google` CLI provides a command-line interface for Google Workspace APIs (Docs, Drive, Sheets, Gmail, Calendar). Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
@@ -121,7 +122,5 @@
 | `vinted` | Search Vinted marketplace listings through the site's internal catalog API |
 | `weather` | The `weather` CLI provides a command-line interface for Weather API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `whisper` | The `whisper` CLI wraps whisper.cpp (`whisper-cli`) for local, offline speech-to-text. Use it for JSON transcripts with timestamped segments; output mirrors `openai-whisper` so the two are swappable. |
-| `wordpress` | The `wordpress` CLI provides a command-line interface for Wordpress API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
-| `wpengine` | Command-line access to the WP Engine Hosting Platform API. Use this CLI when agents or automation need JSON-first access to WP Engine accounts, sites, installs, cache purge operations, SSH keys, and documented SSH/SFTP connection details. |
 | `x` | The `x` CLI provides a command-line interface for X API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `youtube` | The `youtube` CLI provides a command-line interface for Youtube API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |

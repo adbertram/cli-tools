@@ -161,7 +161,7 @@ def _visible_url_markdown(label: str, url: str) -> str:
     Notion embed and link_preview blocks do not have portable Markdown or HTML
     equivalents. Exporting them as HTML comments preserves round-trip metadata,
     but downstream publishers render comments invisibly. Use ordinary Markdown
-    links instead so the URL remains visible in HTML/WordPress output while the
+    links instead so the URL remains visible in rendered HTML output while the
     importer can still reconstruct the original Notion block type.
     """
     if not url:

@@ -153,7 +153,7 @@ def advertisers_search(
     ``*`` wildcards work.
 
     Examples:
-        cj advertisers search "*wordpress*"
+        cj advertisers search "*vpn*"
         cj advertisers search "Bluehost"
         cj advertisers search "*hosting*" --relationship notjoined --table
     """

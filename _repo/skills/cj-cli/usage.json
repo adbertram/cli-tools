@@ -1,7 +1,7 @@
 {
   "tool": "cj",
   "description": "CLI interface for CJ Affiliate (publisher).",
-  "discovered_at": "2026-07-21T14:27:34Z",
+  "discovered_at": "2026-09-17T17:09:42Z",
   "total_commands": 22,
   "global_options": [
     {
@@ -54,7 +54,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as key/value table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -88,7 +89,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -159,7 +161,7 @@
         "search": {
           "help": "Wildcard search advertiser names. Server-side keyword search plus client-side fnmatch so explicit ``*`` wildcards work.",
           "examples": [
-            "cj advertisers search \"*wordpress*\"",
+            "cj advertisers search \"*vpn*\"",
             "cj advertisers search \"Bluehost\"",
             "cj advertisers search \"*hosting*\" --relationship notjoined --table"
           ],
@@ -178,7 +180,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -236,7 +239,8 @@
               "type": "bool",
               "required": false,
               "help": "Clear existing ephemeral auth state and re-authenticate",
-              "short": "-F"
+              "short": "-F",
+              "takes_value": false
             },
             {
               "name": "--credential-type",
@@ -297,7 +301,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -318,7 +323,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
@@ -332,7 +338,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -373,7 +380,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -398,14 +406,16 @@
                   "name": "--keep-old",
                   "type": "bool",
                   "required": false,
-                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
                 },
                 {
                   "name": "--force",
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -440,7 +450,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -454,14 +465,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--verbose",
               "type": "bool",
               "required": false,
               "help": "Show detailed checks",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -484,7 +497,14 @@
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "usage_instructions": "Empty the local response cache for cj.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
@@ -536,6 +556,8 @@
               "type": "bool",
               "required": false,
               "help": "Confirm the publisher has a joined relationship with the advertiser before emitting",
+              "takes_value": false,
+              "secondary": "--no-verify",
               "default": "verify"
             },
             {
@@ -566,7 +588,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as key/value table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -606,7 +629,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -706,14 +730,16 @@
               "name": "--dry-run",
               "type": "bool",
               "required": false,
-              "help": "Check existing relationship and report what would happen, but do not click Apply"
+              "help": "Check existing relationship and report what would happen, but do not click Apply",
+              "takes_value": false
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Display result as a table row",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -750,20 +776,23 @@
               "name": "--dry-run",
               "type": "bool",
               "required": false,
-              "help": "Report what would happen without clicking Apply"
+              "help": "Report what would happen without clicking Apply",
+              "takes_value": false
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Stream results as a table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--stop-on-error",
               "type": "bool",
               "required": false,
-              "help": "Halt on the first FAILED outcome instead of continuing"
+              "help": "Halt on the first FAILED outcome instead of continuing",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -794,7 +823,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as a key/value table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -819,7 +849,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
