@@ -13,7 +13,7 @@ from .encode import multipart_encode
 
 import json
 
-DEFAULT_REQUEST_TIMEOUT = 30.0
+DEFAULT_REQUEST_TIMEOUT = 20.0
 
 
 class RetryConfig(object):
@@ -39,7 +39,7 @@ class RetryConfig(object):
             exponential_base: Base for exponential backoff (default: 2.0)
             jitter: Whether to add random jitter to delays (default: True)
             retry_on_rate_limit: Whether to retry on 429 rate limit errors (default: True)
-            request_timeout: Maximum seconds to wait for one HTTP request (default: 30.0)
+            request_timeout: Maximum seconds to wait for one HTTP request (default: 20.0)
         """
         self.max_retries = max_retries
         self.base_delay = base_delay

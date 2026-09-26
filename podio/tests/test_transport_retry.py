@@ -8,11 +8,20 @@ immediate-failure 4xx branch and `RetryConfig(retry_on_rate_limit=True)`
 never actually engaged for real traffic.
 """
 
+import importlib.util
+import tomllib
+from pathlib import Path
+
 import pytest
 
 from pypodio2 import api as api_module
 from pypodio2 import transport as transport_module
-from pypodio2.transport import HttpTransport, RetryConfig, TransportException
+from pypodio2.transport import (
+    DEFAULT_REQUEST_TIMEOUT,
+    HttpTransport,
+    RetryConfig,
+    TransportException,
+)
 from podio_cli.config import Config
 
 
@@ -57,6 +66,19 @@ def _make_transport(responses, retry_config):
     fake_http = _FakeHttp(responses)
     transport._http = fake_http
     return transport, fake_http
+
+
+def _podio_compliance_harness_timeout():
+    """Read Podio's effective command deadline from the compliance harness."""
+    harness_tests = Path(__file__).resolve().parents[2] / "_repo/skills/cli-tool/tests"
+    module_path = harness_tests / "cli_test_utils.py"
+    spec = importlib.util.spec_from_file_location("podio_cli_test_utils", module_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    with (harness_tests / "cli_test_config.toml").open("rb") as config_file:
+        config = tomllib.load(config_file)
+    return module.get_cli_timeout("podio", config)
 
 
 def test_status_420_is_retried_and_eventually_succeeds():
@@ -218,6 +240,28 @@ def test_request_timeout_fails_fast_with_clear_transport_error():
     with pytest.raises(
         TransportException,
         match=r"Request timed out after 0.01 seconds\.",
+    ):
+        transport()
+
+    assert hanging_http.calls == 1
+
+
+def test_default_request_timeout_leaves_compliance_harness_startup_margin():
+    assert DEFAULT_REQUEST_TIMEOUT <= _podio_compliance_harness_timeout() - 10
+
+
+def test_default_request_timeout_fails_fast_with_clear_transport_error():
+    transport = HttpTransport(
+        url="https://api.podio.com",
+        headers_factory=lambda: {},
+    )
+    hanging_http = _HangingHttp()
+    transport._http = hanging_http
+    transport._method = "GET"
+
+    with pytest.raises(
+        TransportException,
+        match=rf"Request timed out after {DEFAULT_REQUEST_TIMEOUT:g} seconds\.",
     ):
         transport()
 
