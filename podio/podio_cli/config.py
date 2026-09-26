@@ -1,4 +1,5 @@
 """Configuration management for Podio CLI."""
+
 import os
 from pathlib import Path
 from typing import Optional
@@ -6,6 +7,7 @@ from typing import Optional
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
 from cli_tools_shared.credentials import CredentialType
 from pypodio2 import RetryConfig
+from pypodio2.transport import DEFAULT_REQUEST_TIMEOUT
 
 
 class Config(BaseConfig):
@@ -53,29 +55,16 @@ class Config(BaseConfig):
 
     def has_user_auth(self) -> bool:
         """Check if user authentication credentials are available."""
-        return bool(
-            self.client_id
-            and self.client_secret
-            and self.username
-            and self.password
-        )
+        return bool(self.client_id and self.client_secret and self.username and self.password)
 
     def has_app_auth(self) -> bool:
         """Check if app authentication credentials are available."""
-        return bool(
-            self.client_id
-            and self.client_secret
-            and self.app_id
-            and self.app_token
-        )
+        return bool(self.client_id and self.client_secret and self.app_id and self.app_token)
 
     def has_authorization_code_auth(self) -> bool:
         """Check if authorization code credentials are available."""
         return bool(
-            self.client_id
-            and self.client_secret
-            and self.authorization_code
-            and self.redirect_uri
+            self.client_id and self.client_secret and self.authorization_code and self.redirect_uri
         )
 
     def has_token_auth(self) -> bool:
@@ -91,6 +80,7 @@ class Config(BaseConfig):
     def test_connection(self) -> Optional[dict]:
         """Test API connectivity by fetching current user info."""
         from .client import get_client
+
         client = get_client(config=self)
         user = client.User.current()
         return {
@@ -107,13 +97,12 @@ class Config(BaseConfig):
         max_retries = self._get_int_env("RETRY_MAX_ATTEMPTS", default=5, minimum=0)
         base_delay = self._get_float_env("RETRY_BASE_DELAY", default=2.0, minimum=0.001)
         max_delay = self._get_float_env("RETRY_MAX_DELAY", default=60.0, minimum=base_delay)
-        exponential_base = self._get_float_env(
-            "RETRY_EXPONENTIAL_BASE",
-            default=2.0,
-            minimum=1.001
-        )
+        exponential_base = self._get_float_env("RETRY_EXPONENTIAL_BASE", default=2.0, minimum=1.001)
         jitter = self._get_bool_env("RETRY_JITTER", default=True)
         retry_on_rate_limit = self._get_bool_env("RETRY_ON_RATE_LIMIT", default=True)
+        request_timeout = self._get_float_env(
+            "REQUEST_TIMEOUT_SECONDS", default=DEFAULT_REQUEST_TIMEOUT
+        )
 
         self._retry_config = RetryConfig(
             max_retries=max_retries,
@@ -121,7 +110,8 @@ class Config(BaseConfig):
             max_delay=max_delay,
             exponential_base=exponential_base,
             jitter=jitter,
-            retry_on_rate_limit=retry_on_rate_limit
+            retry_on_rate_limit=retry_on_rate_limit,
+            request_timeout=request_timeout,
         )
         return self._retry_config
 
