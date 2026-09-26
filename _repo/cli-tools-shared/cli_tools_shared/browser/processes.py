@@ -6,9 +6,11 @@ import os
 import re
 import shlex
 import signal
+import socket
 import subprocess
 import time
 import errno
+import fcntl
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -16,6 +18,40 @@ from typing import Iterable
 
 class ProcessTableUnavailableError(RuntimeError):
     """Raised when the host sandbox forbids process-table inspection."""
+
+
+class ProfileLifecycleLock:
+    """Exclusive lifecycle lock for one persistent Chromium profile."""
+
+    def __init__(self, user_data_dir: str | Path):
+        profile = Path(user_data_dir)
+        self.path = profile.parent / f".{profile.name}.lifecycle.lock"
+        self._file = None
+
+    @property
+    def file(self):
+        return self._file
+
+    def acquire(self) -> None:
+        if self._file is not None:
+            return
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        lock_file = open(self.path, "a+")
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        except Exception:
+            lock_file.close()
+            raise
+        self._file = lock_file
+
+    def release(self) -> None:
+        if self._file is None:
+            return
+        try:
+            fcntl.flock(self._file.fileno(), fcntl.LOCK_UN)
+        finally:
+            self._file.close()
+            self._file = None
 
 
 @dataclass(frozen=True)
@@ -87,6 +123,25 @@ def command_user_data_dir(command: str) -> str | None:
     return None
 
 
+def command_remote_debugging_port(command: str) -> int | None:
+    """Return Chrome's configured remote-debugging port from a command line."""
+    for pattern in (
+        r"(?:^|\s)--remote-debugging-port=(?P<value>\d+)(?:\s|$)",
+        r"(?:^|\s)--remote-debugging-port\s+(?P<value>\d+)(?:\s|$)",
+    ):
+        match = re.search(pattern, command)
+        if match:
+            return int(match.group("value"))
+    return None
+
+
+def find_free_loopback_port() -> int:
+    """Reserve and release an unused local TCP port for an immediate launch."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
 def is_chromium_process_command(command: str) -> bool:
     """Return whether ``command`` invokes a Chrome/Chromium executable.
 
@@ -145,6 +200,7 @@ def profile_process_pids(
     processes: Iterable[ProcessCommand] | None = None,
     current_pid: int | None = None,
     parent_pid: int | None = None,
+    remote_debugging_port: int | None = None,
 ) -> list[int]:
     """Return live process PIDs using exactly this Chrome user-data-dir."""
     rows = list(list_process_commands() if processes is None else processes)
@@ -163,9 +219,26 @@ def profile_process_pids(
         if (
             is_chromium_process_command(proc.command)
             and command_user_data_dir(proc.command) == profile
+            and (
+                remote_debugging_port is None
+                or command_remote_debugging_port(proc.command) == remote_debugging_port
+            )
         ):
             pids.append(proc.pid)
     return pids
+
+
+def remove_stale_profile_lock_files(user_data_dir: str | Path) -> None:
+    """Remove Chromium singleton artifacts after the caller proved no owner exists."""
+    profile = Path(user_data_dir)
+    for name in ("SingletonCookie", "SingletonLock", "SingletonSocket", "DevToolsActivePort"):
+        path = profile / name
+        if not path.exists() and not path.is_symlink():
+            continue
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            continue
 
 
 def _pid_running(pid: int) -> bool:

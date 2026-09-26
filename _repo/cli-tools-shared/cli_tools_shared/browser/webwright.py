@@ -11,14 +11,24 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qsl, urlsplit, urlunsplit
+from urllib.request import urlopen
 
 from . import BrowserHarnessError
 from ._elements import _ServiceElement, _ServiceLocator
 from .playwright_service import _chrome_binary
+from .processes import (
+    ProcessTableUnavailableError,
+    ProfileLifecycleLock,
+    find_free_loopback_port,
+    profile_process_pids,
+    remove_stale_profile_lock_files,
+    terminate_process,
+)
 
 
 class WebwrightServiceError(BrowserHarnessError):
@@ -73,7 +83,6 @@ class WebwrightBrowserService:
         local_cdp_executable: Optional[str] = None,
         local_cdp_new_page: Optional[bool] = None,
         local_cdp_close_page_on_exit: Optional[bool] = None,
-        local_cdp_close_started_browser_on_exit: Optional[bool] = True,
     ):
         self.session = session
         self.browser_mode = browser_mode
@@ -82,10 +91,12 @@ class WebwrightBrowserService:
         self.local_cdp_executable = local_cdp_executable
         self.local_cdp_new_page = local_cdp_new_page
         self.local_cdp_close_page_on_exit = local_cdp_close_page_on_exit
-        self.local_cdp_close_started_browser_on_exit = local_cdp_close_started_browser_on_exit
         self._environment = None
         self._opened = False
         self._user_data_dir: Optional[Path] = None
+        self._chrome_process: Optional[subprocess.Popen] = None
+        self._cdp_port: Optional[int] = None
+        self._profile_lifecycle_lock: Optional[ProfileLifecycleLock] = None
 
     @staticmethod
     def _safe_url_for_log(url: str) -> str:
@@ -150,6 +161,201 @@ class WebwrightBrowserService:
             "console_warnings": 0,
         }
 
+    def _profile_process_pids(self) -> list[int]:
+        if self._user_data_dir is None:
+            return []
+        return profile_process_pids(self._user_data_dir)
+
+    def _raise_if_profile_in_use(self) -> None:
+        try:
+            pids = self._profile_process_pids()
+        except ProcessTableUnavailableError as exc:
+            raise WebwrightServiceError(
+                "Cannot verify ownership of the Webwright Chrome profile because "
+                "process-table inspection is unavailable."
+            ) from exc
+        if pids:
+            raise WebwrightServiceError(
+                "Webwright profile is already in use by Chrome process(es) "
+                f"{', '.join(str(pid) for pid in pids)}: {self._user_data_dir}"
+            )
+
+    def _owned_cdp_process_pids(self, port: int) -> list[int]:
+        if self._user_data_dir is None:
+            return []
+        return profile_process_pids(
+            self._user_data_dir,
+            remote_debugging_port=port,
+        )
+
+    def _acquire_profile_lifecycle_lock(self) -> None:
+        if self._profile_lifecycle_lock is not None:
+            return
+        if self._user_data_dir is None:
+            raise WebwrightServiceError("Cannot lock a browser profile before it is resolved.")
+        lock = ProfileLifecycleLock(self._user_data_dir)
+        try:
+            lock.acquire()
+        except Exception:
+            raise
+        self._profile_lifecycle_lock = lock
+
+    def _release_profile_lifecycle_lock(self) -> None:
+        lock = self._profile_lifecycle_lock
+        if lock is None:
+            return
+        try:
+            lock.release()
+        finally:
+            self._profile_lifecycle_lock = None
+
+    def _remove_stale_profile_locks(self) -> None:
+        """Remove lock files only after proving that no browser owns the profile."""
+        self._raise_if_profile_in_use()
+        if self._user_data_dir is None:
+            return
+        try:
+            remove_stale_profile_lock_files(self._user_data_dir)
+        except OSError as exc:
+            raise WebwrightServiceError(
+                f"Failed to remove stale browser lock files for {self._user_data_dir}: {exc}"
+            ) from exc
+
+    def _wait_for_owned_cdp_endpoint(self) -> str:
+        """Return this service's dynamically assigned CDP endpoint.
+
+        Chrome writes ``DevToolsActivePort`` inside its user-data-dir only
+        after it has bound an ephemeral debugging port.  Combined with the
+        lifecycle lock and pre-launch process check, this proves the endpoint
+        belongs to this service's profile rather than a browser on port 9222.
+        """
+        if self._user_data_dir is None:
+            raise WebwrightServiceError("Cannot resolve a CDP endpoint before the profile is set.")
+        port_file = self._user_data_dir / "DevToolsActivePort"
+        deadline = time.monotonic() + self.default_timeout
+        while time.monotonic() < deadline:
+            if self._chrome_process is not None and self._chrome_process.poll() is not None:
+                raise WebwrightServiceError(
+                    "Chrome exited before it exposed a CDP endpoint for "
+                    f"profile {self._user_data_dir}."
+                )
+            try:
+                lines = port_file.read_text(encoding="utf-8").splitlines()
+                port = int(lines[0])
+                if not 1 <= port <= 65535:
+                    raise ValueError("port outside valid range")
+                if port != self._cdp_port:
+                    raise WebwrightServiceError(
+                        "Chrome exposed an unexpected CDP port for the owned "
+                        f"profile: expected {self._cdp_port}, got {port}."
+                    )
+                owned_pids = self._owned_cdp_process_pids(port)
+                if self._chrome_process is None or self._chrome_process.pid not in owned_pids:
+                    raise WebwrightServiceError(
+                        "The CDP endpoint is not owned by this Webwright Chrome "
+                        f"process for profile {self._user_data_dir}."
+                    )
+                endpoint = f"http://127.0.0.1:{port}"
+                with urlopen(f"{endpoint}/json/version", timeout=0.5) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                if response.status == 200 and payload.get("webSocketDebuggerUrl"):
+                    return endpoint
+            except (FileNotFoundError, IndexError, ValueError, OSError, json.JSONDecodeError):
+                pass
+            time.sleep(0.1)
+        raise WebwrightServiceError(
+            "Chrome did not expose an owned CDP endpoint within "
+            f"{self.default_timeout}s for profile {self._user_data_dir}."
+        )
+
+    def _launch_owned_chrome(
+        self,
+        *,
+        headed: bool,
+        launch_args: list[str],
+        window_size: tuple[int, int] | None,
+    ) -> str:
+        if self._user_data_dir is None:
+            raise WebwrightServiceError("Cannot launch Chrome before the profile is set.")
+        chrome = (
+            self.local_cdp_executable
+            or os.getenv("CLI_TOOLS_CHROME_BINARY")
+            or _chrome_binary()
+        )
+        self._cdp_port = find_free_loopback_port()
+        args = [
+            chrome,
+            "--remote-debugging-address=127.0.0.1",
+            f"--remote-debugging-port={self._cdp_port}",
+            f"--user-data-dir={self._user_data_dir}",
+            "--no-first-run",
+            "--no-default-browser-check",
+            *launch_args,
+        ]
+        if window_size is not None:
+            args.append(f"--window-size={window_size[0]},{window_size[1]}")
+        if not headed:
+            args.append("--headless=new")
+        try:
+            # Launch the app binary directly. On macOS, ``open -na`` returns
+            # before Chrome and cannot be used as the owned process handle.
+            self._chrome_process = subprocess.Popen(
+                args,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except OSError as exc:
+            raise WebwrightServiceError(f"Failed to launch owned Chrome: {exc}") from exc
+        return self._wait_for_owned_cdp_endpoint()
+
+    def _terminate_owned_chrome(self) -> None:
+        """Stop only this service's profile-and-CDP-port process set."""
+        process = self._chrome_process
+        port = self._cdp_port
+        if process is None or port is None:
+            raise WebwrightServiceError(
+                "Cannot verify the owned Webwright Chrome process before close."
+            )
+        try:
+            try:
+                owned_pids = self._owned_cdp_process_pids(port)
+            except ProcessTableUnavailableError as exc:
+                raise WebwrightServiceError(
+                    "Cannot verify that the owned Webwright Chrome process closed "
+                    "because process-table inspection is unavailable."
+                ) from exc
+            if process.pid not in owned_pids:
+                raise WebwrightServiceError(
+                    "The Webwright Chrome process no longer matches its managed "
+                    f"profile and CDP port {port}; refusing broad profile teardown."
+                )
+            for pid in owned_pids:
+                terminate_process(pid)
+            if process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=5)
+            remaining = self._owned_cdp_process_pids(port)
+            if remaining:
+                raise WebwrightServiceError(
+                    "Chrome process(es) still own the managed Webwright CDP endpoint "
+                    f"after close: {', '.join(str(pid) for pid in remaining)}."
+                )
+        except ProcessTableUnavailableError as exc:
+            raise WebwrightServiceError(
+                "Cannot verify that the owned Webwright Chrome process closed "
+                "because process-table inspection is unavailable."
+            ) from exc
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise WebwrightServiceError(f"Failed to stop owned Chrome: {exc}") from exc
+        finally:
+            self._chrome_process = None
+            self._cdp_port = None
+
     def browser_open(
         self,
         url: Optional[str] = None,
@@ -158,11 +364,22 @@ class WebwrightBrowserService:
         user_agent: Optional[str] = None,
         window_size: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Open a Webwright local browser against a persistent profile."""
+        """Open Webwright against a Chrome process owned by this service."""
         if persistent_profile_dir is None:
             raise WebwrightServiceError(
                 "browser_open: persistent_profile_dir is required. "
                 "Pass config.get_persistent_profile_dir() from the caller."
+            )
+        if self.browser_mode != "local_cdp":
+            raise WebwrightServiceError(
+                "WebwrightBrowserService supports only local_cdp because "
+                "local_persistent inherits Playwright mock-keychain arguments."
+            )
+        if self.local_cdp_url is not None:
+            raise WebwrightServiceError(
+                "local_cdp_url is not supported for managed persistent profiles. "
+                "WebwrightBrowserService launches and verifies its own ephemeral "
+                "loopback CDP endpoint."
             )
         if headed and os.getenv("CLI_TOOL_TEST_NO_HEADED_BROWSER") == "1":
             headed = False
@@ -179,40 +396,39 @@ class WebwrightBrowserService:
             launch_args.append(f"--user-agent={user_agent}")
 
         output_dir = profile_dir.parent / "webwright" / self.session
-        kwargs: dict[str, Any] = {
-            "browser_mode": self.browser_mode,
-            "headless": not headed,
-            "output_dir": output_dir,
-            "user_data_dir": profile_dir,
-            "browser_timeout_ms": self.default_timeout * 1000,
-            "browser_navigation_timeout_ms": self.default_timeout * 1000,
-            "launch_args": launch_args,
-        }
-        if self.local_cdp_url is not None:
-            kwargs["local_cdp_url"] = self.local_cdp_url
-        if self.browser_mode == "local_cdp":
-            # Webwright otherwise prefers Microsoft Edge before Google Chrome
-            # on macOS. A shared Chrome profile must use Chrome's keychain key.
-            kwargs["local_cdp_executable"] = (
-                self.local_cdp_executable
-                or os.getenv("CLI_TOOLS_CHROME_BINARY")
-                or _chrome_binary()
-            )
-        if self.local_cdp_new_page is not None:
-            kwargs["local_cdp_new_page"] = self.local_cdp_new_page
-        if self.local_cdp_close_page_on_exit is not None:
-            kwargs["local_cdp_close_page_on_exit"] = self.local_cdp_close_page_on_exit
-        if self.local_cdp_close_started_browser_on_exit is not None:
-            kwargs["local_cdp_close_started_browser_on_exit"] = (
-                self.local_cdp_close_started_browser_on_exit
-            )
-        if width_height is not None:
-            kwargs["browser_width"], kwargs["browser_height"] = width_height
-
-        env_cls = _load_local_browser_environment()
-        environment = env_cls(**kwargs)
-        self._environment = environment
+        environment = None
         try:
+            self._acquire_profile_lifecycle_lock()
+            self._remove_stale_profile_locks()
+            cdp_endpoint = self._launch_owned_chrome(
+                headed=headed,
+                launch_args=launch_args,
+                window_size=width_height,
+            )
+            # ``headless`` is enacted by the Chrome process we launch. Upstream
+            # local_cdp ignores its own headless config, so never delegate that
+            # decision to Webwright or allow it to autostart/attach to port 9222.
+            kwargs: dict[str, Any] = {
+                "browser_mode": "local_cdp",
+                "headless": not headed,
+                "output_dir": output_dir,
+                "user_data_dir": profile_dir,
+                "browser_timeout_ms": self.default_timeout * 1000,
+                "browser_navigation_timeout_ms": self.default_timeout * 1000,
+                "launch_args": launch_args,
+                "local_cdp_url": cdp_endpoint,
+                "local_cdp_auto_start": False,
+            }
+            if self.local_cdp_new_page is not None:
+                kwargs["local_cdp_new_page"] = self.local_cdp_new_page
+            if self.local_cdp_close_page_on_exit is not None:
+                kwargs["local_cdp_close_page_on_exit"] = self.local_cdp_close_page_on_exit
+            if width_height is not None:
+                kwargs["browser_width"], kwargs["browser_height"] = width_height
+
+            env_cls = _load_local_browser_environment()
+            environment = env_cls(**kwargs)
+            self._environment = environment
             environment.prepare(
                 task=f"Open {url}" if url else "Open browser",
                 task_id=self.session,
@@ -221,24 +437,23 @@ class WebwrightBrowserService:
             self._opened = True
             return self._page_info()
         except Exception as exc:
-            self._environment = None
-            self._opened = False
+            try:
+                if environment is not None:
+                    environment.close()
+            finally:
+                try:
+                    if self._chrome_process is not None:
+                        self._terminate_owned_chrome()
+                finally:
+                    self._environment = None
+                    self._opened = False
+                    self._release_profile_lifecycle_lock()
             raise WebwrightServiceError(f"Failed to open Webwright browser: {exc}") from exc
 
     def _reset_tabs_for_restore(self) -> None:
-        """Leave one blank tab before closing an owned profile.
-
-        ``--restore-last-session`` preserves session cookies, but also restores
-        every tab from the prior run. Webwright's ``local_cdp`` mode may attach
-        to a browser it did not start, so never modify tabs in that case.
-        """
+        """Leave one blank tab before closing this service's owned profile."""
         environment = self._environment
         if environment is None:
-            return
-        if (
-            getattr(environment, "_connected_over_cdp", False)
-            and getattr(environment, "_local_cdp_process", None) is None
-        ):
             return
         context = self._context()
         page = self._page()
@@ -249,6 +464,8 @@ class WebwrightBrowserService:
 
     def browser_close(self) -> Dict[str, Any]:
         environment = self._environment
+        close_owned_browser = self._opened
+        close_error = None
         try:
             if environment is not None:
                 try:
@@ -256,12 +473,19 @@ class WebwrightBrowserService:
                 finally:
                     environment.close()
         except Exception as exc:
-            raise WebwrightServiceError(
-                f"Failed to close Webwright browser: {exc}"
-            ) from exc
+            close_error = exc
         finally:
-            self._environment = None
-            self._opened = False
+            try:
+                if close_owned_browser:
+                    self._terminate_owned_chrome()
+            finally:
+                self._environment = None
+                self._opened = False
+                self._release_profile_lifecycle_lock()
+        if close_error is not None:
+            raise WebwrightServiceError(
+                f"Failed to close Webwright browser: {close_error}"
+            ) from close_error
         return {"success": True, "message": "Browser closed"}
 
     def page_goto(self, url: str, wait_until: str | None = "domcontentloaded") -> Dict[str, Any]:
@@ -325,6 +549,7 @@ class WebwrightBrowserService:
     def data_delete(self) -> Dict[str, Any]:
         self.browser_close()
         if self._user_data_dir is not None and self._user_data_dir.exists():
+            self._raise_if_profile_in_use()
             shutil.rmtree(self._user_data_dir)
         return {"success": True, "message": "Session data deleted"}
 

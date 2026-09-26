@@ -121,6 +121,7 @@ def test_playwright_service_uses_real_keychain_like_cdp_backend(tmp_path, monkey
 
 def test_playwright_service_holds_profile_lifecycle_lock_until_close(tmp_path, monkeypatch):
     from cli_tools_shared.browser import playwright_service as module
+    from cli_tools_shared.browser import processes as process_module
     from cli_tools_shared.browser.playwright_service import PlaywrightBrowserService
 
     playwright = _FakePlaywright()
@@ -136,7 +137,7 @@ def test_playwright_service_holds_profile_lifecycle_lock_until_close(tmp_path, m
     )
     lock_events = []
     monkeypatch.setattr(
-        module.fcntl,
+        process_module.fcntl,
         "flock",
         lambda _fd, operation: lock_events.append(operation),
     )
@@ -145,13 +146,13 @@ def test_playwright_service_holds_profile_lifecycle_lock_until_close(tmp_path, m
     profile = tmp_path / "chromium-profile"
     service.browser_open(persistent_profile_dir=profile)
 
-    assert lock_events == [module.fcntl.LOCK_EX]
+    assert lock_events == [process_module.fcntl.LOCK_EX]
     assert service._lifecycle_lock_file is not None
     assert (tmp_path / ".chromium-profile.lifecycle.lock").is_file()
 
     service.browser_close()
 
-    assert lock_events == [module.fcntl.LOCK_EX, module.fcntl.LOCK_UN]
+    assert lock_events == [process_module.fcntl.LOCK_EX, process_module.fcntl.LOCK_UN]
     assert service._lifecycle_lock_file is None
 
 
@@ -185,6 +186,7 @@ def test_playwright_service_serializes_concurrent_owners_of_same_profile(tmp_pat
 
 def test_playwright_service_releases_profile_lifecycle_lock_after_failed_launch(tmp_path, monkeypatch):
     from cli_tools_shared.browser import playwright_service as module
+    from cli_tools_shared.browser import processes as process_module
     from cli_tools_shared.browser.playwright_service import PlaywrightBrowserService, PlaywrightServiceError
 
     class _FailingChromium:
@@ -200,7 +202,7 @@ def test_playwright_service_releases_profile_lifecycle_lock_after_failed_launch(
     monkeypatch.setattr(module, "_chrome_binary", lambda: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
     lock_events = []
     monkeypatch.setattr(
-        module.fcntl,
+        process_module.fcntl,
         "flock",
         lambda _fd, operation: lock_events.append(operation),
     )
@@ -209,7 +211,7 @@ def test_playwright_service_releases_profile_lifecycle_lock_after_failed_launch(
     with pytest.raises(PlaywrightServiceError, match="launch failed"):
         service.browser_open(persistent_profile_dir=tmp_path / "chromium-profile")
 
-    assert lock_events == [module.fcntl.LOCK_EX, module.fcntl.LOCK_UN]
+    assert lock_events == [process_module.fcntl.LOCK_EX, process_module.fcntl.LOCK_UN]
     assert service._lifecycle_lock_file is None
 
 

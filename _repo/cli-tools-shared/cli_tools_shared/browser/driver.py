@@ -15,7 +15,6 @@ import json
 import os
 import re
 import signal
-import socket
 import subprocess
 import sys
 import time
@@ -33,9 +32,11 @@ from .processes import (
     ProcessCommand,
     ProcessTableUnavailableError,
     command_user_data_dir,
+    find_free_loopback_port,
     list_process_commands,
     pid_is_running,
     profile_process_pids,
+    remove_stale_profile_lock_files,
 )
 
 logger = get_debug_logger("cli_tools.browser_service")
@@ -54,11 +55,7 @@ def _ensure_runtime_dir(session: str) -> Path:
 
 
 def _find_free_port() -> int:
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.bind(("127.0.0.1", 0))
-    port = s.getsockname()[1]
-    s.close()
-    return port
+    return find_free_loopback_port()
 
 
 def _chrome_binary() -> str:
@@ -441,23 +438,12 @@ class BrowserHarnessService:
                 )
             # Stale or unparseable — fall through to delete below.
 
-        for name in (
-            "SingletonCookie",
-            "SingletonLock",
-            "SingletonSocket",
-            "DevToolsActivePort",
-        ):
-            path = ud / name
-            if not path.exists() and not path.is_symlink():
-                continue
-            try:
-                path.unlink()
-            except FileNotFoundError:
-                continue
-            except OSError as e:
-                raise BrowserHarnessError(
-                    f"Failed to remove stale browser lock file {path}: {e}"
-                ) from e
+        try:
+            remove_stale_profile_lock_files(ud)
+        except OSError as e:
+            raise BrowserHarnessError(
+                f"Failed to remove stale browser lock files for {ud}: {e}"
+            ) from e
 
     def _cleanup_stale_session(self) -> None:
         """Kill only stale browser-harness/Chrome state for this named session."""

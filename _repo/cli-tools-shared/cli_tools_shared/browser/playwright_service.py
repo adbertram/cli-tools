@@ -14,7 +14,6 @@ import signal
 import shutil
 import subprocess
 import time
-import fcntl
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qsl, urlsplit, urlunsplit
@@ -24,10 +23,12 @@ from ._elements import _ServiceElement, _ServiceLocator
 from .processes import (
     ProcessCommand,
     ProcessTableUnavailableError,
+    ProfileLifecycleLock,
     command_user_data_dir,
     list_process_commands,
     pid_is_running,
     profile_process_pids,
+    remove_stale_profile_lock_files,
 )
 
 
@@ -100,7 +101,14 @@ class PlaywrightBrowserService:
         self._page = None
         self._opened = False
         self._user_data_dir: Optional[Path] = None
-        self._lifecycle_lock_file = None
+        self._profile_lifecycle_lock: Optional[ProfileLifecycleLock] = None
+
+    @property
+    def _lifecycle_lock_file(self):
+        """Compatibility view of the shared profile lifecycle lock handle."""
+        if self._profile_lifecycle_lock is None:
+            return None
+        return self._profile_lifecycle_lock.file
 
     @staticmethod
     def _safe_url_for_log(url: str) -> str:
@@ -205,29 +213,26 @@ class PlaywrightBrowserService:
 
     def _acquire_profile_lifecycle_lock(self) -> None:
         """Serialize browser ownership for this exact persistent profile."""
-        if self._lifecycle_lock_file is not None:
+        if self._profile_lifecycle_lock is not None:
             return
         if self._user_data_dir is None:
             raise PlaywrightServiceError("Cannot lock a browser profile before it is resolved.")
-        lock_path = self._user_data_dir.parent / f".{self._user_data_dir.name}.lifecycle.lock"
-        lock_path.parent.mkdir(parents=True, exist_ok=True)
-        lock_file = open(lock_path, "a+")
+        lock = ProfileLifecycleLock(self._user_data_dir)
         try:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            lock.acquire()
         except Exception:
-            lock_file.close()
             raise
-        self._lifecycle_lock_file = lock_file
+        self._profile_lifecycle_lock = lock
 
     def _release_profile_lifecycle_lock(self) -> None:
         """Release this service's persistent-profile ownership lock."""
-        if self._lifecycle_lock_file is None:
+        lock = self._profile_lifecycle_lock
+        if lock is None:
             return
         try:
-            fcntl.flock(self._lifecycle_lock_file.fileno(), fcntl.LOCK_UN)
+            lock.release()
         finally:
-            self._lifecycle_lock_file.close()
-            self._lifecycle_lock_file = None
+            self._profile_lifecycle_lock = None
 
     @staticmethod
     def _command_user_data_dir(command: str) -> Optional[str]:
@@ -258,18 +263,12 @@ class PlaywrightBrowserService:
             )
         if self._user_data_dir is None:
             return
-        for name in ("SingletonCookie", "SingletonLock", "SingletonSocket", "DevToolsActivePort"):
-            path = self._user_data_dir / name
-            if not path.exists() and not path.is_symlink():
-                continue
-            try:
-                path.unlink()
-            except FileNotFoundError:
-                continue
-            except OSError as exc:
-                raise PlaywrightServiceError(
-                    f"Failed to remove stale browser lock file {path}: {exc}"
-                ) from exc
+        try:
+            remove_stale_profile_lock_files(self._user_data_dir)
+        except OSError as exc:
+            raise PlaywrightServiceError(
+                f"Failed to remove stale browser lock files for {self._user_data_dir}: {exc}"
+            ) from exc
 
     def browser_open(
         self,

@@ -1,9 +1,12 @@
 from cli_tools_shared.browser.processes import (
+    ProfileLifecycleLock,
     ProcessCommand,
+    command_remote_debugging_port,
     command_user_data_dir,
     is_chromium_process_command,
     profile_process_pids,
     protected_process_ids,
+    remove_stale_profile_lock_files,
     terminate_profile_processes,
 )
 
@@ -112,6 +115,77 @@ def test_command_user_data_dir_supports_equals_space_and_quotes(tmp_path):
     assert command_user_data_dir(f"chrome --user-data-dir={compact_profile}") == str(compact_profile)
     assert command_user_data_dir(f"chrome --user-data-dir '{profile}'") == str(profile)
     assert command_user_data_dir(f'chrome --user-data-dir="{profile}"') == str(profile)
+
+
+def test_command_remote_debugging_port_supports_equals_and_space():
+    assert command_remote_debugging_port("chrome --remote-debugging-port=48321") == 48321
+    assert command_remote_debugging_port("chrome --remote-debugging-port 48322") == 48322
+    assert command_remote_debugging_port("chrome --remote-debugging-address=127.0.0.1") is None
+
+
+def test_profile_process_pids_requires_matching_profile_and_port(tmp_path):
+    profile = tmp_path / "chromium-profile"
+    rows = [
+        ProcessCommand(
+            300,
+            1,
+            "S",
+            f"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome "
+            f"--user-data-dir={profile} --remote-debugging-port=48321",
+        ),
+        ProcessCommand(
+            301,
+            1,
+            "S",
+            f"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome "
+            f"--user-data-dir={profile} --remote-debugging-port=48322",
+        ),
+        ProcessCommand(
+            302,
+            1,
+            "S",
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome "
+            "--user-data-dir=/tmp/other --remote-debugging-port=48321",
+        ),
+    ]
+
+    assert profile_process_pids(
+        profile,
+        processes=rows,
+        current_pid=200,
+        parent_pid=100,
+        remote_debugging_port=48321,
+    ) == [300]
+
+
+def test_profile_lifecycle_lock_uses_a_single_profile_scoped_file(tmp_path):
+    profile = tmp_path / "chromium-profile"
+    first = ProfileLifecycleLock(profile)
+
+    first.acquire()
+    try:
+        assert first.file is not None
+        assert first.path == tmp_path / ".chromium-profile.lifecycle.lock"
+        assert first.path.is_file()
+    finally:
+        first.release()
+
+    assert first.file is None
+
+
+def test_remove_stale_profile_lock_files_removes_only_singleton_artifacts(tmp_path):
+    profile = tmp_path / "chromium-profile"
+    profile.mkdir()
+    (profile / "SingletonLock").symlink_to("old-host-99999")
+    (profile / "SingletonCookie").write_text("stale")
+    untouched = profile / "Default"
+    untouched.mkdir()
+
+    remove_stale_profile_lock_files(profile)
+
+    assert not (profile / "SingletonLock").is_symlink()
+    assert not (profile / "SingletonCookie").exists()
+    assert untouched.is_dir()
 
 
 def test_terminate_profile_processes_stops_only_profile_owned_pids(tmp_path, monkeypatch):
