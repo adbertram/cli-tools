@@ -18,7 +18,6 @@ runner = CliRunner()
         ("task", "Task", "find"),
         ("comment", "Comment", "get"),
         ("status", "Status", "find"),
-        ("space", "Space", "find"),
     ],
 )
 def test_file_list_reads_files_from_the_referenced_object(monkeypatch, ref_type, area, method):
@@ -32,4 +31,18 @@ def test_file_list_reads_files_from_the_referenced_object(monkeypatch, ref_type,
     assert result.exit_code == 0
     assert json.loads(result.stdout) == [{"file_id": 501, "id": 501, "name": f"{ref_type}.pdf"}]
     getattr(getattr(client, area), method).assert_called_once_with(123)
-    assert not client.Files.transport.GET.called
+    assert not client.transport.GET.called
+
+
+def test_file_list_reads_space_files_from_the_files_endpoint(monkeypatch):
+    files = [{"file_id": 501, "name": "space.pdf"}]
+    client = MagicMock()
+    client.transport.GET.return_value = files
+    monkeypatch.setattr(file, "get_client", lambda: client)
+
+    result = runner.invoke(file.app, ["list", "space", "123"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout) == [{"file_id": 501, "id": 501, "name": "space.pdf"}]
+    client.transport.GET.assert_called_once_with(url="/file/space/123/")
+    client.Space.find.assert_not_called()

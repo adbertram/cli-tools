@@ -41,12 +41,15 @@ _REFERENCE_FILE_METHODS = {
     "task": ("Task", "find"),
     "comment": ("Comment", "get"),
     "status": ("Status", "find"),
-    "space": ("Space", "find"),
 }
+_REFERENCE_TYPES = (*_REFERENCE_FILE_METHODS, "space")
 
 
 def _list_reference_files(client, ref_type: str, ref_id: int):
     """Read the files collection from a supported Podio object."""
+    if ref_type == "space":
+        return client.transport.GET(url=f"/file/space/{ref_id}/")
+
     area_name, method_name = _REFERENCE_FILE_METHODS[ref_type]
     return getattr(getattr(client, area_name), method_name)(ref_id).get("files", [])
 
@@ -114,9 +117,9 @@ def attach_file(
         podio file attach 12345 item 67890 --table
     """
     try:
-        if ref_type not in _REFERENCE_FILE_METHODS:
+        if ref_type not in _REFERENCE_TYPES:
             print_error(
-                f"Invalid ref_type '{ref_type}'. Must be one of: {', '.join(_REFERENCE_FILE_METHODS)}"
+                f"Invalid ref_type '{ref_type}'. Must be one of: {', '.join(_REFERENCE_TYPES)}"
             )
             raise typer.Exit(1)
 
@@ -153,9 +156,9 @@ def list_files(
         podio file list item 12345 --table
     """
     try:
-        if ref_type not in _REFERENCE_FILE_METHODS:
+        if ref_type not in _REFERENCE_TYPES:
             print_error(
-                f"Invalid ref_type '{ref_type}'. Must be one of: {', '.join(_REFERENCE_FILE_METHODS)}"
+                f"Invalid ref_type '{ref_type}'. Must be one of: {', '.join(_REFERENCE_TYPES)}"
             )
             raise typer.Exit(1)
 
