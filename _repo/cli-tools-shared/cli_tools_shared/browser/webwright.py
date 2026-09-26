@@ -18,6 +18,7 @@ from urllib.parse import parse_qsl, urlsplit, urlunsplit
 
 from . import BrowserHarnessError
 from ._elements import _ServiceElement, _ServiceLocator
+from .playwright_service import _chrome_binary
 
 
 class WebwrightServiceError(BrowserHarnessError):
@@ -66,13 +67,13 @@ class WebwrightBrowserService:
         self,
         session: str,
         *,
-        browser_mode: str = "local_persistent",
+        browser_mode: str = "local_cdp",
         timeout: int = 60,
         local_cdp_url: Optional[str] = None,
         local_cdp_executable: Optional[str] = None,
         local_cdp_new_page: Optional[bool] = None,
         local_cdp_close_page_on_exit: Optional[bool] = None,
-        local_cdp_close_started_browser_on_exit: Optional[bool] = None,
+        local_cdp_close_started_browser_on_exit: Optional[bool] = True,
     ):
         self.session = session
         self.browser_mode = browser_mode
@@ -189,8 +190,14 @@ class WebwrightBrowserService:
         }
         if self.local_cdp_url is not None:
             kwargs["local_cdp_url"] = self.local_cdp_url
-        if self.local_cdp_executable is not None:
-            kwargs["local_cdp_executable"] = self.local_cdp_executable
+        if self.browser_mode == "local_cdp":
+            # Webwright otherwise prefers Microsoft Edge before Google Chrome
+            # on macOS. A shared Chrome profile must use Chrome's keychain key.
+            kwargs["local_cdp_executable"] = (
+                self.local_cdp_executable
+                or os.getenv("CLI_TOOLS_CHROME_BINARY")
+                or _chrome_binary()
+            )
         if self.local_cdp_new_page is not None:
             kwargs["local_cdp_new_page"] = self.local_cdp_new_page
         if self.local_cdp_close_page_on_exit is not None:
@@ -218,17 +225,43 @@ class WebwrightBrowserService:
             self._opened = False
             raise WebwrightServiceError(f"Failed to open Webwright browser: {exc}") from exc
 
+    def _reset_tabs_for_restore(self) -> None:
+        """Leave one blank tab before closing an owned profile.
+
+        ``--restore-last-session`` preserves session cookies, but also restores
+        every tab from the prior run. Webwright's ``local_cdp`` mode may attach
+        to a browser it did not start, so never modify tabs in that case.
+        """
+        environment = self._environment
+        if environment is None:
+            return
+        if (
+            getattr(environment, "_connected_over_cdp", False)
+            and getattr(environment, "_local_cdp_process", None) is None
+        ):
+            return
+        context = self._context()
+        page = self._page()
+        for other in list(context.pages):
+            if other is not page:
+                self._run(other.close())
+        self._run(page.goto("about:blank"))
+
     def browser_close(self) -> Dict[str, Any]:
         environment = self._environment
-        self._environment = None
-        self._opened = False
-        if environment is not None:
-            try:
-                environment.close()
-            except Exception as exc:
-                raise WebwrightServiceError(
-                    f"Failed to close Webwright browser: {exc}"
-                ) from exc
+        try:
+            if environment is not None:
+                try:
+                    self._reset_tabs_for_restore()
+                finally:
+                    environment.close()
+        except Exception as exc:
+            raise WebwrightServiceError(
+                f"Failed to close Webwright browser: {exc}"
+            ) from exc
+        finally:
+            self._environment = None
+            self._opened = False
         return {"success": True, "message": "Browser closed"}
 
     def page_goto(self, url: str, wait_until: str | None = "domcontentloaded") -> Dict[str, Any]:

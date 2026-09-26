@@ -1811,12 +1811,14 @@ class WebwrightBrowserAutomation(BrowserAutomation):
     while swapping only the underlying browser service.
     """
 
-    WEBWRIGHT_BROWSER_MODE = "local_persistent"
+    # Webwright's local_persistent mode starts Chrome through Playwright, which
+    # adds mock-keychain defaults that corrupt cookies shared with CDP backends.
+    WEBWRIGHT_BROWSER_MODE = "local_cdp"
     WEBWRIGHT_LOCAL_CDP_URL = None
     WEBWRIGHT_LOCAL_CDP_EXECUTABLE = None
     WEBWRIGHT_LOCAL_CDP_NEW_PAGE = None
     WEBWRIGHT_LOCAL_CDP_CLOSE_PAGE_ON_EXIT = None
-    WEBWRIGHT_LOCAL_CDP_CLOSE_STARTED_BROWSER_ON_EXIT = None
+    WEBWRIGHT_LOCAL_CDP_CLOSE_STARTED_BROWSER_ON_EXIT = True
 
     def _get_service(self):
         if self._service is None:

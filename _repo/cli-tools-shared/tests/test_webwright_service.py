@@ -19,6 +19,7 @@ class _FakeKeyboard:
 class _FakePage:
     def __init__(self):
         self.url = "about:blank"
+        self.closed = False
         self.goto_calls = []
         self.evaluate_calls = []
         self.wait_for_selector_calls = []
@@ -27,6 +28,9 @@ class _FakePage:
     async def goto(self, url, wait_until=None):
         self.url = url
         self.goto_calls.append((url, wait_until))
+
+    async def close(self):
+        self.closed = True
 
     async def title(self):
         return "Fake title"
@@ -45,8 +49,9 @@ class _FakePage:
 
 
 class _FakeContext:
-    def __init__(self):
+    def __init__(self, page):
         self.cookies_calls = 0
+        self.pages = [page]
 
     async def cookies(self):
         self.cookies_calls += 1
@@ -69,7 +74,7 @@ class _FakeEnvironment:
         self.prepared = []
         self.closed = False
         self._page = _FakePage()
-        self._context = _FakeContext()
+        self._context = _FakeContext(self._page)
         _FakeEnvironment.instances.append(self)
 
     def prepare(self, **kwargs):
@@ -86,19 +91,33 @@ class _FakeEnvironment:
 
 
 @pytest.fixture(autouse=True)
-def reset_fake_environment():
-    _FakeEnvironment.instances = []
-
-
-def test_webwright_service_opens_persistent_profile_and_navigates(tmp_path, monkeypatch):
+def reset_fake_environment(monkeypatch):
     from cli_tools_shared.browser import webwright as webwright_module
-    from cli_tools_shared.browser.webwright import WebwrightBrowserService
+
+    _FakeEnvironment.instances = []
+    monkeypatch.setattr(
+        webwright_module,
+        "_chrome_binary",
+        lambda: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    )
+
+
+@pytest.fixture
+def fake_webwright_environment(monkeypatch):
+    from cli_tools_shared.browser import webwright as webwright_module
 
     monkeypatch.setattr(
         webwright_module,
         "_load_local_browser_environment",
         lambda: _FakeEnvironment,
     )
+
+
+def test_webwright_service_opens_shared_profile_via_local_cdp(
+    tmp_path, fake_webwright_environment
+):
+    from cli_tools_shared.browser.webwright import WebwrightBrowserService
+
     profile_dir = tmp_path / "profile"
 
     service = WebwrightBrowserService("service-default", timeout=7)
@@ -111,13 +130,18 @@ def test_webwright_service_opens_persistent_profile_and_navigates(tmp_path, monk
     )
 
     env = _FakeEnvironment.instances[0]
-    assert env.kwargs["browser_mode"] == "local_persistent"
+    assert env.kwargs["browser_mode"] == "local_cdp"
     assert env.kwargs["headless"] is False
     assert env.kwargs["user_data_dir"] == profile_dir
     assert env.kwargs["browser_width"] == 1440
     assert env.kwargs["browser_height"] == 900
     assert env.kwargs["browser_timeout_ms"] == 7000
     assert env.kwargs["browser_navigation_timeout_ms"] == 7000
+    assert env.kwargs["local_cdp_close_started_browser_on_exit"] is True
+    assert (
+        env.kwargs["local_cdp_executable"]
+        == "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    )
     assert env.kwargs["launch_args"] == [
         "--restore-last-session",
         "--user-agent=CLI Tools",
@@ -133,15 +157,9 @@ def test_webwright_service_opens_persistent_profile_and_navigates(tmp_path, monk
     assert result["title"] == "Fake title"
 
 
-def test_webwright_service_passes_local_cdp_options(tmp_path, monkeypatch):
-    from cli_tools_shared.browser import webwright as webwright_module
+def test_webwright_service_passes_local_cdp_options(tmp_path, fake_webwright_environment):
     from cli_tools_shared.browser.webwright import WebwrightBrowserService
 
-    monkeypatch.setattr(
-        webwright_module,
-        "_load_local_browser_environment",
-        lambda: _FakeEnvironment,
-    )
     profile_dir = tmp_path / "profile"
 
     service = WebwrightBrowserService(
@@ -167,15 +185,11 @@ def test_webwright_service_passes_local_cdp_options(tmp_path, monkeypatch):
     assert env.kwargs["local_cdp_close_started_browser_on_exit"] is False
 
 
-def test_webwright_service_exposes_page_helpers_and_deletes_profile(tmp_path, monkeypatch):
-    from cli_tools_shared.browser import webwright as webwright_module
+def test_webwright_service_exposes_page_helpers_and_deletes_profile(
+    tmp_path, fake_webwright_environment
+):
     from cli_tools_shared.browser.webwright import WebwrightBrowserService
 
-    monkeypatch.setattr(
-        webwright_module,
-        "_load_local_browser_environment",
-        lambda: _FakeEnvironment,
-    )
     profile_dir = tmp_path / "profile"
     (profile_dir / "Default").mkdir(parents=True)
     (profile_dir / "Default" / "Cookies").write_text("cookies")
@@ -209,6 +223,55 @@ def test_webwright_service_exposes_page_helpers_and_deletes_profile(tmp_path, mo
     assert not profile_dir.exists()
 
 
+def test_webwright_service_close_leaves_single_blank_tab_for_owned_browser(
+    tmp_path, fake_webwright_environment
+):
+    from cli_tools_shared.browser.webwright import WebwrightBrowserService
+
+    service = WebwrightBrowserService("service-default")
+    service.browser_open(
+        "https://example.com/orders",
+        persistent_profile_dir=tmp_path / "profile",
+    )
+    env = _FakeEnvironment.instances[0]
+    restored = _FakePage()
+    env._context.pages.insert(0, restored)
+    env._connected_over_cdp = True
+    env._local_cdp_process = object()
+
+    service.browser_close()
+
+    assert restored.closed is True
+    assert env._page.goto_calls == [
+        ("https://example.com/orders", "domcontentloaded"),
+        ("about:blank", None),
+    ]
+    assert env.closed is True
+
+
+def test_webwright_service_close_does_not_change_externally_owned_cdp_tabs(
+    tmp_path, fake_webwright_environment
+):
+    from cli_tools_shared.browser.webwright import WebwrightBrowserService
+
+    service = WebwrightBrowserService("service-default")
+    service.browser_open(
+        "https://example.com/orders",
+        persistent_profile_dir=tmp_path / "profile",
+    )
+    env = _FakeEnvironment.instances[0]
+    unrelated = _FakePage()
+    env._context.pages.insert(0, unrelated)
+    env._connected_over_cdp = True
+    env._local_cdp_process = None
+
+    service.browser_close()
+
+    assert unrelated.closed is False
+    assert env._page.goto_calls == [("https://example.com/orders", "domcontentloaded")]
+    assert env.closed is True
+
+
 def test_webwright_browser_automation_uses_webwright_service(monkeypatch):
     from cli_tools_shared import auth as auth_module
     from cli_tools_shared.auth import WebwrightBrowserAutomation
@@ -230,13 +293,13 @@ def test_webwright_browser_automation_uses_webwright_service(monkeypatch):
             self,
             session,
             *,
-            browser_mode="local_persistent",
+            browser_mode="local_cdp",
             timeout=60,
             local_cdp_url=None,
             local_cdp_executable=None,
             local_cdp_new_page=None,
             local_cdp_close_page_on_exit=None,
-            local_cdp_close_started_browser_on_exit=None,
+            local_cdp_close_started_browser_on_exit=True,
         ):
             self.session = session
             self.browser_mode = browser_mode
@@ -256,6 +319,7 @@ def test_webwright_browser_automation_uses_webwright_service(monkeypatch):
     service = browser._get_service()
 
     assert service.session == auth_module._safe_daemon_key("custom-work")
-    assert service.browser_mode == "local_persistent"
+    assert service.browser_mode == "local_cdp"
     assert service.local_cdp_url is None
+    assert service.local_cdp_close_started_browser_on_exit is True
     assert browser._get_service() is service
