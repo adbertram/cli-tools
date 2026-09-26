@@ -163,21 +163,6 @@ def publisher(tmp_path, monkeypatch):
     manifest_path.write_text(json.dumps(manifest))
 
     profile_dir = tmp_path / "profile"
-    # _static_build_lock now computes the build-token path directly from
-    # _publisher_runtime_root() (profile-relative), not a fixed repo path.
-    build_token = profile_dir / "static-publisher" / "build-token.json"
-    build_token.parent.mkdir(parents=True)
-    build_token.write_text(
-        json.dumps(
-            {
-                "holder": "root-coordinator",
-                "released_at": None,
-                "release_id": manifest["release_id"],
-                "contract_hash": manifest["contract_hash"],
-                "build_sha256": "c" * 64,
-            }
-        )
-    )
 
     monkeypatch.setattr(client_module, "STATIC_REPOSITORY_ROOT", repository)
     monkeypatch.setattr(client_module, "STATIC_SITE_ROOT", site)
@@ -273,7 +258,7 @@ def publisher(tmp_path, monkeypatch):
     client._run_static_build = build
     client._deploy_static_preview = deploy
     client.update_article = update
-    return client, article, markdown, image, manifest, counters, build_token
+    return client, article, markdown, image, manifest, counters, profile_dir
 
 
 def _scheduled_page(page_id, publish_date):
@@ -329,7 +314,7 @@ def _publish(client, **kwargs):
     return client._publish_static_transaction(**call_kwargs)
 
 
-def _rotate_static_release(manifest, build_token):
+def _rotate_static_release(manifest):
     manifest["inputs"]["corpus_sha256"] = "f" * 64
     manifest_body = {
         key: value
@@ -340,14 +325,6 @@ def _rotate_static_release(manifest, build_token):
     manifest["release_id"] = f"ata-static-{contract_hash[:24]}"
     manifest["contract_hash"] = contract_hash
     client_module.STATIC_RELEASE_MANIFEST.write_text(json.dumps(manifest))
-    token = json.loads(build_token.read_text())
-    token.update(
-        {
-            "release_id": manifest["release_id"],
-            "contract_hash": manifest["contract_hash"],
-        }
-    )
-    build_token.write_text(json.dumps(token))
 
 
 def test_p05_idempotency_encoding_is_exact():
@@ -401,10 +378,9 @@ def test_preview_status_cannot_be_combined_with_scheduling(publisher):
     _assert_nothing_written(client, counters)
 
 
-def test_completed_same_revision_replay_has_zero_effects_and_no_build_token(publisher):
-    client, _article, _markdown, _image, _manifest, counters, build_token = publisher
+def test_completed_same_revision_replay_has_zero_effects(publisher):
+    client, _article, _markdown, _image, _manifest, counters, _profile_dir = publisher
     first = _publish(client)
-    build_token.unlink()
 
     replay = _publish(client)
 
@@ -434,11 +410,6 @@ def test_first_staged_build_binds_post_stage_release_identity(publisher):
     runtime = json.loads(paths["runtime"].read_text())
     assert journal["release_ref"] == runtime["release_ref"] == result["release_ref"]
     assert journal["release_ref"] != pre_stage_release_ref
-    # Once the build lands, _sync_build_token advances the live token to it
-    # and runtime["build_token_release_ref"] is persisted to match -- so a
-    # later retry's staleness check compares against the real, just-built
-    # release, not the snapshot read before this transaction ever staged.
-    assert runtime["build_token_release_ref"] == journal["release_ref"]
     assert (
         manifest["inputs"]["corpus_sha256"]
         == journal["artifacts"]["staged_corpus_sha256"]
@@ -720,7 +691,7 @@ def test_failure_matrix_rolls_back_and_same_journal_retry_completes(
 def test_rolled_back_failed_competing_revision_does_not_block_fresh_source(
     publisher, monkeypatch
 ):
-    client, _article, markdown, _image, manifest, counters, build_token = publisher
+    client, _article, markdown, _image, manifest, counters, _profile_dir = publisher
     original_update = client.update_article
     update_attempts = 0
 
@@ -754,7 +725,7 @@ def test_rolled_back_failed_competing_revision_does_not_block_fresh_source(
     assert failed_runtime["rollback_error"] is None
     historical_release_ref = dict(failed_journal["release_ref"])
 
-    _rotate_static_release(manifest, build_token)
+    _rotate_static_release(manifest)
     assert historical_release_ref != {
         "release_id": manifest["release_id"],
         "contract_hash": manifest["contract_hash"],
@@ -785,7 +756,7 @@ def test_rolled_back_failed_competing_revision_does_not_block_fresh_source(
 def test_historical_competing_revision_still_fails_closed(
     publisher, monkeypatch, historical_state, expected_error
 ):
-    client, _article, markdown, _image, manifest, counters, build_token = publisher
+    client, _article, markdown, _image, manifest, counters, _profile_dir = publisher
     original_update = client.update_article
     update_attempts = 0
 
@@ -830,7 +801,7 @@ def test_historical_competing_revision_still_fails_closed(
         runtime["corpus_rolled_back"] = False
         _atomic_write_json(runtime_path, runtime)
 
-    _rotate_static_release(manifest, build_token)
+    _rotate_static_release(manifest)
     client.get_article_markdown = lambda _page_id: markdown + "\nFresh source revision.\n"
     prior_counters = dict(counters)
 
@@ -983,7 +954,6 @@ def test_legacy_failed_unbuilt_journal_rebinds_without_duplicate_media(
     journal["artifacts"]["staged_corpus_sha256"] = "e" * 64
     runtime["release_ref"] = legacy_release_ref
     runtime["corpus_sha256"] = "e" * 64
-    runtime.pop("build_token_release_ref", None)
     _atomic_write_json(journal_path, journal)
     _atomic_write_json(runtime_path, runtime)
 
@@ -997,78 +967,6 @@ def test_legacy_failed_unbuilt_journal_rebinds_without_duplicate_media(
     assert counters["media"] == 1
     assert counters["build"] == 1
     assert attempts == 2
-
-
-def test_legacy_failed_unbuilt_journal_uses_rotated_build_token(
-    publisher, monkeypatch
-):
-    client, _article, _markdown, _image, manifest, counters, build_token = publisher
-    original_build = client._run_static_build
-
-    def fail_build(*_args, **_kwargs):
-        raise ClientError("injected legacy build failure")
-
-    monkeypatch.setattr(client, "_run_static_build", fail_build)
-    with pytest.raises(ClientError, match="failed during build"):
-        _publish(client)
-
-    journal_path = next(
-        (client._publisher_runtime_root() / "transactions").glob("*.journal.json")
-    )
-    runtime_path = journal_path.with_name(
-        journal_path.name.replace(".journal.json", ".runtime.json")
-    )
-    journal = json.loads(journal_path.read_text())
-    runtime = json.loads(runtime_path.read_text())
-    stale_release_ref = {
-        "release_id": manifest["release_id"],
-        "contract_hash": manifest["contract_hash"],
-    }
-    unbound_release_ref = {"release_id": None, "contract_hash": None}
-    journal["release_ref"] = unbound_release_ref
-    runtime["release_ref"] = unbound_release_ref
-    runtime["build_token_release_ref"] = stale_release_ref
-    runtime["failure_stage"] = "build-lock acquisition"
-    runtime["failure_message"] = "Build token release_id is stale"
-    _atomic_write_json(journal_path, journal)
-    _atomic_write_json(runtime_path, runtime)
-
-    manifest["inputs"]["corpus_sha256"] = "f" * 64
-    manifest_body = {
-        key: value
-        for key, value in manifest.items()
-        if key not in {"release_id", "contract_hash"}
-    }
-    contract_hash = _artifact_sha256(manifest_body)
-    manifest["release_id"] = f"ata-static-{contract_hash[:24]}"
-    manifest["contract_hash"] = contract_hash
-    client_module.STATIC_RELEASE_MANIFEST.write_text(json.dumps(manifest))
-    rotated_release_ref = {
-        "release_id": manifest["release_id"],
-        "contract_hash": manifest["contract_hash"],
-    }
-    token = json.loads(build_token.read_text())
-    token.update(rotated_release_ref)
-    build_token.write_text(json.dumps(token))
-
-    monkeypatch.setattr(client, "_run_static_build", original_build)
-    result = _publish(client)
-
-    # The retry's own build re-stages the corpus and produces its own release
-    # identity (which need not equal the manually rotated placeholder above).
-    # _bind_static_build_release now advances build_token_release_ref to that
-    # actual, just-built identity -- the same one _sync_build_token writes
-    # into the live token -- so later retries keep matching the real token
-    # instead of the pre-build value this test used only to clear staleness.
-    post_build_release_ref = {
-        "release_id": manifest["release_id"],
-        "contract_hash": manifest["contract_hash"],
-    }
-    migrated_runtime = json.loads(runtime_path.read_text())
-    assert migrated_runtime["build_token_release_ref"] == post_build_release_ref
-    assert migrated_runtime["build_token_release_ref"] != stale_release_ref
-    assert result["journal_state"] == "completed"
-    assert counters["media"] == 1
 
 
 def test_failed_unbuilt_journal_rejects_impossible_deployment_effect(
@@ -1301,26 +1199,27 @@ def test_pre_inline_media_record_with_a_mismatched_receipt_still_fails_closed(
     assert counters["deploy"] == counters["notion"] == 0
 
 
-def test_build_token_failure_precedes_journal_and_is_retryable(publisher):
-    client, _article, _markdown, _image, manifest, _counters, build_token = publisher
-    token = json.loads(build_token.read_text())
-    token["holder"] = "p15"
-    build_token.write_text(json.dumps(token))
+@pytest.mark.parametrize(
+    "token_contents",
+    [b"initial build token", b"stale build token", None],
+    ids=["initial", "stale", "missing"],
+)
+def test_publish_ignores_initial_stale_or_missing_build_token(
+    publisher, token_contents
+):
+    client, _article, _markdown, _image, _manifest, counters, _profile_dir = publisher
+    build_token = client._publisher_runtime_root() / "build-token.json"
+    if token_contents is not None:
+        build_token.parent.mkdir(parents=True)
+        build_token.write_bytes(token_contents)
+        original_token = build_token.read_bytes()
 
-    with pytest.raises(ClientError, match="build-lock acquisition"):
-        _publish(client)
+    result = _publish(client)
 
-    transaction_root = client._publisher_runtime_root() / "transactions"
-    assert list(transaction_root.glob("*.journal.json")) == []
-
-    token.update(
-        holder="root-coordinator",
-        released_at=None,
-        release_id=manifest["release_id"],
-        contract_hash=manifest["contract_hash"],
-    )
-    build_token.write_text(json.dumps(token))
-    assert _publish(client)["journal_state"] == "completed"
+    assert result["journal_state"] == "completed"
+    assert counters == {"media": 1, "build": 1, "deploy": 1, "notion": 1}
+    if token_contents is not None:
+        assert build_token.read_bytes() == original_token
 
 
 def test_corrupt_completed_journal_cannot_replay(publisher):
@@ -1835,20 +1734,27 @@ def test_static_build_requires_manifest_regeneration_contract(tmp_path, monkeypa
         )
 
 
-def test_new_journal_captures_corpus_while_global_build_lock_is_held(
+def test_new_journal_captures_corpus_while_profile_build_lock_is_held(
     publisher, monkeypatch
 ):
     client, *_ = publisher
     held = False
     original_new = client._new_publisher_journal
+    original_lock = client._exclusive_publisher_lock
 
     @contextmanager
-    def tracked_lock(*_args, **_kwargs):
+    def tracked_lock(path, *, blocking=True):
         nonlocal held
+        if path != client._publisher_runtime_root() / "locks" / "build.lock":
+            with original_lock(path, blocking=blocking):
+                yield
+            return
+        assert blocking is False
         assert held is False
         held = True
         try:
-            yield
+            with original_lock(path, blocking=blocking):
+                yield
         finally:
             held = False
 
@@ -1856,11 +1762,8 @@ def test_new_journal_captures_corpus_while_global_build_lock_is_held(
         assert held is True
         return original_new(**kwargs)
 
-    monkeypatch.setattr(client, "_static_build_lock", tracked_lock)
+    monkeypatch.setattr(client, "_exclusive_publisher_lock", tracked_lock)
     monkeypatch.setattr(client, "_new_publisher_journal", checked_new)
-    # tracked_lock yields no token handle -- it only asserts lock-hold timing
-    # around journal creation, so the (unrelated) token sync is a no-op here.
-    monkeypatch.setattr(client, "_sync_build_token", lambda *_a, **_k: None)
 
     assert _publish(client)["journal_state"] == "completed"
     assert held is False
