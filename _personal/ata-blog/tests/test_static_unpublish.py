@@ -12,7 +12,6 @@ from pathlib import Path
 
 import pytest
 
-import ata_blog_cli.client as client_module
 from ata_blog_cli.client import AtaBlogClient, ClientError, _static_corpus_sha256
 from test_static_publisher import (  # noqa: F401 - `publisher` is a fixture
     PAGE_ID,
@@ -161,14 +160,14 @@ def test_unpublish_refuses_while_a_publish_transaction_is_active(publisher):
     assert post.exists()
 
 
-def test_unpublish_requires_the_build_token(publisher):
-    client, _article, _markdown, _image, _manifest, _counters, build_token = publisher
+def test_unpublish_ignores_a_missing_build_token(publisher):
+    client, _article, _markdown, _image, _manifest, _counters, _profile_dir = publisher
     _arm_promotion(client)
     post = _published_post(client)
-    build_token.unlink()
+    build_token = client._publisher_runtime_root() / "build-token.json"
+    assert not build_token.exists()
 
-    with pytest.raises(ClientError, match="build-lock acquisition"):
-        _unpublish(client, post)
+    result = _unpublish(client, post)
 
-    assert post.exists()
-    assert client_module.STATIC_SITE_ROOT in post.parents
+    assert result["promotion_id"] == PRODUCTION_DEPLOYMENT_ID
+    assert not post.exists()
