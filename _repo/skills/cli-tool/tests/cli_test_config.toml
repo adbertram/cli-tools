@@ -298,6 +298,7 @@ max_nested_depth = 4
 # Podio fixtures: uses _pos prefix for positional arguments
 [cli_specific.podio.param_fixtures]
 "item list" = { "_pos1" = "app_id" }
+"file list" = { "_pos1" = "file_ref_type", "_pos2" = "space_id" }
 
 # Ahrefs fixtures: site-audit commands require project_id positional arg
 [cli_specific.ahrefs.param_fixtures]

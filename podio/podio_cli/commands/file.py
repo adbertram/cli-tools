@@ -36,6 +36,23 @@ from ..filter_map import FilterMap, apply_properties
 
 app = typer.Typer(help="Manage Podio files")
 
+_REFERENCE_FILE_METHODS = {
+    "item": ("Item", "find"),
+    "task": ("Task", "find"),
+    "comment": ("Comment", "get"),
+    "status": ("Status", "find"),
+}
+_REFERENCE_TYPES = (*_REFERENCE_FILE_METHODS, "space")
+
+
+def _list_reference_files(client, ref_type: str, ref_id: int):
+    """Read the files collection from a supported Podio object."""
+    if ref_type == "space":
+        return client.transport.GET(url=f"/file/space/{ref_id}/")
+
+    area_name, method_name = _REFERENCE_FILE_METHODS[ref_type]
+    return getattr(getattr(client, area_name), method_name)(ref_id).get("files", [])
+
 
 @app.command("upload")
 @command
@@ -100,9 +117,10 @@ def attach_file(
         podio file attach 12345 item 67890 --table
     """
     try:
-        valid_types = ["item", "task", "comment", "status", "space"]
-        if ref_type not in valid_types:
-            print_error(f"Invalid ref_type '{ref_type}'. Must be one of: {', '.join(valid_types)}")
+        if ref_type not in _REFERENCE_TYPES:
+            print_error(
+                f"Invalid ref_type '{ref_type}'. Must be one of: {', '.join(_REFERENCE_TYPES)}"
+            )
             raise typer.Exit(1)
 
         client = get_client()
@@ -138,16 +156,14 @@ def list_files(
         podio file list item 12345 --table
     """
     try:
-        valid_types = ["item", "task", "comment", "status", "space"]
-        if ref_type not in valid_types:
-            print_error(f"Invalid ref_type '{ref_type}'. Must be one of: {', '.join(valid_types)}")
+        if ref_type not in _REFERENCE_TYPES:
+            print_error(
+                f"Invalid ref_type '{ref_type}'. Must be one of: {', '.join(_REFERENCE_TYPES)}"
+            )
             raise typer.Exit(1)
 
         client = get_client()
-        if ref_type == "item":
-            result = client.Item.find(item_id=ref_id).get("files", [])
-        else:
-            result = client.Files.transport.GET(url=f"/file/{ref_type}/{ref_id}/")
+        result = _list_reference_files(client, ref_type, ref_id)
         formatted = format_response(result)
 
         # Apply client-side filter if specified
