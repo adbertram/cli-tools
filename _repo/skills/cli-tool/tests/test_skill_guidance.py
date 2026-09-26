@@ -60,6 +60,14 @@ def test_skill_places_usage_json_in_cli_skill_folder():
     assert "do not import `cli_test_utils` from ad-hoc Python" in text
 
 
+def test_skill_documents_external_project_usage_json_path():
+    text = _read("SKILL.md")
+
+    assert "For a project-owned CLI whose service skill lives outside `cli-tools`" in text
+    assert "--usage-json <canonical-skill-path>/usage.json" in text
+    assert "Do not create an in-repo skill folder merely to use the default path." in text
+
+
 def test_service_skills_reference_adjacent_usage_json_path():
     skills_root = SKILL_ROOT.parent
     service_skills = sorted(skills_root.glob("*-cli/SKILL.md"))
