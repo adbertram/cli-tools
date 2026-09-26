@@ -116,7 +116,7 @@ def _collect_profile_auth_values(prompts, provided_values: dict[str, str]) -> di
         if value is None:
             try:
                 value = typer.prompt(f"Enter {prompt_text}", hide_input=hide_input)
-            except click.Abort:
+            except (click.Abort, typer.Abort):
                 print_error(
                     "Missing required auth parameter values. "
                     "Provide --auth-param FIELD=VALUE or run interactively to enter them."

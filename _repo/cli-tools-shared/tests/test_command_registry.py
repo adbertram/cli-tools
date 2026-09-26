@@ -83,6 +83,31 @@ def test_browser_session_gate_fails_when_config_has_no_saved_session():
     config.has_saved_session.assert_called_once_with()
 
 
+def test_browser_session_gate_reports_shared_profile_seed_command(capsys):
+    config = _config_with_session(False)
+    config.shared_chromium_profile_seed_guidance.return_value = (
+        "shared Chromium profile not seeded; run "
+        "'bricklink auth seed-shared-chromium-profile'"
+    )
+
+    with pytest.raises(typer.Exit):
+        _check_credentials(config, ["browser_session"], "bricklink")
+
+    assert "bricklink auth seed-shared-chromium-profile" in capsys.readouterr().err
+    config.shared_chromium_profile_seed_guidance.assert_called_once_with("bricklink")
+
+
+def test_browser_session_gate_supports_legacy_config_without_seed_guidance(capsys):
+    class LegacyConfig:
+        def has_saved_session(self):
+            return False
+
+    with pytest.raises(typer.Exit):
+        _check_credentials(LegacyConfig(), ["browser_session"], "bricklink")
+
+    assert "no saved browser session" in capsys.readouterr().err
+
+
 def test_browser_session_gate_does_not_call_live_is_authenticated():
     """The gate must NEVER do a live browser navigation. That's the bug the
     refactor fixed: ``auth status`` (filesystem-only) disagreeing with the

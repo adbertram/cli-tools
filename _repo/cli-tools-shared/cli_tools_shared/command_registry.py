@@ -37,6 +37,7 @@ from .config import (
 )
 from .credentials import CredentialType
 from .profiles import ProfileStore, list_profiles
+from .shared_chromium_profile import get_shared_chromium_profile_seed_guidance
 
 logger = logging.getLogger("cli_tools.command_registry")
 
@@ -355,7 +356,10 @@ def _check_credentials(
             # MUST perform it themselves at the point of use — that is
             # not the gate's job.
             if not config.has_saved_session():
-                missing.append(f"  - {cred_type.value}: no saved browser session")
+                guidance = get_shared_chromium_profile_seed_guidance(config, cli_name)
+                missing.append(
+                    f"  - {cred_type.value}: {guidance or 'no saved browser session'}"
+                )
 
         else:
             # API_KEY, PERSONAL_ACCESS_TOKEN, USERNAME_PASSWORD, CUSTOM

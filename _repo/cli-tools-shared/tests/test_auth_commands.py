@@ -94,6 +94,25 @@ def test_single_credential_type_help_does_not_register_credential_type_option():
     assert "No such option" in invalid.output
 
 
+def test_browser_auth_app_seeds_shared_chromium_profile():
+    config = MagicMock()
+    config.CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
+    config.OAUTH_AUTH_URL = ""
+    config.OAUTH_TOKEN_URL = ""
+    config.seed_shared_chromium_profile.return_value = Path("/tmp/shared-chromium-profile")
+    app = create_auth_app(
+        lambda profile=None: config,
+        tool_name="bricklink",
+        include_profiles=False,
+    )
+
+    result = CliRunner().invoke(app, ["seed-shared-chromium-profile"])
+
+    assert result.exit_code == 0, result.output
+    config.seed_shared_chromium_profile.assert_called_once_with()
+    assert "Seeded shared Chromium profile at /tmp/shared-chromium-profile" in result.output
+
+
 def test_auth_login_prints_setup_instructions_and_prompts_for_non_secret_config_first():
     class AuthConfig:
         CREDENTIAL_TYPES = [CredentialType.USERNAME_PASSWORD]
