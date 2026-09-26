@@ -134,7 +134,7 @@ class BrickfreedomClient:
                 self._auth_checked = True
                 if not self._browser.is_authenticated():
                     raise ClientError(
-                        "Not logged in. Run 'brickfreedom auth login -c browser_session' to authenticate."
+                        "Not logged in. Run 'brickfreedom auth login' to authenticate."
                     )
             return self._browser.get_page(url)
         except BrowserAutomationError as e:
