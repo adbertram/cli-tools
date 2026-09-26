@@ -222,16 +222,17 @@ class WebwrightBrowserService:
             ) from exc
 
     def _wait_for_owned_cdp_endpoint(self) -> str:
-        """Return this service's dynamically assigned CDP endpoint.
+        """Return the reachable endpoint for this service's owned CDP process.
 
-        Chrome writes ``DevToolsActivePort`` inside its user-data-dir only
-        after it has bound an ephemeral debugging port.  Combined with the
-        lifecycle lock and pre-launch process check, this proves the endpoint
-        belongs to this service's profile rather than a browser on port 9222.
+        ``DevToolsActivePort`` is written only when Chrome receives
+        ``--remote-debugging-port=0``.  This service deliberately picks a
+        unique non-zero loopback port so it can verify the exact Chrome
+        process before attaching, therefore endpoint readiness must be
+        established by polling the CDP endpoint itself rather than that file.
         """
-        if self._user_data_dir is None:
+        if self._user_data_dir is None or self._cdp_port is None:
             raise WebwrightServiceError("Cannot resolve a CDP endpoint before the profile is set.")
-        port_file = self._user_data_dir / "DevToolsActivePort"
+        endpoint = f"http://127.0.0.1:{self._cdp_port}"
         deadline = time.monotonic() + self.default_timeout
         while time.monotonic() < deadline:
             if self._chrome_process is not None and self._chrome_process.poll() is not None:
@@ -240,27 +241,23 @@ class WebwrightBrowserService:
                     f"profile {self._user_data_dir}."
                 )
             try:
-                lines = port_file.read_text(encoding="utf-8").splitlines()
-                port = int(lines[0])
-                if not 1 <= port <= 65535:
-                    raise ValueError("port outside valid range")
-                if port != self._cdp_port:
-                    raise WebwrightServiceError(
-                        "Chrome exposed an unexpected CDP port for the owned "
-                        f"profile: expected {self._cdp_port}, got {port}."
-                    )
-                owned_pids = self._owned_cdp_process_pids(port)
-                if self._chrome_process is None or self._chrome_process.pid not in owned_pids:
-                    raise WebwrightServiceError(
-                        "The CDP endpoint is not owned by this Webwright Chrome "
-                        f"process for profile {self._user_data_dir}."
-                    )
-                endpoint = f"http://127.0.0.1:{port}"
+                owned_pids = self._owned_cdp_process_pids(self._cdp_port)
+            except ProcessTableUnavailableError as exc:
+                raise WebwrightServiceError(
+                    "Cannot verify ownership of the Webwright Chrome CDP endpoint "
+                    "because process-table inspection is unavailable."
+                ) from exc
+            if self._chrome_process is None or self._chrome_process.pid not in owned_pids:
+                raise WebwrightServiceError(
+                    "The CDP endpoint is not owned by this Webwright Chrome "
+                    f"process for profile {self._user_data_dir}."
+                )
+            try:
                 with urlopen(f"{endpoint}/json/version", timeout=0.5) as response:
                     payload = json.loads(response.read().decode("utf-8"))
                 if response.status == 200 and payload.get("webSocketDebuggerUrl"):
                     return endpoint
-            except (FileNotFoundError, IndexError, ValueError, OSError, json.JSONDecodeError):
+            except (OSError, json.JSONDecodeError):
                 pass
             time.sleep(0.1)
         raise WebwrightServiceError(

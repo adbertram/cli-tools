@@ -14,9 +14,9 @@ class DoorDashBrowser(WebwrightBrowserAutomation):
     # Cloudflare blocks headless Chrome on checkout; reorder runs headed.
     AUTOMATION_HEADED = True
     # DoorDash/Cloudflare accepts the real local Chrome CDP profile but rejects
-    # Playwright's persistent Chrome-for-Testing profile for auth reuse.
-    WEBWRIGHT_BROWSER_MODE = "local_cdp"
-    WEBWRIGHT_LOCAL_CDP_URL = "http://127.0.0.1:9224"
+    # Playwright's persistent Chrome-for-Testing profile for auth reuse. The
+    # shared service now owns a private local CDP endpoint, so this subclass
+    # must not point it at a fixed or externally supplied endpoint.
     WEBWRIGHT_LOCAL_CDP_EXECUTABLE = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
     WEBWRIGHT_LOCAL_CDP_NEW_PAGE = False
 

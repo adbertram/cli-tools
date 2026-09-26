@@ -294,7 +294,7 @@ def test_webwright_service_launches_owned_chrome_headless_on_an_ephemeral_port(
     assert kwargs["start_new_session"] is True
 
 
-def test_webwright_service_verifies_devtools_endpoint_matches_owned_process(
+def test_webwright_service_polls_explicit_cdp_endpoint_owned_by_launched_process(
     tmp_path, monkeypatch
 ):
     from cli_tools_shared.browser import webwright as webwright_module
@@ -315,7 +315,6 @@ def test_webwright_service_verifies_devtools_endpoint_matches_owned_process(
     service = WebwrightBrowserService("service-default")
     service._user_data_dir = tmp_path / "profile"
     service._user_data_dir.mkdir()
-    (service._user_data_dir / "DevToolsActivePort").write_text("48321\n/devtools/browser/test\n")
     service._cdp_port = 48321
     service._chrome_process = _FakeChromeProcess(pid=4321)
     monkeypatch.setattr(
@@ -328,7 +327,7 @@ def test_webwright_service_verifies_devtools_endpoint_matches_owned_process(
     assert service._wait_for_owned_cdp_endpoint() == "http://127.0.0.1:48321"
 
 
-def test_webwright_service_rejects_devtools_endpoint_not_owned_by_launched_chrome(
+def test_webwright_service_rejects_cdp_endpoint_not_owned_by_launched_chrome(
     tmp_path, monkeypatch
 ):
     from cli_tools_shared.browser import webwright as webwright_module
@@ -340,7 +339,6 @@ def test_webwright_service_rejects_devtools_endpoint_not_owned_by_launched_chrom
     service = WebwrightBrowserService("service-default", timeout=1)
     service._user_data_dir = tmp_path / "profile"
     service._user_data_dir.mkdir()
-    (service._user_data_dir / "DevToolsActivePort").write_text("48321\n/devtools/browser/test\n")
     service._cdp_port = 48321
     service._chrome_process = _FakeChromeProcess(pid=4321)
     monkeypatch.setattr(
