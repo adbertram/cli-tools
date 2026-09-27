@@ -880,6 +880,19 @@ def create_auth_app(
         print_output(data, table)
         _exit_if_no_authenticated_profile(data)
 
+    if has_browser_auth:
+        @app.command("seed-shared-chromium-profile")
+        @command
+        def seed_shared_chromium_profile(
+            profile: Optional[str] = typer.Option(
+                None, "--profile", "-p", help="Default profile with the known-good legacy browser session"
+            ),
+        ):
+            """Seed an empty shared Chromium profile from this CLI's default profile."""
+            config = get_config_fn(profile=profile)
+            seeded = config.seed_shared_chromium_profile()
+            print_success(f"Seeded shared Chromium profile at {seeded}")
+
     # Add refresh command only if config has OAuth token URL
     # We check lazily via a probe config to avoid requiring profile at import time
     if config_cls is not None and getattr(config_cls, "OAUTH_TOKEN_URL", ""):

@@ -10,6 +10,7 @@ from cli_tools_shared.config import (
     get_profiles_base_dir,
 )
 from cli_tools_shared.credentials import CredentialType
+from cli_tools_shared.exceptions import ConfigError
 
 
 class BrowserConfig(BaseConfig):
@@ -151,6 +152,114 @@ def test_clear_shared_chromium_profile_wipes_shared(tmp_path, isolated_data_home
     cleared = config.clear_shared_chromium_profile()
     assert cleared == shared
     assert not shared.exists()
+
+
+def _write_cookies(profile_dir: Path, value: str = "cookies") -> None:
+    cookies = profile_dir / "Default" / "Cookies"
+    cookies.parent.mkdir(parents=True, exist_ok=True)
+    cookies.write_text(value)
+
+
+def test_unseeded_shared_profile_reports_exact_seed_command(tmp_path, isolated_data_home):
+    tool_dir = _tool_dir(tmp_path, "bricklink")
+    _write_profile(get_profiles_base_dir(tool_dir.name) / "default" / ".env")
+    config = BrowserConfig(tool_dir=tool_dir)
+    _write_cookies(config.get_legacy_chromium_profile_dir())
+
+    assert config.shared_chromium_profile_seed_guidance("bricklink") == (
+        "shared Chromium profile not seeded; run "
+        "'bricklink auth seed-shared-chromium-profile'"
+    )
+
+
+def test_partially_populated_shared_profile_does_not_report_seed_command(
+    tmp_path,
+    isolated_data_home,
+):
+    tool_dir = _tool_dir(tmp_path, "bricklink")
+    _write_profile(get_profiles_base_dir(tool_dir.name) / "default" / ".env")
+    config = BrowserConfig(tool_dir=tool_dir)
+    _write_cookies(config.get_legacy_chromium_profile_dir())
+    shared = config.get_persistent_profile_dir()
+    (shared / "Preferences").write_text("partial shared profile")
+
+    assert config.shared_chromium_profile_seed_guidance("bricklink") is None
+
+
+def test_seed_shared_profile_copies_one_legacy_profile(tmp_path, isolated_data_home, monkeypatch):
+    tool_dir = _tool_dir(tmp_path, "bricklink")
+    _write_profile(get_profiles_base_dir(tool_dir.name) / "default" / ".env")
+    config = BrowserConfig(tool_dir=tool_dir)
+    source = config.get_legacy_chromium_profile_dir()
+    _write_cookies(source, "legacy-cookies")
+    (source / "Preferences").write_text("preferences")
+    (source / "SingletonLock").write_text("stale-lock")
+    target = config.get_persistent_profile_dir()
+    monkeypatch.setattr(
+        "cli_tools_shared.shared_chromium_profile.profile_process_pids",
+        lambda _profile: [],
+    )
+
+    seeded = config.seed_shared_chromium_profile()
+
+    assert seeded == target
+    assert (target / "Default" / "Cookies").read_text() == "legacy-cookies"
+    assert (target / "Preferences").read_text() == "preferences"
+    assert not (target / "SingletonLock").exists()
+    assert config.shared_chromium_profile_seed_guidance("bricklink") is None
+
+
+def test_seed_shared_profile_refuses_missing_legacy_session(tmp_path, isolated_data_home, monkeypatch):
+    tool_dir = _tool_dir(tmp_path, "bricklink")
+    _write_profile(get_profiles_base_dir(tool_dir.name) / "default" / ".env")
+    config = BrowserConfig(tool_dir=tool_dir)
+    monkeypatch.setattr(
+        "cli_tools_shared.shared_chromium_profile.profile_process_pids",
+        lambda _profile: [],
+    )
+
+    with pytest.raises(ConfigError, match="source has no Cookies database"):
+        config.seed_shared_chromium_profile()
+
+
+def test_seed_shared_profile_refuses_populated_target(tmp_path, isolated_data_home, monkeypatch):
+    tool_dir = _tool_dir(tmp_path, "bricklink")
+    _write_profile(get_profiles_base_dir(tool_dir.name) / "default" / ".env")
+    config = BrowserConfig(tool_dir=tool_dir)
+    _write_cookies(config.get_legacy_chromium_profile_dir())
+    target = config.get_persistent_profile_dir()
+    (target / "existing.txt").write_text("do not overwrite")
+    monkeypatch.setattr(
+        "cli_tools_shared.shared_chromium_profile.profile_process_pids",
+        lambda _profile: [],
+    )
+
+    with pytest.raises(ConfigError, match="destination is not empty"):
+        config.seed_shared_chromium_profile()
+
+
+def test_seed_shared_profile_refuses_nonshared_config(tmp_path, isolated_data_home, monkeypatch):
+    monkeypatch.setenv("CLI_TOOLS_ISOLATE_CHROME_PROFILE", "1")
+    tool_dir = _tool_dir(tmp_path, "bricklink")
+    _write_profile(get_profiles_base_dir(tool_dir.name) / "default" / ".env")
+    config = BrowserConfig(tool_dir=tool_dir)
+
+    with pytest.raises(ConfigError, match="requires the default browser authentication profile"):
+        config.seed_shared_chromium_profile()
+
+
+def test_seed_shared_profile_refuses_running_chrome(tmp_path, isolated_data_home, monkeypatch):
+    tool_dir = _tool_dir(tmp_path, "bricklink")
+    _write_profile(get_profiles_base_dir(tool_dir.name) / "default" / ".env")
+    config = BrowserConfig(tool_dir=tool_dir)
+    _write_cookies(config.get_legacy_chromium_profile_dir())
+    monkeypatch.setattr(
+        "cli_tools_shared.shared_chromium_profile.profile_process_pids",
+        lambda _profile: [421],
+    )
+
+    with pytest.raises(ConfigError, match="PID\\(s\\): 421"):
+        config.seed_shared_chromium_profile()
 
 
 def test_browser_clear_session_preserves_shared_data(tmp_path, isolated_data_home, monkeypatch):

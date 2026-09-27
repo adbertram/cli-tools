@@ -1,8 +1,8 @@
 {
   "tool": "udemy",
   "description": "Udemy Instructor API CLI",
-  "discovered_at": "2026-06-20T19:56:19Z",
-  "total_commands": 15,
+  "discovered_at": "2026-09-27T00:02:04Z",
+  "total_commands": 17,
   "global_options": [
     {
       "name": "--version",
@@ -21,7 +21,6 @@
   "commands": {
     "auth": {
       "help": "Manage udemy authentication",
-      "usage_instructions": "Use `udemy auth` to save, check, clear, and test the Udemy bearer token. Auth commands accept --profile/-p for named profiles, and `auth profiles` manages the profile files.",
       "arguments": [],
       "options": [],
       "commands": {
@@ -41,8 +40,9 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
-              "short": "-F"
+              "help": "Clear existing ephemeral auth state and re-authenticate",
+              "short": "-F",
+              "takes_value": false
             },
             {
               "name": "--credential-type",
@@ -75,7 +75,6 @@
           "commands": {
             "create": {
               "help": "Create a new profile from .env.example template.",
-              "usage_instructions": "Create a named profile file from `.env.example`. After creating NAME, run `udemy auth login --profile NAME` to save that profile's bearer token.",
               "arguments": [
                 {
                   "name": "name",
@@ -103,7 +102,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -124,12 +124,13 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "List configured profiles and identify the default. Use --table/-t for table output, --limit/-l to cap rows, --filter/-f with field:op:value syntax, and --properties/-p to select profile fields.",
               "arguments": [],
               "options": [
@@ -138,7 +139,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -179,7 +181,42 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -197,8 +234,21 @@
             }
           }
         },
+        "seed-shared-chromium-profile": {
+          "help": "Seed an empty shared Chromium profile from this CLI's default profile.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Default profile with the known-good legacy browser session",
+              "short": "-p"
+            }
+          ]
+        },
         "status": {
-          "help": "Check authentication status across profiles.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
           "usage_instructions": "Check whether credentials are saved and see the active profile. Use --profile/-p PROFILE to inspect another profile and --table/-t for tabular output.",
           "arguments": [],
           "options": [
@@ -214,7 +264,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -228,14 +279,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--verbose",
               "type": "bool",
               "required": false,
               "help": "Show detailed checks",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -258,13 +311,19 @@
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "usage_instructions": "Clear all cached responses for the active profile. Use this when stale course data appears or after switching accounts.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
     "courses": {
       "help": "Manage instructor courses",
-      "usage_instructions": "Use `udemy courses` for instructor-taught course data. Authenticate first with `udemy auth login`; the list command supports --limit/-l, --table/-t, and --properties/-p.",
       "arguments": [],
       "options": [
         {
@@ -292,7 +351,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -319,7 +379,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -385,7 +446,7 @@
           "options": [
             {
               "name": "--file",
-              "type": "FILE",
+              "type": "file",
               "required": true,
               "help": "JSON file containing course management fields to update",
               "short": "-f"

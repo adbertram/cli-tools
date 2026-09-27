@@ -103,14 +103,12 @@ class RequestsRetryPolicy:
         """
         if response.status_code in self.retryable_status_codes:
             return True
-        if response.status_code == 403 and len(response.content or b"") == 0:
-            return True
-        return False
+        return self.is_empty_forbidden(response)
 
     @staticmethod
     def is_empty_forbidden(response: requests.Response) -> bool:
         """True when response is BrickLink's empty-403 throttle signal."""
-        return response.status_code == 403 and len(response.content or b"") == 0
+        return response.status_code == 403 and getattr(response, "content", None) == b""
 
     def is_retryable_exception(self, exception: BaseException) -> bool:
         """True when a transport ``exception`` is safe to retry."""

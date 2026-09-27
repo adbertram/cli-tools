@@ -15,6 +15,7 @@ from urllib.parse import urlencode, urlparse, parse_qs, unquote
 
 import requests
 import typer
+from click.exceptions import Exit
 
 from .output import print_success, print_error, print_info
 
@@ -156,7 +157,7 @@ def oauth_login(config, force: bool) -> None:
     redirect_uri_required = getattr(config, "OAUTH_REDIRECT_URI_REQUIRED", True)
     if not redirect_uri and redirect_uri_required:
         print_error("No redirect URI configured. Set REDIRECT_URI in .env or OAUTH_REDIRECT_URI on Config.")
-        raise typer.Exit(1)
+        raise Exit(1)
 
     # PKCE
     code_verifier = None
@@ -197,7 +198,7 @@ def oauth_login(config, force: bool) -> None:
         code = extract_code_from_input(user_input)
     except ValueError as e:
         print_error(str(e))
-        raise typer.Exit(1)
+        raise Exit(1)
 
     # Exchange code for tokens
     headers, extra_data = build_token_auth_headers(config)
@@ -218,7 +219,7 @@ def oauth_login(config, force: bool) -> None:
         response = exchange_oauth_code_for_tokens(token_url, headers, token_data)
     except RuntimeError as exc:
         print_error(str(exc))
-        raise typer.Exit(1)
+        raise Exit(1)
 
     if response.status_code != 200:
         try:
@@ -227,7 +228,7 @@ def oauth_login(config, force: bool) -> None:
         except Exception:
             error_msg = response.text
         print_error(f"Token exchange failed: {error_msg}")
-        raise typer.Exit(1)
+        raise Exit(1)
 
     expires_in = parse_and_save_tokens(config, response.json())
 

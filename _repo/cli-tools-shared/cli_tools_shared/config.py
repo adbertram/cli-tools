@@ -1419,7 +1419,51 @@ class BaseConfig:
             path = default_shared_chromium_profile_dir()
             path.mkdir(parents=True, exist_ok=True)
             return path
+        return self.get_legacy_chromium_profile_dir()
+
+    def get_legacy_chromium_profile_dir(self) -> Path:
+        """Return this tool's pre-shared default Chromium profile path."""
         return self.get_browser_data_dir() / "chromium-profile"
+
+    def shared_chromium_profile_seed_guidance(
+        self,
+        cli_name: Optional[str] = None,
+    ) -> Optional[str]:
+        """Return a seed command when this tool can restore an unseeded share."""
+        from .shared_chromium_profile import chromium_profile_has_cookies
+
+        if not self.uses_shared_chromium_profile():
+            return None
+        shared = default_shared_chromium_profile_dir()
+        legacy = self.get_legacy_chromium_profile_dir()
+        try:
+            legacy_is_shared = legacy.resolve() == shared.resolve()
+        except OSError:
+            legacy_is_shared = False
+        if legacy_is_shared or chromium_profile_has_cookies(shared):
+            return None
+        if shared.exists() and any(shared.iterdir()):
+            return None
+        if not chromium_profile_has_cookies(legacy):
+            return None
+        return (
+            "shared Chromium profile not seeded; run "
+            f"'{cli_name or self._tool_name} auth seed-shared-chromium-profile'"
+        )
+
+    def seed_shared_chromium_profile(self) -> Path:
+        """Seed the shared profile from this tool's legacy default profile."""
+        if not self.uses_shared_chromium_profile():
+            raise ConfigError(
+                "Shared Chromium profile seeding requires the default browser "
+                "authentication profile with shared-profile isolation disabled."
+            )
+        from .shared_chromium_profile import seed_shared_chromium_profile
+
+        return seed_shared_chromium_profile(
+            self.get_legacy_chromium_profile_dir(),
+            default_shared_chromium_profile_dir(),
+        )
 
     def has_saved_session(self) -> bool:
         """Return True when the persistent Chromium profile has a session.

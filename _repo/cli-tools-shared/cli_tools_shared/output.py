@@ -356,8 +356,10 @@ def print_info(message: str):
 def command(fn):
     """Decorator that wraps a Typer command with standard error handling.
 
-    Catches all exceptions except typer.Exit, passing others through handle_error.
+    Catches all exceptions except framework exit signals, passing others through
+    handle_error.
     """
+    import click
     import functools
     import typer as _typer
 
@@ -365,7 +367,7 @@ def command(fn):
     def wrapper(*args, **kwargs):
         try:
             return fn(*args, **kwargs)
-        except _typer.Exit:
+        except (_typer.Exit, click.exceptions.Exit):
             raise
         except Exception as e:
             raise _typer.Exit(handle_error(e))

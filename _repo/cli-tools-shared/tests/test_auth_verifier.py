@@ -135,6 +135,30 @@ class TestVerifyOutputFields:
         # No on-disk session — skip the live probe.
         browser.is_authenticated.assert_not_called()
 
+    def test_browser_session_unseeded_shared_profile_returns_seed_guidance(self):
+        browser = MagicMock()
+        config = _make_config(
+            [CredentialType.BROWSER_SESSION],
+            has_creds=True,
+            browser=browser,
+            has_saved_session=False,
+        )
+        config.shared_chromium_profile_seed_guidance.return_value = (
+            "shared Chromium profile not seeded; run "
+            "'bricklink auth seed-shared-chromium-profile'"
+        )
+
+        result = AuthVerifier(config).verify()
+        block = result["credential_types"]["browser_session"]
+
+        assert block["credentials_saved"] is False
+        assert block["authenticated"] is False
+        assert block["browser_error"] == (
+            "shared Chromium profile not seeded; run "
+            "'bricklink auth seed-shared-chromium-profile'"
+        )
+        browser.is_authenticated.assert_not_called()
+
     def test_browser_session_files_exist_but_live_check_fails(self):
         """Saved session files but live check fails → authenticated=False.
 

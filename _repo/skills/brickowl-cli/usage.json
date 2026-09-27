@@ -1,8 +1,8 @@
 {
   "tool": "brickowl",
   "description": "CLI interface for Brickowl API",
-  "discovered_at": "2026-07-09T16:12:38Z",
-  "total_commands": 57,
+  "discovered_at": "2026-09-26T23:55:02Z",
+  "total_commands": 58,
   "global_options": [
     {
       "name": "--version",
@@ -42,7 +42,8 @@
               "type": "bool",
               "required": false,
               "help": "Clear existing ephemeral auth state and re-authenticate",
-              "short": "-F"
+              "short": "-F",
+              "takes_value": false
             },
             {
               "name": "--credential-type",
@@ -103,7 +104,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -124,7 +126,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
@@ -138,7 +141,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -179,7 +183,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -204,14 +209,16 @@
                   "name": "--keep-old",
                   "type": "bool",
                   "required": false,
-                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
                 },
                 {
                   "name": "--force",
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -228,6 +235,19 @@
               "options": []
             }
           }
+        },
+        "seed-shared-chromium-profile": {
+          "help": "Seed an empty shared Chromium profile from this CLI's default profile.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Default profile with the known-good legacy browser session",
+              "short": "-p"
+            }
+          ]
         },
         "status": {
           "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
@@ -246,7 +266,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -260,14 +281,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--verbose",
               "type": "bool",
               "required": false,
               "help": "Show detailed checks",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -290,7 +313,14 @@
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "usage_instructions": "Remove all cached responses.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
@@ -342,7 +372,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -366,7 +397,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -390,7 +422,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -414,7 +447,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -459,7 +493,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -490,7 +525,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -521,7 +557,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -560,7 +597,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -584,7 +622,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -647,7 +686,8 @@
               "name": "--free-shipping",
               "type": "bool",
               "required": false,
-              "help": "Include free shipping"
+              "help": "Include free shipping",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -708,7 +748,8 @@
               "name": "--free-shipping",
               "type": "bool",
               "required": false,
-              "help": "Include free shipping"
+              "help": "Include free shipping",
+              "takes_value": false
             },
             {
               "name": "--note",
@@ -769,7 +810,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -793,7 +835,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -883,7 +926,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -916,7 +960,8 @@
               "name": "--all",
               "type": "bool",
               "required": false,
-              "help": "Include inactive lots (default: active only)"
+              "help": "Include inactive lots (default: active only)",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -930,7 +975,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--filter",
@@ -991,7 +1037,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1015,7 +1062,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1074,13 +1122,15 @@
               "name": "--hide",
               "type": "bool",
               "required": false,
-              "help": "Hide lot (set for_sale=0)"
+              "help": "Hide lot (set for_sale=0)",
+              "takes_value": false
             },
             {
               "name": "--show",
               "type": "bool",
               "required": false,
-              "help": "Show lot (set for_sale=1)"
+              "help": "Show lot (set for_sale=1)",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1122,7 +1172,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -1145,7 +1196,7 @@
             "brickowl issue list",
             "brickowl issue list --table",
             "brickowl issue list --filter \"status:eq:Open\"",
-            "brickowl issue list --properties \"order_id,customer,status\"",
+            "brickowl issue list --properties \"order_id,details,status\"",
             "brickowl issue list --limit 5"
           ],
           "usage_instructions": "Run `brickowl issue list --help` for exact arguments and options.",
@@ -1156,7 +1207,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -1253,13 +1305,15 @@
               "name": "--include-history",
               "type": "bool",
               "required": false,
-              "help": "Include message history thread"
+              "help": "Include message history thread",
+              "takes_value": false
             },
             {
               "name": "--download-attachments",
               "type": "bool",
               "required": false,
-              "help": "Download attachments to local files"
+              "help": "Download attachments to local files",
+              "takes_value": false
             },
             {
               "name": "--output-dir",
@@ -1273,7 +1327,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1304,24 +1359,26 @@
             },
             {
               "name": "--page",
-              "type": "bool",
+              "type": "INTEGER",
               "required": false,
-              "help": "g      INTEGER  Page number",
-              "short": "-p",
+              "help": "Page number",
+              "short": "-pg",
               "default": "1"
             },
             {
               "name": "--include-history",
               "type": "bool",
               "required": false,
-              "help": "Include message history thread for each message"
+              "help": "Include message history thread for each message",
+              "takes_value": false
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--filter",
@@ -1431,13 +1488,15 @@
               "name": "--priority",
               "type": "bool",
               "required": false,
-              "help": "Send as high priority (accepted for parity)"
+              "help": "Send as high priority (accepted for parity)",
+              "takes_value": false
             },
             {
               "name": "--copy",
               "type": "bool",
               "required": false,
-              "help": "Send a copy to yourself (accepted for parity)"
+              "help": "Send a copy to yourself (accepted for parity)",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1480,13 +1539,15 @@
               "name": "--priority",
               "type": "bool",
               "required": false,
-              "help": "Send as high priority (accepted for parity)"
+              "help": "Send as high priority (accepted for parity)",
+              "takes_value": false
             },
             {
               "name": "--copy",
               "type": "bool",
               "required": false,
-              "help": "Send a copy to yourself (accepted for parity)"
+              "help": "Send a copy to yourself (accepted for parity)",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1532,7 +1593,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1563,7 +1625,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1618,26 +1681,30 @@
               "name": "--shipped",
               "type": "bool",
               "required": false,
-              "help": "Show only shipped orders"
+              "help": "Show only shipped orders",
+              "takes_value": false
             },
             {
               "name": "--not-shipped",
               "type": "bool",
               "required": false,
-              "help": "Show only not-shipped orders"
+              "help": "Show only not-shipped orders",
+              "takes_value": false
             },
             {
               "name": "--not-picked",
               "type": "bool",
               "required": false,
-              "help": "Show only not-picked orders"
+              "help": "Show only not-picked orders",
+              "takes_value": false
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--filter",
@@ -1816,7 +1883,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1840,7 +1908,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -1982,7 +2051,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -2058,27 +2128,34 @@
           "commands": {
             "disable": {
               "help": "Remove the vacation shipping notice from the Brick Owl Slogan / Tag Line.",
+              "examples": [
+                "brickowl store vacation disable --dry-run",
+                "brickowl store vacation disable --yes"
+              ],
               "arguments": [],
               "options": [
                 {
                   "name": "--dry-run",
                   "type": "bool",
                   "required": false,
-                  "help": "Preview changes without saving"
+                  "help": "Preview changes without saving",
+                  "takes_value": false
                 },
                 {
                   "name": "--yes",
                   "type": "bool",
                   "required": false,
                   "help": "Save changes to Brick Owl",
-                  "short": "-y"
+                  "short": "-y",
+                  "takes_value": false
                 },
                 {
                   "name": "--table",
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -2090,6 +2167,10 @@
             },
             "enable": {
               "help": "Add or replace the vacation shipping notice on the Brick Owl Slogan / Tag Line.",
+              "examples": [
+                "brickowl store vacation enable 7/21/26 --dry-run",
+                "brickowl store vacation enable 7/21/26 --yes"
+              ],
               "arguments": [
                 {
                   "name": "ship_out_date",
@@ -2103,21 +2184,24 @@
                   "name": "--dry-run",
                   "type": "bool",
                   "required": false,
-                  "help": "Preview changes without saving"
+                  "help": "Preview changes without saving",
+                  "takes_value": false
                 },
                 {
                   "name": "--yes",
                   "type": "bool",
                   "required": false,
                   "help": "Save changes to Brick Owl",
-                  "short": "-y"
+                  "short": "-y",
+                  "takes_value": false
                 },
                 {
                   "name": "--table",
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--profile",
@@ -2158,7 +2242,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
