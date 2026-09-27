@@ -1,8 +1,8 @@
 {
   "tool": "youtube",
   "description": "YouTube transcript and video downloader (yt-dlp), channel management (Data API v3), and browser-session community posting",
-  "discovered_at": "2026-09-25T23:24:26Z",
-  "total_commands": 27,
+  "discovered_at": "2026-09-27T00:02:19Z",
+  "total_commands": 28,
   "global_options": [
     {
       "name": "--version",
@@ -234,6 +234,19 @@
               "options": []
             }
           }
+        },
+        "seed-shared-chromium-profile": {
+          "help": "Seed an empty shared Chromium profile from this CLI's default profile.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Default profile with the known-good legacy browser session",
+              "short": "-p"
+            }
+          ]
         },
         "status": {
           "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
@@ -478,14 +491,13 @@
                 },
                 {
                   "name": "--privacy",
-                  "type": "bool",
+                  "type": "private|unlisted|public",
                   "required": false,
-                  "help": "[private|unlisted|public]  New privacy status",
-                  "takes_value": false
+                  "help": "New privacy status"
                 },
                 {
                   "name": "--thumbnail",
-                  "type": "FILE",
+                  "type": "file",
                   "required": false,
                   "help": "Path to new thumbnail image"
                 },
@@ -509,7 +521,7 @@
               "arguments": [
                 {
                   "name": "file",
-                  "type": "FILE",
+                  "type": "file",
                   "required": true,
                   "help": "Path to video file to upload"
                 }
@@ -542,10 +554,9 @@
                 },
                 {
                   "name": "--privacy",
-                  "type": "bool",
+                  "type": "private|unlisted|public",
                   "required": false,
-                  "help": "[private|unlisted|public]  Privacy status: private, unlisted, or public",
-                  "takes_value": false,
+                  "help": "Privacy status: private, unlisted, or public",
                   "default": "private"
                 },
                 {
@@ -565,7 +576,7 @@
                 },
                 {
                   "name": "--thumbnail",
-                  "type": "FILE",
+                  "type": "file",
                   "required": false,
                   "help": "Path to thumbnail image (jpg/png) to set after upload"
                 },
@@ -701,7 +712,7 @@
           "options": [
             {
               "name": "--banner-image",
-              "type": "FILE",
+              "type": "file",
               "required": true,
               "help": "Path to banner image file (PNG/JPEG, minimum 2048x1152)"
             },
@@ -747,7 +758,7 @@
           "arguments": [
             {
               "name": "file",
-              "type": "FILE",
+              "type": "file",
               "required": true,
               "help": "Short video file"
             }
@@ -780,10 +791,9 @@
             },
             {
               "name": "--privacy",
-              "type": "bool",
+              "type": "private|unlisted|public",
               "required": false,
-              "help": "[private|unlisted|public]  Privacy status: private, unlisted, or public",
-              "takes_value": false,
+              "help": "Privacy status: private, unlisted, or public",
               "default": "private"
             },
             {
@@ -803,7 +813,7 @@
             },
             {
               "name": "--thumbnail",
-              "type": "FILE",
+              "type": "file",
               "required": false,
               "help": "Optional thumbnail image"
             },
@@ -836,7 +846,7 @@
               "name": "urls",
               "type": "TEXT",
               "required": true,
-              "help": "URLS...  YouTube video URL(s)"
+              "help": "YouTube video URL(s)"
             }
           ],
           "options": [
@@ -954,9 +964,9 @@
           "arguments": [
             {
               "name": "urls",
-              "type": "TEXT",
+              "type": "URLS",
               "required": false,
-              "help": "[URLS]...  YouTube video URL(s)"
+              "help": "YouTube video URL(s)"
             }
           ],
           "options": [

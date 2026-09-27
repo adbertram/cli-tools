@@ -1,8 +1,8 @@
 {
   "tool": "brickfreedom",
   "description": "CLI interface for Brickfreedom dashboard automation",
-  "discovered_at": "2026-07-20T18:46:01Z",
-  "total_commands": 23,
+  "discovered_at": "2026-09-26T23:54:39Z",
+  "total_commands": 24,
   "global_options": [
     {
       "name": "--version",
@@ -42,7 +42,8 @@
               "type": "bool",
               "required": false,
               "help": "Clear existing ephemeral auth state and re-authenticate",
-              "short": "-F"
+              "short": "-F",
+              "takes_value": false
             }
           ]
         },
@@ -96,7 +97,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -117,7 +119,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
@@ -131,7 +134,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -172,7 +176,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -197,14 +202,16 @@
                   "name": "--keep-old",
                   "type": "bool",
                   "required": false,
-                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
                 },
                 {
                   "name": "--force",
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -221,6 +228,19 @@
               "options": []
             }
           }
+        },
+        "seed-shared-chromium-profile": {
+          "help": "Seed an empty shared Chromium profile from this CLI's default profile.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Default profile with the known-good legacy browser session",
+              "short": "-p"
+            }
+          ]
         },
         "status": {
           "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
@@ -239,7 +259,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -253,14 +274,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--verbose",
               "type": "bool",
               "required": false,
               "help": "Show detailed checks",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -283,7 +306,14 @@
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "usage_instructions": "Use `cache clear` for remove all cached responses. deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed..",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
@@ -317,7 +347,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -349,7 +380,8 @@
               "name": "--picked",
               "type": "bool",
               "required": false,
-              "help": "Filter by picked status"
+              "help": "Filter by picked status",
+              "takes_value": false
             },
             {
               "name": "--page",
@@ -363,7 +395,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -403,7 +436,7 @@
               "name": "order_ids",
               "type": "TEXT",
               "required": true,
-              "help": "ORDER_IDS...  Marketplace order IDs to post (mark as shipped)"
+              "help": "Marketplace order IDs to post (mark as shipped)"
             }
           ],
           "options": [
@@ -423,7 +456,7 @@
               "name": "order_ids",
               "type": "TEXT",
               "required": true,
-              "help": "ORDER_IDS...  Marketplace order IDs to mark as processed"
+              "help": "Marketplace order IDs to mark as processed"
             }
           ],
           "options": [
@@ -445,7 +478,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -534,7 +568,8 @@
               "type": "bool",
               "required": false,
               "help": "Mark all tasks as complete",
-              "short": "-b"
+              "short": "-b",
+              "takes_value": false
             },
             {
               "name": "--match-platform",
@@ -564,7 +599,7 @@
               "name": "--match-items-json",
               "type": "TEXT",
               "required": false,
-              "help": "Match one physical missing-part task row by its complete item set as JSON: [{\"itemNumber\":\"3001\",\"quantity\":1}]. Requires --match-platform and"
+              "help": "Match one physical missing-part task row by its complete item set as JSON: [{\"itemNumber\":\"3001\",\"quantity\":1}]. Requires --match-platform and --match-order-id"
             },
             {
               "name": "--profile",
@@ -588,9 +623,9 @@
           "options": [
             {
               "name": "--type",
-              "type": "bool",
+              "type": "customer-replacement-part|missing-part",
               "required": false,
-              "help": "[customer-replacement-part|missing-part]  Task type: customer-replacement-part",
+              "help": "Task type: customer-replacement-part",
               "short": "-t"
             },
             {
@@ -668,7 +703,8 @@
               "type": "bool",
               "required": false,
               "help": "Delete all completed tasks",
-              "short": "-c"
+              "short": "-c",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -695,7 +731,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -712,9 +749,9 @@
           "options": [
             {
               "name": "--type",
-              "type": "bool",
+              "type": "customer-replacement-part|missing-part",
               "required": false,
-              "help": "[customer-replacement-part|missing-part]  Filter by task type: customer-replacement-part, missing-part"
+              "help": "Filter by task type: customer-replacement-part, missing-part"
             },
             {
               "name": "--order-id",
@@ -728,7 +765,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -756,7 +794,8 @@
               "name": "--debug-unparsed",
               "type": "bool",
               "required": false,
-              "help": "Print raw task rows that did not match any known missing-part format (to stderr, prefixed with ' ')"
+              "help": "Print raw task rows that did not match any known missing-part format (to stderr, prefixed with ' ')",
+              "takes_value": false
             },
             {
               "name": "--profile",

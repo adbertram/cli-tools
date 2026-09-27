@@ -1,8 +1,8 @@
 {
   "tool": "google",
   "description": "CLI interface for Google Workspace APIs",
-  "discovered_at": "2026-09-08T22:34:55Z",
-  "total_commands": 108,
+  "discovered_at": "2026-09-26T23:58:13Z",
+  "total_commands": 109,
   "global_options": [
     {
       "name": "--version",
@@ -525,6 +525,19 @@
               "options": []
             }
           }
+        },
+        "seed-shared-chromium-profile": {
+          "help": "Seed an empty shared Chromium profile from this CLI's default profile.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Default profile with the known-good legacy browser session",
+              "short": "-p"
+            }
+          ]
         },
         "status": {
           "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
@@ -3193,7 +3206,7 @@
               ]
             },
             "permissions-add-members": {
-              "help": "[OPTIONS] {report_id} Add members to a Looker Studio report permission role.",
+              "help": "Add members to a Looker Studio report permission role.",
               "usage_instructions": "Add members to a Looker Studio report permission role by report ID.",
               "arguments": [
                 {
@@ -3295,7 +3308,7 @@
               ]
             },
             "permissions-revoke-all": {
-              "help": "{report_id} Revoke all permissions for members on a Looker Studio report.",
+              "help": "Revoke all permissions for members on a Looker Studio report.",
               "usage_instructions": "Revoke all permissions for members on a Looker Studio report by report ID.",
               "arguments": [
                 {
@@ -4176,7 +4189,7 @@
               "options": [
                 {
                   "name": "--listing-file",
-                  "type": "FILE",
+                  "type": "file",
                   "required": false,
                   "help": "Chrome Web Store listing markdown file",
                   "default": "store-assets/chrome-webstore-listing.md"
@@ -4470,7 +4483,7 @@
           "arguments": [
             {
               "name": "package",
-              "type": "FILE",
+              "type": "file",
               "required": true,
               "help": "Extension ZIP package"
             }
