@@ -38,6 +38,13 @@ def videos_publish(
         "--privacy",
         help="TikTok creator privacy level",
     ),
+    mode: str = typer.Option(
+        "direct",
+        "--mode",
+        help="Publish mode: 'direct' posts to the feed (needs video.publish scope); "
+        "'inbox' uploads to the creator's TikTok drafts (needs video.upload scope) — "
+        "title/privacy/--disable-* flags are not sent in inbox mode",
+    ),
     disable_comment: bool = typer.Option(False, "--disable-comment", help="Disable comments"),
     disable_duet: bool = typer.Option(False, "--disable-duet", help="Disable Duet"),
     disable_stitch: bool = typer.Option(False, "--disable-stitch", help="Disable Stitch"),
@@ -46,7 +53,7 @@ def videos_publish(
     ),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
 ):
-    """Publish a video through the Content Posting API (Direct Post)."""
+    """Publish a video through the Content Posting API (Direct Post or drafts inbox)."""
     result = TikTokPostingClient().publish_video(
         file,
         title=title,
@@ -55,6 +62,7 @@ def videos_publish(
         disable_duet=disable_duet,
         disable_stitch=disable_stitch,
         is_aigc=ai_generated,
+        mode=mode,
     )
     if table:
         columns = ["publish_id", "status", "fail_reason", "uploaded_bytes"]
@@ -67,13 +75,23 @@ def videos_publish(
 @command
 def videos_status(
     publish_id: str = typer.Argument(..., help="TikTok publish_id returned by publish"),
+    wait: bool = typer.Option(
+        False,
+        "--wait",
+        help="Poll until TikTok reaches a terminal status "
+        "(PUBLISH_COMPLETE, FAILED, or SEND_TO_USER_INBOX)",
+    ),
+    timeout: int = typer.Option(
+        600, "--timeout", help="Seconds to wait for a terminal status (with --wait)"
+    ),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     properties: Optional[str] = typer.Option(
         None, "--properties", "-p", help="Comma-separated fields to display"
     ),
 ):
     """Fetch a Direct Post's publish status by publish_id."""
-    result = TikTokPostingClient().status(publish_id)
+    client = TikTokPostingClient()
+    result = client.wait_for_status(publish_id, timeout=timeout) if wait else client.status(publish_id)
     if properties:
         result = apply_properties_filter([result], properties)[0]
     columns = (

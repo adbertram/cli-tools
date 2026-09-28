@@ -274,12 +274,43 @@ tiktok auth profiles create posting --auth-type custom
 tiktok auth login --profile posting --credential-type custom
 
 tiktok videos publish short.mp4 --title "Caption" --privacy SELF_ONLY --profile posting
+tiktok videos publish short.mp4 --mode inbox --profile posting
 tiktok videos status PUBLISH_ID --profile posting
+tiktok videos status PUBLISH_ID --wait --profile posting
 ```
 
-The Direct Post API requires video.publish. TikTok can restrict unaudited apps to
-private visibility until the app passes TikTok review. `videos publish` returns the
-`publish_id`, upload status, and the posting account's `creator_username`.
+`videos publish` has two modes (Content Posting API):
+
+- `direct` (default): posts straight to the creator's feed. Needs the
+  `video.publish` scope; title/privacy/`--disable-*` flags are sent.
+- `inbox`: uploads to the creator's TikTok drafts. Needs the `video.upload`
+  scope; the user finishes the post in the TikTok app, so title/privacy flags
+  are not sent.
+
+`videos publish` returns the `publish_id`, upload status, and (direct mode) the
+posting account's `creator_username`. `videos status --wait` polls until TikTok
+reaches a terminal status (`PUBLISH_COMPLETE`, `FAILED`, or `SEND_TO_USER_INBOX`).
+
+The Direct Post API requires an approved TikTok developer app with the video
+scopes. TikTok can restrict unaudited apps to private visibility until the app
+passes TikTok review. No such app currently exists for this tool, so publishing
+cannot be live-tested yet.
+
+## TikTok API status (verified 2026-09-28)
+
+Checked directly in the TikTok developer portal:
+
+- **No comment API.** TikTok offers no `comment.publish` or other comment scopes,
+  so this CLI has no comment-posting commands — don't try to add one; the
+  capability does not exist for third-party developers.
+- **Redirect URIs must start with `https://`.** The portal rejects
+  `http://localhost` callbacks. Register an `https://` URI in the portal and set
+  `REDIRECT_URI` to the exact same value; `tiktok auth login` refuses to start
+  otherwise.
+- **Available scopes:** `user.info.basic` (Login Kit), `user.info.stats`,
+  `user.info.profile`, `video.list`, `video.upload` (drafts inbox),
+  `video.publish` (Direct Post). The CLI's default `SCOPES` request
+  `user.info.basic,video.upload,video.publish`.
 
 ## Listing and Deleting Videos
 

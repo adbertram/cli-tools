@@ -22,6 +22,12 @@ SUPPORTED_MIME_TYPES = {
     ".webm": "video/webm",
 }
 
+DIRECT_INIT_PATH = "/v2/post/publish/video/init/"
+INBOX_INIT_PATH = "/v2/post/publish/inbox/video/init/"
+
+# Statuses after which TikTok will not change the publish outcome.
+TERMINAL_STATUSES = {"PUBLISH_COMPLETE", "FAILED", "SEND_TO_USER_INBOX"}
+
 
 def build_chunk_plan(video_size: int) -> tuple[int, list[tuple[int, int]]]:
     if video_size <= 0:
@@ -156,6 +162,36 @@ class TikTokPostingClient:
             raise ClientError("TikTok status response did not contain an object.")
         return {"publish_id": publish_id, **data}
 
+    def wait_for_status(
+        self,
+        publish_id: str,
+        timeout: float = 600,
+        interval: float = 5,
+    ) -> dict:
+        """Poll publish status until TikTok reaches a terminal state.
+
+        Terminal states: PUBLISH_COMPLETE, FAILED, SEND_TO_USER_INBOX (inbox
+        uploads are finished by the user in the TikTok app, so there is no
+        further API signal). Raises ClientError when TikTok reports FAILED or
+        when no terminal state is reached within `timeout` seconds.
+        """
+        deadline = time.time() + timeout
+        current = self.status(publish_id)
+        while current.get("status") not in TERMINAL_STATUSES:
+            if time.time() >= deadline:
+                raise ClientError(
+                    f"Timed out waiting for TikTok publish {publish_id} "
+                    f"(last status: {current.get('status')})."
+                )
+            time.sleep(interval)
+            current = self.status(publish_id)
+        if current.get("status") == "FAILED":
+            raise ClientError(
+                f"TikTok publish {publish_id} failed: "
+                f"{current.get('fail_reason') or 'no reason given'}"
+            )
+        return current
+
     @staticmethod
     def _mime_type(path: Path) -> str:
         mime = SUPPORTED_MIME_TYPES.get(path.suffix.lower())
@@ -208,54 +244,76 @@ class TikTokPostingClient:
         disable_duet: bool = False,
         disable_stitch: bool = False,
         is_aigc: bool = False,
+        mode: str = "direct",
     ) -> dict:
+        """Upload a video through the Content Posting API.
+
+        mode="direct" posts straight to the creator's feed (needs the
+        video.publish scope; title/privacy/disable flags are sent).
+        mode="inbox" uploads to the creator's TikTok drafts (needs the
+        video.upload scope); the user finishes the post in the TikTok app, so
+        title, privacy level, and disable flags are not sent.
+        """
+        if mode not in ("direct", "inbox"):
+            raise ClientError(
+                f"Unknown publish mode {mode!r}: expected 'direct' or 'inbox'."
+            )
         path = Path(file_path)
         if not path.is_file():
             raise ClientError(f"Video file not found: {path}")
 
-        creator = self.creator_info()
-        privacy_options = creator.get("privacy_level_options") or []
-        if privacy_options and privacy_level not in privacy_options:
-            raise ClientError(
-                f"TikTok privacy level {privacy_level!r} is not available for this creator. "
-                f"Available: {', '.join(privacy_options)}"
-            )
-
-        disable_comment = disable_comment or bool(creator.get("comment_disabled"))
-        disable_duet = disable_duet or bool(creator.get("duet_disabled"))
-        disable_stitch = disable_stitch or bool(creator.get("stitch_disabled"))
-
         size = path.stat().st_size
         chunk_size, ranges = build_chunk_plan(size)
         mime_type = self._mime_type(path)
-
-        post_info = {
-            "title": title,
-            "privacy_level": privacy_level,
-            "disable_comment": disable_comment,
-            "disable_duet": disable_duet,
-            "disable_stitch": disable_stitch,
+        source_info = {
+            "source": "FILE_UPLOAD",
+            "video_size": size,
+            "chunk_size": chunk_size,
+            "total_chunk_count": len(ranges),
         }
-        if is_aigc:
-            post_info["is_aigc"] = True
 
-        payload = self._post_json(
-            "/v2/post/publish/video/init/",
-            {
-                "post_info": post_info,
-                "source_info": {
-                    "source": "FILE_UPLOAD",
-                    "video_size": size,
-                    "chunk_size": chunk_size,
-                    "total_chunk_count": len(ranges),
-                },
-            },
-        )
+        creator: dict = {}
+        if mode == "direct":
+            creator = self.creator_info()
+            privacy_options = creator.get("privacy_level_options") or []
+            if privacy_options and privacy_level not in privacy_options:
+                raise ClientError(
+                    f"TikTok privacy level {privacy_level!r} is not available for this creator. "
+                    f"Available: {', '.join(privacy_options)}"
+                )
+
+            disable_comment = disable_comment or bool(creator.get("comment_disabled"))
+            disable_duet = disable_duet or bool(creator.get("duet_disabled"))
+            disable_stitch = disable_stitch or bool(creator.get("stitch_disabled"))
+
+            post_info = {
+                "title": title,
+                "privacy_level": privacy_level,
+                "disable_comment": disable_comment,
+                "disable_duet": disable_duet,
+                "disable_stitch": disable_stitch,
+            }
+            if is_aigc:
+                post_info["is_aigc"] = True
+            body: dict = {"post_info": post_info, "source_info": source_info}
+            init_path = DIRECT_INIT_PATH
+            mode_label = "Direct Post"
+        else:
+            body = {"source_info": source_info}
+            init_path = INBOX_INIT_PATH
+            mode_label = "inbox upload"
+
+        payload = self._post_json(init_path, body)
         data = payload.get("data") or {}
         publish_id = data.get("publish_id")
         upload_url = data.get("upload_url")
         if not publish_id or not upload_url:
-            raise ClientError("TikTok Direct Post init response omitted publish_id or upload_url.")
+            raise ClientError(
+                f"TikTok {mode_label} init response omitted publish_id or upload_url."
+            )
 
         self._upload_file(upload_url, path, mime_type, ranges)
-        return {**self.status(publish_id), "creator_username": creator.get("creator_username")}
+        result = self.status(publish_id)
+        if creator.get("creator_username"):
+            result["creator_username"] = creator["creator_username"]
+        return result

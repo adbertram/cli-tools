@@ -22,6 +22,18 @@ def generate_tiktok_pkce_pair() -> tuple[str, str]:
     return verifier, challenge
 
 
+def validate_redirect_uri(redirect_uri: str) -> str:
+    """TikTok rejects non-https redirect URIs (including http://localhost)."""
+    uri = (redirect_uri or "").strip()
+    if not uri.startswith("https://"):
+        raise ValueError(
+            "TikTok requires the redirect URI to start with https:// "
+            f"(got {uri!r}). Register an https:// redirect URI in the "
+            "TikTok developer portal and set REDIRECT_URI to match it exactly."
+        )
+    return uri
+
+
 def _authorization_code(user_input: str, expected_state: str) -> str:
     value = user_input.strip()
     if value.startswith("http://") or value.startswith("https://"):
@@ -73,11 +85,16 @@ def tiktok_oauth_login(config, force: bool) -> None:
 
     verifier, challenge = generate_tiktok_pkce_pair()
     state = secrets.token_urlsafe(32)
+    try:
+        redirect_uri = validate_redirect_uri(config.redirect_uri or "")
+    except ValueError as exc:
+        print_error(str(exc))
+        raise typer.Exit(1)
     params = {
         "client_key": config.client_key,
         "scope": ",".join(config.requested_scopes),
         "response_type": "code",
-        "redirect_uri": config.redirect_uri,
+        "redirect_uri": redirect_uri,
         "state": state,
         "code_challenge": challenge,
         "code_challenge_method": "S256",
@@ -102,7 +119,7 @@ def tiktok_oauth_login(config, force: bool) -> None:
             "client_secret": config.client_secret,
             "code": code,
             "grant_type": "authorization_code",
-            "redirect_uri": config.redirect_uri,
+            "redirect_uri": redirect_uri,
             "code_verifier": verifier,
         },
         timeout=30,

@@ -28,7 +28,7 @@ TIKTOK_API_ALL_FIELDS = [
 TIKTOK_API_LOGIN_PROMPTS = [
     ("CLIENT_KEY", "TikTok Client key", False),
     ("CLIENT_SECRET", "TikTok Client secret", True),
-    ("REDIRECT_URI", "Desktop redirect URI", False),
+    ("REDIRECT_URI", "Redirect URI (must start with https://)", False),
 ]
 TIKTOK_API_SENSITIVE_FIELDS = [
     "CLIENT_SECRET",
@@ -42,7 +42,9 @@ TIKTOK_API_EPHEMERAL_FIELDS = [
     "OPEN_ID",
     "GRANTED_SCOPES",
 ]
-DEFAULT_TIKTOK_SCOPES = ["user.info.basic", "video.publish"]
+# Scopes the TikTok developer portal actually offers for these products.
+# video.publish = Direct Post to the feed; video.upload = upload to drafts/inbox.
+DEFAULT_TIKTOK_SCOPES = ["user.info.basic", "video.upload", "video.publish"]
 
 
 def _migrate_legacy_profiles(tool_name: str) -> None:
@@ -72,8 +74,9 @@ class Config(BaseConfig):
         "TikTok has separate auth profiles.\n"
         "  - browser_session is used only for favorites list.\n"
         "  - custom is the Content Posting API profile. Create a TikTok developer app,\n"
-        "    enable Login Kit + Direct Post, register a desktop localhost redirect URI,\n"
-        "    and grant user.info.basic plus video.publish.\n"
+        "    enable Login Kit + Content Posting API, register an https:// redirect URI\n"
+        "    (TikTok rejects http://localhost), and grant user.info.basic plus\n"
+        "    video.upload (drafts) and/or video.publish (Direct Post).\n"
         "Transcript downloads and favorites get use yt-dlp and require no CLI auth."
     )
 

@@ -124,3 +124,137 @@ def test_publish_video_uses_creator_info_init_upload_and_status(tmp_path):
     upload_call = next(call for call in session.calls if call[0] == "PUT")
     assert upload_call[2]["headers"]["Content-Range"] == "bytes 0-10/11"
     assert upload_call[2]["headers"]["Content-Type"] == "video/mp4"
+
+
+from cli_tools_shared.exceptions import ClientError
+
+from tiktok_cli.config import DEFAULT_TIKTOK_SCOPES
+from tiktok_cli.oauth import validate_redirect_uri
+
+
+class FakeInboxSession(FakeSession):
+    def post(self, url, **kwargs):
+        if url.endswith("/inbox/video/init/"):
+            self.calls.append(("POST", url, kwargs))
+            return FakeResponse({
+                "data": {
+                    "publish_id": "PUB-INBOX",
+                    "upload_url": "https://upload.tiktok.test/video",
+                },
+                "error": {"code": "ok"},
+            })
+        if url.endswith("/creator_info/query/"):
+            raise AssertionError("inbox mode must not query creator_info")
+        return super().post(url, **kwargs)
+
+
+def test_default_scopes_match_portal_offerings():
+    assert set(DEFAULT_TIKTOK_SCOPES) == {
+        "user.info.basic",
+        "video.upload",
+        "video.publish",
+    }
+
+
+def test_validate_redirect_uri_requires_https():
+    assert validate_redirect_uri("https://example.com/auth/tiktok/callback") == (
+        "https://example.com/auth/tiktok/callback"
+    )
+    for bad in ("http://localhost:3000/auth/tiktok/callback", "http://example.com/x", ""):
+        try:
+            validate_redirect_uri(bad)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"expected ValueError for {bad!r}")
+
+
+def test_publish_inbox_mode_uses_inbox_init_without_post_info(tmp_path):
+    video = tmp_path / "short.mp4"
+    video.write_bytes(b"hello world")
+    session = FakeInboxSession()
+    client = TikTokPostingClient(config=FakeConfig(), session=session)
+
+    result = client.publish_video(video, title="Ignored", mode="inbox")
+
+    assert result["publish_id"] == "PUB-INBOX"
+    assert "creator_username" not in result
+
+    init_call = next(
+        call for call in session.calls
+        if call[0] == "POST" and call[1].endswith("/inbox/video/init/")
+    )
+    body = init_call[2]["json"]
+    assert "post_info" not in body
+    assert body["source_info"]["source"] == "FILE_UPLOAD"
+
+    assert not any(
+        call[0] == "POST" and call[1].endswith("/creator_info/query/")
+        for call in session.calls
+    )
+
+
+def test_publish_video_rejects_unknown_mode(tmp_path):
+    video = tmp_path / "short.mp4"
+    video.write_bytes(b"hello world")
+    client = TikTokPostingClient(config=FakeConfig(), session=FakeSession())
+    try:
+        client.publish_video(video, mode="drafts")
+    except ClientError:
+        pass
+    else:
+        raise AssertionError("expected ClientError for unknown mode")
+
+
+class FakePollSession(FakeSession):
+    def __init__(self, statuses):
+        super().__init__()
+        self._statuses = list(statuses)
+
+    def post(self, url, **kwargs):
+        if url.endswith("/status/fetch/"):
+            self.calls.append(("POST", url, kwargs))
+            status = self._statuses.pop(0) if self._statuses else "PUBLISH_COMPLETE"
+            payload = {"status": status}
+            if status == "FAILED":
+                payload["fail_reason"] = "ENCODING_ERROR"
+            return FakeResponse({"data": payload, "error": {"code": "ok"}})
+        return super().post(url, **kwargs)
+
+
+def test_wait_for_status_polls_until_terminal():
+    session = FakePollSession(["PROCESSING_UPLOAD", "PROCESSING_UPLOAD", "PUBLISH_COMPLETE"])
+    client = TikTokPostingClient(config=FakeConfig(), session=session)
+    result = client.wait_for_status("PUB1", timeout=60, interval=0)
+    assert result["status"] == "PUBLISH_COMPLETE"
+    polls = [c for c in session.calls if c[1].endswith("/status/fetch/")]
+    assert len(polls) == 3
+
+
+def test_wait_for_status_treats_inbox_terminal():
+    session = FakePollSession(["SEND_TO_USER_INBOX"])
+    client = TikTokPostingClient(config=FakeConfig(), session=session)
+    result = client.wait_for_status("PUB1", timeout=60, interval=0)
+    assert result["status"] == "SEND_TO_USER_INBOX"
+
+
+def test_wait_for_status_raises_on_failed():
+    session = FakePollSession(["FAILED"])
+    client = TikTokPostingClient(config=FakeConfig(), session=session)
+    try:
+        client.wait_for_status("PUB1", timeout=60, interval=0)
+    except ClientError as exc:
+        assert "ENCODING_ERROR" in str(exc)
+    else:
+        raise AssertionError("expected ClientError on FAILED")
+
+
+def test_wait_for_status_raises_on_timeout():
+    session = FakePollSession(["PROCESSING_UPLOAD"] * 10)
+    client = TikTokPostingClient(config=FakeConfig(), session=session)
+    try:
+        client.wait_for_status("PUB1", timeout=0, interval=0)
+    except ClientError as exc:
+        assert "Timed out" in str(exc)
+    else:
+        raise AssertionError("expected ClientError on timeout")
