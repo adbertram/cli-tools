@@ -107,6 +107,36 @@ def test_reports_actionable_blocker_when_no_conventional_featured_image_exists(
     assert "--featured-image PATH" in message
 
 
+def test_resolves_conventional_featured_image_when_page_id_is_dashed(tmp_path, monkeypatch):
+    """The scheduled publisher passes dashed Notion IDs; lookup must use the undashed folder."""
+
+    dashed_page_id = "3075d9c8-5b2b-8183-b1f2-c3f391257a46"
+    undashed_page_id = "3075d9c85b2b8183b1f2c3f391257a46"
+    image_path = tmp_path / "posts" / undashed_page_id / "featured_image.webp"
+    image_path.parent.mkdir(parents=True)
+    image_path.write_bytes(b"webp-bytes")
+    monkeypatch.setattr(client_module, "STATIC_REPOSITORY_ROOT", tmp_path)
+
+    assert AtaBlogClient._resolve_featured_image(dashed_page_id, None) == image_path
+
+
+def test_missing_featured_image_error_lists_undashed_folder_for_dashed_page_id(
+    tmp_path, monkeypatch
+):
+    """The blocker message must point at the real (undashed) folder, not the dashed input."""
+
+    dashed_page_id = "3075d9c8-5b2b-8183-b1f2-c3f391257a46"
+    undashed_page_id = "3075d9c85b2b8183b1f2c3f391257a46"
+    monkeypatch.setattr(client_module, "STATIC_REPOSITORY_ROOT", tmp_path)
+
+    with pytest.raises(ClientError) as exc_info:
+        AtaBlogClient._resolve_featured_image(dashed_page_id, None)
+
+    message = str(exc_info.value)
+    assert f"{tmp_path}/posts/{undashed_page_id}/featured_image.webp" in message
+    assert dashed_page_id not in message
+
+
 def test_explicit_featured_image_path_still_validates(tmp_path):
     """Manual featured image selection remains supported."""
 

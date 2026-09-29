@@ -405,8 +405,9 @@ class AtaBlogClient:
         if featured_image:
             return AtaBlogClient._validate_featured_image(featured_image)
 
+        compact_page_id = AtaBlogClient._compact_page_id(page_id)
         candidates = [
-            STATIC_REPOSITORY_ROOT / "posts" / page_id / f"featured_image.{extension}"
+            STATIC_REPOSITORY_ROOT / "posts" / compact_page_id / f"featured_image.{extension}"
             for extension in ("webp", "png", "jpg", "jpeg")
         ]
         for candidate in candidates:
