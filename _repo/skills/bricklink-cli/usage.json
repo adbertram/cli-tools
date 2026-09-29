@@ -1,8 +1,8 @@
 {
   "tool": "bricklink",
   "description": "CLI interface for Bricklink API",
-  "discovered_at": "2026-08-27T23:05:09Z",
-  "total_commands": 61,
+  "discovered_at": "2026-09-26T23:55:17Z",
+  "total_commands": 68,
   "global_options": [
     {
       "name": "--version",
@@ -242,6 +242,19 @@
             }
           }
         },
+        "seed-shared-chromium-profile": {
+          "help": "Seed an empty shared Chromium profile from this CLI's default profile.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Default profile with the known-good legacy browser session",
+              "short": "-p"
+            }
+          ]
+        },
         "status": {
           "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
           "usage_instructions": "Run `bricklink auth status`. Use options such as --table as needed.",
@@ -291,6 +304,514 @@
               "required": false,
               "help": "Profile name (defaults to all profiles)",
               "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "buy": {
+      "help": "Browse for-sale lots (buyer)",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "current_inventory": {
+          "help": "Live for-sale inventory (seller, store, country)",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "list": {
+              "help": "List/filter live lots already stored in local current_inventory.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--type",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter by item type"
+                },
+                {
+                  "name": "--no",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter by item number"
+                },
+                {
+                  "name": "--category",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Filter by BrickBuddy/BrickLink category id (joins seeded items). Requires --limit"
+                },
+                {
+                  "name": "--color",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "BrickLink color id"
+                },
+                {
+                  "name": "--country",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Seller country code"
+                },
+                {
+                  "name": "--condition",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "N or U"
+                },
+                {
+                  "name": "--max-price",
+                  "type": "FLOAT",
+                  "required": false,
+                  "help": "Maximum unit price"
+                },
+                {
+                  "name": "--min-qty",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Minimum quantity"
+                },
+                {
+                  "name": "--store",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Store name substring"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Max rows (required when --category is set; default 100 otherwise)",
+                  "short": "-l"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "update": {
+              "help": "Refresh live current_inventory for high-gap items (seller/store/country via catalogifs).",
+              "arguments": [
+                {
+                  "name": "item_type",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Item type (e.g. MINIFIG)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--min-gap-ratio",
+                  "type": "FLOAT",
+                  "required": false,
+                  "help": "Only update items whose stock gap is at least this large",
+                  "default": "0.4"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Max items to update (keep small — uses catalogifs)",
+                  "short": "-l",
+                  "default": "25"
+                },
+                {
+                  "name": "--max-lots",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Max live lots to store per item",
+                  "default": "40"
+                },
+                {
+                  "name": "--condition",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "N or U",
+                  "default": "U"
+                },
+                {
+                  "name": "--percentile",
+                  "type": "FLOAT",
+                  "required": false,
+                  "help": "Lowest % band when refreshing sold guide",
+                  "default": "20.0"
+                },
+                {
+                  "name": "--prefix",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Item number prefix"
+                },
+                {
+                  "name": "--no-sold",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip OAuth sold-guide enrich",
+                  "takes_value": false
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Show summary table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        },
+        "gaps": {
+          "help": "List stored price-guide rows with largest lowest-percentile vs avg gaps.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by item type"
+            },
+            {
+              "name": "--no",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by item number"
+            },
+            {
+              "name": "--condition",
+              "type": "TEXT",
+              "required": false,
+              "help": "N or U"
+            },
+            {
+              "name": "--prefix",
+              "type": "TEXT",
+              "required": false,
+              "help": "Item number prefix"
+            },
+            {
+              "name": "--min-gap-ratio",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Minimum (avg-lower%)/avg, e.g. 0.3 = 30% below avg"
+            },
+            {
+              "name": "--min-gap-abs",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Minimum avg-lower% in currency"
+            },
+            {
+              "name": "--guide",
+              "type": "TEXT",
+              "required": false,
+              "help": "stock or sold",
+              "default": "stock"
+            },
+            {
+              "name": "--include",
+              "type": "TEXT",
+              "required": false,
+              "help": "Enrichment missing from OAuth guides (sellers=seller/store/country/feedback from local current_inventory)"
+            },
+            {
+              "name": "--shipping",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Flat per-seller shipping estimate added to buy side (default 5.5)",
+              "default": "5.5"
+            },
+            {
+              "name": "--country",
+              "type": "TEXT",
+              "required": false,
+              "help": "When --include sellers, only keep lots from this country (e.g. US)"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Max rows",
+              "short": "-l",
+              "default": "50"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "item": {
+          "help": "Resolve idItem and refresh live lots into local current_inventory.",
+          "arguments": [
+            {
+              "name": "item_type",
+              "type": "TEXT",
+              "required": true,
+              "help": "Item type (PART, MINIFIG, SET, P, M, S, ...)"
+            },
+            {
+              "name": "item_no",
+              "type": "TEXT",
+              "required": true,
+              "help": "Catalog item number (e.g. 3001, sw0936)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--color",
+              "type": "INTEGER",
+              "required": false,
+              "help": "BrickLink color id"
+            },
+            {
+              "name": "--condition",
+              "type": "TEXT",
+              "required": false,
+              "help": "N or U"
+            },
+            {
+              "name": "--force-refresh",
+              "type": "bool",
+              "required": false,
+              "help": "Bypass idItem/lots TTL caches",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display lots as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Max lots to fetch and display (caps BrickLink pagination)",
+              "short": "-l",
+              "default": "25"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "opportunities": {
+          "help": "List buy-low/sell-high candidates from stored stock (+ sold when present).",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by item type"
+            },
+            {
+              "name": "--condition",
+              "type": "TEXT",
+              "required": false,
+              "help": "N or U",
+              "default": "U"
+            },
+            {
+              "name": "--prefix",
+              "type": "TEXT",
+              "required": false,
+              "help": "Item number prefix"
+            },
+            {
+              "name": "--min-gap-ratio",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Min stock Low% vs avg gap",
+              "default": "0.4"
+            },
+            {
+              "name": "--min-opp-ratio",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Min (sell_proxy-buy_proxy)/sell_proxy"
+            },
+            {
+              "name": "--include",
+              "type": "TEXT",
+              "required": false,
+              "help": "Enrichment missing from OAuth guides (sellers=seller/store/country/feedback from local current_inventory)"
+            },
+            {
+              "name": "--shipping",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Flat per-seller shipping estimate added to buy side (default 5.5)",
+              "default": "5.5"
+            },
+            {
+              "name": "--country",
+              "type": "TEXT",
+              "required": false,
+              "help": "When --include sellers, only keep lots from this country (e.g. US)"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Max rows",
+              "short": "-l",
+              "default": "50"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "prices": {
+          "help": "Refresh OAuth price guides and score lowest-percentile vs average gaps.",
+          "arguments": [
+            {
+              "name": "item_type",
+              "type": "TEXT",
+              "required": true,
+              "help": "Item type to refresh (e.g. MINIFIG, PART)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Max catalog items to refresh (required)",
+              "short": "-l"
+            },
+            {
+              "name": "--condition",
+              "type": "TEXT",
+              "required": false,
+              "help": "N or U (default U)",
+              "default": "U"
+            },
+            {
+              "name": "--guide",
+              "type": "TEXT",
+              "required": false,
+              "help": "stock or sold",
+              "default": "stock"
+            },
+            {
+              "name": "--percentile",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Lowest percentage band of listing prices (e.g. 20 = bottom 20%)",
+              "default": "20.0"
+            },
+            {
+              "name": "--prefix",
+              "type": "TEXT",
+              "required": false,
+              "help": "Only item numbers with this prefix (e.g. sw)"
+            },
+            {
+              "name": "--category",
+              "type": "INTEGER",
+              "required": false,
+              "help": "BrickBuddy category id filter"
+            },
+            {
+              "name": "--color",
+              "type": "INTEGER",
+              "required": false,
+              "help": "BrickLink color id"
+            },
+            {
+              "name": "--offset",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Skip this many seeded items",
+              "default": "0"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Show top gaps as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--top",
+              "type": "INTEGER",
+              "required": false,
+              "help": "How many top gaps to display",
+              "default": "25"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         }

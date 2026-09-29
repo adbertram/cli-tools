@@ -1,8 +1,8 @@
 {
   "tool": "facebook",
   "description": "Facebook CLI - Marketplace, Messenger, and more via browser automation",
-  "discovered_at": "2026-09-25T23:32:05Z",
-  "total_commands": 32,
+  "discovered_at": "2026-09-26T23:58:56Z",
+  "total_commands": 33,
   "global_options": [
     {
       "name": "--version",
@@ -259,6 +259,19 @@
               "help": "Display as table",
               "short": "-t",
               "takes_value": false
+            }
+          ]
+        },
+        "seed-shared-chromium-profile": {
+          "help": "Seed an empty shared Chromium profile from this CLI's default profile.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Default profile with the known-good legacy browser session",
+              "short": "-p"
             }
           ]
         },

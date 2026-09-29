@@ -30,9 +30,34 @@ An intentional global reset uses `BaseConfig.clear_shared_chromium_profile()`. T
 
 ## Existing installations
 
-There is no silent migration from old per-tool Chromium directories. Silent selection or merging of cookie databases is unsafe. Existing directories remain untouched and can be restored. To seed the shared profile, choose one known-good `default` browser profile while Chrome is fully closed, copy it to the shared path, then retain the source as a backup until every CLI is verified. Do not merge multiple Chrome profile trees.
+There is no silent migration from old per-tool Chromium directories. Silent selection or merging of cookie databases is unsafe. Existing directories remain untouched and can be restored.
+
+If the shared profile is empty but an isolated/default profile is known-good, seed exactly one source with that CLI's deterministic command:
+
+```bash
+<known-good-cli> auth seed-shared-chromium-profile
+```
+
+For example, after confirming BrickLink's isolated profile still works:
+
+```bash
+CLI_TOOLS_ISOLATE_CHROME_PROFILE=1 bricklink auth status
+bricklink auth seed-shared-chromium-profile
+```
+
+The command requires the `default` profile, verifies the source has a Chromium Cookies database, refuses a populated destination, refuses running Chrome processes, and excludes stale Chromium singleton artifacts. It never merges or overwrites profile trees. Re-login every other browser CLI into the newly seeded shared profile as needed.
 
 Adam's Mac already has a seeded shared directory and per-tool symlinks from the earlier experiment. Once this feature is active, the symlinks are not required for path resolution; they may remain temporarily as compatibility pointers while validation runs.
+
+## Per-host rollout check
+
+Run this check on every host that executes browser-backed CLI workflows before removing a temporary `CLI_TOOLS_ISOLATE_CHROME_PROFILE=1` workaround:
+
+```bash
+<browser-cli> auth status
+```
+
+When `credential_types.browser_session.browser_error` says the shared Chromium profile is not seeded, identify one CLI whose isolated/default profile is still valid, run its `auth seed-shared-chromium-profile` command while Chrome is closed, then rerun `auth status`. Do not seed from an expired profile. A browser session can be re-authenticated after seeding, but the command must never be used to merge multiple profiles.
 
 ## Validation
 

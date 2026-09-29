@@ -45,14 +45,6 @@ _STATIC_MEDIA_KEY_PREFIX = "wp-content/uploads/"
 STATIC_SITE_ORIGIN = "https://adamtheautomator.com"
 EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 EMPTY_UUID = "00000000-0000-4000-8000-000000000000"
-STATIC_BUILD_TOKEN_RELEASE_ID_STALE = "Build token release_id is stale"
-STATIC_BUILD_TOKEN_CONTRACT_HASH_STALE = "Build token contract_hash is stale"
-STATIC_BUILD_TOKEN_IDENTITY_ERRORS = frozenset(
-    {
-        STATIC_BUILD_TOKEN_RELEASE_ID_STALE,
-        STATIC_BUILD_TOKEN_CONTRACT_HASH_STALE,
-    }
-)
 
 
 def _canonical_json_bytes(value: Any) -> bytes:
@@ -68,22 +60,6 @@ def _canonical_json_bytes(value: Any) -> bytes:
 def _artifact_sha256(value: Any) -> str:
     """Return the P05 canonical artifact hash for a JSON value."""
     return hashlib.sha256(_canonical_json_bytes(value)).hexdigest()
-
-
-class _BuildTokenHandle:
-    """The open, exclusively-locked build-token descriptor plus its contents.
-
-    Kept as one object (not a bare fd) so a build performed while holding the
-    lock can advance the token's release identity in place -- same inode,
-    same lock -- instead of an out-of-band process being the only thing that
-    can ever bring the token back in sync with the manifest it just produced.
-    """
-
-    __slots__ = ("descriptor", "token")
-
-    def __init__(self, descriptor: int, token: Dict[str, Any]) -> None:
-        self.descriptor = descriptor
-        self.token = token
 
 
 def _is_failed_unbuilt_publisher_journal(journal: Dict[str, Any]) -> bool:
@@ -3054,135 +3030,10 @@ class AtaBlogClient:
                 )
 
     @contextmanager
-    def _static_build_lock(
-        self,
-        paths: Dict[str, Path],
-        *,
-        token_release_ref: Optional[Dict[str, str]] = None,
-    ):
-        """Hold the global transferable token and the active-profile build lock.
-
-        `token_release_ref` pins the token to one immutable, already-bound
-        release (a transaction resuming its own earlier build must keep
-        matching that exact release). Pass None when no build is bound yet --
-        the check then re-reads the release manifest fresh, right here, while
-        the lock is held, instead of trusting a snapshot the caller may have
-        read minutes earlier through unrelated Notion/media I/O. That
-        snapshot-age gap -- not a real conflicting build -- was the entire
-        cause of routine 'Build token release_id is stale' failures: a build
-        performed by any transaction now syncs the token in place (see
-        _sync_build_token), so the only thing left for a fresh check to catch
-        is a genuine anomaly, not the passage of time.
-        """
-        build_token_path = self._publisher_runtime_root() / "build-token.json"
-        if not build_token_path.is_file():
-            raise ClientError(f"Required build token is missing: {build_token_path}")
-        descriptor = os.open(build_token_path, os.O_RDWR)
-        try:
-            try:
-                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError as exc:
-                raise ClientError("Global build token is already held") from exc
-            with os.fdopen(os.dup(descriptor), "r", encoding="utf-8") as handle:
-                try:
-                    token = json.load(handle)
-                except json.JSONDecodeError as exc:
-                    raise ClientError(f"Corrupt build token {build_token_path}: {exc}") from exc
-            if not isinstance(token, dict):
-                raise ClientError("Invalid build token: expected a JSON object")
-            if token.get("holder") != "root-coordinator" or token.get("released_at") is not None:
-                raise ClientError("Build token is not currently held by root-coordinator")
-            if token_release_ref is not None:
-                expected_token_release_ref = token_release_ref
-            else:
-                current_manifest = self._load_static_release_manifest()
-                expected_token_release_ref = {
-                    "release_id": current_manifest["release_id"],
-                    "contract_hash": current_manifest["contract_hash"],
-                }
-            if token.get("release_id") != expected_token_release_ref["release_id"]:
-                raise ClientError(STATIC_BUILD_TOKEN_RELEASE_ID_STALE)
-            if token.get("contract_hash") != expected_token_release_ref["contract_hash"]:
-                raise ClientError(STATIC_BUILD_TOKEN_CONTRACT_HASH_STALE)
-            if not re.fullmatch(r"[0-9a-f]{64}", str(token.get("build_sha256"))):
-                raise ClientError("Build token has no bound build_sha256")
-            with self._exclusive_publisher_lock(paths["build_lock"], blocking=False):
-                yield _BuildTokenHandle(descriptor, token)
-        finally:
-            fcntl.flock(descriptor, fcntl.LOCK_UN)
-            os.close(descriptor)
-
-    @staticmethod
-    def _sync_build_token(
-        handle: "_BuildTokenHandle",
-        build: Dict[str, Any],
-        *,
-        runtime: Dict[str, Any],
-        paths: Dict[str, Path],
-    ) -> None:
-        """Advance the held token, then the runtime's belief about it, in that order.
-
-        The token is the single authority a fresh publish call trusts for
-        'what release is currently valid to build against'. A build performed
-        while holding this exact token is, by definition, the new authority --
-        so the coordinator that just ran it must record that fact here, in the
-        same locked critical section, instead of requiring a human to manually
-        re-issue the token before the next publish call can proceed.
-
-        The token write (direct to the locked fd) happens first and is
-        immediately durable. Only once it has landed do we persist
-        runtime["build_token_release_ref"] to match. A crash between the two
-        leaves the runtime believing the token is still whatever it was
-        before this call -- which is still true, since the token write above
-        is what makes it false -- so a retry's staleness check keeps
-        comparing against reality either way instead of a value that raced
-        ahead of (or fell behind) the file it describes.
-        """
-        manifest = build["manifest"]
-        release_ref = {
-            "release_id": manifest["release_id"],
-            "contract_hash": manifest["contract_hash"],
-        }
-        token = dict(handle.token)
-        if (
-            token.get("release_id") != release_ref["release_id"]
-            or token.get("contract_hash") != release_ref["contract_hash"]
-            or token.get("build_sha256") != build["build_sha256"]
-        ):
-            token["release_id"] = release_ref["release_id"]
-            token["contract_hash"] = release_ref["contract_hash"]
-            token["build_sha256"] = build["build_sha256"]
-            token["release"] = {
-                **release_ref,
-                "build_sha256": build["build_sha256"],
-                "deployment_id": None,
-            }
-            journal = list(token.get("journal") or [])
-            journal.append(
-                {
-                    "sequence": (journal[-1]["sequence"] + 1) if journal else 1,
-                    "event": "release_synced",
-                    "holder": "root-coordinator",
-                    "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                    "reason": (
-                        "root-coordinator advanced the held token to the release it "
-                        "just built, closing the window between reading the prior "
-                        "release manifest and acquiring the build lock."
-                    ),
-                    "release_id": release_ref["release_id"],
-                    "contract_hash": release_ref["contract_hash"],
-                    "build_sha256": build["build_sha256"],
-                }
-            )
-            token["journal"] = journal
-            payload = _canonical_json_bytes(token) + b"\n"
-            os.lseek(handle.descriptor, 0, os.SEEK_SET)
-            os.write(handle.descriptor, payload)
-            os.ftruncate(handle.descriptor, len(payload))
-            os.fsync(handle.descriptor)
-            handle.token = token
-        runtime["build_token_release_ref"] = release_ref
-        _atomic_write_json(paths["runtime"], runtime)
+    def _static_build_lock(self, paths: Dict[str, Path]):
+        """Hold the active profile's non-blocking static build lock."""
+        with self._exclusive_publisher_lock(paths["build_lock"], blocking=False):
+            yield
 
     def _load_existing_publisher_journal(
         self,
@@ -3355,14 +3206,7 @@ class AtaBlogClient:
         unbound_release_ref = {"release_id": None, "contract_hash": None}
         current_stage = "build-lock acquisition"
         try:
-            with self._static_build_lock(
-                paths,
-                token_release_ref=(
-                    None
-                    if release_ref == unbound_release_ref
-                    else runtime["build_token_release_ref"]
-                ),
-            ) as build_token_handle:
+            with self._static_build_lock(paths):
                 if journal["state"] == "reserved":
                     if journal["effects"]["corpus_writes"] == 0:
                         current_stage = "staging"
@@ -3419,9 +3263,6 @@ class AtaBlogClient:
                             runtime=runtime,
                             build=build,
                             paths=paths,
-                        )
-                        self._sync_build_token(
-                            build_token_handle, build, runtime=runtime, paths=paths
                         )
                     self._transition_publisher_journal(
                         journal,
@@ -3594,10 +3435,6 @@ class AtaBlogClient:
         idempotency_key = self._publisher_idempotency_key(page_id, source_revision)
         paths = self._publisher_paths(page_id, idempotency_key)
         manifest = self._load_static_release_manifest()
-        release_ref = {
-            "release_id": manifest["release_id"],
-            "contract_hash": manifest["contract_hash"],
-        }
         unbound_release_ref = {"release_id": None, "contract_hash": None}
         final_slug = self._static_slug(title, self._notion_slug(article, page_id))
 
@@ -3652,7 +3489,6 @@ class AtaBlogClient:
                     "status": status,
                     "publish_date": None,
                     "release_ref": unbound_release_ref,
-                    "build_token_release_ref": release_ref,
                     "failure_stage": None,
                     "failure_message": None,
                     "rollback_error": None,
@@ -3682,15 +3518,8 @@ class AtaBlogClient:
                         and journal["events"][-1]["from"] == "staged"
                         and journal["events"][-1]["to"] == "failed"
                         and journal["effects"]["media_upload_sets"] == 1
-                        and (
-                            runtime.get("failure_stage") == "build"
-                            or (
-                                runtime.get("failure_stage")
-                                == "build-lock acquisition"
-                                and runtime.get("failure_message")
-                                in STATIC_BUILD_TOKEN_IDENTITY_ERRORS
-                            )
-                        )
+                        and runtime.get("failure_stage")
+                        in {"build", "build-lock acquisition"}
                         and runtime.get("corpus_rolled_back") is True
                         and runtime.get("rollback_error") in (None, "")
                         and not runtime.get("build_sha256")
@@ -3724,9 +3553,6 @@ class AtaBlogClient:
                             raise ClientError(
                                 "Stale publisher runtime: release_ref mismatch"
                             )
-                        if failed_unbuilt_candidate:
-                            runtime["build_token_release_ref"] = release_ref
-                            _atomic_write_json(paths["runtime"], runtime)
                     elif first_build_was_journaled:
                         if runtime_release_ref not in (
                             journal_release_ref,
@@ -3738,37 +3564,14 @@ class AtaBlogClient:
                     elif failed_unbuilt_candidate:
                         journal["release_ref"] = unbound_release_ref
                         runtime["release_ref"] = unbound_release_ref
-                        runtime["build_token_release_ref"] = release_ref
                         _atomic_write_json(paths["journal"], journal)
                         _atomic_write_json(paths["runtime"], runtime)
                     else:
                         raise ClientError(
                             "Corrupt publisher transaction: unproven first-build binding"
                         )
-                    token_release_ref = runtime.get("build_token_release_ref")
-                    if token_release_ref is None:
-                        token_release_ref = release_ref
-                    runtime["build_token_release_ref"] = token_release_ref
-                    _atomic_write_json(paths["runtime"], runtime)
                 elif runtime_release_ref != journal["release_ref"]:
                     raise ClientError("Stale publisher runtime: release_ref mismatch")
-                elif runtime.get("build_token_release_ref") is None:
-                    runtime["build_token_release_ref"] = release_ref
-                    _atomic_write_json(paths["runtime"], runtime)
-                token_release_ref = runtime.get("build_token_release_ref")
-                if (
-                    not isinstance(token_release_ref, dict)
-                    or set(token_release_ref) != {"release_id", "contract_hash"}
-                    or not isinstance(token_release_ref["release_id"], str)
-                    or not token_release_ref["release_id"]
-                    or not re.fullmatch(
-                        r"[0-9a-f]{64}",
-                        str(token_release_ref["contract_hash"]),
-                    )
-                ):
-                    raise ClientError(
-                        "Corrupt publisher runtime: invalid build_token_release_ref"
-                    )
                 if runtime.get("slug") != final_slug or runtime.get("status") != status:
                     raise ClientError("Retry options do not match the existing publisher runtime")
                 if journal["state"] != "failed":
@@ -3785,14 +3588,7 @@ class AtaBlogClient:
 
             current_stage = "build-lock acquisition"
             try:
-                with self._static_build_lock(
-                    paths,
-                    token_release_ref=(
-                        None
-                        if journal is None or journal["release_ref"] == unbound_release_ref
-                        else runtime["build_token_release_ref"]
-                    ),
-                ) as build_token_handle:
+                with self._static_build_lock(paths):
                     if journal is None:
                         current_stage = "transaction reservation"
                         prior_deployment_id = EMPTY_UUID
@@ -3875,9 +3671,6 @@ class AtaBlogClient:
                             runtime=runtime,
                             build=build,
                             paths=paths,
-                        )
-                        self._sync_build_token(
-                            build_token_handle, build, runtime=runtime, paths=paths
                         )
                     self._transition_publisher_journal(
                         journal,
@@ -4016,7 +3809,7 @@ class AtaBlogClient:
         """Build and deploy a Cloudflare Pages preview without publishing.
 
         Preview is deliberately separate from the journaled publish transaction.
-        It may stage corpus/media and build while the global build lock is held,
+        It may stage corpus/media and build while the per-profile build lock is held,
         but it restores the corpus and reseals that restored corpus before
         returning. It never updates Notion and therefore cannot satisfy or poison
         a later production publish journal for the same source revision.
@@ -4076,7 +3869,7 @@ class AtaBlogClient:
             deployment: Optional[Dict[str, Any]] = None
             current_stage = "build-lock acquisition"
 
-            with self._static_build_lock(paths, token_release_ref=None) as build_token_handle:
+            with self._static_build_lock(paths):
                 try:
                     current_stage = "staging"
                     stage = self._stage_static_article(
@@ -4106,9 +3899,6 @@ class AtaBlogClient:
                     }
                     runtime["release_ref"] = preview_release_ref
                     runtime["build_sha256"] = build["build_sha256"]
-                    self._sync_build_token(
-                        build_token_handle, build, runtime=runtime, paths=paths
-                    )
 
                     current_stage = "preview upload"
                     deployment = self._deploy_static_preview(
@@ -4153,12 +3943,6 @@ class AtaBlogClient:
                             "contract_hash": cleanup_build["manifest"]["contract_hash"],
                         }
                         runtime["cleanup_build_sha256"] = cleanup_build["build_sha256"]
-                        self._sync_build_token(
-                            build_token_handle,
-                            cleanup_build,
-                            runtime=runtime,
-                            paths=paths,
-                        )
                     except Exception as exc:
                         cleanup_errors.append(f"release reseal: {exc}")
 
@@ -4528,7 +4312,7 @@ class AtaBlogClient:
             current_stage = "build-lock acquisition"
             prior_corpus_sha256 = _static_corpus_sha256()
             try:
-                with self._static_build_lock(paths) as build_token_handle:
+                with self._static_build_lock(paths):
                     current_stage = "corpus removal"
                     _atomic_write_bytes(paths["backup"], original)
                     static_post.unlink()
@@ -4543,9 +4327,6 @@ class AtaBlogClient:
                         "contract_hash": manifest["contract_hash"],
                     }
                     runtime["build_sha256"] = build["build_sha256"]
-                    self._sync_build_token(
-                        build_token_handle, build, runtime=runtime, paths=paths
-                    )
 
                     current_stage = "preview upload"
                     deployment = self._deploy_static_preview(

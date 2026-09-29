@@ -2,6 +2,12 @@
 from . import transport, client
 
 
+def _request_timeout(retry_config):
+    if retry_config is None:
+        return transport.DEFAULT_REQUEST_TIMEOUT
+    return retry_config.request_timeout
+
+
 def build_headers(authorization_headers, user_agent):
     headers = transport.KeepAliveHeaders(authorization_headers)
     if user_agent is not None:
@@ -9,24 +15,52 @@ def build_headers(authorization_headers, user_agent):
     return headers
 
 
-def OAuthClient(api_key, api_secret, login, password, user_agent=None,
-                domain="https://api.podio.com", retry_config=None):
-    auth = transport.OAuthAuthorization(login, password,
-                                        api_key, api_secret, domain)
+def OAuthClient(
+    api_key,
+    api_secret,
+    login,
+    password,
+    user_agent=None,
+    domain="https://api.podio.com",
+    retry_config=None,
+):
+    auth = transport.OAuthAuthorization(
+        login, password, api_key, api_secret, domain, request_timeout=_request_timeout(retry_config)
+    )
     return AuthorizingClient(domain, auth, user_agent=user_agent, retry_config=retry_config)
 
 
-def OAuthAppClient(client_id, client_secret, app_id, app_token, user_agent=None,
-                   domain="https://api.podio.com", retry_config=None):
+def OAuthAppClient(
+    client_id,
+    client_secret,
+    app_id,
+    app_token,
+    user_agent=None,
+    domain="https://api.podio.com",
+    retry_config=None,
+):
 
-    auth = transport.OAuthAppAuthorization(app_id, app_token,
-                                           client_id, client_secret, domain)
+    auth = transport.OAuthAppAuthorization(
+        app_id,
+        app_token,
+        client_id,
+        client_secret,
+        domain,
+        request_timeout=_request_timeout(retry_config),
+    )
 
     return AuthorizingClient(domain, auth, user_agent=user_agent, retry_config=retry_config)
 
 
-def OAuthAuthorizationCodeClient(client_id, client_secret, authorization_code, redirect_uri,
-                                  user_agent=None, domain="https://api.podio.com", retry_config=None):
+def OAuthAuthorizationCodeClient(
+    client_id,
+    client_secret,
+    authorization_code,
+    redirect_uri,
+    user_agent=None,
+    domain="https://api.podio.com",
+    retry_config=None,
+):
     """
     Create a Podio client using server-side OAuth authorization code flow.
 
@@ -43,14 +77,27 @@ def OAuthAuthorizationCodeClient(client_id, client_secret, authorization_code, r
         Client: Authenticated Podio API client
     """
     auth = transport.OAuthAuthorizationCodeAuthorization(
-        authorization_code, redirect_uri, client_id, client_secret, domain
+        authorization_code,
+        redirect_uri,
+        client_id,
+        client_secret,
+        domain,
+        request_timeout=_request_timeout(retry_config),
     )
     return AuthorizingClient(domain, auth, user_agent=user_agent, retry_config=retry_config)
 
 
-def OAuthTokenClient(access_token, refresh_token=None, expires_in=None,
-                     client_id=None, client_secret=None, user_agent=None, domain="https://api.podio.com",
-                     on_token_refresh=None, retry_config=None):
+def OAuthTokenClient(
+    access_token,
+    refresh_token=None,
+    expires_in=None,
+    client_id=None,
+    client_secret=None,
+    user_agent=None,
+    domain="https://api.podio.com",
+    on_token_refresh=None,
+    retry_config=None,
+):
     """
     Create a Podio client using an existing access token (client-side flow).
 
@@ -69,7 +116,14 @@ def OAuthTokenClient(access_token, refresh_token=None, expires_in=None,
         Client: Authenticated Podio API client with automatic token refresh
     """
     auth = transport.OAuthTokenAuthorization(
-        access_token, refresh_token, expires_in, client_id, client_secret, domain, on_token_refresh
+        access_token,
+        refresh_token,
+        expires_in,
+        client_id,
+        client_secret,
+        domain,
+        on_token_refresh,
+        request_timeout=_request_timeout(retry_config),
     )
     return AuthorizingClient(domain, auth, user_agent=user_agent, retry_config=retry_config)
 
@@ -77,9 +131,6 @@ def OAuthTokenClient(access_token, refresh_token=None, expires_in=None,
 def AuthorizingClient(domain, auth, user_agent=None, retry_config=None):
     """Creates a Podio client using an auth object."""
     http_transport = transport.HttpTransport(
-        domain,
-        build_headers(auth, user_agent),
-        auth_object=auth,
-        retry_config=retry_config
+        domain, build_headers(auth, user_agent), auth_object=auth, retry_config=retry_config
     )
     return client.Client(http_transport)

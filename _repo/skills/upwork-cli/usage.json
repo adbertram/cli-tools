@@ -1,8 +1,8 @@
 {
   "tool": "upwork",
   "description": "CLI interface for upwork",
-  "discovered_at": "2026-07-02T23:32:24Z",
-  "total_commands": 20,
+  "discovered_at": "2026-09-26T23:33:46Z",
+  "total_commands": 21,
   "global_options": [],
   "commands": {
     "auth": {
@@ -11,7 +11,7 @@
       "options": [],
       "commands": {
         "login": {
-          "help": "Configure authentication credentials.",
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
           "arguments": [],
           "options": [
             {
@@ -26,7 +26,8 @@
               "type": "bool",
               "required": false,
               "help": "Clear existing ephemeral auth state and re-authenticate",
-              "short": "-F"
+              "short": "-F",
+              "takes_value": false
             },
             {
               "name": "--credential-type",
@@ -83,7 +84,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -103,7 +105,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
@@ -116,7 +119,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -157,7 +161,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -182,14 +187,16 @@
                   "name": "--keep-old",
                   "type": "bool",
                   "required": false,
-                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
                 },
                 {
                   "name": "--force",
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -223,12 +230,26 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "seed-shared-chromium-profile": {
+          "help": "Seed an empty shared Chromium profile from this CLI's default profile.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Default profile with the known-good legacy browser session",
+              "short": "-p"
             }
           ]
         },
         "status": {
-          "help": "Check authentication status across profiles.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
           "arguments": [],
           "options": [
             {
@@ -243,7 +264,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -256,14 +278,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--verbose",
               "type": "bool",
               "required": false,
               "help": "Show detailed checks",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -282,9 +306,16 @@
       "options": [],
       "commands": {
         "clear": {
-          "help": "Remove all cached responses.",
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
@@ -316,7 +347,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -363,7 +395,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -415,7 +448,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--properties",
@@ -456,7 +490,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--properties",
@@ -476,13 +511,13 @@
           }
         },
         "get": {
-          "help": "Read common profile attributes.",
+          "help": "Report disabled live profile reads or show one field definition.",
           "arguments": [
             {
-              "name": "[field]",
-              "type": "TEXT",
+              "name": "field",
+              "type": "FIELD",
               "required": false,
-              "help": "TEXT  Optional profile field name or alias"
+              "help": "Optional profile field name or alias"
             }
           ],
           "options": [
@@ -491,7 +526,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -532,7 +568,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -550,7 +587,7 @@
           ]
         },
         "update": {
-          "help": "Update editable profile attributes.",
+          "help": "Validate profile updates or report disabled live profile writes.",
           "arguments": [],
           "options": [
             {
@@ -561,7 +598,7 @@
             },
             {
               "name": "--file",
-              "type": "FILE",
+              "type": "file",
               "required": false,
               "help": "JSON object containing profile fields to update"
             },
@@ -569,21 +606,24 @@
               "name": "--dry-run",
               "type": "bool",
               "required": false,
-              "help": "Validate and print requested updates without changing Upwork"
+              "help": "Validate and print requested updates without changing Upwork",
+              "takes_value": false
             },
             {
               "name": "--yes",
               "type": "bool",
               "required": false,
               "help": "Apply changes without an interactive confirmation prompt",
-              "short": "-y"
+              "short": "-y",
+              "takes_value": false
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
