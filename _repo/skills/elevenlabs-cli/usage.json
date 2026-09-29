@@ -1,8 +1,8 @@
 {
   "tool": "elevenlabs",
   "description": "CLI interface for ElevenLabs API",
-  "discovered_at": "2026-07-13T23:41:46Z",
-  "total_commands": 31,
+  "discovered_at": "2026-09-29T21:29:13Z",
+  "total_commands": 33,
   "global_options": [
     {
       "name": "--version",
@@ -41,7 +41,8 @@
               "type": "bool",
               "required": false,
               "help": "Clear existing ephemeral auth state and re-authenticate",
-              "short": "-F"
+              "short": "-F",
+              "takes_value": false
             }
           ]
         },
@@ -95,7 +96,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -116,7 +118,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
@@ -130,7 +133,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -171,7 +175,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -196,14 +201,16 @@
                   "name": "--keep-old",
                   "type": "bool",
                   "required": false,
-                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
                 },
                 {
                   "name": "--force",
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -238,7 +245,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -252,14 +260,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--verbose",
               "type": "bool",
               "required": false,
               "help": "Show detailed checks",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -282,7 +292,14 @@
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "usage_instructions": "Run `elevenlabs cache clear` to remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
@@ -340,7 +357,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -366,7 +384,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -462,7 +481,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -489,7 +509,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -523,6 +544,88 @@
         }
       }
     },
+    "music": {
+      "help": "Compose music",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "compose": {
+          "help": "Compose music from a prompt and write the audio file.",
+          "arguments": [
+            {
+              "name": "prompt",
+              "type": "TEXT",
+              "required": true,
+              "help": "Text prompt describing the music"
+            }
+          ],
+          "options": [
+            {
+              "name": "--output",
+              "type": "PATH",
+              "required": true,
+              "help": "Path to write audio file",
+              "short": "-o"
+            },
+            {
+              "name": "--seconds",
+              "type": "FLOAT",
+              "required": false,
+              "help": "[3<=x<=600]  Length in seconds (3-600); model picks when omitted"
+            },
+            {
+              "name": "--model",
+              "type": "TEXT",
+              "required": false,
+              "help": "music_v1, music_v2, or music_v2_5 (API default music_v1)",
+              "short": "-m"
+            },
+            {
+              "name": "--instrumental",
+              "type": "bool",
+              "required": false,
+              "help": "Force instrumental output (API default off)",
+              "takes_value": false,
+              "secondary": "--no-instrumental"
+            },
+            {
+              "name": "--seed",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Seed for reproducible output"
+            },
+            {
+              "name": "--output-format",
+              "type": "TEXT",
+              "required": false,
+              "help": "Audio output format",
+              "default": "mp3_44100_128"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Overwrite an existing output file",
+              "short": "-F",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
     "pronunciation-dictionaries": {
       "help": "Manage pronunciation dictionaries",
       "usage_instructions": "Use `elevenlabs pronunciation-dictionaries` for manage pronunciation dictionaries. Available subcommands here are `list`, `get`, `create-from-rules`, `create-from-file`, `update`, `set-rules`, `add-rules`, `remove-rules`, `download`.",
@@ -537,7 +640,7 @@
       ],
       "commands": {
         "add-rules": {
-          "help": "_DICTIONARY_ID Add or replace rules in a pronunciation dictionary.",
+          "help": "Add or replace rules in a pronunciation dictionary.",
           "usage_instructions": "Run `elevenlabs pronunciation-dictionaries add-rules` to _DICTIONARY_ID Add or replace rules in a pronunciation dictionary. Required arguments: `PRONUNCIATION_DICTIONARY_ID`. Common options: `--table/-t`.",
           "arguments": [
             {
@@ -565,7 +668,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -576,7 +680,7 @@
           ]
         },
         "create-from-file": {
-          "help": "[OPTIONS] Create a pronunciation dictionary from a PLS lexicon file.",
+          "help": "Create a pronunciation dictionary from a PLS lexicon file.",
           "usage_instructions": "Run `elevenlabs pronunciation-dictionaries create-from-file` to [OPTIONS] Create a pronunciation dictionary from a PLS lexicon file. Common options: `--table/-t`, `--properties/-p`.",
           "arguments": [],
           "options": [
@@ -589,7 +693,7 @@
             },
             {
               "name": "--file",
-              "type": "FILE",
+              "type": "file",
               "required": true,
               "help": "PLS file path",
               "short": "-f"
@@ -611,7 +715,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -629,7 +734,7 @@
           ]
         },
         "create-from-rules": {
-          "help": "[OPTIONS] Create a pronunciation dictionary from alias and phoneme rules.",
+          "help": "Create a pronunciation dictionary from alias and phoneme rules.",
           "usage_instructions": "Run `elevenlabs pronunciation-dictionaries create-from-rules` to [OPTIONS] Create a pronunciation dictionary from alias and phoneme rules. Common options: `--table/-t`, `--properties/-p`.",
           "arguments": [],
           "options": [
@@ -669,7 +774,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -687,7 +793,7 @@
           ]
         },
         "download": {
-          "help": "DICTIONARY_ID VERSION_ID Download a pronunciation dictionary version as a PLS file.",
+          "help": "Download a pronunciation dictionary version as a PLS file.",
           "usage_instructions": "Run `elevenlabs pronunciation-dictionaries download` to dICTIONARY_ID VERSION_ID Download a pronunciation dictionary version as a PLS file. Required arguments: `PRONUNCIATION_DICTIONARY_ID`, `VERSION_ID`. Common options: `--table/-t`.",
           "arguments": [
             {
@@ -716,7 +822,8 @@
               "type": "bool",
               "required": false,
               "help": "Display result as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -727,7 +834,7 @@
           ]
         },
         "get": {
-          "help": "PRONUNCIATION_DICTIONARY_ID Get pronunciation dictionary metadata and latest rules.",
+          "help": "Get pronunciation dictionary metadata and latest rules.",
           "usage_instructions": "Run `elevenlabs pronunciation-dictionaries get` to pRONUNCIATION_DICTIONARY_ID Get pronunciation dictionary metadata and latest rules. Required arguments: `PRONUNCIATION_DICTIONARY_ID`. Common options: `--table/-t`, `--properties/-p`.",
           "arguments": [
             {
@@ -743,7 +850,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -798,7 +906,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--filter",
@@ -823,7 +932,7 @@
           ]
         },
         "remove-rules": {
-          "help": "ION_DICTIONARY_ID Remove rules from a pronunciation dictionary.",
+          "help": "Remove rules from a pronunciation dictionary.",
           "usage_instructions": "Run `elevenlabs pronunciation-dictionaries remove-rules` to iON_DICTIONARY_ID Remove rules from a pronunciation dictionary. Required arguments: `PRONUNCIATION_DICTIONARY_ID`. Common options: `--table/-t`.",
           "arguments": [
             {
@@ -845,7 +954,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -856,7 +966,7 @@
           ]
         },
         "set-rules": {
-          "help": "_DICTIONARY_ID Replace all rules in a pronunciation dictionary.",
+          "help": "Replace all rules in a pronunciation dictionary.",
           "usage_instructions": "Run `elevenlabs pronunciation-dictionaries set-rules` to _DICTIONARY_ID Replace all rules in a pronunciation dictionary. Required arguments: `PRONUNCIATION_DICTIONARY_ID`. Common options: `--table/-t`.",
           "arguments": [
             {
@@ -884,7 +994,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -895,7 +1006,7 @@
           ]
         },
         "update": {
-          "help": "CTIONARY_ID Update pronunciation dictionary metadata without changing its version.",
+          "help": "Update pronunciation dictionary metadata without changing its version.",
           "usage_instructions": "Run `elevenlabs pronunciation-dictionaries update` to cTIONARY_ID Update pronunciation dictionary metadata without changing its version. Required arguments: `PRONUNCIATION_DICTIONARY_ID`. Common options: `--table/-t`, `--properties/-p`.",
           "arguments": [
             {
@@ -917,14 +1028,17 @@
               "name": "--archived",
               "type": "bool",
               "required": false,
-              "help": "Archive state"
+              "help": "Archive state",
+              "takes_value": false,
+              "secondary": "--not-archived"
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -932,6 +1046,88 @@
               "required": false,
               "help": "Comma-separated fields to include",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "sound-effects": {
+      "help": "Generate sound effects",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "create": {
+          "help": "Generate a sound effect from text and write the audio file.",
+          "arguments": [
+            {
+              "name": "text",
+              "type": "TEXT",
+              "required": true,
+              "help": "Text describing the sound effect"
+            }
+          ],
+          "options": [
+            {
+              "name": "--output",
+              "type": "PATH",
+              "required": true,
+              "help": "Path to write audio file",
+              "short": "-o"
+            },
+            {
+              "name": "--duration",
+              "type": "FLOAT",
+              "required": false,
+              "help": "[0.5<=x<=30]  Duration in seconds (0.5-30); API picks when omitted"
+            },
+            {
+              "name": "--prompt-influence",
+              "type": "FLOAT",
+              "required": false,
+              "help": "[0<=x<=1]     Prompt influence 0-1 (API default 0.3)"
+            },
+            {
+              "name": "--loop",
+              "type": "bool",
+              "required": false,
+              "help": "Create a smoothly looping effect (API default off)",
+              "takes_value": false,
+              "secondary": "--no-loop"
+            },
+            {
+              "name": "--model",
+              "type": "TEXT",
+              "required": false,
+              "help": "Model ID (API default eleven_text_to_sound_v2)",
+              "short": "-m"
+            },
+            {
+              "name": "--output-format",
+              "type": "TEXT",
+              "required": false,
+              "help": "Audio output format",
+              "default": "mp3_44100_128"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Overwrite an existing output file",
+              "short": "-F",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1006,31 +1202,33 @@
               "name": "--stability",
               "type": "FLOAT",
               "required": false,
-              "help": "[0<=x<=1]             Voice stability"
+              "help": "[0<=x<=1]         Voice stability"
             },
             {
               "name": "--similarity-boost",
               "type": "FLOAT",
               "required": false,
-              "help": "[0<=x<=1]             Similarity boost"
+              "help": "[0<=x<=1]         Similarity boost"
             },
             {
               "name": "--style",
               "type": "FLOAT",
               "required": false,
-              "help": "[0<=x<=1]             Style exaggeration"
+              "help": "[0<=x<=1]         Style exaggeration"
             },
             {
               "name": "--speaker-boost",
               "type": "bool",
               "required": false,
-              "help": "Speaker boost"
+              "help": "Speaker boost",
+              "takes_value": false,
+              "secondary": "--no-speaker-boost"
             },
             {
               "name": "--speed",
               "type": "FLOAT",
               "required": false,
-              "help": "[0.7<=x<=1.2]         Voice speed"
+              "help": "[0.7<=x<=1.2]     Voice speed"
             },
             {
               "name": "--seed",
@@ -1055,6 +1253,8 @@
               "type": "bool",
               "required": false,
               "help": "Enable request logging",
+              "takes_value": false,
+              "secondary": "--disable-logging",
               "default": "enable-logging"
             },
             {
@@ -1062,7 +1262,8 @@
               "type": "bool",
               "required": false,
               "help": "Display result as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1097,7 +1298,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -1146,7 +1348,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -1173,7 +1376,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -1253,7 +1457,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",

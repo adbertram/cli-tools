@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import random
+import shutil
 import subprocess
 import tempfile
 import time
@@ -41,6 +42,7 @@ DEFAULT_MAX_DELAY = 30.0
 DEFAULT_JITTER = 0.1
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 HISTORY_MEDIA_TIMEOUT_SECONDS = 30
+GENERATION_TIMEOUT_SECONDS = 300
 
 
 def _history_audio_magic(content_type: str, content: bytes) -> str:
@@ -102,6 +104,47 @@ def _validate_history_audio_file(path: Path, content_type: str, content: bytes) 
         "ffprobe": True,
         "full_decode": True,
     }
+
+
+def _require_writable_output(output_path: Path, force: bool) -> None:
+    """Refuse to overwrite an existing output file unless force is set."""
+    if output_path.exists() and not force:
+        raise ClientError(f"Output file already exists: {output_path}. Use --force to overwrite.")
+
+
+def _write_generated_audio(output_path: Path, content: bytes, output_format: str) -> Optional[float]:
+    """Write generated audio atomically after validating it is non-empty and, for MP3 with ffprobe, decodable.
+
+    Returns the ffprobe duration in seconds, or None when ffprobe is unavailable or the format is raw/opus.
+    """
+    if not content:
+        raise ClientError("ElevenLabs returned an empty audio body")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_name: Optional[str] = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb", prefix=f".{output_path.name}.", suffix=".tmp", dir=output_path.parent, delete=False
+        ) as temporary:
+            temporary_name = temporary.name
+            temporary.write(content)
+        duration = None
+        if output_format.startswith("mp3_") and shutil.which("ffprobe"):
+            try:
+                probe = subprocess.run(
+                    ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "json", temporary_name],
+                    capture_output=True, text=True, check=True, timeout=HISTORY_MEDIA_TIMEOUT_SECONDS,
+                )
+                duration = float(json.loads(probe.stdout)["format"]["duration"])
+            except (subprocess.SubprocessError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+                raise ClientError(f"Generated audio failed ffprobe validation: {exc}") from exc
+            if duration <= 0:
+                raise ClientError("Generated audio has non-positive duration")
+        os.replace(temporary_name, output_path)
+        temporary_name = None
+        return duration
+    finally:
+        if temporary_name is not None:
+            Path(temporary_name).unlink(missing_ok=True)
 
 
 class ElevenlabsClient:
@@ -188,6 +231,7 @@ class ElevenlabsClient:
         files: Optional[Dict[str, Any]] = None,
         params: Optional[Dict[str, Any]] = None,
         accept: str = "application/json",
+        timeout: int = 60,
     ) -> requests.Response:
         if data is not None and (form_data is not None or files is not None):
             raise ClientError("JSON data cannot be combined with multipart form data")
@@ -209,7 +253,7 @@ class ElevenlabsClient:
                     data=form_data,
                     files=files,
                     params=params,
-                    timeout=60,
+                    timeout=timeout,
                 )
                 last_response = response
                 if self._is_retryable(response, None) and attempt < self.max_retries:
@@ -509,6 +553,81 @@ class ElevenlabsClient:
             character_count=int(character_count) if character_count is not None else None,
             history_item_id=response.headers.get("history-item-id"),
         )
+
+    def _generate_audio(
+        self,
+        endpoint: str,
+        payload: Dict[str, Any],
+        output_format: str,
+        output_path: Path,
+        force: bool,
+    ) -> Dict[str, Any]:
+        """POST a generation request, write the audio, and return the JSON result record."""
+        _require_writable_output(output_path, force)
+        response = self._request(
+            method="POST",
+            endpoint=endpoint,
+            data=payload,
+            params={"output_format": output_format},
+            accept="audio/*",
+            timeout=GENERATION_TIMEOUT_SECONDS,
+        )
+        duration = _write_generated_audio(output_path, response.content, output_format)
+        result: Dict[str, Any] = {
+            "output": str(output_path),
+            "bytes": len(response.content),
+            "format": output_format,
+            **payload,
+        }
+        if duration is not None:
+            result["probed_duration_seconds"] = duration
+        return result
+
+    def create_sound_effect(
+        self,
+        text: str,
+        output_path: Path,
+        output_format: str,
+        force: bool = False,
+        duration_seconds: Optional[float] = None,
+        prompt_influence: Optional[float] = None,
+        loop: Optional[bool] = None,
+        model_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Generate a sound effect via POST /v1/sound-generation."""
+        payload: Dict[str, Any] = {"text": text}
+        for key, value in (
+            ("duration_seconds", duration_seconds),
+            ("prompt_influence", prompt_influence),
+            ("loop", loop),
+            ("model_id", model_id),
+        ):
+            if value is not None:
+                payload[key] = value
+        return self._generate_audio("/v1/sound-generation", payload, output_format, output_path, force)
+
+    def compose_music(
+        self,
+        prompt: str,
+        output_path: Path,
+        output_format: str,
+        force: bool = False,
+        seconds: Optional[float] = None,
+        model_id: Optional[str] = None,
+        instrumental: Optional[bool] = None,
+        seed: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Compose music via POST /v1/music."""
+        payload: Dict[str, Any] = {"prompt": prompt}
+        for key, value in (
+            ("music_length_ms", None if seconds is None else round(seconds * 1000)),
+            ("model_id", model_id),
+            ("force_instrumental", instrumental),
+            ("seed", seed),
+        ):
+            if value is not None:
+                payload[key] = value
+        return self._generate_audio("/v1/music", payload, output_format, output_path, force)
 
     def list_pronunciation_dictionaries(
         self,

@@ -9,11 +9,13 @@ from cli_tools_shared.command_registry import register_commands
 app = create_app(name="elevenlabs", help="CLI interface for ElevenLabs API", version=__version__)
 
 # Register command modules
-from .commands import history, models, pronunciation_dictionaries, speech, user, voices
+from .commands import history, models, music, pronunciation_dictionaries, sound_effects, speech, user, voices
 register_commands(app, get_config, history, name="history", help="Inspect and download generated history")
 register_commands(app, get_config, voices, name="voices", help="Manage ElevenLabs voices")
 register_commands(app, get_config, models, name="models", help="Manage ElevenLabs models")
 register_commands(app, get_config, speech, name="speech", help="Generate speech audio")
+register_commands(app, get_config, sound_effects, name="sound-effects", help="Generate sound effects")
+register_commands(app, get_config, music, name="music", help="Compose music")
 register_commands(
     app,
     get_config,
