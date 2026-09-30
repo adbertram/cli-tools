@@ -33,6 +33,7 @@ no_auth_clis = [
     # store is readable, and login/logout/profile-write commands are
     # deliberately not exposed.
     "hermes-sessions",
+    "ntfy-cli",
 ]
 
 # Local readers that expose only `auth status` as a conventional readiness
@@ -40,6 +41,7 @@ no_auth_clis = [
 # create_auth_app(), because doing so would add profile/config mutation paths.
 read_only_status_auth_clis = [
     "hermes-sessions",
+    "ntfy-cli",
 ]
 
 # Orchestration/framework CLIs that don't follow standard resource patterns
@@ -53,7 +55,7 @@ no_filters_clis = ["reminders", "cliclick", "powerpoint-slide-recorder", "macspe
 browser_clis = ["bricklink", "brickowl", "globiflow", "ahrefs", "brickfreedom", "raptive", "facebook"]
 
 # Wrapper CLIs that don't use profiles (wrap system commands, not services)
-wrapper_clis = ["lastpass", "imessage", "openai-whisper", "cliclick", "notifier", "claude-code-sessions", "powerpoint-slide-recorder"]
+wrapper_clis = ["lastpass", "imessage", "openai-whisper", "cliclick", "notifier", "claude-code-sessions", "powerpoint-slide-recorder", "ntfy-cli"]
 
 [output]
 # Rich table requirements
