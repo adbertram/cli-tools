@@ -2155,6 +2155,21 @@ def test_publish_article_delegates_to_static_transaction(publisher, monkeypatch)
     }
 
 
+def test_publish_article_compacts_dashed_page_id(publisher, monkeypatch):
+    # The due-post scan hands out dashed Notion ids; the static build rejects
+    # any notionPageId that is not 32 undashed hex characters.
+    client, *_ = publisher
+    calls = []
+    monkeypatch.setattr(
+        client, "_publish_static_transaction", lambda **kwargs: calls.append(kwargs) or {}
+    )
+    dashed = f"{PAGE_ID[:8]}-{PAGE_ID[8:12]}-{PAGE_ID[12:16]}-{PAGE_ID[16:20]}-{PAGE_ID[20:]}"
+
+    client.publish_article(dashed.upper(), status="publish")
+
+    assert calls[0]["page_id"] == PAGE_ID
+
+
 # --- schedule-only mode ------------------------------------------------------
 #
 # `publish --auto-schedule` / `publish --date` validates the post, picks a slot

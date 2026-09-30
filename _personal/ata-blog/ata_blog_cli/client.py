@@ -4075,6 +4075,9 @@ class AtaBlogClient:
         """
         if status not in {"draft", "preview", "publish"}:
             raise ClientError("Static publish status must be draft, preview, or publish")
+        # The static corpus and build accept only the undashed page id, while
+        # Notion and the due-post scan hand out the dashed form.
+        page_id = self._compact_page_id(page_id)
         schedule_window = self._parse_schedule_window(schedule_after, schedule_before)
         # An empty --date (an unset shell variable) is still a schedule request:
         # it must fail as a bad date, never fall through to a promotion.
