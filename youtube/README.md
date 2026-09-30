@@ -168,6 +168,38 @@ youtube auth profiles select myprofile
 youtube auth profiles delete myprofile
 ```
 
+### Analytics (`youtube analytics report`)
+
+Per-video YouTube Analytics (views, watch time, avg. view duration/percentage,
+subscribers gained, likes, comments, shares) for the authenticated user's
+channel via the YouTube Analytics API v2. Default date range is the last
+28 days.
+
+```bash
+# Per-video report for all your uploads (last 28 days)
+youtube analytics report --table
+
+# Specific videos only (IDs or URLs)
+youtube analytics report -v VIDEO_ID -v https://www.youtube.com/watch?v=OTHER_ID
+
+# Channel-level totals by day
+youtube analytics report --channel --table
+
+# Custom date range and metrics
+youtube analytics report --start-date 2026-01-01 --end-date 2026-06-30 \
+    --metrics views,estimatedMinutesWatched,subscribersGained
+
+# Top videos by views, daily breakdown per video
+youtube analytics report --dimensions video,day --sort -views --max-results 100
+
+# Filter and pick fields
+youtube analytics report --filter views:gt:1000 --properties title,views
+```
+
+Requires the `yt-analytics.readonly` OAuth scope (added automatically on your
+next `youtube auth login --force`) and the YouTube Analytics API enabled in
+the same Google Cloud project as your OAuth client.
+
 ### Channel Management (`youtube channel videos ...`)
 
 All commands below operate on the authenticated user's own channel.

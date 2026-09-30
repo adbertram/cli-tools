@@ -33,7 +33,9 @@ class Config(BaseConfig):
         "Create OAuth credentials at: https://console.cloud.google.com/apis/credentials\n"
         "  Click 'Create Credentials' > 'OAuth client ID' > type: 'Desktop app'\n"
         "  (Desktop app type auto-allows http://localhost redirect URIs)\n"
-        "  Then enable the YouTube Data API v3 in the same project."
+        "  Then enable the YouTube Data API v3 in the same project.\n"
+        "  Also enable the YouTube Analytics API for analytics commands:\n"
+        "  https://console.cloud.google.com/apis/library/youtubeanalytics.googleapis.com"
     )
     CUSTOM_LOGIN_PROMPTS = YOUTUBE_PROFILE_AUTH_PROMPTS
     CUSTOM_EPHEMERAL_FIELDS = []

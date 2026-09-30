@@ -14,9 +14,10 @@ app = create_app(
 )
 
 # Register command modules
-from .commands import auth, channel, channels, shorts, transcripts, videos
+from .commands import analytics, auth, channel, channels, shorts, transcripts, videos
 
 app.add_typer(auth.app, name="auth", help="Manage authentication")
+app.add_typer(analytics.app, name="analytics", help="YouTube Analytics reports for your channel")
 register_commands(app, get_config, transcripts, name="transcripts", help="Download YouTube video transcripts")
 register_commands(app, get_config, videos, name="videos", help="Download / list public YouTube videos (yt-dlp)")
 register_commands(app, get_config, channel, name="channel", help="Manage your authenticated YouTube channel")
