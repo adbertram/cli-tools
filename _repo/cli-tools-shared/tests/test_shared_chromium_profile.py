@@ -1,4 +1,6 @@
 """Shared Chromium user-data-dir contract for browser CLIs."""
+import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -304,6 +306,144 @@ def test_browser_clear_session_deletes_isolated_profile(tmp_path, isolated_data_
 
     service.data_delete.assert_called_once_with()
     assert service._user_data_dir == config.get_persistent_profile_dir()
+
+
+class _SessionLifecyclePage:
+    def __init__(self):
+        self.url = "about:blank"
+
+    def title(self):
+        return "Session lifecycle test page"
+
+    def set_default_timeout(self, _timeout):
+        return None
+
+    def set_default_navigation_timeout(self, _timeout):
+        return None
+
+    def goto(self, url, **_kwargs):
+        self.url = url
+
+    def close(self):
+        return None
+
+
+class _SessionLifecycleContext:
+    def __init__(self, cookies):
+        self._cookies = cookies
+        self.pages = [_SessionLifecyclePage()]
+        self.closed = False
+
+    def cookies(self):
+        return [dict(cookie) for cookie in self._cookies]
+
+    def new_page(self):
+        page = _SessionLifecyclePage()
+        self.pages.append(page)
+        return page
+
+    def close(self):
+        self.closed = True
+
+
+class _SessionLifecycleChromium:
+    """Fake persistent profile backend that models Chrome's keychain split."""
+
+    _MOCK_KEYCHAIN_ARGS = {"--use-mock-keychain", "--password-store=basic"}
+
+    def __init__(self):
+        self._cookies_by_profile = {}
+
+    def save_plain_chrome_session(self, profile_dir, cookie):
+        self._cookies_by_profile.setdefault(str(profile_dir), []).append(dict(cookie))
+
+    def plain_chrome_session_is_authenticated(self, profile_dir):
+        return any(
+            cookie.get("name") == "bricklink_session"
+            and cookie.get("value") == "authenticated"
+            for cookie in self._cookies_by_profile.get(str(profile_dir), [])
+        )
+
+    def launch_persistent_context(self, profile_dir, **kwargs):
+        cookies = self._cookies_by_profile.setdefault(str(profile_dir), [])
+        ignored = set(kwargs.get("ignore_default_args", []))
+        if not self._MOCK_KEYCHAIN_ARGS.issubset(ignored):
+            # Chrome cannot decrypt cookies written with the other keychain and
+            # drops them when the second tool opens the shared profile.
+            cookies.clear()
+        return _SessionLifecycleContext(cookies)
+
+
+class _PlainRealKeychainTool:
+    """Distinct CDP/plain-Chrome launcher used by Tool A in this regression."""
+
+    def __init__(self, chromium):
+        self._chromium = chromium
+
+    def authenticate(self, profile_dir):
+        self._chromium.save_plain_chrome_session(
+            profile_dir,
+            {
+                "name": "bricklink_session",
+                "value": "authenticated",
+                "domain": ".bricklink.com",
+            },
+        )
+
+    def is_authenticated(self, profile_dir):
+        return self._chromium.plain_chrome_session_is_authenticated(profile_dir)
+
+
+class _SessionLifecyclePlaywright:
+    def __init__(self, chromium):
+        self.chromium = chromium
+
+    def stop(self):
+        return None
+
+
+def test_plain_chrome_tool_session_survives_second_tool_playwright_lifecycle(
+    tmp_path, isolated_data_home, monkeypatch
+):
+    """A Playwright Tool B lifecycle must not sign out plain-Chrome Tool A (#530)."""
+    from cli_tools_shared.browser import playwright_service as module
+    from cli_tools_shared.browser.playwright_service import PlaywrightBrowserService
+
+    first_tool_dir = _tool_dir(tmp_path, "bricklink")
+    second_tool_dir = _tool_dir(tmp_path, "brickowl")
+    _write_profile(get_profiles_base_dir(first_tool_dir.name) / "default" / ".env")
+    _write_profile(get_profiles_base_dir(second_tool_dir.name) / "default" / ".env")
+    first_config = BrowserConfig(tool_dir=first_tool_dir)
+    second_config = BrowserConfig(tool_dir=second_tool_dir)
+    shared_profile = first_config.get_persistent_profile_dir()
+    assert shared_profile == second_config.get_persistent_profile_dir()
+
+    chromium = _SessionLifecycleChromium()
+    fake_sync_module = types.SimpleNamespace(
+        sync_playwright=lambda: types.SimpleNamespace(
+            start=lambda: _SessionLifecyclePlaywright(chromium)
+        )
+    )
+    monkeypatch.setitem(sys.modules, "playwright.sync_api", fake_sync_module)
+    monkeypatch.setattr(module, "_chrome_binary", lambda: "/Applications/Google Chrome")
+    monkeypatch.setattr(
+        PlaywrightBrowserService, "_cleanup_stale_profile_locks", lambda self: None
+    )
+    monkeypatch.setattr(
+        PlaywrightBrowserService, "_cleanup_stale_profile_processes", lambda self: None
+    )
+
+    tool_a = _PlainRealKeychainTool(chromium)
+    tool_a.authenticate(shared_profile)
+    assert tool_a.is_authenticated(shared_profile)
+
+    tool_b = PlaywrightBrowserService("brickowl-default")
+    tool_b.browser_open(persistent_profile_dir=shared_profile)
+    tool_b_context = tool_b._context
+    tool_b.browser_close()
+    assert tool_b_context.closed is True
+
+    assert tool_a.is_authenticated(shared_profile)
 
 
 def test_all_browser_consumers_inherit_shared_profile_resolution():
