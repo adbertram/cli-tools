@@ -619,10 +619,12 @@ ebay seller images get IMAGE_ID
 
 **Note:** Uploaded image metadata is stored locally in `~/.ebay/images.json` for easy retrieval.
 `images upload` writes a JSON object to stdout with `uploaded`, `errors`,
-`total_uploaded`, and `total_errors`. Each `uploaded` record includes the eBay
-`imageUrl`. Progress and warnings go to stderr. If any requested image fails,
-the command still writes that complete JSON result but exits with status 1, so a
-listing workflow cannot silently continue with an incomplete gallery.
+`persistence_errors`, `total_uploaded`, `total_errors`, and
+`total_persistence_errors`. Each `uploaded` record includes the eBay `imageUrl`
+immediately after eBay accepts it, even if saving local metadata later fails.
+Progress and warnings go to stderr. Any requested upload or local-persistence
+failure writes the complete JSON result and exits with status 1, so a listing
+workflow cannot silently continue with incomplete state.
 
 #### Videos
 

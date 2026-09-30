@@ -51,8 +51,10 @@ def test_image_upload_writes_all_uploaded_urls_as_json(monkeypatch):
         for index in range(24)
     ]
     assert payload["errors"] == []
+    assert payload["persistence_errors"] == []
     assert payload["total_uploaded"] == 24
     assert payload["total_errors"] == 0
+    assert payload["total_persistence_errors"] == 0
     assert client.upload_image_from_url.call_count == 24
 
 
@@ -93,4 +95,48 @@ def test_partial_file_upload_returns_json_and_fails(monkeypatch, tmp_path):
     ]
     assert payload["total_uploaded"] == 20
     assert payload["total_errors"] == 4
+    assert payload["persistence_errors"] == []
+    assert payload["total_persistence_errors"] == 0
     assert client.upload_image_from_file.call_count == 24
+
+
+def test_image_upload_keeps_remote_url_when_local_persistence_fails(monkeypatch):
+    source_url = "https://example.test/one.jpg"
+    client = MagicMock()
+    client.upload_image_from_url.return_value = _upload_response(1)
+    storage = MagicMock()
+    storage.add_image.side_effect = OSError("disk full")
+    monkeypatch.setattr(images, "get_client", lambda: client)
+    monkeypatch.setattr(images, "ImageStorage", lambda: storage)
+
+    result = CliRunner().invoke(
+        app,
+        ["seller", "images", "upload", "--url", source_url],
+    )
+
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert payload["uploaded"] == [
+        {
+            "image_id": "image-1",
+            "imageUrl": "https://i.ebayimg.com/images/image-1.jpg",
+            "expirationDate": "2026-12-31T00:00:00.000Z",
+            "source": "url",
+            "original": source_url,
+        }
+    ]
+    assert payload["errors"] == []
+    assert payload["persistence_errors"] == [
+        {
+            "original": source_url,
+            "image_id": "image-1",
+            "imageUrl": "https://i.ebayimg.com/images/image-1.jpg",
+            "error": "disk full",
+        }
+    ]
+    assert payload["total_uploaded"] == 1
+    assert payload["total_errors"] == 0
+    assert payload["total_persistence_errors"] == 1
+    assert "Uploaded but failed to store local metadata" in result.stderr
+    client.upload_image_from_url.assert_called_once_with(source_url)
+    storage.add_image.assert_called_once()
