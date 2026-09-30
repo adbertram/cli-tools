@@ -601,6 +601,10 @@ ebay seller images upload --file "/path/one.jpg,/path/two.jpg"
 ebay seller images upload --url "https://example.com/image.jpg"
 ebay seller images upload --url "https://a.com/1.jpg,https://b.com/2.jpg"
 
+# Capture the uploaded eBay URLs for an inventory update
+ebay seller images upload --file "/path/one.jpg,/path/two.jpg" \
+  | jq -r '.uploaded[].imageUrl'
+
 # List locally-stored uploaded images
 ebay seller images list
 ebay seller images list
@@ -614,6 +618,11 @@ ebay seller images get IMAGE_ID
 **Available fields:** image_id, imageUrl, expirationDate, source, original, uploaded_at
 
 **Note:** Uploaded image metadata is stored locally in `~/.ebay/images.json` for easy retrieval.
+`images upload` writes a JSON object to stdout with `uploaded`, `errors`,
+`total_uploaded`, and `total_errors`. Each `uploaded` record includes the eBay
+`imageUrl`. Progress and warnings go to stderr. If any requested image fails,
+the command still writes that complete JSON result but exits with status 1, so a
+listing workflow cannot silently continue with an incomplete gallery.
 
 #### Videos
 

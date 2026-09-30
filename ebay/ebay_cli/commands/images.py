@@ -151,10 +151,14 @@ def images_upload(
             }
             print_json(output)
 
-        # Exit with error code if any uploads failed
-        if errors and not results:
+        # A partial upload must be visible to automation as a failure.  The
+        # structured result above still preserves every successfully uploaded
+        # eBay URL for recovery or cleanup.
+        if errors:
             raise typer.Exit(1)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         raise typer.Exit(handle_error(e))
 
