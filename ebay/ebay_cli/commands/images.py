@@ -37,6 +37,44 @@ def _image_record(image: dict) -> dict:
     }
 
 
+def _record_uploaded_image(
+    results: list[dict],
+    persistence_errors: list[dict],
+    storage: ImageStorage,
+    result: dict,
+    source: str,
+    original: str,
+) -> None:
+    """Keep a successful remote upload even if local metadata cannot be saved."""
+    record = {
+        "image_id": result["image_id"],
+        "imageUrl": result["imageUrl"],
+        "expirationDate": result["expirationDate"],
+        "source": source,
+        "original": original,
+    }
+    results.append(record)
+
+    try:
+        stored_record = storage.add_image(
+            image_id=record["image_id"],
+            image_url=record["imageUrl"],
+            expiration_date=record["expirationDate"],
+            source=source,
+            original=original,
+        )
+        if stored_record.get("uploaded_at"):
+            record["uploaded_at"] = stored_record["uploaded_at"]
+    except Exception as e:
+        persistence_errors.append({
+            "original": original,
+            "image_id": record["image_id"],
+            "imageUrl": record["imageUrl"],
+            "error": str(e),
+        })
+        print_error(f"Uploaded but failed to store local metadata for {original}: {e}")
+
+
 @app.command("upload")
 @command
 def images_upload(
@@ -80,6 +118,7 @@ def images_upload(
 
         results = []
         errors = []
+        persistence_errors = []
 
         if file:
             # Parse comma-separated file paths
@@ -93,14 +132,14 @@ def images_upload(
                         continue
 
                     result = client.upload_image_from_file(path)
-                    record = storage.add_image(
-                        image_id=result["image_id"],
-                        image_url=result["imageUrl"],
-                        expiration_date=result["expirationDate"],
-                        source="file",
-                        original=path
+                    _record_uploaded_image(
+                        results,
+                        persistence_errors,
+                        storage,
+                        result,
+                        "file",
+                        path,
                     )
-                    results.append(record)
                     print_success(f"Uploaded: {path}")
 
                 except Exception as e:
@@ -114,14 +153,14 @@ def images_upload(
             for image_url in urls:
                 try:
                     result = client.upload_image_from_url(image_url)
-                    record = storage.add_image(
-                        image_id=result["image_id"],
-                        image_url=result["imageUrl"],
-                        expiration_date=result["expirationDate"],
-                        source="url",
-                        original=image_url
+                    _record_uploaded_image(
+                        results,
+                        persistence_errors,
+                        storage,
+                        result,
+                        "url",
+                        image_url,
                     )
-                    results.append(record)
                     print_success(f"Uploaded: {image_url}")
 
                 except Exception as e:
@@ -146,15 +185,21 @@ def images_upload(
             output = {
                 "uploaded": results,
                 "errors": errors,
+                "persistence_errors": persistence_errors,
                 "total_uploaded": len(results),
-                "total_errors": len(errors)
+                "total_errors": len(errors),
+                "total_persistence_errors": len(persistence_errors),
             }
             print_json(output)
 
-        # Exit with error code if any uploads failed
-        if errors and not results:
+        # A partial upload must be visible to automation as a failure.  The
+        # structured result above still preserves every successfully uploaded
+        # eBay URL for recovery or cleanup.
+        if errors or persistence_errors:
             raise typer.Exit(1)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         raise typer.Exit(handle_error(e))
 
