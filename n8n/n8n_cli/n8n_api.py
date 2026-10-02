@@ -183,6 +183,12 @@ class N8nApiClient:
             f"n8n node registry not ready after {timeout}s (last error: {last_error})"
         )
 
+    def wait_for_restart_readiness(self, timeout: int = 60, poll_interval: float = 2.0) -> bool:
+        """Wait until both REST routes and the node registry are available."""
+        self.wait_for_ready(timeout=timeout, poll_interval=poll_interval)
+        self.wait_for_node_registry(timeout=timeout, poll_interval=poll_interval)
+        return True
+
     def create_workflow(
         self,
         name: str,

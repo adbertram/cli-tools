@@ -8,7 +8,7 @@ from typing import Optional
 from cli_tools_shared.output import command, print_json, print_table, print_error, print_info, print_warning, handle_error
 from cli_tools_shared.filters import apply_limit
 from ..n8n_api import get_n8n_api_client, N8nApiError
-from ..server import run_on_server
+from ..server import N8N_PLIST, restart_n8n, run_on_server
 
 app = typer.Typer(help="Query n8n server logs and configuration", no_args_is_help=True)
 
@@ -259,7 +259,7 @@ print(json.dumps(results))
 @command
 def logs_config(
     plist_path: str = typer.Option(
-        "/Library/LaunchDaemons/com.n8n.server.plist",
+        N8N_PLIST,
         "--plist", help="LaunchDaemon plist path on server"
     ),
 ):
@@ -309,7 +309,7 @@ def logs_set_level(
     db_logging: Optional[bool] = typer.Option(None, "--db-logging", help="Enable/disable database query logging"),
     restart: bool = typer.Option(True, "--restart/--no-restart", help="Restart n8n after changing config"),
     plist_path: str = typer.Option(
-        "/Library/LaunchDaemons/com.n8n.server.plist",
+        N8N_PLIST,
         "--plist", help="LaunchDaemon plist path on server"
     ),
 ):
@@ -366,8 +366,7 @@ for k, v in updates.items():
 
         if restart:
             print_info("Restarting n8n...")
-            run_on_server(f"sudo launchctl unload {plist_path}", timeout=15)
-            run_on_server(f"sudo launchctl load {plist_path}", timeout=15)
+            restart_n8n(plist_path=plist_path)
             print_info("n8n restarted with new logging configuration")
         else:
             print_warning("Config updated but n8n NOT restarted. Use: sudo launchctl unload/load to apply.")

@@ -8,9 +8,13 @@ no SSH_HOST is set and BASE_URL points to localhost.
 """
 import os
 import subprocess
+import time
 from urllib.parse import urlparse
 
-from .n8n_api import N8nApiError
+from .n8n_api import N8nApiError, get_n8n_api_client
+
+
+N8N_PLIST = "/Library/LaunchDaemons/com.n8n.server.plist"
 
 
 def get_server_host() -> str:
@@ -78,6 +82,21 @@ def run_on_server_raw(command: str, timeout: int = 120) -> subprocess.CompletedP
             ["ssh", host, command],
             capture_output=True, text=True, timeout=timeout,
         )
+
+
+def restart_n8n(timeout: int = 60, *, plist_path: str = N8N_PLIST) -> None:
+    """Restart the n8n LaunchDaemon and wait until it is usable."""
+    result = run_on_server_raw(f"sudo launchctl unload {plist_path}")
+    if result.returncode != 0:
+        raise RuntimeError(f"Failed to stop n8n: {result.stderr.strip()}")
+
+    time.sleep(2)
+
+    result = run_on_server_raw(f"sudo launchctl load {plist_path}")
+    if result.returncode != 0:
+        raise RuntimeError(f"Failed to start n8n: {result.stderr.strip()}")
+
+    get_n8n_api_client().wait_for_restart_readiness(timeout=timeout)
 
 
 def sync_to_server(src: str, dest: str, excludes: list[str] = None) -> subprocess.CompletedProcess:
