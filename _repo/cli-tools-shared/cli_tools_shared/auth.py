@@ -462,12 +462,130 @@ class BrowserAutomation:
         return f"{tool}-{profile}"
 
     def _get_service(self) -> BrowserHarnessService:
-        """Get a cached :class:`BrowserHarnessService` for this profile."""
+        """Get a cached browser service for this profile.
+        
+        The backend is selected via CLI_TOOLS_BROWSER_BACKEND:
+        - 'auto' → Lightpanda for allowlisted SESSION_NAMEs, else Chrome
+          - Default allowlist: poshmark, offerup
+          - Override with CLI_TOOLS_LIGHTPANDA_SESSIONS (comma-separated, replaces default)
+        - 'lightpanda' → LightpandaBrowserService (always, with CF fallback)
+        - 'playwright' → PlaywrightBrowserService  
+        - 'webwright' → WebwrightBrowserService
+        - default/unset → BrowserHarnessService (Chrome/browser-harness)
+        
+        Auto mode selects Lightpanda only for tools verified to work on pure
+        Lightpanda. Non-allowlisted tools get Chrome directly (no Lightpanda
+        startup + CF fallback overhead).
+        """
         if self._service is None:
-            self._service = BrowserHarnessService(
-                _safe_daemon_key(self._session_name())
-            )
+            backend = os.environ.get("CLI_TOOLS_BROWSER_BACKEND", "").lower()
+            session_key = _safe_daemon_key(self._session_name())
+            
+            # Auto mode: check SESSION_NAME against allowlist
+            if backend == "auto":
+                # Default allowlist: tools verified to work on pure Lightpanda
+                default_allowlist = frozenset({"poshmark", "offerup"})
+                
+                # Optional override via env (replaces default if set)
+                env_sessions = os.environ.get("CLI_TOOLS_LIGHTPANDA_SESSIONS", "").strip()
+                if env_sessions:
+                    allowlist = frozenset(s.strip() for s in env_sessions.split(",") if s.strip())
+                else:
+                    allowlist = default_allowlist
+                
+                # Check if current SESSION_NAME is allowlisted
+                session_name = self.SESSION_NAME or self._tool_name()
+                if session_name in allowlist:
+                    logger.debug(
+                        "Auto mode: %s in allowlist, using Lightpanda", session_name
+                    )
+                    from .browser import LightpandaBrowserService
+                    self._service = LightpandaBrowserService(session_key)
+                    self._lightpanda_backend = True
+                else:
+                    logger.debug(
+                        "Auto mode: %s not in allowlist, using Chrome", session_name
+                    )
+                    self._service = BrowserHarnessService(session_key)
+            elif backend == "lightpanda":
+                from .browser import LightpandaBrowserService
+                self._service = LightpandaBrowserService(session_key)
+                # Track that we're using Lightpanda for CF fallback
+                self._lightpanda_backend = True
+            elif backend == "playwright":
+                from .browser.playwright_service import PlaywrightBrowserService
+                self._service = PlaywrightBrowserService(session_key)
+            elif backend == "webwright":
+                from .browser.webwright import WebwrightBrowserService
+                self._service = WebwrightBrowserService(session_key)
+            else:
+                # Default: browser-harness (Chrome CDP daemon)
+                self._service = BrowserHarnessService(session_key)
         return self._service
+    
+    def _check_cloudflare_and_fallback(self, page) -> Optional[BrowserHarnessService]:
+        """Check if Lightpanda hit Cloudflare and fall back to Chrome if so.
+        
+        Returns Chrome page if fallback occurred, None otherwise.
+        """
+        # Only applies when using Lightpanda backend
+        if not getattr(self, '_lightpanda_backend', False):
+            return None
+        
+        # Check if CF fallback is disabled
+        if os.environ.get("CLI_TOOLS_LIGHTPANDA_CF_FALLBACK") == "0":
+            return None
+        
+        # Check if current page is CF-blocked
+        if not hasattr(page, 'is_cloudflare_blocked'):
+            return None
+        
+        if not page.is_cloudflare_blocked():
+            return None
+        
+        # CF detected - fall back to Chrome
+        logger.debug(
+            "Cloudflare challenge detected on Lightpanda, falling back to Chrome"
+        )
+        print_warning(
+            "Cloudflare detected - Lightpanda cannot impersonate Chrome. "
+            "Falling back to Chrome/browser-harness..."
+        )
+        
+        # Close Lightpanda
+        try:
+            page.browser_close()
+        except Exception:
+            pass
+        
+        # Switch to Chrome
+        self._service = None
+        self._lightpanda_backend = False
+        
+        # Get Chrome service and reopen at same URL
+        chrome = BrowserHarnessService(_safe_daemon_key(self._session_name()))
+        current_url = page.url if hasattr(page, 'url') else None
+        
+        if current_url:
+            try:
+                chrome_page = chrome
+                chrome.browser_open(
+                    current_url,
+                    headed=not self._headless_enabled(),
+                    persistent_profile_dir=self._get_persistent_profile_dir(),
+                    user_agent=self._browser_user_agent(),
+                    window_size=self._browser_window_size(),
+                )
+                self._service = chrome
+                self._page = chrome_page
+                return chrome_page
+            except Exception as exc:
+                logger.debug("CF fallback failed: %s", exc)
+                raise BrowserAutomationError(
+                    f"Cloudflare fallback to Chrome failed: {exc}"
+                ) from exc
+        
+        return None
 
     _safe_url_for_log = staticmethod(BrowserHarnessService._safe_url_for_log)
 
@@ -1485,10 +1603,20 @@ class BrowserAutomation:
         in ``INTERSTITIALS`` so callers only ever receive real content, then
         raises if that real content is actually an HTTP 429/5xx error document
         (:meth:`_raise_for_http_error_status`).
+        
+        If using Lightpanda backend and Cloudflare is detected, automatically
+        falls back to Chrome (unless CLI_TOOLS_LIGHTPANDA_CF_FALLBACK=0).
         """
         page = self._navigate_page(url)
         page = self._resolve_interstitials(page, url)
         self._raise_for_http_error_status(page)
+        
+        # Check for Cloudflare and fall back to Chrome if needed
+        chrome_page = self._check_cloudflare_and_fallback(page)
+        if chrome_page is not None:
+            # CF fallback occurred - return Chrome page
+            return chrome_page
+        
         return page
 
     def _navigate_page(self, url: str = None) -> BrowserHarnessService:

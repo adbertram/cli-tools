@@ -4,6 +4,7 @@ Public API:
 - BrowserHarnessError  — exception for all service errors
 - BrowserHarnessService — unified browser automation service (lazy-loaded)
 - WebwrightBrowserService — optional Webwright-backed service (lazy-loaded)
+- LightpandaBrowserService — optional Lightpanda-backed service (lazy-loaded)
 
 The persistent Chromium user-data-dir for each profile is owned by
 ``cli_tools_shared.config.BaseConfig.get_persistent_profile_dir()`` and
@@ -30,4 +31,11 @@ def __getattr__(name):
             "WebwrightServiceError": WebwrightServiceError,
         }
         return webwright_exports[name]
+    if name in ("LightpandaBrowserService", "LightpandaServiceError"):
+        from .lightpanda_service import LightpandaBrowserService, LightpandaServiceError
+        lightpanda_exports = {
+            "LightpandaBrowserService": LightpandaBrowserService,
+            "LightpandaServiceError": LightpandaServiceError,
+        }
+        return lightpanda_exports[name]
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
