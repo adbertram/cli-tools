@@ -4,7 +4,7 @@ import re
 import pytest
 from pathlib import Path
 
-from cli_test_utils import run_cli_command, validate_json_output, parse_help_commands
+from cli_test_utils import get_pkg_dir, run_cli_command, validate_json_output, parse_help_commands
 
 
 def _help_has_command(help_text: str, command: str) -> bool:
@@ -226,7 +226,7 @@ def _parse_credential_types_from_config(cli_dir, cli_name) -> list:
     Returns lowercase type values (e.g. ['oauth', 'browser_session']) or [] if unknown.
     """
     import ast
-    cli_pkg = cli_dir / f"{cli_name.replace('-', '_')}_cli"
+    cli_pkg = get_pkg_dir(cli_dir, cli_name)
     config_file = cli_pkg / "config.py"
     if not config_file.exists():
         return []
@@ -253,7 +253,7 @@ def _parse_credential_types_from_config(cli_dir, cli_name) -> list:
 def _config_declares_no_credential_types(cli_dir, cli_name) -> bool:
     """Return True when Config explicitly declares CREDENTIAL_TYPES = []."""
     import ast
-    cli_pkg = cli_dir / f"{cli_name.replace('-', '_')}_cli"
+    cli_pkg = get_pkg_dir(cli_dir, cli_name)
     config_file = cli_pkg / "config.py"
     if not config_file.exists():
         return False
@@ -471,7 +471,7 @@ def _parse_custom_allowed_fields(cli_dir, cli_name) -> set:
     literal handling below.
     """
     import ast
-    cli_pkg = cli_dir / f"{cli_name.replace('-', '_')}_cli"
+    cli_pkg = get_pkg_dir(cli_dir, cli_name)
     config_file = cli_pkg / "config.py"
     if not config_file.exists():
         return set()
@@ -626,7 +626,7 @@ def test_config_extends_base_config(cli_name, cli_dir, help_cache, test_config, 
         pytest.skip(f"{cli_name} has no auth subcommand (auth infrastructure not required)")
 
     # Find config.py in the CLI package
-    cli_pkg = cli_dir / f"{cli_name.replace('-', '_')}_cli"
+    cli_pkg = get_pkg_dir(cli_dir, cli_name)
     config_file = cli_pkg / "config.py"
 
     if not config_file.exists():
@@ -647,7 +647,7 @@ def test_config_uses_resolve_tool_dir(cli_name, cli_dir, help_cache, test_config
     if not _cli_has_auth(help_cache):
         pytest.skip(f"{cli_name} has no auth subcommand (auth infrastructure not required)")
 
-    cli_pkg = cli_dir / f"{cli_name.replace('-', '_')}_cli"
+    cli_pkg = get_pkg_dir(cli_dir, cli_name)
     config_file = cli_pkg / "config.py"
     if not config_file.exists():
         pytest.skip(f"{cli_name} config.py not found at {config_file}")
@@ -712,7 +712,7 @@ def test_config_test_connection_uses_active_config(cli_name, cli_dir, help_cache
     if not _cli_has_auth(help_cache):
         pytest.skip(f"{cli_name} has no auth subcommand (auth infrastructure not required)")
 
-    cli_pkg = cli_dir / f"{cli_name.replace('-', '_')}_cli"
+    cli_pkg = get_pkg_dir(cli_dir, cli_name)
     config_file = cli_pkg / "config.py"
     if not config_file.exists():
         pytest.skip(f"{cli_name} config.py not found at {config_file}")
@@ -734,7 +734,7 @@ def test_auth_runtime_state_uses_profile_data_dir(cli_name, cli_dir, help_cache,
     if not _cli_has_auth(help_cache):
         pytest.skip(f"{cli_name} has no auth subcommand (auth infrastructure not required)")
 
-    cli_pkg = cli_dir / f"{cli_name.replace('-', '_')}_cli"
+    cli_pkg = get_pkg_dir(cli_dir, cli_name)
     if not cli_pkg.exists():
         pytest.skip(f"{cli_name} package directory not found")
 
@@ -763,7 +763,7 @@ def test_no_stale_auth_commands_in_inactive_cli_packages(cli_name, cli_dir, help
     if command_filter and command_filter not in ("auth", "profiles"):
         pytest.skip(f"Skipping stale auth package tests (filtering to '{command_filter}')")
 
-    active_pkg_name = f"{cli_name.replace('-', '_')}_cli"
+    active_pkg_name = get_pkg_dir(cli_dir, cli_name).name
     stale_auth_files = []
     for candidate in cli_dir.iterdir():
         if not candidate.is_dir() or not candidate.name.endswith("_cli"):
@@ -804,7 +804,7 @@ def test_auth_uses_shared_package(cli_name, cli_dir, help_cache, test_config, co
         pytest.skip(f"{cli_name} uses custom auth (wrapper/legacy)")
 
     # Check main.py for create_auth_app import
-    cli_pkg = cli_dir / f"{cli_name.replace('-', '_')}_cli"
+    cli_pkg = get_pkg_dir(cli_dir, cli_name)
     main_file = cli_pkg / "main.py"
     auth_file = cli_pkg / "commands" / "auth.py"
 
@@ -849,7 +849,7 @@ def test_read_only_status_auth_exemption_is_status_only(
         "than status"
     )
 
-    cli_pkg = cli_dir / f"{cli_name.replace('-', '_')}_cli"
+    cli_pkg = get_pkg_dir(cli_dir, cli_name)
     auth_file = cli_pkg / "commands" / "auth.py"
     assert auth_file.is_file(), f"'{cli_name}' has no commands/auth.py"
     assert "create_auth_app" not in auth_file.read_text(), (
@@ -869,7 +869,7 @@ def test_no_direct_prompting(cli_name, cli_dir, help_cache, test_config, command
     if not _cli_has_auth(help_cache):
         pytest.skip(f"{cli_name} has no auth subcommand (prompting check not applicable)")
 
-    cli_pkg = cli_dir / f"{cli_name.replace('-', '_')}_cli"
+    cli_pkg = get_pkg_dir(cli_dir, cli_name)
     if not cli_pkg.exists():
         pytest.skip(f"{cli_name} package directory not found")
 
@@ -923,7 +923,7 @@ def test_no_direct_prompting(cli_name, cli_dir, help_cache, test_config, command
 def _is_multi_credential_cli(cli_dir, cli_name):
     """Check if a CLI has multiple credential types by inspecting its config.py."""
     import ast
-    cli_pkg = cli_dir / f"{cli_name.replace('-', '_')}_cli"
+    cli_pkg = get_pkg_dir(cli_dir, cli_name)
     config_file = cli_pkg / "config.py"
     if not config_file.exists():
         return False
@@ -959,7 +959,7 @@ def test_auth_login_has_credential_type_flag(cli_name, cli_dir, help_cache, test
 def _has_browser_session_type(cli_dir, cli_name):
     """Check if a CLI has BROWSER_SESSION in its CREDENTIAL_TYPES list."""
     import ast
-    cli_pkg = cli_dir / f"{cli_name.replace('-', '_')}_cli"
+    cli_pkg = get_pkg_dir(cli_dir, cli_name)
     config_file = cli_pkg / "config.py"
     if not config_file.exists():
         return False
@@ -1179,7 +1179,7 @@ def test_no_custom_browser_status_check(cli_name, cli_dir, help_cache, test_conf
     if not is_browser_cli:
         pytest.skip(f"{cli_name} is not a browser automation CLI")
 
-    pkg_dir = cli_dir / f"{cli_name.replace('-', '_')}_cli"
+    pkg_dir = get_pkg_dir(cli_dir, cli_name)
     if not pkg_dir.exists():
         pytest.skip(f"{cli_name} package directory not found")
 
@@ -1222,7 +1222,7 @@ def test_browser_session_has_live_auth_check_url(cli_name, cli_dir, help_cache, 
     if not _has_browser_session_type(cli_dir, cli_name):
         pytest.skip(f"{cli_name} does not use BROWSER_SESSION credential type")
 
-    cli_pkg = cli_dir / f"{cli_name.replace('-', '_')}_cli"
+    cli_pkg = get_pkg_dir(cli_dir, cli_name)
     browser_file = cli_pkg / "browser.py"
     if not browser_file.exists():
         pytest.skip(f"{cli_name} has no browser.py")

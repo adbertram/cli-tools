@@ -12,11 +12,12 @@ import re
 import tomllib
 from pathlib import Path
 
+from cli_test_utils import get_pkg_dir
 import pytest
 
 
 def _pkg_dir(cli_dir: Path, cli_name: str) -> Path:
-    return cli_dir / f"{cli_name.replace('-', '_')}_cli"
+    return get_pkg_dir(cli_dir, cli_name)
 
 
 def _iter_source_files(pkg_dir: Path):

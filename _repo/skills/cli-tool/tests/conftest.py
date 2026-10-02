@@ -12,7 +12,7 @@ from typing import Dict
 # Add tests directory to path so cli_test_utils can be imported
 sys.path.insert(0, str(Path(__file__).parent))
 
-from cli_test_utils import discover_list_commands, get_config_auth_metadata, run_cli_command
+from cli_test_utils import get_pkg_dir, discover_list_commands, get_config_auth_metadata, run_cli_command
 
 SKIP_GROUPS = {"auth", "cache", "profiles"}
 CLI_SELECTION_FIXTURE = "cli_name"
@@ -90,7 +90,7 @@ def _required_credential_types_for_list_commands(
     allowed_types: set[str] | None = None,
 ) -> list[str]:
     """Return credential types required by the discovered list commands."""
-    pkg_dir = cli_dir / f"{cli_name.replace('-', '_')}_cli"
+    pkg_dir = get_pkg_dir(cli_dir, cli_name)
     if allowed_types is None:
         configured_credential_types = _credential_types_from_config(cli_dir, cli_name)
         if configured_credential_types is None:
@@ -566,7 +566,7 @@ def _detect_browser_capability(cli_dir: Path, cli_name: str) -> bool:
     1. config.py for CredentialType.BROWSER_SESSION
     2. Existence of browser.py in the package directory
     """
-    pkg_name = cli_name.replace("-", "_") + "_cli"
+    pkg_name = get_pkg_dir(cli_dir, cli_name).name
     pkg_dir = cli_dir / pkg_name
 
     if not pkg_dir.exists():
@@ -601,3 +601,10 @@ def is_browser_cli(cli_name, cli_dir, test_config) -> bool:
         return True
 
     return _detect_browser_capability(cli_dir, cli_name)
+
+
+@pytest.fixture
+def cli_repo_policy(cli_dir, cli_tools_root):
+    """Central-repository rules do not govern another project's source tree."""
+    if not cli_dir.resolve().is_relative_to(cli_tools_root.resolve()):
+        pytest.skip("Project-owned CLI: repository policy belongs to its owning project")

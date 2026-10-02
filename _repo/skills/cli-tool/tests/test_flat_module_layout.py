@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from cli_test_utils import get_pkg_dir
 import pytest
 
 FLATTEN_TARGETS = ("models", "commands")
@@ -28,7 +29,7 @@ def test_no_single_module_directory(cli_name, cli_dir, command_filter, sub_dir):
     """A single-module subdirectory must be flattened into a top-level module."""
     if command_filter:
         pytest.skip("Skipping (command filter active)")
-    pkg_dir = cli_dir / f"{cli_name.replace('-', '_')}_cli"
+    pkg_dir = get_pkg_dir(cli_dir, cli_name)
     target = pkg_dir / sub_dir
     only_module = _single_module_directory(target)
     if only_module is None:

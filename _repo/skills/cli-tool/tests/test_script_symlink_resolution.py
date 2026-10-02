@@ -97,7 +97,7 @@ def test_remove_script_resolves_cli_tools_dir_through_symlinked_skill_dir(tmp_pa
     result = _run(scripts / "remove-cli-tool.sh", MISSING_TOOL)
 
     assert result.returncode == 1, result.stderr
-    assert f"{expected_root}/{MISSING_TOOL}" in result.stderr, result.stderr
+    assert f"{expected_root}/_personal/{MISSING_TOOL}" in result.stderr, result.stderr
 
 
 def test_create_skill_script_resolves_cli_tools_dir_through_symlinked_skill_dir(tmp_path):

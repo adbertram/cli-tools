@@ -4,6 +4,7 @@ Tests that output.py imports standard functions from cli_tools_shared.output
 and does not locally redefine them. CLI-specific helpers are allowed.
 """
 
+from cli_test_utils import get_pkg_dir
 import pytest
 import json
 
@@ -25,7 +26,7 @@ STANDARD_OUTPUT_FUNCTIONS = [
 ]
 
 def _get_output_path(cli_dir, cli_name):
-    return cli_dir / f"{cli_name.replace('-', '_')}_cli" / "output.py"
+    return get_pkg_dir(cli_dir, cli_name) / "output.py"
 
 
 def _profile_args(auth_context, help_cache, cmd_path):
@@ -192,7 +193,7 @@ def test_format_functions_have_truncate_parameter(cli_dir, cli_name, command_fil
     """
     import re
 
-    commands_dir = cli_dir / f"{cli_name.replace('-', '_')}_cli" / "commands"
+    commands_dir = get_pkg_dir(cli_dir, cli_name) / "commands"
     if not commands_dir.exists():
         pytest.skip("commands directory not found")
 
@@ -247,7 +248,7 @@ def test_json_output_not_truncated(cli_dir, cli_name, command_filter):
     """
     import re
 
-    commands_dir = cli_dir / f"{cli_name.replace('-', '_')}_cli" / "commands"
+    commands_dir = get_pkg_dir(cli_dir, cli_name) / "commands"
     if not commands_dir.exists():
         pytest.skip("commands directory not found")
 
@@ -320,7 +321,7 @@ def test_no_unconditional_truncation_in_format_functions(cli_dir, cli_name, comm
     """
     import re
 
-    commands_dir = cli_dir / f"{cli_name.replace('-', '_')}_cli" / "commands"
+    commands_dir = get_pkg_dir(cli_dir, cli_name) / "commands"
     if not commands_dir.exists():
         pytest.skip("commands directory not found")
 

@@ -1,5 +1,6 @@
 """Command execution validation tests (Section 7)."""
 
+from cli_test_utils import get_pkg_dir
 import pytest
 import json
 import warnings
@@ -823,7 +824,7 @@ def test_no_silent_error_swallowing(cli_dir, cli_name, command_filter):
     - return empty results when API calls fail
     - use bare 'except:' or 'except Exception:'
     """
-    commands_dir = cli_dir / f"{cli_name.replace('-', '_')}_cli" / "commands"
+    commands_dir = get_pkg_dir(cli_dir, cli_name) / "commands"
     if not commands_dir.exists():
         pytest.skip("No commands directory found")
 

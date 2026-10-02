@@ -5,6 +5,7 @@ import subprocess
 import sys
 import json
 import re
+import tomllib
 from functools import cache
 from pathlib import Path
 from typing import Any, List, Dict, Optional, Tuple
@@ -901,7 +902,7 @@ def get_config_auth_metadata(cli_dir: Path, cli_name: str) -> Optional[Dict[str,
     uv_venv = get_uv_tool_venv_dir(cli_dir, cli_name)
     if uv_venv is None:
         return None
-    cli_pkg = cli_name.replace("-", "_") + "_cli"
+    cli_pkg = get_pkg_dir(cli_dir, cli_name).name
     result = subprocess.run(
         [
             str(uv_venv / "bin" / "python"),
@@ -935,8 +936,18 @@ def get_config_auth_metadata(cli_dir: Path, cli_name: str) -> Optional[Dict[str,
 
 
 def get_pkg_dir(cli_dir: Path, cli_name: str) -> Path:
-    """Get the CLI package directory from the CLI repo path and CLI name."""
+    """Resolve the package declared by the console entry point.
+
+    Scaffold fixtures without script metadata retain the standard package spelling.
+    Project-owned tools may declare a different package, such as `coursecraft`.
+    """
     pkg_name = cli_name.replace("-", "_") + "_cli"
+    project = cli_dir / "pyproject.toml"
+    if project.is_file():
+        data = tomllib.loads(project.read_text())
+        entry = data.get("project", {}).get("scripts", {}).get(cli_name)
+        if entry:
+            pkg_name = entry.split(":", 1)[0].split(".", 1)[0]
     return cli_dir / pkg_name
 
 

@@ -2,6 +2,7 @@
 
 import json
 import os
+from cli_test_utils import get_pkg_dir
 import pytest
 import re
 import subprocess
@@ -288,7 +289,9 @@ def test_cli_tools_shared_uses_repo_local_source(cli_name, cli_dir, command_filt
         cli_dir,
     )
     source = data.get("tool", {}).get("uv", {}).get("sources", {}).get("cli-tools-shared")
-    assert source == {"path": expected_relative_path, "editable": True}, (
+    assert (isinstance(source, dict) and source.get("editable") is True
+            and isinstance(source.get("path"), str)
+            and (cli_dir / source["path"]).resolve() == (cli_tools_root / "_repo" / "cli-tools-shared").resolve()), (
         f"{cli_name}/pyproject.toml must map cli-tools-shared to the local sibling package. "
         f"Fix: add [tool.uv.sources] cli-tools-shared = {{ path = {expected_relative_path!r}, editable = true }}."
     )
@@ -410,7 +413,7 @@ def test_launcher_shebang_points_to_uv_tool_python(cli_name, cli_dir, command_fi
         f"\n"
         f"Reminder: when running manual import tests of this CLI, you MUST use "
         f"its own interpreter:\n"
-        f"    {expected_python3} -c 'import {cli_name.replace('-', '_')}_cli.main'"
+        f"    {expected_python3} -c 'import {get_pkg_dir(cli_dir, cli_name).name}.main'"
     )
 
 
@@ -423,7 +426,7 @@ def test_package_imports_cleanly(cli_name, cli_dir, command_filter):
     if command_filter:
         pytest.skip("Skipping general setup tests (command filter active)")
 
-    pkg_name = cli_name.replace("-", "_") + "_cli"
+    pkg_name = get_pkg_dir(cli_dir, cli_name).name
     pkg_dir = cli_dir / pkg_name
     if not pkg_dir.exists():
         pytest.skip(f"{cli_name} has no {pkg_name}/ package directory")
@@ -548,7 +551,7 @@ def test_env_example_has_base_url(cli_name, cli_dir, test_config, command_filter
             [str(venv_python), "-c",
              "from cli_tools_shared.credentials import CredentialType; "
              "import importlib, sys; "
-             f"pkg = '{cli_name}'.replace('-', '_') + '_cli'; "
+             f"pkg = {get_pkg_dir(cli_dir, cli_name).name!r}; "
              "sys.path.insert(0, '.'); "
              "mod = importlib.import_module(pkg + '.config'); "
              "cfg = [c for c in vars(mod).values() "

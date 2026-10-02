@@ -4,7 +4,7 @@ import pytest
 import subprocess
 from pathlib import Path
 
-from cli_test_utils import run_cli_command
+from cli_test_utils import get_pkg_dir, run_cli_command
 
 
 _GENERATED_SOURCE_DIRS = {
@@ -197,7 +197,7 @@ def test_pyproject_includes_cli_tools_shared(cli_name, cli_dir, command_filter):
     content = pyproject.read_text()
 
     # Check if code actually imports cli_tools_shared
-    pkg_name = cli_name.replace("-", "_") + "_cli"
+    pkg_name = get_pkg_dir(cli_dir, cli_name).name
     pkg_dir = cli_dir / pkg_name
     if not pkg_dir.exists():
         pytest.skip(f"{cli_name} has no {pkg_name}/ package directory")
@@ -246,7 +246,7 @@ def test_no_runtime_agent_dirs(cli_name, cli_dir, command_filter):
     )
 
 
-def test_repo_gitignore_covers_cli_source_artifacts(cli_tools_root, command_filter):
+def test_repo_gitignore_covers_cli_source_artifacts(cli_tools_root, command_filter, cli_repo_policy):
     """Assertion 7a2: repo root .gitignore covers generated CLI source artifacts."""
     if command_filter:
         pytest.skip("Skipping general setup tests (command filter active)")
@@ -275,7 +275,7 @@ def test_repo_gitignore_covers_cli_source_artifacts(cli_tools_root, command_filt
     )
 
 
-def test_repo_root_is_only_source_visible_gitignore(cli_tools_root, command_filter):
+def test_repo_root_is_only_source_visible_gitignore(cli_tools_root, command_filter, cli_repo_policy):
     """Assertion 7a3: source-visible .gitignore policy is centralized at repo root."""
     if command_filter:
         pytest.skip("Skipping general setup tests (command filter active)")
@@ -301,7 +301,7 @@ def test_source_visible_gitignores_excludes_agent_workspaces(tmp_path):
 
 def _is_wrapper_tool(cli_dir, cli_name):
     """Return True if tool has cache_support=False (wrapper tool)."""
-    pkg_name = cli_name.replace("-", "_") + "_cli"
+    pkg_name = get_pkg_dir(cli_dir, cli_name).name
     main_py = cli_dir / pkg_name / "main.py"
     if not main_py.exists():
         return False
@@ -313,7 +313,7 @@ def test_uses_create_app_pattern(cli_name, cli_dir, command_filter):
     if command_filter:
         pytest.skip("Skipping general setup tests (command filter active)")
 
-    pkg_name = cli_name.replace("-", "_") + "_cli"
+    pkg_name = get_pkg_dir(cli_dir, cli_name).name
     main_py = cli_dir / pkg_name / "main.py"
     if not main_py.exists():
         pytest.skip(f"{cli_name} has no {pkg_name}/main.py")
@@ -330,7 +330,7 @@ def test_uses_run_app_pattern(cli_name, cli_dir, command_filter):
     if command_filter:
         pytest.skip("Skipping general setup tests (command filter active)")
 
-    pkg_name = cli_name.replace("-", "_") + "_cli"
+    pkg_name = get_pkg_dir(cli_dir, cli_name).name
     main_py = cli_dir / pkg_name / "main.py"
     if not main_py.exists():
         pytest.skip(f"{cli_name} has no {pkg_name}/main.py")
@@ -364,7 +364,7 @@ def test_cache_subcommand_exists(cli_executable, cli_name, cli_dir, command_filt
         pytest.skip(f"{cli_name} is a wrapper tool (cache_support=False)")
 
     # cache subcommand requires get_config for storage_dir
-    pkg_name = cli_name.replace("-", "_") + "_cli"
+    pkg_name = get_pkg_dir(cli_dir, cli_name).name
     main_py = cli_dir / pkg_name / "main.py"
     if main_py.exists() and "get_config" not in main_py.read_text():
         pytest.skip(f"{cli_name} has no get_config (cache subcommand not applicable)")

@@ -18,6 +18,7 @@ import subprocess
 import tomllib
 from pathlib import Path
 
+from cli_test_utils import get_pkg_dir
 import pytest
 
 from cli_test_utils import get_uv_tool_venv_dir
@@ -25,7 +26,7 @@ from cli_test_utils import get_uv_tool_venv_dir
 
 def _get_pkg_dir(cli_dir: Path, cli_name: str) -> Path:
     """Get the CLI package directory."""
-    pkg_name = cli_name.replace("-", "_") + "_cli"
+    pkg_name = get_pkg_dir(cli_dir, cli_name).name
     return cli_dir / pkg_name
 
 

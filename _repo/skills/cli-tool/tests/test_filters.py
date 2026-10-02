@@ -1,5 +1,6 @@
 """Filter system validation tests (Sections 5-6)."""
 
+from cli_test_utils import get_pkg_dir
 import pytest
 import ast
 from pathlib import Path
@@ -48,7 +49,7 @@ def _resolve_cli_tools_shared_filters():
 
 def test_filters_has_required_operators(cli_name, cli_dir, test_config, command_filter):
     """Assertion 21: filters.py has all required operators."""
-    filters_path = cli_dir / f"{cli_name.replace('-', '_')}_cli" / "filters.py"
+    filters_path = get_pkg_dir(cli_dir, cli_name) / "filters.py"
     if not filters_path.exists():
         pytest.skip("filters.py not found")
 
@@ -77,7 +78,7 @@ def test_filters_has_required_operators(cli_name, cli_dir, test_config, command_
 
 def test_filters_implements_in_operator_correctly(cli_name, cli_dir, command_filter):
     """Assertion 22: filters.py implements 'in' operator with pipe separator."""
-    filters_path = cli_dir / f"{cli_name.replace('-', '_')}_cli" / "filters.py"
+    filters_path = get_pkg_dir(cli_dir, cli_name) / "filters.py"
     if not filters_path.exists():
         pytest.skip("filters.py not found")
 

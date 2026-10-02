@@ -16,6 +16,8 @@ from pathlib import Path
 
 import pytest
 
+from cli_test_utils import get_pkg_dir
+
 import cli_tools_shared.config as config_module
 from cli_tools_shared.credentials import (
     CredentialType,
@@ -37,7 +39,7 @@ def test_config_has_credential_types_list(cli_name, cli_dir, help_cache, test_co
     if " auth " not in help_text and "│ auth" not in help_text:
         pytest.skip(f"{cli_name} has no auth subcommand (auth infrastructure not required)")
 
-    cli_pkg = cli_dir / f"{cli_name.replace('-', '_')}_cli"
+    cli_pkg = get_pkg_dir(cli_dir, cli_name)
     config_file = cli_pkg / "config.py"
 
     if not config_file.exists():
@@ -58,7 +60,7 @@ def test_config_does_not_override_clear_ephemeral(cli_name, cli_dir, test_config
     if command_filter and command_filter not in ("auth",):
         pytest.skip(f"Skipping config tests (filtering to '{command_filter}')")
 
-    cli_pkg = cli_dir / f"{cli_name.replace('-', '_')}_cli"
+    cli_pkg = get_pkg_dir(cli_dir, cli_name)
     config_file = cli_pkg / "config.py"
 
     if not config_file.exists():
@@ -83,7 +85,7 @@ def test_auth_no_clear_credentials_on_force(cli_name, cli_dir, test_config, comm
     if command_filter and command_filter not in ("auth",):
         pytest.skip(f"Skipping auth tests (filtering to '{command_filter}')")
 
-    cli_pkg = cli_dir / f"{cli_name.replace('-', '_')}_cli"
+    cli_pkg = get_pkg_dir(cli_dir, cli_name)
 
     # Check if CLI uses the shared create_auth_app (handles force correctly)
     main_file = cli_pkg / "main.py"

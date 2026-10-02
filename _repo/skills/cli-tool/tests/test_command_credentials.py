@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from cli_test_utils import discover_nested_commands, get_config_auth_metadata
+from cli_test_utils import get_pkg_dir, discover_nested_commands, get_config_auth_metadata
 
 
 # Command groups that are infrastructure, not user-facing commands
@@ -122,7 +122,7 @@ def test_config_declares_credential_types(
     if " auth " not in help_text and "│ auth" not in help_text:
         pytest.skip(f"{cli_name} has no auth subcommand (auth infrastructure not required)")
 
-    cli_pkg = cli_name.replace("-", "_") + "_cli"
+    cli_pkg = get_pkg_dir(cli_dir, cli_name).name
     from cli_test_utils import get_uv_tool_venv_dir
     uv_venv = get_uv_tool_venv_dir(cli_dir, cli_name)
     if uv_venv is None:
@@ -187,7 +187,7 @@ def test_command_credentials_subset_of_config(
     if " auth " not in help_text and "│ auth" not in help_text:
         pytest.skip(f"{cli_name} has no auth subcommand (auth infrastructure not required)")
 
-    cli_pkg = cli_name.replace("-", "_") + "_cli"
+    cli_pkg = get_pkg_dir(cli_dir, cli_name).name
     module_entries = _command_module_entries(cli_dir, cli_pkg)
     if not module_entries:
         pytest.skip(f"{cli_name} has no command modules")
@@ -269,7 +269,7 @@ def test_all_commands_have_credential_mapping(
     if " auth " not in help_text and "│ auth" not in help_text:
         pytest.skip(f"{cli_name} has no auth subcommand (auth infrastructure not required)")
 
-    cli_pkg = cli_name.replace("-", "_") + "_cli"
+    cli_pkg = get_pkg_dir(cli_dir, cli_name).name
     module_entries = _command_module_entries(cli_dir, cli_pkg)
     if not module_entries:
         pytest.skip(f"{cli_name} has no command modules")
@@ -413,7 +413,7 @@ def test_credentialed_commands_expose_profile_option(
     if " auth " not in help_text and "│ auth" not in help_text:
         pytest.skip(f"{cli_name} has no auth subcommand (auth infrastructure not required)")
 
-    cli_pkg = cli_name.replace("-", "_") + "_cli"
+    cli_pkg = get_pkg_dir(cli_dir, cli_name).name
     module_entries = _command_module_entries(cli_dir, cli_pkg)
     if not module_entries:
         pytest.skip(f"{cli_name} has no command modules")
@@ -536,7 +536,7 @@ def test_command_aliases_have_credential_mapping(
     if " auth " not in help_text and "│ auth" not in help_text:
         pytest.skip(f"{cli_name} has no auth subcommand (auth infrastructure not required)")
 
-    cli_pkg = cli_name.replace("-", "_") + "_cli"
+    cli_pkg = get_pkg_dir(cli_dir, cli_name).name
     module_entries = _command_module_entries(cli_dir, cli_pkg)
     if not module_entries:
         pytest.skip(f"{cli_name} has no command modules")
@@ -629,7 +629,7 @@ def test_register_commands_adoption(
     if " auth " not in help_text and "│ auth" not in help_text:
         pytest.skip(f"{cli_name} has no auth subcommand")
 
-    cli_pkg = cli_name.replace("-", "_") + "_cli"
+    cli_pkg = get_pkg_dir(cli_dir, cli_name).name
     main_file = cli_dir / cli_pkg / "main.py"
 
     module_entries = _command_module_entries(cli_dir, cli_pkg)
