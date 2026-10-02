@@ -1,7 +1,7 @@
 """Unit tests for cli_test_utils.run_cli_command timeout-retry semantics.
 
 CLI startup can stall for tens of seconds under bursty host contention
-(Dropbox sync, parallel agent sessions). One stall must not fail a harness
+(parallel agent sessions). One stall must not fail a harness
 run, but a genuine hang (two consecutive timeouts) must still raise.
 """
 

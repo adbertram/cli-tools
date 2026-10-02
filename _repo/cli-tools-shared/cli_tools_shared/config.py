@@ -26,7 +26,7 @@ from .repo_paths import secret_manager_script
 # ==================== File Write Utilities ====================
 
 def _set_key_with_retry(env_path: str, name: str, value: str, max_retries: int = 3):
-    """Wrap set_key with retry for Windows PermissionError (Dropbox file locks)."""
+    """Wrap set_key with retry for transient Windows PermissionError (file locks)."""
     path = Path(env_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.touch(exist_ok=True)

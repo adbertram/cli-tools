@@ -88,8 +88,8 @@ def _lean_allow_reason(source_lines: list[str], node: ast.stmt) -> str | None:
     run before any submodule import on every entry path: Python guarantees the
     package ``__init__`` runs ahead of ``<pkg>.main`` / ``<pkg>.commands.*`` on a
     bare ``import`` as well as the console script, so a command-path wrapper cannot
-    cover bare imports (e.g. a stale-bytecode purge for an editable, Dropbox-synced
-    install). A non-empty reason is required so the exception is self-documenting
+    cover bare imports (e.g. a warnings filter that must precede a dependency
+    import). A non-empty reason is required so the exception is self-documenting
     and greppable in review; the rule stays strict for every unannotated statement.
     """
     start = node.lineno - 1
@@ -239,8 +239,8 @@ def test_package_init_has_no_runtime_work(cli_name, cli_dir, command_filter):
             "Fix: keep package __init__.py to docstrings, imports, and static "
             "metadata assignments. Put executable setup in the command path.\n"
             "If the statement genuinely must run before any submodule import on "
-            "every entry path (e.g. a stale-bytecode purge for an editable, "
-            "Dropbox-synced install), annotate that one statement with an inline "
+            "every entry path (e.g. a warnings filter that must precede a "
+            "dependency import), annotate that one statement with an inline "
             "'# lean-cli-allow: <reason>' marker."
         )
 

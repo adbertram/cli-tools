@@ -547,8 +547,7 @@ like `cli_tools_shared` import fine — it's the tool's *own* module that's gone
 CLI tools are installed with `uv tool install -e` (editable). An editable
 install does NOT copy the package into the venv — it writes a `.pth` finder that
 points `sys.path` back at the on-disk source directory. If that source directory
-is later deleted, moved, or renamed (e.g. a folder removed from a Dropbox/iCloud
-synced repo, a `git clean`, a manual `mv`), the finder's mapping dangles and the
+is later deleted, moved, or renamed (e.g. a `git clean`, a manual `mv`), the finder's mapping dangles and the
 tool's own package no longer resolves. The receipt still lists the old editable
 path, so reinstalling from it would also fail until the source is back.
 
@@ -581,7 +580,8 @@ editable install against it). Recovery sources, in priority order:
    ```bash
    find ~/.cache/uv/git-v0/checkouts -type d -name '<pkg>' 2>/dev/null
    ```
-3. **Dropbox/cloud file revisions** — for a synced repo, use the `dropbox` CLI
+3. **Dropbox cloud file revisions** — this Mac uploads the repo to Dropbox as a
+   backup, so use the `dropbox` CLI
    (`dropbox files history <path>` then `dropbox files restore`). CAVEAT: a
    deleted folder's *content blobs* can be purged server-side even while tombstone
    metadata (and thus `files history` revs) survive — restore then fails with

@@ -59,7 +59,7 @@ def run_cli_command(
     """Execute CLI command with timeout and capture output.
 
     Retries once on timeout: CLI startup can stall for tens of seconds under
-    bursty host contention (Dropbox sync, parallel agent sessions), and a
+    bursty host contention (parallel agent sessions), and a
     single stall is not a CLI hang. A second consecutive timeout raises
     TimeoutExpired so genuine hangs still fail loudly.
     """

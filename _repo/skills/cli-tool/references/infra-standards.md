@@ -43,8 +43,7 @@ before any submodule import on **every** entry path — Python guarantees the
 package `__init__` runs before `<pkg>.main` / `<pkg>.commands.*`, so it is the only
 hook that also protects a bare `import <pkg>.main` (used by tests, diagnostics, and
 `python -m`), which a console-script wrapper cannot cover. A warning filter that
-must precede a dependency import, or a stale-bytecode purge for an editable,
-Dropbox-synced install, qualifies. Annotate that single statement with an inline
+must precede a dependency import qualifies. Annotate that single statement with an inline
 `# lean-cli-allow: <reason>` marker so it passes the lean check and the exception
 is self-documenting and auditable:
 
