@@ -369,7 +369,7 @@ points, Python requirements, overrides, or a broken install must be rebuilt:
 
 For remote installs such as `adam-server`, verify the remote checkout contains
 the intended changed file content before reinstalling. Deliver the changed
-source with `~/Dropbox/ai_harness_root/bin/push.sh adam-server --path <abs-dir>`
+source with `~/Dropbox/ai_harness_root/bin/push.sh adam-server --path <abs-dir>` <!-- harness-root:allow -->
 (never `scp`), reinstall on the remote host, then verify through the installed
 launcher's Python environment that the exact patched symbol or source marker is
 present.
