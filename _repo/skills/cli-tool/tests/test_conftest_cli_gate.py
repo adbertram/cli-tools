@@ -89,6 +89,28 @@ def test_personal_worktree_override_resolves_source_before_global_launcher(
     ) == tool_dir
 
 
+def test_personal_installed_cli_uses_launcher_source_without_override(
+    tmp_path, monkeypatch
+) -> None:
+    cli_tools_root = tmp_path / "worktree"
+    tool_dir = cli_tools_root / "_personal" / "ata-blog"
+    tool_dir.mkdir(parents=True)
+    (tool_dir / "pyproject.toml").write_text("[project]\nname = 'ata-blog-cli'\n")
+
+    monkeypatch.setattr(
+        cli_conftest,
+        "_resolve_cli_dir_from_executable",
+        lambda _cli_executable: pytest.fail("must not parse a launcher as a worktree override"),
+    )
+    monkeypatch.setattr(
+        cli_conftest,
+        "_resolve_cli_dir_from_launcher",
+        lambda cli_name: tool_dir if cli_name == "ata-blog" else pytest.fail("wrong CLI"),
+    )
+
+    assert cli_conftest.cli_dir.__wrapped__("ata-blog", cli_tools_root, None) == tool_dir
+
+
 def test_worktree_override_requires_project_virtualenv_layout(tmp_path) -> None:
     executable = tmp_path / "not-a-worktree-executable"
     executable.write_text("#!/usr/bin/env bash\nexit 0\n")

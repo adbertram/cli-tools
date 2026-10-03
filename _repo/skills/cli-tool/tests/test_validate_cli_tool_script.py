@@ -161,12 +161,25 @@ def test_test_script_supports_worktree_executable_override():
     assert "--cli-executable <path>" in script_text
     assert '--cli-executable) CLI_EXECUTABLE="$2"; shift 2 ;;' in script_text
     assert "test_cli_executable_override" in script_text
-    assert 'PYTEST_ARGS=(--cli-name "$CLI_NAME" --cli-executable "$CLI_EXECUTABLE"' in script_text
+    assert 'PYTEST_ARGS=(--cli-name "$CLI_NAME" --tb=short --junitxml="$JUNIT")' in script_text
+    assert 'if [[ "$CLI_EXECUTABLE_OVERRIDE" == true ]]; then\n    PYTEST_ARGS+=(--cli-executable "$CLI_EXECUTABLE")\nfi' in script_text
+    assert 'PYTEST_ARGS=(--cli-name "$CLI_NAME" --cli-executable "$CLI_EXECUTABLE"' not in script_text
     assert 'uv run python -m pytest "$SKILL_DIR/tests" "${PYTEST_ARGS[@]}"' in script_text
 
 
-def test_test_script_runs_real_pytest_for_worktree_executable(tmp_path):
-    """The wrapper must load its conftest before parsing a worktree executable."""
+@pytest.mark.parametrize(
+    ("cli_name", "use_worktree_executable", "is_personal_cli"),
+    [
+        ("demo", True, False),
+        ("demo", False, False),
+        ("ata-blog", False, True),
+    ],
+    ids=["worktree-override", "installed-launcher", "personal-installed-launcher"],
+)
+def test_test_script_runs_real_pytest_for_launcher_mode(
+    tmp_path, cli_name, use_worktree_executable, is_personal_cli
+):
+    """The wrapper loads its conftest with an override only for worktree runs."""
     fake_repo = tmp_path / "repo"
     fake_skill_dir = fake_repo / "_repo" / "skills" / "cli-tool"
     fake_scripts_dir = fake_skill_dir / "scripts"
@@ -195,9 +208,13 @@ def test_test_script_runs_real_pytest_for_worktree_executable(tmp_path):
     (fake_tests_dir / "test_worktree_options.py").write_text(
         "from pathlib import Path\n\n"
         "def test_worktree_options(pytestconfig):\n"
-        "    assert pytestconfig.getoption('--cli-name') == 'demo'\n"
+        f"    assert pytestconfig.getoption('--cli-name') == {cli_name!r}\n"
         "    assert pytestconfig.getoption('--command') == 'probe'\n"
-        "    assert Path(pytestconfig.getoption('--cli-executable')).name == 'demo'\n",
+        + (
+            f"    assert Path(pytestconfig.getoption('--cli-executable')).name == {cli_name!r}\n"
+            if use_worktree_executable
+            else "    assert pytestconfig.getoption('--cli-executable') is None\n"
+        ),
         encoding="utf-8",
     )
 
@@ -207,10 +224,14 @@ def test_test_script_runs_real_pytest_for_worktree_executable(tmp_path):
         target_is_directory=True,
     )
 
-    tool_dir = fake_repo / "demo"
-    tool_dir.mkdir()
+    tool_dir = (
+        fake_repo / "_personal" / cli_name
+        if is_personal_cli
+        else fake_repo / cli_name
+    )
+    tool_dir.mkdir(parents=True)
     (tool_dir / "pyproject.toml").write_text(
-        "[project]\nname = 'demo-cli'\nversion = '0.1.0'\n",
+        f"[project]\nname = '{cli_name}-cli'\nversion = '0.1.0'\n",
         encoding="utf-8",
     )
     (tool_dir / "README.md").write_text(
@@ -219,30 +240,52 @@ def test_test_script_runs_real_pytest_for_worktree_executable(tmp_path):
         "Use it to test worktree validation.\n",
         encoding="utf-8",
     )
-    executable = tool_dir / ".venv" / "bin" / "demo"
-    executable.parent.mkdir(parents=True)
-    executable.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
-    executable.chmod(0o755)
-
     home_dir = tmp_path / "home"
+    arguments = [
+        str(fake_scripts_dir / "test-cli-tool.sh"),
+        "--cli-name",
+        cli_name,
+        "--command",
+        "probe",
+    ]
+    if use_worktree_executable:
+        executable = tool_dir / ".venv" / "bin" / cli_name
+        executable.parent.mkdir(parents=True)
+        executable.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+        executable.chmod(0o755)
+        arguments.extend(["--cli-executable", str(executable)])
+    else:
+        launcher = home_dir / ".local" / "bin" / cli_name
+        launcher.parent.mkdir(parents=True)
+        launcher.write_text(
+            f"#!{sys.executable}\n" if is_personal_cli else "#!/usr/bin/env bash\nexit 0\n",
+            encoding="utf-8",
+        )
+        launcher.chmod(0o755)
+
     uv_cache_dir = Path(os.environ.get("UV_CACHE_DIR", Path.home() / ".cache" / "uv"))
+    environment = {
+        **os.environ,
+        "HOME": str(home_dir),
+        "UV_CACHE_DIR": str(uv_cache_dir),
+        "UV_PROJECT_ENVIRONMENT": str(tmp_path / "harness-env"),
+    }
+    if is_personal_cli:
+        shared_path = str(fake_repo / "_repo" / "cli-tools-shared")
+        environment.update(
+            {
+                "CLI_TOOL_DIR_ATA_BLOG_CLI": str(tool_dir),
+                "PYTHONPATH": (
+                    f"{shared_path}{os.pathsep}{environment['PYTHONPATH']}"
+                    if environment.get("PYTHONPATH")
+                    else shared_path
+                ),
+            }
+        )
     result = subprocess.run(
-        [
-            str(fake_scripts_dir / "test-cli-tool.sh"),
-            "--cli-name",
-            "demo",
-            "--command",
-            "probe",
-            "--cli-executable",
-            str(executable),
-        ],
+        arguments,
         cwd=fake_repo,
-        env={
-            **os.environ,
-            "HOME": str(home_dir),
-            "UV_CACHE_DIR": str(uv_cache_dir),
-            "UV_PROJECT_ENVIRONMENT": str(tmp_path / "harness-env"),
-        },
+        env=environment,
         capture_output=True,
         text=True,
         check=False,

@@ -429,7 +429,10 @@ print(json.loads(os.environ["PRECHECK_JSON"])["message"])
 PY
 )"
 
-PYTEST_ARGS=(--cli-name "$CLI_NAME" --cli-executable "$CLI_EXECUTABLE" --tb=short --junitxml="$JUNIT")
+PYTEST_ARGS=(--cli-name "$CLI_NAME" --tb=short --junitxml="$JUNIT")
+if [[ "$CLI_EXECUTABLE_OVERRIDE" == true ]]; then
+    PYTEST_ARGS+=(--cli-executable "$CLI_EXECUTABLE")
+fi
 PYTEST_ARGS+=(-k "not test_auth_status_schema")
 [[ -n "$COMMAND" ]] && PYTEST_ARGS+=(--command "$COMMAND")
 $VERBOSE && PYTEST_ARGS+=(-v) || PYTEST_ARGS+=(-q)
