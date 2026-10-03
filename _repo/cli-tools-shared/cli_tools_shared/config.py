@@ -365,6 +365,23 @@ def _normalize_secret_name_part(value: str) -> str:
     return value.lower().replace("_", "-")
 
 
+def _secret_name_for_profile_field(
+    tool_name: str,
+    field_name: str,
+    profile_name: str,
+) -> str:
+    """Build the canonical secret-manager name for one profile field."""
+    tool_part = _normalize_secret_name_part(tool_name)
+    field_part = _normalize_secret_name_part(field_name)
+    prefix = f"{tool_part}-"
+    if field_part.startswith(prefix):
+        field_part = field_part[len(prefix) :]
+    profile_part = _normalize_secret_name_part(profile_name)
+    if profile_part == "default":
+        return f"{tool_part}-{field_part}"
+    return f"{tool_part}-{profile_part}-{field_part}"
+
+
 def auth_profile_secret_placeholders(tool_name: str) -> list[tuple[Path, str, str]]:
     """Return ``(env_path, field_name, secret_name)`` for profile placeholders."""
     references: list[tuple[Path, str, str]] = []
@@ -962,15 +979,11 @@ class BaseConfig:
         override = overrides.get(name)
         if override:
             return override
-        tool_name = _normalize_secret_name_part(self._tool_name)
-        field_name = _normalize_secret_name_part(name)
-        prefix = f"{tool_name}-"
-        if field_name.startswith(prefix):
-            field_name = field_name[len(prefix) :]
-        profile_name = _normalize_secret_name_part(profile_name_from_path(env_path))
-        if profile_name == "default":
-            return f"{tool_name}-{field_name}"
-        return f"{tool_name}-{profile_name}-{field_name}"
+        return _secret_name_for_profile_field(
+            self._tool_name,
+            name,
+            profile_name_from_path(env_path),
+        )
 
     def _secret_name_for_field(self, name: str) -> str:
         return self._secret_name_for_field_in_profile(name, self.env_file_path)

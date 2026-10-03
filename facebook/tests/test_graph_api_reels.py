@@ -1,6 +1,8 @@
 import json
+from pathlib import Path
 
 import pytest
+from dotenv import dotenv_values
 from typer.testing import CliRunner
 
 from cli_tools_shared.exceptions import ClientError
@@ -207,7 +209,92 @@ def test_legacy_profiles_are_migrated_before_auth_commands(monkeypatch, tmp_path
     profile.mkdir()
     (profile / ".env").write_text("ACTIVE=true\n")
     monkeypatch.setattr(config_mod, "get_profiles_base_dir", lambda _name: tmp_path)
+    monkeypatch.setattr(config_mod, "resolve_tool_dir", lambda _name: tmp_path)
+    monkeypatch.setattr(config_mod.BaseConfig, "__init__", lambda self, **_kwargs: None)
+
+    config_mod.Config()
+
+    assert dotenv_values(profile / ".env") == {
+        "ACTIVE": "true",
+        "AUTH_TYPE": BROWSER_AUTH_TYPE,
+    }
+
+
+def test_legacy_browser_credentials_move_to_secret_manager_before_config_load(monkeypatch, tmp_path):
+    profile = tmp_path / "default"
+    profile.mkdir()
+    env_path = profile / ".env"
+    env_path.write_text("ACTIVE=true\nUSERNAME=legacy-user\nPASSWORD=legacy-password\n")
+    calls = []
+
+    monkeypatch.setattr(config_mod, "get_profiles_base_dir", lambda _name: tmp_path)
+
+    def fake_secret_exists(secret_name):
+        calls.append(("has", secret_name, None))
+        return False
+
+    def fake_set_secret(secret_name, value, target_env_path):
+        calls.append(("set", secret_name, value, target_env_path))
+
+    monkeypatch.setattr(config_mod, "_secret_exists", fake_secret_exists)
+    monkeypatch.setattr(config_mod, "_set_secret_value", fake_set_secret)
 
     config_mod.migrate_legacy_profiles()
 
-    assert (profile / ".env").read_text() == f"AUTH_TYPE={BROWSER_AUTH_TYPE}\nACTIVE=true\n"
+    assert calls == [
+        ("has", "facebook-username", None),
+        ("set", "facebook-username", "legacy-user", env_path),
+        ("has", "facebook-password", None),
+        ("set", "facebook-password", "legacy-password", env_path),
+    ]
+    assert dotenv_values(env_path) == {
+        "ACTIVE": "true",
+        "AUTH_TYPE": BROWSER_AUTH_TYPE,
+    }
+
+
+def test_legacy_profile_uses_profile_scoped_secret_names(monkeypatch, tmp_path):
+    profile = tmp_path / "work"
+    profile.mkdir()
+    env_path = profile / ".env"
+    env_path.write_text(
+        f"AUTH_TYPE={BROWSER_AUTH_TYPE}\nACTIVE=true\nUSERNAME=legacy-user\n"
+    )
+    calls = []
+
+    monkeypatch.setattr(config_mod, "get_profiles_base_dir", lambda _name: tmp_path)
+    monkeypatch.setattr(config_mod, "_secret_exists", lambda name: calls.append(name) or False)
+    monkeypatch.setattr(config_mod, "_set_secret_value", lambda name, value, path: None)
+
+    config_mod.migrate_legacy_profiles()
+
+    assert calls == ["facebook-work-username"]
+    assert dotenv_values(env_path) == {
+        "AUTH_TYPE": BROWSER_AUTH_TYPE,
+        "ACTIVE": "true",
+    }
+
+
+def test_blank_legacy_auth_type_is_replaced_once(monkeypatch, tmp_path):
+    profile = tmp_path / "default"
+    profile.mkdir()
+    env_path = profile / ".env"
+    env_path.write_text("ACTIVE=true\nAUTH_TYPE=\n")
+    monkeypatch.setattr(config_mod, "get_profiles_base_dir", lambda _name: tmp_path)
+
+    config_mod.migrate_legacy_profiles()
+
+    assert dotenv_values(env_path)["AUTH_TYPE"] == BROWSER_AUTH_TYPE
+    assert sum(line.startswith("AUTH_TYPE=") for line in env_path.read_text().splitlines()) == 1
+
+
+def test_config_repairs_the_generated_default_profile_auth_type(monkeypatch, tmp_path):
+    tool_dir = Path(__file__).resolve().parents[1]
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+    monkeypatch.setattr(config_mod, "resolve_tool_dir", lambda _name: tool_dir)
+
+    Config(profile_auth_type=BROWSER_AUTH_TYPE)
+
+    env_path = tmp_path / "data" / "cli-tools" / "facebook" / "authentication_profiles" / "default" / ".env"
+    assert dotenv_values(env_path)["AUTH_TYPE"] == BROWSER_AUTH_TYPE
+    assert sum(line.startswith("AUTH_TYPE=") for line in env_path.read_text().splitlines()) == 1
