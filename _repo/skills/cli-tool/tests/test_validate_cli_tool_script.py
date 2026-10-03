@@ -155,6 +155,88 @@ def test_test_script_unknown_argument_points_to_supported_invocation():
     assert "Unknown argument: $1. Use --cli-name <name> or --file <path>." in script_text
 
 
+def test_test_script_supports_worktree_executable_override():
+    script_text = (SKILL_ROOT / "scripts/test-cli-tool.sh").read_text()
+
+    assert "--cli-executable <path>" in script_text
+    assert '--cli-executable) CLI_EXECUTABLE="$2"; shift 2 ;;' in script_text
+    assert "test_cli_executable_override" in script_text
+    assert 'PYTEST_ARGS=(--cli-name "$CLI_NAME" --cli-executable "$CLI_EXECUTABLE"' in script_text
+
+
+@pytest.mark.parametrize("override_kind", ["missing", "not-executable"])
+def test_test_script_rejects_invalid_executable_override(tmp_path, override_kind):
+    script = SKILL_ROOT / "scripts/test-cli-tool.sh"
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_uv = fake_bin / "uv"
+    fake_uv.write_text("#!/usr/bin/env bash\nexit 99\n", encoding="utf-8")
+    fake_uv.chmod(0o755)
+
+    executable = tmp_path / "worktree-cli"
+    if override_kind == "not-executable":
+        executable.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [str(script), "--cli-name", "weather", "--cli-executable", str(executable)],
+        cwd=REPO_ROOT,
+        env={
+            **os.environ,
+            "HOME": str(tmp_path / "home"),
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 1, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["failures"][0]["test_name"] == "test_cli_executable_override"
+    assert str(executable) in payload["failures"][0]["message"]
+
+
+def test_test_script_resolves_personal_worktree_override_without_shared_launcher(tmp_path):
+    fake_repo = tmp_path / "repo"
+    script_dir = fake_repo / "_repo" / "skills" / "cli-tool" / "scripts"
+    script_dir.mkdir(parents=True)
+    script = script_dir / "test-cli-tool.sh"
+    shutil.copy2(SKILL_ROOT / "scripts" / "test-cli-tool.sh", script)
+    script.chmod(0o755)
+
+    tool_dir = fake_repo / "_personal" / "demo"
+    tool_dir.mkdir(parents=True)
+    (tool_dir / "pyproject.toml").write_text("[project]\nname = 'demo'\n")
+    (tool_dir / "README.md").write_text("# Demo\n")
+    executable = tool_dir / ".venv" / "bin" / "demo"
+    executable.parent.mkdir(parents=True)
+    executable.write_text("#!/usr/bin/env bash\nexit 0\n")
+    executable.chmod(0o755)
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_uv = fake_bin / "uv"
+    fake_uv.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    fake_uv.chmod(0o755)
+    home_dir = tmp_path / "home"
+
+    result = subprocess.run(
+        [str(script), "--cli-name", "demo", "--cli-executable", str(executable)],
+        cwd=fake_repo,
+        env={
+            **os.environ,
+            "HOME": str(home_dir),
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert not (home_dir / ".local" / "bin" / "demo").exists()
+
+
 def test_test_script_reports_missing_launcher_as_structured_failure():
     script_text = (SKILL_ROOT / "scripts/test-cli-tool.sh").read_text()
 

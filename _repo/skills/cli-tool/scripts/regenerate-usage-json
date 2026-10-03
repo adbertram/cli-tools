@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate a repo-owned CLI skill usage.json from the installed CLI help."""
+"""Regenerate a repo-owned CLI skill usage.json from the selected CLI help."""
 
 from __future__ import annotations
 
@@ -104,7 +104,7 @@ def resolve_cli_executable(
     if not canonical_launcher.is_file() or not os.access(canonical_launcher, os.X_OK):
         raise SystemExit(
             "CLI executable is missing or not executable at canonical uv launcher: "
-            f"{canonical_launcher}. Pass --cli-executable for a new non-uv map or test fixture."
+            f"{canonical_launcher}. Pass --cli-executable for a new non-uv map, test fixture, or worktree checkout."
         )
     return str(canonical_launcher)
 
@@ -694,7 +694,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("cli_name", help="Tool name used by the skill directory, for example jira")
     parser.add_argument(
         "--cli-executable",
-        help="Executable to inspect for a new non-uv map or test fixture",
+        help="Executable to inspect for a new non-uv map, test fixture, or worktree checkout",
     )
     parser.add_argument("--usage-json", type=Path, help="usage.json path to update")
     parser.add_argument("--check", action="store_true", help="Exit 1 if usage.json would change")
