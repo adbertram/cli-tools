@@ -14,6 +14,7 @@ _DISCOVER_NESTED_COMMANDS_CACHE: Dict[
     Tuple[str, str, int, int, Tuple[str, ...], int],
     Tuple[str, ...],
 ] = {}
+CLI_TEST_EXECUTABLE_ENV = "CLI_TOOL_TEST_EXECUTABLE"
 
 
 def _clean_path() -> Dict[str, str]:
@@ -871,13 +872,29 @@ def discover_list_commands(
 
 
 def get_uv_tool_venv_dir(cli_dir: Path, cli_name: str) -> Optional[Path]:
-    """Get the uv tool venv path by reading package name from pyproject.toml.
+    """Get the selected CLI environment path.
 
-    uv tool install stores venvs at ~/.local/share/uv/tools/<package-name>.
+    An explicit test executable takes precedence when it belongs to a project
+    virtual environment. This lets a worktree test run use that worktree's
+    `.venv` instead of the shared uv tool environment. Otherwise, uv tool
+    install stores venvs at ~/.local/share/uv/tools/<package-name>.
     The package name comes from pyproject.toml [project].name field.
     Falls back to {cli_name}-cli if pyproject.toml can't be read.
     """
     import tomllib
+
+    cli_executable_override = os.environ.get(CLI_TEST_EXECUTABLE_ENV)
+    if cli_executable_override is not None:
+        executable = Path(cli_executable_override).expanduser()
+        venv_bin = executable.parent
+        venv_dir = venv_bin.parent
+        if (
+            venv_bin.name == "bin"
+            and (venv_dir / "pyvenv.cfg").is_file()
+            and (venv_bin / "python").is_file()
+        ):
+            return venv_dir
+        return None
 
     pkg_name = f"{cli_name}-cli"
     pyproject = cli_dir / "pyproject.toml"

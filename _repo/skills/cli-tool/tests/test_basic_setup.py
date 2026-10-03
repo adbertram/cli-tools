@@ -44,7 +44,9 @@ def test_tool_directory_exists(cli_dir, command_filter):
     )
 
 
-def test_cli_command_available_in_path(cli_name, cli_dir, command_filter):
+def test_cli_command_available_in_path(
+    cli_name, cli_dir, command_filter, cli_executable_override
+):
     """Assertion 2: CLI command is available in PATH.
 
     This test verifies the CLI can be run by name from any shell without
@@ -55,6 +57,8 @@ def test_cli_command_available_in_path(cli_name, cli_dir, command_filter):
     """
     if command_filter:
         pytest.skip("Skipping general setup tests (command filter active)")
+    if cli_executable_override:
+        pytest.skip("Skipping shared launcher availability check (--cli-executable active)")
 
     import os
 
@@ -116,13 +120,15 @@ def test_cli_command_available_in_path(cli_name, cli_dir, command_filter):
     )
 
 
-def test_cli_world_invocable(cli_name, cli_dir, command_filter):
+def test_cli_world_invocable(cli_name, cli_dir, command_filter, cli_executable_override):
     """Assertion 2b: CLI is invocable via PATH symlink.
 
     Verifies a symlink exists in ~/.local/bin pointing to the CLI's venv binary.
     """
     if command_filter:
         pytest.skip("Skipping general setup tests (command filter active)")
+    if cli_executable_override:
+        pytest.skip("Skipping shared launcher symlink check (--cli-executable active)")
 
     import os
 

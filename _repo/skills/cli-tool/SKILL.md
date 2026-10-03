@@ -654,8 +654,10 @@ Do not create an in-repo skill folder merely to use the default path.
 When an existing `usage.json` declares `binary`, the generator uses that exact
 absolute executable path. This is the launcher contract for non-uv tools whose
 command differs from the skill name. Without `binary`, the generator requires
-the canonical uv launcher at `~/.local/bin/<tool>`. Use `--cli-executable` only
-for a new non-uv map or an isolated test fixture.
+the canonical uv launcher at `~/.local/bin/<tool>`. Use `--cli-executable` for
+a new non-uv map, an isolated test fixture, or a worktree checkout. For a
+worktree, point it at that checkout's `<tool>/.venv/bin/<tool>` and never
+reinstall or repoint the shared `~/.local/bin/<tool>` launcher.
 </principle>
 
 <principle name="Schema-Safe Usage JSON Inspection">

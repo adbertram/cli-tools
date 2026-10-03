@@ -367,6 +367,32 @@ points, Python requirements, overrides, or a broken install must be rebuilt:
 <cli-tools-root>/_repo/skills/cli-tool/scripts/install-cli-tool.sh --force-refresh <name>
 ```
 
+### Worktree validation (do not change the shared launcher)
+
+When the change is being validated from a git worktree, do not run either
+install command above against the shared uv tool environment. Instead, sync the
+resolved tool directory in that worktree and keep this variable for Steps 6.5
+through 6.7:
+
+For a personal CLI, the resolved directory is
+`<cli-tools-root>/_personal/<name>`. The standard executable path below lets
+the test harness derive that source directory without consulting the shared
+launcher.
+
+```bash
+TOOL_DIR="<resolved tool directory in this worktree>"
+uv sync --project "$TOOL_DIR"
+CLI_EXECUTABLE="$TOOL_DIR/.venv/bin/<name>"
+test -f "$CLI_EXECUTABLE" && test -x "$CLI_EXECUTABLE"
+```
+
+Pass `--cli-executable "$CLI_EXECUTABLE"` to both
+`regenerate-usage-json` and `test-cli-tool.sh`. Do not run
+`install-cli-tool.sh --force-refresh`, repoint a symlink, or alter
+`~/.local/bin/<name>`; the override keeps every validation command on the
+worktree source. Global-launcher health checks are skipped during this mode,
+while import and command checks use the worktree `.venv`.
+
 For remote installs such as `adam-server`, verify the remote checkout contains
 the intended changed file content before reinstalling. Deliver the changed
 source with `~/Dropbox/ai_harness_root/bin/push.sh adam-server --path <abs-dir>` <!-- harness-root:allow -->
@@ -432,6 +458,13 @@ If the file exists, refresh its command map with the repo-owned generator:
 <cli-tools-root>/_repo/skills/cli-tool/scripts/regenerate-usage-json <name>
 ```
 
+For worktree validation, run:
+
+```bash
+<cli-tools-root>/_repo/skills/cli-tool/scripts/regenerate-usage-json <name> \
+  --cli-executable "$CLI_EXECUTABLE"
+```
+
 Launcher resolution follows the `Usage JSON Lives In The CLI Skill` principle
 in the repo-owned `cli-tool` skill.
 
@@ -447,6 +480,13 @@ the CLI implementation.
 
 ```bash
 <cli-tools-root>/_repo/skills/cli-tool/scripts/test-cli-tool.sh --cli-name <name>
+```
+
+For worktree validation, run:
+
+```bash
+<cli-tools-root>/_repo/skills/cli-tool/scripts/test-cli-tool.sh --cli-name <name> \
+  --cli-executable "$CLI_EXECUTABLE"
 ```
 
 The script returns JSON with `success`, `summary`, `failures[]`, and `auth_required`.
@@ -468,6 +508,13 @@ installed CLI help:
 
 ```bash
 <cli-tools-root>/_repo/skills/cli-tool/scripts/regenerate-usage-json <name> --check
+```
+
+For worktree validation, run:
+
+```bash
+<cli-tools-root>/_repo/skills/cli-tool/scripts/regenerate-usage-json <name> \
+  --cli-executable "$CLI_EXECUTABLE" --check
 ```
 
 The check must return `"changed": false`. If it reports drift, refresh the map,

@@ -76,7 +76,9 @@ def test_config_does_not_override_clear_ephemeral(cli_name, cli_dir, test_config
     )
 
 
-def test_auth_no_clear_credentials_on_force(cli_name, cli_dir, test_config, command_filter):
+def test_auth_no_clear_credentials_on_force(
+    cli_name, cli_dir, cli_executable, test_config, command_filter
+):
     """Auth commands must NOT call clear_credentials() for --force flows.
 
     clear_credentials() wipes ALL fields including static ones (API keys, etc.).
@@ -113,7 +115,7 @@ def test_auth_no_clear_credentials_on_force(cli_name, cli_dir, test_config, comm
         try:
             import subprocess
             result = subprocess.run(
-                [cli_name, "--help"], capture_output=True, text=True, timeout=10
+                [cli_executable, "--help"], capture_output=True, text=True, timeout=10
             )
             help_text = result.stdout
         except Exception:
