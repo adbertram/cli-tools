@@ -19,16 +19,21 @@ fi
 
 SCRIPT_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLI_TOOLS_DIR="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
-TOOL_DIR="$CLI_TOOLS_DIR/$TOOL_NAME"
+STANDARD_TOOL_DIR="$CLI_TOOLS_DIR/$TOOL_NAME"
+PERSONAL_TOOL_DIR="$CLI_TOOLS_DIR/_personal/$TOOL_NAME"
 SKILL_DIR="$CLI_TOOLS_DIR/_repo/skills/${TOOL_NAME}-cli"
 TEST_CONFIG="$CLI_TOOLS_DIR/_repo/skills/cli-tool/tests/cli_test_config.toml"
 README_PATH="$CLI_TOOLS_DIR/README.md"
 DOCS_PATH="$CLI_TOOLS_DIR/_repo/docs/cli_tools.md"
 SYMLINK_PATH="$HOME/.local/bin/$TOOL_NAME"
 
-# Check if tool directory exists
-if [ ! -d "$TOOL_DIR" ]; then
-    echo "Error: CLI tool '$TOOL_NAME' not found at $TOOL_DIR" >&2
+# Resolve the standard location first, then a personal CLI under _personal/.
+if [ -d "$STANDARD_TOOL_DIR" ]; then
+    TOOL_DIR="$STANDARD_TOOL_DIR"
+elif [ -d "$PERSONAL_TOOL_DIR" ]; then
+    TOOL_DIR="$PERSONAL_TOOL_DIR"
+else
+    echo "Error: CLI tool '$TOOL_NAME' not found at $STANDARD_TOOL_DIR or $PERSONAL_TOOL_DIR" >&2
     exit 1
 fi
 
