@@ -234,6 +234,9 @@ class BrowserAutomation:
     AUTH_LOGIN_ERROR_SELECTOR = ""  # Selector visible when submitted credentials are rejected
     AUTH_LOGIN_USERNAME_SECRET = ""  # CLI-tools secret-manager name
     AUTH_LOGIN_PASSWORD_SECRET = ""  # CLI-tools secret-manager name
+    # Derive username/password secret names from the CLI tool name and active
+    # profile using the shared profile-secret naming convention.
+    AUTH_LOGIN_SECRETS_PROFILE_SCOPED = False
     AUTH_LOGIN_TOTP_SELECTOR = ""  # Selector for a TOTP challenge input
     AUTH_LOGIN_TOTP_SUBMIT_SELECTOR = ""  # Selector for the TOTP submit control
     AUTH_LOGIN_TOTP_SECRET = ""  # CLI-tools secret-manager Base32 seed name
@@ -384,6 +387,21 @@ class BrowserAutomation:
 
     def __init__(self, config):
         self.config = config
+        if self.AUTH_LOGIN_SECRETS_PROFILE_SCOPED:
+            from .config import _secret_name_for_profile_field
+
+            tool_name = self._tool_name()
+            profile_name = self._profile_name()
+            self.AUTH_LOGIN_USERNAME_SECRET = _secret_name_for_profile_field(
+                tool_name,
+                "USERNAME",
+                profile_name,
+            )
+            self.AUTH_LOGIN_PASSWORD_SECRET = _secret_name_for_profile_field(
+                tool_name,
+                "PASSWORD",
+                profile_name,
+            )
         self._page: Optional[BrowserHarnessService] = None
         self._service: Optional[BrowserHarnessService] = None
         self._auth_verified_at: float = 0

@@ -30,7 +30,7 @@ After installation, the `facebook` command will be available in your terminal.
 # Check if browser session is active
 facebook auth status
 
-# Login (opens headed browser)
+# Login (uses secret-manager credentials; opens a headed browser only for a human gate)
 facebook auth login
 
 # Browse marketplace listings
@@ -67,10 +67,9 @@ This CLI is a **wrapper** around the `playwright` command-line tool:
 Manage browser authentication sessions.
 
 ```bash
-# Login via headed browser
-facebook auth login
-facebook auth login --force  # Re-authenticate
-facebook auth login --force --profile work  # Uses USERNAME/PASSWORD from that profile
+# Login or refresh a browser session
+facebook auth login --profile default --credential-type browser_session
+facebook auth login --force --profile work --credential-type browser_session
 
 # Check authentication status
 facebook auth status
@@ -85,11 +84,20 @@ facebook auth logout
 facebook auth logout --force  # Skip confirmation
 ```
 
-`facebook auth login --force --profile <name>` requires `USERNAME` and
-`PASSWORD` in that auth profile. The CLI submits those credentials into the
-Facebook login form. If Facebook presents a checkpoint, two-step, or captcha
-screen, complete it manually in the opened browser; the CLI waits until the
-login finishes and the browser session is saved.
+Store reusable Facebook login credentials in the CLI-tools secret manager,
+never in an authentication-profile `.env` file. The default browser profile
+uses `facebook-username` and `facebook-password`; a named profile uses
+`facebook-<profile>-username` and `facebook-<profile>-password`.
+
+```bash
+printf '%s' "$FACEBOOK_USERNAME" | _repo/_secret-manager/secrets.sh set --tool facebook --type username
+printf '%s' "$FACEBOOK_PASSWORD" | _repo/_secret-manager/secrets.sh set --tool facebook --type password
+```
+
+The CLI reads those secrets only for the browser-login flow. Browser cookies
+and other session state remain in the authentication profile. If Facebook
+presents a checkpoint, two-step, or CAPTCHA screen, complete it in the opened
+browser; the session is then saved for later commands.
 
 ### Marketplace
 
@@ -567,10 +575,14 @@ Supported operators: `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `contains`, `startswi
 Non-auth configuration is stored in `~/.local/share/cli-tools/facebook/.env`.
 Browser-auth profiles live under
 `~/.local/share/cli-tools/facebook/authentication_profiles/<profile>/`.
+Their `.env` files contain profile metadata and CLI-managed runtime state only;
+reusable usernames and passwords are stored in the CLI-tools secret manager.
 
-Facebook login runs in normal headed Chrome, while routine commands reuse the
-same persistent profile headlessly. The CLI derives a normal Chrome User-Agent
-from the installed Chrome version for both modes so Facebook sees one consistent
+Facebook login first uses the secret-manager credentials headlessly. If Facebook
+requires a checkpoint, two-step verification, or CAPTCHA, it opens a headed
+browser for you to complete that human gate. Routine commands reuse the same
+persistent profile headlessly. The CLI derives a normal Chrome User-Agent from
+the installed Chrome version for both modes so Facebook sees one consistent
 browser fingerprint instead of `Chrome` during login and `HeadlessChrome`
 during automation. Set `BROWSER_USER_AGENT` only when an explicit override is
 required.
