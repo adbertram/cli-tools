@@ -162,6 +162,99 @@ def test_test_script_supports_worktree_executable_override():
     assert '--cli-executable) CLI_EXECUTABLE="$2"; shift 2 ;;' in script_text
     assert "test_cli_executable_override" in script_text
     assert 'PYTEST_ARGS=(--cli-name "$CLI_NAME" --cli-executable "$CLI_EXECUTABLE"' in script_text
+    assert 'uv run python -m pytest "$SKILL_DIR/tests" "${PYTEST_ARGS[@]}"' in script_text
+
+
+def test_test_script_runs_real_pytest_for_worktree_executable(tmp_path):
+    """The wrapper must load its conftest before parsing a worktree executable."""
+    fake_repo = tmp_path / "repo"
+    fake_skill_dir = fake_repo / "_repo" / "skills" / "cli-tool"
+    fake_scripts_dir = fake_skill_dir / "scripts"
+    fake_tests_dir = fake_skill_dir / "tests"
+    fake_scripts_dir.mkdir(parents=True)
+    fake_tests_dir.mkdir()
+
+    for script_name in ("test-cli-tool.sh", "junit_to_json.py"):
+        shutil.copy2(SKILL_ROOT / "scripts" / script_name, fake_scripts_dir / script_name)
+    (fake_scripts_dir / "test-cli-tool.sh").chmod(0o755)
+    for config_name in ("pyproject.toml", "pytest.ini", "uv.lock"):
+        shutil.copy2(SKILL_ROOT / config_name, fake_skill_dir / config_name)
+
+    (fake_tests_dir / "__init__.py").write_text("", encoding="utf-8")
+    (fake_tests_dir / "auth_status_schema.py").write_text(
+        "def parse_and_validate_stdout(*_args, **_kwargs):\n    return {}, []\n",
+        encoding="utf-8",
+    )
+    (fake_tests_dir / "conftest.py").write_text(
+        "def pytest_addoption(parser):\n"
+        "    parser.addoption('--cli-name')\n"
+        "    parser.addoption('--cli-executable')\n"
+        "    parser.addoption('--command')\n",
+        encoding="utf-8",
+    )
+    (fake_tests_dir / "test_worktree_options.py").write_text(
+        "from pathlib import Path\n\n"
+        "def test_worktree_options(pytestconfig):\n"
+        "    assert pytestconfig.getoption('--cli-name') == 'demo'\n"
+        "    assert pytestconfig.getoption('--command') == 'probe'\n"
+        "    assert Path(pytestconfig.getoption('--cli-executable')).name == 'demo'\n",
+        encoding="utf-8",
+    )
+
+    shared_source = REPO_ROOT / "_repo" / "cli-tools-shared"
+    (fake_repo / "_repo" / "cli-tools-shared").symlink_to(
+        shared_source,
+        target_is_directory=True,
+    )
+
+    tool_dir = fake_repo / "demo"
+    tool_dir.mkdir()
+    (tool_dir / "pyproject.toml").write_text(
+        "[project]\nname = 'demo-cli'\nversion = '0.1.0'\n",
+        encoding="utf-8",
+    )
+    (tool_dir / "README.md").write_text(
+        "# Demo\n\n## DESCRIPTION\n\n"
+        "This CLI lets you use demo data.\n"
+        "Use it to test worktree validation.\n",
+        encoding="utf-8",
+    )
+    executable = tool_dir / ".venv" / "bin" / "demo"
+    executable.parent.mkdir(parents=True)
+    executable.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    executable.chmod(0o755)
+
+    home_dir = tmp_path / "home"
+    uv_cache_dir = Path(os.environ.get("UV_CACHE_DIR", Path.home() / ".cache" / "uv"))
+    result = subprocess.run(
+        [
+            str(fake_scripts_dir / "test-cli-tool.sh"),
+            "--cli-name",
+            "demo",
+            "--command",
+            "probe",
+            "--cli-executable",
+            str(executable),
+        ],
+        cwd=fake_repo,
+        env={
+            **os.environ,
+            "HOME": str(home_dir),
+            "UV_CACHE_DIR": str(uv_cache_dir),
+            "UV_PROJECT_ENVIRONMENT": str(tmp_path / "harness-env"),
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["success"] is True
+    assert payload["summary"]["passed"] == 1
+    assert payload["failures"] == []
+    assert "unrecognized arguments" not in payload["raw_output"]
 
 
 @pytest.mark.parametrize("override_kind", ["missing", "not-executable"])
