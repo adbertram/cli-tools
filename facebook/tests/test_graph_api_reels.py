@@ -253,6 +253,42 @@ def test_legacy_browser_credentials_move_to_secret_manager_before_config_load(mo
     }
 
 
+def test_legacy_browser_credentials_preserve_literal_dollar_braces_before_scrubbing(
+    monkeypatch, tmp_path
+):
+    profile = tmp_path / "default"
+    profile.mkdir()
+    env_path = profile / ".env"
+    env_path.write_text(
+        "ACTIVE=true\n"
+        "USERNAME=legacy${UNSET}-user\n"
+        "PASSWORD=legacy${UNSET}-password\n"
+    )
+    stored = []
+
+    monkeypatch.setattr(config_mod, "get_profiles_base_dir", lambda _name: tmp_path)
+    monkeypatch.setattr(config_mod, "_secret_exists", lambda _name: False)
+
+    def fake_set_secret(secret_name, value, target_env_path):
+        assert target_env_path == env_path
+        assert "USERNAME=legacy${UNSET}-user" in env_path.read_text()
+        assert "PASSWORD=legacy${UNSET}-password" in env_path.read_text()
+        stored.append((secret_name, value))
+
+    monkeypatch.setattr(config_mod, "_set_secret_value", fake_set_secret)
+
+    config_mod.migrate_legacy_profiles()
+
+    assert stored == [
+        ("facebook-username", "legacy${UNSET}-user"),
+        ("facebook-password", "legacy${UNSET}-password"),
+    ]
+    assert dotenv_values(env_path) == {
+        "ACTIVE": "true",
+        "AUTH_TYPE": BROWSER_AUTH_TYPE,
+    }
+
+
 def test_legacy_profile_uses_profile_scoped_secret_names(monkeypatch, tmp_path):
     profile = tmp_path / "work"
     profile.mkdir()

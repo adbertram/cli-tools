@@ -89,7 +89,9 @@ def migrate_legacy_profiles() -> None:
     if not profiles_dir.exists():
         return
     for env_path in sorted(profiles_dir.glob("*/.env")):
-        values = dotenv_values(env_path)
+        # Legacy credential values are opaque. In particular, a literal
+        # ``${...}`` fragment must reach the secret manager unchanged.
+        values = dotenv_values(env_path, interpolate=False)
         profile_name = profile_name_from_path(env_path)
         for field_name in BROWSER_LOGIN_FIELDS:
             _migrate_legacy_browser_login_field(
