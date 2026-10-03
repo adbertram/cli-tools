@@ -190,11 +190,15 @@ def test_remover_should_delete_every_registration_surface(tmp_path):
     assert f"tool uninstall {TOOL}-cli" in uv_log
 
 
-def test_remover_should_delete_personal_cli_without_changing_gitignore(tmp_path):
+def test_remover_should_delete_personal_cli_and_its_gitignore_reinclude(tmp_path):
     repo_root, home_dir = _build_fixture_repo(tmp_path, personal=True)
     personal_tool_dir = repo_root / "_personal" / TOOL
     gitignore = repo_root / ".gitignore"
-    gitignore_contents = "_personal/*\n"
+    gitignore_contents = (
+        "_personal/*\n"
+        f"!_personal/{OTHER_TOOL}/\n"
+        f"!_personal/{TOOL}/\n"
+    )
     gitignore.write_text(gitignore_contents, encoding="utf-8")
 
     result = _run_remover(repo_root, home_dir, TOOL)
@@ -206,7 +210,10 @@ def test_remover_should_delete_personal_cli_without_changing_gitignore(tmp_path)
     assert not (repo_root / TOOL).exists()
     assert not (home_dir / ".local" / "bin" / TOOL).exists()
     assert not (repo_root / "_repo" / "skills" / f"{TOOL}-cli").exists()
-    assert gitignore.read_text(encoding="utf-8") == gitignore_contents
+    assert gitignore.read_text(encoding="utf-8") == (
+        "_personal/*\n"
+        f"!_personal/{OTHER_TOOL}/\n"
+    )
 
 
 def test_remover_should_finish_when_the_uv_tool_is_not_installed(tmp_path):

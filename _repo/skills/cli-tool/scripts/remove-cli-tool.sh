@@ -25,13 +25,16 @@ SKILL_DIR="$CLI_TOOLS_DIR/_repo/skills/${TOOL_NAME}-cli"
 TEST_CONFIG="$CLI_TOOLS_DIR/_repo/skills/cli-tool/tests/cli_test_config.toml"
 README_PATH="$CLI_TOOLS_DIR/README.md"
 DOCS_PATH="$CLI_TOOLS_DIR/_repo/docs/cli_tools.md"
+GITIGNORE_PATH="$CLI_TOOLS_DIR/.gitignore"
 SYMLINK_PATH="$HOME/.local/bin/$TOOL_NAME"
 
 # Resolve the standard location first, then a personal CLI under _personal/.
+IS_PERSONAL_TOOL=false
 if [ -d "$STANDARD_TOOL_DIR" ]; then
     TOOL_DIR="$STANDARD_TOOL_DIR"
 elif [ -d "$PERSONAL_TOOL_DIR" ]; then
     TOOL_DIR="$PERSONAL_TOOL_DIR"
+    IS_PERSONAL_TOOL=true
 else
     echo "Error: CLI tool '$TOOL_NAME' not found at $STANDARD_TOOL_DIR or $PERSONAL_TOOL_DIR" >&2
     exit 1
@@ -62,6 +65,24 @@ fi
 # Remove directory
 rm -rf "$TOOL_DIR"
 echo "Removed: $TOOL_DIR"
+
+# Personal tools have a root .gitignore re-include entry that must not outlive
+# the directory. Preserve the broad _personal/* rule and other tool entries.
+if [ "$IS_PERSONAL_TOOL" = true ] && [ -f "$GITIGNORE_PATH" ]; then
+    "$PYTHON_BIN" - "$GITIGNORE_PATH" "$TOOL_NAME" <<'PY'
+import sys
+from pathlib import Path
+
+gitignore_path = Path(sys.argv[1])
+tool = sys.argv[2]
+reinclude = f"!_personal/{tool}/"
+lines = gitignore_path.read_text().splitlines(keepends=True)
+kept = [line for line in lines if line.rstrip("\r\n") != reinclude]
+if len(kept) != len(lines):
+    gitignore_path.write_text("".join(kept))
+    print(f"Removed: {reinclude} from {gitignore_path}")
+PY
+fi
 
 # Remove symlink if exists
 if [ -L "$SYMLINK_PATH" ]; then
