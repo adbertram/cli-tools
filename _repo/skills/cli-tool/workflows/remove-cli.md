@@ -1,14 +1,21 @@
 <process>
 ## Step 1: Verify CLI Exists
 
-Confirm the target CLI tool exists:
+Confirm the target CLI tool exists at either the standard or personal location:
 
 ```bash
-ls <cli-tools-root>/<name>
+if [ -d <cli-tools-root>/<name> ]; then
+  ls <cli-tools-root>/<name>
+elif [ -d <cli-tools-root>/_personal/<name> ]; then
+  ls <cli-tools-root>/_personal/<name>
+else
+  printf '%s\n' 'CLI directory not found at either standard or _personal location.' >&2
+  exit 1
+fi
 ls -la ~/.local/bin/<name>
 ```
 
-If the directory does not exist, inform the user and stop.
+If neither directory exists, inform the user and stop.
 
 ## Step 2: Show What Will Be Removed
 
@@ -48,8 +55,9 @@ Edit `<cli-tools-root>/_repo/docs/cli_tools.md` to remove the table row for `<na
 
 Confirm:
 ```bash
-# Directory should be gone
-ls <cli-tools-root>/<name> 2>&1
+# Neither standard nor personal CLI directory should remain
+test ! -e <cli-tools-root>/<name>
+test ! -e <cli-tools-root>/_personal/<name>
 # Symlink should be gone
 ls -la ~/.local/bin/<name> 2>&1
 # Service skill should be gone

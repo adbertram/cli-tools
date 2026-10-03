@@ -90,13 +90,14 @@ def test_list_script_resolves_cli_tools_dir_through_symlinked_skill_dir(tmp_path
 
 
 def test_remove_script_resolves_cli_tools_dir_through_symlinked_skill_dir(tmp_path):
-    """remove-cli-tool.sh must look for the named tool under the real root."""
+    """remove-cli-tool.sh must report both lookup locations under the real root."""
     repo_root, scripts = _symlinked_skill_scripts(tmp_path)
     expected_root = repo_root.resolve()
 
     result = _run(scripts / "remove-cli-tool.sh", MISSING_TOOL)
 
     assert result.returncode == 1, result.stderr
+    assert f"{expected_root}/{MISSING_TOOL}" in result.stderr, result.stderr
     assert f"{expected_root}/_personal/{MISSING_TOOL}" in result.stderr, result.stderr
 
 

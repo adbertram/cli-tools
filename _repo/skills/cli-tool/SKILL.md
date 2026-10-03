@@ -18,6 +18,19 @@ description: >-
 Route every cli-tools request to the correct repo-owned CLI skill or lifecycle workflow, then execute against the real command contract.
 </objective>
 
+<project_overrides>
+Before acting on this skill, run:
+
+```bash
+~/.agents/skills/skill-expert/scripts/load-skill-overrides.sh cli-tool
+```
+
+Apply any printed instructions alongside this skill's own workflow: they extend it and
+never repeal its limits. No output means no project override is in effect. A non-zero
+exit means the project's override file is broken -- report it and stop rather than
+silently running unmodified.
+</project_overrides>
+
 <agent_routing>
 Service-operation routing stays in the current session: use `<cli-tools-root>/_repo/skills/cli-tool/workflows/skill-router.md`, then load the selected service skill and its adjacent `usage.json`.
 
