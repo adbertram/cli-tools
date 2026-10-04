@@ -287,3 +287,66 @@ def test_readiness_budget_exhausted_after_navigation_prevents_discovery(client,m
     with pytest.raises(ClientError,match='readiness_deadline_exceeded'):client.linked_accounts()
     page.goto_frame.assert_called_once()
     page.evaluate_in_iframe.assert_not_called();client._request.assert_not_called()
+
+def test_rest_direct_app_keeps_one_account_preflight_and_original_transport(client):
+    from whop_cli.client import FETCH_JS
+    account=Mock();account.evaluate.return_value={'status':200,'text':json.dumps({'id':'user_TEST','username':'test'})}
+    page=action_page([True,{'status':200,'text':json.dumps({'success':True,'data':[]})}],suffix='/discover')
+    client.browser.get_page.side_effect=[account,page]
+    assert client._rest('/api/campaign/campaigns/discover',{'collapseGroups':'true','limit':50,'sortBy':'newest'})['data']==[]
+    assert client.browser.get_page.call_args_list[0].args==('https://whop.com/',)
+    assert client.browser.get_page.call_args_list[1].args==('https://example.apps.whop.com/c/exp_TEST/discover',)
+    assert account.evaluate.call_count==1
+    assert account.evaluate.call_args.args[1]['path']=='/api/v1/users/me'
+    page.goto_frame.assert_not_called();page.evaluate.assert_not_called()
+    transport=page.evaluate_in_iframe.call_args_list[-1]
+    assert FETCH_JS in transport.args[1]
+    assert transport.args[2]['arg']=={'path':'/api/campaign/campaigns/discover?collapseGroups=true&limit=50&sortBy=newest','action':None,'body':None}
+
+def test_rest_wrapper_routes_only_matched_app_and_fetches_guarded_context(client,monkeypatch):
+    monkeypatch.setattr('whop_cli.client.time.sleep',lambda _:None)
+    client.account=Mock(return_value={'id':'user_TEST','username':'test'})
+    page=action_page([True,{'status':200,'text':json.dumps({'success':True,'data':{'id':'campaign_TEST'}})}],suffix='/discover')
+    shell={'id':'shell','origin':'https://whop.com','path':'/clippingculture/exp_TEST/app/'}
+    app={'id':'app','origin':'https://example.apps.whop.com','path':'/c/exp_TEST/settings'}
+    page.frame_documents.side_effect=[[shell,app],[shell,{**app,'path':'/c/exp_TEST/discover'}]]
+    client.browser.get_page.return_value=page
+    assert client.campaign('campaign_TEST')['id']=='campaign_TEST'
+    client.account.assert_called_once_with()
+    page.goto_frame.assert_called_once_with('app','https://example.apps.whop.com/c/exp_TEST/discover',request_timeout=ANY)
+    assert 0<page.goto_frame.call_args.kwargs['request_timeout']<=10
+    page.evaluate.assert_not_called()
+    assert all(call.args[0]=='https://example.apps.whop.com/c/exp_TEST/discover' for call in page.evaluate_in_iframe.call_args_list)
+    assert page.evaluate_in_iframe.call_args.args[2]['arg']['path']=='/api/campaign/campaigns/discover/campaign_TEST'
+
+def test_rest_scope_change_refuses_request_without_retry(client):
+    client.account=Mock(return_value={'id':'user_TEST','username':'test'})
+    page=action_page([],suffix='/discover');page.evaluate_in_iframe.side_effect=[True,{'scopeMatched':False}]
+    client.browser.get_page.return_value=page
+    with pytest.raises(ClientError,match='document_scope_changed'):client.campaign('campaign_TEST')
+    assert page.evaluate_in_iframe.call_count==2
+    page.evaluate.assert_not_called()
+
+def test_rest_ambiguous_app_context_refuses_fetch(client):
+    page=action_page([],suffix='/discover');row=page.frame_documents.return_value[0]
+    page.frame_documents.return_value=[row,{**row,'id':'second'}]
+    client._reward_page=Mock(return_value=page)
+    with pytest.raises(ClientError,match='document_ambiguous'):client.campaign('campaign_TEST')
+    page.goto_frame.assert_not_called();page.evaluate.assert_not_called();page.evaluate_in_iframe.assert_not_called()
+
+@pytest.mark.parametrize('origin,path',[('https://whop.com','/clippingculture/exp_TEST/app/'),
+    ('https://example.apps.whop.com','/c/exp_TESTevil'),('https://wrong.apps.whop.com','/c/exp_TEST')])
+def test_rest_wrong_context_hits_owning_readiness_deadline_without_fetch(client,monkeypatch,origin,path):
+    ticks=iter([0,0,11]);monkeypatch.setattr('whop_cli.client.time.monotonic',lambda:next(ticks))
+    page=action_page([],suffix='/discover');page.frame_documents.return_value=[{'id':'wrong','origin':origin,'path':path}]
+    client._reward_page=Mock(return_value=page)
+    with pytest.raises(ClientError,match='read_action_page_not_ready'):client.campaign('campaign_TEST')
+    page.goto_frame.assert_not_called();page.evaluate.assert_not_called();page.evaluate_in_iframe.assert_not_called()
+
+def test_rest_budget_exhausted_after_navigation_never_fetches(client,monkeypatch):
+    ticks=iter([0,0,0,0,11]);monkeypatch.setattr('whop_cli.client.time.monotonic',lambda:next(ticks))
+    monkeypatch.setattr('whop_cli.client.time.sleep',lambda _:None)
+    page=action_page([],suffix='/discover');page.frame_documents.return_value=[{'id':'app','origin':'https://example.apps.whop.com','path':'/c/exp_TEST/settings'}]
+    client._reward_page=Mock(return_value=page)
+    with pytest.raises(ClientError,match='readiness_deadline_exceeded'):client.campaign('campaign_TEST')
+    page.goto_frame.assert_called_once();page.evaluate.assert_not_called();page.evaluate_in_iframe.assert_not_called()
