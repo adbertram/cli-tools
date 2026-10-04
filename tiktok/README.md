@@ -87,6 +87,17 @@ authentication, and saves the same profile's session. Manual mode never reads or
 submits stored login credentials. It requires an explicit non-default profile
 and `browser_session` credential type; ordinary login behavior is unchanged.
 
+Read the current account identity without exporting passport contact/session
+fields. IDs stay strings so large TikTok account IDs keep their exact digits:
+
+```bash
+tiktok account get --profile clipping
+tiktok account get --profile clipping --expected-username YOUR_HANDLE
+```
+
+Use `--expected-username` and/or `--expected-account-id` for an explicit account
+guard. A mismatched, expired, or malformed identity fails without returning data.
+
 ### Transcripts Download
 
 ```bash

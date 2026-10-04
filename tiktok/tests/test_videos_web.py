@@ -119,6 +119,18 @@ def test_list_posted_videos_requires_sec_uid():
         _client(page).list_posted_videos("adam")
 
 
+def test_list_posted_videos_reports_observed_account_not_found():
+    page = FakePage([], sec_uid={"error": "account_not_found"})
+    with pytest.raises(ClientError, match="account_not_found"):
+        _client(page).list_posted_videos("ata_clipping")
+    assert page.requests == []
+
+
+def test_existing_empty_profile_remains_empty_list():
+    page = FakePage([(200, {"statusCode": 0, "itemList": [], "hasMore": False})])
+    assert _client(page).list_posted_videos("ata_clipper") == []
+
+
 def test_get_posted_video_missing_id_errors():
     page = FakePage([(200, {"statusCode": 0, "itemList": [_aweme("1", "x")], "hasMore": False})])
     with pytest.raises(ClientError, match="Video 2 not found"):

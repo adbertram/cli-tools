@@ -3,6 +3,8 @@
 import subprocess
 import time
 import json
+import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 from urllib.parse import quote
@@ -267,6 +269,8 @@ def get_client() -> TiktokClient:
 FAVORITES_PATH = "/api/user/collect/item_list/?aid=1988"
 POSTS_PATH = "/api/post/item_list/?aid=1988"
 DELETE_PATH = "/api/aweme/delete/?aid=1988"
+ACCOUNT_INFO_PATH = "/passport/web/account/info/?aid=1988"
+ACCOUNT_INFO_ORIGIN = "https://www.tiktok.com"
 
 # Page size TikTok's own web app requests, and the paging ceiling this client
 # walks before giving up on reaching --limit.
@@ -304,7 +308,9 @@ _SEC_UID_JS = """() => {
     const el = document.getElementById('__UNIVERSAL_DATA_FOR_REHYDRATION__');
     if (!el) return null;
     const detail = (JSON.parse(el.textContent).__DEFAULT_SCOPE__ || {})['webapp.user-detail'] || {};
-    return ((detail.userInfo || {}).user || {}).secUid || null;
+    const user = (detail.userInfo || {}).user;
+    if (detail.statusCode === 10221 && !user) return { error: 'account_not_found' };
+    return (user || {}).secUid || null;
 }"""
 
 
@@ -362,6 +368,37 @@ def favorite_from_video_metadata(metadata: dict) -> Dict:
         "author": metadata.get("uploader"),
         "saved_at": None,
     }
+
+
+def normalize_account_identity(payload: dict) -> Dict:
+    """Whitelist observed passport identity fields; reject inconsistent IDs."""
+    malformed = "TikTok account identity response is malformed; identity was not verified."
+    if not isinstance(payload, dict):
+        raise ClientError(malformed)
+    data = payload.get("data")
+    if payload.get("message") == "error":
+        raise ClientError("TikTok account session is not authenticated. " + _LOGIN_HINT)
+    if payload.get("message") != "success" or not isinstance(data, dict):
+        raise ClientError(malformed)
+    if "error_code" in data:
+        if type(data["error_code"]) is not int:
+            raise ClientError(malformed)
+        if data["error_code"] != 0:
+            raise ClientError("TikTok account session is not authenticated. " + _LOGIN_HINT)
+    account_id = data.get("user_id_str")
+    numeric_id = data.get("user_id")
+    username = data.get("username")
+    if (
+        not isinstance(account_id, str)
+        or not re.fullmatch(r"[1-9][0-9]{0,63}", account_id)
+        or type(numeric_id) is not int
+        or str(numeric_id) != account_id
+        or not isinstance(username, str)
+        or not re.fullmatch(r"[A-Za-z0-9_.]{1,256}", username)
+        or not any(char.isalnum() or char == "_" for char in username)
+    ):
+        raise ClientError(malformed)
+    return {"account_id": account_id, "username": username}
 
 
 class TikTokWebClient:
@@ -492,6 +529,37 @@ class TikTokWebClient:
 
         return items[:limit]
 
+    def get_account(self, expected_username: Optional[str] = None, expected_account_id: Optional[str] = None) -> Dict:
+        """Read verified current identity without exporting passport secrets.
+
+        The shared in-page fetch returns response TEXT, parsed by Python, so
+        64-bit user_id values never pass through a JavaScript Number.
+        """
+        if expected_username is not None:
+            expected_username = expected_username.strip().removeprefix("@")
+            if not re.fullmatch(r"[A-Za-z0-9_.]{1,256}", expected_username):
+                raise ClientError("--expected-username must be a nonempty TikTok handle.")
+        if expected_account_id is not None and not re.fullmatch(r"[1-9][0-9]{0,63}", expected_account_id):
+            raise ClientError("--expected-account-id must be a positive numeric ID.")
+        try:
+            page = self._get_browser().get_page(ACCOUNT_INFO_ORIGIN + "/")
+            payload = self._fetch_json(page, ACCOUNT_INFO_PATH)
+        except Exception:
+            # Generic web errors can include response bodies or browser details.
+            # Passport contains session_key/contact fields; never echo them.
+            raise ClientError("TikTok account identity request failed; identity was not verified.") from None
+        identity = normalize_account_identity(payload)
+        if expected_username is not None and identity["username"].casefold() != expected_username.casefold():
+            raise ClientError("TikTok account identity mismatch: username does not match --expected-username.")
+        if expected_account_id is not None and identity["account_id"] != expected_account_id:
+            raise ClientError("TikTok account identity mismatch: account ID does not match --expected-account-id.")
+        return {
+            **identity,
+            "profile": self.config.get_active_profile_name(),
+            "observed_at": datetime.now(timezone.utc).isoformat(),
+            "provenance": ACCOUNT_INFO_ORIGIN + ACCOUNT_INFO_PATH,
+        }
+
     def list_favorites(self, limit: int = 100) -> List[Dict]:
         """List the logged-in account's saved (favorited) TikTok videos."""
         return self._list_items(self._page(), FAVORITES_PATH, normalize_favorite, limit)
@@ -504,6 +572,8 @@ class TikTokWebClient:
             raise ClientError("A TikTok username is required.")
         page = self._page(f"/@{quote(handle)}")
         sec_uid = page.evaluate(_SEC_UID_JS)
+        if isinstance(sec_uid, dict) and sec_uid.get("error") == "account_not_found":
+            raise ClientError(f"account_not_found: TikTok profile @{handle} was not found.")
         if not sec_uid:
             raise ClientError(
                 f"TikTok profile page for @{handle} did not expose "

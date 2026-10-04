@@ -1,8 +1,8 @@
 {
   "tool": "tiktok",
   "description": "TikTok transcript downloader using yt-dlp",
-  "discovered_at": "2026-10-04T01:14:17Z",
-  "total_commands": 20,
+  "discovered_at": "2026-10-04T01:34:55Z",
+  "total_commands": 21,
   "global_options": [
     {
       "name": "--version",
@@ -13,6 +13,52 @@
     }
   ],
   "commands": {
+    "account": {
+      "help": "Read verified current account identity",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get the authenticated account ID and username from TikTok's account endpoint. Numeric account IDs remain strings to preserve 64-bit precision. Optional expected-identity guards fail before returning data if the session differs.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--expected-username",
+              "type": "TEXT",
+              "required": false,
+              "help": "Fail unless the current username matches this handle"
+            },
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Fail unless the current numeric account ID matches exactly"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
     "auth": {
       "help": "Manage tiktok authentication",
       "arguments": [],

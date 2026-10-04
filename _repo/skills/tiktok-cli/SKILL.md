@@ -43,6 +43,7 @@ tiktok <command-group> <action> [arguments] [options]
 | Permanently delete one of your videos by id; requires `--yes` (`browser_session`). | `tiktok videos delete` |
 | Configure authentication, optionally using a manual browser login. | `tiktok auth login` |
 | Open visible Chrome for manual login in an isolated named browser profile; no stored credentials are submitted. | `tiktok auth login --profile clipping --credential-type browser_session --manual` |
+| Read verified current numeric account ID and username in a named browser profile. | `tiktok account get --profile clipping` |
 | Clear stored credentials. | `tiktok auth logout` |
 | Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``. | `tiktok auth status` |
 | Manage authentication profiles | `tiktok auth profiles` |
@@ -71,6 +72,7 @@ with `tiktok auth status --profile <named-profile>` before service operations.
 </principle>
 
 <principle name="Command Groups">
+- **account** -- Read current identity from TikTok's passport account-info endpoint. `get` uses `browser_session`, returns the numeric `account_id` as a string, and excludes contact/session fields. Optional `--expected-username` and `--expected-account-id` fail on mismatch; authentication alone does not establish the intended account.
 - **transcripts** -- Download TikTok video transcripts
 - **favorites** -- List and look up saved (favorited) TikTok videos. `list` needs a `browser_session` login (`tiktok auth login --credential-type browser_session`); `get` does not.
 - **videos** -- `publish`/`status` use the custom Content Posting API profile (`--profile posting`). `list`/`get`/`delete` use the `browser_session` profile because no official TikTok API lists private posts or deletes videos. A `SELF_ONLY` publish returns no post id; find it with `videos list --username <creator_username>` (publish output includes `creator_username`).

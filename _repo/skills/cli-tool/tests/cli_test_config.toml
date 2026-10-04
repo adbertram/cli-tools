@@ -361,3 +361,8 @@ list_commands = [
 # target ids), so there is no record a `get` could address. `audit list` returns
 # every field the page exposes.
 excluded_from_get_required = ["audit"]
+
+[cli_specific.tiktok]
+# account get reads the single current session identity, takes no resource ID,
+# and needs no collection command for ID discovery. Other groups remain checked.
+excluded_from_list_required = ["account"]
