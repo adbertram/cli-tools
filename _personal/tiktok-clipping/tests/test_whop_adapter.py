@@ -234,7 +234,7 @@ def test_actual_released_whop_sdk_roundtrips_runtime_receipt_binding_and_callbac
     (tmp_path/'owned-sdk-profile').mkdir(mode=0o700)
     client = WhopClient(sdk_config)
     client.account = Mock(return_value={'id': 'user_fixture', 'username': 'fixture', 'profile': 'rewards'})
-    client.linked_accounts = Mock(return_value=[{'accountId': publication['account_id'], 'platform': 'tiktok', 'status': 'active', 'username': 'ata_clipper', 'id': 'linked'}])
+    client.linked_accounts = Mock(return_value=[{'accountId': publication['account_id'], 'platform': 'tiktok', 'status': 'active', 'username': 'ata_clipper', 'id': 'linked', 'userId': 'creator_fixture'}])
     client.campaign = Mock(return_value={'id': 'campaign-1', 'name': 'TEST', 'description': 'Actual fixture brief', 'referenceMaterials': [], 'platforms': ['tiktok'],
         'status': 'active', 'private': False, 'requiresApplication': False,
         'payouts': [{'platform': 'tiktok', 'payoutType': 'cpm', 'rateCents': 100, 'minPayoutCents': 100, 'maxPayoutCents': 35000, 'budgetCents': 15000, 'spentCents': 0}]})
@@ -265,3 +265,21 @@ def test_actual_released_whop_sdk_roundtrips_runtime_receipt_binding_and_callbac
     sdk_row = client.reconcile_submission(request)
     assert sdk_row['state'] == 'submitted_verified' and sdk_row['binding']['publication'] == publication
     assert document.evaluate.call_count == 1
+
+    # Actual released SDK shared scan and individual net derivation, with only
+    # provider reads mocked. A gross-only pending row must not erase known net.
+    from tiktok_clipping_cli.revenue import normalize_revenue
+    client._rest.return_value = {'data': [
+        {'id': 'net_FIXTURE', 'submissionId': 'native-provider', 'campaignId': 'campaign-1',
+         'status': 'completed', 'currency': 'USD', 'netAmount': '900719925474099312345'},
+        {'id': 'pending_FIXTURE', 'submissionId': 'native-provider', 'campaignId': 'campaign-1',
+         'status': 'pending', 'currency': 'USD', 'amount': '40'}], 'pagination': {'nextCursor': None}}
+    scan = client.sync_submission_revenue()
+    assert scan['complete'] is True
+    raw = client.submission_revenue('native-provider', 'campaign-1', refresh_payouts=False)
+    assert raw['received_cents'] == '900719925474099312345'
+    assert raw['pending_cents'] is None and raw['amounts_verified'] is False
+    normalized = normalize_revenue(raw, engine.rewards(job_id), config['rewards_account'],
+        sdk_row['binding']['experience'], config['limits']['max_payload_bytes'])
+    assert normalized['revenue']['received_cents'] == raw['received_cents']
+    assert normalized['earnings'] is None and document.evaluate.call_count == 1

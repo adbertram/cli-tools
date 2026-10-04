@@ -155,3 +155,41 @@ def test_terminate_profile_processes_stops_only_profile_owned_pids(tmp_path, mon
     assert stopped == [300, 301]
     assert [pid for pid, _sig in signals] == [300, 301]
     assert alive == {400}
+
+
+def _mock_process_bytes(monkeypatch, raw):
+    from types import SimpleNamespace
+    from cli_tools_shared.browser import processes
+    def run(argv, **options):
+        assert argv==['ps','ax','-o','pid=,ppid=,stat=,command=']
+        assert options['capture_output'] is True and options['check'] is True
+        return SimpleNamespace(stdout=raw.decode(options.get('encoding','utf-8'),options.get('errors','strict')))
+    monkeypatch.setattr(processes.subprocess,'run',run)
+    return processes
+
+
+def test_invalid_unrelated_argv_does_not_hide_exact_owned_browser(monkeypatch,tmp_path):
+    import json
+    profile=tmp_path/'chromium-profile'
+    raw=b'50 1 S /usr/bin/python unrelated-\xe2-byte\n'+f'300 1 S /usr/bin/chromium --user-data-dir={profile}\n'.encode()
+    processes=_mock_process_bytes(monkeypatch,raw)
+    rows=processes.list_process_commands()
+    assert rows[0].command.encode('utf-8','surrogateescape')==b'/usr/bin/python unrelated-\xe2-byte'
+    pids=profile_process_pids(profile,processes=rows,current_pid=200,parent_pid=100)
+    assert pids==[300]
+    assert json.dumps({'browser_pids':pids})=='{"browser_pids": [300]}'
+
+
+def test_valid_nonascii_owned_profile_survives_process_decode(monkeypatch,tmp_path):
+    profile=tmp_path/'账户-é-chromium-profile'
+    raw=f'300 1 S /usr/bin/chromium --user-data-dir={profile}\n'.encode('utf-8')+b'50 1 S /bin/other \xff\n'
+    processes=_mock_process_bytes(monkeypatch,raw)
+    assert processes.profile_process_pids(profile,current_pid=200,parent_pid=100)==[300]
+
+
+def test_malformed_owned_path_cannot_match_valid_or_replacement_profile(monkeypatch,tmp_path):
+    profile=tmp_path/'chromium-profile'
+    raw=f'300 1 S /usr/bin/chromium --user-data-dir={profile}'.encode()+b'\xe2-byte\n'
+    processes=_mock_process_bytes(monkeypatch,raw)
+    assert processes.profile_process_pids(profile,current_pid=200,parent_pid=100)==[]
+    assert processes.profile_process_pids(str(profile)+'�-byte',current_pid=200,parent_pid=100)==[]

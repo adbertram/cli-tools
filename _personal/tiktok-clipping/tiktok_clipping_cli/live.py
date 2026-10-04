@@ -286,8 +286,37 @@ class LiveAdapter:
         bridge = WhopSubmissionAdapter(self.config)
         return self._participant_call(lambda client: bridge.reconcile(client, job, reward_ledger))
 
-    def reward_status(self, job, reward_ledger):
-        missing("verified_whop_participant_reward_status")
+    def sync_reward_revenue(self):
+        """Advance one shared provider pass before inspecting a due batch."""
+        def sync(client):
+            if not callable(getattr(client, 'sync_submission_revenue', None)):
+                missing('whop_individual_revenue_sdk')
+            result = client.sync_submission_revenue()
+            actor = self._reward_actor()
+            if not isinstance(result, dict) or any(result.get('binding', {}).get(k) != actor[k] for k in ('account_id', 'profile')):
+                raise SafetyError('revenue_sync_actor_changed')
+            failure = result.get('failure')
+            if failure is not None:
+                category = failure.get('category')
+                raise AdapterFailure(category if category in {'auth', 'rate_limit', 'transient'} else 'permanent',
+                    'whop:' + str(failure.get('code')), failure.get('retry_after_seconds'),
+                    provider='whop', code=failure.get('code'), status=failure.get('status') or None)
+            return result
+        return self._participant_call(sync)
+
+    def reward_status(self, job, reward_ledger, refresh_payouts=True):
+        from .revenue import normalize_revenue
+        from .whop_adapter import WhopSubmissionAdapter
+        self._reward_actor()
+        bound = WhopSubmissionAdapter(self.config)._binding(job, reward_ledger)
+        def read(client):
+            if not callable(getattr(client, 'submission_revenue', None)):
+                missing('whop_individual_revenue_sdk')
+            result = client.submission_revenue(reward_ledger['submission']['submission_id'],
+                reward_ledger['campaign_id'], refresh_payouts=refresh_payouts)
+            return normalize_revenue(result, reward_ledger, self._reward_actor(),
+                bound['experience'], self.config['limits']['max_payload_bytes'])
+        return self._participant_call(read)
 
     def visual_execution_state(self, envelope):
         from .visual import native_execution_state
