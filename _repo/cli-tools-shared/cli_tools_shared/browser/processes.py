@@ -44,6 +44,10 @@ def list_process_commands() -> list[ProcessCommand]:
             ["ps", "ax", "-o", "pid=,ppid=,stat=,command="],
             capture_output=True,
             text=True,
+            # Process argv is arbitrary OS bytes, not guaranteed UTF-8 text.
+            # Preserve malformed bytes without changing exact ownership matches.
+            encoding="utf-8",
+            errors="surrogateescape",
             check=True,
         )
     except (OSError, subprocess.CalledProcessError) as exc:
