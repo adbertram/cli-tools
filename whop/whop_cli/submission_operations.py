@@ -17,38 +17,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
 from cli_tools_shared.exceptions import ClientError
-from .client import FETCH_JS, MAX_LIMIT, WhopError, retry_after_seconds, decode_action, identifier, strict_json
+from .client import DISCOVER_ACTION_JS, FETCH_JS, MAX_LIMIT, WhopError, retry_after_seconds, decode_action, identifier, strict_json
 
 MAX_JOURNAL = 262144
 STUDIO_READBACK = 'https://www.tiktok.com/tiktok/creator/manage/item_list/v1/'
-# One shared ten-second abort signal bounds all discovery batches. An unseen
-# script cannot hide a second action reference and still produce readiness.
-SUBMISSION_DISCOVERY_JS = r"""async (name) => {
-    const sourcesOf=()=>[...new Set([...document.scripts].map(s=>s.src).filter(s=>s&&new URL(s).origin===location.origin))];
-    const sources=sourcesOf();
-    if(sources.length>120)return {action:null,reason:'script_limit',sources:sources.length,matches:0,failures:0};
-    const signal=AbortSignal.timeout(10000),matches=new Set();let failures=0,total=0;
-    for(let i=0;i<sources.length;i+=8){
-        const texts=await Promise.all(sources.slice(i,i+8).map(async url=>{
-            let reader;try{
-                const r=await fetch(url,{signal,redirect:'error'});
-                if(!r.ok||!r.body)throw Error();
-                reader=r.body.getReader();const chunks=[];let size=0;
-                while(true){const {value,done}=await reader.read();if(done)break;
-                    size+=value.byteLength;total+=value.byteLength;
-                    if(size>8000000||total>32000000)throw Error();chunks.push(value);
-                }
-                const decoder=new TextDecoder();return chunks.map(c=>decoder.decode(c,{stream:true})).join('')+decoder.decode();
-            }catch(_){failures++;return '';}finally{if(reader){try{await reader.cancel();}catch(_){}}}
-        }));
-        for(const text of texts){const re=/createServerReference\)\("([a-f0-9]{40,64})"[^;]{0,160}?"([A-Za-z]+)"/g;
-            for(const m of text.matchAll(re))if(m[2]===name)matches.add(m[1]);}
-        if(signal.aborted||total>32000000)break;
-    }
-    const after=sourcesOf(),changed=sources.length!==after.length||after.some(s=>!sources.includes(s));
-    const reason=matches.size>1?'ambiguous':failures||signal.aborted?'script_fetch_failed':changed?'scripts_changed':matches.size===1?'ready':'missing';
-    return {action:reason==='ready'?[...matches][0]:null,reason,sources:sources.length,matches:matches.size,failures};
-}"""
+# Read and create-action discovery share the same bounded, stable-snapshot scanner.
+SUBMISSION_DISCOVERY_JS = DISCOVER_ACTION_JS
 
 def canonical(value):
     return json.dumps(value,sort_keys=True,separators=(',',':'),allow_nan=False)

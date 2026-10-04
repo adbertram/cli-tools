@@ -57,25 +57,38 @@ FETCH_JS = """async ({path, action, body}) => {
 }"""
 FETCH_JS = FETCH_JS.replace("MAX_BODY",str(MAX_BODY))
 
+# Lazy route imports may add scripts during a scan. Rediscover complete fresh
+# snapshots only within one shared deadline/byte allowance; never retry actions.
 DISCOVER_ACTION_JS = r"""async (name) => {
-    const scriptSources = () => [...new Set([...document.scripts].map(s=>s.src).filter(s=>s && new URL(s).origin===location.origin))];
-    const sources = scriptSources();
-    if (sources.length>120) return {action:null,reason:'script_limit',sources:sources.length,matches:0,failures:0};
-    const matches = new Set();
-    let failures = 0;
-    for (let i=0;i<sources.length;i+=8) {
-        const texts=await Promise.all(sources.slice(i,i+8).map(async u=>{
-            try { const r=await fetch(u,{signal:AbortSignal.timeout(10000)});if(!r.ok){failures++;return '';}return await r.text(); }catch(_){failures++;return '';}
+    const sourcesOf=()=>[...new Set([...document.scripts].map(s=>s.src).filter(s=>s&&new URL(s).origin===location.origin))];
+    const signal=AbortSignal.timeout(10000);let total=0;
+    for(let attempt=1;attempt<=3;attempt++){
+    const sources=sourcesOf();
+    if(sources.length>120)return {action:null,reason:'script_limit',sources:sources.length,matches:0,failures:0};
+    const matches=new Set();let failures=0;
+    for(let i=0;i<sources.length;i+=8){
+        const texts=await Promise.all(sources.slice(i,i+8).map(async url=>{
+            let reader;try{
+                const r=await fetch(url,{signal,redirect:'error'});
+                if(!r.ok||!r.body)throw Error();
+                reader=r.body.getReader();const chunks=[];let size=0;
+                while(true){const {value,done}=await reader.read();if(done)break;
+                    size+=value.byteLength;total+=value.byteLength;
+                    if(size>8000000||total>32000000)throw Error();chunks.push(value);
+                }
+                const decoder=new TextDecoder();return chunks.map(c=>decoder.decode(c,{stream:true})).join('')+decoder.decode();
+            }catch(_){failures++;return '';}finally{if(reader){try{await reader.cancel();}catch(_){}}}
         }));
-        for(const text of texts){
-            const re=/createServerReference\)\("([a-f0-9]{40,64})"[^;]{0,160}?"([A-Za-z]+)"/g;
-            for(const m of text.matchAll(re)) if(m[2]===name) matches.add(m[1]);
-        }
+        for(const text of texts){const re=/createServerReference\)\("([a-f0-9]{40,64})"[^;]{0,160}?"([A-Za-z]+)"/g;
+            for(const m of text.matchAll(re))if(m[2]===name)matches.add(m[1]);}
+        if(signal.aborted||total>32000000)break;
     }
-    const after=scriptSources();
-    const changed=sources.length!==after.length || after.some(u=>!sources.includes(u));
-    const reason=matches.size>1?'ambiguous':matches.size===1?'ready':failures?'script_fetch_failed':changed?'scripts_changed':'missing';
-    return {action:matches.size===1?[...matches][0]:null,reason,sources:sources.length,matches:matches.size,failures};
+    const after=sourcesOf(),changed=sources.length!==after.length||after.some(s=>!sources.includes(s));
+    const reason=matches.size>1?'ambiguous':failures||signal.aborted?'script_fetch_failed':changed?'scripts_changed':matches.size===1?'ready':'missing';
+    if(reason==='scripts_changed'&&attempt<3&&!signal.aborted)continue;
+    return {action:reason==='ready'?[...matches][0]:null,reason,sources:sources.length,matches:matches.size,failures,attempts:attempt,afterSources:after.length};
+    }
+
 }"""
 
 def strict_json(text):
@@ -239,7 +252,7 @@ class WhopClient:
         key=(suffix,name)
         if fresh: self._actions.pop(key,None)
         if key not in self._actions:
-            options={} if request_timeout is None else {'request_timeout':request_timeout}
+            options={'request_timeout':12.0 if request_timeout is None else request_timeout}
             value=document.evaluate(discovery_js,name,**options)
             if not isinstance(value,dict): raise ClientError("invalid_action_discovery_response")
             reason=value.get('reason')
@@ -250,8 +263,8 @@ class WhopClient:
                 raise ClientError("invalid_action_discovery_response")
             action=value.get('action')
             if reason!='ready':
-                raise ClientError(f"read_action_discovery_{reason}: sources={counts[0]}, matches={counts[1]}, failures={counts[2]}")
-            if counts[1]!=1 or not isinstance(action,str) or not re.fullmatch(r'[a-f0-9]{40,64}',action):
+                raise WhopError(f"read_action_discovery_{reason}: sources={counts[0]}, matches={counts[1]}, failures={counts[2]}",category="transient" if reason in ("scripts_changed","script_fetch_failed") else "invalid_request")
+            if counts[1]!=1 or counts[2]!=0 or not isinstance(action,str) or not re.fullmatch(r'[a-f0-9]{40,64}',action):
                 raise ClientError("invalid_action_discovery_response")
             self._actions[key]=action
         return self._actions[key]
