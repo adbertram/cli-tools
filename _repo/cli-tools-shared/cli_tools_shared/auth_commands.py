@@ -274,11 +274,13 @@ def _handle_browser_login(config, tool_name: str, force: bool):
 
         # Headless-first automatic refresh for CLIs with a complete
         # declarative non-interactive login. A successful headless refresh
-        # returns before any browser window is opened. Fall back to the
+        # returns before any browser window is opened. ``--force`` must skip
+        # this shortcut because a fresh session would otherwise return early
+        # instead of entering the forced browser-login flow. Fall back to the
         # headed flow only when a human gate blocks the headless attempt
         # (needs_human) or — for a non-challenge failure on a TTY — so a
         # human can still complete the login by hand.
-        if _browser_declarative_login_ready(browser):
+        if not force and _browser_declarative_login_ready(browser):
             outcome = browser.ensure_fresh_session()
             if outcome.authenticated:
                 print_success("Browser session authenticated")

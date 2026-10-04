@@ -68,6 +68,11 @@ class _CredentialBrowser(_LoginUrlBrowser):
     AUTH_LOGIN_PASSWORD_SECRET = "test-browser-password"
 
 
+class _ProfileScopedCredentialBrowser(_CredentialBrowser):
+    SESSION_NAME = "browser-session"
+    AUTH_LOGIN_SECRETS_PROFILE_SCOPED = True
+
+
 class _TotpCredentialBrowser(_CredentialBrowser):
     AUTH_LOGIN_TOTP_SELECTOR = "#authcode"
     AUTH_LOGIN_TOTP_SUBMIT_SELECTOR = "#totp-submit"
@@ -1143,6 +1148,16 @@ def test_session_name_returns_tool_dash_profile_default(tmp_path):
 def test_session_name_returns_tool_dash_profile_work(tmp_path):
     browser = _TestBrowser(_ProfileConfig(tmp_path, "work"))
     assert browser._session_name() == "test-browser-work"
+
+
+def test_profile_scoped_login_secrets_use_the_cli_tool_name(tmp_path):
+    config = _ProfileConfig(tmp_path, "work")
+    config._tool_name = "service-tool"
+
+    browser = _ProfileScopedCredentialBrowser(config)
+
+    assert browser.AUTH_LOGIN_USERNAME_SECRET == "service-tool-work-username"
+    assert browser.AUTH_LOGIN_PASSWORD_SECRET == "service-tool-work-password"
 
 
 def test_session_name_raises_when_profile_is_empty(tmp_path):

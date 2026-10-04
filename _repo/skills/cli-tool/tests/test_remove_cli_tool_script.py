@@ -68,7 +68,7 @@ exit 9
 """
 
 
-def _build_fixture_repo(tmp_path: Path) -> tuple[Path, Path]:
+def _build_fixture_repo(tmp_path: Path, *, personal: bool = False) -> tuple[Path, Path]:
     """Return ``(repo_root, home_dir)`` for a cli-tools-shaped fixture tree."""
     repo_root = tmp_path / "cli-tools"
     home_dir = tmp_path / "home"
@@ -86,8 +86,9 @@ def _build_fixture_repo(tmp_path: Path) -> tuple[Path, Path]:
     shutil.copy2(REMOVER, script)
     script.chmod(0o755)
 
-    tool_dir = repo_root / TOOL
-    tool_dir.mkdir()
+    tool_parent = repo_root / "_personal" if personal else repo_root
+    tool_dir = tool_parent / TOOL
+    tool_dir.mkdir(parents=True)
     (tool_dir / "pyproject.toml").write_text(
         f'[project]\nname = "{TOOL}-cli"\n', encoding="utf-8"
     )
@@ -187,6 +188,32 @@ def test_remover_should_delete_every_registration_surface(tmp_path):
 
     uv_log = (repo_root / "uv.log").read_text(encoding="utf-8")
     assert f"tool uninstall {TOOL}-cli" in uv_log
+
+
+def test_remover_should_delete_personal_cli_and_its_gitignore_reinclude(tmp_path):
+    repo_root, home_dir = _build_fixture_repo(tmp_path, personal=True)
+    personal_tool_dir = repo_root / "_personal" / TOOL
+    gitignore = repo_root / ".gitignore"
+    gitignore_contents = (
+        "_personal/*\n"
+        f"!_personal/{OTHER_TOOL}/\n"
+        f"!_personal/{TOOL}/\n"
+    )
+    gitignore.write_text(gitignore_contents, encoding="utf-8")
+
+    result = _run_remover(repo_root, home_dir, TOOL)
+
+    assert result.returncode == 0, result.stderr
+    assert f"Directory: {personal_tool_dir}" in result.stdout
+    assert f"Removed: {personal_tool_dir}" in result.stdout
+    assert not personal_tool_dir.exists()
+    assert not (repo_root / TOOL).exists()
+    assert not (home_dir / ".local" / "bin" / TOOL).exists()
+    assert not (repo_root / "_repo" / "skills" / f"{TOOL}-cli").exists()
+    assert gitignore.read_text(encoding="utf-8") == (
+        "_personal/*\n"
+        f"!_personal/{OTHER_TOOL}/\n"
+    )
 
 
 def test_remover_should_finish_when_the_uv_tool_is_not_installed(tmp_path):

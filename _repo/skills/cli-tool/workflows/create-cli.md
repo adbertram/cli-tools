@@ -152,7 +152,7 @@ inspect only discovered paths. Do not run `find`, `rg`, `sed`, `cat`, `nl`,
 path. If a preferred example skill is absent, report that absence and choose
 another discovered example or continue without one.
 This is the cli-tools-specific application of the file-operand rule in
-`/Users/adam/Dropbox/.agents/skills/agent-expert/references/global-standards.md`.
+`~/.agents/skills/agent-expert/references/global-standards.md`.
 
 Keep repository inspection searches line-local and literal unless multiline
 matching is deliberately required. Do not compose one complex `rg` regex with

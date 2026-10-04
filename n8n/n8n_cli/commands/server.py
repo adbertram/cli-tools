@@ -1,11 +1,10 @@
 """Server commands - manage the n8n server instance."""
 import json
-import time
 import typer
 
-from ..n8n_api import get_n8n_api_client, N8nApiError
+from ..n8n_api import N8nApiError
 from cli_tools_shared.output import command, print_json, print_error, print_info, print_success
-from ..server import run_on_server, run_on_server_raw
+from ..server import restart_n8n, run_on_server, run_on_server_raw
 from . import logs, server_config
 
 app = typer.Typer(help="Manage the n8n server", no_args_is_help=True)
@@ -33,7 +32,6 @@ app.add_typer(logs.app, name="logs", help="Query n8n server logs and configurati
 app.add_typer(server_config.app, name="config", help="Manage n8n server configuration")
 
 N8N_BIN = "/usr/local/lib/node_modules/n8n/bin/n8n"
-N8N_PLIST = "/Library/LaunchDaemons/com.n8n.server.plist"
 N8N_INSTALL_PREFIX = "/usr/local"
 
 
@@ -46,22 +44,6 @@ def _get_latest_version() -> str:
     """Get the latest n8n version available on npm."""
     output = run_on_server("npm view n8n version").strip()
     return output
-
-
-def _restart_n8n():
-    """Stop and start the n8n LaunchDaemon, then wait for ready."""
-    result = run_on_server_raw(f"sudo launchctl unload {N8N_PLIST}")
-    if result.returncode != 0:
-        raise RuntimeError(f"Failed to stop n8n: {result.stderr.strip()}")
-
-    time.sleep(2)
-
-    result = run_on_server_raw(f"sudo launchctl load {N8N_PLIST}")
-    if result.returncode != 0:
-        raise RuntimeError(f"Failed to start n8n: {result.stderr.strip()}")
-
-    api = get_n8n_api_client()
-    api.wait_for_ready(timeout=60)
 
 
 @app.command("upgrade")
@@ -122,7 +104,7 @@ def upgrade(
         # Step 4: Restart
         if not skip_restart:
             print_info("[4/4] Restarting n8n...")
-            _restart_n8n()
+            restart_n8n()
             print_success("n8n restarted and ready")
         else:
             print_info("[4/4] Skipping restart")
@@ -168,7 +150,7 @@ def restart():
     """
     try:
         print_info("Restarting n8n...")
-        _restart_n8n()
+        restart_n8n()
         print_success("n8n restarted and ready")
     except RuntimeError as e:
         print_error(str(e))

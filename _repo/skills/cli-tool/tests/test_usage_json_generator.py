@@ -706,3 +706,17 @@ def test_update_workflow_uses_regenerate_usage_json_script():
     final_check = workflow.index(f"{SCRIPT} <name> --check")
 
     assert simplify < refresh < full_test < final_check
+
+
+def test_workflows_document_worktree_executable_overrides_without_global_reinstall():
+    skill_root = Path(__file__).resolve().parents[1]
+    test_workflow = (skill_root / "workflows" / "test-cli.md").read_text()
+    update_workflow = (skill_root / "workflows" / "update-cli.md").read_text()
+
+    for workflow in (test_workflow, update_workflow):
+        assert 'CLI_EXECUTABLE="$TOOL_DIR/.venv/bin/' in workflow
+        assert '--cli-executable "$CLI_EXECUTABLE"' in workflow
+        assert "repoint a symlink" in workflow
+        assert "~/.local/bin/<tool>" in workflow or "~/.local/bin/<name>" in workflow
+
+    assert "replaces the installed-launcher pre-flight above" in test_workflow

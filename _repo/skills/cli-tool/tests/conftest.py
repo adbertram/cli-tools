@@ -1,6 +1,7 @@
 """Shared pytest configuration and fixtures for CLI tool testing."""
 
 import json
+import os
 import pytest
 import sys
 import tomllib
@@ -16,6 +17,7 @@ from cli_test_utils import get_pkg_dir, discover_list_commands, get_config_auth_
 
 SKIP_GROUPS = {"auth", "cache", "profiles"}
 CLI_SELECTION_FIXTURE = "cli_name"
+CLI_TEST_EXECUTABLE_ENV = "CLI_TOOL_TEST_EXECUTABLE"
 CLI_NAME_REQUIRED_MESSAGE = (
     "WARNING: No --cli-name specified for CLI-dependent tests.\n"
     "Use --cli-name <name> to execute CLI-dependent tests. "
@@ -226,6 +228,23 @@ def pytest_addoption(parser):
         default=None,
         help="Filter tests to specific command group (e.g., 'auth', 'records')"
     )
+    parser.addoption(
+        "--cli-executable",
+        action="store",
+        default=None,
+        help="Executable path to test instead of ~/.local/bin/<cli-name>",
+    )
+
+
+def pytest_configure(config):
+    """Expose an explicit test executable to helpers that select a Python environment."""
+    cli_executable_override = config.getoption("--cli-executable")
+    if cli_executable_override is None:
+        os.environ.pop(CLI_TEST_EXECUTABLE_ENV, None)
+    else:
+        os.environ[CLI_TEST_EXECUTABLE_ENV] = str(
+            Path(cli_executable_override).expanduser().resolve()
+        )
 
 
 def _selected_tests_need_cli_name(items) -> bool:
@@ -282,6 +301,35 @@ def _resolve_cli_dir_from_launcher(cli_name: str) -> Path:
     return resolved
 
 
+def _validate_cli_executable_override(cli_executable: str) -> Path:
+    """Return a usable override executable without choosing a source directory."""
+    exe_path = Path(cli_executable).expanduser()
+    if not exe_path.is_file() or not os.access(exe_path, os.X_OK):
+        raise RuntimeError(
+            "CLI executable override is missing, not a regular file, or not executable: "
+            f"{exe_path}"
+        )
+    return exe_path
+
+
+def _resolve_cli_dir_from_executable(cli_executable: str) -> Path:
+    """Resolve a worktree source directory from its project virtualenv executable."""
+    exe_path = _validate_cli_executable_override(cli_executable)
+    venv_bin = exe_path.parent
+    venv_dir = venv_bin.parent
+    cli_dir = venv_dir.parent
+    if (
+        venv_bin.name != "bin"
+        or venv_dir.name != ".venv"
+        or not (cli_dir / "pyproject.toml").is_file()
+    ):
+        raise RuntimeError(
+            "CLI executable override must be under <tool-dir>/.venv/bin/<tool> "
+            f"with a pyproject.toml: {exe_path}"
+        )
+    return cli_dir.resolve()
+
+
 @pytest.fixture(scope="session")
 def test_config() -> Dict:
     """Load test configuration from TOML file."""
@@ -306,9 +354,19 @@ def cli_name(request) -> str:
 
 
 @pytest.fixture(scope="session")
-def cli_dir(cli_name, cli_tools_root) -> Path:
+def cli_dir(cli_name, cli_tools_root, cli_executable_override) -> Path:
     """Get CLI directory path."""
     path = cli_tools_root / cli_name
+    if cli_executable_override is not None:
+        try:
+            return _resolve_cli_dir_from_executable(cli_executable_override)
+        except RuntimeError as exc:
+            if not path.exists():
+                pytest.fail(
+                    f"CLI directory not found at {path}, and --cli-executable did not resolve "
+                    f"a worktree project directory: {exc}"
+                )
+
     if path.exists():
         return path
 
@@ -321,13 +379,39 @@ def cli_dir(cli_name, cli_tools_root) -> Path:
 
 
 @pytest.fixture(scope="session")
-def cli_executable(cli_name, cli_dir) -> str:
+def cli_executable_override(request) -> str | None:
+    """Return the explicit executable requested for worktree validation, if any."""
+    return request.config.getoption("--cli-executable")
+
+
+@pytest.fixture(scope="session")
+def cli_executable(cli_name, cli_dir, cli_executable_override) -> str:
+    """Get the executable selected for this test session."""
+    return _resolve_cli_executable(
+        cli_name,
+        cli_dir,
+        cli_executable_override,
+    )
+
+
+def _resolve_cli_executable(
+    cli_name: str,
+    cli_dir: Path,
+    cli_executable_override: str | None,
+) -> str:
     """Get the full path to the CLI executable.
 
     This ensures tests use the CLI from its proper installation location,
-    not from whatever happens to be in the test runner's PATH.
-    Looks for the executable in ~/.local/bin (where uv tool install places it).
+    not from whatever happens to be in the test runner's PATH. An explicit
+    --cli-executable takes precedence so a git worktree can be tested without
+    changing the shared ~/.local/bin launcher.
     """
+    if cli_executable_override is not None:
+        try:
+            return str(_validate_cli_executable_override(cli_executable_override).resolve())
+        except RuntimeError as exc:
+            pytest.fail(str(exc))
+
     exe_path = Path.home() / ".local" / "bin" / cli_name
     # On Windows, uv installs executables with .exe extension
     if not exe_path.exists():

@@ -11,15 +11,48 @@ Before testing, understand the standards:
 
 If not provided, ask: "Which CLI tool do you want to test?"
 
-Parse arguments to extract the tool name, optional `--verbose` flag, and optional `--command` filter.
+Parse arguments to extract the tool name, optional `--verbose` flag, optional `--command` filter, and optional `--cli-executable` override.
 
-**Pre-flight Check:** Before running pytest, verify the CLI is functional:
+**Installed-launcher pre-flight:** Outside worktree validation, verify the
+installed CLI is functional before running pytest:
 
 ```bash
 $TOOL_NAME --help >/dev/null 2>&1
 ```
 
 If this fails, investigate the CLI startup error BEFORE running tests.
+
+**Worktree validation (no global launcher changes):** When the change is in a
+git worktree, run the worktree's editable executable instead of the shared
+`~/.local/bin/<tool>` launcher. Resolve the actual tool directory in that
+worktree, then create or refresh only that directory's environment. This
+replaces the installed-launcher pre-flight above:
+
+For a personal CLI, the resolved directory is
+`<cli-tools-root>/_personal/$TOOL_NAME`. The standard executable path below
+lets the test harness derive that source directory without consulting the
+shared launcher.
+
+```bash
+TOOL_DIR="<resolved tool directory in this worktree>"
+uv sync --project "$TOOL_DIR"
+CLI_EXECUTABLE="$TOOL_DIR/.venv/bin/$TOOL_NAME"
+test -f "$CLI_EXECUTABLE" && test -x "$CLI_EXECUTABLE"
+"$CLI_EXECUTABLE" --help >/dev/null 2>&1
+
+<cli-tools-root>/_repo/skills/cli-tool/scripts/regenerate-usage-json "$TOOL_NAME" \
+  --cli-executable "$CLI_EXECUTABLE"
+<cli-tools-root>/_repo/skills/cli-tool/scripts/test-cli-tool.sh \
+  --cli-name "$TOOL_NAME" --cli-executable "$CLI_EXECUTABLE" [--command "$COMMAND"] [--verbose]
+<cli-tools-root>/_repo/skills/cli-tool/scripts/regenerate-usage-json "$TOOL_NAME" \
+  --cli-executable "$CLI_EXECUTABLE" --check
+```
+
+Do not run `install-cli-tool.sh --force-refresh`, repoint a symlink, or alter
+`~/.local/bin/<tool>` for this procedure. The executable override is passed to
+both the structured test script and its pytest harness. Global-launcher health
+checks are skipped, while every help, usage-map, import, and command check uses
+the worktree source and its `.venv`.
 
 **Harness-only collection:** When validating changes to the cli-tool test
 harness itself, collect tests with the batch confirmation flag so
@@ -227,7 +260,7 @@ that intentionally convert CLI execution into a process exit.
 **Run the test script for structured JSON results:**
 
 ```bash
-<cli-tools-root>/_repo/skills/cli-tool/scripts/test-cli-tool.sh --cli-name "$TOOL_NAME" [--command "$COMMAND"] [--verbose]
+<cli-tools-root>/_repo/skills/cli-tool/scripts/test-cli-tool.sh --cli-name "$TOOL_NAME" [--command "$COMMAND"] [--cli-executable "$CLI_EXECUTABLE"] [--verbose]
 ```
 
 The script returns JSON with:

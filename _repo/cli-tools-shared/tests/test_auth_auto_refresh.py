@@ -491,6 +491,18 @@ def _login_config(browser, has_session: bool):
     return config
 
 
+def _stub_successful_browser_login(monkeypatch, browser):
+    login_calls = []
+    monkeypatch.setattr(
+        browser,
+        "login",
+        lambda force=False: login_calls.append(force)
+        or {"success": True, "message": "ok"},
+    )
+    monkeypatch.setattr(browser, "close", lambda: None)
+    return login_calls
+
+
 def test_handle_browser_login_headless_refreshes_declarative_login(
     tmp_path, monkeypatch, capsys
 ):
@@ -517,6 +529,25 @@ def test_handle_browser_login_headless_refreshes_declarative_login(
     assert "Browser session authenticated" in capsys.readouterr().err
 
 
+def test_handle_browser_login_force_bypasses_fresh_session_shortcut(
+    tmp_path, monkeypatch
+):
+    browser = _DeclarativeBrowser(_ConfigDouble(tmp_path))
+    config = _login_config(browser, has_session=True)
+    monkeypatch.setattr(
+        browser,
+        "ensure_fresh_session",
+        lambda: (_ for _ in ()).throw(
+            AssertionError("forced login must not use the fresh-session shortcut")
+        ),
+    )
+    login_calls = _stub_successful_browser_login(monkeypatch, browser)
+
+    _handle_browser_login(config, "refresh-browser", force=True)
+
+    assert login_calls == [True]
+
+
 def test_handle_browser_login_keeps_headed_flow_without_declarative_login(
     tmp_path, monkeypatch
 ):
@@ -528,13 +559,7 @@ def test_handle_browser_login_keeps_headed_flow_without_declarative_login(
         "ensure_fresh_session",
         lambda: (_ for _ in ()).throw(AssertionError("headless refresh must not run")),
     )
-    login_calls = []
-    monkeypatch.setattr(
-        browser,
-        "login",
-        lambda force=False: login_calls.append(force) or {"success": True, "message": "ok"},
-    )
-    monkeypatch.setattr(browser, "close", lambda: None)
+    login_calls = _stub_successful_browser_login(monkeypatch, browser)
 
     _handle_browser_login(config, "plain-browser", force=False)
 
@@ -556,13 +581,7 @@ def test_handle_browser_login_falls_back_to_headed_when_human_needed(
             reason="reCAPTCHA challenge detected on the login page; a human must complete it",
         ),
     )
-    login_calls = []
-    monkeypatch.setattr(
-        browser,
-        "login",
-        lambda force=False: login_calls.append(force) or {"success": True, "message": "ok"},
-    )
-    monkeypatch.setattr(browser, "close", lambda: None)
+    login_calls = _stub_successful_browser_login(monkeypatch, browser)
 
     _handle_browser_login(config, "refresh-browser", force=False)
 
@@ -615,13 +634,7 @@ def test_handle_browser_login_non_human_refresh_failure_falls_back_on_tty(
             reason="Browser login credentials were rejected by the service.",
         ),
     )
-    login_calls = []
-    monkeypatch.setattr(
-        browser,
-        "login",
-        lambda force=False: login_calls.append(force) or {"success": True, "message": "ok"},
-    )
-    monkeypatch.setattr(browser, "close", lambda: None)
+    login_calls = _stub_successful_browser_login(monkeypatch, browser)
     monkeypatch.setattr(
         "cli_tools_shared.auth_commands._interactive_stdio_available", lambda: True
     )

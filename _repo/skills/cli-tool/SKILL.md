@@ -18,6 +18,19 @@ description: >-
 Route every cli-tools request to the correct repo-owned CLI skill or lifecycle workflow, then execute against the real command contract.
 </objective>
 
+<project_overrides>
+Before acting on this skill, run:
+
+```bash
+~/.agents/skills/skill-expert/scripts/load-skill-overrides.sh cli-tool
+```
+
+Apply any printed instructions alongside this skill's own workflow: they extend it and
+never repeal its limits. No output means no project override is in effect. A non-zero
+exit means the project's override file is broken -- report it and stop rather than
+silently running unmodified.
+</project_overrides>
+
 <agent_routing>
 Service-operation routing stays in the current session: use `<cli-tools-root>/_repo/skills/cli-tool/workflows/skill-router.md`, then load the selected service skill and its adjacent `usage.json`.
 
@@ -641,8 +654,10 @@ Do not create an in-repo skill folder merely to use the default path.
 When an existing `usage.json` declares `binary`, the generator uses that exact
 absolute executable path. This is the launcher contract for non-uv tools whose
 command differs from the skill name. Without `binary`, the generator requires
-the canonical uv launcher at `~/.local/bin/<tool>`. Use `--cli-executable` only
-for a new non-uv map or an isolated test fixture.
+the canonical uv launcher at `~/.local/bin/<tool>`. Use `--cli-executable` for
+a new non-uv map, an isolated test fixture, or a worktree checkout. For a
+worktree, point it at that checkout's `<tool>/.venv/bin/<tool>` and never
+reinstall or repoint the shared `~/.local/bin/<tool>` launcher.
 </principle>
 
 <principle name="Schema-Safe Usage JSON Inspection">

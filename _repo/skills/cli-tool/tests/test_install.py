@@ -98,7 +98,7 @@ def test_canonical_uv_tool_env_overrides_isolated_xdg(monkeypatch, tmp_path):
     assert env["UV_TOOL_BIN_DIR"] == str(home / ".local" / "bin")
 
 
-def test_uv_tool_registered(cli_name, cli_dir, command_filter):
+def test_uv_tool_registered(cli_name, cli_dir, command_filter, cli_executable_override):
     """CLI must be registered as a uv tool.
 
     uv tool install creates an isolated venv and symlink automatically.
@@ -106,6 +106,8 @@ def test_uv_tool_registered(cli_name, cli_dir, command_filter):
     """
     if command_filter:
         pytest.skip("Skipping general setup tests (command filter active)")
+    if cli_executable_override:
+        pytest.skip("Skipping shared uv tool registration check (--cli-executable active)")
 
     result = subprocess.run(
         ["uv", "tool", "list"],
@@ -356,7 +358,9 @@ def test_dependencies_installed(cli_name, cli_dir, command_filter):
     )
 
 
-def test_launcher_shebang_points_to_uv_tool_python(cli_name, cli_dir, command_filter):
+def test_launcher_shebang_points_to_uv_tool_python(
+    cli_name, cli_dir, command_filter, cli_executable_override
+):
     """The ~/.local/bin/<cli_name> launcher must have a shebang pointing
     to the CLI's uv tool venv python (e.g.
     ``#!~/.local/share/uv/tools/<pkg>/bin/python3``).
@@ -376,6 +380,8 @@ def test_launcher_shebang_points_to_uv_tool_python(cli_name, cli_dir, command_fi
     """
     if command_filter:
         pytest.skip("Skipping general setup tests (command filter active)")
+    if cli_executable_override:
+        pytest.skip("Skipping shared launcher shebang check (--cli-executable active)")
 
     launcher = Path.home() / ".local" / "bin" / cli_name
     if not launcher.exists():
