@@ -79,6 +79,61 @@ reports `studio_lookup_inconclusive` instead of asserting absence. The live
 account currently has one post; multiple-page behavior is covered by fixtures.
 These reads do not establish whether an attempted upload created a new post.
 
+## Studio publishing
+
+Studio publishing uses an explicit named browser profile and a version 1 JSON
+policy. Required fields are `schema_version`, `profile`, `account_id` (string),
+`username`, `caption`, `audience="Everyone"`, `timing="now"`,
+`disclosure="branded_content"`, and `music_rights_confirmed=true`. Supply music
+rights confirmation only after checking the rights for the actual asset's audio.
+Unknown fields and omitted fields are rejected; the caption is used verbatim.
+Policy JSON must be UTF-8 and at most 64 KiB.
+
+```bash
+tiktok studio prepare clip.mp4 --policy policy.json --request-id UUID --profile clipper
+tiktok studio status UUID --profile clipper
+tiktok studio publish UUID --yes --profile clipper
+tiktok studio reconcile UUID --profile clipper
+```
+
+`prepare` stages the exact MP4 bytes under the profile's private runtime directory,
+then verifies the account, uploaded media, caption, Everyone, Now, branded content,
+and observed music consent. Files must be at most 30 GB and leave 1 GiB free after
+staging. The bounded copy rechecks free space while writing and removes only its
+owned temporary file on failure. Staged files must remain regular files with the
+bound size, hash, and file identity; symlinks are refused. The request UUID binds the asset hash, policy, and actor. Repeating a
+matching preparation returns its existing journal entry; changing that binding
+is refused. `status` reads only the local operation journal.
+
+The SDK supports `StudioPublisher(config, browser=None)`, `prepare(file, policy,
+request_id)`, `publish(request_id, *, before_public_action)`, `status(request_id)`,
+`reconcile(request_id)`, and `close()`. Keep one publisher instance for
+prepare→publish so its owned editor stays open. The mandatory trusted Python
+callback receives the request, asset hash, policy digest, actor, draft ID, and
+editor project ID immediately before Post. An unattended coordinator must inspect
+its own authoritative reservation and control state in that callback.
+
+A native request guard permits only the exact creation ID, uploaded video ID,
+and one batch-zero request. The response allocates a separate `post_project_id`.
+Accepted projects are persisted before polling, even when the response has no
+item ID yet. `reconcile` reads that exact project through Studio project status,
+then verifies its exact task item ID through the existing own-post Studio reader.
+Pending, failed, unknown, and malformed results never trigger another Post. A
+successful result requires the exact returned item ID and verified Studio readback. Verified publication removes only the operation's hash-matched
+staged media, retaining its journal and receipt.
+
+This account's local drafts can become unavailable after a normal browser exit.
+Before any public dispatch, recovery can rebuild a missing private draft or
+atomically remove only its exact journal-owned orphan, then reprepare the same
+bytes and policy under the same UUID. Recovery checks native heartbeat state,
+retains an audit, and preserves unknown drafts. Session transfer moves browser
+authentication; local IndexedDB drafts and staged media stay on their source host.
+
+Caption clearing uses the existing framework-input helper's native select-all
+command, then whole-string native insertion to avoid TikTok's per-key hashtag
+autocomplete. Saved caption and controls are checked after rendering and autosave.
+Shared native-input and close repairs are tracked in agent-issues #1156 and #1154.
+
 ## Commands
 
 ### Auth

@@ -50,11 +50,16 @@ def decimal(value, field, *, required=False):
     return int(value)
 
 
+def positive_decimal_id(value):
+    """An exact positive string ID, never a coerced JSON number."""
+    return isinstance(value, str) and re.fullmatch(r"[1-9][0-9]{0,63}", value) is not None
+
+
 def normalize_item(raw, identity, observed_at, measured_at):
     if not isinstance(raw, dict):
         raise StudioContractError("TikTok Studio item is malformed.")
     item_id = raw.get("item_id")
-    if not isinstance(item_id, str) or not re.fullmatch(r"[1-9][0-9]{0,63}", item_id):
+    if not positive_decimal_id(item_id):
         raise StudioContractError("TikTok Studio item ID is malformed.")
     caption = raw.get("desc")
     if caption is not None and not isinstance(caption, str):
