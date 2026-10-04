@@ -339,6 +339,12 @@ class WhopClient:
         return self._submission_operation('create',request_id,campaign_id,publication,expected_account_id=expected_account_id,expected_tiktok_account_id=expected_tiktok_account_id,accepted_requirements_digest=accepted_requirements_digest,confirm=confirm)
     def reconcile_submission(self,request_id):
         return self._submission_operation('reconcile',request_id)
+    def sync_submission_revenue(self,*,restart_pass=False):
+        from .revenue_operations import invoke
+        return invoke(self,'synchronize',restart_pass=restart_pass)
+    def submission_revenue(self,submission_id,campaign_id,*,refresh_payouts=True):
+        from .revenue_operations import invoke
+        return invoke(self,'revenue',submission_id,campaign_id,refresh_payouts=refresh_payouts)
     def submission_status(self):
         return {kind:self._action('countMySubmissionsAction',[{'retainer':value}],'/submissions')['data']
                 for kind,value in [('clips',False),('retainers',True)]}

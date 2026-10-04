@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import math
 import os
 import posixpath
 import re
@@ -198,6 +199,7 @@ SLIDE_IDENTITY_FIELD = "slide"
 SLIDE_LABEL_PREFIX = "Slide"
 SLIDE_ADVANCE_REASON = "next slide"
 TERMINAL_AFTER_EFFECT_REASON = "terminal after effect"
+EXPLICIT_CUE_OFFSETS_FIELD = "cue_offsets_seconds"
 INTER_SLIDE_ACTIONS = [{
     "key": "space",
     "reason": SLIDE_ADVANCE_REASON,
@@ -858,7 +860,8 @@ def normalize_item(item, index, cue_marker):
     label = slide_label(item, index)
     transcript = read_transcript(item, label)
     segments = split_segments(label, transcript, cue_marker)
-    return {
+    cue_count = len(segments) - 1
+    normalized = {
         "index": index,
         "label": label,
         "identity": {
@@ -867,9 +870,42 @@ def normalize_item(item, index, cue_marker):
         },
         "transcript": transcript,
         "segments": segments,
-        "cue_count": len(segments) - 1,
+        "cue_count": cue_count,
         "audio_path": audio_path(item, label),
     }
+    if EXPLICIT_CUE_OFFSETS_FIELD in item:
+        normalized[EXPLICIT_CUE_OFFSETS_FIELD] = validate_explicit_cue_offsets(
+            label, item[EXPLICIT_CUE_OFFSETS_FIELD], cue_count
+        )
+    return normalized
+
+
+def validate_explicit_cue_offsets(label, offsets, cue_count):
+    """Check caller-supplied cue times: one finite number per cue, >= 0, strictly ascending."""
+    if not isinstance(offsets, list):
+        raise ValueError(f"{label} {EXPLICIT_CUE_OFFSETS_FIELD} must be a list of numbers")
+    if len(offsets) != cue_count:
+        raise ValueError(
+            f"{label} {EXPLICIT_CUE_OFFSETS_FIELD} has {len(offsets)} offsets "
+            f"but the transcript has {cue_count} cue markers"
+        )
+    previous = None
+    for position, offset in enumerate(offsets, start=1):
+        if isinstance(offset, bool) or not isinstance(offset, (int, float)) or not math.isfinite(offset):
+            raise ValueError(
+                f"{label} {EXPLICIT_CUE_OFFSETS_FIELD} offset {position} must be a number, got {offset!r}"
+            )
+        if offset < 0:
+            raise ValueError(
+                f"{label} {EXPLICIT_CUE_OFFSETS_FIELD} offset {position} must be >= 0, got {offset}"
+            )
+        if previous is not None and offset <= previous:
+            raise ValueError(
+                f"{label} {EXPLICIT_CUE_OFFSETS_FIELD} must be strictly ascending; "
+                f"offset {position} ({offset}) does not follow {previous}"
+            )
+        previous = offset
+    return offsets
 
 
 def word_count(text):
@@ -1004,6 +1040,21 @@ def cue_offsets_from_word_ratio(label, segments, duration_seconds):
         consumed_words = consumed_words + word_count(segment)
         offsets.append(duration_seconds * consumed_words / total_words)
     return offsets
+
+
+def cue_offsets_for_item(item, duration_seconds):
+    """Return (cue offsets, timing method): the item's explicit offsets, else the word-ratio estimate."""
+    if EXPLICIT_CUE_OFFSETS_FIELD not in item:
+        return cue_offsets_from_word_ratio(item["label"], item["segments"], duration_seconds), "word-ratio"
+
+    offsets = item[EXPLICIT_CUE_OFFSETS_FIELD]
+    for position, offset in enumerate(offsets, start=1):
+        if offset >= duration_seconds:
+            raise ValueError(
+                f"{item['label']} {EXPLICIT_CUE_OFFSETS_FIELD} offset {position} ({offset}) "
+                f"must be less than the audio duration ({duration_seconds} seconds)"
+            )
+    return offsets, "explicit"
 
 
 def click_steps_from_slide_index_walk(slide_numbers, observed_indexes):
@@ -1292,7 +1343,7 @@ def prepare(config, click_steps, terminal_after_effect_steps):
         normalize_audio(item["audio_path"], normalized_audio_path)
         duration_seconds = audio_duration(normalized_audio_path)
         item_started_at = timeline_seconds
-        cue_offsets = cue_offsets_from_word_ratio(item["label"], item["segments"], duration_seconds)
+        cue_offsets, cue_timing_method = cue_offsets_for_item(item, duration_seconds)
 
         audio_files.append(normalized_audio_path)
         for cue_offset in cue_offsets:
@@ -1336,7 +1387,7 @@ def prepare(config, click_steps, terminal_after_effect_steps):
             "terminal_after_effect_steps": terminal_after_effect_steps[item["identity"]["value"]],
             "audio": str(item["audio_path"]),
             "duration_seconds": duration_seconds,
-            "cue_timing_method": "word-ratio",
+            "cue_timing_method": cue_timing_method,
         })
 
     write_concat_file(concat_path, audio_files)

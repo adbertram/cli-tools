@@ -68,6 +68,23 @@ The receipt is the owning Studio SDK runtime bridge object: `publication_id`, ex
 
 No real nonempty create response or submission record has yet been observed; the first valid published clip must verify this boundary before end-to-end completion is claimed.
 
+## Individual submission revenue
+
+```bash
+whop earnings sync --profile rewards
+whop earnings submission SUBMISSION_ID CAMPAIGN_ID --profile rewards
+whop earnings submission SUBMISSION_ID CAMPAIGN_ID --profile rewards --no-refresh-payouts
+whop earnings sync --profile rewards --restart-pass
+```
+
+The SDK exposes `sync_submission_revenue(*, restart_pass=False)` and `submission_revenue(submission_id, campaign_id, *, refresh_payouts=True)`. A revenue read requires exactly one owned indexed submission operation and a fresh matching participant readback. It never uses the denied generic submission-detail REST route. For a batch, advance the shared scan once, then read each submission with `refresh_payouts=False`; the original provider observation times are preserved. The explicit no-refresh option uses the recorded pass and does not claim it was fetched again.
+
+One profile/actor/experience-wide payout scan uses the observed creator `userIds`, limit 100 and cursor. Each call refreshes the head and reads at most ten continuation pages, commits progress after successful reads, and resumes beyond 1000 records. There is no per-submission history scan. Pending and completed generations are separate; a completed generation is promoted atomically. Missing allocations are recorded as disappeared, not inferred reversals. `--restart-pass` discards only unfinished scan state; the prior completed ledger remains. Structured provider cooldowns survive restart and prohibit new reads until the minimum delay.
+
+Results bind `submission_id`, `campaign_id`, and `publication_id`, preserve moderation `status` and `approved_at`, and expose `observed_at`, `readback_fresh`, `amounts_verified`, `unknown_reasons`, allocation observation times, and `sync.started_at/completed_at`. A completed scan is a paginated observation interval, not an atomic provider snapshot. Monetary values `pending_cents`, `received_cents`, and `total_earned_cents` are exact decimal strings or null. They are separate values; never sum all three. Completed allocations use the actual creator net amount, with gross and fee fields retained separately. Pending net amounts require actual `accruedNetAmount`; gross/display fallback fields are retained separately as `provider_display_pending_cents` with each allocation's `pending_amount_basis`. Unknown pending net never hides independently known received net. `amount_basis:creator_net` defines the three objective monetary fields, while reversed allocations remain explicit. All contributing allocation records must have one explicit consistent provider currency. A dollar glyph, campaign CPM, wallet balance, missing field, empty list, incomplete scan or disappeared allocation never supplies a currency or a zero. Migrated completed amounts and settlement gates remain unknown until their exact allocation semantics are verified. Raw allocation output is limited to fifty records, with total count/truncation indicators; aggregation uses the complete indexed set.
+
+`earning_window_started_at`, `earning_window_ended_at`, and `exposure_seconds` remain null because no exact per-submission earning interval has been observed. A payout's `completeAt`/`paidAt` remains allocation settlement information and never supplies an earning window. Public product pricing describes a CPM earning/hold policy but does not establish actual per-record dates or currency. No nonempty payout record has yet been observed; authenticated empty pagination and parser/journal regressions prove the read boundary, not a real earned-money result.
+
 ## Cache and profile maintenance
 
 ```bash

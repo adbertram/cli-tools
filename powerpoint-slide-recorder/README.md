@@ -82,6 +82,10 @@ Every item requires `slide`, `transcript_path`, and `audio_path`. Slide numbers 
 
 Each transcript is required. Each cue marker sends Space at the estimated cue boundary.
 
+An item may also carry `cue_offsets_seconds`: a list of numbers, one per cue marker in that item's transcript, each the time in seconds from the start of that item's audio file at which Space is sent. When the key is present those times are used as given and the item's timing-plan entry records `"cue_timing_method": "explicit"`. When it is absent the cue times are estimated from the transcript's word ratio (`"cue_timing_method": "word-ratio"`). Items can mix the two.
+
+The list must have exactly one entry per cue marker (an empty list for a transcript with no cue markers), every entry must be a number that is at least 0 and less than the item's audio duration, and entries must be strictly ascending. Anything else fails with an error naming the slide; there is no fallback to the estimate.
+
 Before any capture starts, the recorder measures each slide's click steps from the **live** slide show: it opens the deck, plays the requested slide range with manual advance, presses Space through the whole range, and reads the running show's slide index after every press. A press that leaves the index unchanged consumed a click step; a press that moves it to the next slide consumed the advance. The recording then fails before capture when a transcript's cue-marker count does not match the click steps that slide actually consumes.
 
 The count is measured rather than read from the deck's OOXML because they are not the same number. On layout-inherited paragraph builds — the Pluralsight template — PowerPoint expands the layout's build template against each slide's own content at show time, so a slide that authors 4 `clickEffect` nodes can consume 8 presses in the running show (and vice versa). Only the live measurement can agree with the recording drive.
@@ -99,7 +103,8 @@ During the recording, every press is preceded by an equality check between the r
     {
       "slide": 2,
       "transcript_path": "/path/to/transcripts/002.txt",
-      "audio_path": "/path/to/audio/002.mp3"
+      "audio_path": "/path/to/audio/002.mp3",
+      "cue_offsets_seconds": [3.42, 7.9]
     }
   ]
 }
