@@ -28,7 +28,7 @@ def clock():
 def config(tmp_path, clock):
     return {
         "database": str(tmp_path / "state.db"), "workspace": str(tmp_path / "media"),
-        "account": {"handle": "ata_clipping", "account_id": "test-account", "profile": "test-only", "verified_at": iso(clock()), "provenance": "TEST fixture identity"},
+        "account": {"handle": "ata_clipper", "account_id": "7692213003349443597", "profile": "clipper", "verified_at": iso(clock()), "provenance": "TEST fixture identity"},
         "sources": [{"id": "source-1", "feed": "https://source.example/feed", "allowed_hosts": ["source.example"], "reuse_evidence": "TEST reuse permission", "campaign": {
             "id": "campaign-1", "enabled": True, "categories": ["education"], "minimum_followers": 0,
             "expires_at": iso(clock() + 86400 * 30), "provenance": "TEST campaign evidence", "platform": "whop_content_rewards", "submission_window_seconds": 600}}],
@@ -82,7 +82,7 @@ class Adapter:
         return {"passed": self.quality_passes, "width": 1080, "height": 1920, "duration_seconds": proposal["end_seconds"] - proposal["start_seconds"], "audio_present": True, "captions_present": True, "coherent_boundaries": True, "provenance": "TEST fixture"}
 
     def receipt(self, job):
-        return {"publication_id": "post-" + job["id"], "publication_url": "https://www.tiktok.com/@ata_clipping/video/123", "account_id": self.config["account"]["account_id"], "handle": "ata_clipping", "published_at": iso(self.clock()), "provenance": "TEST fixture readback"}
+        return {"publication_id": "post-" + job["id"], "publication_url": "https://www.tiktok.com/@ata_clipper/video/123", "account_id": self.config["account"]["account_id"], "handle": "ata_clipper", "published_at": iso(self.clock()), "provenance": "TEST fixture readback"}
 
     def publish(self, job, asset, key):
         self.calls.append("publish")

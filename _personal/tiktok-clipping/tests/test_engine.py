@@ -21,10 +21,10 @@ def test_first_boot_paused_and_no_account_defaults(config, clock):
         engine.control("running")
 
 
-@pytest.mark.parametrize("handle", ["atalearning", "Fred", "ata_clipping_other", "@ATALearning"])
+@pytest.mark.parametrize("handle", ["atalearning", "Fred", "ata_clipping", "ata_clipper_other", "@ATALearning", "@itstories", "@@ata_clipper"])
 def test_exact_account_gate(config, handle):
     config["account"]["handle"] = handle
-    with pytest.raises(SafetyError, match="account_must_be_ata_clipping"):
+    with pytest.raises(SafetyError, match="account_must_be_ata_clipper"):
         validate_config(config)
 
 
