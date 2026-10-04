@@ -241,7 +241,7 @@ def validate_config(config):
             from .rights import validate_policy
             validate_policy(source["publication_policy"], source)
     learning = config["learning"]
-    keys(learning, LEARNING)
+    keys(learning, LEARNING, {"outcome_policy"})
     for field in ("minimum_samples", "evaluation_minimum_samples"):
         number(learning[field], 2, 100000, integer=True)
     number(learning["cohort_age_seconds"], 1)
@@ -250,6 +250,11 @@ def validate_config(config):
         number(learning[field], 0, 1)
     if learning["objective"] not in METRICS:
         raise SafetyError("unknown_objective")
+    if "outcome_policy" in learning:
+        from .outcome_learning import validate_policy
+        validate_policy(learning["outcome_policy"], learning)
+        if any(objective["channel"] == "engagement" and objective["horizon_seconds"] > limits["metrics_max_age_seconds"] for objective in learning["outcome_policy"]["objectives"]):
+            raise SafetyError("engagement_horizon_exceeds_metric_retention")
     keys(config["baseline"], {"weights", "exploration"})
     validate_strategy(config["baseline"], config)
     return config
@@ -276,7 +281,7 @@ def validate_strategy(proposal, config, previous=None):
 
 
 def validate_source(record, config, now):
-    keys(record, {"source_id", "media_id", "media_url", "duration_seconds", "transcript", "observed_at", "provenance", "categories", "transcript_segments"}, {"assigned_style", "strategy_version", "strategy", "excluded_ranges", "clip_sequence", "media_key", "performance_context", "model_feedback"})
+    keys(record, {"source_id", "media_id", "media_url", "duration_seconds", "transcript", "observed_at", "provenance", "categories", "transcript_segments"}, {"assigned_style", "strategy_version", "strategy", "excluded_ranges", "clip_sequence", "media_key", "performance_context", "model_feedback", "outcome_selection"})
     source = next((s for s in config["sources"] if s["id"] == record["source_id"]), None)
     if source is None:
         raise SafetyError("source_not_allowlisted")
