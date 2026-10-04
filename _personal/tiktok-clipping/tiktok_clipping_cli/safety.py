@@ -85,6 +85,9 @@ LEARNING = {
     "max_exploration", "regression_fraction", "evaluation_minimum_samples", "objective",
 }
 METRICS = {"views", "likes", "comments", "shares", "watch_seconds", "revenue"}
+TARGET_HANDLE = "ata_clipper"
+TARGET_ACCOUNT_ID = "7692213003349443597"
+TARGET_PROFILE = "clipper"
 
 
 def validate_config(config):
@@ -98,10 +101,13 @@ def validate_config(config):
     account = config["account"]
     if account is not None:
         keys(account, {"handle", "account_id", "profile", "verified_at", "provenance"})
-        if string(account["handle"]).lstrip("@").casefold() != "ata_clipping":
-            raise SafetyError("account_must_be_ata_clipping")
-        for field in ("account_id", "profile", "provenance"):
-            string(account[field])
+        if string(account["handle"]).removeprefix("@").casefold() != TARGET_HANDLE:
+            raise SafetyError("account_must_be_ata_clipper")
+        if string(account["account_id"]) != TARGET_ACCOUNT_ID:
+            raise SafetyError("account_id_must_match_verified_target")
+        if string(account["profile"]) != TARGET_PROFILE:
+            raise SafetyError("account_profile_must_be_clipper")
+        string(account["provenance"])
         timestamp(account["verified_at"])
     limits = config["limits"]
     keys(limits, LIMITS)

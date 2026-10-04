@@ -22,6 +22,7 @@ COMMAND_CREDENTIALS = {
     "status": ["custom"],
     "list": ["browser_session"],
     "get": ["browser_session"],
+    "metrics": ["browser_session"],
     "delete": ["browser_session"],
 }
 _VIDEO_COLUMNS = ["id", "url", "caption", "author", "created_at"]
@@ -101,6 +102,8 @@ def _print_videos(videos: list, table: bool, properties: Optional[str]) -> None:
 @command
 def videos_list(
     username: str = typer.Option(..., "--username", "-u", help=_USERNAME_HELP),
+    studio: bool = typer.Option(False, "--studio", help="Read Studio content for this verified session owner"),
+    expected_account_id: Optional[str] = typer.Option(None, "--expected-account-id", help="Exact numeric owner ID required with --studio"),
     table: bool = typer.Option(False, "--table", "-t", help="Display results as a table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of results"),
     filter: Optional[List[str]] = typer.Option(
@@ -110,7 +113,7 @@ def videos_list(
         None, "--properties", "-p", help="Comma-separated fields to display"
     ),
 ):
-    """List a profile's posted videos, including private ones for your own account."""
+    """List posted videos; --studio uses verified own-account Studio content."""
     if filter:
         try:
             validate_filters(filter)
@@ -118,7 +121,10 @@ def videos_list(
             raise ClientError(str(e)) from e
     client = get_web_client()
     try:
-        videos = client.list_posted_videos(username, limit=limit)
+        if expected_account_id is not None and not studio:
+            raise ClientError("--expected-account-id requires --studio.")
+        videos = (client.list_studio_videos(username, limit=limit, expected_account_id=expected_account_id)
+                  if studio else client.list_posted_videos(username, limit=limit))
     finally:
         client.close()
     if filter:
@@ -131,6 +137,8 @@ def videos_list(
 def videos_get(
     video_id: str = typer.Argument(..., help="TikTok video id"),
     username: str = typer.Option(..., "--username", "-u", help=_USERNAME_HELP),
+    studio: bool = typer.Option(False, "--studio", help="Read Studio content for this verified session owner"),
+    expected_account_id: Optional[str] = typer.Option(None, "--expected-account-id", help="Exact numeric owner ID required with --studio"),
     table: bool = typer.Option(False, "--table", "-t", help="Display result as a table"),
     properties: Optional[str] = typer.Option(
         None, "--properties", "-p", help="Comma-separated fields to display"
@@ -139,13 +147,46 @@ def videos_get(
     """Get one of a profile's posted videos by id."""
     client = get_web_client()
     try:
-        video = client.get_posted_video(username, video_id)
+        if expected_account_id is not None and not studio:
+            raise ClientError("--expected-account-id requires --studio.")
+        video = (client.get_studio_video(username, video_id, expected_account_id=expected_account_id)
+                 if studio else client.get_posted_video(username, video_id))
     finally:
         client.close()
     if table:
         _print_videos([video], True, properties)
     else:
         print_json(apply_properties_filter([video], properties)[0] if properties else video)
+
+
+@app.command("metrics")
+@command
+def videos_metrics(
+    video_id: str = typer.Argument(..., help="Own TikTok video ID"),
+    username: str = typer.Option(..., "--username", "-u", help="Verified session owner's TikTok handle"),
+    expected_account_id: Optional[str] = typer.Option(None, "--expected-account-id", help="Fail unless the numeric session owner ID matches exactly"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to display"),
+):
+    """Read actual per-post Studio counts; missing metrics remain null.
+
+    Views, likes, comments, shares and favorites are cumulative observed counts.
+    This command does not estimate revenue or substitute account analytics.
+    """
+    client = get_web_client()
+    try:
+        video = client.get_studio_video(username, video_id, expected_account_id=expected_account_id)
+    finally:
+        client.close()
+    result = {key: video[key] for key in ("id", "url", "account_id", "author", "profile", "observed_at", "server_timestamp_ms", "provenance")}
+    result.update(video["metrics"])
+    if properties:
+        result = apply_properties_filter([result], properties)[0]
+    if table:
+        columns = [field.strip() for field in properties.split(",")] if properties else ["id", "views", "likes", "comments", "shares", "favorites", "observed_at"]
+        print_table([result], columns, columns)
+    else:
+        print_json(result)
 
 
 @app.command("delete")

@@ -40,6 +40,8 @@ tiktok <command-group> <action> [arguments] [options]
 | Check a Direct Post's status by `publish_id` (custom API profile). | `tiktok videos status` |
 | List a profile's posted videos; your own private posts need your `browser_session`. | `tiktok videos list` |
 | Get one posted video by id (`browser_session`). | `tiktok videos get` |
+| Read verified own-account Studio content with endpoint provenance. | `tiktok videos list --profile clipper --username ata_clipper --studio --expected-account-id 7692213003349443597` |
+| Read actual cumulative views, likes, comments, shares, and favorites for an own post. Missing measurements stay null. | `tiktok videos metrics <video_id> --profile clipper --username ata_clipper --expected-account-id 7692213003349443597` |
 | Permanently delete one of your videos by id; requires `--yes` (`browser_session`). | `tiktok videos delete` |
 | Configure authentication, optionally using a manual browser login. | `tiktok auth login` |
 | Open visible Chrome for manual login in an isolated named browser profile; no stored credentials are submitted. | `tiktok auth login --profile clipping --credential-type browser_session --manual` |
@@ -75,7 +77,7 @@ with `tiktok auth status --profile <named-profile>` before service operations.
 - **account** -- Read current identity from TikTok's passport account-info endpoint. `get` uses `browser_session`, returns the numeric `account_id` as a string, and excludes contact/session fields. Optional `--expected-username` and `--expected-account-id` fail on mismatch; authentication alone does not establish the intended account.
 - **transcripts** -- Download TikTok video transcripts
 - **favorites** -- List and look up saved (favorited) TikTok videos. `list` needs a `browser_session` login (`tiktok auth login --credential-type browser_session`); `get` does not.
-- **videos** -- `publish`/`status` use the custom Content Posting API profile (`--profile posting`). `list`/`get`/`delete` use the `browser_session` profile because no official TikTok API lists private posts or deletes videos. A `SELF_ONLY` publish returns no post id; find it with `videos list --username <creator_username>` (publish output includes `creator_username`).
+- **videos** -- `publish`/`status` use the custom Content Posting API profile (`--profile posting`). `list`/`get`/`delete`/`metrics` use `browser_session`. Explicit `list/get --studio` and `metrics` verify the session owner against `--username` and optional exact `--expected-account-id`; they read Studio content using the observed Views sorting control. Studio counts are per-post measurements, never account-counter substitutes or earned revenue. Missing metrics are null. Limited/malformed reads and bounded incomplete lookups are inconclusive, never proof of absence. The public profile route remains the default for `list/get`; HTTP failures are not empty feeds. A `SELF_ONLY` API publish returns no post ID; listing alone does not prove which post an ambiguous upload created.
 - **auth** -- Manage tiktok authentication
 </principle>
 </essential_principles>
