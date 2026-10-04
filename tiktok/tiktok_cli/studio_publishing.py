@@ -52,6 +52,8 @@ DRAFTS_JS = r"""async (owner) => {
       file_key:desc.fileKey??null,file_name:desc.rawFile?.name??null,file_size:desc.rawFile?.size??null,
       duration_ms:media.video_duration_ms??null,stage:desc.stage??null,percent:desc.percent??null,
       caption:data.web_video_param_list?.[0]?.single_post_feature_info?.text??null,
+      caption_markup:data.web_video_param_list?.[0]?.single_post_feature_info?.markup_text??null,
+      caption_text_extra:data.web_video_param_list?.[0]?.single_post_feature_info?.text_extra??null,
       privacy:data.web_feature_common_info.privacy_setting_info,
       commercial:data.web_feature_common_info.tcm_params?JSON.parse(data.web_feature_common_info.tcm_params):null};});db.close();resolve(rows)
     }catch(e){db.close();reject(Error('DRAFT_SCHEMA_CHANGED'))}
@@ -144,9 +146,12 @@ OBSERVER_JS = r"""(opts) => {
    state.project_id_present=Object.hasOwn(common??{},'project_id');
    const item=Array.isArray(items)&&items.length===1?items[0]:null;
    state.video_id=item?.video_id??null;state.batch_index=item?.batch_index??null;
+   const feature=item?.single_post_feature_info,extra=feature?.text_extra;
+   const entities=Array.isArray(extra)&&extra.length===opts.caption_text_extra.length&&extra.every((value,index)=>{
+    const expected=opts.caption_text_extra[index];return value&&Object.keys(value).sort().join(',')===Object.keys(expected).sort().join(',')&&Object.keys(expected).every(k=>value[k]===expected[k])});
    valid=common&&Object.keys(common).sort().join(',')==='creation_id,enter_post_page_from,post_type'&&
     Array.isArray(items)&&items.length===1&&state.creation_id===opts.creation_id&&
-    state.video_id===opts.video_id&&state.batch_index===0&&!state.project_id_present
+    state.video_id===opts.video_id&&state.batch_index===0&&!state.project_id_present&&feature?.text===opts.caption&&entities
   }catch(_){}
   if(state.count!==1||!valid){state.blocked='POST_BINDING_OR_DUPLICATE_REJECTED';this.abort();throw Error(state.blocked)}
   this.addEventListener('loadend',()=>{state.receipt={status:this.status,
@@ -155,6 +160,13 @@ OBSERVER_JS = r"""(opts) => {
 }"""
 RECEIPT_JS = "(key)=>{const s=window[key];return s?{count:s.count,receipt:s.receipt,creation_id:s.creation_id,video_id:s.video_id,batch_index:s.batch_index,project_id_present:s.project_id_present}:null}"
 RESTORE_JS = "(key)=>{const s=window[key];if(s){s.restore();delete window[key]}return true}"
+CAPTION_TEXT_JS = "(selector)=>[...document.querySelector(selector).querySelectorAll('[data-block=true]')].map(x=>x.textContent).join('\\n')"
+CAPTION_READY_JS = r"""(selector)=>{const e=document.querySelector(selector),s=window.getSelection();
+ if(!e||!e.contains(document.activeElement)||!s||!s.isCollapsed||!e.contains(s.anchorNode)||!e.contains(s.focusNode))return false;
+ const r=document.createRange();r.selectNodeContents(e);r.setStart(s.focusNode,s.focusOffset);return r.toString()===''}"""
+CAPTION_OPTIONS_JS = r"""(kind)=>[...document.querySelectorAll(kind==='mention'?'[role=option].mention-suggestion-item':'[role=option].hashtag-suggestion-item')]
+ .filter(x=>x.getClientRects().length).map(x=>({id:x.id,name:kind==='mention'?x.querySelector('.user-id')?.innerText.split(' · ')[0]:x.querySelector('.hash-tag-topic')?.innerText}))"""
+CAPTION_TOKEN_RE = re.compile(r'(?<![\w.@])(@[A-Za-z0-9._]+|#\w+)', re.UNICODE)
 
 
 class StudioPublishError(ClientError):
@@ -171,6 +183,50 @@ def canonical(value) -> str:
 
 def digest(value) -> str:
     return hashlib.sha256(canonical(value).encode()).hexdigest()
+
+
+def caption_tokens(caption):
+    return list(CAPTION_TOKEN_RE.finditer(caption))
+
+
+def caption_entities(row, caption):
+    """Verify the native saved Draft.js ranges and derive its Post text_extra."""
+    def invalid():
+        raise StudioPublishError('Studio saved caption mention/hashtag entities are unverified.')
+    try:
+        raw = parse_response(row['caption_markup'])
+        blocks, entities = raw['blocks'], raw['entityMap']
+        if not isinstance(blocks, list) or not isinstance(entities, dict) or '\n'.join(b['text'] for b in blocks) != caption:
+            invalid()
+        ranges = []
+        base = 0
+        for block in blocks:
+            for value in block['entityRanges']:
+                if any(type(value.get(k)) is not int or value[k] < 0 for k in ('key', 'offset', 'length')):
+                    invalid()
+                entity = entities[str(value['key'])]
+                mention = entity['data']['mention']
+                ranges.append({'start': base + value['offset'], 'length': value['length'], 'key': value['key'], 'entity': entity, 'mention': mention})
+            base += len(block['text'].encode('utf-16-le')) // 2 + 1
+        tokens = caption_tokens(caption)
+        if len(tokens) != len(ranges) or len(entities) != len(ranges):
+            invalid()
+        result = []
+        for token in tokens:
+            text = token.group();start = len(caption[:token.start()].encode('utf-16-le')) // 2;length = len(text.encode('utf-16-le')) // 2
+            matches = [r for r in ranges if type(r['start']) is int and type(r['length']) is int and r['start'] == start and r['length'] == length]
+            if len(matches) != 1:invalid()
+            value = matches[0];mention = value['mention'];entity = value['entity'];is_user = text.startswith('@')
+            if type(value['key']) is not int or mention.get('name') != text[1:] or mention.get('type') != ('at' if is_user else 'hashTag') or entity.get('type') != ('mention' if is_user else '#mention') or entity.get('mutability') != 'IMMUTABLE':invalid()
+            uid = mention.get('uid', mention.get('id')) if is_user else ''
+            if is_user and not positive_decimal_id(uid):invalid()
+            result.append({'tag_id': str(value['key']), 'start': start, 'end': start + length, 'user_id': uid, 'type': 0 if is_user else 1, 'hashtag_name': '' if is_user else text[1:]})
+        # The observed serializer generates outgoing extras from entityMap.
+        # Saved drafts may keep an empty text_extra; nonempty values must agree.
+        if row.get('caption_text_extra') not in ([], result):invalid()
+        return result
+    except (KeyError, TypeError, ValueError, AttributeError, UnicodeError):
+        invalid()
 
 
 def validate_policy(value: dict) -> dict:
@@ -336,18 +392,26 @@ class StudioPublisher:
         with self._locked():
             operation = self.status(request_id)
             prior = canonical(operation)
-            if operation['state'] != 'prepared' or operation.get('public_action_dispatched') is not False or operation.get('project_id') != '0' or operation['draft'].get('project_id') != '0':
+            if operation['state'] not in {'prepared', 'preparation_failed'} or operation.get('public_action_dispatched') is not False or operation.get('project_id') != '0' or operation['draft'].get('project_id') != '0':
                 raise StudioPublishError('Recorded Continue migration requires the original private project zero.')
             if not isinstance(receipt, dict) or receipt.get('resumed') is not True or receipt.get('banner') != 1 or receipt.get('draft_count') != 1 or receipt.get('draft_id') != operation['draft_id'] or receipt.get('actor') != operation['actor'] or not isinstance(receipt.get('row'), dict) or not isinstance(receipt.get('dom'), dict) or receipt['dom'].get('editor') != 1:
                 raise StudioPublishError('Recorded native Continue receipt is not exact.')
-            previous = self._match_draft(operation, [receipt.get('row')])
+            configured = operation['state'] == 'prepared'
+            previous = self._match_draft(operation, [receipt.get('row')], check_controls=configured)
+            if not configured and any(previous.get(k) != operation['draft'].get(k) for k in ('caption', 'privacy', 'commercial', 'create_time')):
+                raise StudioPublishError('Recorded failed private draft state changed.')
             if previous.get('project_id') != '0':
                 raise StudioPublishError('Recorded Continue did not start at project zero.')
+            policy = validate_policy(operation['policy'])
+            if digest(policy) != operation['policy_digest'] or digest({'asset_sha256': operation['asset_sha256'], 'policy': policy}) != operation['binding']:
+                raise StudioPublishError('Recorded Continue immutable policy binding changed.')
             self._verify_asset(operation)
             page = self._page()
             page.wait_for_timeout(1500)
             actor = self._identity(page, operation['policy'])
-            current = self._match_draft(operation, self._drafts(page, operation['policy']))
+            current = self._match_draft(operation, self._drafts(page, operation['policy']), check_controls=configured)
+            if not configured and any(current.get(k) != previous.get(k) for k in ('caption', 'privacy', 'commercial', 'create_time')):
+                raise StudioPublishError('Recorded failed private draft state changed.')
             if actor != operation['actor'] or not positive_decimal_id(current.get('project_id')):
                 raise StudioPublishError('Recorded Continue actor or assigned project is unverified.')
             operation.setdefault('editor_project_transitions', []).append({
@@ -402,17 +466,11 @@ class StudioPublisher:
             raise StudioPublishError(f"Studio {label} checkbox is unavailable or ambiguous.")
         return candidates[0]
 
-    def _configure(self, page, policy):
+    def _configure(self, page, policy, draft=None):
         caption = page.locator(CAPTION_SELECTOR)
         if caption.count() != 1:
             raise StudioPublishError("Studio caption editor is unavailable or ambiguous.")
-        # Reuse the engine's real key-event path for framework editor state.
-        page.fill_framework_input(CAPTION_SELECTOR, "")
-        cleared = page.evaluate("(selector)=>document.querySelector(selector)?.innerText", CAPTION_SELECTOR)
-        if not isinstance(cleared, str) or cleared.strip():
-            raise StudioPublishError("Studio native caption clear did not update the editor.")
-        # Whole native insertion avoids per-key hashtag autocomplete rewriting.
-        page.type_text(policy["caption"])
+        self._set_caption(page, policy, draft)
         page.wait_for_timeout(300)
         if page.locator('.more-btn > span:first-child:has-text("Show more")').count() == 1:
             page.locator('.more-btn > span:first-child:has-text("Show more")').click()
@@ -450,6 +508,81 @@ class StudioPublisher:
         # separate unchecked music checkbox fails verification before Post.
         return self._verify_controls(page, policy)
 
+    def _set_caption(self, page, policy, saved=None):
+        self._caption_semantic_rollback_unverified = False
+        caption = policy['caption']
+        if saved is not None:
+            try:
+                caption_entities(saved, caption)
+                if page.evaluate(CAPTION_TEXT_JS, CAPTION_SELECTOR) == caption:
+                    return
+            except StudioPublishError:
+                pass
+        previous = page.evaluate(CAPTION_TEXT_JS, CAPTION_SELECTOR)
+        if not isinstance(previous, str):
+            raise StudioPublishError('Studio caption editor text is unavailable.')
+        page.fill_framework_input(CAPTION_SELECTOR, '')
+        if page.evaluate(CAPTION_TEXT_JS, CAPTION_SELECTOR) != '':
+            raise StudioPublishError('Studio native caption clear did not update the editor.')
+        try:
+            cursor = 0
+            for token in caption_tokens(caption):
+                self._wait(page, lambda: page.evaluate(CAPTION_READY_JS, CAPTION_SELECTOR), 'Studio caption focus/caret is unverified.', seconds=3)
+                if caption[cursor:token.start()]:
+                    page.type_text(caption[cursor:token.start()])
+                self._wait(page, lambda: page.evaluate(CAPTION_TEXT_JS, CAPTION_SELECTOR) == caption[:token.start()], 'Studio caption prefix did not update.', seconds=3)
+                text = token.group();kind = 'mention' if text.startswith('@') else 'hashtag'
+                trigger = page.get_by_role('button', name='Mention' if kind == 'mention' else 'Hashtag', exact=True)
+                if trigger.count() != 1:
+                    raise StudioPublishError('Studio caption entity trigger is unavailable or ambiguous.')
+                trigger.click()
+                self._wait(page, lambda: page.evaluate(CAPTION_TEXT_JS, CAPTION_SELECTOR) == caption[:token.start()] + text[0], 'Studio caption entity trigger did not update.', seconds=3)
+                self._wait(page, lambda: page.evaluate(CAPTION_READY_JS, CAPTION_SELECTOR), 'Studio caption entity trigger did not restore focus/caret.', seconds=3)
+                page.type_text(text[1:])
+                self._wait(page, lambda: page.evaluate(CAPTION_TEXT_JS, CAPTION_SELECTOR) == caption[:token.end()], 'Studio caption query did not update.', seconds=3)
+                def exact_option():
+                    options = page.evaluate(CAPTION_OPTIONS_JS, kind)
+                    if not isinstance(options, list):raise StudioPublishError('Studio caption suggestions changed schema.')
+                    matches = [x for x in options if isinstance(x, dict) and x.get('name') == (text[1:] if kind == 'mention' else text)]
+                    if len(matches) > 1:raise StudioPublishError('Studio exact caption suggestion is ambiguous.')
+                    return matches[0] if matches else None
+                option = self._wait(page, exact_option, 'Studio exact caption suggestion is unavailable.', seconds=10)
+                if not isinstance(option.get('id'), str) or not re.fullmatch(r'mention-option-[A-Za-z0-9_-]+', option['id']):
+                    raise StudioPublishError('Studio caption suggestion target is unverified.')
+                page.click_native('#'+option['id'])
+                expected = caption[:token.end()]
+                actual = self._wait(page, lambda: (value if (value := page.evaluate(CAPTION_TEXT_JS, CAPTION_SELECTOR)) in (expected, expected + ' ') else None), 'Studio selected entity did not update the caption.', seconds=3)
+                if actual == expected + ' ':
+                    page.keyboard_press('Backspace')
+                self._wait(page, lambda: page.evaluate(CAPTION_TEXT_JS, CAPTION_SELECTOR) == expected, 'Studio selected entity changed the exact caption.', seconds=3)
+                def entity_saved():
+                    if saved is None:raise StudioPublishError('Studio caption editing requires exact draft ownership.')
+                    rows = [r for r in self._drafts(page, policy) if r['draft_id'] == saved['draft_id']]
+                    if len(rows) != 1 or any(rows[0].get(k) != saved.get(k) for k in MEDIA_BINDING_FIELDS):
+                        raise StudioPublishError('Studio caption draft ownership changed.')
+                    if rows[0]['caption'] != expected:return False
+                    try:caption_entities(rows[0], expected)
+                    except StudioPublishError:return False
+                    return True
+                self._wait(page, entity_saved, 'Studio selected native entity did not persist.', seconds=10)
+                cursor = token.end()
+            if caption[cursor:]:page.type_text(caption[cursor:])
+            if page.evaluate(CAPTION_TEXT_JS, CAPTION_SELECTOR) != caption:
+                raise StudioPublishError('Studio native caption does not match the exact policy.')
+        except Exception:
+            self._caption_semantic_rollback_unverified = True
+            page.fill_framework_input(CAPTION_SELECTOR, '')
+            page.type_text(previous)
+            raise
+
+    def _saved_caption_draft(self, operation, page, policy):
+        row = self._match_draft(operation, self._drafts(page, policy))
+        try:
+            caption_entities(row, policy['caption'])
+        except StudioPublishError:
+            return None
+        return row
+
     def _verify_controls(self, page, policy):
         state = page.evaluate(CONTROLS_JS)
         branded = self._checkbox(page, "Branded content")
@@ -470,7 +603,7 @@ class StudioPublisher:
             raise StudioPublishError("Studio upload completion or Post readiness is not verified.")
         return state
 
-    def _match_draft(self, operation, rows, *, exact=True):
+    def _match_draft(self, operation, rows, *, exact=True, require_entities=False, check_controls=True):
         matches = [r for r in rows if r["draft_id"] == operation["draft_id"]]
         if len(matches) != 1:
             raise StudioPublishError("Studio exact owned draft is missing or ambiguous.")
@@ -480,8 +613,10 @@ class StudioPublisher:
             raise StudioPublishError("Studio exact draft media binding changed.")
         if row["file_name"] != operation["staged_name"] or row["file_size"] != operation["asset_bytes"] or row["stage"] != "complete" or row["percent"] != 100:
             raise StudioPublishError("Studio draft does not match the exact completed upload.")
-        if row["caption"] != operation["policy"]["caption"] or not isinstance(row["privacy"], dict) or row["privacy"].get("visibility_type") != 0 or not isinstance(row["commercial"], dict) or row["commercial"].get("commerce_toggle_info", {}).get("branded_content_type") != 2001:
+        if check_controls and (row["caption"] != operation["policy"]["caption"] or not isinstance(row["privacy"], dict) or row["privacy"].get("visibility_type") != 0 or not isinstance(row["commercial"], dict) or row["commercial"].get("commerce_toggle_info", {}).get("branded_content_type") != 2001):
             raise StudioPublishError("Studio persisted draft controls do not match the policy.")
+        if require_entities:
+            caption_entities(row, operation['policy']['caption'])
         return row
 
     def prepare(self, file: str | Path, policy: dict, request_id: str) -> dict:
@@ -565,16 +700,19 @@ class StudioPublisher:
             # the verified staged bytes; the journal retains prior attempts.
             history = record.get("preparation_history", []) + [{k: record.get(k) for k in ("draft_id", "state", "updated_at")}]
             recovery_audit = record.get("orphan_recovery", [])
+            editor_project_transitions = record.get('editor_project_transitions', [])
             temporary = None
         else:
             history = []
             recovery_audit = []
+            editor_project_transitions = []
         if temporary is not None:
             temporary.replace(staged)
         operation = {"request_id": request_id, "binding": binding, "policy_digest": digest(policy),
                      "policy": policy, "asset_sha256": hasher.hexdigest(), "asset_bytes": size,
                      "staged_name": staged.name, "state": "preparing", "public_action_dispatched": False,
-                     "preparation_history": history, "orphan_recovery": recovery_audit}
+                     "preparation_history": history, "orphan_recovery": recovery_audit,
+                     "editor_project_transitions": editor_project_transitions}
         self._save(operation)
         page = self._page()
         try:
@@ -599,9 +737,9 @@ class StudioPublisher:
             operation["draft_id"] = rows[0]["draft_id"]
             operation["draft"] = rows[0]
             self._save(operation)
-            operation["controls"] = self._configure(page, policy)
+            operation["controls"] = self._configure(page, policy, operation['draft'])
             def saved():
-                row = self._match_draft(operation, self._drafts(page, policy))
+                row = self._match_draft(operation, self._drafts(page, policy), require_entities=True)
                 return row
             # Autosave is asynchronous. Mismatch while saving is allowed
             # only during this bounded private preparation, never publish.
@@ -619,6 +757,8 @@ class StudioPublisher:
             return operation
         except Exception:
             operation["state"] = "preparation_failed"
+            if getattr(self, '_caption_semantic_rollback_unverified', False):
+                operation['caption_repair'] = {'state': 'failed', 'semantic_rollback_verified': False}
             self._save(operation)
             raise
 
@@ -764,15 +904,25 @@ class StudioPublisher:
             if page.locator('.more-btn > span:first-child:has-text("Show more")').count() == 1:
                 page.locator('.more-btn > span:first-child:has-text("Show more")').click()
             self._wait(page, lambda: page.evaluate(CONTROLS_JS).get("upload_complete") and page.evaluate(CONTROLS_JS).get("post_enabled"), "Studio reopened upload readiness did not complete.")
+            current = self._match_draft(operation, self._drafts(page, policy))
+            try:
+                self._set_caption(page, policy, current)
+            except Exception:
+                operation['state'] = 'preparation_failed'
+                operation['caption_repair'] = {'state': 'failed', 'semantic_rollback_verified': False}
+                self._save(operation)
+                raise
             self._verify_controls(page, policy)
-            draft = self._match_draft(operation, self._drafts(page, policy))
+            draft = self._wait(page, lambda: self._saved_caption_draft(operation, page, policy), 'Studio saved native entities did not persist.', seconds=10)
             # TikTok creates a fresh project on resume. Its new observed exact
             # project ID is recorded before dispatch, retaining creation/media.
             operation["project_id"] = draft["project_id"]
+            operation['draft'] = draft
             self._identity(page, policy)
             key = "__studio_publish_" + request_id.replace("-", "")
             page.evaluate(OBSERVER_JS, {"key": key, "path": POST_PATH,
-                                         "video_id": draft["video_id"], "creation_id": draft["creation_id"]})
+                                         "video_id": draft["video_id"], "creation_id": draft["creation_id"],
+                                         'caption': policy['caption'], 'caption_text_extra': caption_entities(draft, policy['caption'])})
             operation["state"] = "dispatch_pending"
             self._save(operation)
             try:

@@ -1118,6 +1118,23 @@ class BrowserHarnessService:
         self._require_open()
         self._bh.h.fill_input(selector, text)
 
+    def click_native(self, selector: str) -> None:
+        """Send existing native mouse press/release to one visible hit-tested target."""
+        self._require_open()
+        point = self.evaluate(r"""(selector)=>{
+            const rows=[...document.querySelectorAll(selector)];
+            if(rows.length!==1)throw Error('NATIVE_CLICK_TARGET_NOT_UNIQUE');
+            const el=rows[0];if(!el.isConnected||el.disabled||el.getAttribute('aria-disabled')==='true')throw Error('NATIVE_CLICK_TARGET_DISABLED');
+            el.scrollIntoView({block:'center',inline:'center'});
+            const r=el.getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height/2;
+            const style=getComputedStyle(el),hit=document.elementFromPoint(x,y);
+            if(!r.width||!r.height||style.visibility!=='visible'||style.display==='none'||!Number.isFinite(x)||!Number.isFinite(y)||x<0||y<0||x>=innerWidth||y>=innerHeight||!hit||!el.contains(hit))throw Error('NATIVE_CLICK_TARGET_NOT_HIT');
+            return {x,y}
+        }""", selector)
+        if not isinstance(point, dict) or set(point) != {'x', 'y'} or any(type(point[k]) not in (int, float) or not math.isfinite(point[k]) or point[k] < 0 for k in ('x', 'y')):
+            raise BrowserHarnessError('native_click_coordinates_invalid')
+        self._bh.h.click_at_xy(point['x'], point['y'])
+
     def set_input_files(self, selector: str, file_path: str) -> None:
         """Set a ``<input type="file">`` element's files to a local file.
 
