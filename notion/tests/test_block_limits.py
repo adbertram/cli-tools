@@ -112,6 +112,27 @@ def test_array_over_100_elements_overflows_into_sibling_blocks():
     assert find_oversize_rich_text(out) is None
 
 
+def test_numbered_list_start_index_stays_on_first_overflow_sibling():
+    """Only the first split numbered-list block may carry its start index."""
+    block = {
+        "type": "numbered_list_item",
+        "numbered_list_item": {
+            "rich_text": [
+                {"type": "text", "text": {"content": "first"}},
+                {"type": "text", "text": {"content": "second"}},
+                {"type": "text", "text": {"content": "third"}},
+            ],
+            "list_start_index": 4,
+        },
+    }
+
+    out = enforce_block_limits([block], max_elements=2)
+
+    assert len(out) == 2
+    assert out[0]["numbered_list_item"]["list_start_index"] == 4
+    assert "list_start_index" not in out[1]["numbered_list_item"]
+
+
 def test_oversize_content_in_nested_children_is_split():
     block = {
         "type": "toggle",

@@ -65,34 +65,6 @@ def _paragraph_rich_text(block):
     return block["paragraph"]["rich_text"]
 
 
-def _to_api_block_shape(blocks):
-    """Reshape input blocks into the shape the Notion API returns from `get`.
-
-    `text_to_blocks` emits create-shaped blocks (segments carry
-    ``text.content``), while ``blocks_to_markdown`` reads the read-shaped output
-    (segments carry ``plain_text`` plus an ``annotations`` dict and an optional
-    ``href``). This bridges the two so a single round-trip assertion exercises
-    both conversion directions exactly as a live set->get would.
-    """
-    reshaped = []
-    for block in blocks:
-        block_type = block["type"]
-        body = block[block_type]
-        segments = []
-        for seg in body["rich_text"]:
-            text = seg["text"]
-            api_seg = {
-                "plain_text": text["content"],
-                "annotations": seg.get("annotations") or {},
-            }
-            link = text.get("link")
-            if link:
-                api_seg["href"] = link["url"]
-            segments.append(api_seg)
-        reshaped.append({"type": block_type, block_type: {"rich_text": segments}})
-    return reshaped
-
-
 def test_text_to_blocks_intraword_underscores_stay_literal():
     """env_prep.ps1, ai_validation_checks, foo_bar_baz must NOT become italic.
 
@@ -141,44 +113,55 @@ def test_set_get_roundtrip_preserves_intraword_underscore_tokens():
     for token in ("env_prep.ps1", "ai_validation_checks", "foo_bar_baz"):
         source = f"Use {token} to proceed."
         blocks = text_to_blocks(source)
-        api_blocks = _to_api_block_shape(blocks)
+        api_blocks = _as_api_blocks(blocks)
         roundtripped = blocks_to_markdown(api_blocks)
         assert roundtripped == source, token
 
 
-def test_text_to_blocks_code_inside_bold_is_code_only_not_bold():
-    """A `code` token inside a **bold** span must NOT be marked bold too.
-
-    Markdown has no syntax for a run that is BOTH code and bold, so a
-    bold+code run round-trips as broken ``**`code`**`` and the adjacent bold
-    delimiters collide into ``****``. The code run must be code-only; the
-    surrounding runs stay bold.
-    """
-    source = "**Grounding (`clip-slide-plan.1`):** rest is plain."
+def test_text_to_blocks_code_inside_bold_italic_preserves_outer_annotations():
+    """A code run inside ***bold italic*** keeps all three annotations."""
+    source = "***Grounding (`clip-slide-plan.1`):*** rest is plain."
     blocks = text_to_blocks(source)
 
     rich_text = _paragraph_rich_text(blocks[0])
     by_text = {seg["text"]["content"]: (seg.get("annotations") or {}) for seg in rich_text}
-    # The code token is code-only, never bold.
-    assert by_text["clip-slide-plan.1"] == {"code": True}
-    # The surrounding runs inside the bold span stay bold.
-    assert by_text["Grounding ("] == {"bold": True}
-    assert by_text["):"] == {"bold": True}
+    assert by_text["clip-slide-plan.1"] == {
+        "bold": True,
+        "italic": True,
+        "code": True,
+    }
+    assert by_text["Grounding ("] == {"bold": True, "italic": True}
+    assert by_text["):"] == {"bold": True, "italic": True}
 
 
-def test_set_get_roundtrip_code_inside_bold_has_no_quadruple_asterisks():
-    """set->get round-trip of `code` inside **bold** must not emit ``****``.
+def test_set_get_roundtrip_code_inside_bold_italic_preserves_one_span():
+    """set->get keeps inline code inside its enclosing ***bold italic*** span.
 
     Mirrors a live ``pages content set`` then ``pages get -m`` by converting
     markdown -> create blocks -> API-shaped read blocks -> markdown.
     """
-    source = "**Grounding (`clip-slide-plan.1`):** the rest is bold too."
+    source = "***Grounding (`clip-slide-plan.1`):*** the rest is plain."
     blocks = text_to_blocks(source)
-    api_blocks = _to_api_block_shape(blocks)
+    api_blocks = _as_api_blocks(blocks)
     roundtripped = blocks_to_markdown(api_blocks)
 
-    assert "****" not in roundtripped
-    assert "`clip-slide-plan.1`" in roundtripped
+    assert roundtripped == source
+
+
+def test_set_get_roundtrip_preserves_non_one_numbered_list_start():
+    """The first number of a numbered list survives content set then get."""
+    source = (
+        "4. ***Configure `list_start_index` before upload***\n\n"
+        "5. Keep the following list item semantic."
+    )
+
+    blocks = text_to_blocks(source)
+    first = blocks[0]["numbered_list_item"]
+    second = blocks[1]["numbered_list_item"]
+
+    assert first["list_start_index"] == 4
+    assert "list_start_index" not in second
+    assert _roundtrip(source) == source
 
 
 def test_text_to_blocks_nested_fenced_code_block_preserves_literal_content():
