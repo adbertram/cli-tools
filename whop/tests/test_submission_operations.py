@@ -18,6 +18,7 @@ def client(tmp_path):
     c.account=Mock(return_value={'id':ACTOR,'username':'whopuser','profile':'rewards'})
     c.linked_accounts=Mock(return_value=[{'accountId':TIKTOK,'platform':'tiktok','status':'active','username':'ata_clipper','id':'linked_TEST'}])
     c.campaign=Mock(return_value={'id':CAMPAIGN,'name':'Test','description':'Actual requirements','referenceMaterials':[],'platforms':['tiktok'],'status':'active','private':False,'requiresApplication':False,
+       'budgetCents':100000,'metrics':{'budgetSpentCents':5423},
        'payouts':[{'platform':'tiktok','payoutType':'cpm','rateCents':100,'minPayoutCents':100,'maxPayoutCents':35000,'budgetCents':15000,'spentCents':0}]})
     c._rest=Mock(return_value={'data':[{'campaignId':CAMPAIGN,'creatorMaxReached':False,'intake':'open','platformIntake':{'tiktok':'open'}}]})
     c._action_document=Mock(return_value=Mock())
@@ -75,6 +76,58 @@ def test_closed_intake_fails(client,key,value):
 def test_no_funding(client):
     client.campaign.return_value['payouts'][0]['spentCents']=15000
     with pytest.raises(ClientError,match='not_funded'):ready(client)
+
+
+def test_campaign_reported_funding_and_optional_platform_intake_match_native_contract(client):
+    payout=client.campaign.return_value['payouts'][0]
+    del payout['budgetCents'];del payout['spentCents']
+    del client._rest.return_value['data'][0]['platformIntake']
+    result=ready(client)
+    assert result['funding_remaining_cents']==94577
+    assert result['funding']=={'scope':'campaign_reported','remaining_cents':94577,
+        'campaign':{'budget_cents':100000,'spent_cents':5423,'remaining_cents':94577},'platform':None}
+    assert result['ready'] is True
+
+
+def test_platform_allocation_preserved_and_mutable_campaign_spend_not_in_digest(client):
+    first=ready(client);assert first['funding']['scope']=='platform' and first['funding_remaining_cents']==15000
+    client.campaign.return_value['metrics']['budgetSpentCents']=99999
+    second=ready(client)
+    assert second['requirements_digest']==first['requirements_digest']
+    assert second['funding']['campaign']['remaining_cents']==1 and second['funding_remaining_cents']==15000
+
+
+@pytest.mark.parametrize('budget,spent',[(None,0),(100000,None),(True,0),(100000,-1),(100000,100000),(0,0)])
+def test_unknown_or_exhausted_campaign_funds_refuse_even_if_platform_positive(client,budget,spent):
+    client.campaign.return_value['budgetCents']=budget;client.campaign.return_value['metrics']['budgetSpentCents']=spent
+    with pytest.raises(ClientError,match='funding_schema_changed|not_funded'):ready(client)
+    client._rest.assert_not_called();client._action_document.assert_not_called()
+
+
+@pytest.mark.parametrize('key,value',[('budgetCents',None),('spentCents',None),('budgetCents',True),('spentCents',-1)])
+def test_partial_or_invalid_platform_allocation_never_uses_campaign_remaining(client,key,value):
+    client.campaign.return_value['payouts'][0][key]=value
+    with pytest.raises(ClientError,match='payout_schema_changed'):ready(client)
+    client._action_document.assert_not_called()
+
+
+@pytest.mark.parametrize('allocation',[{'budgetCents':15000,'spentCents':0},{'spentCents':100}])
+def test_other_platform_allocation_cannot_authorize_unknown_tiktok_allocation(client,allocation):
+    payout=client.campaign.return_value['payouts'][0];del payout['budgetCents'];del payout['spentCents']
+    client.campaign.return_value['payouts'].append({'platform':'instagram',**allocation})
+    with pytest.raises(ClientError,match='platform_funding_unknown'):ready(client)
+
+
+@pytest.mark.parametrize('value',[None,{}, {'instagram':'closed'}, {'tiktok':'open'}])
+def test_native_open_intake_allows_absent_platform_specific_restriction(client,value):
+    client._rest.return_value['data'][0]['platformIntake']=value
+    assert ready(client)['ready'] is True
+
+
+@pytest.mark.parametrize('value',['SECRET',{'tiktok':'unrecognized'},True])
+def test_malformed_optional_platform_intake_refuses(client,value):
+    client._rest.return_value['data'][0]['platformIntake']=value
+    with pytest.raises(ClientError,match='intake_schema_changed'):ready(client)
 
 def test_dynamic_form_chunk_loaded_only_after_missing_action(client):
     client._discover_action.side_effect=[ClientError('read_action_discovery_missing: sources=60, matches=0, failures=0'),'b'*40]
