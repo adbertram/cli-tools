@@ -30,18 +30,22 @@ Sign-in flow (validated live via the harness headless Chromium):
      message — all of which are detected and reported as explicit blockers.
 
 `AUTH_LOGIN_HANDLER` drives the email/password step headlessly through the
-CLI-owned harness browser (which renders TikTok fine), so `auth login` never
-opens the plain/headed Chrome that crashes this host. The one thing it cannot
-do is answer an out-of-band verification code or a CAPTCHA, so those are a
-hard stop with an explicit message rather than a silent failure.
+CLI-owned harness browser. The explicit `auth login --manual` option instead
+uses the shared engine's plain visible Chrome login in an isolated named
+profile. That route submits no stored credentials and lets the user complete
+verification in the same persistent profile before live session verification.
 """
 
 from __future__ import annotations
 
 import time
+from contextvars import ContextVar
 
 from cli_tools_shared.auth import BrowserAutomation, BrowserAutomationError
 from cli_tools_shared.config import read_cli_tool_secret, secret_manager_set_command
+
+# Scoped to one CLI invocation; the cached Config never stores a login mode.
+manual_login_requested = ContextVar("tiktok_manual_login", default=False)
 
 # Truthy result means NOT authenticated. Asks TikTok's own passport account
 # endpoint instead of reading the header: a signed-out profile whose header
@@ -158,7 +162,8 @@ def _tiktok_login_handler(browser: "TiktokBrowser", page) -> None:
                 "TikTok presented a CAPTCHA / human-verification challenge "
                 "during login. This cannot be solved automatically and must "
                 "not be automated around. Re-run 'tiktok auth login "
-                "--credential-type browser_session' from an interactive shell "
+                "--profile <named-profile> --credential-type browser_session "
+                "--manual' from an interactive shell "
                 "and complete the challenge in the CLI-owned browser profile."
             )
         if issue == "rate_limit":
@@ -182,8 +187,9 @@ def _tiktok_login_handler(browser: "TiktokBrowser", page) -> None:
                 "TikTok requested a 6-digit verification code (two-factor "
                 "authentication). The code is delivered to Adam's phone/email, "
                 "not generated from a seed, so it cannot be completed "
-                "headlessly. Re-run 'tiktok auth login --credential-type "
-                "browser_session' from an interactive shell to enter the code."
+                "headlessly. Re-run 'tiktok auth login --profile <named-profile> "
+                "--credential-type browser_session --manual' from an interactive "
+                "shell to enter the code."
             )
     raise BrowserAutomationError(
         "TikTok login did not reach an authenticated state within "
@@ -206,3 +212,10 @@ class TiktokBrowser(BrowserAutomation):
     # USERNAME/PASSWORD/SUBMIT selector constants are deliberately left unset
     # because that declarative path only runs on the crashing headed flow.
     AUTH_LOGIN_HANDLER = staticmethod(_tiktok_login_handler)
+
+
+class ManualTiktokBrowser(TiktokBrowser):
+    """Opt-in plain Chrome login; shared code verifies and saves the session."""
+
+    AUTH_LOGIN_HANDLER = None
+    MANUAL_LOGIN = True

@@ -12,6 +12,19 @@ description: >-
 Execute tiktok operations using the `tiktok` CLI. All tiktok interactions should use this CLI.
 </objective>
 
+<project_overrides>
+Before acting on this skill, run:
+
+```bash
+~/.agents/skills/skill-expert/scripts/load-skill-overrides.sh tiktok-cli
+```
+
+Apply any printed instructions alongside this skill's own workflow: they extend it and
+never repeal its limits. No output means no project override is in effect. A non-zero
+exit means the project's override file is broken -- report it and stop rather than
+silently running unmodified.
+</project_overrides>
+
 <quick_start>
 The `tiktok` CLI follows this pattern:
 ```bash
@@ -28,7 +41,8 @@ tiktok <command-group> <action> [arguments] [options]
 | List a profile's posted videos; your own private posts need your `browser_session`. | `tiktok videos list` |
 | Get one posted video by id (`browser_session`). | `tiktok videos get` |
 | Permanently delete one of your videos by id; requires `--yes` (`browser_session`). | `tiktok videos delete` |
-| Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent. | `tiktok auth login` |
+| Configure authentication, optionally using a manual browser login. | `tiktok auth login` |
+| Open visible Chrome for manual login in an isolated named browser profile; no stored credentials are submitted. | `tiktok auth login --profile clipping --credential-type browser_session --manual` |
 | Clear stored credentials. | `tiktok auth logout` |
 | Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``. | `tiktok auth status` |
 | Manage authentication profiles | `tiktok auth profiles` |
@@ -42,6 +56,18 @@ This file contains complete command syntax, all arguments, all options, and usag
 
 <principle name="AI Instruction Results">
 After every `tiktok` command, inspect stdout. If it is JSON with `type: "ai_instruction"` and `schema_version: "1.0"`, follow the instruction object as the next task instead of summarizing it as ordinary command output. Use the allowed tools, context, constraints, and success criteria in the payload. Run `verification_commands` or `follow_up_commands` only after completing the instructed AI work; they are not required commands for performing the handoff.
+</principle>
+
+<principle name="Manual Browser Login">
+Use `auth login --profile <named-profile> --credential-type browser_session --manual`
+for an explicitly requested visible login or MFA/CAPTCHA recovery. It opens plain
+Chrome with that profile's existing persistent data. Finish login there, then
+press Enter in the terminal; without an interactive terminal, close that window
+within five minutes instead. The shared engine verifies live authentication and
+saves the profile's session. Manual login requires an explicit non-default
+profile, submits no stored credentials, and leaves ordinary login unchanged.
+Use Computer Use only for this CLI-owned window; never bypass CAPTCHA. Verify
+with `tiktok auth status --profile <named-profile>` before service operations.
 </principle>
 
 <principle name="Command Groups">

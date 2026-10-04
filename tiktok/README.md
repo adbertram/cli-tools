@@ -72,6 +72,21 @@ TikTok has two profile types: `browser_session` (favorites list and the
 status; see below). `auth status` checks a browser session against TikTok's own
 account endpoint, so an expired session reports `authenticated: false`.
 
+For a visible login or recovery from an MFA/CAPTCHA step, explicitly opt into
+manual login in an isolated named browser profile:
+
+```bash
+tiktok auth login --profile clipping --credential-type browser_session --manual
+tiktok auth status --profile clipping
+```
+
+Finish login in the opened Chrome window, then press Enter in the terminal.
+Without an interactive terminal, close that window within five minutes instead.
+The shared engine closes only that profile's login browser, verifies live
+authentication, and saves the same profile's session. Manual mode never reads or
+submits stored login credentials. It requires an explicit non-default profile
+and `browser_session` credential type; ordinary login behavior is unchanged.
+
 ### Transcripts Download
 
 ```bash

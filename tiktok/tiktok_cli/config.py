@@ -163,8 +163,9 @@ class Config(BaseConfig):
         return val is None or val.lower() == "true"
 
     def get_browser(self):
-        from .browser import TiktokBrowser
-        return TiktokBrowser(self)
+        from .browser import ManualTiktokBrowser, TiktokBrowser, manual_login_requested
+        browser_type = ManualTiktokBrowser if manual_login_requested.get() else TiktokBrowser
+        return browser_type(self)
 
     def has_credentials(self) -> bool:
         if self.auth_type == BROWSER_AUTH_TYPE:

@@ -1,7 +1,7 @@
 {
   "tool": "tiktok",
   "description": "TikTok transcript downloader using yt-dlp",
-  "discovered_at": "2026-09-27T00:02:01Z",
+  "discovered_at": "2026-10-04T01:14:17Z",
   "total_commands": 20,
   "global_options": [
     {
@@ -19,7 +19,7 @@
       "options": [],
       "commands": {
         "login": {
-          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "help": "Configure authentication, optionally using a manual browser login. With --manual, finish login in the opened Chrome window and press Enter here. Without a terminal, close that window within five minutes instead. The shared engine verifies live authentication and persists the session.",
           "arguments": [],
           "options": [
             {
@@ -41,8 +41,15 @@
               "name": "--credential-type",
               "type": "TEXT",
               "required": false,
-              "help": "Authenticate only this credential type (e.g., 'custom', 'browser_session')",
+              "help": "Authenticate only 'custom' or 'browser_session'",
               "short": "-c"
+            },
+            {
+              "name": "--manual",
+              "type": "bool",
+              "required": false,
+              "help": "Open plain visible Chrome for manual login in an isolated named browser_session profile; never submit stored credentials",
+              "takes_value": false
             }
           ]
         },

@@ -5,6 +5,7 @@ from cli_tools_shared.auth_commands import create_auth_app
 from cli_tools_shared.command_registry import register_commands
 from .client import ClientError
 from .config import get_config
+from .auth import add_manual_login_option
 from .oauth import tiktok_oauth_login
 
 app = create_app(
@@ -19,14 +20,9 @@ from .commands import favorites, transcripts, videos
 register_commands(app, get_config, transcripts, name="transcripts", help="Download TikTok video transcripts")
 register_commands(app, get_config, favorites, name="favorites", help="Manage saved (favorited) TikTok videos")
 register_commands(app, get_config, videos, name="videos", help="Publish, inspect, list, and delete TikTok videos")
-app.add_typer(
-    create_auth_app(
-        get_config,
-        tool_name="tiktok",
-        login_handler=tiktok_oauth_login,
-    ),
-    name="auth",
-)
+auth_app = create_auth_app(get_config, tool_name="tiktok", login_handler=tiktok_oauth_login)
+add_manual_login_option(auth_app)
+app.add_typer(auth_app, name="auth")
 
 
 def main():
