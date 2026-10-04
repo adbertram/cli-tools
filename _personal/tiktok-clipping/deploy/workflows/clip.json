@@ -42,7 +42,7 @@
         0
       ],
       "parameters": {
-        "command": "/usr/bin/env PATH='/opt/homebrew/opt/ffmpeg-full/bin:/Users/adam/.local/bin:/opt/homebrew/bin:/usr/bin:/bin' WHISPER_CPP_MODEL='/Users/adam/.local/share/cli-tools/whisper/models/ggml-small.en.bin' /Users/adam/.local/bin/tiktok-clipping jobs prepare --kind clip --config /opt/cli-tools/_personal/tiktok-clipping/deploy/config.json",
+        "command": "=/usr/bin/env PATH='/opt/homebrew/opt/ffmpeg-full/bin:/Users/adam/.local/bin:/opt/homebrew/bin:/usr/bin:/bin' WHISPER_CPP_MODEL='/Users/adam/.local/share/cli-tools/whisper/models/ggml-small.en.bin' /Users/adam/.local/bin/tiktok-clipping jobs prepare --kind clip --config /opt/cli-tools/_personal/tiktok-clipping/deploy/config.json --n8n-execution-id '{{ $execution.id }}' --n8n-workflow-id iok4Q6LnQuJ4xMvg",
         "executeOnce": true
       }
     },
@@ -123,7 +123,88 @@
         0
       ],
       "parameters": {
-        "command": "=printf '%s' '{{ $json.stdinB64 }}' | /usr/bin/base64 -D | /usr/bin/env PATH='/opt/homebrew/opt/ffmpeg-full/bin:/Users/adam/.local/bin:/opt/homebrew/bin:/usr/bin:/bin' WHISPER_CPP_MODEL='/Users/adam/.local/share/cli-tools/whisper/models/ggml-small.en.bin' /Users/adam/.local/bin/tiktok-clipping jobs apply --config /opt/cli-tools/_personal/tiktok-clipping/deploy/config.json",
+        "command": "=printf '%s' '{{ $json.stdinB64 }}' | /usr/bin/base64 -D | /usr/bin/env PATH='/opt/homebrew/opt/ffmpeg-full/bin:/Users/adam/.local/bin:/opt/homebrew/bin:/usr/bin:/bin' WHISPER_CPP_MODEL='/Users/adam/.local/share/cli-tools/whisper/models/ggml-small.en.bin' /Users/adam/.local/bin/tiktok-clipping jobs apply --config /opt/cli-tools/_personal/tiktok-clipping/deploy/config.json --n8n-execution-id '{{ $execution.id }}' --n8n-workflow-id iok4Q6LnQuJ4xMvg",
+        "executeOnce": true
+      }
+    },
+    {
+      "id": "read-render-result",
+      "name": "Read render result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const raw=$input.first().json.stdout; if(typeof raw!==\"string\" || raw.length>1048576) throw new Error(\"Invalid rendered envelope\"); return [{json:JSON.parse(raw)}];"
+      }
+    },
+    {
+      "id": "require-visual-review",
+      "name": "Require visual review",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const input=$input.first().json; const d=input.state===\"visual_pending\"?input:input.action_result; if(!d || d.state!==\"visual_pending\") return []; const e=d.visual; if(!e || e.schema_version!==1 || !/^[a-f0-9]{32}$/.test(e.job_id) || !/^[a-f0-9]{32}$/.test(e.attempt_id) || !Number.isFinite(e.expires_at) || e.expires_at<=Date.now()/1000) throw new Error(\"Invalid visual lease\"); const task=JSON.stringify(e); if(task.length>8192) throw new Error(\"Visual task too large\"); return [{json:{visual:e,task}}];"
+      }
+    },
+    {
+      "id": "deepseek-visual",
+      "name": "DeepSeek visual review",
+      "type": "n8n-nodes-agent-harnesses.deepSeekHarness",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        0
+      ],
+      "parameters": {
+        "prompt": "={{$json.task}}",
+        "profile": "headless",
+        "options": {
+          "workingDirectory": "/opt/cli-tools/_personal/tiktok-clipping",
+          "patches": "={{$json.visual.overlay_path}}",
+          "timeout": "={{Math.max(1,Math.min(120,Math.floor($json.visual.model_deadline-Date.now()/1000)))}}"
+        }
+      },
+      "credentials": {
+        "deepSeekHarnessApi": {
+          "id": "SCgsQg91RETeYSdk",
+          "name": "DeepSeek Harness (adam-server)"
+        }
+      }
+    },
+    {
+      "id": "encode-visual-result",
+      "name": "Encode visual receipt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const result=$input.first().json.result; if(typeof result!==\"string\" || result.length>65536) throw new Error(\"Invalid native review result\"); const receipt=JSON.parse(result); const e=$(\"Require visual review\").first().json.visual; if(JSON.stringify(receipt.envelope)!==JSON.stringify(e)) throw new Error(\"Native visual envelope changed\"); const stdinB64=Buffer.from(result,\"utf8\").toString(\"base64\"); if(!/^[A-Za-z0-9+/=]+$/.test(stdinB64)) throw new Error(\"Invalid visual transport\"); return [{json:{stdinB64}}];"
+      }
+    },
+    {
+      "id": "validate-visual-receipt",
+      "name": "Validate visual receipt",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2640,
+        0
+      ],
+      "parameters": {
+        "command": "=printf '%s' '{{ $json.stdinB64 }}' | /usr/bin/base64 -D | /usr/bin/env PATH='/opt/homebrew/opt/ffmpeg-full/bin:/Users/adam/.local/bin:/opt/homebrew/bin:/usr/bin:/bin' /Users/adam/.local/bin/tiktok-clipping jobs apply-visual --config /opt/cli-tools/_personal/tiktok-clipping/deploy/config.json --n8n-execution-id '{{ $execution.id }}' --n8n-workflow-id iok4Q6LnQuJ4xMvg",
         "executeOnce": true
       }
     }
@@ -169,6 +250,11 @@
             "node": "Require leased job",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Require visual review",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -200,6 +286,61 @@
         [
           {
             "node": "Validate and execute",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate and execute": {
+      "main": [
+        [
+          {
+            "node": "Read render result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read render result": {
+      "main": [
+        [
+          {
+            "node": "Require visual review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Require visual review": {
+      "main": [
+        [
+          {
+            "node": "DeepSeek visual review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek visual review": {
+      "main": [
+        [
+          {
+            "node": "Encode visual receipt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Encode visual receipt": {
+      "main": [
+        [
+          {
+            "node": "Validate visual receipt",
             "type": "main",
             "index": 0
           }

@@ -45,5 +45,13 @@
     },
     "exploration": 0.05
   },
-  "adapter_module": null
+  "adapter_module": null,
+  "visual": {
+    "frame_count": 3,
+    "max_frame_bytes": 1048576,
+    "timeout_seconds": 120,
+    "retention_seconds": 86400,
+    "continuation_seconds": 30,
+    "workflow_id": "iok4Q6LnQuJ4xMvg"
+  }
 }

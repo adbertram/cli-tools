@@ -1,8 +1,8 @@
 {
   "tool": "tiktok-clipping",
   "description": "CLI interface for tiktok-clipping",
-  "discovered_at": "2026-10-04T00:42:48Z",
-  "total_commands": 15,
+  "discovered_at": "2026-10-04T16:33:37Z",
+  "total_commands": 16,
   "global_options": [],
   "commands": {
     "control": {
@@ -45,6 +45,42 @@
               "type": "file",
               "required": true,
               "help": "Trusted absolute JSON configuration file"
+            },
+            {
+              "name": "--n8n-execution-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Trusted enclosing native execution ID"
+            },
+            {
+              "name": "--n8n-workflow-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Trusted configured native workflow ID"
+            }
+          ]
+        },
+        "apply-visual": {
+          "help": "Validate a native image-review receipt and its exact durable lease.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--config",
+              "type": "file",
+              "required": true,
+              "help": "Trusted absolute JSON configuration file"
+            },
+            {
+              "name": "--n8n-execution-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Trusted enclosing native execution ID after node return"
+            },
+            {
+              "name": "--n8n-workflow-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Trusted configured native workflow ID"
             }
           ]
         },
@@ -156,6 +192,18 @@
               "type": "TEXT",
               "required": true,
               "help": "clip, learn or metrics; metrics never enters model node"
+            },
+            {
+              "name": "--n8n-execution-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Trusted enclosing native workflow execution ID"
+            },
+            {
+              "name": "--n8n-workflow-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Trusted configured native workflow ID"
             }
           ]
         },
@@ -213,6 +261,18 @@
               "type": "file",
               "required": true,
               "help": "Trusted absolute JSON configuration file"
+            },
+            {
+              "name": "--n8n-execution-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Trusted enclosing native execution ID"
+            },
+            {
+              "name": "--n8n-workflow-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Trusted configured native workflow ID"
             }
           ]
         }

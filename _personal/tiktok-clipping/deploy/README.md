@@ -1,4 +1,4 @@
-# n8n deployment for @ata_clipping
+# n8n deployment for @ata_clipper
 
 This deployment is installed on adam-server but is not a live publishing system yet. All four schedules are inactive. Production configuration has no verified account, no approved campaign sources, no live adapter, and zero daily spending/posting budgets. Do not remove these gates to make a status check look successful.
 
@@ -25,21 +25,12 @@ A real server FFmpeg smoke generated a 720×1280 three-second synthetic video wi
 
 ## Activation gates
 
-Complete the authenticated TikTok and Whop integrations before enabling these schedules. Verify the exact numeric identity of @ata_clipping, publishing access, linked participant account, campaign eligibility and rights, actual submission fields and deadline, and measured analytics/earnings. Public campaign discovery does not establish membership or eligibility. The public adapter deliberately reports missing capabilities for these authenticated operations.
+Complete the authenticated TikTok and Whop integrations before enabling these schedules. Verify the exact numeric identity of @ata_clipper, publishing access, linked participant account, campaign eligibility and rights, actual submission fields and deadline, and measured analytics/earnings. Public campaign discovery does not establish membership or eligibility. The public adapter deliberately reports missing capabilities for these authenticated operations.
 
 Campaign-specific content requirements also need enforceable checks. For example, the inspected Boxabl campaign requires a whole-home visual, brand presence and demographic information; source-list access alone does not prove a finished clip meets them. Configure only sources whose complete requirements the system can verify.
 
 After the authenticated operations work, populate trusted config with current evidence and explicit budgets, run one real eligible cycle through publishing, submission and readback, then enable schedules. Preserve pause/stop and unknown-outcome gates. No ambiguous upload or submission is repeated without authoritative reconciliation.
 
-The immediate browser-access gate is macOS Accessibility and Screen Recording for CuaDriver:
+The visual definition adds a native image-review stage with an immutable per-attempt overlay and trusted execution identity. Code deployment preserves the paused state, zero budgets, unconfigured account and empty sources. Updating the source workflow file does not enable its schedule. The production-shaped isolated workflow smoke is a separate deployment gate; earlier text-only executions do not count as visual proof.
 
-```sh
-/Users/adam/.local/bin/cua-driver permissions grant
-```
-
-For server state or an immediate pause:
-
-```sh
-ssh adam-server /Users/adam/.local/bin/tiktok-clipping status get --config /opt/cli-tools/_personal/tiktok-clipping/deploy/config.json
-ssh adam-server /Users/adam/.local/bin/tiktok-clipping control set paused --config /opt/cli-tools/_personal/tiktok-clipping/deploy/config.json
-```
+Use the owning n8n server integration to run `tiktok-clipping status get --config /opt/cli-tools/_personal/tiktok-clipping/deploy/config.json` or `tiktok-clipping control set paused --config /opt/cli-tools/_personal/tiktok-clipping/deploy/config.json` on adam-server. Preserve the external state directory during source refresh.

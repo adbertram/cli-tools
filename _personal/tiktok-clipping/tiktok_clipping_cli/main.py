@@ -35,6 +35,13 @@ def _engine(config):
     return Engine.from_path(config)
 
 
+def _native_engine(config, execution_id, workflow_id, *, completed=False):
+    if (execution_id is None) != (workflow_id is None):
+        raise SafetyError("native_execution_context_incomplete")
+    native = None if execution_id is None else {"execution_id": execution_id, "workflow_id": workflow_id}
+    return Engine.from_path(config, native_execution=native, native_completion=completed)
+
+
 def _stdin(engine):
     maximum = engine.config["limits"]["max_payload_bytes"]
     return strict_json(sys.stdin.buffer.read(maximum + 1), maximum)
@@ -42,17 +49,20 @@ def _stdin(engine):
 
 @jobs.command("prepare")
 @command
-def prepare(config: ConfigPath, kind: str = typer.Option(..., "--kind", help="clip, learn or metrics; metrics never enters model node.")):
+def prepare(config: ConfigPath, kind: str = typer.Option(..., "--kind", help="clip, learn or metrics; metrics never enters model node."),
+            execution_id: Optional[str] = typer.Option(None,"--n8n-execution-id",help="Trusted enclosing native workflow execution ID."),
+            workflow_id: Optional[str] = typer.Option(None,"--n8n-workflow-id",help="Trusted configured native workflow ID.")):
     """Claim one durable job or return an explicit paused/unconfigured/idle state."""
-    _perform(lambda: _engine(config).prepare(kind))
+    _perform(lambda: _native_engine(config,execution_id,workflow_id).prepare(kind))
 
 
 @jobs.command("apply")
 @command
-def apply(config: ConfigPath):
+def apply(config: ConfigPath, execution_id: Optional[str] = typer.Option(None,"--n8n-execution-id",help="Trusted enclosing native execution ID."),
+          workflow_id: Optional[str] = typer.Option(None,"--n8n-workflow-id",help="Trusted configured native workflow ID.")):
     """Validate leased model JSON from stdin, then execute once through trusted adapters."""
     def action():
-        engine = _engine(config)
+        engine = _native_engine(config,execution_id,workflow_id)
         return engine.apply(_stdin(engine))
     _perform(action)
 
@@ -67,11 +77,24 @@ def ingest(config: ConfigPath):
     _perform(action)
 
 
+@jobs.command("apply-visual")
+@command
+def apply_visual(config: ConfigPath, execution_id: str = typer.Option(...,"--n8n-execution-id",help="Trusted enclosing native execution ID after node return."),
+                 workflow_id: str = typer.Option(...,"--n8n-workflow-id",help="Trusted configured native workflow ID.")):
+    """Validate a native image-review receipt and its exact durable lease."""
+    def action():
+        engine = _native_engine(config,execution_id,workflow_id,completed=True)
+        return engine.apply_visual(_stdin(engine))
+    _perform(action)
+
+
 @jobs.command("run")
 @command
-def run(job_id: str = typer.Argument(..., help="Durable job ID."), config: ConfigPath = ...):
+def run(job_id: str = typer.Argument(..., help="Durable job ID."), config: ConfigPath = ...,
+        execution_id: Optional[str] = typer.Option(None,"--n8n-execution-id",help="Trusted enclosing native execution ID."),
+        workflow_id: Optional[str] = typer.Option(None,"--n8n-workflow-id",help="Trusted configured native workflow ID.")):
     """Run a ready job; coordinator alone owns retries and side-effect budgets."""
-    _perform(lambda: _engine(config).run(job_id))
+    _perform(lambda: _native_engine(config,execution_id,workflow_id).run(job_id))
 
 
 @jobs.command("reconcile")

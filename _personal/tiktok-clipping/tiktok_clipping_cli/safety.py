@@ -106,7 +106,18 @@ TARGET_PROFILE = "clipper"
 
 
 def validate_config(config):
-    keys(config, {"database", "workspace", "account", "sources", "limits", "learning", "baseline", "adapter_module"})
+    keys(config, {"database", "workspace", "account", "sources", "limits", "learning", "baseline", "adapter_module"}, {"visual"})
+    if config.get("visual") is not None:
+        visual = config["visual"]
+        keys(visual, {"frame_count", "max_frame_bytes", "timeout_seconds", "continuation_seconds", "retention_seconds", "workflow_id"})
+        string(visual["workflow_id"], 128)
+        number(visual["frame_count"], 1, 8, integer=True)
+        number(visual["max_frame_bytes"], 1024, 1048576, integer=True)
+        number(visual["timeout_seconds"], 1, config["limits"]["lease_seconds"], integer=True)
+        number(visual["continuation_seconds"], 1, 300, integer=True)
+        if visual["timeout_seconds"] + visual["continuation_seconds"] > config["limits"]["lease_seconds"]:
+            raise SafetyError("visual_lease_headroom_missing")
+        number(visual["retention_seconds"], 60, 2592000, integer=True)
     for field in ("database", "workspace"):
         from pathlib import Path
         if not Path(string(config[field])).is_absolute():
@@ -202,7 +213,7 @@ def validate_strategy(proposal, config, previous=None):
 
 
 def validate_source(record, config, now):
-    keys(record, {"source_id", "media_id", "media_url", "duration_seconds", "transcript", "observed_at", "provenance", "categories", "transcript_segments"}, {"assigned_style", "strategy_version", "strategy", "excluded_ranges", "clip_sequence", "media_key", "performance_context"})
+    keys(record, {"source_id", "media_id", "media_url", "duration_seconds", "transcript", "observed_at", "provenance", "categories", "transcript_segments"}, {"assigned_style", "strategy_version", "strategy", "excluded_ranges", "clip_sequence", "media_key", "performance_context", "model_feedback"})
     source = next((s for s in config["sources"] if s["id"] == record["source_id"]), None)
     if source is None:
         raise SafetyError("source_not_allowlisted")

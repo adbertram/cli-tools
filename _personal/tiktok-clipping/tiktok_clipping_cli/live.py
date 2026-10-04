@@ -136,6 +136,10 @@ class LiveAdapter:
     def reward_status(self, job, reward_ledger):
         missing("verified_whop_participant_reward_status")
 
+    def visual_execution_state(self, envelope):
+        from .visual import native_execution_state
+        return native_execution_state(self.config, envelope)
+
 
 def create_adapter(config):
     return LiveAdapter(config)
