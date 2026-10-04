@@ -41,6 +41,7 @@ tiktok <command-group> <action> [arguments] [options]
 | List a profile's posted videos; your own private posts need your `browser_session`. | `tiktok videos list` |
 | Get one posted video by id (`browser_session`). | `tiktok videos get` |
 | Read verified own-account Studio content with endpoint provenance. | `tiktok videos list --profile clipper --username ata_clipper --studio --expected-account-id 7692213003349443597` |
+| Read exact owned post IDs in one bounded Studio scan; resume beyond 1000 feed items using caller-owned continuation. | `tiktok studio inventory owned-post-ids.json --profile clipper --username ata_clipper --account-id 7692213003349443597` |
 | Read actual cumulative views, likes, comments, shares, and favorites for an own post. Missing measurements stay null. | `tiktok videos metrics <video_id> --profile clipper --username ata_clipper --expected-account-id 7692213003349443597` |
 | Permanently delete one of your videos by id; requires `--yes` (`browser_session`). | `tiktok videos delete` |
 | Configure authentication, optionally using a manual browser login. | `tiktok auth login` |
@@ -78,6 +79,7 @@ with `tiktok auth status --profile <named-profile>` before service operations.
 - **transcripts** -- Download TikTok video transcripts
 - **favorites** -- List and look up saved (favorited) TikTok videos. `list` needs a `browser_session` login (`tiktok auth login --credential-type browser_session`); `get` does not.
 - **videos** -- `publish`/`status` use the custom Content Posting API profile (`--profile posting`). `list`/`get`/`delete`/`metrics` use `browser_session`. Explicit `list/get --studio` and `metrics` verify the session owner against `--username` and optional exact `--expected-account-id`; they read Studio content using the observed Views sorting control. Studio counts are per-post measurements, never account-counter substitutes or earned revenue. Missing metrics are null. Limited/malformed reads and bounded incomplete lookups are inconclusive, never proof of absence. The public profile route remains the default for `list/get`; HTTP failures are not empty feeds. A `SELF_ONLY` API publish returns no post ID; listing alone does not prove which post an ambiguous upload created.
+- **studio inventory** -- Takes a regular JSON file of 1–1000 unique positive string IDs (64 KiB), exact `--username` and `--account-id`, optional regular `--continuation` JSON file, and `--max-pages` 1–20. One capture serves all IDs. Resume refreshes the head, requires at least two pages, and binds exact actor/profile/request-set/stable native semantics without signing material. Keep prior results and their actual measurement timestamps. `records` are newly measured matches, `requested_complete` includes previously observed matches, and `unresolved_ids` remain unknown even at `provider_end`; never infer deletion. Restart without a continuation for a new pass. No public-feed fallback.
 - **auth** -- Manage tiktok authentication
 </principle>
 </essential_principles>

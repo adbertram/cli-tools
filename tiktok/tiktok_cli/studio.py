@@ -17,6 +17,29 @@ METRIC_FIELDS = {
 
 class StudioContractError(ValueError):
     """A malformed/limited read cannot establish account content or absence."""
+    def __init__(self, message, *, code="studio_contract_error", category="upstream", status=None, retry_after_seconds=None):
+        super().__init__(message)
+        self.code, self.category, self.status = code, category, status
+        self.retry_after_seconds = retry_after_seconds
+
+
+def retry_after_seconds(raw, now=None):
+    from datetime import datetime, timezone
+    from email.utils import parsedate_to_datetime
+    if type(raw) is not str or len(raw) > 200:
+        return None
+    raw = raw.strip()
+    if re.fullmatch(r"[0-9]+", raw):
+        delay = float(raw)
+        return delay if math.isfinite(delay) else None
+    try:
+        when = parsedate_to_datetime(raw)
+        if when.tzinfo is None:
+            return None
+        delay = (when - (now or datetime.now(timezone.utc))).total_seconds()
+        return max(0.0, delay) if math.isfinite(delay) else None
+    except (ValueError, TypeError, OverflowError):
+        return None
 
 
 def parse_response(text):
@@ -96,7 +119,7 @@ def validate_page(payload):
     if not isinstance(payload.get("item_list"), list) or type(payload.get("has_more")) is not bool:
         raise StudioContractError("TikTok Studio pagination is malformed; result is inconclusive.")
     cursor = payload.get("cursor")
-    if type(cursor) is not int or cursor < 0:
+    if type(cursor) is not int or cursor < 0 or cursor > 2**53 - 1:
         raise StudioContractError("TikTok Studio cursor is malformed; result is inconclusive.")
     extra = payload.get("extra")
     if extra is not None and not isinstance(extra, dict):
@@ -126,7 +149,7 @@ CAPTURE_JS = r"""(opts) => {
  proto.setRequestHeader=function(name,value){if(this[key])this[key].headers[name]=value;return saved.header.call(this,name,value)};
  proto.send=function(body){const request=this[key];if(request&&typeof body==='string'){
    try {const parsed=JSON.parse(body);if(parsed.cursor===0&&parsed.size===opts.page_size){request.body=parsed;this.addEventListener('loadend',()=>{
-     if(this.status===200&&this.responseType===''){state.request=request;state.restore();}
+     if(!state.request&&this.status===200&&this.responseType===''){state.request=request;state.restore();}
    });}} catch (_) {}
  }return saved.send.call(this,body)};
  return true;
@@ -138,8 +161,73 @@ FETCH_JS = r"""async (opts) => {
  const body={...request.body,cursor:opts.cursor};
  const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),15000);
  try {
-   const response=await fetch(request.url,{method:'POST',headers:request.headers,credentials:'include',body:JSON.stringify(body),signal:controller.signal});
-   const text=await response.text();return {status:response.status,body:text.length<=opts.max_body?text:null};
- } finally {clearTimeout(timer);}
+   const response=await fetch(request.url,{method:'POST',headers:request.headers,credentials:'include',body:JSON.stringify(body),signal:controller.signal,redirect:'error'});
+   const header=response.headers?.get('Retry-After');const retryAfter=typeof header==='string'&&header.length<=200?header:null;
+   if(response.status!==200){try{await response.body?.cancel();}catch(_){}return {status:response.status,body:null,retryAfter};}
+   const reader=response.body?.getReader();if(!reader)return {status:response.status,body:null};
+   const chunks=[];let size=0;
+   try {while(true){const part=await reader.read();if(part.done)break;size+=part.value.byteLength;
+     if(size>opts.max_body){await reader.cancel();return {status:response.status,body:null};}chunks.push(part.value);}}
+   finally {reader.releaseLock();}
+   const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength;}
+   return {status:response.status,body:new TextDecoder('utf-8',{fatal:true}).decode(bytes)};
+ } catch(error){return {status:0,body:null,transport:error?.name==='AbortError'?'timeout':'network'};}
+ finally {clearTimeout(timer);}
 }"""
 CLEANUP_JS = "(key) => {const state=window[key];if(state){state.restore();delete window[key]}return true}"
+
+
+# Only observed body semantics leave page memory. Signed URLs/headers never do.
+SEMANTICS_JS = r"""(key) => {
+ const request=window[key]?.request;if(!request)return null;
+ const body=request.body;
+ if(Object.keys(body).sort().join(',')!=='cursor,query,size')return null;
+ const q=body.query;
+ if(!q||Object.keys(q).sort().join(',')!=='conditions,is_recent_posts,sort_orders'||
+    !Array.isArray(q.conditions)||q.conditions.length||q.is_recent_posts!==false||
+    !Array.isArray(q.sort_orders)||q.sort_orders.length!==1||
+    Object.keys(q.sort_orders[0]).sort().join(',')!=='field_name,order'||
+    q.sort_orders[0].field_name!=='post_time'||q.sort_orders[0].order!==2)return null;
+ return {path:'/tiktok/creator/manage/item_list/v1/',size:body.size,query:q};
+}"""
+
+class StudioReader:
+    """One native capture shared by list, single lookup, and batch reads."""
+    def __init__(self, page, key, identity):
+        self.page, self.key, self.identity = page, key, identity
+
+    def read_page(self, cursor):
+        from datetime import datetime, timezone
+        response = self.page.evaluate(FETCH_JS, {"key": self.key, "cursor": cursor, "max_body": MAX_RESPONSE_BYTES})
+        if not isinstance(response, dict) or type(response.get("status")) is not int:
+            raise StudioContractError("TikTok Studio content response is malformed; result is inconclusive.")
+        status = response["status"]
+        if status != 200:
+            category = "rate_limit" if status == 429 else "auth" if status in (401,403) else "transient" if status == 0 or 500 <= status <= 599 else "upstream"
+            code = "studio_transport_timeout" if status == 0 and response.get("transport") == "timeout" else "studio_transport_failed" if status == 0 else "studio_http_" + str(status)
+            raise StudioContractError("TikTok Studio content request failed; result is inconclusive.",
+                                      code=code, category=category, status=status,
+                                      retry_after_seconds=retry_after_seconds(response.get("retryAfter")))
+        if not isinstance(response.get("body"), str):
+            raise StudioContractError("TikTok Studio content body is unavailable or oversized; result is inconclusive.")
+        raw, more, next_cursor, measured = validate_page(parse_response(response["body"]))
+        if len(raw) > STUDIO_PAGE_SIZE:
+            raise StudioContractError("TikTok Studio page exceeds the observed page bound.")
+        observed = datetime.now(timezone.utc).isoformat()
+        records = [normalize_item(item, self.identity, observed, measured) for item in raw]
+        if len({record["id"] for record in records}) != len(records):
+            raise StudioContractError("TikTok Studio repeated a video; pagination is inconclusive.")
+        if more and (not records or next_cursor <= cursor):
+            raise StudioContractError("TikTok Studio cursor did not advance; result is inconclusive.")
+        return records, more, next_cursor
+
+    def semantics_digest(self):
+        import hashlib
+        semantics = self.page.evaluate(SEMANTICS_JS, self.key)
+        expected = {"path": STUDIO_ITEMS_PATH, "size": STUDIO_PAGE_SIZE,
+                    "query": {"sort_orders": [{"field_name": "post_time", "order": 2}],
+                              "conditions": [], "is_recent_posts": False}}
+        # Exact JSON equality also rejects bool-for-int substitutions.
+        if json.dumps(semantics, sort_keys=True) != json.dumps(expected, sort_keys=True):
+            raise StudioContractError("TikTok Studio native request semantics changed; result is inconclusive.")
+        return hashlib.sha256(json.dumps(expected, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
