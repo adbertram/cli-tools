@@ -388,6 +388,26 @@ class Daemon:
             )))
             return {"session_id": self.session}
         if meta == "pending_dialog": return {"dialog": self.dialog}
+        if meta == "close_navigation":
+            timeout = req.get("timeout", 5)
+            if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not 0 < timeout <= 5:
+                return {"error": "invalid close-navigation timeout"}
+            task = asyncio.create_task(self.cdp.send_raw("Page.navigate", {"url": "about:blank"}, session_id=self.session))
+            try:
+                async with asyncio.timeout(timeout):
+                    while not task.done():
+                        if self.dialog:
+                            if self.dialog.get("type") != "beforeunload":
+                                raise RuntimeError("Close navigation blocked by a non-beforeunload native dialog")
+                            await self.cdp.send_raw("Page.handleJavaScriptDialog", {"accept": True}, session_id=self.session)
+                        await asyncio.wait({task}, timeout=0.05)
+                    return {"result": await task}
+            except TimeoutError:
+                raise RuntimeError(f"Close navigation timed out after {timeout}s") from None
+            finally:
+                if not task.done():
+                    task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
         if meta == "shutdown":    self.stop.set(); return {"ok": True}
 
         method = req["method"]

@@ -311,7 +311,7 @@ class BrowserHarnessService:
         for tab in helpers.list_tabs():
             if tab["targetId"] != keep:
                 helpers.cdp("Target.closeTarget", targetId=tab["targetId"])
-        helpers.goto_url("about:blank")
+        helpers.goto_url_for_close("about:blank", timeout=5)
 
     def _request_browser_close(self) -> None:
         """Ask Chrome to exit cleanly before hard-stop teardown.
@@ -1109,6 +1109,11 @@ class BrowserHarnessService:
         self._require_open()
         from ._elements import _ServiceElement
         _ServiceElement(self, css=selector).fill(text)
+
+    def fill_framework_input(self, selector: str, text: str) -> None:
+        """Fill a framework-managed editor through existing native key events."""
+        self._require_open()
+        self._bh.h.fill_input(selector, text)
 
     def set_input_files(self, selector: str, file_path: str) -> None:
         """Set a ``<input type="file">`` element's files to a local file.

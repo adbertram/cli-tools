@@ -209,6 +209,17 @@ def goto_url(url):
     d = (AGENT_WORKSPACE / "domain-skills" / (urlparse(url).hostname or "").removeprefix("www.").split(".")[0])
     return {**r, "domain_skills": sorted(p.name for p in d.rglob("*.md"))[:10]} if d.is_dir() else r
 
+
+def goto_url_for_close(url="about:blank", *, timeout=5):
+    """Bound shutdown housekeeping and accept only native beforeunload.
+
+    The daemon sees native dialog events while Page.navigate is pending.
+    General navigation and service transactions never use this close helper.
+    """
+    if url != "about:blank":
+        raise ValueError("Close navigation only accepts about:blank")
+    return _send({"meta": "close_navigation", "timeout": timeout}, timeout=timeout + 1).get("result", {})
+
 def page_info():
     """{url, title, w, h, sx, sy, pw, ph} — viewport + scroll + page size.
 
@@ -277,7 +288,9 @@ def fill_input(selector, text, clear_first=True, timeout=0.0):
         mods = 4 if sys.platform == "darwin" else 2  # Cmd on macOS, Ctrl elsewhere
         select_all = {"key": "a", "code": "KeyA", "modifiers": mods,
                       "windowsVirtualKeyCode": 65, "nativeVirtualKeyCode": 65}
-        cdp("Input.dispatchKeyEvent", type="rawKeyDown", **select_all)
+        # CDP editing command targets the focused editor, including contenteditable.
+        # https://chromedevtools.github.io/devtools-protocol/tot/Input/#method-dispatchKeyEvent
+        cdp("Input.dispatchKeyEvent", type="rawKeyDown", commands=["selectAll"], **select_all)
         cdp("Input.dispatchKeyEvent", type="keyUp", **select_all)
         press_key("Backspace")
     for ch in text:

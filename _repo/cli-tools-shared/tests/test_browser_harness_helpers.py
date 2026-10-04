@@ -123,3 +123,26 @@ def test_cdp_deadline_separate_from_protocol_and_socket_margin(monkeypatch):
 def test_cdp_rejects_invalid_deadlines(value):
     with pytest.raises(ValueError,match='invalid_cdp_request_timeout'):
         helpers.cdp('Page.navigate',request_timeout=value)
+@pytest.mark.parametrize("selector", ["input#owned", "textarea#owned", "[contenteditable=true]#owned"])
+@pytest.mark.parametrize("platform,modifier", [("darwin", 4), ("linux", 2)])
+def test_framework_clear_targets_focused_editor_with_native_select_all(monkeypatch, selector, platform, modifier):
+    calls = []; expressions = []
+    monkeypatch.setattr(helpers.sys, "platform", platform)
+    monkeypatch.setattr(helpers, "js", lambda expression: expressions.append(expression) or True)
+    monkeypatch.setattr(helpers, "cdp", lambda method, **params: calls.append((method, params)) or {})
+    helpers.fill_input(selector, "")
+    assert len(expressions) == 2
+    assert all(selector in expression for expression in expressions)
+    assert calls[0] == ("Input.dispatchKeyEvent", {"type": "rawKeyDown", "commands": ["selectAll"],
+        "key": "a", "code": "KeyA", "modifiers": modifier, "windowsVirtualKeyCode": 65, "nativeVirtualKeyCode": 65})
+    assert "commands" not in calls[1][1] and calls[1][1]["type"] == "keyUp"
+    assert [event[1]["key"] for event in calls[2:]] == ["Backspace", "Backspace"]
+
+
+def test_framework_clear_missing_target_dispatches_no_keyboard_event(monkeypatch):
+    calls = []
+    monkeypatch.setattr(helpers, "js", lambda expression: False)
+    monkeypatch.setattr(helpers, "cdp", lambda *args, **kwargs: calls.append(args))
+    with pytest.raises(RuntimeError, match="element not found"):
+        helpers.fill_input("#missing", "")
+    assert calls == []
