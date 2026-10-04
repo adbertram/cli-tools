@@ -300,3 +300,31 @@ def test_cache_removal_does_not_assume_physical_space_reclaimed(config, monkeypa
     with pytest.raises(SafetyError, match='disk_budget_exhausted'):
         renderer.prune_cache()
     assert not cache.exists()
+
+
+def test_real_reordered_cuts_burn_required_disclosure_across_full_render(source):
+    from test_rights import scoped_policy
+    renderer,path=source
+    from tiktok_clipping_cli.media import sha256
+    import json
+    configured=renderer.config['sources'][0]
+    configured.update(reuse_evidence='https://docs.google.com/document/d/TEST/edit',campaign={'id':'test-campaign'},feed='https://www.youtube.com/watch?v=fixture')
+    policy=scoped_policy(configured)
+    policy.update(source_sha256=sha256(path),source_bytes=path.stat().st_size,minimum_clip_seconds=1,clip_rules=[])
+    configured['publication_policy']=policy
+    p={'start_seconds':0,'end_seconds':3,'segments':[{'start_seconds':2,'end_seconds':3},{'start_seconds':0,'end_seconds':1}],'caption':'@hardscope #ad','style':'centered'}
+    transcript=[{'start':i,'end':i+1,'text':f'Sentence {i}.'} for i in range(3)]
+    asset=renderer.render_local(path,transcript,p,'Synthetic local fixture; never publish',publication_policy=policy)
+    report=renderer.quality({'input':{'source_id':configured['id']}},p,asset)
+    assert report['passed'] and abs(report['duration_seconds']-2)<0.1
+    receipt=json.loads(Path(asset['path']).with_suffix('.json').read_text())
+    assert receipt['edit']=={'segments':p['segments'],'rendered_duration':2,'reservation':'whole_source_bounding_span'}
+    assert receipt['captions'][0]['text']=='Sentence 2.' and receipt['captions'][1]['text']=='Sentence 0.'
+    assert receipt['audio_provenance']=={'source_sha256':policy['source_sha256'],'segments':p['segments'],'external_audio':False}
+    # Disclosure pixels at both ends, measured independently from filter strings.
+    for second in (0.1,1.8):
+        frame=subprocess.run([renderer.ffmpeg,'-v','error','-ss',str(second),'-i',asset['path'],'-frames:v','1','-vf','crop=720:240:0:0','-f','rawvideo','-pix_fmt','rgb24','-'],capture_output=True,check=True,timeout=20).stdout
+        assert sum(1 for i in range(0,len(frame),3) if min(frame[i:i+3])>200)>100
+    receipt['audio_provenance']['external_audio']=True
+    Path(asset['path']).with_suffix('.json').write_text(json.dumps(receipt))
+    with pytest.raises(SafetyError,match='render_rights_overlay_audio_receipt_changed'):renderer.quality({'input':{'source_id':configured['id']}},p,asset)

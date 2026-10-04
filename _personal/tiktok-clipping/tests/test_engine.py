@@ -533,3 +533,20 @@ def test_provider_rate_limit_without_header_uses_configured_initial_cooldown(eng
     assert result['failures']==2 and len(calls)==1
     with engine.transaction() as db:
         assert db.execute("SELECT until FROM circuits WHERE capability='metrics'").fetchone()[0]>=clock()+config['limits']['retry_base_seconds']
+
+
+@pytest.mark.parametrize('category', ['rate_limit', 'ambiguous'])
+def test_whop_provider_cooldown_survives_restart_and_crosses_method_boundaries(engine, adapter, config, clock, category):
+    config['rewards_account'] = {'account_id': 'fixture', 'username': 'fixture', 'profile': 'rewards', 'verified_at': iso(clock()), 'provenance': 'TEST'}
+    def throttle(*args):
+        raise AdapterFailure(category, 'TEST Whop failure', 172800.25, provider='whop', code='test_throttled', status=429)
+    adapter.verify_ready = throttle
+    with pytest.raises(AdapterFailure) as error: engine._call('verify_ready', {})
+    assert error.value.category == category
+    restarted = Engine(config, adapter=adapter, clock=clock)
+    for method, args in [('publish', ({}, {}, 'key')), ('submit_rewards', ({}, {})), ('reward_status', ({}, {}))]:
+        with pytest.raises(AdapterFailure, match='circuit_open: provider:whop'): restarted._call(method, *args)
+    with restarted.transaction() as db:
+        assert db.execute("SELECT until FROM circuits WHERE capability='provider:whop'").fetchone()[0] == clock() + 172800.25
+    # Exact TikTok-only reconciliation does not call Whop and remains available.
+    assert restarted._call('reconcile', {'id': 'fixture'}, 'key')['state'] == 'published'

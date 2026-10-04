@@ -17,7 +17,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from .safety import SafetyError, canonical, digest, keys, number, strict_json, string, validate_proposal, write_allowance, PHYSICAL_DISK_RESERVE_BYTES
+from .safety import edit_duration, edit_segments, SafetyError, canonical, digest, keys, number, strict_json, string, validate_proposal, write_allowance, PHYSICAL_DISK_RESERVE_BYTES
 
 
 # Coordinates and typography are trusted constants, never model filter text.
@@ -26,6 +26,7 @@ STYLES = {
     "tight": ("(iw-ow)/2", 1.2, 22),
     "left": ("0", 1.0, 20),
     "right": ("iw-ow", 1.0, 20),
+    "readable": ("(iw-ow)/2", 1.0, 28),
 }
 BOUNDARY_TOLERANCE = 0.25
 
@@ -62,7 +63,7 @@ def timed_segments(raw, duration, maximum=1048576):
     return result
 
 
-def clip_segments(segments, proposal):
+def _single_clip_segments(segments, proposal):
     """Require a complete sentence start and end, then shift measured captions."""
     start, end = proposal["start_seconds"], proposal["end_seconds"]
     selected = [s for s in segments if s["end"] > start and s["start"] < end]
@@ -78,6 +79,16 @@ def clip_segments(segments, proposal):
         raise SafetyError("clip_ends_mid_sentence")
     # Only trim sub-frame tolerance at source boundaries; never stretch a cue.
     return [{"start": max(0, s["start"] - start), "end": min(end - start, s["end"] - start), "text": s["text"]} for s in selected]
+
+
+def clip_segments(segments, proposal):
+    """Shift each measured cut's captions into the ordered rendered timeline."""
+    result, offset = [], 0
+    for cut in edit_segments(proposal):
+        result.extend({**segment, "start": segment["start"] + offset, "end": segment["end"] + offset}
+                      for segment in _single_clip_segments(segments, cut))
+        offset += cut["end_seconds"] - cut["start_seconds"]
+    return result
 
 
 def srt_time(value):
@@ -330,9 +341,10 @@ class MediaRenderer:
             validate_proposal("clip", proposal, {**record, **prepared}, self.config)
             source_path = self.root / digest({"url": self._source(record)}) / "source.mp4"
             segments = self._prepared_segments(prepared)
-            return self.render_local(source_path, segments, proposal, prepared["provenance"], deadline=deadline)
+            source = next(source for source in self.config["sources"] if source["id"] == record["source_id"])
+            return self.render_local(source_path, segments, proposal, prepared["provenance"], deadline=deadline, publication_policy=source.get("publication_policy"))
 
-    def render_local(self, source_path, segments, proposal, provenance, *, deadline=None):
+    def render_local(self, source_path, segments, proposal, provenance, *, deadline=None, publication_policy=None):
         """Render an already approved workspace file; also used by local smoke tests."""
         deadline = deadline or self._deadline()
         source_path = self._path(source_path)
@@ -342,14 +354,24 @@ class MediaRenderer:
             raise SafetyError("render_style_not_supported")
         if not measured["audio_present"]:
             raise SafetyError("source_audio_missing")
+        cuts = edit_segments(proposal, measured["duration_seconds"])
+        source_digest = sha256(source_path)
+        overlays = []
+        if publication_policy is not None:
+            from .rights import required_overlays
+            if source_digest != publication_policy["source_sha256"] or source_path.stat().st_size != publication_policy["source_bytes"]:
+                raise SafetyError("render_source_rights_binding_changed")
+            overlays = required_overlays(publication_policy, proposal)
+            if edit_duration(proposal) >= measured["duration_seconds"]:
+                raise SafetyError("full_source_repost_forbidden")
         captions = clip_segments(timed_segments({"segments": segments}, measured["duration_seconds"], self.config["limits"]["max_payload_bytes"]), proposal)
         string(provenance)
         filters = self._run([self.ffmpeg, "-hide_banner", "-filters"], deadline, output_limit=262144)
         if b" subtitles " not in filters:
             raise SafetyError("ffmpeg_subtitles_filter_required")
         x, zoom, font_size = STYLES[proposal["style"]]
-        duration = proposal["end_seconds"] - proposal["start_seconds"]
-        name = digest({"source": sha256(source_path), "proposal": proposal, "captions": captions})
+        duration = edit_duration(proposal)
+        name = digest({"source": source_digest, "proposal": proposal, "captions": captions, "publication_policy": publication_policy})
         destination = self.root / (name + ".mp4")
         receipt_path = self.root / (name + ".json")
         with tempfile.TemporaryDirectory(prefix="render-", dir=self.root) as temp:
@@ -359,9 +381,22 @@ class MediaRenderer:
             # Relative fixed subtitle filename avoids all filter path escaping.
             crop = f"crop=w='min(iw,ih*9/16)/{zoom}':h='min(ih,iw*16/9)/{zoom}':x='{x}':y='(ih-oh)/2'"
             video_filter = crop + ",scale=720:1280,setsar=1,subtitles=filename=captions.srt:force_style='FontName=Arial,FontSize=" + str(font_size) + ",Outline=2,MarginV=60'"
-            self._run([self.ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-protocol_whitelist", "file,pipe", "-ss",
-                str(proposal["start_seconds"]), "-i", str(source_path), "-t", str(duration), "-map", "0:v:0", "-map", "0:a:0",
-                "-vf", video_filter, "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+            for index, text in enumerate(overlays):
+                (temp / f"overlay-{index}.txt").write_text(text, encoding="utf-8")
+                video_filter += f",drawtext=textfile=overlay-{index}.txt:x=(w-text_w)/2:y={40+index*64}:fontsize=40:fontcolor=white:box=1:boxcolor=black@0.85:boxborderw=12"
+            command = [self.ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-protocol_whitelist", "file,pipe"]
+            if len(cuts) == 1:
+                command += ["-ss", str(cuts[0]["start_seconds"]), "-i", str(source_path), "-t", str(duration), "-map", "0:v:0", "-map", "0:a:0",
+                            "-vf", video_filter, "-af", "loudnorm=I=-16:TP=-1.5:LRA=11"]
+            else:
+                graph = []
+                for index, cut in enumerate(cuts):
+                    bounds = f"start={cut['start_seconds']}:end={cut['end_seconds']}"
+                    graph += [f"[0:v:0]trim={bounds},setpts=PTS-STARTPTS[v{index}]", f"[0:a:0]atrim={bounds},asetpts=PTS-STARTPTS[a{index}]"]
+                streams = "".join(f"[v{i}][a{i}]" for i in range(len(cuts)))
+                graph += [streams + f"concat=n={len(cuts)}:v=1:a=1[vc][ac]", "[vc]" + video_filter + "[vout]", "[ac]loudnorm=I=-16:TP=-1.5:LRA=11[aout]"]
+                command += ["-i", str(source_path), "-filter_complex", ";".join(graph), "-map", "[vout]", "-map", "[aout]"]
+            self._run(command + ["-c:v", "libx264", "-preset", "fast", "-crf", "20",
                 "-threads", "2", "-pix_fmt", "yuv420p", "-c:a", "aac", "-ar", "48000", "-b:a", "128k", "-movflags", "+faststart",
                 "-map_metadata", "-1", "-fs", str(self._disk()), str(temp / "clip.mp4")], deadline, cwd=temp)
             output = temp / "clip.mp4"
@@ -371,7 +406,7 @@ class MediaRenderer:
             self._decode(output, deadline)
             asset = {"path": str(destination), "sha256": sha256(output), "bytes": output.stat().st_size,
                 "provenance": "ffmpeg portrait crop; loudnorm; timed Whisper caption burn-in; " + provenance}
-            receipt = {"asset": asset, "proposal": proposal, "captions": captions, "source_sha256": sha256(source_path), "measured": report}
+            receipt = {"asset": asset, "proposal": proposal, "captions": captions, "source_sha256": source_digest, "measured": report, "edit": {"segments": cuts, "rendered_duration": duration, "reservation": "whole_source_bounding_span"}, "audio_provenance": {"source_sha256": source_digest, "segments": cuts, "external_audio": False}, "overlays": overlays, "rights_policy_digest": None if publication_policy is None else digest(publication_policy)}
             raw = canonical(receipt).encode()
             if len(raw) > self.config["limits"]["max_payload_bytes"]:
                 raise SafetyError("payload_too_large")
@@ -385,18 +420,33 @@ class MediaRenderer:
         self._run([self.ffmpeg, "-hide_banner", "-loglevel", "error", "-xerror", "-nostdin", "-protocol_whitelist", "file,pipe",
             "-i", str(path), "-map", "0:v:0", "-map", "0:a:0", "-f", "null", "-"], deadline)
 
-    def quality(self, job, proposal, asset):
+    def render_receipt(self, job, proposal, asset):
         keys(asset, {"path", "sha256", "bytes", "provenance"})
-        deadline = self._deadline()
         path = self._path(asset["path"])
         if path.stat().st_size != asset["bytes"] or sha256(path) != asset["sha256"]:
             raise SafetyError("asset_digest_or_size_mismatch")
         receipt_path = self._path(path.with_suffix(".json"))
-        receipt = strict_json(receipt_path.read_bytes(), self.config["limits"]["max_payload_bytes"])
-        keys(receipt, {"asset", "proposal", "captions", "source_sha256", "measured"})
+        from .visual import owned_bytes
+        receipt = strict_json(owned_bytes(receipt_path, self.root, self.config["limits"]["max_payload_bytes"]), self.config["limits"]["max_payload_bytes"])
+        keys(receipt, {"asset", "proposal", "captions", "source_sha256", "measured"}, {"edit", "audio_provenance", "overlays", "rights_policy_digest"})
         if receipt["asset"] != asset or receipt["proposal"] != proposal:
             raise SafetyError("render_receipt_mismatch")
-        duration = proposal["end_seconds"] - proposal["start_seconds"]
+        source = next((source for source in self.config["sources"] if source["id"] == job.get("input", {}).get("source_id")), None)
+        if source is None and any("publication_policy" in source for source in self.config["sources"]):
+            raise SafetyError("quality_source_rights_context_missing")
+        policy = None if source is None else source.get("publication_policy")
+        if policy is not None:
+            from .rights import required_overlays
+            expected_edit = {"segments": edit_segments(proposal), "rendered_duration": edit_duration(proposal), "reservation": "whole_source_bounding_span"}
+            if receipt.get("edit") != expected_edit or receipt.get("rights_policy_digest") != digest(policy) or receipt["source_sha256"] != policy["source_sha256"] or receipt.get("overlays") != required_overlays(policy, proposal) or receipt.get("audio_provenance") != {"source_sha256": policy["source_sha256"], "segments": edit_segments(proposal), "external_audio": False}:
+                raise SafetyError("render_rights_overlay_audio_receipt_changed")
+        return receipt
+
+    def quality(self, job, proposal, asset):
+        receipt = self.render_receipt(job, proposal, asset)
+        deadline = self._deadline()
+        path = self._path(asset["path"])
+        duration = edit_duration(proposal)
         captions = timed_segments({"segments": receipt["captions"]}, duration, self.config["limits"]["max_payload_bytes"])
         report = self.probe(path, deadline)
         self._decode(path, deadline)

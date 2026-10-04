@@ -11,14 +11,14 @@ def main():
     keys(message, {"config", "method", "args"})
     config = validate_config(message["config"])
     method = message["method"]
-    if method not in {"discover", "render", "quality", "publish", "reconcile", "metrics", "submit_rewards", "reward_status", "verify_ready", "visual_execution_state"}:
+    if method not in {"discover", "render", "quality", "publish", "reconcile", "metrics", "submit_rewards", "reconcile_rewards", "reward_status", "verify_ready", "visual_execution_state"}:
         raise ValueError("unknown_adapter_method")
     try:
         adapter = importlib.import_module(config["adapter_module"]).create_adapter(config)
         result = getattr(adapter, method)(*message["args"])
         output = {"result": result}
     except AdapterFailure as exc:
-        output = {"error": str(exc), "category": exc.category, "retry_after": exc.retry_after}
+        output = {"error": str(exc), "category": exc.category, "retry_after": exc.retry_after, "provider": exc.provider, "code": exc.code, "status": exc.status}
     except (TimeoutError, ConnectionError) as exc:
         output = {"error": type(exc).__name__, "category": "ambiguous" if method in {"publish", "submit_rewards"} else "transient", "retry_after": None}
     except Exception as exc:

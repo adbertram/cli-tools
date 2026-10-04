@@ -168,9 +168,9 @@ class StudioPublicationAdapter:
             pre_action = self._matches(operation, binding, policy) and operation.get("state") in PRE_ACTION_STATES and operation.get("public_action_dispatched") is False
         except Exception:
             pre_action = False
-        return AdapterFailure("transient" if pre_action else "ambiguous", "studio_publish: " + type(exc).__name__)
+        return AdapterFailure("transient" if pre_action else "ambiguous", "studio_publish: " + type(exc).__name__, getattr(exc, "retry_after", None), provider=getattr(exc, "provider", None), code=getattr(exc, "code", None), status=getattr(exc, "status", None))
 
-    def _close(self, sdk, binding, policy, verified_receipt=None):
+    def _close(self, sdk, binding, policy, verified_receipt=None, prior_failure=None):
         try:
             sdk.close()
         except Exception as exc:
@@ -181,11 +181,16 @@ class StudioPublicationAdapter:
                 provenance["cleanup_issue"] = {"kind": "studio_browser_close_failed", "error_type": type(exc).__name__, "recoverable": True}
                 verified_receipt["provenance"] = canonical(provenance)
                 return
+            if prior_failure is not None:
+                prior_failure.cleanup_issue = "studio_browser_close_failed"
+                prior_failure.args = (str(prior_failure) + "; cleanup: studio_browser_close_failed",)
+                return
             raise self._failure(sdk, binding, policy, exc) from exc
 
-    def publish(self, job, asset, key, policy):
+    def publish(self, job, asset, key, policy, *, pre_public_check=None):
         binding = self._binding(asset, key, policy)
         sdk = self.publisher_factory()
+        failure = None
         try:
             try:
                 existing = sdk.status(binding["request_id"])
@@ -203,15 +208,66 @@ class StudioPublicationAdapter:
                 raise SafetyError("studio_prepare_operation_changed")
             self._reserve(job, key, binding, prepared["draft_id"])
             guard = StudioPublicActionGuard(self.config, job, asset, key, policy, prepared, sdk.status, clock=self.clock)
-            result = sdk.publish(binding["request_id"], before_public_action=guard)
+            precheck_error = None
+            def boundary(binding):
+                nonlocal precheck_error
+                try:
+                    if pre_public_check is not None:
+                        pre_public_check(binding)
+                except Exception as exc:
+                    precheck_error = exc
+                    raise
+                guard(binding)
+            try:
+                result = sdk.publish(binding["request_id"], before_public_action=boundary)
+            except Exception:
+                if precheck_error is not None:
+                    failure = self._failure(sdk, binding, policy, precheck_error)
+                    if failure.category == "transient":
+                        from .engine import AdapterFailure
+                        if isinstance(precheck_error, AdapterFailure):
+                            raise precheck_error
+                        if isinstance(precheck_error, SafetyError):
+                            raise AdapterFailure("permanent", str(precheck_error)) from precheck_error
+                    raise failure from precheck_error
+                raise
             if not self._matches(result, binding, policy):
                 raise SafetyError("studio_publication_operation_changed")
             return self._receipt(result)
         except Exception as exc:
             # Trust exact persisted pre-action proof, never an exception label.
-            raise self._failure(sdk, binding, policy, exc) from exc
+            classified = self._failure(sdk, binding, policy, exc)
+            from .engine import AdapterFailure
+            if classified.category == "transient" and isinstance(exc, AdapterFailure):
+                failure = exc
+                raise exc
+            failure = classified
+            raise classified from exc
         finally:
-            self._close(sdk, binding, policy)
+            self._close(sdk, binding, policy, prior_failure=failure)
+
+    def recorded_policy(self, job, asset, key):
+        """Read the original policy only when journal and reservation agree."""
+        sdk = self.publisher_factory()
+        try:
+            try:
+                operation = sdk.status(publication_request_id(key))
+                policy = operation["policy"]
+                binding = self._binding(asset, key, policy)
+                with sqlite3.connect(Path(self.config["database"]).as_uri() + "?mode=ro", uri=True, timeout=2) as db:
+                    db.row_factory = sqlite3.Row
+                    row = db.execute("SELECT * FROM publications WHERE job_id=?", (job["id"],)).fetchone()
+                if row is None or row["idempotency_key"] != key or row["asset_digest"] != asset["sha256"] or row["account_id"] != binding["actor"]["account_id"] or row["data"] is None:
+                    return None
+                reserved = strict_json(row["data"], self.config["limits"]["max_payload_bytes"])
+                expected = studio_reservation_identity({**binding, "draft_id": operation.get("draft_id")})
+                if any(reserved.get(field) != value for field, value in expected.items()) or not self._matches(operation, binding, policy):
+                    return None
+                return policy
+            except (KeyError, ValueError, TypeError, sqlite3.Error):
+                return None
+        finally:
+            sdk.close()
 
     def reconcile(self, job, asset, key, policy):
         binding = self._binding(asset, key, policy)
