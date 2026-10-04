@@ -24,6 +24,41 @@ STUDIO_READBACK = 'https://www.tiktok.com/tiktok/creator/manage/item_list/v1/'
 # Read and create-action discovery share the same bounded, stable-snapshot scanner.
 SUBMISSION_DISCOVERY_JS = DISCOVER_ACTION_JS
 
+# Capture the failed predicate in the same evaluation, before the caller closes
+# the browser. The selection and click behavior are unchanged.
+OPEN_SUBMISSION_FORM_JS = """() => {
+    const exact=[...document.querySelectorAll('button')].filter(b=>b.innerText.trim()==='Submit clip');
+    const enabled=exact.filter(b=>!b.disabled);
+    if(enabled.length!==1){
+        const visible=b=>{const r=b.getBoundingClientRect(),s=getComputedStyle(b);
+            return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden';};
+        const count=n=>Math.min(n,100000);
+        return {opened:false,diagnostics:{origin:location.origin,path:location.pathname,
+            ready_state:document.readyState,exact_buttons:count(exact.length),
+            enabled_buttons:count(enabled.length),visible_buttons:count(exact.filter(visible).length),
+            visible_enabled_buttons:count(enabled.filter(visible).length),
+            dialogs:count(document.querySelectorAll('[role=dialog]').length)}};
+    }
+    enabled[0].click(); return true;
+}"""
+
+def form_failure(value, origin, expected_path):
+    """Only a guarded exact route and bounded numeric DOM facts leave the SDK."""
+    raw=value.get('diagnostics') if type(value) is dict and value.get('opened') is False else None
+    context='expected_app' if type(raw) is dict and raw.get('origin')==origin else 'whop_wrapper' if type(raw) is dict and raw.get('origin')=='https://whop.com' else 'other_or_missing'
+    route_match=type(raw) is dict and raw.get('origin')==origin and raw.get('path')==expected_path
+    safe={'kind':'submission_form_predicate','available':False,
+          'context_origin':context,'route_match':route_match}
+    fields=('exact_buttons','enabled_buttons','visible_buttons','visible_enabled_buttons','dialogs')
+    if (type(raw) is dict and raw.get('origin')==origin and raw.get('path')==expected_path
+        and raw.get('ready_state') in ('loading','interactive','complete')
+        and all(type(raw.get(k)) is int and 0<=raw[k]<=100000 for k in fields)):
+        safe.update({'available':True,'origin':origin,'path':expected_path,
+                     'ready_state':raw['ready_state'],**{k:raw[k] for k in fields}})
+    error=WhopError('submission_form_unavailable',category='transient')
+    error.diagnostics=safe
+    return error
+
 def canonical(value):
     return json.dumps(value,sort_keys=True,separators=(',',':'),allow_nan=False)
 
@@ -124,12 +159,8 @@ def readiness(client,campaign_id,*,expected_account_id,expected_tiktok_account_i
         action=client._discover_action(document,'createSubmissionAction',suffix,fresh=True,discovery_js=SUBMISSION_DISCOVERY_JS,request_timeout=12.0)
     except ClientError as error:
         if not str(error).startswith('read_action_discovery_missing:'): raise
-        opened=document.evaluate("""() => {
-            const buttons=[...document.querySelectorAll('button')].filter(b=>b.innerText.trim()==='Submit clip'&&!b.disabled);
-            if(buttons.length!==1) return false;
-            buttons[0].click(); return true;
-        }""",request_timeout=2.0)
-        if opened is not True: raise ClientError('submission_form_unavailable') from None
+        opened=document.evaluate(OPEN_SUBMISSION_FORM_JS,request_timeout=2.0)
+        if opened is not True: raise form_failure(opened,origin,path+suffix) from None
         # The observed form is dynamically imported. Wait for its mounted dialog,
         # not an arbitrary sleep or a hard-coded build/action reference.
         mounted=document.evaluate("""async () => {const end=Date.now()+10000;

@@ -84,6 +84,71 @@ def test_dynamic_form_chunk_loaded_only_after_missing_action(client):
     assert document.evaluate.call_args_list[0].kwargs['request_timeout']==2
     assert document.evaluate.call_args_list[1].kwargs['request_timeout']==12
 
+def test_failed_form_predicate_survives_close_with_typed_safe_diagnostics(client):
+    client._discover_action.side_effect=ClientError('read_action_discovery_missing: sources=60, matches=0, failures=0')
+    facts={'origin':'https://example.apps.whop.com','path':'/c/exp_TEST/campaigns/'+CAMPAIGN,
+           'ready_state':'complete','exact_buttons':2,'enabled_buttons':0,
+           'visible_buttons':1,'visible_enabled_buttons':0,'dialogs':1,'private_body':'SECRET'}
+    document=client._action_document.return_value
+    document.evaluate.return_value={'opened':False,'diagnostics':facts}
+    with pytest.raises(op.WhopError,match='submission_form_unavailable') as caught:ready(client)
+    client.close()
+    error=caught.value
+    assert error.category=='transient' and error.status is None and error.retry_after_seconds is None
+    assert error.diagnostics=={'kind':'submission_form_predicate','available':True,'context_origin':'expected_app','route_match':True,
+        **{k:v for k,v in facts.items() if k!='private_body'}}
+    assert 'SECRET' not in json.dumps(error.diagnostics)
+    assert document.evaluate.call_count==1
+    assert not hasattr(client,'_submission_context')
+
+@pytest.mark.parametrize('change',[{'origin':'https://whop.com'}, {'path':'/auth/SECRET?token=SECRET'},
+    {'ready_state':'SECRET'},{'exact_buttons':True},{'dialogs':100001}])
+def test_form_diagnostics_reject_unscoped_or_malformed_values(change):
+    origin='https://example.apps.whop.com';path='/c/exp_TEST/campaigns/'+CAMPAIGN
+    raw={'origin':origin,'path':path,'ready_state':'complete','exact_buttons':0,'enabled_buttons':0,
+        'visible_buttons':0,'visible_enabled_buttons':0,'dialogs':0,**change}
+    error=op.form_failure({'opened':False,'diagnostics':raw},origin,path)
+    assert error.diagnostics['available'] is False
+    assert error.diagnostics['context_origin']==('whop_wrapper' if raw['origin']=='https://whop.com' else 'expected_app')
+    assert error.diagnostics['route_match']==(raw['origin']==origin and raw['path']==path)
+    assert 'SECRET' not in json.dumps(error.diagnostics)
+
+@pytest.mark.parametrize('origin',['https://evil.test/SECRET?token=SECRET',None])
+def test_form_diagnostics_other_origin_is_enum_only(origin):
+    error=op.form_failure({'opened':False,'diagnostics':{'origin':origin,'path':'/SECRET'}},
+                         'https://example.apps.whop.com','/c/exp_TEST/campaigns/'+CAMPAIGN)
+    assert error.diagnostics=={'kind':'submission_form_predicate','available':False,
+                              'context_origin':'other_or_missing','route_match':False}
+    assert 'SECRET' not in json.dumps(error.diagnostics)
+
+@pytest.mark.parametrize('buttons,clicked',[
+    ([],0),([{'disabled':True,'visible':True}],0),
+    ([{'disabled':False,'visible':True},{'disabled':False,'visible':False}],0),
+    ([{'disabled':False,'visible':False}],1),
+])
+def test_actual_js_atomic_form_predicate_counts_and_unchanged_click(buttons,clicked):
+    import subprocess
+    script='''let clicks=0;
+    globalThis.location={origin:'https://example.apps.whop.com',pathname:'/c/exp_TEST/campaigns/campaign_TEST',search:'?token=SECRET',hash:'#SECRET'};
+    const buttons='''+json.dumps(buttons)+'''.map(b=>({...b,innerText:'Submit clip',
+       getBoundingClientRect:()=>({width:b.visible?10:0,height:10}),click:()=>{clicks++}}));
+    globalThis.getComputedStyle=()=>({display:'block',visibility:'visible'});
+    globalThis.document={readyState:'interactive',querySelectorAll:s=>s==='button'?buttons:[{}]};
+    const result=('''+op.OPEN_SUBMISSION_FORM_JS+''')();
+    console.log(JSON.stringify({result,clicks}));'''
+    run=subprocess.run(['node','--input-type=module'],input=script,text=True,capture_output=True,timeout=3)
+    assert run.returncode==0,run.stderr
+    result=json.loads(run.stdout)
+    assert result['clicks']==clicked
+    if clicked:assert result['result'] is True
+    else:
+        facts=result['result']['diagnostics']
+        assert facts['exact_buttons']==len(buttons)
+        assert facts['enabled_buttons']==sum(not b['disabled'] for b in buttons)
+        assert facts['visible_buttons']==sum(b['visible'] for b in buttons)
+        assert facts['visible_enabled_buttons']==sum(b['visible'] and not b['disabled'] for b in buttons)
+        assert 'SECRET' not in run.stdout
+
 @pytest.mark.parametrize('code',['ambiguous','script_fetch_failed','scripts_changed'])
 def test_discovery_failure_does_not_open_form(client,code):
     client._discover_action.side_effect=ClientError('read_action_discovery_'+code+': diagnostic')
