@@ -283,7 +283,38 @@ class LiveAdapter:
         return bridge.reconcile(job, job["asset"], idempotency_key, policy)
 
     def metrics(self, publication):
-        missing("verified_tiktok_post_metrics")
+        result = self.metrics_batch([publication])
+        records = result['records']
+        if len(records) != 1:
+            raise AdapterFailure('transient', 'studio_metrics_unresolved', provider='tiktok')
+        return records[0]
+
+    def metrics_batch(self, publications, continuation=None, max_pages=20):
+        from .studio_metrics import normalize_batch, validate_publications
+        from tiktok_cli.client import ClientError, TikTokWebClient
+        from tiktok_cli.config import Config as TikTokConfig
+        account = self.config['account']
+        ids = validate_publications(publications, account)
+        client = self.studio_factory() if self.studio_factory else TikTokWebClient(TikTokConfig(profile=account['profile']))
+        failure = None
+        try:
+            result = client.get_studio_videos(account['handle'].removeprefix('@'), ids,
+                expected_account_id=account['account_id'], continuation=continuation, max_pages=max_pages)
+            return normalize_batch(result, publications, account)
+        except ClientError as exc:
+            category = {'auth':'auth','rate_limit':'rate_limit','transient':'transient'}.get(exc.category, 'permanent')
+            failure = AdapterFailure(category, exc.code, provider='tiktok', code=exc.code,
+                status=exc.status or None, retry_after=exc.retry_after_seconds)
+            raise failure from exc
+        except BaseException as exc:
+            failure = exc
+            raise
+        finally:
+            try:
+                client.close()
+            except Exception as exc:
+                if failure is None:
+                    raise AdapterFailure('transient', 'studio_metrics_close_failed', provider='tiktok') from exc
 
     def submit_rewards(self, job, reward_ledger):
         from .whop_adapter import WhopSubmissionAdapter

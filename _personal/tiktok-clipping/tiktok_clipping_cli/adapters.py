@@ -17,7 +17,7 @@ class ExternalAdapter:
         self.timeout = config["limits"]["work_timeout_seconds"]
 
     def __getattr__(self, method):
-        if method not in {"discover", "render", "quality", "publish", "reconcile", "metrics", "submit_rewards", "reconcile_rewards", "reward_status", "verify_ready", "visual_execution_state"}:
+        if method not in {"discover", "render", "quality", "publish", "reconcile", "metrics", "metrics_batch", "sync_reward_revenue", "submit_rewards", "reconcile_rewards", "reward_status", "verify_ready", "visual_execution_state"}:
             raise AttributeError(method)
         return lambda *args: self.call(method, args)
 
