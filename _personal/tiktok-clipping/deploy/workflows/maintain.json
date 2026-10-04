@@ -1,0 +1,106 @@
+{
+  "name": "TikTok clipping - recover and submit rewards",
+  "nodes": [
+    {
+      "id": "schedule",
+      "name": "Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "manual-start",
+      "name": "Manual start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "prepare-work",
+      "name": "Prepare work",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "command": "/usr/bin/env PATH='/opt/homebrew/opt/ffmpeg-full/bin:/Users/adam/.local/bin:/opt/homebrew/bin:/usr/bin:/bin' WHISPER_CPP_MODEL='/Users/adam/.local/share/cli-tools/whisper/models/ggml-small.en.bin' /Users/adam/.local/bin/tiktok-clipping jobs maintain --config /opt/cli-tools/_personal/tiktok-clipping/deploy/config.json",
+        "executeOnce": true
+      }
+    },
+    {
+      "id": "read-coordinator-result",
+      "name": "Read coordinator result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const raw=$input.first().json.stdout; if(typeof raw!==\"string\" || raw.length>1048576) throw new Error(\"Invalid coordinator envelope\"); const d=JSON.parse(raw); if (!d || typeof d!==\"object\" || Array.isArray(d)) throw new Error(\"Invalid coordinator result\"); return [{json:d}];"
+      }
+    }
+  ],
+  "connections": {
+    "Schedule": {
+      "main": [
+        [
+          {
+            "node": "Prepare work",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual start": {
+      "main": [
+        [
+          {
+            "node": "Prepare work",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare work": {
+      "main": [
+        [
+          {
+            "node": "Read coordinator result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 1800,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "timezone": "America/Chicago"
+  }
+}

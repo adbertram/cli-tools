@@ -110,6 +110,7 @@
 | `techsmith` | The `techsmith` CLI provides a command-line interface for Techsmith (browser automation). Use it when you need repeatable access to techsmith workflows that are only available through a signed-in website. |
 | `things` | The `things` CLI provides a command-line interface for Things API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `tiktok` | The `tiktok` CLI provides tikTok transcript downloader using yt-dlp. Use it when you need scriptable reads, exports, or evidence collection without opening the service UI. |
+| `tiktok-clipping` | Durable autonomous clipping coordinator with bounded model proposals and verified adapters |
 | `trainee-digital` | trainee.digital data-annotation orders feed (browser automation, worker side) |
 | `twelvelabs` | The `twelvelabs` CLI provides a command-line interface for Twelvelabs API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `udemy` | The `udemy` CLI provides a command-line interface for Udemy API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |

@@ -1,0 +1,49 @@
+{
+  "database": "/Users/adam/.local/share/tiktok-clipping/state.db",
+  "workspace": "/Users/adam/.local/share/tiktok-clipping/media",
+  "account": null,
+  "sources": [],
+  "limits": {
+    "daily_posts": 0,
+    "daily_model_calls": 0,
+    "daily_runtime_seconds": 0,
+    "min_clip_seconds": 15,
+    "max_clip_seconds": 60,
+    "max_attempts": 6,
+    "max_revisions": 2,
+    "lease_seconds": 900,
+    "max_payload_bytes": 262144,
+    "max_queue": 100,
+    "max_disk_bytes": 10737418240,
+    "work_timeout_seconds": 600,
+    "retry_base_seconds": 60,
+    "retry_max_seconds": 3600,
+    "circuit_failures": 3,
+    "circuit_cooldown_seconds": 3600,
+    "caption_chars": 2200,
+    "metrics_batch_size": 5,
+    "metrics_poll_seconds": 3600,
+    "metrics_max_age_seconds": 864000,
+    "max_clips_per_source": 3
+  },
+  "learning": {
+    "minimum_samples": 10,
+    "evaluation_minimum_samples": 10,
+    "cohort_age_seconds": 691200,
+    "cohort_tolerance_seconds": 3600,
+    "max_weight_delta": 0.05,
+    "max_exploration": 0.1,
+    "regression_fraction": 0.2,
+    "objective": "revenue"
+  },
+  "baseline": {
+    "weights": {
+      "centered": 0.25,
+      "tight": 0.25,
+      "left": 0.25,
+      "right": 0.25
+    },
+    "exploration": 0.05
+  },
+  "adapter_module": null
+}

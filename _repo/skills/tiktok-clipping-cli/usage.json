@@ -1,0 +1,333 @@
+{
+  "tool": "tiktok-clipping",
+  "description": "CLI interface for tiktok-clipping",
+  "discovered_at": "2026-10-04T00:42:48Z",
+  "total_commands": 15,
+  "global_options": [],
+  "commands": {
+    "control": {
+      "help": "Persist pause, stop or running state.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "set": {
+          "help": "Persist control state; running requires verified exact account and approved sources.",
+          "arguments": [
+            {
+              "name": "state",
+              "type": "TEXT",
+              "required": true,
+              "help": "running, paused or stopped"
+            }
+          ],
+          "options": [
+            {
+              "name": "--config",
+              "type": "file",
+              "required": true,
+              "help": "Trusted absolute JSON configuration file"
+            }
+          ]
+        }
+      }
+    },
+    "jobs": {
+      "help": "Prepare, validate and execute durable jobs.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "apply": {
+          "help": "Validate leased model JSON from stdin, then execute once through trusted adapters.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--config",
+              "type": "file",
+              "required": true,
+              "help": "Trusted absolute JSON configuration file"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get one durable job, excluding its ownership credential.",
+          "arguments": [
+            {
+              "name": "job_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Durable job ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--config",
+              "type": "file",
+              "required": true,
+              "help": "Trusted absolute JSON configuration file"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display record fields as table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "ingest": {
+          "help": "Queue an allowlisted trusted source record from bounded JSON stdin.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--config",
+              "type": "file",
+              "required": true,
+              "help": "Trusted absolute JSON configuration file"
+            }
+          ]
+        },
+        "list": {
+          "help": "List durable jobs, including explicit failed, blocked and ambiguous states.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--config",
+              "type": "file",
+              "required": true,
+              "help": "Trusted absolute JSON configuration file"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[1<=x<=10000]  Maximum job records",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display job records as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            }
+          ]
+        },
+        "maintain": {
+          "help": "Recover expired leases, reconcile uploads and maintain campaign submissions.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--config",
+              "type": "file",
+              "required": true,
+              "help": "Trusted absolute JSON configuration file"
+            }
+          ]
+        },
+        "prepare": {
+          "help": "Claim one durable job or return an explicit paused/unconfigured/idle state.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--config",
+              "type": "file",
+              "required": true,
+              "help": "Trusted absolute JSON configuration file"
+            },
+            {
+              "name": "--kind",
+              "type": "TEXT",
+              "required": true,
+              "help": "clip, learn or metrics; metrics never enters model node"
+            }
+          ]
+        },
+        "reconcile": {
+          "help": "Read back an ambiguous upload without repeating publication.",
+          "arguments": [
+            {
+              "name": "job_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Ambiguous job ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--config",
+              "type": "file",
+              "required": true,
+              "help": "Trusted absolute JSON configuration file"
+            }
+          ]
+        },
+        "retry": {
+          "help": "Revalidate blocked work after a trusted capability/configuration repair.",
+          "arguments": [
+            {
+              "name": "job_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Blocked job ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--config",
+              "type": "file",
+              "required": true,
+              "help": "Trusted absolute JSON configuration file"
+            }
+          ]
+        },
+        "run": {
+          "help": "Run a ready job; coordinator alone owns retries and side-effect budgets.",
+          "arguments": [
+            {
+              "name": "job_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Durable job ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--config",
+              "type": "file",
+              "required": true,
+              "help": "Trusted absolute JSON configuration file"
+            }
+          ]
+        }
+      }
+    },
+    "metrics": {
+      "help": "Record provenance-preserving measurement snapshots.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "record": {
+          "help": "Append a trusted timestamped metric snapshot from stdin; unknown values stay null.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--config",
+              "type": "file",
+              "required": true,
+              "help": "Trusted absolute JSON configuration file"
+            }
+          ]
+        }
+      }
+    },
+    "rewards": {
+      "help": "Track campaign submission separately from publication and earnings.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "refresh": {
+          "help": "Read actual campaign acceptance/rejection and observed earnings.",
+          "arguments": [
+            {
+              "name": "job_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Publication job ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--config",
+              "type": "file",
+              "required": true,
+              "help": "Trusted absolute JSON configuration file"
+            }
+          ]
+        },
+        "submit": {
+          "help": "Submit one post to its verified campaign before its verified campaign-specific deadline.",
+          "arguments": [
+            {
+              "name": "job_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Verified publication job ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--config",
+              "type": "file",
+              "required": true,
+              "help": "Trusted absolute JSON configuration file"
+            }
+          ]
+        }
+      }
+    },
+    "status": {
+      "help": "Inspect current setup and durable budgets.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "get": {
+          "help": "Inspect setup, control, account, durable budgets and strategy version.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--config",
+              "type": "file",
+              "required": false,
+              "help": "Trusted JSON configuration; absent means unconfigured"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display aggregate state fields as table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        }
+      }
+    },
+    "strategy": {
+      "help": "Bounded strategy versions and rollback.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "rollback": {
+          "help": "Restore recorded baseline; models cannot change hard policy.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--config",
+              "type": "file",
+              "required": true,
+              "help": "Trusted absolute JSON configuration file"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "usage_instructions": "Use the `tiktok-clipping` CLI. Run `tiktok-clipping --help` to discover command groups and `--help` on any subcommand for its options."
+}
