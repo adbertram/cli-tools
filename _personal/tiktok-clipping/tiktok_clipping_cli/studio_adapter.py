@@ -13,7 +13,7 @@ import sqlite3
 import time
 import uuid
 
-from .safety import SafetyError, canonical, digest, keys, number, strict_json
+from .safety import SafetyError, canonical, digest, keys, number, strict_json, timestamp
 
 PRE_ACTION_STATES = {"preparing", "preparation_failed", "prepared"}
 
@@ -72,6 +72,11 @@ class StudioPublicActionGuard:
                 raise SafetyError("studio_callback_job_not_running_publication")
             if not isinstance(current["lease_token"], str) or not secrets.compare_digest(current["lease_token"], token) or number(current["lease_until"], 0) <= self.clock():
                 raise SafetyError("studio_callback_lease_expired_or_reclaimed")
+            sources = [source for source in self.config['sources'] if source['id'] == self.job['input']['source_id']]
+            if len(sources) != 1:raise SafetyError('studio_callback_source_changed')
+            deadline = min(current['lease_until'], timestamp(sources[0]['campaign']['expires_at']))
+            if deadline <= self.clock() + 5:
+                raise SafetyError('studio_callback_dispatch_headroom_exhausted')
             if current["policy_digest"] != digest(self.config) or current["policy_digest"] != self.job["policy_digest"]:
                 raise SafetyError("studio_callback_coordinator_policy_changed")
             maximum = self.config["limits"]["max_payload_bytes"]
@@ -86,10 +91,11 @@ class StudioPublicActionGuard:
             identity = studio_reservation_identity(binding)
             if reservation["data"] is None or strict_json(reservation["data"], maximum) != identity:
                 raise SafetyError("studio_callback_reserved_request_changed")
-            dispatch = {**identity, "project_id": binding["project_id"], "dispatch_authorized_at": self.clock()}
+            dispatch = {**identity, "project_id": binding["project_id"], "dispatch_authorized_at": self.clock(), "dispatch_deadline": deadline}
             changed = db.execute("UPDATE publications SET state='dispatch_pending',data=? WHERE job_id=? AND state='uploading' AND idempotency_key=?", (canonical(dispatch), self.job["id"], self.key)).rowcount
             if changed != 1:
                 raise SafetyError("studio_callback_dispatch_reservation_changed")
+        return {"dispatch_deadline": deadline}
 
 
 class StudioPublicationAdapter:
@@ -217,7 +223,7 @@ class StudioPublicationAdapter:
                 except Exception as exc:
                     precheck_error = exc
                     raise
-                guard(binding)
+                return guard(binding)
             try:
                 result = sdk.publish(binding["request_id"], before_public_action=boundary)
             except Exception:

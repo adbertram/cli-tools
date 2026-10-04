@@ -287,3 +287,24 @@ def test_original_policy_reconciliation_survives_current_campaign_change(engine,
     assert result['state']=='published' and sdk.calls.count('native-send')==1
     with engine.transaction() as db:db.execute("UPDATE publications SET asset_digest='foreign'")
     assert bridge.recorded_policy(job,asset,key) is None
+
+
+@pytest.mark.parametrize('boundary', ['lease', 'source'])
+def test_guard_rejects_dispatch_without_bounded_drain_headroom(engine, config, adapter, clock, boundary):
+    from datetime import datetime, timezone
+    guard, binding, _, job, _, _ = guard_fixture(engine, config, adapter, clock)
+    if boundary == 'lease':
+        with engine.transaction() as db:db.execute('UPDATE jobs SET lease_until=? WHERE id=?',(clock()+5,job['id']))
+    else:config['sources'][0]['campaign']['expires_at']=datetime.fromtimestamp(clock()+5,timezone.utc).isoformat()
+    with pytest.raises(SafetyError, match='headroom'):guard(binding)
+    with engine.transaction() as db:assert db.execute('SELECT state FROM publications').fetchone()[0]=='uploading'
+
+
+def test_guard_returns_original_lease_and_source_deadline_without_renewal(engine, config, adapter, clock):
+    from datetime import datetime, timezone
+    guard,binding,_,_,_,_=guard_fixture(engine,config,adapter,clock)
+    config['sources'][0]['campaign']['expires_at']=datetime.fromtimestamp(clock()+20,timezone.utc).isoformat()
+    # The config mutation is explicit in this fixture's authorized policy digest.
+    with engine.transaction() as db:db.execute('UPDATE jobs SET policy_digest=?',(digest(config),))
+    guard.job['policy_digest']=digest(config)
+    assert guard(binding)=={'dispatch_deadline':clock()+20}

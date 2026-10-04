@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 import fcntl
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -134,7 +135,7 @@ CONTROLS_JS = r"""() => {
 # browser memory. Only bounded response text and exact project IDs are exported.
 OBSERVER_JS = r"""(opts) => {
  const proto=XMLHttpRequest.prototype,open=proto.open,send=proto.send;
- const state={count:0,receipt:null,creation_id:null,video_id:null,batch_index:null,project_id_present:null,blocked:null,
+ const state={count:0,deadline:null,creation_id:null,video_id:null,batch_index:null,project_id_present:null,blocked:null,
   restore:()=>{proto.open=open;proto.send=send}};window[opts.key]=state;
  proto.open=function(method,url,...rest){let match=false;
   try{const u=new URL(String(url),location.href);match=method==='POST'&&u.origin==='https://www.tiktok.com'&&u.pathname===opts.path}catch(_){}
@@ -153,12 +154,10 @@ OBSERVER_JS = r"""(opts) => {
     Array.isArray(items)&&items.length===1&&state.creation_id===opts.creation_id&&
     state.video_id===opts.video_id&&state.batch_index===0&&!state.project_id_present&&feature?.text===opts.caption&&entities
   }catch(_){}
-  if(state.count!==1||!valid){state.blocked='POST_BINDING_OR_DUPLICATE_REJECTED';this.abort();throw Error(state.blocked)}
-  this.addEventListener('loadend',()=>{state.receipt={status:this.status,
-   body:this.responseType===''&&this.responseText.length<=1000000?this.responseText:null}})
+  if(state.count!==1||!valid||(state.deadline!==null&&Date.now()>=state.deadline*1000)){state.blocked='POST_BINDING_OR_DUPLICATE_REJECTED';this.abort();throw Error(state.blocked)}
  }return send.call(this,body)};return true
 }"""
-RECEIPT_JS = "(key)=>{const s=window[key];return s?{count:s.count,receipt:s.receipt,creation_id:s.creation_id,video_id:s.video_id,batch_index:s.batch_index,project_id_present:s.project_id_present}:null}"
+DEADLINE_JS = "(opts)=>{const s=window[opts.key];if(!s)throw Error('POST_GUARD_MISSING');s.deadline=opts.deadline;return true}"
 RESTORE_JS = "(key)=>{const s=window[key];if(s){s.restore();delete window[key]}return true}"
 CAPTION_TEXT_JS = "(selector)=>[...document.querySelector(selector).querySelectorAll('[data-block=true]')].map(x=>x.textContent).join('\\n')"
 CAPTION_READY_JS = r"""(selector)=>{const e=document.querySelector(selector),s=window.getSelection();
@@ -282,6 +281,84 @@ def accepted_project(observed: dict, operation: dict) -> dict:
     if not positive_decimal_id(payload.get("project_id")):
         unknown()
     return payload
+
+
+class _PostNetworkObserver:
+    """One native requestId/response pair, independent of renderer lifetime."""
+    def __init__(self, page, operation, save):
+        self.page, self.operation, self.save = page, operation, save
+        self.session = page.begin_network_observation()
+        self.requests, self.responses, self.finished = {}, {}, set()
+        operation['network_observation'] = {'state': 'armed', 'request_count': 0}
+        save(operation)
+
+    def before_dispatch(self):
+        # The trusted callback may perform a slow participant readiness read.
+        # Remove background events before Post, refusing any earlier Post.
+        events = self.page.network_observations(self.session, method='POST', origin='https://www.tiktok.com', path=POST_PATH)
+        if events:
+            self.operation['state'] = 'outcome_unknown'
+            self.operation['network_observation']['state'] = 'unexpected_pre_dispatch_exchange'
+            self.save(self.operation)
+            raise StudioPublishError('Native Post exchange preceded the dispatch boundary; reconcile only.', category='ambiguous_post_action')
+
+    def read(self, timeout=30):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            events = self.page.network_observations(self.session, method='POST', origin='https://www.tiktok.com',
+                                                    path=POST_PATH, request_ids=tuple(self.requests), timeout=min(5, max(.01, deadline-time.monotonic())))
+            for event in events:
+                request_id = event.get('request_id')
+                if not isinstance(request_id, str) or not 1 <= len(request_id) <= 128:
+                    raise StudioPublishError('Native Post network identity is invalid.', category='ambiguous_post_action')
+                if event['kind'] == 'request':
+                    if self.requests:
+                        raise StudioPublishError('Native Post observed more than one request.', category='ambiguous_post_action')
+                    body = parse_response(event['body'])
+                    common = body.get('post_common_info') if isinstance(body, dict) else None
+                    items = body.get('single_post_req_list') if isinstance(body, dict) else None
+                    item = items[0] if isinstance(items, list) and len(items) == 1 and isinstance(items[0], dict) else {}
+                    feature = item.get('single_post_feature_info')
+                    if not isinstance(feature, dict):feature = {}
+                    draft = self.operation['draft'];caption = self.operation['policy']['caption']
+                    if (not isinstance(common, dict) or set(common) != {'creation_id','enter_post_page_from','post_type'}
+                            or common['creation_id'] != draft['creation_id'] or item.get('video_id') != draft['video_id']
+                            or type(item.get('batch_index')) is not int or item['batch_index'] != 0
+                            or feature.get('text') != caption or feature.get('text_extra') != caption_entities(draft, caption)):
+                        raise StudioPublishError('Native Post network binding changed.', category='ambiguous_post_action')
+                    self.requests[request_id] = {'count': 1, 'creation_id': common['creation_id'], 'video_id': item['video_id'],
+                                                 'batch_index': 0, 'project_id_present': False}
+                    self.operation['public_action_dispatched'] = True
+                    self.operation['network_observation'] = {'state': 'request_observed', 'request_count': 1,
+                        'request_id': request_id, 'creation_id': common['creation_id'], 'video_id': item['video_id'],
+                        'request_sha256': hashlib.sha256(event['body'].encode()).hexdigest()}
+                    self.save(self.operation)
+                elif request_id not in self.requests:
+                    raise StudioPublishError('Native Post response has no exact request.', category='ambiguous_post_action')
+                elif event['kind'] == 'response':
+                    if request_id in self.responses or event.get('route_matches') is not True or event.get('status') != 200:
+                        raise StudioPublishError('Native Post response route/status is inconclusive.', category='ambiguous_post_action')
+                    self.responses[request_id] = event['status']
+                elif event['kind'] == 'finished':
+                    size = event.get('encoded_bytes')
+                    if type(size) not in (int, float) or not 0 <= size <= 1_000_000:
+                        raise StudioPublishError('Native Post response exceeds its bound.', category='ambiguous_post_action')
+                    self.finished.add(request_id)
+                elif event['kind'] == 'failed':
+                    raise StudioPublishError('Native Post transport failed.', category='ambiguous_post_action')
+            if len(self.requests) == 1:
+                request_id = next(iter(self.requests))
+                if request_id in self.responses and request_id in self.finished:
+                    body = self.page.network_response_body(self.session, request_id, timeout=min(5, max(.1, deadline-time.monotonic())))
+                    observed = {**self.requests[request_id], 'receipt': {'status': self.responses[request_id], 'body': body}}
+                    payload = accepted_project(observed, self.operation)
+                    self.operation['network_observation'].update(state='accepted_response', response_sha256=hashlib.sha256(body.encode()).hexdigest())
+                    self.operation['post_project_id'] = payload['project_id']
+                    self.operation['state'] = 'project_accepted'
+                    self.save(self.operation)
+                    return payload
+            time.sleep(.1)
+        raise StudioPublishError('Native Post network result is inconclusive; reconcile only.', category='ambiguous_post_action')
 
 
 def receipt_item_id(payload: dict) -> str | None:
@@ -916,7 +993,7 @@ class StudioPublisher:
         self._save(operation)
         return operation, page
 
-    def publish(self, request_id: str, *, before_public_action: Callable[[dict], None]) -> dict:
+    def publish(self, request_id: str, *, before_public_action: Callable[[dict], dict | None]) -> dict:
         if not callable(before_public_action):
             raise StudioPublishError("Studio public action requires a trusted before_public_action callback.")
         with self._locked():
@@ -933,28 +1010,59 @@ class StudioPublisher:
             page.evaluate(OBSERVER_JS, {"key": key, "path": POST_PATH,
                                          "video_id": draft["video_id"], "creation_id": draft["creation_id"],
                                          'caption': policy['caption'], 'caption_text_extra': caption_entities(draft, policy['caption'])})
+            try:
+                network = _PostNetworkObserver(page, operation, self._save)
+            except Exception as exc:
+                self._restore_post_observer(page, key, operation)
+                raise StudioPublishError('Native Post observation could not be armed; no Post dispatched.') from exc
             operation["state"] = "dispatch_pending"
             self._save(operation)
             try:
-                # No browser read or file permit between trusted gate and Post.
-                before_public_action({k: operation[k] for k in ("request_id", "asset_sha256", "policy_digest", "actor", "draft_id", "project_id")})
+                # Trusted coordinator gate runs after all editor checks.
+                authorization = before_public_action({k: operation[k] for k in ("request_id", "asset_sha256", "policy_digest", "actor", "draft_id", "project_id")})
             except Exception:
                 operation["state"] = "prepared"
                 self._save(operation)
-                page.evaluate(RESTORE_JS, key)
+                self._restore_post_observer(page, key, operation)
                 raise StudioPublishError("Trusted public-action callback rejected Studio Post; no Post dispatched.") from None
             try:
-                page.locator(POST_SELECTOR).click()
-                operation["public_action_dispatched"] = True
+                failure_stage = 'native_observation_refresh'
+                deadline = None
+                if authorization is not None:
+                    if (not isinstance(authorization, dict) or set(authorization) != {'dispatch_deadline'}
+                            or type(authorization['dispatch_deadline']) not in (int, float)
+                            or not math.isfinite(authorization['dispatch_deadline'])):
+                        operation['state'] = 'prepared'
+                        self._save(operation)
+                        raise StudioPublishError('Trusted dispatch deadline is invalid.')
+                    deadline = authorization['dispatch_deadline']
+                operation['dispatch_deadline'] = deadline
+                self._save(operation)
+                failure_stage = 'native_observation_refresh'
+                network.before_dispatch()
+                page.evaluate(DEADLINE_JS, {'key': key, 'deadline': deadline})
+                if deadline is not None and time.time() >= deadline:
+                    operation['state'] = 'prepared'
+                    self._save(operation)
+                    raise StudioPublishError('Trusted dispatch deadline expired; no Post dispatched.')
+                failure_stage = 'native_post_action'
+                click_error = None
+                try:
+                    page.locator(POST_SELECTOR).click()
+                except Exception as exc:
+                    # An evaluation can fail after the event reached the page.
+                    # Drain the independent native exchange before closing it.
+                    click_error = exc
+                    operation['post_action_issue'] = {'error_type': type(exc).__name__, 'recoverable': True}
                 operation["state"] = "outcome_unknown"
                 self._save(operation)
-                deadline = time.monotonic() + 30
-                observed = None
-                while time.monotonic() < deadline:
-                    observed = page.evaluate(RECEIPT_JS, key)
-                    if observed and observed.get("receipt"):break
-                    page.wait_for_timeout(250)
-                payload = accepted_project(observed, operation)
+                failure_stage = 'post_receipt_read'
+                try:
+                    payload = network.read()
+                except Exception as exc:
+                    if click_error is not None:
+                        raise exc from click_error
+                    raise
                 operation["post_project_id"] = payload["project_id"]
                 operation["state"] = "project_accepted"
                 # Persist native acceptance before interpreting any optional
@@ -965,13 +1073,26 @@ class StudioPublisher:
                     operation["item_id"] = item
                     operation["state"] = "receipt_observed"
                     self._save(operation)
-            except Exception:
-                operation["state"] = "outcome_unknown"
+            except Exception as exc:
+                if operation["state"] != "prepared":operation["state"] = "outcome_unknown"
+                operation['post_failure'] = {'stage': failure_stage, 'error_type': type(exc).__name__}
                 self._save(operation)
-                raise StudioPublishError("Studio Post outcome is unknown; reconcile only, never retry.", category="ambiguous_post_action") from None
+                raise StudioPublishError("Studio Post refused before dispatch." if operation["state"] == "prepared" else "Studio Post outcome is unknown; reconcile only, never retry.", category="pre_action_abort" if operation["state"] == "prepared" else "ambiguous_post_action") from exc
             finally:
-                page.evaluate(RESTORE_JS, key)
+                self._restore_post_observer(page, key, operation)
             return self._reconcile(operation)
+
+    def _restore_post_observer(self, page, key, operation):
+        try:
+            page.evaluate(RESTORE_JS, key)
+        except Exception as exc:
+            operation['observer_cleanup_issue'] = {'error_type': type(exc).__name__, 'recoverable': True}
+            try:
+                self._save(operation)
+            except Exception:
+                # The dispatch/receipt boundary was saved before cleanup.
+                # Failed diagnostic persistence cannot replace its outcome.
+                pass
 
     def _reconcile(self, operation):
         if not operation.get("item_id"):

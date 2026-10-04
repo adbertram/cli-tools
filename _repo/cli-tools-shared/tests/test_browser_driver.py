@@ -1918,3 +1918,82 @@ def test_native_click_actual_dom_guard_refuses_ambiguous_and_occluded_targets(mo
     console.log('EXACT_HIT_ONLY');'''.replace('EXPRESSION', '(' + scripts[0] + ')')
     result = subprocess.run(['node', '-e', script], capture_output=True, text=True, check=True)
     assert result.stdout.strip() == 'EXACT_HIT_ONLY'
+
+
+def network_service(monkeypatch, *, events=(), body=None):
+    service = BrowserHarnessService('network-receipt-proof');service._opened = True
+    calls = []
+    def send(request, **kwargs):
+        calls.append((request, kwargs))
+        return {'session_id': 'owner'} if request['meta'] == 'session' else {'events': list(events)}
+    def cdp(method, **kwargs):
+        calls.append((method, kwargs))
+        return body if method == 'Network.getResponseBody' else {}
+    monkeypatch.setattr(service._bh.h, '_send', send)
+    monkeypatch.setattr(service._bh.h, 'cdp', cdp)
+    return service, calls
+
+
+def test_network_observer_enables_bounded_durable_body_storage(monkeypatch):
+    service, calls = network_service(monkeypatch)
+    assert service.begin_network_observation(max_bytes=1024) == 'owner'
+    method, params = calls[1]
+    assert method == 'Network.enable' and params == {'session_id': 'owner', 'request_timeout': 5, 'maxTotalBufferSize': 4096, 'maxResourceBufferSize': 1024, 'maxPostDataSize': 1024, 'enableDurableMessages': True}
+    assert calls[-1] == ({'meta': 'drain_events'}, {'timeout': 5})
+
+
+def test_network_filter_exports_only_exact_session_route_and_no_headers(monkeypatch):
+    def event(method, **params):return {'session_id': 'owner', 'method': 'Network.'+method, 'params': params}
+    events = [event('requestWillBeSent', requestId='other', request={'method': 'POST', 'url': 'https://other.test/post', 'postData': 'SECRET'}),
+              {'session_id': 'foreign', 'method': 'Network.requestWillBeSent', 'params': {'requestId': 'foreign', 'request': {'method': 'POST', 'url': 'https://exact.test/post', 'postData': 'SECRET'}}},
+              event('requestWillBeSent', requestId='exact', request={'method': 'POST', 'url': 'https://exact.test/post?signed=SECRET', 'postData': '{}', 'headers': {'Authorization': 'SECRET'}}),
+              event('responseReceived', requestId='exact', response={'url': 'https://exact.test/post?signed=SECRET', 'status': 200, 'headers': {'Set-Cookie': 'SECRET'}}),
+              event('loadingFinished', requestId='exact', encodedDataLength=12), event('loadingFailed', requestId='other')]
+    service, _ = network_service(monkeypatch, events=events)
+    result = service.network_observations('owner', method='POST', origin='https://exact.test', path='/post')
+    assert result == [{'kind': 'request', 'request_id': 'exact', 'body': '{}'}, {'kind': 'response', 'request_id': 'exact', 'status': 200, 'route_matches': True}, {'kind': 'finished', 'request_id': 'exact', 'encoded_bytes': 12}]
+    assert 'SECRET' not in str(result)
+
+
+def test_network_late_response_keeps_explicit_original_request_and_session(monkeypatch):
+    events = [{'session_id': 'owner', 'method': 'Network.responseReceived', 'params': {'requestId': 'exact', 'response': {'url': 'https://exact.test/post', 'status': 200}}}]
+    service, _ = network_service(monkeypatch, events=events)
+    assert service.network_observations('owner', method='POST', origin='https://exact.test', path='/post', request_ids=('exact',))[0]['request_id'] == 'exact'
+
+
+@pytest.mark.parametrize('count', [500, 501])
+def test_network_buffer_overflow_is_inconclusive(monkeypatch, count):
+    service, _ = network_service(monkeypatch, events=[{}]*count)
+    with pytest.raises(BrowserHarnessError, match='buffer_inconclusive'):
+        service.network_observations('owner', method='POST', origin='https://exact.test', path='/post')
+
+
+@pytest.mark.parametrize('body', [None, 12, 'x'*1025])
+def test_network_matching_request_requires_bounded_body(monkeypatch, body):
+    event = {'session_id': 'owner', 'method': 'Network.requestWillBeSent', 'params': {'requestId': 'exact', 'request': {'method': 'POST', 'url': 'https://exact.test/post', 'postData': body}}}
+    service, _ = network_service(monkeypatch, events=[event])
+    with pytest.raises(BrowserHarnessError, match='body_unavailable'):
+        service.network_observations('owner', method='POST', origin='https://exact.test', path='/post', max_bytes=1024)
+
+
+@pytest.mark.parametrize('encoded', [False, True])
+def test_network_response_body_exact_id_bounded_utf8(monkeypatch, encoded):
+    import base64
+    value = '{"ok":"✓"}'
+    body = base64.b64encode(value.encode()).decode() if encoded else value
+    service, calls = network_service(monkeypatch, body={'body': body, 'base64Encoded': encoded})
+    assert service.network_response_body('owner', 'exact', max_bytes=1024, timeout=2) == value
+    assert calls == [('Network.getResponseBody', {'session_id': 'owner', 'request_timeout': 2, 'requestId': 'exact'})]
+
+
+@pytest.mark.parametrize('body', [{'body': 'x'*1025, 'base64Encoded': False}, {'body': 'eA=='*800, 'base64Encoded': True}, {'body': '{}'}, {}])
+def test_network_response_oversize_or_malformed_is_not_returned(monkeypatch, body):
+    service, _ = network_service(monkeypatch, body=body)
+    with pytest.raises(BrowserHarnessError):service.network_response_body('owner', 'exact', max_bytes=1024)
+
+
+@pytest.mark.parametrize('timeout', [0, -1, 6, float('nan'), True])
+def test_network_response_invalid_deadline_never_queries(monkeypatch, timeout):
+    service, calls = network_service(monkeypatch)
+    with pytest.raises(BrowserHarnessError):service.network_response_body('owner', 'exact', timeout=timeout)
+    assert calls == []

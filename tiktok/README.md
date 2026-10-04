@@ -111,7 +111,11 @@ request_id)`, `publish(request_id, *, before_public_action)`, `status(request_id
 prepare→publish so its owned editor stays open. The mandatory trusted Python
 callback receives the request, asset hash, policy digest, actor, draft ID, and
 editor project ID immediately before Post. An unattended coordinator must inspect
-its own authoritative reservation and control state in that callback.
+its own authoritative reservation and control state in that callback. It may
+return `{"dispatch_deadline": epoch_seconds}` from its original lease and policy
+cutoff. The SDK checks that deadline before click and in the native pre-send
+guard; it never renews authorization. Bounded CDP request/response capture
+survives renderer navigation and journals only exact binding IDs and hashes.
 
 A native request guard permits only the exact creation ID, uploaded video ID,
 and one batch-zero request. The response allocates a separate `post_project_id`.

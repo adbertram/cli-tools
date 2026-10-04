@@ -1135,6 +1135,78 @@ class BrowserHarnessService:
             raise BrowserHarnessError('native_click_coordinates_invalid')
         self._bh.h.click_at_xy(point['x'], point['y'])
 
+    def begin_network_observation(self, *, max_bytes: int = 1_000_000) -> str:
+        """Keep bounded response bodies outside the renderer across navigation.
+
+        Uses Network.enable/getResponseBody from the owning CDP connection:
+        https://chromedevtools.github.io/devtools-protocol/tot/Network/
+        """
+        self._require_open()
+        if type(max_bytes) is not int or not 1 <= max_bytes <= 1_000_000:
+            raise BrowserHarnessError('network_observation_limit_invalid')
+        session = self._bh.h._send({'meta': 'session'}, timeout=5).get('session_id')
+        if not isinstance(session, str) or not session:
+            raise BrowserHarnessError('network_observation_session_missing')
+        self._bh.h.cdp('Network.enable', session_id=session, request_timeout=5,
+                       maxTotalBufferSize=max_bytes*4, maxResourceBufferSize=max_bytes,
+                       maxPostDataSize=max_bytes, enableDurableMessages=True)
+        self._bh.h._send({'meta': 'drain_events'}, timeout=5).get('events')
+        return session
+
+    def network_observations(self, session_id: str, *, method: str, origin: str, path: str,
+                             request_ids=(), max_bytes: int = 1_000_000, timeout: float = 5) -> List[Dict[str, Any]]:
+        """Return matching requests and their events, omitting every header."""
+        self._require_open()
+        if type(max_bytes) is not int or not 1 <= max_bytes <= 1_000_000 or not isinstance(session_id, str) or not session_id or method not in ('POST', 'PUT', 'PATCH') or not isinstance(origin, str) or not isinstance(path, str) or not path.startswith('/') or not isinstance(request_ids, (tuple, list)) or len(request_ids) > 100 or any(not isinstance(value, str) or not 1 <= len(value) <= 128 for value in request_ids) or type(timeout) not in (int, float) or not 0 < timeout <= 5:
+            raise BrowserHarnessError('network_observation_arguments_invalid')
+        events = self._bh.h._send({'meta': 'drain_events'}, timeout=timeout).get('events')
+        if not isinstance(events, list) or len(events) >= 500:
+            raise BrowserHarnessError('network_observation_buffer_inconclusive')
+        matched, result = set(request_ids), []
+        for event in events:
+            if event.get('session_id') != session_id:
+                continue
+            params = event.get('params', {});request_id = params.get('requestId')
+            if event.get('method') == 'Network.requestWillBeSent':
+                request = params.get('request', {});url = urlsplit(request.get('url', ''))
+                if request.get('method') != method or url.scheme+'://'+url.netloc != origin or url.path != path:
+                    continue
+                body = request.get('postData')
+                if not isinstance(body, str) or len(body.encode()) > max_bytes:
+                    raise BrowserHarnessError('network_observation_request_body_unavailable')
+                matched.add(request_id)
+                result.append({'kind': 'request', 'request_id': request_id, 'body': body})
+            elif request_id in matched:
+                if event.get('method') == 'Network.responseReceived':
+                    response = params.get('response', {});url = urlsplit(response.get('url', ''))
+                    result.append({'kind': 'response', 'request_id': request_id, 'status': response.get('status'),
+                                   'route_matches': url.scheme+'://'+url.netloc == origin and url.path == path})
+                elif event.get('method') == 'Network.loadingFinished':
+                    result.append({'kind': 'finished', 'request_id': request_id, 'encoded_bytes': params.get('encodedDataLength')})
+                elif event.get('method') == 'Network.loadingFailed':
+                    result.append({'kind': 'failed', 'request_id': request_id})
+        return result
+
+    def network_response_body(self, session_id: str, request_id: str, *, max_bytes: int = 1_000_000,
+                              timeout: float = 5) -> str:
+        """Read one exact request's bounded UTF-8 response through CDP."""
+        self._require_open()
+        if type(max_bytes) is not int or not 1 <= max_bytes <= 1_000_000 or not isinstance(session_id, str) or not session_id or not isinstance(request_id, str) or not 1 <= len(request_id) <= 128 or type(timeout) not in (int, float) or not 0 < timeout <= 5:
+            raise BrowserHarnessError('network_response_arguments_invalid')
+        result = self._bh.h.cdp('Network.getResponseBody', session_id=session_id,
+                               request_timeout=timeout, requestId=request_id)
+        if not isinstance(result, dict) or type(result.get('base64Encoded')) is not bool or not isinstance(result.get('body'), str):
+            raise BrowserHarnessError('network_response_body_invalid')
+        body = result['body']
+        if len(body.encode()) > max_bytes * 2:
+            raise BrowserHarnessError('network_response_body_oversize')
+        if result['base64Encoded']:
+            import base64
+            body = base64.b64decode(body, validate=True).decode('utf-8')
+        if len(body.encode()) > max_bytes:
+            raise BrowserHarnessError('network_response_body_oversize')
+        return body
+
     def set_input_files(self, selector: str, file_path: str) -> None:
         """Set a ``<input type="file">`` element's files to a local file.
 

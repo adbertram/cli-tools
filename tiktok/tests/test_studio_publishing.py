@@ -152,6 +152,27 @@ class Page:
         self.receipt = {"status_code": 0, "project_id": row["project_id"],
                         "single_post_resp_list": [{"status_code": 0, "batch_index": 0, "item_id": "7692252984792681742"}]}
         self.click_error = False
+        self.network_after_click_error = False
+        self.observer_options = None
+        self.network_sent = False
+    def begin_network_observation(self, **kwargs):return 'exact-session'
+    def native_request(self):
+        opts = self.observer_options
+        return {'post_common_info': {'creation_id': opts['creation_id'], 'enter_post_page_from': 1, 'post_type': 1},
+                'single_post_req_list': [{'video_id': opts['video_id'], 'batch_index': 0,
+                    'single_post_feature_info': {'text': opts['caption'], 'text_extra': opts['caption_text_extra']}}]}
+    def network_observations(self, session, **kwargs):
+        if not self.clicked:return []
+        if self.click_error and not self.network_after_click_error:
+            raise RuntimeError('network disconnected after click')
+        if not self.clicked or self.network_sent:return []
+        self.network_sent = True
+        return [{'kind': 'request', 'request_id': '123.1', 'body': json.dumps(self.native_request())},
+                {'kind': 'response', 'request_id': '123.1', 'status': 200, 'route_matches': True},
+                {'kind': 'finished', 'request_id': '123.1', 'encoded_bytes': 128}]
+    def network_response_body(self, session, request_id, **kwargs):
+        assert session == 'exact-session' and request_id == '123.1'
+        return json.dumps(self.receipt)
     def wait_for_timeout(self, duration):pass
     def locator(self, selector):
         page = self
@@ -169,10 +190,8 @@ class Page:
         if script == module.CAPTION_TEXT_JS:return self.rows[0]['caption']
         if script == module.CONTROLS_JS:return {"upload_complete": True, "post_enabled": True}
         if script == module.DRAFTS_JS:return self.rows
-        if script == module.OBSERVER_JS:self.events.append("observe");return True
-        if script == module.RECEIPT_JS:
-            return {"count": 1, "receipt": {"status": 200, "body": json.dumps(self.receipt)},
-                    "project_id_present": False, "creation_id": self.rows[0]["creation_id"], "video_id": self.rows[0]["video_id"], "batch_index": 0}
+        if script == module.OBSERVER_JS:self.observer_options = value;self.events.append("observe");return True
+        if script == module.DEADLINE_JS:self.dispatch_deadline = value['deadline'];return True
         if script == module.RESTORE_JS:self.restored = True;return True
         raise AssertionError(script)
 
@@ -211,6 +230,39 @@ def test_callback_rejection_never_posts_and_preserves_safe_prepared_state(publis
         publisher.publish(value["request_id"], before_public_action=reject)
     assert error.value.category == "pre_action_abort" and page.clicked == 0 and page.restored
     assert publisher.status(value["request_id"])["state"] == "prepared"
+
+
+def test_observer_cleanup_failure_preserves_primary_post_error(publisher, monkeypatch):
+    value = prepared(publisher);page = attach(publisher, value, monkeypatch)
+    page.click_error = True
+    original = page.evaluate
+    def evaluate(script, argument=None):
+        if script == module.RESTORE_JS:
+            raise RuntimeError('cleanup failure')
+        return original(script, argument)
+    page.evaluate = evaluate
+    with pytest.raises(StudioPublishError) as error:
+        publisher.publish(value['request_id'], before_public_action=lambda binding: None)
+    assert str(error.value.__cause__.__cause__) == 'transport disconnected after click'
+    saved = publisher.status(value['request_id'])
+    assert saved['state'] == 'outcome_unknown'
+    assert saved['post_failure'] == {'stage': 'post_receipt_read', 'error_type': 'RuntimeError'}
+    assert saved['observer_cleanup_issue'] == {'error_type': 'RuntimeError', 'recoverable': True}
+
+
+def test_callback_denial_cleanup_failure_preserves_known_no_dispatch(publisher, monkeypatch):
+    value = prepared(publisher);page = attach(publisher, value, monkeypatch)
+    original = page.evaluate
+    def evaluate(script, argument=None):
+        if script == module.RESTORE_JS:raise RuntimeError('cleanup failure')
+        return original(script, argument)
+    page.evaluate = evaluate
+    def deny(binding):raise RuntimeError('trusted denial')
+    with pytest.raises(StudioPublishError, match='callback rejected'):
+        publisher.publish(value['request_id'], before_public_action=deny)
+    saved = publisher.status(value['request_id'])
+    assert saved['state'] == 'prepared' and saved['public_action_dispatched'] is False
+    assert page.clicked == 0 and saved['observer_cleanup_issue']['recoverable'] is True
 
 
 @pytest.mark.parametrize("change", [{"video_id": "wrong"}, {"file_key": "wrong"}, {"file_size": 1},
@@ -680,3 +732,186 @@ def test_failed_exact_selection_restores_text_and_marks_semantics_unverified(pub
     monkeypatch.setattr(publisher, '_wait', once)
     with pytest.raises(StudioPublishError):publisher._set_caption(page, policy() | {'caption': '@hardscope'})
     assert page.text == 'Original text' and publisher._caption_semantic_rollback_unverified is True
+
+
+def test_navigation_context_loss_still_persists_exact_native_acceptance(publisher, monkeypatch):
+    value = prepared(publisher);page = attach(publisher, value, monkeypatch)
+    page.click_error = True;page.network_after_click_error = True
+    monkeypatch.setattr(publisher, '_reconcile', lambda operation: operation)
+    original = page.evaluate
+    def evaluate(script, argument=None):
+        if script == module.RESTORE_JS:raise RuntimeError('renderer gone')
+        return original(script, argument)
+    page.evaluate = evaluate
+    result = publisher.publish(value['request_id'], before_public_action=lambda binding: None)
+    assert result['state'] == 'receipt_observed' and result['post_project_id'] == value['project_id']
+    assert result['public_action_dispatched'] is True and result['network_observation']['state'] == 'accepted_response'
+    assert result['observer_cleanup_issue']['recoverable'] is True and page.clicked == 1
+    with pytest.raises(StudioPublishError, match='retry'):
+        publisher.publish(value['request_id'], before_public_action=lambda binding: pytest.fail('no callback'))
+    assert page.clicked == 1
+
+
+def test_network_arming_failure_is_known_private_and_restores_guard(publisher, monkeypatch):
+    value = prepared(publisher);page = attach(publisher, value, monkeypatch)
+    page.begin_network_observation = lambda: (_ for _ in ()).throw(RuntimeError('unsupported'))
+    with pytest.raises(StudioPublishError, match='armed'):
+        publisher.publish(value['request_id'], before_public_action=lambda binding: pytest.fail('no callback'))
+    assert page.clicked == 0 and page.restored
+    assert publisher.status(value['request_id'])['state'] == 'prepared'
+
+
+@pytest.mark.parametrize('change', ['creation', 'media', 'batch', 'caption', 'entities', 'multiple_items', 'project', 'not_object', 'duplicate', 'response_id', 'redirect', 'status', 'oversize', 'failed'])
+def test_network_refuses_wrong_binding_duplicate_or_inconclusive_exchange(publisher, monkeypatch, change):
+    value = prepared(publisher);page = attach(publisher, value, monkeypatch)
+    original = page.network_observations
+    def observations(*args, **kwargs):
+        events = original(*args, **kwargs)
+        if not events:return []
+        body = json.loads(events[0]['body'])
+        item = body['single_post_req_list'][0]
+        if change == 'creation':body['post_common_info']['creation_id'] = 'different'
+        elif change == 'media':item['video_id'] = 'different'
+        elif change == 'batch':item['batch_index'] = True
+        elif change == 'caption':item['single_post_feature_info']['text'] += 'other'
+        elif change == 'entities':item['single_post_feature_info']['text_extra'] = []
+        elif change == 'multiple_items':body['single_post_req_list'].append(dict(item))
+        elif change == 'project':body['post_common_info']['project_id'] = '123'
+        elif change == 'not_object':body = []
+        elif change == 'duplicate':events.insert(1, dict(events[0]))
+        elif change == 'response_id':events[1]['request_id'] = 'different'
+        elif change == 'redirect':events[1]['route_matches'] = False
+        elif change == 'status':events[1]['status'] = 503
+        elif change == 'oversize':events[2]['encoded_bytes'] = 1_000_001
+        elif change == 'failed':events[2]['kind'] = 'failed'
+        events[0]['body'] = json.dumps(body)
+        return events
+    page.network_observations = observations
+    with pytest.raises(StudioPublishError) as error:
+        publisher.publish(value['request_id'], before_public_action=lambda binding: None)
+    assert error.value.category == 'ambiguous_post_action'
+    assert publisher.status(value['request_id'])['state'] == 'outcome_unknown' and page.clicked == 1
+    with pytest.raises(StudioPublishError, match='retry'):
+        publisher.publish(value['request_id'], before_public_action=lambda binding: pytest.fail('no callback'))
+
+
+def test_late_response_uses_original_session_and_saves_request_before_response(publisher, monkeypatch):
+    value = prepared(publisher);page = attach(publisher, value, monkeypatch)
+    monkeypatch.setattr(publisher, '_reconcile', lambda operation: operation)
+    original = page.network_observations;batches = []
+    def observations(session, **kwargs):
+        assert session == 'exact-session'
+        if not page.clicked:return []
+        if not batches:
+            events = original(session, **kwargs);batches.extend([[], events[1:]])
+            return events[:1]
+        assert kwargs['request_ids'] == ('123.1',)
+        saved = publisher.status(value['request_id'])
+        assert saved['public_action_dispatched'] and saved['network_observation']['state'] == 'request_observed'
+        return batches.pop(0)
+    page.network_observations = observations
+    result = publisher.publish(value['request_id'], before_public_action=lambda binding: None)
+    assert result['state'] == 'receipt_observed' and page.clicked == 1
+
+
+def test_crash_after_exact_request_observation_remains_reconcile_only(publisher, monkeypatch):
+    value = prepared(publisher);page = attach(publisher, value, monkeypatch)
+    save = publisher._save
+    def crash(operation):
+        save(operation)
+        if operation.get('network_observation', {}).get('state') == 'request_observed':raise KeyboardInterrupt()
+    monkeypatch.setattr(publisher, '_save', crash)
+    with pytest.raises(KeyboardInterrupt):
+        publisher.publish(value['request_id'], before_public_action=lambda binding: None)
+    saved = publisher.status(value['request_id'])
+    assert saved['state'] == 'outcome_unknown' and saved['public_action_dispatched'] is True
+    assert saved['network_observation']['request_id'] == '123.1'
+    assert publisher.reconcile(value['request_id'])['reconciliation'] == 'inconclusive_no_exact_receipt_id'
+    with pytest.raises(StudioPublishError, match='retry'):
+        publisher.publish(value['request_id'], before_public_action=lambda binding: pytest.fail('no callback'))
+
+
+def test_background_refresh_is_after_slow_callback_before_post(publisher, monkeypatch):
+    value = prepared(publisher);page = attach(publisher, value, monkeypatch)
+    monkeypatch.setattr(publisher, '_reconcile', lambda operation: operation)
+    original = page.network_observations
+    def observations(*args, **kwargs):
+        if not page.clicked:
+            assert page.events[-1] == 'callback'
+            page.events.append('refresh')
+        return original(*args, **kwargs)
+    page.network_observations = observations
+    publisher.publish(value['request_id'], before_public_action=lambda binding: page.events.append('callback'))
+    assert page.events[-3:] == ['callback', 'refresh', 'Post']
+
+
+def test_unexpected_request_before_click_refuses_public_action(publisher, monkeypatch):
+    value = prepared(publisher);page = attach(publisher, value, monkeypatch)
+    page.network_observations = lambda *args, **kwargs: [{'kind': 'request', 'request_id': 'unexpected', 'body': '{}'}]
+    with pytest.raises(StudioPublishError):publisher.publish(value['request_id'], before_public_action=lambda binding: None)
+    assert page.clicked == 0
+    saved = publisher.status(value['request_id'])
+    assert saved['state'] == 'outcome_unknown' and saved['network_observation']['state'] == 'unexpected_pre_dispatch_exchange'
+
+
+def test_inconclusive_refresh_never_posts_or_accepts_receipt(publisher, monkeypatch):
+    value = prepared(publisher);page = attach(publisher, value, monkeypatch)
+    def observations(*args, **kwargs):raise RuntimeError('buffer overflow')
+    page.network_observations = observations
+    with pytest.raises(StudioPublishError):publisher.publish(value['request_id'], before_public_action=lambda binding: None)
+    saved = publisher.status(value['request_id'])
+    assert page.clicked == 0 and saved['state'] == 'outcome_unknown' and 'post_project_id' not in saved
+
+
+def test_expired_deadline_after_drain_never_clicks_and_remains_private(publisher, monkeypatch):
+    value=prepared(publisher);page=attach(publisher,value,monkeypatch)
+    now=[1000.0];monkeypatch.setattr(module.time,'time',lambda:now[0])
+    def observations(*args,**kwargs):now[0]=1006;return []
+    page.network_observations=observations
+    with pytest.raises(StudioPublishError) as error:
+        publisher.publish(value['request_id'],before_public_action=lambda binding:{'dispatch_deadline':1005.0})
+    assert error.value.category=='pre_action_abort' and page.clicked==0
+    assert publisher.status(value['request_id'])['state']=='prepared'
+
+
+def test_native_guard_rejects_send_delayed_past_trusted_deadline():
+    import subprocess
+    script="""
+    global.window={};global.location={href:'https://www.tiktok.com/tiktokstudio/upload'};
+    let sends=0,aborts=0,now=1000000;Date.now=()=>now;
+    class XHR{open(){} send(){sends++} abort(){aborts++}}global.XMLHttpRequest=XHR;
+    const install=OBSERVER,setDeadline=DEADLINE;
+    install({key:'owned',path:'/tiktok/web/project/post/v1/',creation_id:'OWNED',video_id:'VIDEO',caption:'CAPTION',caption_text_extra:[]});
+    setDeadline({key:'owned',deadline:1005});now=1005000;
+    const xhr=new XHR();xhr.open('POST','/tiktok/web/project/post/v1/');
+    try{xhr.send(JSON.stringify({post_common_info:{creation_id:'OWNED',enter_post_page_from:1,post_type:2},single_post_req_list:[{video_id:'VIDEO',batch_index:0,single_post_feature_info:{text:'CAPTION',text_extra:[]}}]}))}catch(_){}
+    if(sends!==0||aborts!==1)throw Error('expired send');console.log('EXPIRED_ZERO_SENDS');
+    """.replace('OBSERVER','('+module.OBSERVER_JS+')').replace('DEADLINE','('+module.DEADLINE_JS+')')
+    result=subprocess.run(['node','-e',script],capture_output=True,text=True,check=True)
+    assert result.stdout.strip()=='EXPIRED_ZERO_SENDS'
+
+
+@pytest.mark.parametrize('authorization', [{'dispatch_deadline':True},{'dispatch_deadline':float('inf')},{'dispatch_deadline':1000,'other':True},{}])
+def test_invalid_trusted_deadline_remains_known_private(publisher,monkeypatch,authorization):
+    value=prepared(publisher);page=attach(publisher,value,monkeypatch)
+    with pytest.raises(StudioPublishError) as error:
+        publisher.publish(value['request_id'],before_public_action=lambda binding:authorization)
+    assert error.value.category=='pre_action_abort' and page.clicked==0
+    assert publisher.status(value['request_id'])['state']=='prepared'
+
+
+def test_crash_after_native_acceptance_retains_project_receipt_before_optional_item(publisher,monkeypatch):
+    value=prepared(publisher);page=attach(publisher,value,monkeypatch)
+    save=publisher._save
+    def crash(operation):
+        save(operation)
+        if operation.get('network_observation',{}).get('state')=='accepted_response':raise KeyboardInterrupt()
+    monkeypatch.setattr(publisher,'_save',crash)
+    with pytest.raises(KeyboardInterrupt):
+        publisher.publish(value['request_id'],before_public_action=lambda binding:None)
+    saved=publisher.status(value['request_id'])
+    assert saved['state']=='project_accepted' and saved['post_project_id']==value['project_id']
+    assert 'item_id' not in saved and saved['public_action_dispatched'] is True
+    with pytest.raises(StudioPublishError,match='retry'):
+        publisher.publish(value['request_id'],before_public_action=lambda binding:pytest.fail('no callback'))
+    assert page.clicked==1
