@@ -189,7 +189,7 @@ class WhopClient:
         self.account()  # Validate Whop identity, not just a residual cookie.
         return self.browser.get_page(origin+path+suffix)
     def _rest(self,path,params=None):
-        page=self._reward_page()
+        page=self._action_document('/discover')
         result=self._request(page,path+('?' + urlencode(params) if params else ''))
         return self._success(result)
     @staticmethod
