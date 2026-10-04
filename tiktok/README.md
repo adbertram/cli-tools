@@ -461,3 +461,47 @@ tiktok auth session-import --profile clipper --expected-account-id EXPECTED_NUME
 Export verifies exact live identity before and after collecting cookies scoped to tiktok.com, www.tiktok.com, and tiktokw.us plus localStorage from exactly https://www.tiktok.com. It accepts only a named browser_session profile. Keep bundles private inside CLI runtime storage; never place them in a repository.
 
 Import requires an absent named destination on macOS. It restores into private inactive staging, reopens for an exact live identity check, publishes exclusively, and verifies the final profile again. It never activates a profile or replaces an existing destination. Challenges and failures retain private recovery state; after the browser closes, `tiktok auth session-import-recover --profile clipper` recovers only importer-owned state. Raw Chrome profiles, keychains, reusable credentials, IndexedDB, sessionStorage, service workers, and hardware-bound state are not transferred.
+
+## Batch Studio inventory
+
+Read a set of exact owned publication IDs through one shared native Studio feed
+scan, instead of scanning independently for each post:
+
+```bash
+printf '["7692252984792681742"]\n' > owned-post-ids.json
+tiktok studio inventory owned-post-ids.json --profile clipper --username ata_clipper --account-id 7692213003349443597
+```
+
+The SDK method is `get_studio_videos(username, video_ids, *, expected_account_id,
+continuation=None, max_pages=20)`. Inputs allow 1–1000 unique positive string IDs
+and at most 64 KiB of JSON. A call reads at most 20 pages of 50 items; responses
+stream within an 8 MB byte limit. The caller retains records and the returned
+`continuation`, passing it to the next call (or a regular JSON file with the CLI's
+`--continuation`). Resume needs at least two pages, including a fresh head read.
+There is no total history limit of 1000 items.
+
+A continuation binds the exact actor/profile, requested ID set, and stable
+observed request semantics: native `post_time` descending order, no conditions,
+and `is_recent_posts=false`. Fresh signing material stays in browser memory and
+does not invalidate continuation. Changed bindings or malformed pagination fail
+explicitly. The first successful native capture is frozen for that invocation.
+
+`records` contains only matched posts actually measured during this call. The
+caller keeps earlier records with their original `observed_at` and
+`server_timestamp_ms`; continuation does not refresh them. `requested_complete`
+means every requested ID has been observed during this pass, including prior
+calls, rather than every ID being freshly measured now. `provider_end` means
+this observed pass ended. `unresolved_ids` remain unknown, including at provider
+end; they never imply deletion or nonexistence. Start a new pass without a
+continuation to revisit previously missing posts. No denied public-feed fallback
+is used, and revenue/watch-time measurements are unavailable.
+
+SDK failures expose sanitized `ClientError.code`, `category`, `status`, and
+`retry_after_seconds` (also `retry_after`). HTTP 429 is `rate_limit`, HTTP 401/403
+is `auth`, transport timeouts/network failures and 5xx responses are `transient`.
+Valid numeric or HTTP-date Retry-After values retain the provider minimum,
+including delays longer than 24 hours. The actor preflight preserves this
+metadata without passport response bodies and refuses an internal retry when
+the provider minimum exceeds its local delay bound. Before any browser read,
+manifest validation reserves enough space for every found ID and the complete
+actor binding, so a request that cannot fit a 64 KiB continuation fails upfront.

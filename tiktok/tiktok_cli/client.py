@@ -1,6 +1,7 @@
 """TikTok transcript downloader using yt-dlp, plus the tiktok.com web client
 (favorites, own posted videos, delete) described above TikTokWebClient."""
 import subprocess
+from contextlib import contextmanager
 import time
 import json
 import re
@@ -22,8 +23,14 @@ from .config import get_config
 
 
 class ClientError(Exception):
-    """Custom exception for TikTok CLI errors."""
-    pass
+    """Sanitized SDK failure; optional provider cooldown without message parsing."""
+    def __init__(self, message, *, code=None, category="unknown", status=None, retry_after_seconds=None):
+        super().__init__(message)
+        self.code = code
+        self.category = category
+        self.status = status
+        self.retry_after_seconds = retry_after_seconds
+        self.retry_after = retry_after_seconds
 
 
 class TiktokClient:
@@ -377,14 +384,16 @@ def normalize_account_identity(payload: dict) -> Dict:
         raise ClientError(malformed)
     data = payload.get("data")
     if payload.get("message") == "error":
-        raise ClientError("TikTok account session is not authenticated. " + _LOGIN_HINT)
+        raise ClientError("TikTok account session is not authenticated. " + _LOGIN_HINT,
+                          code="account_not_authenticated", category="auth")
     if payload.get("message") != "success" or not isinstance(data, dict):
         raise ClientError(malformed)
     if "error_code" in data:
         if type(data["error_code"]) is not int:
             raise ClientError(malformed)
         if data["error_code"] != 0:
-            raise ClientError("TikTok account session is not authenticated. " + _LOGIN_HINT)
+            raise ClientError("TikTok account session is not authenticated. " + _LOGIN_HINT,
+                          code="account_not_authenticated", category="auth")
     account_id = data.get("user_id_str")
     numeric_id = data.get("user_id")
     username = data.get("username")
@@ -437,12 +446,8 @@ class TikTokWebClient:
         return self._get_browser().get_page(f"{self.config.base_url.rstrip('/')}{path}")
 
     def _retry_after_seconds(self, raw: Optional[str]) -> Optional[float]:
-        if raw is None:
-            return None
-        try:
-            return float(raw)
-        except (TypeError, ValueError):
-            return None
+        from .studio import retry_after_seconds
+        return retry_after_seconds(raw)
 
     def _fetch_json(self, page, path: str, *, method: str = "GET", csrf: bool = False) -> dict:
         """Run one in-page request with retry and return its JSON payload."""
@@ -461,23 +466,28 @@ class TikTokWebClient:
                     time.sleep(policy.calculate_delay(attempt))
                     continue
                 raise ClientError(
-                    f"TikTok web request {path} failed after {attempt + 1} attempts: {exc}"
+                    f"TikTok web request {path} failed after {attempt + 1} attempts: {exc}",
+                    code="tiktok_transport_failed", category="transient", status=0
                 ) from exc
 
             status = int(result.get("status") or 0)
             last_status = status
             body = str(result.get("body") or "")
-            if status in policy.retryable_status_codes and attempt < policy.max_retries:
+            provider_delay = self._retry_after_seconds(result.get("retryAfter"))
+            if (status in policy.retryable_status_codes and attempt < policy.max_retries
+                    and (provider_delay is None or provider_delay <= policy.max_delay)):
                 time.sleep(
                     policy.calculate_delay(
-                        attempt, self._retry_after_seconds(result.get("retryAfter"))
+                        attempt, provider_delay
                     )
                 )
                 continue
             if status != 200:
                 raise ClientError(
                     f"TikTok web request {path} HTTP {status} "
-                    f"{result.get('statusText', '')}: {body[:300]}"
+                    f"{result.get('statusText', '')}: {body[:300]}",
+                    code=f"tiktok_http_{status}", category="rate_limit" if status == 429 else "auth" if status in (401,403) else "transient" if status >= 500 or status == 0 else "upstream",
+                    status=status, retry_after_seconds=provider_delay
                 )
             if not body:
                 raise ClientError(
@@ -504,23 +514,14 @@ class TikTokWebClient:
             f"(last status={last_status}): {last_exception}"
         )
 
-    def _studio_read(self, username: str, *, limit: int = 100, video_id: Optional[str] = None, expected_account_id: Optional[str] = None) -> List[Dict]:
-        """Read only observed Studio content for the verified session owner."""
+    @contextmanager
+    def _studio_session(self, username, expected_account_id):
         from uuid import uuid4
-        from .studio import (CAPTURE_JS, READY_JS, FETCH_JS, CLEANUP_JS, STUDIO_CONTENT_URL,
-                             MAX_STUDIO_ITEMS, MAX_RESPONSE_BYTES, STUDIO_PAGE_SIZE, MAX_STUDIO_PAGES, STUDIO_ITEMS_PATH,
-                             StudioContractError, normalize_item, validate_page, parse_response)
-        if type(limit) is not int or not 1 <= limit <= MAX_STUDIO_ITEMS:
-            raise ClientError(f"Studio --limit must be between 1 and {MAX_STUDIO_ITEMS}.")
-        if video_id is not None and not re.fullmatch(r"[1-9][0-9]{0,63}", video_id):
-            raise ClientError("Studio video ID must be a positive numeric string.")
+        from .studio import (CAPTURE_JS, READY_JS, CLEANUP_JS, STUDIO_CONTENT_URL,
+                             STUDIO_PAGE_SIZE, STUDIO_ITEMS_PATH, StudioReader, StudioContractError)
         identity = self.get_account(expected_username=username, expected_account_id=expected_account_id)
-        def verified(records):
-            self.get_account(expected_username=identity["username"], expected_account_id=identity["account_id"])
-            return records
         page = self._get_browser().get_page(STUDIO_CONTENT_URL)
         key = "__tiktok_cli_read_" + uuid4().hex
-        records, seen, cursors = [], set(), {0}
         try:
             control = page.get_by_role("button", name="Views", exact=True)
             for _ in range(60):
@@ -528,7 +529,11 @@ class TikTokWebClient:
                     break
                 page.wait_for_timeout(250)
             else:
-                raise ClientError("TikTok Studio content control was unavailable; result is inconclusive.")
+                raise StudioContractError("TikTok Studio content control was unavailable; result is inconclusive.")
+            from .studio_inventory import canonical
+            actor = {field: identity[field] for field in ("account_id", "username", "profile")}
+            if len(canonical(actor)) > 4096:
+                raise StudioContractError("Studio inventory actor binding exceeds its 4 KiB limit.")
             page.evaluate(CAPTURE_JS, {"key": key, "path": STUDIO_ITEMS_PATH, "page_size": STUDIO_PAGE_SIZE})
             control.click()
             for _ in range(60):
@@ -536,50 +541,76 @@ class TikTokWebClient:
                     break
                 page.wait_for_timeout(250)
             else:
-                raise ClientError("TikTok Studio native content read was unavailable; result is inconclusive.")
-            cursor = 0
-            for _ in range(MAX_STUDIO_PAGES):
-                response = page.evaluate(FETCH_JS, {"key": key, "cursor": cursor, "max_body": MAX_RESPONSE_BYTES})
-                if not isinstance(response, dict) or response.get("status") != 200 or not isinstance(response.get("body"), str):
-                    raise ClientError("TikTok Studio content request failed; result is inconclusive.")
-                payload = parse_response(response["body"])
-                raw_items, more, next_cursor, measured = validate_page(payload)
-                if len(raw_items) > STUDIO_PAGE_SIZE:
-                    raise StudioContractError("TikTok Studio page exceeds the observed page bound.")
-                observed = datetime.now(timezone.utc).isoformat()
-                for raw in raw_items:
-                    record = normalize_item(raw, identity, observed, measured)
-                    if record["id"] in seen:
-                        raise StudioContractError("TikTok Studio repeated a video; pagination is inconclusive.")
-                    seen.add(record["id"])
-                    records.append(record)
-                    if video_id == record["id"]:
-                        return verified([record])
-                    if video_id is None and len(records) >= limit:
-                        return verified(records[:limit])
-                if not more:
-                    if video_id is not None:
-                        verified([])
-                        raise ClientError("studio_video_not_found: the complete observed own-account feed did not contain that ID.")
-                    return verified(records)
-                if not raw_items or next_cursor <= cursor or next_cursor in cursors:
-                    raise StudioContractError("TikTok Studio cursor did not advance; result is inconclusive.")
-                cursors.add(next_cursor)
-                cursor = next_cursor
-                if len(records) >= limit:
-                    break
-            raise ClientError("studio_lookup_inconclusive: bounded content scan did not establish absence.")
+                raise StudioContractError("TikTok Studio native content read was unavailable; result is inconclusive.")
+            yield StudioReader(page, key, identity)
+            checked = self.get_account(expected_username=identity["username"], expected_account_id=identity["account_id"])
+            if any(checked.get(field) != identity[field] for field in ("account_id", "username", "profile")):
+                raise StudioContractError("TikTok Studio owner or profile changed during read; result is inconclusive.")
         except ClientError:
             raise
         except StudioContractError as error:
-            raise ClientError(str(error)) from None
+            raise ClientError(str(error), code=error.code, category=error.category, status=error.status,
+                              retry_after_seconds=error.retry_after_seconds) from None
         except Exception:
-            raise ClientError("TikTok Studio content read failed; result is inconclusive.") from None
+            raise ClientError("TikTok Studio content read failed; result is inconclusive.",
+                              code="studio_transport_failed", category="transient") from None
         finally:
             try:
                 page.evaluate(CLEANUP_JS, key)
             except Exception:
                 pass
+
+    def _studio_read(self, username: str, *, limit: int = 100, video_id: Optional[str] = None, expected_account_id: Optional[str] = None) -> List[Dict]:
+        """Read only observed Studio content for the verified session owner."""
+        from .studio import MAX_STUDIO_ITEMS, MAX_STUDIO_PAGES, StudioContractError
+        if type(limit) is not int or not 1 <= limit <= MAX_STUDIO_ITEMS:
+            raise ClientError(f"Studio --limit must be between 1 and {MAX_STUDIO_ITEMS}.")
+        if video_id is not None and not re.fullmatch(r"[1-9][0-9]{0,63}", video_id):
+            raise ClientError("Studio video ID must be a positive numeric string.")
+        missing = False
+        with self._studio_session(username, expected_account_id) as reader:
+            records, seen, cursor = [], set(), 0
+            for _ in range(MAX_STUDIO_PAGES):
+                items, more, next_cursor = reader.read_page(cursor)
+                for record in items:
+                    if record["id"] in seen:
+                        raise StudioContractError("TikTok Studio repeated a video; pagination is inconclusive.")
+                    seen.add(record["id"])
+                    records.append(record)
+                    if video_id == record["id"]:
+                        return [record]
+                    if video_id is None and len(records) >= limit:
+                        return records[:limit]
+                if not more:
+                    if video_id is not None:
+                        missing = True
+                        break
+                    return records
+                cursor = next_cursor
+                if len(records) >= limit:
+                    break
+            if not missing:
+                raise ClientError("studio_lookup_inconclusive: bounded content scan did not establish absence.")
+        raise ClientError("studio_video_not_found: the complete observed own-account feed did not contain that ID.")
+
+    def get_studio_videos(self, username: str, video_ids: List[str], *, expected_account_id: str,
+                          continuation: Optional[Dict] = None, max_pages: int = 20) -> Dict:
+        """Batch exact IDs through one bounded own-account Studio scan.
+
+        Caller retains prior records and the public continuation. Unresolved IDs
+        remain unknown, including when the provider ends this observation pass.
+        """
+        from .studio_inventory import validate_request, batch_read
+        from .studio import StudioContractError
+        try:
+            request = validate_request(video_ids, continuation, max_pages, expected_account_id)
+            if request["continuation"] is not None and request["continuation"]["actor"]["username"] != username:
+                raise StudioContractError("Studio inventory continuation username changed.")
+        except StudioContractError as error:
+            raise ClientError(str(error), code=error.code, category="invalid_request", status=error.status,
+                              retry_after_seconds=error.retry_after_seconds) from None
+        with self._studio_session(username, expected_account_id) as reader:
+            return batch_read(reader, request)
 
     def list_studio_videos(self, username: str, limit: int = 100, expected_account_id: Optional[str] = None) -> List[Dict]:
         return self._studio_read(username, limit=limit, expected_account_id=expected_account_id)
@@ -629,10 +660,14 @@ class TikTokWebClient:
         try:
             page = self._get_browser().get_page(ACCOUNT_INFO_ORIGIN + "/")
             payload = self._fetch_json(page, ACCOUNT_INFO_PATH)
+        except ClientError as error:
+            # Keep only structured provider metadata; never passport bodies.
+            raise ClientError("TikTok account identity request failed; identity was not verified.",
+                              code=error.code, category=error.category, status=error.status,
+                              retry_after_seconds=error.retry_after_seconds) from None
         except Exception:
-            # Generic web errors can include response bodies or browser details.
-            # Passport contains session_key/contact fields; never echo them.
-            raise ClientError("TikTok account identity request failed; identity was not verified.") from None
+            raise ClientError("TikTok account identity request failed; identity was not verified.",
+                              code="account_transport_failed", category="transient") from None
         identity = normalize_account_identity(payload)
         if expected_username is not None and identity["username"].casefold() != expected_username.casefold():
             raise ClientError("TikTok account identity mismatch: username does not match --expected-username.")

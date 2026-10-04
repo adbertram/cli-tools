@@ -1,8 +1,8 @@
 {
   "tool": "tiktok",
   "description": "TikTok transcript downloader using yt-dlp",
-  "discovered_at": "2026-10-04T15:30:52Z",
-  "total_commands": 29,
+  "discovered_at": "2026-10-04T19:26:14Z",
+  "total_commands": 30,
   "global_options": [
     {
       "name": "--version",
@@ -394,7 +394,7 @@
           ]
         },
         "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
           "arguments": [],
           "options": [
             {
@@ -547,6 +547,58 @@
         }
       ],
       "commands": {
+        "inventory": {
+          "help": "Read exact owned post IDs in one Studio scan; unresolved IDs stay unknown.",
+          "arguments": [
+            {
+              "name": "manifest",
+              "type": "PATH",
+              "required": true,
+              "help": "Regular JSON file containing 1-1000 unique string video IDs"
+            }
+          ],
+          "options": [
+            {
+              "name": "--username",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact session owner handle"
+            },
+            {
+              "name": "--account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact numeric session owner ID"
+            },
+            {
+              "name": "--continuation",
+              "type": "PATH",
+              "required": false,
+              "help": "Prior result's continuation JSON file"
+            },
+            {
+              "name": "--max-pages",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[1<=x<=20]  Page budget, including fresh head",
+              "default": "20"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display freshly observed matched records as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "prepare": {
           "help": "Upload privately, verify disclosure controls, and retain the owned draft. Policy fields: schema_version=1, profile, account_id (string), username, caption, audience=Everyone, timing=now, disclosure=branded_content, music_rights_confirmed=true. Caption is used verbatim.",
           "arguments": [

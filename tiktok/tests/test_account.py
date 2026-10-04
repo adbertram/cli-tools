@@ -126,3 +126,35 @@ def test_account_identity_is_bound_to_tiktok_origin():
     result = instance.get_account()
     assert instance.config.get_browser().urls == ["https://www.tiktok.com/"]
     assert result["provenance"].startswith("https://www.tiktok.com/")
+
+
+@pytest.mark.parametrize('header',['172801','Tue, 06 Oct 2026 00:00:01 GMT'])
+def test_identity_preserves_provider_delay_and_never_retries_before_long_minimum(monkeypatch,header):
+    from datetime import datetime,timezone
+    import tiktok_cli.studio as studio
+    fake=Page('PRIVATE-CONTACT DO-NOT-EXPOSE',429)
+    original=fake.evaluate
+    def evaluate(script,args):
+        result=original(script,args);result['retryAfter']=header;return result
+    fake.evaluate=evaluate
+    c=client(fake);c._retry_policy=__import__('cli_tools_shared.http_session',fromlist=['RequestsRetryPolicy']).RequestsRetryPolicy(max_retries=3,max_delay=30)
+    delays=[];monkeypatch.setattr('tiktok_cli.client.time.sleep',delays.append)
+    real=studio.retry_after_seconds
+    monkeypatch.setattr(studio,'retry_after_seconds',lambda raw:real(raw,datetime(2026,10,4,tzinfo=timezone.utc)))
+    with pytest.raises(ClientError,match='identity request failed') as failure:c.get_account()
+    error=failure.value
+    assert error.status==429 and error.category=='rate_limit' and error.retry_after_seconds==172801
+    assert len(fake.requests)==1 and not delays and 'PRIVATE' not in str(error) and 'DO-NOT-EXPOSE' not in str(error)
+
+
+@pytest.mark.parametrize('status,category',[(401,'auth'),(403,'auth'),(503,'transient')])
+def test_identity_sanitization_preserves_typed_http_failure(status,category):
+    with pytest.raises(ClientError,match='identity request failed') as failure:client(Page('SECRET',status)).get_account()
+    assert failure.value.category==category and failure.value.status==status and 'SECRET' not in str(failure.value)
+
+
+def test_unauthenticated_passport_response_has_typed_auth_category():
+    with pytest.raises(ClientError,match='not authenticated') as failure:
+        normalize_account_identity({'message':'error','data':{'session_key':'DO_NOT_EXPOSE'}})
+    assert failure.value.category=='auth' and failure.value.code=='account_not_authenticated'
+    assert 'DO_NOT_EXPOSE' not in str(failure.value)

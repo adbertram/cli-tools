@@ -246,6 +246,15 @@ def matches_post(record,bound):
 
 def safe_record(record):
     safe={k:record.get(k) for k in ('id','campaignId','status','createdAt','approvedAt','pendingCents','receivedCents','totalEarnedCents')}
+    for key in ('flagged','isDeleted'):
+        value=record.get(key)
+        if value is not None and type(value) is not bool:
+            raise ClientError('submission_moderation_flag_schema_changed')
+        safe[key]=value
+    # The observed participant creatorStatusOf classifier is flag-based.
+    # Missing flags cannot establish that raw status represents moderation.
+    known=type(safe['flagged']) is bool and type(safe['isDeleted']) is bool
+    safe['creator_status']=('rejected' if safe['flagged'] and not safe['isDeleted'] else safe['status'] if isinstance(safe['status'],str) else None) if known else None
     safe['socialMediaPost']={k:record['socialMediaPost'].get(k) for k in ('platform','postId')}
     return safe
 
