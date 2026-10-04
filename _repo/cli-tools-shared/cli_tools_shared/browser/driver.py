@@ -227,6 +227,8 @@ class BrowserHarnessService:
 
     def _start_daemon(self):
         """Start (or reuse) the browser-harness daemon for this session."""
+        # Administrative calls use cached IPC paths too; bind this owner first.
+        self._bh.h
         from browser_harness.admin import ensure_daemon
         if not self._cdp_ws:
             raise BrowserHarnessError(
@@ -265,6 +267,7 @@ class BrowserHarnessService:
         daemon process directly via its pid file and move on.
         """
         import signal
+        self._bh.h  # Never stop a different instance's cached daemon endpoint.
         from browser_harness import _ipc as ipc
         try:
             pid_path = ipc.pid_path(self.session)

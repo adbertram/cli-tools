@@ -1823,3 +1823,54 @@ def test_public_framework_fill_reuses_owned_helper(monkeypatch):
     monkeypatch.setattr(service._bh.h, "fill_input", lambda selector, text: calls.append((selector, text)))
     service.fill_framework_input("#exact-editor", "caption")
     assert calls == ["open", ("#exact-editor", "caption")]
+
+
+@pytest.mark.parametrize('order',[(0,1,0),(1,0,1)])
+def test_alternating_live_service_objects_bind_cached_ipc_before_daemon_start(tmp_path,monkeypatch,order):
+    from browser_harness import _ipc,admin
+    for field in ('_RUNTIME','_TMP','BH_RUNTIME_DIR','BH_TMP_DIR'):
+        monkeypatch.setattr(_ipc,field,getattr(_ipc,field))
+    for field in ('NAME','SOCK'):
+        monkeypatch.setattr(bh_helpers,field,getattr(bh_helpers,field))
+    for field in ('BH_RUNTIME_DIR','BH_TMP_DIR','BH_IPC_TIMEOUT'):
+        monkeypatch.setenv(field,os.environ.get(field,''))
+    def runtime(session):
+        path=tmp_path/session;path.mkdir(exist_ok=True);return path
+    monkeypatch.setattr(driver,'_ensure_runtime_dir',runtime)
+    services=[BrowserHarnessService('owned-stage'),BrowserHarnessService('owned-final')]
+    services[order[0]]._bh.h  # Prime the first cached IPC directory.
+    observed=[]
+    def ensure(*,name,env,wait):
+        service=next(s for s in services if s.session==name)
+        assert _ipc._RUNTIME==service._runtime_dir
+        assert _ipc._TMP==service._runtime_dir
+        assert bh_helpers.NAME==service.session
+        assert env['BH_RUNTIME_DIR']==str(service._runtime_dir)
+        observed.append(name)
+    monkeypatch.setattr(admin,'ensure_daemon',ensure)
+    monkeypatch.setattr(admin,'restart_daemon',lambda *a,**k:pytest.fail('unrelated daemon must not be restarted'))
+    for index in order:
+        service=services[index];service._cdp_ws='ws://127.0.0.1:1234/devtools/browser/fake'
+        service._start_daemon()
+    assert observed==[services[i].session for i in order]
+
+
+def test_daemon_stop_rebinds_owner_and_leaves_other_endpoint_intact(tmp_path,monkeypatch):
+    from browser_harness import _ipc
+    for field in ('_RUNTIME','_TMP','BH_RUNTIME_DIR','BH_TMP_DIR'):
+        monkeypatch.setattr(_ipc,field,getattr(_ipc,field))
+    for field in ('NAME','SOCK'):
+        monkeypatch.setattr(bh_helpers,field,getattr(bh_helpers,field))
+    for field in ('BH_RUNTIME_DIR','BH_TMP_DIR','BH_IPC_TIMEOUT'):
+        monkeypatch.setenv(field,os.environ.get(field,''))
+    def runtime(session):
+        path=tmp_path/session;path.mkdir(exist_ok=True);return path
+    monkeypatch.setattr(driver,'_ensure_runtime_dir',runtime)
+    owner=BrowserHarnessService('owned-first');other=BrowserHarnessService('owned-other')
+    for service,pid in [(owner,11111),(other,22222)]:
+        service._bh.h;_ipc.pid_path(service.session).write_text(str(pid))
+    signals=[];monkeypatch.setattr(driver.os,'kill',lambda pid,sig:signals.append(pid))
+    owner._stop_daemon()
+    assert signals==[11111]
+    assert not (owner._runtime_dir/'bu.pid').exists()
+    assert (other._runtime_dir/'bu.pid').read_text()=='22222'
