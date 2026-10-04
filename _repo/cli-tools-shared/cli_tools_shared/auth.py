@@ -1489,17 +1489,12 @@ class BrowserAutomation:
 
     def _portable_identity(self, expected_account_id: str, expected_username: str = None) -> dict:
         try:
-            if not isinstance(expected_account_id, str) or not expected_account_id or not self.AUTH_CHECK_URL:
+            if not isinstance(expected_account_id, str) or not expected_account_id:
                 raise ValueError
             self._auth_verified_at = 0
             self._portable_profile_dir = self._get_persistent_profile_dir()
-            self._portable_strict_close = True
-            try:
-                live = self.is_authenticated()
-            finally:
-                self._portable_strict_close = False
-            if not live or not live.live_check:
-                raise ValueError
+            # Opt-in service hooks fetch the authenticated account endpoint now.
+            # Its exact actor is the proof; a separate UI heuristic adds no proof.
             identity = self.config.browser_session_identity(self)
             if not isinstance(identity, dict) or set(identity) != {"account_id", "username"} or any(
                 not isinstance(value, str) or not value or len(value) > 256 for value in identity.values()
@@ -1899,9 +1894,6 @@ class BrowserAutomation:
 
     def close(self) -> None:
         logger.debug("close: closing browser session")
-        if getattr(self, "_portable_strict_close", False):
-            self._portable_close()
-            return
         try:
             self._get_service().browser_close()
         except BrowserHarnessError:

@@ -242,7 +242,7 @@ def test_failed_restore_retains_private_bundle_and_stage(environment, monkeypatc
 @pytest.mark.parametrize("failure", ["challenge", "wrong_actor", "close"])
 def test_live_identity_and_persistence_failures_never_publish(environment, monkeypatch, failure):
     if failure == "challenge":
-        monkeypatch.setattr(Browser, "is_authenticated", lambda self: AuthResult(authenticated=False, live_check=True, needs_human=True))
+        monkeypatch.setattr(Config, "browser_session_identity", lambda self, browser: (_ for _ in ()).throw(BrowserAutomationError("HTTP challenge")))
     elif failure == "wrong_actor":
         monkeypatch.setattr(Config, "browser_session_identity", lambda self, browser: {"account_id": "foreign", "username": "owner"})
     else:
@@ -614,23 +614,33 @@ def test_expired_frame_operation_detaches_only_owned_session_preserving_error(mo
     assert 0<calls[-1][1]['request_timeout']<=.25
 
 
-def test_portable_identity_never_swallows_auth_check_close_failure(environment,monkeypatch):
+def test_portable_identity_uses_fresh_authoritative_hook_without_generic_preflight(environment):
     from unittest.mock import Mock
     _,factory=environment
     profile=get_profiles_base_dir('sample')/'transfer-test';profile.mkdir(parents=True)
     (profile/'.env').write_text('ACTIVE=false\n');(profile/'.env').chmod(0o600)
     config=factory(profile='transfer-test');browser=config.get_browser()
-    browser._service=config.service
-    monkeypatch.setattr(Browser,'is_authenticated',BrowserAutomation.is_authenticated)
-    browser.get_page=Mock(return_value=config.service);browser._check_auth=Mock(return_value=True);browser._check_available=Mock(return_value=True)
-    config.service.browser_close=Mock(side_effect=BrowserHarnessError(SENTINEL))
-    config.browser_session_identity=Mock()
-    with pytest.raises(BrowserAutomationError,match='Portable session browser close failed') as error:
+    browser.is_authenticated=Mock(side_effect=AssertionError('generic UI auth must not run'))
+    config.browser_session_identity=Mock(side_effect=[{'account_id':'actor-1','username':'owner'},{'account_id':'other','username':'owner'}])
+    assert browser._portable_identity('actor-1','owner')=={'account_id':'actor-1','username':'owner'}
+    with pytest.raises(BrowserAutomationError,match='identity verification failed'):
         browser._portable_identity('actor-1','owner')
-    assert SENTINEL not in str(error.value)
-    assert browser._service is config.service
-    assert browser._portable_strict_close is False
-    config.browser_session_identity.assert_not_called()
+    browser.is_authenticated.assert_not_called()
+    assert config.browser_session_identity.call_count==2
+    assert all(call.args==(browser,) for call in config.browser_session_identity.call_args_list)
+
+
+@pytest.mark.parametrize('error',[BrowserHarnessError(SENTINEL),BrowserAutomationError('HTTP challenge')])
+def test_portable_authoritative_identity_hook_failure_is_never_accepted(environment,error):
+    from unittest.mock import Mock
+    _,factory=environment
+    profile=get_profiles_base_dir('sample')/'transfer-test';profile.mkdir(parents=True)
+    (profile/'.env').write_text('ACTIVE=false\n');(profile/'.env').chmod(0o600)
+    config=factory(profile='transfer-test');browser=config.get_browser()
+    config.browser_session_identity=Mock(side_effect=error)
+    with pytest.raises(BrowserAutomationError,match='identity verification failed') as caught:
+        browser._portable_identity('actor-1','owner')
+    assert SENTINEL not in str(caught.value)
 
 
 def test_portable_close_retains_owner_if_profile_process_remains(environment,monkeypatch):
