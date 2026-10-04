@@ -352,7 +352,7 @@ def test_model_claim_does_not_spend_runtime_but_execution_does(engine, adapter, 
     envelope = claim(engine, clock)
     assert engine.status()["budgets"][0]["runtime_seconds"] == 0
     engine.apply(payload(envelope))
-    assert engine.status()["budgets"][0]["runtime_seconds"] == config["limits"]["work_timeout_seconds"]
+    assert 0 < engine.status()["budgets"][0]["runtime_seconds"] <= config["limits"]["work_timeout_seconds"]
 
 
 def test_global_media_overlap_across_approved_sources(config, adapter, clock):

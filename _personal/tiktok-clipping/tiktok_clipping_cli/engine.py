@@ -64,12 +64,41 @@ def bounded(method):
         if owner:
             self._deadline = self.clock() + self.config["limits"]["work_timeout_seconds"]
             self._runtime_reserved = False
+            self._runtime_owner = {'id':secrets.token_hex(16),'method':method.__name__,'started':self.monotonic(),'reservation_id':None}
+        primary = None
         try:
             return method(self, *args, **kwargs)
+        except BaseException as exc:
+            primary = exc
+            raise
         finally:
             if owner:
-                self._deadline = None
-                self._runtime_reserved = False
+                try:
+                    context = self._runtime_owner
+                    if context['reservation_id'] is not None:
+                        from .runtime_budget import settle_runtime
+                        elapsed = self.monotonic()-context['started']
+                        with self.transaction() as db:
+                            settle_runtime(self,db,context['reservation_id'],elapsed,'trusted_coordinator_monotonic')
+                except Exception as exc:
+                    # Accounting cannot replace an already committed business outcome.
+                    try:
+                        with self.transaction() as db:
+                            row = db.execute("SELECT reserved_seconds,settled_seconds FROM runtime_reservations WHERE id=?", (context['reservation_id'],)).fetchone()
+                            self.event(db, None, 'runtime_settlement_held', {
+                                'reservation_id': context['reservation_id'],
+                                'reason': str(exc) if isinstance(exc, SafetyError) else type(exc).__name__,
+                                'reserved_seconds': row['reserved_seconds'] if row else None,
+                                'settled_seconds': row['settled_seconds'] if row else None,
+                            })
+                    except Exception:
+                        pass  # The durable reservation remains the recovery authority.
+                    if primary is not None:
+                        primary.add_note('runtime_settlement_failed; no refund applied')
+                finally:
+                    self._deadline = None
+                    self._runtime_reserved = False
+                    self._runtime_owner = None
     return run
 
 
@@ -119,10 +148,11 @@ def decoded_job(row):
 
 
 class Engine:
-    def __init__(self, config, adapter=None, clock=time.time, *, native_execution=None, native_completion=False):
+    def __init__(self, config, adapter=None, clock=time.time, *, native_execution=None, native_completion=False, monotonic=time.monotonic):
         self.config = validate_config(config)
         self.policy_digest = digest(config)
         self.clock = clock
+        self.monotonic = monotonic
         self.native_execution = native_execution
         self.native_completion = native_completion
         if native_execution is not None:
@@ -142,6 +172,7 @@ class Engine:
         self.adapter = adapter
         self._deadline = None
         self._runtime_reserved = False
+        self._runtime_owner = None
         with self.transaction() as db:
             db.executescript(SCHEMA)
             from .outcome_learning import HISTORY_SCHEMA
@@ -282,6 +313,7 @@ class Engine:
         if circuit and circuit[0] > self.clock():
             raise AdapterFailure("transient", "circuit_open: model", circuit[0] - self.clock())
 
+    @bounded
     def _call(self, method, *args):
         remaining = self.config["limits"]["work_timeout_seconds"] if self._deadline is None else self._deadline - self.clock()
         if remaining <= 0:
@@ -296,7 +328,9 @@ class Engine:
                 if provider and provider[0] > self.clock():
                     raise AdapterFailure("transient", "circuit_open: provider:whop", provider[0] - self.clock(), provider="whop")
             if not self._runtime_reserved:
-                self._budget(db, "runtime_seconds", self.config["limits"]["work_timeout_seconds"])
+                from .runtime_budget import reserve_operation
+                owner = self._runtime_owner
+                owner['reservation_id'] = reserve_operation(self,db,owner['id'],owner['method'],self.config['limits']['work_timeout_seconds'])
                 self._runtime_reserved = True
         start = self.clock()
         try:
