@@ -612,3 +612,126 @@ def test_expired_frame_operation_detaches_only_owned_session_preserving_error(mo
     assert calls[-1][0]=='Target.detachFromTarget'
     assert calls[-1][1]['sessionId']=='owned-session'
     assert 0<calls[-1][1]['request_timeout']<=.25
+
+
+def test_portable_identity_never_swallows_auth_check_close_failure(environment,monkeypatch):
+    from unittest.mock import Mock
+    _,factory=environment
+    profile=get_profiles_base_dir('sample')/'transfer-test';profile.mkdir(parents=True)
+    (profile/'.env').write_text('ACTIVE=false\n');(profile/'.env').chmod(0o600)
+    config=factory(profile='transfer-test');browser=config.get_browser()
+    browser._service=config.service
+    monkeypatch.setattr(Browser,'is_authenticated',BrowserAutomation.is_authenticated)
+    browser.get_page=Mock(return_value=config.service);browser._check_auth=Mock(return_value=True);browser._check_available=Mock(return_value=True)
+    config.service.browser_close=Mock(side_effect=BrowserHarnessError(SENTINEL))
+    config.browser_session_identity=Mock()
+    with pytest.raises(BrowserAutomationError,match='Portable session browser close failed') as error:
+        browser._portable_identity('actor-1','owner')
+    assert SENTINEL not in str(error.value)
+    assert browser._service is config.service
+    assert browser._portable_strict_close is False
+    config.browser_session_identity.assert_not_called()
+
+
+def test_portable_close_retains_owner_if_profile_process_remains(environment,monkeypatch):
+    _,factory=environment
+    profile=get_profiles_base_dir('sample')/'transfer-test';profile.mkdir(parents=True)
+    (profile/'.env').write_text('ACTIVE=false\n');(profile/'.env').chmod(0o600)
+    config=factory(profile='transfer-test');browser=config.get_browser();browser._service=config.service
+    seen=[]
+    monkeypatch.setattr('cli_tools_shared.auth.profile_process_pids',lambda path:seen.append(path) or [123])
+    with pytest.raises(BrowserAutomationError,match='Portable session browser close failed'):browser._portable_close()
+    assert browser._service is config.service
+    assert seen==[config.get_persistent_profile_dir()]
+
+
+def test_failed_postpublication_journal_has_fixed_safe_diagnostic(environment,monkeypatch):
+    monkeypatch.setattr(Config,'fail_final',True)
+    with pytest.raises(BrowserAutomationError,match='phase=published; code=identity_verification_failed') as error:
+        restore(environment)
+    journal=json.loads((get_tool_data_dir('sample')/'session-transfers'/'account.journal.json').read_text())
+    assert journal['failure_phase']=='published'
+    assert journal['failure_code']=='identity_verification_failed'
+    assert SENTINEL not in str(error.value)
+    assert not (get_profiles_base_dir('sample')/'account').exists()
+
+
+def retained_transfer(environment, monkeypatch, *, published=False):
+    monkeypatch.setattr(Config, 'fail_final', True)
+    with pytest.raises(BrowserAutomationError):
+        restore(environment)
+    monkeypatch.setattr(Config, 'fail_final', False)
+    path=get_tool_data_dir('sample')/'session-transfers'/'account.journal.json'
+    journal=json.loads(path.read_text())
+    if published:
+        commands._exclusive_session_rename(Path(journal['stage']),Path(journal['target']))
+    return path,journal
+
+
+def finalize_transfer(environment):
+    return commands._recover_portable_profile('sample','account',finalize=True,
+        get_config_fn=environment[1],expected_account_id='actor-1',expected_username='owner')
+
+
+@pytest.mark.parametrize('published',[False,True])
+def test_finalize_retained_owned_state_requires_actor_before_and_after_publish(environment,monkeypatch,published):
+    path,journal=retained_transfer(environment,monkeypatch,published=published)
+    calls=[]
+    original=Config.browser_session_identity
+    monkeypatch.setattr(Config,'browser_session_identity',lambda self,browser:calls.append(self.get_active_profile_name()) or original(self,browser))
+    result=finalize_transfer(environment)
+    assert result['verified'] is True and result['active'] is False and result['published'] is True
+    assert calls==(['account','account'] if published else [Path(journal['stage']).name,'account'])
+    assert (Path(journal['target'])/'.env').read_text()=='ACTIVE=false\n'
+    assert not Path(journal['stage']).exists() and not Path(journal['backup']).exists()
+    assert not path.exists() and not (get_profiles_base_dir('sample')/'default').exists()
+
+
+@pytest.mark.parametrize('fault',['ambiguous','marker','actor','live','close','race'])
+def test_finalize_refuses_unsafe_or_unverified_retained_state(environment,monkeypatch,fault):
+    path,journal=retained_transfer(environment,monkeypatch)
+    stage,target,backup=[Path(journal[k]) for k in ('stage','target','backup')]
+    before=backup.read_bytes()
+    if fault=='ambiguous':
+        target.mkdir();(target/'foreign').write_text('untouched')
+    elif fault=='marker':
+        (stage/'.session-transfer.json').write_text(json.dumps({'token':'wrong'}))
+    elif fault=='actor':
+        monkeypatch.setattr(Config,'browser_session_identity',lambda self,browser:{'account_id':'other','username':'owner'})
+    elif fault=='live':
+        monkeypatch.setattr('cli_tools_shared.browser.processes.profile_process_pids',lambda path:[123])
+    elif fault=='close':
+        original_browser=Config.get_browser
+        def opened_browser(self):
+            browser=original_browser(self);browser._service=self.service;return browser
+        monkeypatch.setattr(Config,'get_browser',opened_browser)
+        monkeypatch.setattr(Service,'browser_close',lambda self:(_ for _ in ()).throw(BrowserHarnessError(SENTINEL)))
+    elif fault=='race':
+        original=commands._exclusive_session_rename
+        def raced(source,destination):
+            if source==stage:
+                target.mkdir();(target/'foreign').write_text('untouched')
+            original(source,destination)
+        monkeypatch.setattr(commands,'_exclusive_session_rename',raced)
+    with pytest.raises(BrowserAutomationError) as error:finalize_transfer(environment)
+    assert SENTINEL not in str(error.value)
+    assert backup.read_bytes()==before and stage.exists()
+    if fault in ('ambiguous','race'):assert (target/'foreign').read_text()=='untouched'
+    else:assert not target.exists()
+    assert json.loads(path.read_text())['phase']=='failed'
+
+
+def test_finalize_cleanup_failure_preserves_durable_complete_and_recoverable_backup(environment,monkeypatch):
+    path,journal=retained_transfer(environment,monkeypatch)
+    original=Path.unlink
+    def failed_backup(self,*args,**kwargs):
+        if self==Path(journal['backup']):raise PermissionError('private cleanup interrupted')
+        return original(self,*args,**kwargs)
+    monkeypatch.setattr(Path,'unlink',failed_backup)
+    result=finalize_transfer(environment)
+    assert result['verified'] is True and result['backup_retained'] is True
+    assert json.loads(path.read_text())['phase']=='complete'
+    assert Path(journal['target']).exists() and not Path(journal['stage']).exists()
+    monkeypatch.setattr(Path,'unlink',original)
+    assert commands._recover_portable_profile('sample','account')['published'] is True
+    assert not Path(journal['backup']).exists()

@@ -363,7 +363,7 @@
           ]
         },
         "session-import-recover": {
-          "help": "Recover only owned closed transfer state, preserving failed backups.",
+          "help": "Recover owned closed transfer state or finalize it after exact actor proof.",
           "arguments": [],
           "options": [
             {
@@ -371,11 +371,30 @@
               "type": "TEXT",
               "required": true,
               "help": "Explicit named profile with an unfinished transfer journal"
+            },
+            {
+              "name": "--finalize",
+              "type": "bool",
+              "required": false,
+              "help": "Verify and publish already restored inactive owned state",
+              "takes_value": false
+            },
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Required exact actor for finalization"
+            },
+            {
+              "name": "--expected-username",
+              "type": "TEXT",
+              "required": false,
+              "help": "Expected service username for finalization"
             }
           ]
         },
         "status": {
-          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth \u2014 not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
           "arguments": [],
           "options": [
             {

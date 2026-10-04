@@ -35,6 +35,25 @@ from .output import (
 logger = get_debug_logger("cli_tools.auth_commands")
 
 
+def _portable_failure_code(error):
+    """Classify only fixed owning-engine messages, never echo exception text."""
+    from .auth import BrowserAutomationError
+    import errno
+    if isinstance(error, OSError) and error.errno == errno.EEXIST:
+        return "destination_exists"
+    if isinstance(error, BrowserAutomationError):
+        return {
+            "Portable session browser close failed": "browser_close_failed",
+            "Portable cookie readback failed": "cookie_readback_failed",
+            "Portable storage readback failed": "storage_readback_failed",
+            "Portable session identity verification failed or requires device verification": "identity_verification_failed",
+            "Published portable identity did not verify": "published_identity_or_close_failed",
+            "Portable staging browser did not close": "staging_browser_not_closed",
+            "Portable session restore failed or requires device verification; private staging was retained": "restore_or_device_verification_failed",
+        }.get(str(error), "transfer_failed")
+    return "transfer_failed"
+
+
 def _exclusive_session_rename(source, destination):
     """Publish an absent macOS destination atomically, with no fallback."""
     import ctypes
@@ -192,6 +211,8 @@ def _portable_profile_import(get_config_fn, config_cls, tool_name, profile, bund
             pass
         return {**result, "profile": profile, "imported": True, "active": False}
     except Exception as error:
+        failure_phase = journal["phase"] if journal is not None else "preparation"
+        failure_code = _portable_failure_code(error)
         if browser is not None:
             try:
                 browser._portable_close()
@@ -207,6 +228,8 @@ def _portable_profile_import(get_config_fn, config_cls, tool_name, profile, bund
                     _exclusive_session_rename(target, stage)
                 if journal["phase"] != "initializing":
                     journal["phase"] = "failed"
+                journal["failure_phase"] = failure_phase
+                journal["failure_code"] = failure_code
                 _session_journal_write(journal_path, journal)
             except Exception:
                 # Retain the last durable journal and all private backup state.
@@ -216,12 +239,100 @@ def _portable_profile_import(get_config_fn, config_cls, tool_name, profile, bund
         import errno
         if isinstance(error, OSError) and error.errno == errno.EEXIST:
             raise BrowserAutomationError("Portable session destination already exists; private backup retained") from None
-        raise BrowserAutomationError("Portable session import failed; private backup retained and journal recovery is required") from None
+        raise BrowserAutomationError(f"Portable session import failed (phase={failure_phase}; code={failure_code}); private backup retained and journal recovery is required") from None
     finally:
         os.close(lock)
 
 
-def _recover_portable_profile(tool_name, profile):
+def _finalize_portable_profile(get_config_fn, tool_name, profile, journal, journal_path,
+                               stage, target, backup, owned, expected_account_id,
+                               expected_username):
+    """Finalize one already restored, importer-owned inactive profile under lock."""
+    from .auth import BrowserAutomationError, PORTABLE_SESSION_MAX_BYTES, read_session_bundle
+    from .browser.processes import profile_process_pids
+    browser = None
+    failure_phase = "preparation"
+    may_rollback = False
+    try:
+        if not callable(get_config_fn) or not isinstance(expected_account_id, str) or not expected_account_id:
+            raise ValueError
+        if stage.exists() == target.exists():
+            raise ValueError
+        current = stage if stage.exists() else target
+        if not owned(current):
+            raise ValueError
+        env = current / ".env"
+        _private_session_path(env)
+        if env.stat().st_size > 65536:
+            raise ValueError
+        from .config import _read_env_values
+        if _read_env_values(env).get("ACTIVE") != "false":
+            raise ValueError
+        if profile_process_pids(current / "browser-data" / "chromium-profile"):
+            raise ValueError
+        _private_session_path(backup)
+        with backup.open("rb") as stream:
+            raw = stream.read(PORTABLE_SESSION_MAX_BYTES + 1)
+        bundle = read_session_bundle(raw.decode("utf-8"))
+        if bundle["tool"] != tool_name or bundle["profile"] != profile or bundle["identity"]["account_id"] != expected_account_id or (
+            expected_username is not None and bundle["identity"]["username"].casefold() != expected_username.casefold()
+        ):
+            raise ValueError
+        failure_phase = "restoring"
+        journal["phase"] = failure_phase
+        _session_journal_write(journal_path, journal)
+        may_rollback = True
+        config = get_config_fn(profile=current.name)
+        browser = config.get_browser()
+        identity = browser._portable_identity(expected_account_id, expected_username)
+        browser._portable_close()
+        if profile_process_pids(config.get_persistent_profile_dir()):
+            raise BrowserAutomationError("Portable staging browser did not close")
+        if current == stage:
+            failure_phase = "publishing"
+            journal["phase"] = failure_phase
+            _session_journal_write(journal_path, journal)
+            _exclusive_session_rename(stage, target)
+        failure_phase = "published"
+        journal["phase"] = failure_phase
+        _session_journal_write(journal_path, journal)
+        config = get_config_fn(profile=profile)
+        browser = config.get_browser()
+        final_identity = browser._portable_identity(expected_account_id, expected_username)
+        browser._portable_close()
+        if final_identity != identity or profile_process_pids(config.get_persistent_profile_dir()):
+            raise BrowserAutomationError("Published portable identity did not verify")
+        journal["phase"] = "complete"
+        journal.pop("failure_phase", None)
+        journal.pop("failure_code", None)
+        _session_journal_write(journal_path, journal)
+        try:
+            backup.unlink()
+            _exclusive_session_rename(journal_path, journal_path.parent / (journal["token"] + ".completed.json"))
+        except OSError:
+            pass
+        return {"tool": tool_name, "profile": profile, "identity": final_identity,
+                "recovered": True, "published": True, "verified": True, "active": False,
+                "backup_retained": backup.exists()}
+    except Exception as error:
+        code = _portable_failure_code(error)
+        if browser is not None:
+            try:
+                browser._portable_close()
+            except Exception:
+                pass
+        try:
+            if may_rollback and owned(target) and not stage.exists() and not profile_process_pids(target / "browser-data" / "chromium-profile"):
+                _exclusive_session_rename(target, stage)
+            journal.update(phase="failed", failure_phase=failure_phase, failure_code=code)
+            _session_journal_write(journal_path, journal)
+        except Exception:
+            pass
+        raise BrowserAutomationError(f"Portable session finalization failed (phase={failure_phase}; code={code}); private backup retained") from None
+
+
+def _recover_portable_profile(tool_name, profile, *, finalize=False, get_config_fn=None,
+                              expected_account_id=None, expected_username=None):
     """Quarantine only importer-owned state, preserving every failed backup."""
     import fcntl
     import json
@@ -265,6 +376,11 @@ def _recover_portable_profile(tool_name, profile):
             _private_session_path(path, directory=True)
             _private_session_path(marker)
             return marker.stat().st_size <= 4096 and json.loads(marker.read_text()) == {"token": token, "tool": tool_name, "profile": profile}
+        if finalize and journal["phase"] == "complete":
+            raise BrowserAutomationError("Portable session is already complete; use recovery without --finalize for cleanup")
+        if finalize:
+            return _finalize_portable_profile(get_config_fn, tool_name, profile, journal,
+                journal_path, stage, target, backup, owned, expected_account_id, expected_username)
         if journal["phase"] == "complete":
             if not owned(target) or stage.exists() or profile_process_pids(target / "browser-data" / "chromium-profile"):
                 raise ValueError
@@ -291,7 +407,9 @@ def _recover_portable_profile(tool_name, profile):
         _session_journal_write(journal_path, journal)
         _exclusive_session_rename(journal_path, transfers / f"{token}.recovered.json")
         return {"tool": tool_name, "profile": profile, "recovered": True, "backup_retained": retained}
-    except Exception:
+    except Exception as error:
+        if isinstance(error, BrowserAutomationError) and (str(error).startswith("Portable session finalization failed (phase=") or str(error) == "Portable session is already complete; use recovery without --finalize for cleanup"):
+            raise
         raise BrowserAutomationError("Portable session recovery refused unsafe or live profile state; backup retained") from None
     finally:
         os.close(lock)
@@ -344,9 +462,18 @@ def _register_portable_session_commands(app, get_config_fn, config_cls, tool_nam
     @command
     def session_import_recover(
         profile: str = typer.Option(..., "--profile", help="Explicit named profile with an unfinished transfer journal"),
+        finalize: bool = typer.Option(False, "--finalize", help="Verify and publish already restored inactive owned state"),
+        expected_account_id: Optional[str] = typer.Option(None, "--expected-account-id", help="Required exact actor for finalization"),
+        expected_username: Optional[str] = typer.Option(None, "--expected-username", help="Expected service username for finalization"),
     ):
-        """Recover only owned closed transfer state, preserving failed backups."""
-        print_json(_recover_portable_profile(tool_name, profile))
+        """Recover owned closed transfer state or finalize it after exact actor proof."""
+        if finalize and not expected_account_id:
+            raise BrowserAutomationError("Portable session finalization requires --expected-account-id")
+        if not finalize and (expected_account_id is not None or expected_username is not None):
+            raise BrowserAutomationError("Portable session expected identity requires --finalize")
+        print_json(_recover_portable_profile(tool_name, profile, finalize=finalize,
+            get_config_fn=get_config_fn, expected_account_id=expected_account_id,
+            expected_username=expected_username))
 
 
 _CREDENTIAL_TYPE_ALIASES = {
