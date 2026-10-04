@@ -519,7 +519,9 @@ class Engine:
             asset = self._asset(json.loads(job["asset"]))
             if asset["sha256"] != envelope["asset_sha256"]:
                 raise SafetyError("visual_asset_binding_changed")
-            VisualArtifacts(self.config).verify(envelope, asset)
+            manifest = VisualArtifacts(self.config).verify(envelope, asset)
+            if receipt['outcome'] == 'completed' and manifest['schema_version'] == 3 and sorted(receipt['decision']['checks']) != manifest['checks']:
+                raise SafetyError('visual_current_review_checks_required')
             inventory = VisualArtifacts(self.config).inventory(envelope)
             db.execute("UPDATE visual_attempts SET artifact_inventory=? WHERE id=?", (canonical(inventory), envelope["attempt_id"]))
             if receipt["outcome"] != "completed" or receipt["usage_observed"] is not True:

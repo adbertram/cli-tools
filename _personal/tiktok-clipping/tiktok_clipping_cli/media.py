@@ -29,6 +29,8 @@ STYLES = {
     "right": ("iw-ow", 1.0, 20),
     "readable": ("(iw-ow)/2", 1.0, 28),
 }
+CAPTION_STYLE = {"version": 2, "font": "Arial", "font_size": 48, "bold": True,
+                 "outline": 4, "shadow": 2, "margin_vertical": 230, "emphasis": "last_word_yellow"}
 BOUNDARY_TOLERANCE = 0.25
 
 
@@ -55,7 +57,7 @@ def timed_segments(raw, duration, maximum=1048576):
         if end <= start:
             raise SafetyError("empty_caption_interval")
         text = string(segment["text"], 500).strip()
-        if any(c in text for c in ("{", "}", "\\", "<", ">", "\n", "\r")):
+        if any(ord(c) < 32 and c not in "\n\r\t" for c in text):
             raise SafetyError("caption_markup_forbidden")
         result.append({"start": start, "end": end, "text": text})
         previous_end = end
@@ -115,6 +117,43 @@ def srt_time(value):
     minutes, milliseconds = divmod(milliseconds, 60000)
     seconds, milliseconds = divmod(milliseconds, 1000)
     return f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
+
+
+def ass_literal(text):
+    r"""libass supports escaped braces, but not a doubled literal backslash.
+
+    Word joiner preserves a visible backslash while breaking special \N/\h
+    sequences. This is formatting only; the receipt retains the original text.
+    Source: https://github.com/libass/libass/blob/master/libass/ass_parse.c
+    """
+    if any(ord(char) < 32 and char not in '\r\n\t' for char in text):raise SafetyError('caption_control_character_forbidden')
+    return (text.replace('\\', '\\\u2060').replace('{', r'\{').replace('}', r'\}')
+            .replace('\r\n', '\n').replace('\r', '\n').replace('\n', r'\N').replace('\t', r'\h'))
+
+
+def ass_captions(captions, font_size):
+    """Trusted styling changes appearance only; measured words remain verbatim."""
+    import re
+    def timestamp(value):
+        centiseconds = round(value * 100)
+        hours, centiseconds = divmod(centiseconds, 360000)
+        minutes, centiseconds = divmod(centiseconds, 6000)
+        seconds, centiseconds = divmod(centiseconds, 100)
+        return f"{hours}:{minutes:02d}:{seconds:02d}.{centiseconds:02d}"
+    header = ("[Script Info]\nScriptType: v4.00+\nPlayResX: 720\nPlayResY: 1280\nWrapStyle: 0\n"
+              "[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
+              f"Style: Speech,Arial,{font_size},&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,4,2,2,64,64,230,1\n"
+              "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
+    rows = []
+    for cue in captions:
+        text = cue['text']
+        matches = list(re.finditer(r"[\w]+(?:['’][\w]+)*", text))
+        if matches:
+            word = matches[-1]
+            text = ass_literal(text[:word.start()]) + r'{\c&H00D7FF&}' + ass_literal(text[word.start():word.end()]) + r'{\c&H00FFFFFF&}' + ass_literal(text[word.end():])
+        else:text = ass_literal(text)
+        rows.append(f"Dialogue: 0,{timestamp(cue['start'])},{timestamp(cue['end'])},Speech,,0,0,0,,{text}")
+    return header + "\n".join(rows) + "\n"
 
 
 class MediaRenderer:
@@ -244,6 +283,8 @@ class MediaRenderer:
             out.seek(0)
             err.seek(0)
             stdout, stderr = out.read(output_limit + 1), err.read(1048576)
+            if b'failed to find any fallback with glyph' in stderr:
+                raise SafetyError('caption_glyph_unavailable')
             if process.returncode:
                 raise SafetyError("media_process_failed: " + Path(command[0]).name + ": " + stderr.decode(errors="replace")[-300:])
             return stdout
@@ -482,7 +523,8 @@ class MediaRenderer:
         source_digest = sha256(source_path)
         overlays = []
         if publication_policy is not None:
-            from .rights import required_overlays
+            from .rights import current_render_policy, required_overlays
+            current_render_policy(publication_policy)
             if source_digest != publication_policy["source_sha256"] or source_path.stat().st_size != publication_policy["source_bytes"]:
                 raise SafetyError("render_source_rights_binding_changed")
             overlays = required_overlays(publication_policy, proposal)
@@ -499,20 +541,21 @@ class MediaRenderer:
             raise SafetyError("ffmpeg_subtitles_filter_required")
         x, zoom, font_size = STYLES[proposal["style"]]
         duration = edit_duration(proposal)
-        name = digest({"source": source_digest, "proposal": proposal, "captions": captions, "publication_policy": publication_policy})
+        name = digest({"source": source_digest, "proposal": proposal, "captions": captions, "publication_policy": publication_policy, "caption_style": CAPTION_STYLE})
         destination = self.root / (name + ".mp4")
         receipt_path = self.root / (name + ".json")
         with tempfile.TemporaryDirectory(prefix="render-", dir=self.root) as temp:
             temp = Path(temp)
-            srt = "\n\n".join(f"{i}\n{srt_time(s['start'])} --> {srt_time(s['end'])}\n{s['text']}" for i, s in enumerate(captions, 1)) + "\n"
-            (temp / "captions.srt").write_text(srt, encoding="utf-8")
-            # Relative fixed subtitle filename avoids all filter path escaping.
+            # Fixed ASS layout and markup come from trusted style constants.
+            # Provider text is checked before we add the emphasis commands.
+            styled_font = round(CAPTION_STYLE['font_size'] * font_size / 20)
+            (temp / "captions.ass").write_text(ass_captions(captions, styled_font), encoding="utf-8")
             crop = f"crop=w='min(iw,ih*9/16)/{zoom}':h='min(ih,iw*16/9)/{zoom}':x='{x}':y='(ih-oh)/2'"
-            video_filter = crop + ",scale=720:1280,setsar=1,subtitles=filename=captions.srt:force_style='FontName=Arial,FontSize=" + str(font_size) + ",Outline=2,MarginV=60'"
+            video_filter = crop + ",scale=720:1280,setsar=1,subtitles=filename=captions.ass"
             for index, text in enumerate(overlays):
                 (temp / f"overlay-{index}.txt").write_text(text, encoding="utf-8")
                 video_filter += f",drawtext=textfile=overlay-{index}.txt:x=(w-text_w)/2:y={40+index*64}:fontsize=40:fontcolor=white:box=1:boxcolor=black@0.85:boxborderw=12"
-            command = [self.ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-protocol_whitelist", "file,pipe"]
+            command = [self.ffmpeg, "-hide_banner", "-loglevel", "warning", "-nostdin", "-y", "-protocol_whitelist", "file,pipe"]
             if len(cuts) == 1:
                 command += ["-ss", str(cuts[0]["start_seconds"]), "-i", str(source_path), "-t", str(duration), "-map", "0:v:0", "-map", "0:a:0",
                             "-vf", video_filter, "-af", "loudnorm=I=-16:TP=-1.5:LRA=11"]
@@ -534,7 +577,7 @@ class MediaRenderer:
             self._decode(output, deadline)
             asset = {"path": str(destination), "sha256": sha256(output), "bytes": output.stat().st_size,
                 "provenance": "ffmpeg portrait crop; loudnorm; timed Whisper caption burn-in; " + provenance}
-            receipt = {"asset": asset, "proposal": proposal, "captions": captions, "source_sha256": source_digest, "measured": report, "edit": {"segments": cuts, "rendered_duration": duration, "reservation": "whole_source_bounding_span"}, "audio_provenance": {"source_sha256": source_digest, "segments": cuts, "external_audio": False}, "overlays": overlays, "rights_policy_digest": None if publication_policy is None else digest(publication_policy)}
+            receipt = {"asset": asset, "proposal": proposal, "captions": captions, "caption_style": {**CAPTION_STYLE, "font_size": styled_font}, "source_sha256": source_digest, "measured": report, "edit": {"segments": cuts, "rendered_duration": duration, "reservation": "whole_source_bounding_span"}, "audio_provenance": {"source_sha256": source_digest, "segments": cuts, "external_audio": False}, "overlays": overlays, "rights_policy_digest": None if publication_policy is None else digest(publication_policy)}
             if refinement is not None:
                 receipt["transcript_refinement"] = refinement
             raw = canonical(receipt).encode()
@@ -558,9 +601,12 @@ class MediaRenderer:
         receipt_path = self._path(path.with_suffix(".json"))
         from .visual import owned_bytes
         receipt = strict_json(owned_bytes(receipt_path, self.root, self.config["limits"]["max_payload_bytes"]), self.config["limits"]["max_payload_bytes"])
-        keys(receipt, {"asset", "proposal", "captions", "source_sha256", "measured"}, {"edit", "audio_provenance", "overlays", "rights_policy_digest", "transcript_refinement"})
+        keys(receipt, {"asset", "proposal", "captions", "source_sha256", "measured"}, {"edit", "audio_provenance", "overlays", "rights_policy_digest", "transcript_refinement", "caption_style"})
         if receipt["asset"] != asset or receipt["proposal"] != proposal:
             raise SafetyError("render_receipt_mismatch")
+        if receipt.get('caption_style') is not None:
+            expected_style = {**CAPTION_STYLE, 'font_size': round(CAPTION_STYLE['font_size'] * STYLES[proposal['style']][2] / 20)}
+            if receipt['caption_style'] != expected_style:raise SafetyError('render_caption_style_changed')
         refinement = receipt.get("transcript_refinement")
         if refinement is not None:
             if not isinstance(refinement, dict) or refinement.get("source_sha256") != receipt["source_sha256"] or not isinstance(refinement.get("cuts"), list) or [record.get("cut") for record in refinement["cuts"] if isinstance(record, dict)] != edit_segments(proposal):
@@ -584,6 +630,7 @@ class MediaRenderer:
         policy = None if source is None else source.get("publication_policy")
         if policy is not None:
             from .rights import required_overlays
+            if policy.get("schema_version") == 2 and receipt.get("caption_style") is None:raise SafetyError("render_caption_style_missing")
             expected_edit = {"segments": edit_segments(proposal), "rendered_duration": edit_duration(proposal), "reservation": "whole_source_bounding_span"}
             if receipt.get("edit") != expected_edit or receipt.get("rights_policy_digest") != digest(policy) or receipt["source_sha256"] != policy["source_sha256"] or receipt.get("overlays") != required_overlays(policy, proposal) or receipt.get("audio_provenance") != {"source_sha256": policy["source_sha256"], "segments": edit_segments(proposal), "external_audio": False}:
                 raise SafetyError("render_rights_overlay_audio_receipt_changed")

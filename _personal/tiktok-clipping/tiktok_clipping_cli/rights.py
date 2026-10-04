@@ -7,7 +7,7 @@ from .safety import SafetyError,edit_duration,edit_segments,keys,number,string
 
 def validate_policy(policy, source):
     keys(policy, {'schema_version','campaign_id','brief_url','brief_content_sha256','source_url','source_sha256','source_bytes','video_reuse_allowed','original_audio_reuse_allowed','external_audio_allowed','full_source_repost_allowed','minimum_clip_seconds','required_caption_tokens','required_on_screen_text','clip_rules'})
-    if type(policy['schema_version']) is not int or policy['schema_version']!=1:
+    if type(policy['schema_version']) is not int or policy['schema_version'] not in (1,2):
         raise SafetyError('rights_policy_version_invalid')
     if policy['campaign_id']!=source['campaign']['id'] or policy['brief_url']!=source['reuse_evidence'] or policy['source_url']!=source['feed']:
         raise SafetyError('rights_policy_source_campaign_brief_mismatch')
@@ -27,7 +27,7 @@ def validate_policy(policy, source):
             if any(c in value for c in ('\n','\r','\\','{','}')):raise SafetyError('rights_required_text_markup_forbidden')
         if len(set(values)) != len(values):raise SafetyError('rights_required_text_duplicate')
     texts(policy['required_caption_tokens'],128);texts(policy['required_on_screen_text'],128)
-    if 'Ad' not in policy['required_on_screen_text']:raise SafetyError('rights_ad_overlay_required')
+    if policy['schema_version']==1 and 'Ad' not in policy['required_on_screen_text']:raise SafetyError('rights_ad_overlay_required')
     rules=policy['clip_rules']
     if not isinstance(rules,list) or len(rules)>8:raise SafetyError('rights_clip_rule_limit')
     for rule in rules:
@@ -39,6 +39,16 @@ def validate_policy(policy, source):
         start=min(c['start_seconds'] for c in rule['segments']);end=max(c['end_seconds'] for c in rule['segments'])
         edit_segments({'start_seconds':start,'end_seconds':end,'segments':rule['segments']})
         texts(rule['caption_tokens'],128);texts(rule['on_screen_text'],128)
+    if policy['schema_version']==2:current_render_policy(policy)
+    return policy
+
+
+def current_render_policy(policy):
+    """Historical policies stay readable; new media follows current preferences."""
+    if policy.get('schema_version') != 2:raise SafetyError('current_no_ad_render_policy_required')
+    labels = list(policy['required_on_screen_text']) + [label for rule in policy['clip_rules'] for label in rule['on_screen_text']]
+    if any(re.search(r'\b(ad|advertisement|sponsored)\b|paid\s+partnership', label, re.IGNORECASE) for label in labels):
+        raise SafetyError('campaign_requires_forbidden_on_video_disclaimer')
     return policy
 
 

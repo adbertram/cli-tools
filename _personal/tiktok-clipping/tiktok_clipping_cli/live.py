@@ -203,6 +203,8 @@ class LiveAdapter:
 
     def _fresh_readiness(self, job, expected_digest=None):
         source = self._job_source(job)
+        from .rights import current_render_policy
+        current_render_policy(source["publication_policy"])
         if timestamp(source["campaign"]["expires_at"]) <= time.time():
             raise SafetyError("campaign_expired")
         campaign = self.campaign(source["campaign"]["id"])

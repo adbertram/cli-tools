@@ -11,7 +11,8 @@ export const name = 'headless-runner';
 export const inject = ['agentDefaultModel','agents','sessions','attachments','sessionProjections'];
 const fields = ['schema_version','job_id','attempt_id','lease_token','nonce','asset_sha256','input_digest','proposal_digest','policy_digest','manifest_path','manifest_sha256','overlay_path','overlay_sha256','native_execution','model_deadline','expires_at'];
 const usageFields = ['uncachedInputTokens','outputTokens','cacheReadTokens','cacheWriteTokens'];
-const checks = ['disclosure_visible','captions_readable','portrait_composition','no_obvious_visual_defects'];
+const legacyChecks = ['disclosure_visible','captions_readable','portrait_composition','no_obvious_visual_defects'];
+const checks = legacyChecks.filter(name=>name!=='disclosure_visible').concat(['required_attribution_visible','no_added_ad_disclaimer']);
 const hash = data => createHash('sha256').update(data).digest('hex');
 const exactKeys = (value, names) => value && typeof value==='object' && !Array.isArray(value) && Object.keys(value).sort().join(',')===names.slice().sort().join(',');
 
@@ -49,8 +50,10 @@ export async function loadInputs(task, config) {
  const {envelope,root}=validateEnvelope(task,config.workspace);
  await ownedFile(envelope.overlay_path,root,16384,envelope.overlay_sha256);
  const manifest=JSON.parse(await ownedFile(envelope.manifest_path,root,16384,envelope.manifest_sha256));
- const coverage=manifest.schema_version===2;
- if(!exactKeys(manifest,['schema_version','job_id','attempt_id','asset_sha256','frames','prompt',...(coverage?['caption_cues','rendered_duration','render_receipt_sha256']:[])]) || ![1,2].includes(manifest.schema_version) || ['job_id','attempt_id','asset_sha256'].some(k=>manifest[k]!==envelope[k]) || typeof manifest.prompt!=='string' || manifest.prompt.length>8000 || !Array.isArray(manifest.frames) || manifest.frames.length!==config.frameCount || config.frameCount<1 || config.frameCount>8) throw Error('invalid_visual_manifest');
+ const coverage=manifest.schema_version>=2;
+ const current=manifest.schema_version===3;
+ if(!exactKeys(manifest,['schema_version','job_id','attempt_id','asset_sha256','frames','prompt',...(current?['checks','caption_style','required_labels']:[]),...(coverage?['caption_cues','rendered_duration','render_receipt_sha256']:[])]) || ![1,2,3].includes(manifest.schema_version) || ['job_id','attempt_id','asset_sha256'].some(k=>manifest[k]!==envelope[k]) || typeof manifest.prompt!=='string' || manifest.prompt.length>8000 || !Array.isArray(manifest.frames) || manifest.frames.length!==config.frameCount || config.frameCount<1 || config.frameCount>8) throw Error('invalid_visual_manifest');
+ if(current && (!Array.isArray(manifest.checks)||manifest.checks.slice().sort().join(',')!==checks.slice().sort().join(',')||!Array.isArray(manifest.required_labels)||manifest.required_labels.length>16||manifest.required_labels.some(label=>typeof label!=='string'||label.length>128)))throw Error('invalid_current_review_contract');
  if(coverage) {
   if(!Number.isFinite(manifest.rendered_duration) || manifest.rendered_duration<=0 || manifest.rendered_duration>3600 || !/^[a-f0-9]{64}$/.test(manifest.render_receipt_sha256) || !Array.isArray(manifest.caption_cues) || !manifest.caption_cues.length || manifest.caption_cues.length>1000) throw Error('invalid_visual_caption_cues');
   let previousEnd=0;
@@ -88,8 +91,8 @@ export function classifyFailure(reason) {
  return {category,code,status,retry_after_ms:retry};
 }
 
-export function validDecision(value) {
- return exactKeys(value,['passed','checks','reason']) && exactKeys(value.checks,checks) && typeof value.passed==='boolean'
+export function validDecision(value, expectedChecks=legacyChecks) {
+ return exactKeys(value,['passed','checks','reason']) && exactKeys(value.checks,expectedChecks) && typeof value.passed==='boolean'
   && Object.values(value.checks).every(v=>typeof v==='boolean') && value.passed===Object.values(value.checks).every(Boolean)
   && typeof value.reason==='string' && value.reason.trim().length>0 && value.reason.length<=2000;
 }
@@ -99,7 +102,7 @@ export function decisionFailure(error) {
  return {category:code==='invalid_model_result'?'malformed_output':'model_failed',code,status:null,retry_after_ms:null};
 }
 
-export function parseDecision(text, pythonExecutable, execute=execFileSync) {
+export function parseDecision(text, pythonExecutable, execute=execFileSync, expectedChecks=legacyChecks) {
  if(typeof text!=='string' || Buffer.byteLength(text)>16384 || typeof pythonExecutable!=='string' || !path.isAbsolute(pythonExecutable)) throw Error('invalid_model_result');
  // Reuse the coordinator's duplicate-key/nonfinite parser. The input stays on
  // stdin and never enters shell source; preserve the original raw result.
@@ -111,7 +114,7 @@ export function parseDecision(text, pythonExecutable, execute=execFileSync) {
   throw Object.assign(Error(code),{code});
  }
  const decision=JSON.parse(raw);
- if(!validDecision(decision))throw Error('invalid_model_result');
+ if(!validDecision(decision,expectedChecks))throw Error('invalid_model_result');
  return decision;
 }
 
@@ -142,7 +145,7 @@ async function run(ctx,config) {
   receipt.usage_provenance={session_id:agent.session.id,as_of_seq:ctx.sessionProjections.snapshot(agent.session).asOfSeq};
   if(reason?.kind==='completed' && Buffer.byteLength(text)<=16384) {
    receipt.raw_result=text;
-   try {receipt.decision=parseDecision(text,config.pythonExecutable);receipt.outcome='completed';receipt.failure=null;}
+   try {receipt.decision=parseDecision(text,config.pythonExecutable,execFileSync,manifest.schema_version===3?manifest.checks:legacyChecks);receipt.outcome='completed';receipt.failure=null;}
    catch(error) {receipt.decision=null;receipt.failure=decisionFailure(error);}
   } else {
    receipt.failure=classifyFailure(reason);

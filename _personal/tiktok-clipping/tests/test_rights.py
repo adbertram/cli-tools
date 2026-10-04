@@ -66,3 +66,18 @@ def test_mention_requires_full_native_handle_boundary(caption):
     from tiktok_clipping_cli.rights import has_token
     assert not has_token(caption, '@hardscope')
     assert has_token('Watch (@hardscope), #ad', '@hardscope')
+
+
+def test_new_policy_excludes_added_ad_text_but_preserves_historical_audit(config):
+    from tiktok_clipping_cli.rights import current_render_policy
+    source=config['sources'][0];source['reuse_evidence']='https://docs.google.com/document/d/TEST/edit'
+    old=scoped_policy(source);assert validate_policy(old,source)==old
+    with pytest.raises(SafetyError,match='current_no_ad'):current_render_policy(old)
+    current={**old,'schema_version':2,'required_on_screen_text':['HardScope']}
+    assert validate_policy(current,source)==current
+    assert '#ad' in current['required_caption_tokens']
+    for disclaimer in ['Ad','Advertisement','Sponsored','Paid partnership','This is an ad']:
+        with pytest.raises(SafetyError,match='forbidden_on_video'):
+            validate_policy({**current,'required_on_screen_text':['HardScope',disclaimer]},source)
+        modified=copy.deepcopy(current);modified['clip_rules'][0]['on_screen_text'].append(disclaimer)
+        with pytest.raises(SafetyError,match='forbidden_on_video'):validate_policy(modified,source)

@@ -71,7 +71,7 @@ def test_caption_gap_preserves_composition_sample_and_samples_speech_midpoint():
 def test_new_manifest_expectations_bind_actual_receipt_and_missing_speech_still_fails(visual_engine,adapter,clock):
     envelope=issue(visual_engine,clock)
     manifest=json.loads(Path(envelope['manifest_path']).read_text())
-    assert manifest['schema_version']==2 and any(frame['caption_expected'] for frame in manifest['frames'])
+    assert manifest['schema_version']==3 and any(frame['caption_expected'] for frame in manifest['frames'])
     assert 'missing captions there fails' in manifest['prompt']
     assert 'cue gaps do not prove audio silence' in manifest['prompt'].lower()
     rejected=receipt(envelope,clock)
@@ -98,6 +98,7 @@ def test_old_immutable_manifest_remains_verifiable_for_retention(visual_engine,c
     envelope=issue(visual_engine,clock);asset=visual_engine.get(envelope['job_id'])['asset']
     path=Path(envelope['manifest_path']);manifest=json.loads(path.read_text());manifest['schema_version']=1
     manifest.pop('caption_cues');manifest.pop('rendered_duration');manifest.pop('render_receipt_sha256')
+    for field in ('checks','caption_style','required_labels'):manifest.pop(field)
     for frame in manifest['frames']:frame.pop('caption_expected')
     raw=canonical(manifest).encode();path.write_bytes(raw);envelope['manifest_sha256']=hashlib.sha256(raw).hexdigest()
     assert VisualArtifacts(visual_engine.config).verify(envelope,asset)['schema_version']==1
@@ -471,3 +472,15 @@ def test_incomplete_preparation_cleanup_refuses_live_original_worker(visual_engi
     e={'native_execution':{'execution_id':'123','workflow_id':'workflow-test'},'preparation_process':current_process_identity()}
     result=native_execution_state(visual_engine.config,e,execution_reader=lambda i:{'id':i,'workflowId':'workflow-test','status':'error','stoppedAt':iso(clock())})
     assert result['terminal'] and result['process_absent'] is False
+
+
+def test_current_visual_contract_requires_attribution_and_no_added_disclaimer(visual_engine,clock):
+    envelope=issue(visual_engine,clock)
+    manifest=json.loads(Path(envelope['manifest_path']).read_text())
+    assert manifest['schema_version']==3 and set(manifest['checks'])==CHECKS
+    assert 'required_attribution_visible' in CHECKS and 'no_added_ad_disclaimer' in CHECKS and 'disclosure_visible' not in CHECKS
+    assert 'naturally spoken transcript words are allowed' in manifest['prompt']
+    legacy=receipt(envelope,clock)
+    legacy['decision']['checks'].pop('required_attribution_visible');legacy['decision']['checks'].pop('no_added_ad_disclaimer')
+    legacy['decision']['checks']['disclosure_visible']=True
+    with pytest.raises(SafetyError,match='current_review_checks'):visual_engine.apply_visual(legacy,execute=False)

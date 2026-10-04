@@ -91,3 +91,13 @@ test('parser infrastructure failure is distinct from malformed model JSON',()=>{
  assert.equal(category('{}',python,importFailed).category,'model_failed');
  assert.equal(category('{}',python,importFailed).code,'parser_unavailable');
 });
+
+test('current no-Ad decision uses explicit attribution and disclaimer checks',async()=>{
+ const {validDecision,parseDecision}=await import('../deploy/visual-runner.mjs');
+ const expected=['captions_readable','portrait_composition','no_obvious_visual_defects','required_attribution_visible','no_added_ad_disclaimer'];
+ const decision={passed:true,checks:Object.fromEntries(expected.map(name=>[name,true])),reason:'Current explicit labels and no added disclaimer.'};
+ assert.equal(validDecision(decision,expected),true);
+ assert.equal(validDecision(decision),false);
+ const execute=()=>JSON.stringify(decision);
+ assert.deepEqual(parseDecision(JSON.stringify(decision),'/trusted/python',execute,expected),decision);
+});

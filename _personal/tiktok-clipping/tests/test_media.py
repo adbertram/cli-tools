@@ -38,9 +38,6 @@ def segments():
     ([{"start": False, "end": 1, "text": "Boolean."}], "number_out_of_bounds"),
     ([{"start": 0, "end": 0, "text": "Zero duration."}], "empty_caption_interval"),
     ([{"start": 0, "end": 20, "text": "Too long."}], "number_out_of_bounds"),
-    ([{"start": 0, "end": 1, "text": "{\\an9}override"}], "caption_markup_forbidden"),
-    ([{"start": 0, "end": 1, "text": "<b>markup</b>"}], "caption_markup_forbidden"),
-    ([{"start": 0, "end": 1, "text": "Line\n\n00:00:00 --> 00:00:01"}], "caption_markup_forbidden"),
     ([{"start": 0, "end": 2, "text": "Overlap."}, {"start": 1, "end": 3, "text": "Overlap."}], "number_out_of_bounds"),
 ])
 def test_reject_bad_timestamps_and_subtitle_injection(segments, error):
@@ -420,7 +417,7 @@ def test_cache_removal_does_not_assume_physical_space_reclaimed(config, monkeypa
     assert not cache.exists()
 
 
-def test_real_reordered_cuts_burn_required_disclosure_across_full_render(source):
+def test_real_reordered_cuts_burn_required_attribution_across_full_render(source):
     from test_rights import scoped_policy
     renderer,path=source
     from tiktok_clipping_cli.media import sha256
@@ -428,7 +425,7 @@ def test_real_reordered_cuts_burn_required_disclosure_across_full_render(source)
     configured=renderer.config['sources'][0]
     configured.update(reuse_evidence='https://docs.google.com/document/d/TEST/edit',campaign={'id':'test-campaign'},feed='https://www.youtube.com/watch?v=fixture')
     policy=scoped_policy(configured)
-    policy.update(source_sha256=sha256(path),source_bytes=path.stat().st_size,minimum_clip_seconds=1,clip_rules=[])
+    policy.update(schema_version=2,required_on_screen_text=["@hardscope"],source_sha256=sha256(path),source_bytes=path.stat().st_size,minimum_clip_seconds=1,clip_rules=[])
     configured['publication_policy']=policy
     p={'start_seconds':0,'end_seconds':3,'segments':[{'start_seconds':2,'end_seconds':3},{'start_seconds':0,'end_seconds':1}],'caption':'@hardscope #ad','style':'centered'}
     transcript=[{'start':i,'end':i+1,'text':f'Sentence {i}.'} for i in range(3)]
@@ -439,10 +436,55 @@ def test_real_reordered_cuts_burn_required_disclosure_across_full_render(source)
     assert receipt['edit']=={'segments':p['segments'],'rendered_duration':2,'reservation':'whole_source_bounding_span'}
     assert receipt['captions'][0]['text']=='Sentence 2.' and receipt['captions'][1]['text']=='Sentence 0.'
     assert receipt['audio_provenance']=={'source_sha256':policy['source_sha256'],'segments':p['segments'],'external_audio':False}
-    # Disclosure pixels at both ends, measured independently from filter strings.
+    # Attribution pixels at both ends, measured independently from filter strings.
     for second in (0.1,1.8):
         frame=subprocess.run([renderer.ffmpeg,'-v','error','-ss',str(second),'-i',asset['path'],'-frames:v','1','-vf','crop=720:240:0:0','-f','rawvideo','-pix_fmt','rgb24','-'],capture_output=True,check=True,timeout=20).stdout
         assert sum(1 for i in range(0,len(frame),3) if min(frame[i:i+3])>200)>100
     receipt['audio_provenance']['external_audio']=True
     Path(asset['path']).with_suffix('.json').write_text(json.dumps(receipt))
     with pytest.raises(SafetyError,match='render_rights_overlay_audio_receipt_changed'):renderer.quality({'input':{'source_id':configured['id']}},p,asset)
+
+
+def test_ass_caption_literal_escaping_and_emphasis_preserve_words():
+    from tiktok_clipping_cli.media import ass_captions,ass_literal
+    text='Literal \\N \\n \\h {\\pos(0,0)} 😀\nA verylongwordwithoutspaces.'
+    escaped=ass_literal(text)
+    assert '\\\u2060N' in escaped and '\\\u2060n' in escaped and '\\\u2060h' in escaped
+    assert r'\{' in escaped and r'\}' in escaped and '😀' in escaped
+    assert escaped.count(r'\N')==1
+    cues=[{'start':0,'end':1,'text':text}]
+    ass=ass_captions(cues,48)
+    assert r'{\c&H00D7FF&}verylongwordwithoutspaces{\c&H00FFFFFF&}.' in ass
+    assert cues[0]['text']==text and ass==ass_captions(cues,48)
+    with pytest.raises(SafetyError):ass_literal('injected\x00text')
+
+
+def test_caption_receipt_retains_naturally_spoken_ad_and_literal_markup(source,proposal):
+    renderer,path=source
+    text='This ad says {hello} and \\N literally.'
+    asset=renderer.render_local(path,[{'start':0,'end':3,'text':text}],proposal,'Synthetic only; never publish')
+    receipt=renderer.render_receipt({'input':{'source_id':renderer.config['sources'][0]['id']}},proposal,asset)
+    assert receipt['captions'][0]['text']==text
+    assert receipt['caption_style']['version']==2
+    assert receipt['overlays']==[]
+
+
+def test_actual_libass_missing_glyph_refuses_output(source,proposal):
+    renderer,path=source
+    with pytest.raises(SafetyError,match='caption_glyph_unavailable'):
+        renderer.render_local(path,[{'start':0,'end':3,'text':'Unassigned glyph \U0010ffff.'}],proposal,'Synthetic only; never publish')
+
+
+def test_actual_libass_literal_sequences_do_not_add_lines(source,proposal):
+    renderer,path=source
+    text=r'Literal \N \n \h {\pos(0,0)} ☺.'
+    asset=renderer.render_local(path,[{'start':0,'end':3,'text':text}],proposal,'Synthetic literal raster proof only')
+    frame=subprocess.run([renderer.ffmpeg,'-v','error','-ss','1','-i',asset['path'],'-frames:v','1','-f','rawvideo','-pix_fmt','rgb24','-'],capture_output=True,check=True,timeout=20).stdout
+    # Synthetic blue background, outlined white text in the safe lower region.
+    # This string wraps into two rows, not the four extra ASS escape linebreaks.
+    active=[]
+    for y in range(400,1280):
+        row=frame[y*720*3:(y+1)*720*3]
+        if sum(1 for i in range(0,len(row),3) if min(row[i:i+3])>190)>5:active.append(y)
+    runs=sum(1 for index,y in enumerate(active) if index==0 or y>active[index-1]+2)
+    assert active and runs<=2 and min(active)>800 and max(active)<1100

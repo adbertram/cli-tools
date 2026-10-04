@@ -215,6 +215,8 @@ def participant(live):
     import time
     adapter, source, campaign, media = live
     config = adapter.config
+    source['publication_policy'] = {**source['publication_policy'], 'schema_version': 2,
+        'required_on_screen_text': ['TEST attribution']}
     config['rewards_account'] = {'account_id': 'user_fixture', 'username': 'fixture',
         'profile': 'rewards', 'verified_at': now_iso(), 'provenance': 'TEST owning account'}
     engine = Engine(config, adapter=adapter, clock=time.time)
@@ -242,6 +244,15 @@ def test_readiness_retains_full_campaign_brief_requirements_and_exact_policy(par
     assert evidence['source_evidence']['publication_policy'] == source['publication_policy']
     assert evidence['readiness']['requirements'] == sdk.ready['requirements']
     assert sdk.calls[-1] == 'close'
+
+
+def test_historical_ad_asset_cannot_enter_fresh_public_readiness(participant):
+    adapter, source, _, sdk, job, _ = participant
+    source['publication_policy'] = {**source['publication_policy'], 'schema_version': 1,
+        'required_on_screen_text': ['Ad', 'TEST attribution']}
+    with pytest.raises(SafetyError, match='current_no_ad_render_policy_required'):
+        adapter.verify_ready(job)
+    assert sdk.calls == []
 
 
 def test_missing_submission_method_blocks_readiness_before_public_prepare(participant):
