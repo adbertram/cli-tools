@@ -249,3 +249,37 @@ def test_list_command_auth_gate_selects_profile_auth_types(tmp_path, monkeypatch
     )
 
     assert required_types == ["author_kit"]
+
+
+@pytest.mark.parametrize('requested', ['clipper', None])
+def test_auth_gate_pins_requested_inactive_profile_and_preserves_default(monkeypatch, tmp_path, requested):
+    import copy, json
+    profiles=[{'name':'default','auth_type':'browser_session','active':True,'authenticated':True,'credential_types':{'browser_session':{'authenticated':True}}},
+              {'name':'clipper','auth_type':'browser_session','active':False,'authenticated':True,'credential_types':{'browser_session':{'authenticated':True}}}]
+    original=copy.deepcopy(profiles);calls=[]
+    monkeypatch.setattr(cli_conftest,'_credential_types_from_config',lambda *_:['browser_session'])
+    monkeypatch.setattr(cli_conftest,'discover_list_commands',lambda *_:(['studio videos list'],30))
+    monkeypatch.setattr(cli_conftest,'_required_credential_types_for_list_commands',lambda *_:['browser_session'])
+    monkeypatch.setattr(cli_conftest,'_required_profile_auth_types_for_list_commands',lambda *_:['browser_session'])
+    def run(exe,args):
+        calls.append(args)
+        rows=profiles if args[:3]==['auth','profiles','list'] else [p for p in profiles if p['name']==(requested or 'default')]
+        return SimpleNamespace(returncode=0,stdout=json.dumps(rows if args[:3]==['auth','profiles','list'] else {'profiles':rows}))
+    monkeypatch.setattr(cli_conftest,'run_cli_command',run)
+    context=cli_conftest._check_authenticated('demo','demo',tmp_path,{'exclusions':{'no_auth_clis':[]}},lambda _: ' auth status ',None,requested)
+    assert context['profile']==(requested or 'default')
+    assert calls[-1]==['auth','status']+(['--profile',requested] if requested else [])
+    from test_execution import _profile_args
+    assert _profile_args(context,lambda _: '--profile','studio videos list')==['--profile',requested or 'default']
+    assert profiles==original
+
+
+def test_requested_profile_rejects_wrong_status_name(monkeypatch,tmp_path):
+    import json
+    monkeypatch.setattr(cli_conftest,'_credential_types_from_config',lambda *_:['browser_session'])
+    monkeypatch.setattr(cli_conftest,'discover_list_commands',lambda *_:(['studio videos list'],30))
+    monkeypatch.setattr(cli_conftest,'_required_credential_types_for_list_commands',lambda *_:['browser_session'])
+    monkeypatch.setattr(cli_conftest,'_required_profile_auth_types_for_list_commands',lambda *_:[])
+    monkeypatch.setattr(cli_conftest,'run_cli_command',lambda *_:SimpleNamespace(returncode=0,stdout=json.dumps({'profiles':[{'name':'different','active':False,'authenticated':True}]})))
+    with pytest.raises(pytest.fail.Exception,match='exactly requested profile'):
+        cli_conftest._check_authenticated('demo','demo',tmp_path,{'exclusions':{'no_auth_clis':[]}},lambda _: ' auth status ',None,'clipper')

@@ -59,6 +59,37 @@ Run this check on every host that executes browser-backed CLI workflows before r
 
 When `credential_types.browser_session.browser_error` says the shared Chromium profile is not seeded, identify one CLI whose isolated/default profile is still valid, run its `auth seed-shared-chromium-profile` command while Chrome is closed, then rerun `auth status`. Do not seed from an expired profile. A browser session can be re-authenticated after seeding, but the command must never be used to merge multiple profiles.
 
+## Portable named sessions
+
+Services that declare `browser_session_origins()`,
+`browser_session_cookie_domains()`, and `browser_session_identity(browser)`
+support explicit named-session transfer. The identity hook returns only string
+`account_id` and `username` fields using the provided browser. Default/shared
+profiles and non-browser authentication profiles are refused.
+
+```bash
+tiktok auth session-export --profile clipper --expected-account-id 7692213003349443597 --expected-username ata_clipper --output "$HOME/.local/share/cli-tools/tiktok/session-transfers/clipper.json"
+tiktok auth session-import --profile clipper --expected-account-id 7692213003349443597 --expected-username ata_clipper --stdin < "$HOME/.local/share/cli-tools/tiktok/session-transfers/clipper.json"
+tiktok auth session-import-recover --profile clipper
+```
+
+Export files must be new files in a private CLI runtime directory. The format
+contains only service-scoped cookies and exact-origin localStorage, is capped
+at 16 MiB, and never includes `.env` credentials, IdP sessions, Chrome databases,
+or keychain material. Cookies+localStorage may still require device verification
+on another host; only live exact-account verification proves portability.
+
+Import requires an absent destination and macOS exclusive rename support.
+Required root configuration must already exist. It creates an inactive private
+staging profile before Config construction, restores and checks persistence,
+closes Chrome, publishes without overwriting any concurrent destination, then
+verifies the final profile. No imported profile is automatically activated.
+Failure retains private stage, bundle, and journal. A subsequent import refuses
+an unfinished journal until `session-import-recover` checks ownership and that
+Chrome is closed. Recovery quarantines a failed owned publication and archives
+its journal while retaining its backup. A durable complete journal instead
+finishes cleanup and preserves the already verified published profile.
+
 ## Validation
 
 Run:

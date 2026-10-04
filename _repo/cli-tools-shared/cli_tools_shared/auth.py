@@ -6,6 +6,9 @@ service workers, and cache all persist natively in
 live from the running browser-harness daemon via
 :meth:`BrowserAutomation.live_cookies`.
 
+Explicit named-session transfer exports only declared service cookies and
+origin localStorage. It never snapshots Chromium files or reusable credentials.
+
 CLI tools subclass :class:`BrowserAutomation` and declare class-level hooks::
 
     class MyBrowser(BrowserAutomation):
@@ -20,6 +23,7 @@ import binascii
 import hashlib
 import hmac
 import json
+import math
 import os
 import random
 import re
@@ -30,6 +34,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlsplit
 
 from ._debug_logging import get_debug_logger
 from .exceptions import ClientError
@@ -58,6 +63,127 @@ class BrowserAutomationError(ClientError):
         self.message = message
         self.cause = cause
         super().__init__(message)
+
+
+PORTABLE_SESSION_MAX_BYTES = 16 * 1024 * 1024
+
+
+def validate_session_profile(profile: str) -> str:
+    """Validate an explicit named profile for a portable session operation."""
+    if not isinstance(profile, str) or profile == "default" or not re.fullmatch(
+        r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", profile
+    ):
+        raise BrowserAutomationError("Portable sessions require an explicit safe named profile")
+    return profile
+
+
+def read_session_bundle(raw: str) -> dict:
+    """Parse bounded JSON without echoing secret-bearing invalid input."""
+    def unique_object(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError
+            result[key] = value
+        return result
+
+    try:
+        if len(raw.encode("utf-8")) > PORTABLE_SESSION_MAX_BYTES:
+            raise ValueError
+        bundle = json.loads(raw, object_pairs_hook=unique_object,
+                            parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
+        if not isinstance(bundle, dict) or set(bundle) != {
+            "version", "tool", "profile", "auth_type", "identity", "origins", "cookies"
+        } or type(bundle["version"]) is not int or bundle["version"] != 1:
+            raise ValueError
+        validate_session_profile(bundle["profile"])
+        if not isinstance(bundle["tool"], str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", bundle["tool"]):
+            raise ValueError
+        if bundle["auth_type"] != "browser_session" or not isinstance(bundle["origins"], list) or not isinstance(bundle["cookies"], list):
+            raise ValueError
+        identity = bundle["identity"]
+        if not isinstance(identity, dict) or set(identity) != {"account_id", "username"} or any(
+            not isinstance(value, str) or not value or len(value) > 256 for value in identity.values()
+        ):
+            raise ValueError
+        return bundle
+    except Exception:
+        raise BrowserAutomationError("Invalid or oversized portable session bundle") from None
+
+
+def write_session_bundle(path: Path, bundle: dict) -> None:
+    """Publish a new private runtime JSON file, refusing existing outputs."""
+    import stat
+    import tempfile
+    from .config import get_cli_tools_data_root
+
+    path = Path(path).absolute()
+    root = get_cli_tools_data_root().resolve()
+    if ".." in path.parts or not path.is_relative_to(root) or not path.parent.resolve().is_relative_to(root) or path.parent.resolve() != path.parent or any(parent.is_symlink() for parent in (path, *path.parents) if parent.is_relative_to(root)):
+        raise BrowserAutomationError("Session bundles require a private CLI runtime path")
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    parent_stat = path.parent.stat()
+    if parent_stat.st_uid != os.getuid() or stat.S_IMODE(parent_stat.st_mode) & 0o077:
+        raise BrowserAutomationError("Session bundle directory must be private (0700)")
+    descriptor, temporary = tempfile.mkstemp(prefix=".session-", dir=path.parent)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            json.dump(bundle, stream, allow_nan=False, separators=(",", ":"))
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.link(temporary, path, follow_symlinks=False)
+        descriptor = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+    except Exception:
+        raise BrowserAutomationError("Private session bundle write failed") from None
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+
+
+def _session_origin(value: str) -> str:
+    if not isinstance(value, str):
+        raise BrowserAutomationError("Invalid portable session origin")
+    parsed = urlsplit(value)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or parsed.port or parsed.path or parsed.query or parsed.fragment or value != f"https://{parsed.hostname}":
+        raise BrowserAutomationError("Invalid portable session origin")
+    return value
+
+
+def _session_cookie(raw: dict, domains: tuple[str, ...], *, from_browser: bool = False) -> dict:
+    fields = {"name", "value", "domain", "path", "secure", "httpOnly", "sameSite", "expires", "priority", "sourceScheme", "sourcePort", "partitionKey"}
+    if not isinstance(raw, dict) or (not from_browser and set(raw) - fields):
+        raise BrowserAutomationError("Invalid portable cookie fields")
+    if raw.get("partitionKeyOpaque"):
+        raise BrowserAutomationError("Opaque partition cookies cannot be transferred")
+    row = {key: value for key, value in raw.items() if key in fields}
+    for key in ("name", "value", "domain", "path"):
+        if not isinstance(row.get(key), str) or any(character in row[key] for character in ("\x00", "\r", "\n")):
+            raise BrowserAutomationError("Invalid portable cookie")
+    if not row["name"] or row["domain"].lstrip(".") not in domains or not row["path"].startswith("/"):
+        raise BrowserAutomationError("Portable cookie is outside declared service scope")
+    for key in ("secure", "httpOnly"):
+        if type(row.get(key)) is not bool:
+            raise BrowserAutomationError("Invalid portable cookie flags")
+    for key, values in (("sameSite", ("Strict", "Lax", "None")), ("priority", ("Low", "Medium", "High")), ("sourceScheme", ("Unset", "NonSecure", "Secure"))):
+        if key in row and row[key] not in values:
+            raise BrowserAutomationError("Invalid portable cookie attributes")
+    if "sourcePort" in row and (type(row["sourcePort"]) is not int or row["sourcePort"] != -1 and not 1 <= row["sourcePort"] <= 65535):
+        raise BrowserAutomationError("Invalid portable cookie source port")
+    if from_browser and raw.get("session") is True:
+        row.pop("expires", None)
+    if "expires" in row and (type(row["expires"]) not in (int, float) or not math.isfinite(row["expires"]) or row["expires"] <= time.time()):
+        raise BrowserAutomationError("Portable cookie has expired or invalid expiry")
+    partition = row.get("partitionKey")
+    if partition is not None:
+        if not isinstance(partition, dict) or set(partition) != {"topLevelSite", "hasCrossSiteAncestor"} or type(partition["hasCrossSiteAncestor"]) is not bool:
+            raise BrowserAutomationError("Unsupported portable cookie partition")
+        site = _session_origin(partition["topLevelSite"])
+        if urlsplit(site).hostname not in domains:
+            raise BrowserAutomationError("Portable cookie partition is outside service scope")
+    return row
 
 
 @dataclass(frozen=True)
@@ -207,8 +333,9 @@ class BrowserAutomation:
     """Base class for browser automation in CLI tools.
 
     Persistent Chromium user-data-dir per profile holds cookies,
-    localStorage, IndexedDB, service workers, and cache — there is no
-    snapshot/restore. Subclasses declare hooks; the base class drives
+    localStorage, IndexedDB, service workers, and cache. Explicit portable
+    transfer covers declared cookies/localStorage only. Subclasses declare
+    hooks; the base class drives
     headed login and headless command execution against the persistent
     profile.
     """
@@ -1338,6 +1465,158 @@ class BrowserAutomation:
             except BrowserHarnessError as e:
                 raise BrowserAutomationError(str(e)) from e
         return svc.cookie_list()
+
+    def _portable_scope(self) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        from .config import get_profiles_base_dir
+
+        profile = validate_session_profile(self._profile_name())
+        if getattr(self.config, "PROFILE_AUTH_TYPE_FIELD", None) and self.config._profile_auth_type_for_env(self.config.env_file_path) != "browser_session":
+            raise BrowserAutomationError("Portable transfer requires a browser_session authentication profile")
+        expected = get_profiles_base_dir(self._tool_name()) / profile / "browser-data" / "chromium-profile"
+        actual = self._get_persistent_profile_dir()
+        if actual.resolve() != expected.absolute() or any(path.is_symlink() for path in (expected, expected.parent, expected.parent.parent)):
+            raise BrowserAutomationError("Portable session profile must be isolated")
+        origins = tuple(_session_origin(value) for value in self.config.browser_session_origins())
+        domains = tuple(self.config.browser_session_cookie_domains())
+        if not origins or len(set(origins)) != len(origins) or not domains or len(set(domains)) != len(domains) or any(
+            not isinstance(domain, str) or not re.fullmatch(r"[a-z0-9]+(?:[.-][a-z0-9]+)*", domain) for domain in domains
+        ):
+            raise BrowserAutomationError("Invalid portable service scope declaration")
+        service = self._get_service()
+        if any(not callable(getattr(service, name, None)) for name in ("cookie_set", "localstorage_get", "localstorage_set")):
+            raise BrowserAutomationError("Portable sessions are unsupported by this browser backend")
+        return origins, domains
+
+    def _portable_identity(self, expected_account_id: str, expected_username: str = None) -> dict:
+        try:
+            if not isinstance(expected_account_id, str) or not expected_account_id or not self.AUTH_CHECK_URL:
+                raise ValueError
+            self._auth_verified_at = 0
+            live = self.is_authenticated()
+            if not live or not live.live_check:
+                raise ValueError
+            identity = self.config.browser_session_identity(self)
+            if not isinstance(identity, dict) or set(identity) != {"account_id", "username"} or any(
+                not isinstance(value, str) or not value or len(value) > 256 for value in identity.values()
+            ) or identity["account_id"] != expected_account_id or (
+                expected_username is not None and identity["username"].casefold() != expected_username.casefold()
+            ):
+                raise ValueError
+            return identity
+        except Exception:
+            raise BrowserAutomationError("Portable session identity verification failed or requires device verification") from None
+
+    def _portable_close(self) -> None:
+        """Close strictly so a transfer never hides a persistence failure."""
+        service = self._service
+        try:
+            if service is not None:
+                service.browser_close()
+        except Exception:
+            raise BrowserAutomationError("Portable session browser close failed") from None
+        finally:
+            self._page = None
+            self._service = None
+            self._auth_verified_at = 0
+
+    def _validate_portable_bundle(self, bundle: dict, target_profile: str,
+                                  expected_account_id: str, expected_username: str = None) -> dict:
+        bundle = read_session_bundle(json.dumps(bundle, allow_nan=False))
+        origins, domains = self._portable_scope()
+        if bundle["tool"] != self._tool_name() or bundle["profile"] != validate_session_profile(target_profile) or bundle["identity"]["account_id"] != expected_account_id or (
+            expected_username is not None and bundle["identity"]["username"].casefold() != expected_username.casefold()
+        ):
+            raise BrowserAutomationError("Portable session tool, profile, or expected identity mismatch")
+        found = []
+        for row in bundle["origins"]:
+            if not isinstance(row, dict) or set(row) != {"origin", "localStorage"} or row["origin"] not in origins or not isinstance(row["localStorage"], list):
+                raise BrowserAutomationError("Invalid portable localStorage scope")
+            keys = []
+            for item in row["localStorage"]:
+                if not isinstance(item, dict) or set(item) != {"key", "value"} or any(not isinstance(value, str) for value in item.values()):
+                    raise BrowserAutomationError("Invalid portable localStorage entry")
+                keys.append(item["key"])
+            if len(set(keys)) != len(keys):
+                raise BrowserAutomationError("Duplicate portable localStorage key")
+            found.append(row["origin"])
+        if len(found) != len(origins) or set(found) != set(origins):
+            raise BrowserAutomationError("Portable session origins do not match declared service scope")
+        bundle["cookies"] = [_session_cookie(row, domains) for row in bundle["cookies"]]
+        identities = [(row["name"], row["domain"], row["path"], json.dumps(row.get("partitionKey"), sort_keys=True)) for row in bundle["cookies"]]
+        if not identities or len(set(identities)) != len(identities):
+            raise BrowserAutomationError("Portable session has missing or duplicate cookies")
+        return bundle
+
+    def export_session(self, output: Path, *, expected_account_id: str,
+                       expected_username: str = None) -> dict:
+        """Export declared cookies and origin storage to a private runtime file."""
+        try:
+            origins, domains = self._portable_scope()
+            if not self.config.has_saved_session():
+                raise BrowserAutomationError("Portable session source has no saved browser session")
+            identity = self._portable_identity(expected_account_id, expected_username)
+            service = self._get_service()
+            if not service._opened:
+                service.browser_open("about:blank", headed=not self._headless_enabled(),
+                                     persistent_profile_dir=self._get_persistent_profile_dir(),
+                                     user_agent=self._browser_user_agent(), window_size=self._browser_window_size())
+            storage = []
+            for origin in origins:
+                service.page_goto(origin + "/")
+                storage.append({"origin": origin, "localStorage": service.localstorage_get(origin)})
+            cookies = [_session_cookie(row, domains, from_browser=True) for row in service.cookie_list()
+                       if isinstance(row, dict) and isinstance(row.get("domain"), str) and row["domain"].lstrip(".") in domains]
+            bundle = {"version": 1, "tool": self._tool_name(), "profile": self._profile_name(),
+                      "auth_type": "browser_session", "identity": identity, "cookies": cookies, "origins": storage}
+            bundle = self._validate_portable_bundle(bundle, self._profile_name(), expected_account_id, expected_username)
+            if self._portable_identity(expected_account_id, expected_username) != identity:
+                raise BrowserAutomationError("Portable session identity changed during export")
+            self._portable_close()
+            write_session_bundle(output, bundle)
+            return {"tool": bundle["tool"], "profile": bundle["profile"], "identity": identity,
+                    "cookies": len(cookies), "origins": len(storage), "exported": True}
+        except Exception:
+            raise BrowserAutomationError("Portable session export failed; no session data was disclosed") from None
+        finally:
+            self._portable_close()
+
+    def import_session(self, bundle: dict, *, expected_account_id: str,
+                       expected_username: str = None, target_profile: str = None) -> dict:
+        """Restore into a fresh private staging profile and verify persistence."""
+        try:
+            target_profile = target_profile or self._profile_name()
+            bundle = self._validate_portable_bundle(bundle, target_profile, expected_account_id, expected_username)
+            directory = self._get_persistent_profile_dir()
+            if directory.exists() and any(directory.iterdir()):
+                raise BrowserAutomationError("Portable session restore requires an empty staging browser profile")
+            service = self._get_service()
+            service.browser_open("about:blank", headed=not self._headless_enabled(), persistent_profile_dir=directory,
+                                 user_agent=self._browser_user_agent(), window_size=self._browser_window_size())
+            service.cookie_set(bundle["cookies"])
+            actual = { (row["name"], row["domain"], row["path"], json.dumps(row.get("partitionKey"), sort_keys=True)): _session_cookie(row, tuple(self.config.browser_session_cookie_domains()), from_browser=True)
+                       for row in service.cookie_list() if isinstance(row, dict) and row.get("domain", "").lstrip(".") in self.config.browser_session_cookie_domains() }
+            for row in bundle["cookies"]:
+                key = (row["name"], row["domain"], row["path"], json.dumps(row.get("partitionKey"), sort_keys=True))
+                saved = actual.get(key, {})
+                if any(saved.get(field) != value for field, value in row.items() if field != "expires") or (
+                    "expires" in row and abs(saved.get("expires", 0) - row["expires"]) > 1
+                ):
+                    raise BrowserAutomationError("Portable cookie readback failed")
+            for row in bundle["origins"]:
+                service.page_goto(row["origin"] + "/")
+                service.localstorage_set(row["origin"], row["localStorage"])
+                readback = {item["key"]: item["value"] for item in service.localstorage_get(row["origin"])}
+                if any(readback.get(item["key"]) != item["value"] for item in row["localStorage"]):
+                    raise BrowserAutomationError("Portable storage readback failed")
+            self._portable_close()
+            identity = self._portable_identity(expected_account_id, expected_username)
+            self._portable_close()
+            return {"tool": bundle["tool"], "profile": target_profile, "identity": identity,
+                    "cookies": len(bundle["cookies"]), "origins": len(bundle["origins"]), "verified": True}
+        except Exception:
+            raise BrowserAutomationError("Portable session restore failed or requires device verification; private staging was retained") from None
+        finally:
+            self._portable_close()
 
     # ---------------- Interstitial resolution ----------------
 

@@ -1,5 +1,5 @@
 """CDP WS holder + IPC relay (Unix socket on POSIX, TCP loopback on Windows). One daemon per BU_NAME."""
-import asyncio, json, os, socket, sys, time, urllib.error, urllib.request
+import asyncio, json, math, os, socket, sys, time, urllib.error, urllib.request
 from urllib.parse import urlparse
 from collections import deque
 from pathlib import Path
@@ -395,6 +395,29 @@ class Daemon:
         # Browser-level Target.* calls must not use a session (stale or otherwise).
         # For everything else, explicit session in req wins; else default.
         sid = None if method.startswith("Target.") else (req.get("session_id") or self.session)
+        budget = req.get("request_timeout")
+        if budget is not None:
+            if type(budget) not in (int, float) or not math.isfinite(budget) or not 0 < budget <= 300:
+                return {"error": "invalid_cdp_request_timeout"}
+            # cdp-use retains cancelled response futures until a reply arrives.
+            # Remove only this call's cancelled additions; never another session's.
+            pending = self.cdp.pending_requests
+            owned_ids = []
+            async def bounded_request():
+                # send_raw registers msg_id + 1 before its first await.
+                owned_ids.append(self.cdp.msg_id + 1)
+                return await self.cdp.send_raw(method, params, session_id=sid)
+            try:
+                return {"result": await asyncio.wait_for(bounded_request(), timeout=budget)}
+            except asyncio.TimeoutError:
+                return {"error": "cdp_request_deadline_exceeded"}
+            except Exception:
+                return {"error": "cdp_request_failed"}
+            finally:
+                for key in owned_ids:
+                    future = pending.pop(key, None)
+                    if future is not None and not future.done():
+                        future.cancel()
         try:
             return {"result": await self.cdp.send_raw(method, params, session_id=sid)}
         except Exception as e:

@@ -4,9 +4,10 @@ import math
 import re
 import time
 from datetime import datetime, timezone
-from urllib.parse import urlencode, urlsplit
+from types import SimpleNamespace
+from urllib.parse import urlencode
 from cli_tools_shared.exceptions import ClientError
-from .config import get_config
+from .config import get_config, rewards_location
 
 MAX_BODY = 8_000_000
 MAX_LIMIT = 1000
@@ -101,9 +102,9 @@ def bounds(limit):
     return limit
 
 class WhopClient:
-    def __init__(self, config=None):
+    def __init__(self, config=None, browser=None):
         self.config=config or get_config()
-        self.browser=self.config.get_browser()
+        self.browser=browser if browser is not None else self.config.get_browser()
         self._actions={}
         self.max_retries=2
         self.base_delay=1.0
@@ -111,15 +112,11 @@ class WhopClient:
     def close(self):
         self.browser.close()
     def _location(self):
-        raw=self.config.rewards_url
-        if not raw: raise ClientError("rewards_url_unconfigured: run whop auth login")
-        u=urlsplit(raw)
-        if u.scheme!='https' or not re.fullmatch(r'[a-z0-9]+\.apps\.whop\.com',u.netloc) or not re.fullmatch(r'/c/exp_[A-Za-z0-9]+/?',u.path) or u.query or u.fragment:
-            raise ClientError("invalid_rewards_url")
-        return f'https://{u.netloc}',u.path.rstrip('/')
+        return rewards_location(self.config.rewards_url)
     def _request(self,page,path,action=None,body=None):
         for attempt in range(self.max_retries+1):
             try: response=page.evaluate(FETCH_JS,{"path":path,"action":action,"body":body})
+            except ClientError: raise
             except Exception: raise ClientError("browser_read_failed") from None
             if not isinstance(response,dict): raise ClientError("invalid_transport_response")
             status=response.get('status')
@@ -160,18 +157,48 @@ class WhopClient:
         if name not in READ_ACTIONS: raise ClientError("action_not_read_allowlisted")
         page=self._reward_page(suffix)
         origin,path=self._location()
-        # Navigation can return while the new document has no scripts yet.
-        # Wait for the configured document before taking the script snapshot.
+        # Whop may wrap the experience and reset its child route to discover.
+        # Select only the configured experience, then route that frame directly.
+        requested_path=path+suffix
+        requested_url=origin+requested_path
         ready_js="""({origin,path}) => location.origin===origin && location.pathname===path
             && document.readyState!=='loading'
             && [...document.scripts].some(s=>s.src && new URL(s.src).origin===origin)"""
         deadline=time.monotonic()+10.0
-        while page.evaluate(ready_js,{'origin':origin,'path':path+suffix}) is not True:
-            if time.monotonic()>=deadline: raise ClientError("read_action_page_not_ready")
+        def remaining():
+            budget=deadline-time.monotonic()
+            if budget<=0: raise ClientError("read_action_readiness_deadline_exceeded")
+            return budget
+        navigated=False
+        while True:
+            frames=page.frame_documents(request_timeout=remaining())
+            candidates={f['id']:f for f in frames if f['origin']==origin and (f['path']==path or f['path'].startswith(path+'/'))}
+            if len(candidates)>1:
+                raise ClientError("read_action_document_ambiguous")
+            if candidates:
+                frame=next(iter(candidates.values()))
+                if frame['path']!=requested_path and not navigated:
+                    page.goto_frame(frame['id'],requested_url,request_timeout=remaining())
+                    navigated=True
+                elif page.evaluate_in_iframe(requested_url,ready_js,{'origin':origin,'path':requested_path},request_timeout=remaining()) is True:
+                    remaining()
+                    break
+            if time.monotonic()>=deadline:
+                raise ClientError("read_action_page_not_ready: "+json.dumps({'frames':frames},separators=(',',':')))
             time.sleep(0.1)
+        def scoped_evaluate(script,arg=None):
+            guarded="""async ({origin,path,arg}) => {
+                if(location.origin!==origin || location.pathname!==path) return {scopeMatched:false};
+                return {scopeMatched:true,value:await ("""+script+""")(arg)};
+            }"""
+            result=page.evaluate_in_iframe(requested_url,guarded,{'origin':origin,'path':requested_path,'arg':arg})
+            if not isinstance(result,dict) or result.get('scopeMatched') is not True or 'value' not in result:
+                raise ClientError("read_action_document_scope_changed")
+            return result['value']
+        document=SimpleNamespace(evaluate=scoped_evaluate)
         key=(suffix,name)
         if key not in self._actions:
-            value=page.evaluate(DISCOVER_ACTION_JS,name)
+            value=document.evaluate(DISCOVER_ACTION_JS,name)
             if not isinstance(value,dict): raise ClientError("invalid_action_discovery_response")
             reason=value.get('reason')
             if reason not in ('ready','ambiguous','script_fetch_failed','scripts_changed','missing','script_limit'):
@@ -185,7 +212,7 @@ class WhopClient:
             if counts[1]!=1 or not isinstance(action,str) or not re.fullmatch(r'[a-f0-9]{40,64}',action):
                 raise ClientError("invalid_action_discovery_response")
             self._actions[key]=action
-        return self._success(self._request(page,path+suffix,self._actions[key],args))
+        return self._success(self._request(document,path+suffix,self._actions[key],args))
     def account(self):
         page=self.browser.get_page('https://whop.com/')
         row=self._request(page,'/api/v1/users/me')

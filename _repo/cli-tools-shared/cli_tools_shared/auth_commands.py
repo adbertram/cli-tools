@@ -35,6 +35,320 @@ from .output import (
 logger = get_debug_logger("cli_tools.auth_commands")
 
 
+def _exclusive_session_rename(source, destination):
+    """Publish an absent macOS destination atomically, with no fallback."""
+    import ctypes
+    import os
+    from pathlib import Path
+
+    if sys.platform != "darwin":
+        raise ConfigError("Portable profile publication requires macOS exclusive rename")
+    library = ctypes.CDLL(None, use_errno=True)
+    rename = library.renamex_np
+    rename.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
+    rename.restype = ctypes.c_int
+    if rename(os.fsencode(source), os.fsencode(destination), 0x00000004 | 0x00000010) != 0:
+        raise OSError(ctypes.get_errno(), "Portable exclusive profile rename failed")
+    # A successful syscall is not a durable directory entry until every
+    # affected parent is flushed. Failure leaves the pre-rename journal in
+    # place, so recovery inspects the ownership marker rather than assuming.
+    for parent in {Path(source).parent, Path(destination).parent}:
+        descriptor = os.open(parent, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+
+
+def _session_journal_write(path, journal):
+    import json
+    import os
+    import tempfile
+    from pathlib import Path
+
+    descriptor, temporary = tempfile.mkstemp(prefix=".journal-", dir=path.parent)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            json.dump(journal, stream, separators=(",", ":"))
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        descriptor = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+
+
+def _private_session_path(path, *, directory=False):
+    """Reject aliases and permissions that expose transfer state."""
+    import os
+    import stat
+
+    metadata = path.lstat()
+    kind = stat.S_ISDIR if directory else stat.S_ISREG
+    if path.absolute() != path.resolve() or not kind(metadata.st_mode) or metadata.st_uid != os.getuid() or stat.S_IMODE(metadata.st_mode) & 0o077:
+        raise ConfigError("Portable transfer state must be private and unaliased")
+
+
+def _portable_profile_import(get_config_fn, config_cls, tool_name, profile, bundle,
+                             expected_account_id, expected_username=None):
+    """Restore a new inactive profile with durable ownership and rollback."""
+    import ctypes
+    import fcntl
+    import json
+    import os
+    import stat
+    import uuid
+    from pathlib import Path
+    from .auth import BrowserAutomationError, read_session_bundle, validate_session_profile, write_session_bundle
+    from .config import get_profiles_base_dir, get_tool_data_dir
+    from .browser.processes import profile_process_pids
+
+    validate_session_profile(profile)
+    bundle = read_session_bundle(json.dumps(bundle, allow_nan=False))
+    if bundle["tool"] != tool_name or bundle["profile"] != profile or bundle["identity"]["account_id"] != expected_account_id or (
+        expected_username is not None and bundle["identity"]["username"].casefold() != expected_username.casefold()
+    ):
+        raise BrowserAutomationError("Portable session target or expected identity mismatch")
+    if config_cls is None or CredentialType.BROWSER_SESSION not in config_cls.CREDENTIAL_TYPES:
+        raise BrowserAutomationError("Portable browser session configuration is unavailable")
+    if sys.platform != "darwin" or not hasattr(ctypes.CDLL(None), "renamex_np"):
+        raise BrowserAutomationError("Portable profile publication requires macOS exclusive rename")
+    root = get_profiles_base_dir(tool_name).absolute()
+    target = root / profile
+    if root.resolve() != root or target.exists() or target.is_symlink():
+        raise BrowserAutomationError("Portable session destination already exists or is not isolated")
+    transfers = get_tool_data_dir(tool_name) / "session-transfers"
+    transfers.mkdir(mode=0o700, parents=True, exist_ok=True)
+    _private_session_path(transfers, directory=True)
+    lock_path = transfers / f"{profile}.lock"
+    lock = os.open(lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    browser = None
+    journal_path = transfers / f"{profile}.journal.json"
+    journal = None
+    try:
+        _private_session_path(lock_path)
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if journal_path.exists() or journal_path.is_symlink():
+            raise BrowserAutomationError("Unfinished portable session transfer requires journal recovery")
+        if target.exists() or target.is_symlink():
+            raise BrowserAutomationError("Portable session destination already exists")
+        token = uuid.uuid4().hex
+        stage_name = "transfer-" + token
+        stage = root / stage_name
+        backup = transfers / f"{token}.bundle.json"
+        journal = {"token": token, "tool": tool_name, "profile": profile,
+                   "stage": str(stage), "target": str(target), "backup": str(backup), "phase": "initializing"}
+        # Journal every subsequent mutation, including interrupted preparation.
+        _session_journal_write(journal_path, journal)
+        stage.mkdir(mode=0o700, parents=True)
+        marker = stage / ".session-transfer.json"
+        _session_journal_write(marker, {"token": token, "tool": tool_name, "profile": profile})
+        env = "ACTIVE=false\n"
+        field = getattr(config_cls, "PROFILE_AUTH_TYPE_FIELD", None)
+        if field:
+            env += f"{field}=browser_session\n"
+        descriptor = os.open(stage / ".env", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "w") as stream:
+            stream.write(env)
+            stream.flush()
+            os.fsync(stream.fileno())
+        # The marker proves ownership during recovery; it contains no secrets.
+        write_session_bundle(backup, bundle)
+        journal["phase"] = "prepared"
+        _session_journal_write(journal_path, journal)
+        # Staging .env already exists, so BaseConfig cannot bootstrap active default.
+        config = get_config_fn(profile=stage_name)
+        browser = config.get_browser()
+        journal["phase"] = "restoring"
+        _session_journal_write(journal_path, journal)
+        result = browser.import_session(bundle, expected_account_id=expected_account_id,
+                                        expected_username=expected_username, target_profile=profile)
+        browser._portable_close()
+        if profile_process_pids(config.get_persistent_profile_dir()):
+            raise BrowserAutomationError("Portable staging browser did not close")
+        journal["phase"] = "publishing"
+        _session_journal_write(journal_path, journal)
+        _exclusive_session_rename(stage, target)
+        journal["phase"] = "published"
+        _session_journal_write(journal_path, journal)
+        final_config = get_config_fn(profile=profile)
+        browser = final_config.get_browser()
+        final_identity = browser._portable_identity(expected_account_id, expected_username)
+        browser._portable_close()
+        if final_identity != result["identity"] or profile_process_pids(final_config.get_persistent_profile_dir()):
+            raise BrowserAutomationError("Published portable identity did not verify")
+        journal["phase"] = "complete"
+        _session_journal_write(journal_path, journal)
+        # Complete is the durable commit point. Cleanup failure must not undo
+        # an already verified publication; recovery completes private cleanup.
+        try:
+            backup.unlink()
+            journal_path.unlink()
+        except OSError:
+            pass
+        return {**result, "profile": profile, "imported": True, "active": False}
+    except Exception as error:
+        if browser is not None:
+            try:
+                browser._portable_close()
+            except Exception:
+                pass
+        if journal is not None:
+            try:
+                stage = Path(journal["stage"])
+                target = Path(journal["target"])
+                marker = target / ".session-transfer.json"
+                owned = marker.is_file() and json.loads(marker.read_text()).get("token") == journal["token"]
+                if owned and not stage.exists() and not profile_process_pids(target / "browser-data" / "chromium-profile"):
+                    _exclusive_session_rename(target, stage)
+                if journal["phase"] != "initializing":
+                    journal["phase"] = "failed"
+                _session_journal_write(journal_path, journal)
+            except Exception:
+                # Retain the last durable journal and all private backup state.
+                pass
+        if journal is None and isinstance(error, BrowserAutomationError):
+            raise error
+        import errno
+        if isinstance(error, OSError) and error.errno == errno.EEXIST:
+            raise BrowserAutomationError("Portable session destination already exists; private backup retained") from None
+        raise BrowserAutomationError("Portable session import failed; private backup retained and journal recovery is required") from None
+    finally:
+        os.close(lock)
+
+
+def _recover_portable_profile(tool_name, profile):
+    """Quarantine only importer-owned state, preserving every failed backup."""
+    import fcntl
+    import json
+    import os
+    import re
+    from pathlib import Path
+    from .auth import BrowserAutomationError, validate_session_profile
+    from .config import get_profiles_base_dir, get_tool_data_dir
+    from .browser.processes import profile_process_pids
+
+    validate_session_profile(profile)
+    transfers = get_tool_data_dir(tool_name) / "session-transfers"
+    journal_path = transfers / f"{profile}.journal.json"
+    try:
+        _private_session_path(transfers, directory=True)
+        _private_session_path(journal_path)
+        lock_path = transfers / f"{profile}.lock"
+        _private_session_path(lock_path)
+        lock = os.open(lock_path, os.O_RDWR | os.O_NOFOLLOW)
+    except Exception:
+        raise BrowserAutomationError("Portable session recovery journal is missing or unsafe") from None
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if journal_path.stat().st_size > 4096:
+            raise ValueError
+        journal = json.loads(journal_path.read_text())
+        token = journal["token"]
+        if not isinstance(token, str) or not re.fullmatch(r"[a-f0-9]{32}", token):
+            raise ValueError
+        root = get_profiles_base_dir(tool_name).absolute()
+        stage, target = root / ("transfer-" + token), root / profile
+        backup = transfers / f"{token}.bundle.json"
+        if journal["tool"] != tool_name or journal["profile"] != profile or journal["stage"] != str(stage) or journal["target"] != str(target) or journal["backup"] != str(backup) or root.resolve() != root or journal["phase"] not in {"initializing", "prepared", "restoring", "publishing", "published", "failed", "complete", "recovered"}:
+            raise ValueError
+        if any(path.is_symlink() for path in (stage, target, backup)):
+            raise ValueError
+        def owned(path):
+            marker = path / ".session-transfer.json"
+            if not marker.exists():
+                return False
+            _private_session_path(path, directory=True)
+            _private_session_path(marker)
+            return marker.stat().st_size <= 4096 and json.loads(marker.read_text()) == {"token": token, "tool": tool_name, "profile": profile}
+        if journal["phase"] == "complete":
+            if not owned(target) or stage.exists() or profile_process_pids(target / "browser-data" / "chromium-profile"):
+                raise ValueError
+            if backup.exists():
+                _private_session_path(backup)
+                backup.unlink()
+            _exclusive_session_rename(journal_path, transfers / f"{token}.completed.json")
+            return {"tool": tool_name, "profile": profile, "recovered": True, "backup_retained": False, "published": True}
+        if owned(target):
+            if stage.exists() or profile_process_pids(target / "browser-data" / "chromium-profile"):
+                raise ValueError
+            _exclusive_session_rename(target, stage)
+        initializing = journal["phase"] == "initializing"
+        if stage.exists():
+            _private_session_path(stage, directory=True)
+        if (not initializing and not owned(stage)) or profile_process_pids(stage / "browser-data" / "chromium-profile") or (not initializing and not backup.is_file()):
+            raise ValueError
+        if initializing and (target.exists() or (stage.exists() and (stage / ".session-transfer.json").exists() and not owned(stage))):
+            raise ValueError
+        if backup.exists():
+            _private_session_path(backup)
+        retained = backup.is_file()
+        journal["phase"] = "recovered"
+        _session_journal_write(journal_path, journal)
+        _exclusive_session_rename(journal_path, transfers / f"{token}.recovered.json")
+        return {"tool": tool_name, "profile": profile, "recovered": True, "backup_retained": retained}
+    except Exception:
+        raise BrowserAutomationError("Portable session recovery refused unsafe or live profile state; backup retained") from None
+    finally:
+        os.close(lock)
+
+
+def _register_portable_session_commands(app, get_config_fn, config_cls, tool_name):
+    """Mount explicit named-session commands without constructing Config."""
+    from pathlib import Path
+    from .auth import BrowserAutomationError, PORTABLE_SESSION_MAX_BYTES, read_session_bundle, validate_session_profile
+    from .config import get_profiles_base_dir
+
+    @app.command("session-export")
+    @command
+    def session_export(
+        profile: str = typer.Option(..., "--profile", help="Explicit named browser-session profile"),
+        expected_account_id: str = typer.Option(..., "--expected-account-id", help="Exact expected service account ID"),
+        expected_username: Optional[str] = typer.Option(None, "--expected-username", help="Expected service username"),
+        output: Path = typer.Option(..., "--output", help="New private CLI runtime bundle file"),
+    ):
+        """Export scoped cookies/localStorage after live exact-account checks."""
+        validate_session_profile(profile)
+        source = get_profiles_base_dir(tool_name).absolute() / profile
+        if source.resolve() != source or not (source / ".env").is_file() or (source / ".env").is_symlink():
+            raise BrowserAutomationError("Portable session source profile is missing or unsafe")
+        config = get_config_fn(profile=profile)
+        print_json(config.get_browser().export_session(output, expected_account_id=expected_account_id,
+                                                       expected_username=expected_username))
+
+    @app.command("session-import")
+    @command
+    def session_import(
+        profile: str = typer.Option(..., "--profile", help="New inactive named browser-session profile"),
+        expected_account_id: str = typer.Option(..., "--expected-account-id", help="Exact expected service account ID"),
+        expected_username: Optional[str] = typer.Option(None, "--expected-username", help="Expected service username"),
+        stdin: bool = typer.Option(False, "--stdin", help="Read a private bounded session bundle from stdin"),
+    ):
+        """Restore, verify, close, and exclusively publish an absent profile."""
+        validate_session_profile(profile)
+        if not stdin or sys.stdin.isatty():
+            raise BrowserAutomationError("Portable import requires --stdin with piped or redirected JSON")
+        try:
+            raw = sys.stdin.buffer.read(PORTABLE_SESSION_MAX_BYTES + 1)
+            bundle = read_session_bundle(raw.decode("utf-8"))
+        except Exception:
+            raise BrowserAutomationError("Invalid or oversized portable session stdin") from None
+        print_json(_portable_profile_import(get_config_fn, config_cls, tool_name, profile, bundle,
+                                             expected_account_id, expected_username))
+
+    @app.command("session-import-recover")
+    @command
+    def session_import_recover(
+        profile: str = typer.Option(..., "--profile", help="Explicit named profile with an unfinished transfer journal"),
+    ):
+        """Recover only owned closed transfer state, preserving failed backups."""
+        print_json(_recover_portable_profile(tool_name, profile))
+
+
 _CREDENTIAL_TYPE_ALIASES = {
     "browser": CredentialType.BROWSER_SESSION.value,
 }
@@ -881,6 +1195,9 @@ def create_auth_app(
         )
         print_output(data, table)
         _exit_if_no_authenticated_profile(data)
+
+    if has_browser_auth and getattr(config_cls, "PORTABLE_BROWSER_SESSION", False) is True:
+        _register_portable_session_commands(app, get_config_fn, config_cls, tool_name)
 
     if has_browser_auth:
         @app.command("seed-shared-chromium-profile")

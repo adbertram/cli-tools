@@ -33,7 +33,7 @@ class FakeApi:
 def test_node_test_preserves_case_sensitive_resource_and_operation(monkeypatch):
     api = FakeApi()
     monkeypatch.setattr(test_command, "get_n8n_api_client", lambda: api)
-    monkeypatch.setattr(test_command, "_check_ui_visibility", lambda *_args: [])
+    monkeypatch.setattr(test_command, "_check_credential_test_bindings", lambda _package_name: [])
     monkeypatch.setattr(test_command.health_mod, "run_health_checks", lambda *_args, **_kwargs: [object()])
     monkeypatch.setattr(test_command.health_mod, "has_failures", lambda _findings: True)
     monkeypatch.setattr(test_command, "_print_findings_table", lambda _findings: None)

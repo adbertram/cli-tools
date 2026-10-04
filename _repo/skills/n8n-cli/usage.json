@@ -1,8 +1,8 @@
 {
   "tool": "n8n",
   "description": "Manage n8n server - workflows, nodes, executions, credentials, data tables, and logs",
-  "discovered_at": "2026-09-24T00:03:20Z",
-  "total_commands": 66,
+  "discovered_at": "2026-10-04T13:33:31Z",
+  "total_commands": 67,
   "global_options": [
     {
       "name": "--version",
@@ -1671,6 +1671,43 @@
               ]
             }
           }
+        },
+        "deploy-browser-session": {
+          "help": "Transfer a private service session to a new inactive server profile. Both service CLIs and required nonsecret root configuration must already be deployed. Existing destination profiles are never replaced. The remote owning CLI verifies exact identity before and after atomic publication.",
+          "arguments": [
+            {
+              "name": "tool",
+              "type": "TEXT",
+              "required": true,
+              "help": "Installed owning service CLI"
+            }
+          ],
+          "options": [
+            {
+              "name": "--browser-profile",
+              "type": "TEXT",
+              "required": true,
+              "help": "Explicit named service browser profile"
+            },
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact verified service account ID"
+            },
+            {
+              "name": "--expected-username",
+              "type": "TEXT",
+              "required": false,
+              "help": "Expected service account username"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         },
         "logs": {
           "help": "Query n8n server logs and configuration",

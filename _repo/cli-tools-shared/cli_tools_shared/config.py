@@ -898,6 +898,7 @@ class BaseConfig:
     OAUTH_EXTRA_AUTH_PARAMS: dict = {}   # Extra params for auth URL (e.g. audience)
     OAUTH_TOKEN_EXPIRES: bool = True   # False for OAuth 1.0a/static token credentials
     OAUTH_STATIC_REQUIRED_FIELDS: tuple = ("CLIENT_ID", "CLIENT_SECRET", "ACCESS_TOKEN")
+    PORTABLE_BROWSER_SESSION: bool = False
     BROWSER_SESSION_REQUIRES_API_TEST: bool = False
 
     # Extra credential prompts (set by subclasses that need additional fields prompted during login)
@@ -1373,6 +1374,18 @@ class BaseConfig:
             self.clear_session()
 
     # ==================== Profile Data Directories ====================
+
+    def browser_session_origins(self) -> tuple[str, ...]:
+        """Return explicitly approved origins for portable session state."""
+        raise ConfigError("Portable browser session origins are not configured")
+
+    def browser_session_cookie_domains(self) -> tuple[str, ...]:
+        """Return explicitly approved cookie domains for portable sessions."""
+        raise ConfigError("Portable browser session cookie domains are not configured")
+
+    def browser_session_identity(self, browser) -> dict[str, str]:
+        """Read verified identity through the owning service's public reader."""
+        raise ConfigError("Portable browser session identity is not configured")
 
     def get_profiles_dir(self) -> Path:
         """Get the authentication_profiles directory for runtime data."""

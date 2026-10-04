@@ -3,7 +3,7 @@ set -o pipefail
 
 usage() {
     cat <<'HELP'
-Usage: test-cli-tool.sh --cli-name <name> [--command <cmd>] [--cli-executable <path>] [--verbose]
+Usage: test-cli-tool.sh --cli-name <name> [--command <cmd>] [--cli-executable <path>] [--profile <name>] [--verbose]
        test-cli-tool.sh --file <path>
 
 Options:
@@ -12,6 +12,7 @@ Options:
   --cli-executable <path>
                       Executable to test instead of ~/.local/bin/<name>
   --file <path>       Auto-derive cli-name and command from a file path
+  --profile <name>   Verify and use an exact named profile without activation
   --verbose           Show verbose pytest output
   -h, --help          Show this help message
 HELP
@@ -148,6 +149,7 @@ run_auth_status_schema_preflight() {
     CLI_NAME="$CLI_NAME" \
     CLI_EXECUTABLE="$CLI_EXECUTABLE" \
     COMMAND="$COMMAND" \
+    CLI_PROFILE="$CLI_PROFILE" \
     uv run --project "$SKILL_DIR" python3 - <<'PY'
 import json
 import os
@@ -174,6 +176,7 @@ def run_command(args: list[str]) -> subprocess.CompletedProcess[str]:
 cli_name = os.environ["CLI_NAME"]
 cli_executable = os.environ["CLI_EXECUTABLE"]
 command_filter = os.environ.get("COMMAND")
+requested_profile = os.environ.get("CLI_PROFILE")
 
 if command_filter:
     emit("skipped", "Skipping (command filter active)")
@@ -199,7 +202,7 @@ if not has_subcommand(auth_help.stdout, "status"):
     emit("skipped", f"{cli_name} has no 'auth status' subcommand")
     raise SystemExit(0)
 
-status_result = run_command([cli_executable, "auth", "status"])
+status_result = run_command([cli_executable, "auth", "status"] + (["--profile", requested_profile] if requested_profile else []))
 if status_result.returncode not in (0, 2):
     detail = status_result.stderr.strip() or status_result.stdout.strip()
     emit("failed", f"'{cli_name} auth status' exited {status_result.returncode}: {detail[:300]}")
@@ -214,6 +217,9 @@ if errors:
     raise SystemExit(0)
 
 profiles = payload.get("profiles", []) if isinstance(payload, dict) else []
+if requested_profile and (len(profiles) != 1 or not isinstance(profiles[0], dict) or profiles[0].get("name") != requested_profile):
+    emit("failed", f"auth status did not verify exactly requested profile '{requested_profile}'")
+    raise SystemExit(0)
 if status_result.returncode == 2 or not any(
     isinstance(profile, dict) and profile.get("authenticated") is True
     for profile in profiles
@@ -227,6 +233,7 @@ PY
 
 CLI_NAME=""
 COMMAND=""
+CLI_PROFILE=""
 CLI_EXECUTABLE=""
 VERBOSE=false
 FILE_PATH=""
@@ -239,6 +246,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --cli-name) CLI_NAME="$2"; shift 2 ;;
         --command) COMMAND="$2"; shift 2 ;;
+        --profile) CLI_PROFILE="$2"; shift 2 ;;
         --cli-executable) CLI_EXECUTABLE="$2"; shift 2 ;;
         --verbose) VERBOSE=true; shift ;;
         --file) FILE_PATH="$2"; shift 2 ;;
@@ -434,6 +442,7 @@ if [[ "$CLI_EXECUTABLE_OVERRIDE" == true ]]; then
     PYTEST_ARGS+=(--cli-executable "$CLI_EXECUTABLE")
 fi
 PYTEST_ARGS+=(-k "not test_auth_status_schema")
+[[ -n "$CLI_PROFILE" ]] && PYTEST_ARGS+=(--profile "$CLI_PROFILE")
 [[ -n "$COMMAND" ]] && PYTEST_ARGS+=(--command "$COMMAND")
 $VERBOSE && PYTEST_ARGS+=(-v) || PYTEST_ARGS+=(-q)
 

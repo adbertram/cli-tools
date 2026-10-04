@@ -1,11 +1,22 @@
 import json
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, ANY
 import pytest
 from typer.testing import CliRunner
 from cli_tools_shared.exceptions import ClientError
 from whop_cli.client import WhopClient, decode_action, identifier, bounds, strict_json, READ_ACTIONS
 from whop_cli.main import app
+
+
+def action_page(values, suffix='/settings'):
+    page=Mock()
+    page.frame_documents.return_value=[{'id':'root','origin':'https://example.apps.whop.com','path':'/c/exp_TEST'+suffix}]
+    replies=iter(values)
+    def evaluate(selector,script,arg=None,**options):
+        value=next(replies)
+        return {'scopeMatched':True,'value':value} if 'scopeMatched' in script else value
+    page.evaluate_in_iframe.side_effect=evaluate
+    return page
 
 @pytest.fixture
 def client():
@@ -134,7 +145,7 @@ def test_help_tree():
         assert CliRunner().invoke(app,[group,'--help']).exit_code==0
 
 def test_action_routes_and_discovery(client):
-    page=Mock();page.evaluate.side_effect=[True,{'action':'a'*40,'reason':'ready','sources':62,'matches':1,'failures':0}]
+    page=action_page([True,{'action':'a'*40,'reason':'ready','sources':62,'matches':1,'failures':0}])
     client._reward_page=Mock(return_value=page)
     client._request=Mock(return_value={'success':True,'data':{'socialMediaAccounts':[]}})
     assert client.linked_accounts()==[]
@@ -143,7 +154,7 @@ def test_action_routes_and_discovery(client):
 
 @pytest.mark.parametrize('reason',['missing','ambiguous','script_fetch_failed','scripts_changed','script_limit'])
 def test_action_discovery_failure_is_explicit_and_safe(client,reason):
-    page=Mock();page.evaluate.side_effect=[True,{'action':None,'reason':reason,'sources':62,'matches':0,'failures':1,'private':'secret'}]
+    page=action_page([True,{'action':None,'reason':reason,'sources':62,'matches':0,'failures':1,'private':'secret'}])
     client._reward_page=Mock(return_value=page);client._request=Mock()
     with pytest.raises(ClientError,match=f'read_action_discovery_{reason}') as error:
         client.linked_accounts()
@@ -154,7 +165,7 @@ def test_action_discovery_failure_is_explicit_and_safe(client,reason):
     {'action':'a'*40,'reason':'secret','sources':62,'matches':1,'failures':0},
     {'action':'a'*40,'reason':'ready','sources':True,'matches':1,'failures':0}])
 def test_invalid_discovery_result_fails_closed(client,value):
-    page=Mock();page.evaluate.side_effect=[True,value];client._reward_page=Mock(return_value=page)
+    page=action_page([True,value]);client._reward_page=Mock(return_value=page)
     with pytest.raises(ClientError,match='invalid_action_discovery_response'):client.linked_accounts()
 
 def test_account_security_fields_excluded(client):
@@ -202,15 +213,77 @@ def test_rewards_url_is_tool_configuration_not_a_profile_field(tmp_path, monkeyp
 
 def test_action_waits_for_script_document(client,monkeypatch):
     sleeps=[];monkeypatch.setattr('whop_cli.client.time.sleep',sleeps.append)
-    page=Mock();page.evaluate.side_effect=[False,False,True,{'action':'a'*40,'reason':'ready','sources':62,'matches':1,'failures':0}]
+    page=action_page([False,False,True,{'action':'a'*40,'reason':'ready','sources':62,'matches':1,'failures':0}])
     client._reward_page=Mock(return_value=page)
     client._request=Mock(return_value={'success':True,'data':{'socialMediaAccounts':[]}})
     assert client.linked_accounts()==[]
     assert sleeps==[0.1,0.1]
-    assert page.evaluate.call_args_list[0].args[1]=={'origin':'https://example.apps.whop.com','path':'/c/exp_TEST/settings'}
+    assert page.evaluate_in_iframe.call_args_list[0].args[2]=={'origin':'https://example.apps.whop.com','path':'/c/exp_TEST/settings'}
 
 def test_action_document_readiness_timeout(client,monkeypatch):
-    ticks=iter([0,11]);monkeypatch.setattr('whop_cli.client.time.monotonic',lambda:next(ticks))
-    page=Mock();page.evaluate.return_value=False;client._reward_page=Mock(return_value=page);client._request=Mock()
+    ticks=iter([0,0,0,11]);monkeypatch.setattr('whop_cli.client.time.monotonic',lambda:next(ticks))
+    page=action_page([False]);client._reward_page=Mock(return_value=page);client._request=Mock()
     with pytest.raises(ClientError,match='read_action_page_not_ready'):client.linked_accounts()
     client._request.assert_not_called()
+
+
+@pytest.mark.parametrize('suffix,name', [('/settings','listSocialMediaAccounts'),('/submissions','listMySubmissionsAction')])
+def test_shell_routes_matched_experience_frame_and_reacquires_exact_context(client,monkeypatch,suffix,name):
+    monkeypatch.setattr('whop_cli.client.time.sleep',lambda _:None)
+    page=action_page([True,{'action':'a'*40,'reason':'ready','sources':62,'matches':1,'failures':0}],suffix)
+    shell={'id':'shell','origin':'https://whop.com','path':'/community/app/'}
+    child={'id':'app','origin':'https://example.apps.whop.com','path':'/c/exp_TEST/discover'}
+    page.frame_documents.side_effect=[[shell,child],[shell,{**child,'path':'/c/exp_TEST'+suffix}]]
+    client._reward_page=Mock(return_value=page);client._request=Mock(return_value={'success':True,'data':[]})
+    assert client._action(name,[],suffix)['data']==[]
+    page.goto_frame.assert_called_once_with('app','https://example.apps.whop.com/c/exp_TEST'+suffix,request_timeout=ANY)
+    assert 0<page.goto_frame.call_args.kwargs['request_timeout']<=10
+    assert all(c.args[0]=='https://example.apps.whop.com/c/exp_TEST'+suffix for c in page.evaluate_in_iframe.call_args_list)
+
+
+def test_direct_action_document_has_no_extra_navigation(client):
+    page=action_page([True,{'action':'a'*40,'reason':'ready','sources':62,'matches':1,'failures':0}])
+    client._reward_page=Mock(return_value=page);client._request=Mock(return_value={'success':True,'data':{'socialMediaAccounts':[]}})
+    client.linked_accounts()
+    page.goto_frame.assert_not_called()
+
+
+@pytest.mark.parametrize('origin,path', [('https://wrong.apps.whop.com','/c/exp_TEST/settings'),('https://example.apps.whop.com','/c/exp_TESTevil/settings')])
+def test_wrong_app_or_experience_is_never_navigated_or_requested(client,monkeypatch,origin,path):
+    ticks=iter([0,0,11]);monkeypatch.setattr('whop_cli.client.time.monotonic',lambda:next(ticks))
+    page=action_page([]);page.frame_documents.return_value=[{'id':'wrong','origin':origin,'path':path}]
+    client._reward_page=Mock(return_value=page);client._request=Mock()
+    with pytest.raises(ClientError,match='read_action_page_not_ready'):client.linked_accounts()
+    page.goto_frame.assert_not_called();page.evaluate_in_iframe.assert_not_called();client._request.assert_not_called()
+
+
+def test_ambiguous_experience_frames_fail_closed(client):
+    page=action_page([]);row=page.frame_documents.return_value[0]
+    page.frame_documents.return_value=[row,{**row,'id':'second'}]
+    client._reward_page=Mock(return_value=page);client._request=Mock()
+    with pytest.raises(ClientError,match='document_ambiguous'):client.linked_accounts()
+    page.goto_frame.assert_not_called();client._request.assert_not_called()
+
+
+def test_redirect_out_of_scope_before_discovery_fails_closed(client):
+    page=action_page([]);page.evaluate_in_iframe.side_effect=[True,{'scopeMatched':False}]
+    client._reward_page=Mock(return_value=page);client._request=Mock()
+    with pytest.raises(ClientError,match='document_scope_changed'):client.linked_accounts()
+    client._request.assert_not_called()
+
+
+def test_transport_rechecks_scope_after_valid_discovery(client):
+    page=action_page([]);page.evaluate_in_iframe.side_effect=[True,{'scopeMatched':True,'value':{'action':'a'*40,'reason':'ready','sources':62,'matches':1,'failures':0}},{'scopeMatched':False}]
+    client._reward_page=Mock(return_value=page)
+    with pytest.raises(ClientError,match='document_scope_changed'):client.linked_accounts()
+
+
+def test_readiness_budget_exhausted_after_navigation_prevents_discovery(client,monkeypatch):
+    ticks=iter([0,0,0,0,11]);monkeypatch.setattr('whop_cli.client.time.monotonic',lambda:next(ticks))
+    monkeypatch.setattr('whop_cli.client.time.sleep',lambda _:None)
+    page=action_page([])
+    page.frame_documents.return_value=[{'id':'app','origin':'https://example.apps.whop.com','path':'/c/exp_TEST/discover'}]
+    client._reward_page=Mock(return_value=page);client._request=Mock()
+    with pytest.raises(ClientError,match='readiness_deadline_exceeded'):client.linked_accounts()
+    page.goto_frame.assert_called_once()
+    page.evaluate_in_iframe.assert_not_called();client._request.assert_not_called()

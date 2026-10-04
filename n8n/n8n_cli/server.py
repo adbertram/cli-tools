@@ -65,22 +65,25 @@ def run_on_server(command: str, timeout: int = 30) -> str:
     return result.stdout
 
 
-def run_on_server_raw(command: str, timeout: int = 120) -> subprocess.CompletedProcess:
+def run_on_server_raw(command: str, timeout: int = 120, *, input_data: str | None = None) -> subprocess.CompletedProcess:
     """Run a command on the n8n server, returning the raw CompletedProcess.
 
     Uses a local shell when running on the server, SSH otherwise.
-    Callers are responsible for checking returncode.
+    Callers are responsible for checking returncode. Private payloads may be
+    passed on stdin; they never become shell arguments or environment values.
     """
     if is_local():
         return subprocess.run(
             ["bash", "-c", command],
             capture_output=True, text=True, timeout=timeout,
+            **({"input": input_data} if input_data is not None else {}),
         )
     else:
         host = get_server_host()
         return subprocess.run(
             ["ssh", host, command],
             capture_output=True, text=True, timeout=timeout,
+            **({"input": input_data} if input_data is not None else {}),
         )
 
 

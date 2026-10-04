@@ -62,6 +62,7 @@ class Config(BaseConfig):
 
     DIST_NAME = "tiktok-cli"
     CREDENTIAL_TYPES = [CredentialType.CUSTOM, CredentialType.BROWSER_SESSION]
+    PORTABLE_BROWSER_SESSION = True
     PROFILE_AUTH_TYPE_FIELD = "AUTH_TYPE"
     PROFILE_AUTH_TYPES = {
         API_AUTH_TYPE: [],
@@ -167,6 +168,17 @@ class Config(BaseConfig):
         browser_type = ManualTiktokBrowser if manual_login_requested.get() else TiktokBrowser
         return browser_type(self)
 
+    def browser_session_origins(self) -> tuple[str, ...]:
+        return ("https://www.tiktok.com",)
+
+    def browser_session_cookie_domains(self) -> tuple[str, ...]:
+        return ("tiktok.com", "www.tiktok.com", "tiktokw.us")
+
+    def browser_session_identity(self, browser) -> dict[str, str]:
+        from .client import TikTokWebClient
+        row = TikTokWebClient(config=self, browser=browser).get_account()
+        return {"account_id": row["account_id"], "username": row["username"]}
+
     def has_credentials(self) -> bool:
         if self.auth_type == BROWSER_AUTH_TYPE:
             return self.has_saved_session()
@@ -195,7 +207,7 @@ class Config(BaseConfig):
             try:
                 result = self.get_browser().test_session()
                 if result.get("authenticated"):
-                    return {"api_test": "passed (browser session active)"}
+                    return {"api_test": "passed"}
                 return {"api_test": f"failed: {result.get('error', 'not authenticated')}"}
             except Exception as exc:
                 return {"api_test": f"failed: {exc}"}

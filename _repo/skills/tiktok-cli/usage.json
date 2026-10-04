@@ -1,8 +1,8 @@
 {
   "tool": "tiktok",
   "description": "TikTok transcript downloader using yt-dlp",
-  "discovered_at": "2026-10-04T12:23:50Z",
-  "total_commands": 22,
+  "discovered_at": "2026-10-04T13:33:17Z",
+  "total_commands": 25,
   "global_options": [
     {
       "name": "--version",
@@ -298,6 +298,79 @@
               "required": false,
               "help": "Default profile with the known-good legacy browser session",
               "short": "-p"
+            }
+          ]
+        },
+        "session-export": {
+          "help": "Export scoped cookies/localStorage after live exact-account checks.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": true,
+              "help": "Explicit named browser-session profile"
+            },
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact expected service account ID"
+            },
+            {
+              "name": "--expected-username",
+              "type": "TEXT",
+              "required": false,
+              "help": "Expected service username"
+            },
+            {
+              "name": "--output",
+              "type": "PATH",
+              "required": true,
+              "help": "New private CLI runtime bundle file"
+            }
+          ]
+        },
+        "session-import": {
+          "help": "Restore, verify, close, and exclusively publish an absent profile.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": true,
+              "help": "New inactive named browser-session profile"
+            },
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact expected service account ID"
+            },
+            {
+              "name": "--expected-username",
+              "type": "TEXT",
+              "required": false,
+              "help": "Expected service username"
+            },
+            {
+              "name": "--stdin",
+              "type": "bool",
+              "required": false,
+              "help": "Read a private bounded session bundle from stdin",
+              "takes_value": false
+            }
+          ]
+        },
+        "session-import-recover": {
+          "help": "Recover only owned closed transfer state, preserving failed backups.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": true,
+              "help": "Explicit named profile with an unfinished transfer journal"
             }
           ]
         },

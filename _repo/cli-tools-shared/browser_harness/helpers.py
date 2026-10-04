@@ -54,8 +54,8 @@ def _ipc_timeout():
     return float(raw) if raw else DEFAULT_IPC_TIMEOUT
 
 
-def _send(req):
-    c, token = ipc.connect(NAME, timeout=_ipc_timeout())
+def _send(req, *, timeout=None):
+    c, token = ipc.connect(NAME, timeout=_ipc_timeout() if timeout is None else timeout)
     try:
         r = ipc.request(c, token, req)
     finally:
@@ -64,9 +64,16 @@ def _send(req):
     return r
 
 
-def cdp(method, session_id=None, **params):
+def cdp(method, session_id=None, *, request_timeout=None, **params):
     """Raw CDP. cdp('Page.navigate', url='...'), cdp('DOM.getDocument', depth=-1)."""
-    return _send({"method": method, "params": params, "session_id": session_id}).get("result", {})
+    req = {"method": method, "params": params, "session_id": session_id}
+    if request_timeout is None:
+        return _send(req).get("result", {})
+    if type(request_timeout) not in (int, float) or not math.isfinite(request_timeout) or not 0 < request_timeout <= 300:
+        raise ValueError("invalid_cdp_request_timeout")
+    req["request_timeout"] = request_timeout
+    # The daemon cancels at the budget; allow its timeout response to arrive.
+    return _send(req, timeout=request_timeout + 0.25).get("result", {})
 
 
 def drain_events():  return _send({"meta": "drain_events"})["events"]

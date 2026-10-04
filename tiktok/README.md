@@ -395,3 +395,14 @@ browser profile can list videos before publishing anything.
 ```bash
 TIKTOK_E2E=1 uv run --project tiktok --with pytest python -m pytest tiktok/tests/test_videos_e2e.py -v -s
 ```
+
+## Portable named browser sessions
+
+```bash
+tiktok auth session-export --profile clipper --expected-account-id EXPECTED_NUMERIC_ID --expected-username EXPECTED_HANDLE --output PRIVATE_RUNTIME_FILE
+tiktok auth session-import --profile clipper --expected-account-id EXPECTED_NUMERIC_ID --expected-username EXPECTED_HANDLE --stdin < PRIVATE_RUNTIME_FILE
+```
+
+Export verifies exact live identity before and after collecting cookies scoped to tiktok.com, www.tiktok.com, and tiktokw.us plus localStorage from exactly https://www.tiktok.com. It accepts only a named browser_session profile. Keep bundles private inside CLI runtime storage; never place them in a repository.
+
+Import requires an absent named destination on macOS. It restores into private inactive staging, reopens for an exact live identity check, publishes exclusively, and verifies the final profile again. It never activates a profile or replaces an existing destination. Challenges and failures retain private recovery state; after the browser closes, `tiktok auth session-import-recover --profile clipper` recovers only importer-owned state. Raw Chrome profiles, keychains, reusable credentials, IndexedDB, sessionStorage, service workers, and hardware-bound state are not transferred.

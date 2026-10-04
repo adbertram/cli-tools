@@ -411,6 +411,7 @@ class TikTokWebClient:
         base_delay: float = DEFAULT_REQUESTS_BASE_DELAY,
         max_delay: float = DEFAULT_REQUESTS_MAX_DELAY,
         jitter: float = DEFAULT_REQUESTS_JITTER,
+        browser=None,
     ):
         self.config = config or get_config()
         self._retry_policy = RequestsRetryPolicy(
@@ -420,7 +421,7 @@ class TikTokWebClient:
             jitter=jitter,
             retryable_status_codes=DEFAULT_REQUESTS_RETRYABLE_STATUS_CODES,
         )
-        self._browser = None
+        self._browser = browser
 
     def _get_browser(self):
         if self._browser is None:

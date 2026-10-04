@@ -106,3 +106,20 @@ def test_press_key_keeps_special_keys_untouched(monkeypatch):
     assert events[2]["text"] == "\r"
     assert events[2]["windowsVirtualKeyCode"] == 13
     assert events[2]["modifiers"] == 8
+
+
+def test_cdp_deadline_separate_from_protocol_and_socket_margin(monkeypatch):
+    calls=[]
+    monkeypatch.setattr(helpers,'_send',lambda req,**kw: calls.append((req,kw)) or {'result':{}})
+    helpers.cdp('Page.navigate',session_id='exact-session',request_timeout=.5,url='https://example.test/')
+    req,options=calls[0]
+    assert req=={'method':'Page.navigate','session_id':'exact-session','params':{'url':'https://example.test/'},'request_timeout':.5}
+    assert options=={'timeout':.75}
+    helpers.cdp('Page.getFrameTree')
+    assert calls[1][1]=={} and 'request_timeout' not in calls[1][0]
+
+
+@pytest.mark.parametrize('value',[0,-1,float('nan'),float('inf'),True,301,'1'])
+def test_cdp_rejects_invalid_deadlines(value):
+    with pytest.raises(ValueError,match='invalid_cdp_request_timeout'):
+        helpers.cdp('Page.navigate',request_timeout=value)

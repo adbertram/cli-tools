@@ -12,6 +12,7 @@ browser-harness daemon (``BU_NAME``).  This mirrors the previous
 """
 
 import json
+import math
 import os
 import re
 import signal
@@ -881,6 +882,101 @@ class BrowserHarnessService:
                 return None
             raise BrowserHarnessError(f"Eval error: {e}")
 
+    @staticmethod
+    def _frame_deadline(request_timeout):
+        if request_timeout is None:
+            return None
+        if type(request_timeout) not in (int, float) or not math.isfinite(request_timeout) or not 0 < request_timeout <= 300:
+            raise BrowserHarnessError("invalid_frame_request_timeout")
+        return time.monotonic() + request_timeout
+
+    def _frame_cdp(self, deadline, method, **params):
+        options = {}
+        if deadline is not None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise BrowserHarnessError("frame_request_deadline_exceeded")
+            options["request_timeout"] = remaining
+        try:
+            return self._bh.h.cdp(method, **options, **params)
+        except Exception:
+            raise BrowserHarnessError("frame_cdp_request_failed") from None
+
+    def _detach_owned_frame(self, session_id, deadline):
+        primary_failure = sys.exc_info()[0] is not None
+        # Cleanup has its own quarter-second budget after the action deadline.
+        cleanup_deadline = time.monotonic() + 0.25 if deadline is not None else None
+        try:
+            self._frame_cdp(cleanup_deadline, "Target.detachFromTarget", sessionId=session_id)
+        except BrowserHarnessError:
+            if not primary_failure:
+                raise
+
+    def frame_documents(self, *, request_timeout=None) -> List[Dict[str, Any]]:
+        """Bounded frame diagnostics with no query, fragment or document content."""
+        self._require_open()
+        deadline = self._frame_deadline(request_timeout)
+        result = []
+        def add(frame, kind):
+            if len(result) >= 128:
+                raise BrowserHarnessError("frame_document_limit_exceeded")
+            try:
+                url = urlsplit(str(frame.get("url", "")))
+                origin = url.scheme + ":"
+                path = ""
+                if url.scheme in ("http", "https"):
+                    origin = url.scheme + "://" + (url.hostname or "") + (":" + str(url.port) if url.port else "")
+                    path = url.path
+            except (ValueError, TypeError):
+                raise BrowserHarnessError("frame_document_url_invalid") from None
+            result.append({"id": frame.get("id", frame.get("targetId")),
+                           "parent_id": frame.get("parentId"), "kind": kind,
+                           "origin": origin, "path": path})
+        def visit(tree):
+            if not isinstance(tree, dict) or not isinstance(tree.get("frame"), dict):
+                raise BrowserHarnessError("invalid_frame_tree")
+            add(tree["frame"], "frame")
+            for child in tree.get("childFrames", []) or []:
+                visit(child)
+        tree = self._frame_cdp(deadline, "Page.getFrameTree")
+        if not isinstance(tree, dict) or "frameTree" not in tree:
+            raise BrowserHarnessError("invalid_frame_tree")
+        visit(tree["frameTree"])
+        targets = self._frame_cdp(deadline, "Target.getTargets")
+        if not isinstance(targets, dict) or not isinstance(targets.get("targetInfos"), list):
+            raise BrowserHarnessError("invalid_frame_targets")
+        for target in targets["targetInfos"]:
+            if isinstance(target, dict) and target.get("type") == "iframe":
+                add(target, "iframe_target")
+        return result
+
+    def goto_frame(self, frame_id: str, url: str, *, request_timeout=None) -> None:
+        """Navigate one verified frame within its current HTTPS origin."""
+        if not isinstance(frame_id, str) or not frame_id or len(frame_id) > 256:
+            raise BrowserHarnessError("invalid_frame_id")
+        deadline = self._frame_deadline(request_timeout)
+        try:
+            target = urlsplit(url)
+            port = target.port
+        except (ValueError, TypeError):
+            raise BrowserHarnessError("invalid_frame_navigation_url") from None
+        if target.scheme != "https" or not target.hostname or target.username or target.password or target.query or target.fragment:
+            raise BrowserHarnessError("invalid_frame_navigation_url")
+        origin = "https://" + target.hostname + (":" + str(port) if port else "")
+        frames = [f for f in self.frame_documents(**({"request_timeout": deadline-time.monotonic()} if deadline else {})) if f["id"] == frame_id]
+        if not frames or any(f["origin"] != origin for f in frames):
+            raise BrowserHarnessError("frame_navigation_origin_mismatch")
+        session_id = None
+        try:
+            if any(f["kind"] == "iframe_target" for f in frames):
+                session_id = self._frame_cdp(deadline, "Target.attachToTarget", targetId=frame_id, flatten=True)["sessionId"]
+            result = self._frame_cdp(deadline, "Page.navigate", session_id=session_id, frameId=frame_id, url=url)
+            if result.get("errorText") or result.get("isDownload"):
+                raise BrowserHarnessError("frame_navigation_failed")
+        finally:
+            if session_id:
+                self._detach_owned_frame(session_id, deadline)
+
     def iframe_target(self, url_substr: str) -> Optional[str]:
         """Return the first iframe target or frame id containing ``url_substr``."""
         self._require_open()
@@ -897,9 +993,34 @@ class BrowserHarnessService:
         except Exception as e:
             raise BrowserHarnessError(f"iframe_target error: {e}") from e
 
-    def evaluate_in_iframe(self, url_substr: str, js: str, arg: Any = None) -> Any:
+    def evaluate_in_iframe(self, url_substr: str, js: str, arg: Any = None, *, request_timeout=None) -> Any:
         """Run JS inside the first iframe whose URL contains ``url_substr``."""
         self._require_open()
+        if request_timeout is not None:
+            deadline = self._frame_deadline(request_timeout)
+            frames = self.frame_documents(request_timeout=deadline-time.monotonic())
+            matches = {f["id"]: f for f in frames if url_substr in f["origin"]+f["path"]}
+            if not matches:
+                return None
+            if len(matches) != 1:
+                raise BrowserHarnessError("frame_evaluation_ambiguous")
+            frame = next(iter(matches.values()))
+            session_id = None
+            try:
+                if frame["kind"] == "iframe_target":
+                    session_id = self._frame_cdp(deadline, "Target.attachToTarget", targetId=frame["id"], flatten=True)["sessionId"]
+                    context = {}
+                else:
+                    world = self._frame_cdp(deadline, "Page.createIsolatedWorld", frameId=frame["id"], worldName="cli-tools-iframe-eval")
+                    if not world.get("executionContextId"):
+                        return None
+                    context = {"contextId": world["executionContextId"]}
+                wrapped = self._wrap_callable_expression(js, arg)
+                value = self._frame_cdp(deadline, "Runtime.evaluate", session_id=session_id, **context, expression=wrapped, returnByValue=True, awaitPromise=True)
+                return self._decode_cdp_runtime_value(value, "frame evaluation")
+            finally:
+                if session_id:
+                    self._detach_owned_frame(session_id, deadline)
         helper_target_id = None
         try:
             helper_target_id = self._bh.h.iframe_target(url_substr)
@@ -1170,6 +1291,46 @@ class BrowserHarnessService:
         return r.get("cookies", [])
 
     # ---------------- Storage ----------------
+
+    def cookie_set(self, cookies: List[Dict[str, Any]]) -> None:
+        """Set validated portable cookies without logging their payload."""
+        self._require_open()
+        try:
+            self._bh.h.cdp("Network.setCookies", cookies=cookies)
+        except Exception:
+            raise BrowserHarnessError("Portable cookie write failed") from None
+
+    def _portable_storage_id(self, origin: str) -> Dict[str, Any]:
+        self._require_open()
+        actual = urlsplit(self.url)
+        if f"{actual.scheme}://{actual.netloc}" != origin:
+            raise BrowserHarnessError("Portable storage origin mismatch")
+        return {"securityOrigin": origin, "isLocalStorage": True}
+
+    def localstorage_get(self, origin: str) -> List[Dict[str, str]]:
+        """Read one declared origin strictly; unavailable storage is an error."""
+        storage_id = self._portable_storage_id(origin)
+        try:
+            result = self._bh.h.cdp("DOMStorage.getDOMStorageItems", storageId=storage_id)
+            rows = result["entries"]
+            if not isinstance(rows, list) or any(
+                not isinstance(row, list) or len(row) != 2
+                or any(not isinstance(value, str) for value in row) for row in rows
+            ):
+                raise ValueError
+            return [{"key": row[0], "value": row[1]} for row in rows]
+        except Exception:
+            raise BrowserHarnessError("Portable storage read failed") from None
+
+    def localstorage_set(self, origin: str, items: List[Dict[str, str]]) -> None:
+        """Set validated string entries in the current exact origin."""
+        storage_id = self._portable_storage_id(origin)
+        try:
+            for item in items:
+                self._bh.h.cdp("DOMStorage.setDOMStorageItem", storageId=storage_id,
+                               key=item["key"], value=item["value"])
+        except Exception:
+            raise BrowserHarnessError("Portable storage write failed") from None
 
     def localstorage_list(self) -> List[Dict[str, str]]:
         self._require_open()

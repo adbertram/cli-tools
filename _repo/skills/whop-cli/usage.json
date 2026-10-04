@@ -1,8 +1,8 @@
 {
   "tool": "whop",
   "description": "CLI interface for whop",
-  "discovered_at": "2026-10-04T02:18:30Z",
-  "total_commands": 24,
+  "discovered_at": "2026-10-04T13:33:11Z",
+  "total_commands": 28,
   "global_options": [],
   "commands": {
     "account": {
@@ -254,6 +254,79 @@
             }
           ]
         },
+        "session-export": {
+          "help": "Export scoped cookies/localStorage after live exact-account checks.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": true,
+              "help": "Explicit named browser-session profile"
+            },
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact expected service account ID"
+            },
+            {
+              "name": "--expected-username",
+              "type": "TEXT",
+              "required": false,
+              "help": "Expected service username"
+            },
+            {
+              "name": "--output",
+              "type": "PATH",
+              "required": true,
+              "help": "New private CLI runtime bundle file"
+            }
+          ]
+        },
+        "session-import": {
+          "help": "Restore, verify, close, and exclusively publish an absent profile.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": true,
+              "help": "New inactive named browser-session profile"
+            },
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact expected service account ID"
+            },
+            {
+              "name": "--expected-username",
+              "type": "TEXT",
+              "required": false,
+              "help": "Expected service username"
+            },
+            {
+              "name": "--stdin",
+              "type": "bool",
+              "required": false,
+              "help": "Read a private bounded session bundle from stdin",
+              "takes_value": false
+            }
+          ]
+        },
+        "session-import-recover": {
+          "help": "Recover only owned closed transfer state, preserving failed backups.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": true,
+              "help": "Explicit named profile with an unfinished transfer journal"
+            }
+          ]
+        },
         "status": {
           "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
           "arguments": [],
@@ -432,6 +505,25 @@
               "help": "Auth profile name"
             }
           ]
+        }
+      }
+    },
+    "config": {
+      "help": "Provision Whop root configuration",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "set-rewards-url": {
+          "help": "Set a missing Rewards URL; refuse replacing an existing different URL.",
+          "arguments": [
+            {
+              "name": "url",
+              "type": "TEXT",
+              "required": true,
+              "help": "Embedded Content Rewards HTTPS URL"
+            }
+          ],
+          "options": []
         }
       }
     },

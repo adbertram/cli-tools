@@ -17,7 +17,7 @@ whop auth status --profile rewards
 whop auth profiles list
 ```
 
-Login prompts for your explicit embedded Content Rewards URL (`https://YOUR_APP.apps.whop.com/c/exp_YOUR_EXPERIENCE`). No personal app or experience is configured by default. Complete Whop sign-in manually in the CLI-owned Chrome window, then open your Content Rewards experience in that same window before confirming login. This persists Whop and embedded-app sessions in the selected CLI profile. MFA and human challenges stay manual. Storage exported by another browser is not a supported CLI auth import.
+Login prompts for your explicit embedded Content Rewards URL (`https://YOUR_APP.apps.whop.com/c/exp_YOUR_EXPERIENCE`). No personal app or experience is configured by default. Complete Whop sign-in manually in the CLI-owned Chrome window, then open your Content Rewards experience in that same window before confirming login. This persists Whop and embedded-app sessions in the selected CLI profile. MFA and human challenges stay manual. Portable import is supported only through the owning CLI commands documented below.
 
 Reusable human-supplied credentials belong in the CLI-tools secret manager (`_repo/_secret-manager/secrets.sh`), never `.env` files. Only CLI-managed runtime session state and non-secret setup belong in profile configuration. Prefer a named profile to isolate this participant session.
 
@@ -72,3 +72,17 @@ _repo/skills/cli-tool/scripts/test-cli-tool.sh --cli-name whop
 ```
 
 The full live compliance run requires a saved authenticated profile. Source/parser tests do not prove live authentication or a nonempty submission/payout schema.
+
+## Portable named sessions
+
+Provision the explicit nonsecret root Rewards URL before importing a profile:
+
+```bash
+whop config set-rewards-url https://YOUR_APP.apps.whop.com/c/exp_YOUR_EXPERIENCE
+whop auth session-export --profile rewards --expected-account-id EXPECTED_USER_ID --output PRIVATE_RUNTIME_FILE
+whop auth session-import --profile rewards --expected-account-id EXPECTED_USER_ID --stdin < PRIVATE_RUNTIME_FILE
+```
+
+The URL command sets a missing value, preserves other root fields, and refuses a different existing URL. It does not create or select an authentication profile. Session bundles contain only cookies for whop.com and the configured app host, plus localStorage from https://whop.com and that exact app origin. They do not include whop.tw, raw Chrome profiles, keychains, passwords, or unrelated browser state.
+
+Bundles must remain in private CLI runtime storage. Import requires an absent named destination on macOS, restores into private inactive staging, reopens the browser for an exact live account check, publishes exclusively, and checks identity again. It never activates a profile. Existing profiles are refused. Device verification or another failure retains private recovery state; after the browser closes, `whop auth session-import-recover --profile rewards` recovers only importer-owned state. Successful import removes its private transfer backup. IndexedDB, sessionStorage, service workers, and hardware-bound state are not transferred.

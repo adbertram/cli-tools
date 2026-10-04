@@ -24,7 +24,8 @@ COMMAND_CREDENTIALS = {
     ],
     "version": [
         "api_key"
-    ]
+    ],
+    "deploy-browser-session": ["api_key"],
 }
 
 # Register logs as a sub-group: n8n server logs ...
@@ -33,6 +34,84 @@ app.add_typer(server_config.app, name="config", help="Manage n8n server configur
 
 N8N_BIN = "/usr/local/lib/node_modules/n8n/bin/n8n"
 N8N_INSTALL_PREFIX = "/usr/local"
+
+
+@app.command("deploy-browser-session")
+@command
+def deploy_browser_session(
+    tool: str = typer.Argument(..., help="Installed owning service CLI"),
+    browser_profile: str = typer.Option(..., "--browser-profile", help="Explicit named service browser profile"),
+    expected_account_id: str = typer.Option(..., "--expected-account-id", help="Exact verified service account ID"),
+    expected_username: str = typer.Option(None, "--expected-username", help="Expected service account username"),
+):
+    """Transfer a private service session to a new inactive server profile.
+
+    Both service CLIs and required nonsecret root configuration must already
+    be deployed. Existing destination profiles are never replaced. The remote
+    owning CLI verifies exact identity before and after atomic publication.
+    """
+    import os
+    import re
+    import shlex
+    import stat
+    import subprocess
+    import tempfile
+    from pathlib import Path
+    from cli_tools_shared.auth import PORTABLE_SESSION_MAX_BYTES, read_session_bundle, validate_session_profile
+    from cli_tools_shared.config import get_tool_data_dir
+
+    validate_session_profile(browser_profile)
+    for value in (tool, expected_account_id, expected_username):
+        if value is not None and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,255}", value):
+            raise ValueError("Invalid portable session tool or expected identity")
+    executable = Path.home() / ".local" / "bin" / tool
+    if not executable.is_file() or not os.access(executable, os.X_OK):
+        raise ValueError("Owning local service CLI is not installed")
+    transfers = get_tool_data_dir("n8n") / "session-transfers"
+    transfers.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if transfers.absolute() != transfers.resolve() or transfers.stat().st_uid != os.getuid() or stat.S_IMODE(transfers.stat().st_mode) & 0o077:
+        raise ValueError("Portable transfer directory must be private (0700)")
+    directory = Path(tempfile.mkdtemp(prefix="deploy-", dir=transfers))
+    bundle_path = directory / "session.json"
+    arguments = ["--profile", browser_profile, "--expected-account-id", expected_account_id]
+    if expected_username is not None:
+        arguments += ["--expected-username", expected_username]
+    remote_cli = '"$HOME/.local/bin/' + tool + '"'
+    # Capability discovery emits help only, before any local browser opens.
+    probe = run_on_server_raw(remote_cli + " auth session-import --help", timeout=30)
+    if probe.returncode != 0 or not all(flag in probe.stdout for flag in ("--stdin", "--expected-account-id", "--profile")):
+        directory.rmdir()
+        raise ValueError("Remote owning CLI does not support portable session import")
+    try:
+        exported = subprocess.run([str(executable), "auth", "session-export", *arguments, "--output", str(bundle_path)],
+                                  capture_output=True, text=True, timeout=180)
+        if exported.returncode != 0 or not bundle_path.is_file() or bundle_path.is_symlink():
+            raise ValueError("Owning service session export failed")
+        metadata = bundle_path.stat()
+        if metadata.st_uid != os.getuid() or stat.S_IMODE(metadata.st_mode) != 0o600 or metadata.st_size > PORTABLE_SESSION_MAX_BYTES:
+            raise ValueError("Portable session export file is not private or exceeds size limit")
+        payload = bundle_path.read_text(encoding="utf-8")
+        bundle = read_session_bundle(payload)
+        if bundle["tool"] != tool or bundle["profile"] != browser_profile or bundle["identity"]["account_id"] != expected_account_id or (
+            expected_username is not None and bundle["identity"]["username"].casefold() != expected_username.casefold()
+        ):
+            raise ValueError("Portable session export identity mismatch")
+        remote_command = remote_cli + " auth session-import --stdin " + shlex.join(arguments)
+        imported = run_on_server_raw(remote_command, timeout=240, input_data=payload)
+        if imported.returncode != 0:
+            raise ValueError("Remote portable session import failed; private backup retained")
+        result = json.loads(imported.stdout)
+        if result.get("imported") is not True or result.get("verified") is not True or result.get("active") is not False or result.get("profile") != browser_profile or result.get("tool") != tool or result.get("identity", {}).get("account_id") != expected_account_id or (
+            expected_username is not None and result.get("identity", {}).get("username", "").casefold() != expected_username.casefold()
+        ):
+            raise ValueError("Remote portable session identity was not verified")
+        bundle_path.unlink()
+        directory.rmdir()
+        print_json({"tool": tool, "profile": browser_profile, "identity": result["identity"],
+                    "imported": True, "verified": True, "active": False})
+    except Exception:
+        # Never disclose subprocess stderr, bundle contents, or parser errors.
+        raise ValueError("Portable browser session deployment failed; private backup retained") from None
 
 
 def _get_current_version() -> str:

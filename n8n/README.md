@@ -323,6 +323,22 @@ n8n server version
 n8n server restart
 ```
 
+Deploy an explicitly named browser session after installing both owning service
+CLIs and their required nonsecret root configuration on the server:
+
+```bash
+n8n server deploy-browser-session tiktok --browser-profile clipper --expected-account-id 7692213003349443597 --expected-username ata_clipper
+n8n server deploy-browser-session whop --browser-profile rewards --expected-account-id user_WTRcEsVm5k3qW
+```
+
+`--browser-profile` selects the service browser profile. n8n's `--profile`
+selects its API credentials. Transfer uses a private 0600 cookie/localStorage
+bundle over the existing SSH helper's stdin. The server restores into private
+staging, verifies the exact account, closes Chrome, and publishes a new inactive
+profile with exclusive rename. An existing destination or device challenge
+fails explicitly and retains private recovery state. Default and unrelated
+profiles are preserved. This command does not install source or restart n8n.
+
 ### Cache
 
 Manage the local response cache used to speed up repeat queries.

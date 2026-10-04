@@ -216,6 +216,7 @@ def pytest_addoption(parser):
         default=None,
         help="CLI tool name to test (e.g., 'notion', 'podio')"
     )
+    parser.addoption("--profile", action="store", default=None, help="Exact named profile to verify and use without activation")
     parser.addoption(
         "--force",
         action="store_true",
@@ -443,13 +444,18 @@ def help_cache(cli_executable) -> Dict[str, str]:
 
 
 @pytest.fixture(scope="session")
-def authenticated(cli_executable, cli_name, cli_dir, test_config, help_cache, command_filter):
-    """Check if CLI is authenticated. Fail if not authenticated and auth is required."""
-    return _check_authenticated(cli_executable, cli_name, cli_dir, test_config, help_cache, command_filter)
+def cli_profile(request):
+    return request.config.getoption("--profile")
 
 
 @pytest.fixture(scope="session")
-def require_authenticated(cli_executable, cli_name, cli_dir, test_config, help_cache, command_filter):
+def authenticated(cli_executable, cli_name, cli_dir, test_config, help_cache, command_filter, cli_profile):
+    """Check if CLI is authenticated. Fail if not authenticated and auth is required."""
+    return _check_authenticated(cli_executable, cli_name, cli_dir, test_config, help_cache, command_filter, cli_profile)
+
+
+@pytest.fixture(scope="session")
+def require_authenticated(cli_executable, cli_name, cli_dir, test_config, help_cache, command_filter, cli_profile):
     """Return a callable so tests can discover commands before auth gating."""
     auth_verified = False
     cached_result = None
@@ -466,6 +472,7 @@ def require_authenticated(cli_executable, cli_name, cli_dir, test_config, help_c
             test_config,
             help_cache,
             command_filter,
+            cli_profile,
         )
         auth_verified = True
         return cached_result
@@ -473,7 +480,7 @@ def require_authenticated(cli_executable, cli_name, cli_dir, test_config, help_c
     return _require_authenticated
 
 
-def _check_authenticated(cli_executable, cli_name, cli_dir, test_config, help_cache, command_filter):
+def _check_authenticated(cli_executable, cli_name, cli_dir, test_config, help_cache, command_filter, requested_profile=None):
     """Check if CLI is fully authenticated for complete live list-command testing.
 
     Auto-detects whether the CLI has auth commands. If no auth subcommand exists,
@@ -525,7 +532,7 @@ def _check_authenticated(cli_executable, cli_name, cli_dir, test_config, help_ca
                 profile
                 for profile in profile_rows
                 if isinstance(profile, dict)
-                and profile.get("active") is True
+                and (profile.get("name") == requested_profile if requested_profile else profile.get("active") is True)
                 and profile.get("auth_type") == auth_type
             ]
             for auth_type in required_profile_auth_types
@@ -533,7 +540,7 @@ def _check_authenticated(cli_executable, cli_name, cli_dir, test_config, help_ca
         for auth_type, matching_profiles in matching_profiles_by_auth_type.items():
             if len(matching_profiles) != 1:
                 pytest.fail(
-                    f"{cli_name} requires one active profile for auth type "
+                    f"{cli_name} requires one {'requested' if requested_profile else 'active'} profile for auth type "
                     f"{auth_type}; found {len(matching_profiles)}."
                 )
         if len(required_profile_auth_types) == 1:
@@ -553,7 +560,8 @@ def _check_authenticated(cli_executable, cli_name, cli_dir, test_config, help_ca
     ):
         auth_command = f"{auth_command} --credential-type {required_credential_types[0]}"
 
-    result = run_cli_command(cli_executable, ["auth", "status"])
+    status_args = ["auth", "status"] + (["--profile", requested_profile] if requested_profile else [])
+    result = run_cli_command(cli_executable, status_args)
 
     if result.returncode not in (0, 2):
         pytest.fail(
@@ -570,10 +578,12 @@ def _check_authenticated(cli_executable, cli_name, cli_dir, test_config, help_ca
     )
 
     profiles = status.get("profiles", [])
+    if requested_profile and (len(profiles) != 1 or not isinstance(profiles[0], dict) or profiles[0].get("name") != requested_profile):
+        pytest.fail(f"{cli_name} auth status did not verify exactly requested profile '{requested_profile}'")
     active_profiles = [
         profile
         for profile in profiles
-        if isinstance(profile, dict) and profile.get("active") is True
+        if isinstance(profile, dict) and (profile.get("name") == requested_profile if requested_profile else profile.get("active") is True)
     ]
     if profile_context is not None:
         active_profiles = [
