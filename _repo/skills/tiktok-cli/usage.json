@@ -1,8 +1,8 @@
 {
   "tool": "tiktok",
   "description": "TikTok transcript downloader using yt-dlp",
-  "discovered_at": "2026-10-04T01:34:55Z",
-  "total_commands": 21,
+  "discovered_at": "2026-10-04T12:23:50Z",
+  "total_commands": 22,
   "global_options": [
     {
       "name": "--version",
@@ -575,6 +575,19 @@
               "short": "-u"
             },
             {
+              "name": "--studio",
+              "type": "bool",
+              "required": false,
+              "help": "Read Studio content for this verified session owner",
+              "takes_value": false
+            },
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Exact numeric owner ID required with --studio"
+            },
+            {
               "name": "--table",
               "type": "bool",
               "required": false,
@@ -598,7 +611,7 @@
           ]
         },
         "list": {
-          "help": "List a profile's posted videos, including private ones for your own account.",
+          "help": "List posted videos; --studio uses verified own-account Studio content.",
           "arguments": [],
           "options": [
             {
@@ -607,6 +620,19 @@
               "required": true,
               "help": "TikTok username whose posts to read (private posts need that account's session)",
               "short": "-u"
+            },
+            {
+              "name": "--studio",
+              "type": "bool",
+              "required": false,
+              "help": "Read Studio content for this verified session owner",
+              "takes_value": false
+            },
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Exact numeric owner ID required with --studio"
             },
             {
               "name": "--table",
@@ -630,6 +656,53 @@
               "required": false,
               "help": "Filter: field:op:value",
               "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "metrics": {
+          "help": "Read actual per-post Studio counts; missing metrics remain null. Views, likes, comments, shares and favorites are cumulative observed counts. This command does not estimate revenue or substitute account analytics.",
+          "arguments": [
+            {
+              "name": "video_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Own TikTok video ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--username",
+              "type": "TEXT",
+              "required": true,
+              "help": "Verified session owner's TikTok handle",
+              "short": "-u"
+            },
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Fail unless the numeric session owner ID matches exactly"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",

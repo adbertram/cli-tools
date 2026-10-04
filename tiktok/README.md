@@ -53,6 +53,32 @@ tiktok favorites list --table
 tiktok favorites get "https://www.tiktok.com/@user/video/1234567890"
 ```
 
+## Own-account Studio readback
+
+Studio reads use the named browser session and verify the requested handle and
+optional exact numeric account ID before reading. The public profile mode stays
+available without `--studio`; access errors never become empty profiles.
+
+```bash
+tiktok videos list --profile clipper --username ata_clipper --studio --expected-account-id 7692213003349443597 --limit 10
+tiktok videos get 7692252984792681742 --profile clipper --username ata_clipper --studio --expected-account-id 7692213003349443597
+tiktok videos metrics 7692252984792681742 --profile clipper --username ata_clipper --expected-account-id 7692213003349443597
+```
+
+The observed Studio Manage content feed supplies cumulative views, likes,
+comments, shares, and favorites. Missing measurements remain `null`. Results
+include local `observed_at`, optional server `server_timestamp_ms`, verified
+owner ID, profile, and endpoint provenance. Richer analytics and earned revenue
+are separate; this command does not estimate them from counts.
+
+`--studio` lists by the live Views sorting control. Requests and pagination
+reuse the browser's own read request with signing/session values kept in page
+memory. Malformed, limited, cyclic, or inaccessible reads fail explicitly.
+A complete terminal feed can report `studio_video_not_found`; a bounded scan
+reports `studio_lookup_inconclusive` instead of asserting absence. The live
+account currently has one post; multiple-page behavior is covered by fixtures.
+These reads do not establish whether an attempted upload created a new post.
+
 ## Commands
 
 ### Auth

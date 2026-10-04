@@ -503,6 +503,90 @@ class TikTokWebClient:
             f"(last status={last_status}): {last_exception}"
         )
 
+    def _studio_read(self, username: str, *, limit: int = 100, video_id: Optional[str] = None, expected_account_id: Optional[str] = None) -> List[Dict]:
+        """Read only observed Studio content for the verified session owner."""
+        from uuid import uuid4
+        from .studio import (CAPTURE_JS, READY_JS, FETCH_JS, CLEANUP_JS, STUDIO_CONTENT_URL,
+                             MAX_STUDIO_ITEMS, MAX_RESPONSE_BYTES, STUDIO_PAGE_SIZE, MAX_STUDIO_PAGES, STUDIO_ITEMS_PATH,
+                             StudioContractError, normalize_item, validate_page, parse_response)
+        if type(limit) is not int or not 1 <= limit <= MAX_STUDIO_ITEMS:
+            raise ClientError(f"Studio --limit must be between 1 and {MAX_STUDIO_ITEMS}.")
+        if video_id is not None and not re.fullmatch(r"[1-9][0-9]{0,63}", video_id):
+            raise ClientError("Studio video ID must be a positive numeric string.")
+        identity = self.get_account(expected_username=username, expected_account_id=expected_account_id)
+        def verified(records):
+            self.get_account(expected_username=identity["username"], expected_account_id=identity["account_id"])
+            return records
+        page = self._get_browser().get_page(STUDIO_CONTENT_URL)
+        key = "__tiktok_cli_read_" + uuid4().hex
+        records, seen, cursors = [], set(), {0}
+        try:
+            control = page.get_by_role("button", name="Views", exact=True)
+            for _ in range(60):
+                if control.count() == 1:
+                    break
+                page.wait_for_timeout(250)
+            else:
+                raise ClientError("TikTok Studio content control was unavailable; result is inconclusive.")
+            page.evaluate(CAPTURE_JS, {"key": key, "path": STUDIO_ITEMS_PATH, "page_size": STUDIO_PAGE_SIZE})
+            control.click()
+            for _ in range(60):
+                if page.evaluate(READY_JS, key):
+                    break
+                page.wait_for_timeout(250)
+            else:
+                raise ClientError("TikTok Studio native content read was unavailable; result is inconclusive.")
+            cursor = 0
+            for _ in range(MAX_STUDIO_PAGES):
+                response = page.evaluate(FETCH_JS, {"key": key, "cursor": cursor, "max_body": MAX_RESPONSE_BYTES})
+                if not isinstance(response, dict) or response.get("status") != 200 or not isinstance(response.get("body"), str):
+                    raise ClientError("TikTok Studio content request failed; result is inconclusive.")
+                payload = parse_response(response["body"])
+                raw_items, more, next_cursor, measured = validate_page(payload)
+                if len(raw_items) > STUDIO_PAGE_SIZE:
+                    raise StudioContractError("TikTok Studio page exceeds the observed page bound.")
+                observed = datetime.now(timezone.utc).isoformat()
+                for raw in raw_items:
+                    record = normalize_item(raw, identity, observed, measured)
+                    if record["id"] in seen:
+                        raise StudioContractError("TikTok Studio repeated a video; pagination is inconclusive.")
+                    seen.add(record["id"])
+                    records.append(record)
+                    if video_id == record["id"]:
+                        return verified([record])
+                    if video_id is None and len(records) >= limit:
+                        return verified(records[:limit])
+                if not more:
+                    if video_id is not None:
+                        verified([])
+                        raise ClientError("studio_video_not_found: the complete observed own-account feed did not contain that ID.")
+                    return verified(records)
+                if not raw_items or next_cursor <= cursor or next_cursor in cursors:
+                    raise StudioContractError("TikTok Studio cursor did not advance; result is inconclusive.")
+                cursors.add(next_cursor)
+                cursor = next_cursor
+                if len(records) >= limit:
+                    break
+            raise ClientError("studio_lookup_inconclusive: bounded content scan did not establish absence.")
+        except ClientError:
+            raise
+        except StudioContractError as error:
+            raise ClientError(str(error)) from None
+        except Exception:
+            raise ClientError("TikTok Studio content read failed; result is inconclusive.") from None
+        finally:
+            try:
+                page.evaluate(CLEANUP_JS, key)
+            except Exception:
+                pass
+
+    def list_studio_videos(self, username: str, limit: int = 100, expected_account_id: Optional[str] = None) -> List[Dict]:
+        return self._studio_read(username, limit=limit, expected_account_id=expected_account_id)
+
+    def get_studio_video(self, username: str, video_id: str, expected_account_id: Optional[str] = None) -> Dict:
+        from .studio import MAX_STUDIO_ITEMS
+        return self._studio_read(username, limit=MAX_STUDIO_ITEMS, video_id=video_id, expected_account_id=expected_account_id)[0]
+
     def _list_items(self, page, path: str, normalize, limit: int) -> List[Dict]:
         """Walk an ``itemList``/``hasMore``/``cursor`` feed up to ``limit`` items."""
         items: List[Dict] = []
