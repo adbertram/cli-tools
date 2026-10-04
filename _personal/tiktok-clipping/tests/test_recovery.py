@@ -103,7 +103,7 @@ def test_asset_cleanup_rotates_past_first_hundred(engine, config, clock):
             path = Path(config["workspace"]) / (job_id + ".mp4")
             path.write_bytes(b"TEST confirmed asset")
             paths.append(path)
-            asset = {"path": str(path), "sha256": "test-digest", "bytes": path.stat().st_size, "provenance": "TEST confirmed asset"}
+            asset = {"path": str(path), "sha256": __import__("hashlib").sha256(path.read_bytes()).hexdigest(), "bytes": path.stat().st_size, "provenance": "TEST confirmed asset"}
             db.execute("UPDATE jobs SET status='published',asset=? WHERE id=?", (canonical(asset), job_id))
             db.execute("INSERT INTO rewards(job_id,publication_id,campaign_id,state,deadline,updated_at) VALUES(?,?,?,'submitted',?,?)", (job_id, "post-" + job_id, "campaign-1", clock() + 600, clock()))
     assert engine.prune_confirmed_assets() > 0

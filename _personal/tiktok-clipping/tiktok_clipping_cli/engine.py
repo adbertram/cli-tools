@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import os
+import stat
 import secrets
 import sqlite3
 import time
@@ -24,7 +27,7 @@ def media_identity(record):
 
 from .safety import (
     METRICS, TARGET_HANDLE, SafetyError, canonical, digest, keys, number, strict_json, string,
-    timestamp, validate_config, validate_proposal, validate_source,
+    timestamp, validate_config, validate_proposal, validate_source, write_allowance,
 )
 
 
@@ -191,9 +194,7 @@ class Engine:
         db.execute(f"UPDATE budgets SET {field}={field}+? WHERE day=?", (amount, day))
 
     def _disk_check(self):
-        total = sum(p.stat().st_size for p in self.workspace.rglob("*") if p.is_file())
-        if total >= self.config["limits"]["max_disk_bytes"]:
-            raise SafetyError("disk_budget_exhausted")
+        return write_allowance(self.workspace, self.config["limits"]["max_disk_bytes"])
 
     def _adapter(self):
         if self.adapter is None:
@@ -202,12 +203,14 @@ class Engine:
             self.adapter = MissingAdapter() if module is None else ExternalAdapter(self.config)
         return self.adapter
 
-    def _circuit_failure(self, method):
+    def _circuit_failure(self, method, retry_after=None):
         with self.transaction() as db:
             failures = db.execute("SELECT failures FROM circuits WHERE capability=?", (method,)).fetchone()
             count = (failures[0] if failures else 0) + 1
             until = self.clock() + self.config["limits"]["circuit_cooldown_seconds"] if count >= self.config["limits"]["circuit_failures"] else 0
-            db.execute("INSERT INTO circuits VALUES(?,?,?) ON CONFLICT(capability) DO UPDATE SET failures=excluded.failures,until=excluded.until", (method, count, until))
+            if retry_after is not None:
+                until = max(until, self.clock() + retry_after)
+            db.execute("INSERT INTO circuits VALUES(?,?,?) ON CONFLICT(capability) DO UPDATE SET failures=excluded.failures,until=max(circuits.until,excluded.until)", (method, count, until))
             self.event(db, None, "capability_failure", {"capability": method, "failures": count, "until": until})
 
     def _call(self, method, *args):
@@ -231,8 +234,11 @@ class Engine:
             result = getattr(adapter, method)(*args)
             if self.clock() - start > remaining:
                 raise AdapterFailure("ambiguous" if method in {"publish", "submit_rewards"} else "transient", "adapter_work_timeout")
-        except AdapterFailure:
-            self._circuit_failure(method)
+        except AdapterFailure as exc:
+            retry_after = None
+            if exc.category == "rate_limit":
+                retry_after = exc.retry_after if exc.retry_after is not None else self.config["limits"]["retry_base_seconds"]
+            self._circuit_failure(method, retry_after)
             raise
         except (TimeoutError, ConnectionError) as exc:
             self._circuit_failure(method)
@@ -684,25 +690,42 @@ class Engine:
                 return {"job_id": job_id, "state": "done", **result}
             if job["kind"] == "metrics":
                 with self.transaction() as db:
-                    publications = [json.loads(r[0]) for r in db.execute("SELECT p.data FROM publications p JOIN metric_schedule s ON p.id=s.publication_id WHERE p.state='published' AND s.retired=0 AND s.next_check<=? ORDER BY s.next_check,p.id LIMIT ?", (self.clock(), self.config["limits"]["metrics_batch_size"]))]
-                count = 0
-                for publication in publications:
-                    published_at = timestamp(publication["published_at"])
-                    age = self.clock() - published_at
+                    publications = list(db.execute("SELECT p.id,p.data,s.failures FROM publications p JOIN metric_schedule s ON p.id=s.publication_id WHERE p.state='published' AND s.retired=0 AND s.next_check<=? ORDER BY s.next_check,p.id LIMIT ?", (self.clock(), self.config["limits"]["metrics_batch_size"])))
+                count = failures = 0
+                for row in publications:
+                    publication_id = row["id"]
+                    try:
+                        publication = json.loads(row["data"])
+                        published_at = timestamp(publication["published_at"])
+                        stage = "metrics"
+                        record = self._call("metrics", publication)
+                        if not isinstance(record, dict) or record.get("publication_id", publication_id) != publication_id:
+                            raise SafetyError("metric_publication_mismatch")
+                        self.snapshot({**record, "publication_id": publication_id})
+                    except (AdapterFailure, SafetyError, ValueError, KeyError, TypeError) as exc:
+                        if str(exc).startswith(("control_", "budget_exhausted", "operation_time_budget_exhausted")):
+                            raise
+                        failures += 1
+                        attempts = row["failures"] + 1
+                        delay = min(self.config["limits"]["retry_max_seconds"], self.config["limits"]["retry_base_seconds"] * 2 ** min(attempts - 1, 30))
+                        if isinstance(exc, AdapterFailure) and exc.retry_after is not None:
+                            delay = max(delay, exc.retry_after)
+                        with self.transaction() as db:
+                            db.execute("UPDATE metric_schedule SET next_check=?,failures=? WHERE publication_id=?", (self.clock() + delay, attempts, publication_id))
+                            self.event(db, job_id, "metric_read_failed", {"publication_id": publication_id, "failures": attempts, "error": str(exc)[:500]})
+                        continue
                     cohort_due = published_at + self.config["learning"]["cohort_age_seconds"]
                     next_check = self.clock() + self.config["limits"]["metrics_poll_seconds"]
                     if self.clock() < cohort_due:
                         next_check = min(next_check, cohort_due)
-                    retired = int(age >= self.config["limits"]["metrics_max_age_seconds"])
+                    retired = int(self.clock() - published_at >= self.config["limits"]["metrics_max_age_seconds"])
                     with self.transaction() as db:
-                        db.execute("UPDATE metric_schedule SET next_check=?,last_check=?,retired=? WHERE publication_id=?", (next_check, self.clock(), retired, publication["publication_id"]))
-                    stage = "metrics"
-                    record = self._call("metrics", publication)
-                    self.snapshot({"publication_id": publication["publication_id"], **record})
+                        db.execute("UPDATE metric_schedule SET next_check=?,last_check=?,failures=0,retired=? WHERE publication_id=?", (next_check, self.clock(), retired, publication_id))
                     count += 1
+                result = {"snapshots": count, "failures": failures}
                 with self.transaction() as db:
-                    db.execute("UPDATE jobs SET status='done',result=?,updated_at=? WHERE id=?", (canonical({"snapshots": count}), self.clock(), job_id))
-                return {"job_id": job_id, "state": "done", "snapshots": count}
+                    db.execute("UPDATE jobs SET status='done',result=?,updated_at=? WHERE id=?", (canonical(result), self.clock(), job_id))
+                return {"job_id": job_id, "state": "done", **result}
             validate_source(job["input"], self.config, self.clock())
             stage = "verify_ready"
             readiness = self._call("verify_ready", job)
@@ -972,10 +995,26 @@ class Engine:
             path = Path(asset["path"])
             if path.is_symlink() or not path.is_absolute() or not path.resolve().is_relative_to(self.workspace.resolve()):
                 raise SafetyError("cleanup_asset_path_rejected")
-            size = path.stat().st_size if path.is_file() else 0
-            if path.is_file():
-                path.unlink()
-                removed += size
+            size = 0
+            if path.exists():
+                descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+                try:
+                    before = os.fstat(descriptor)
+                    if not stat.S_ISREG(before.st_mode):
+                        raise SafetyError("cleanup_asset_path_rejected")
+                    hasher = hashlib.sha256()
+                    with os.fdopen(descriptor, "rb", closefd=False) as stream:
+                        for chunk in iter(lambda: stream.read(1048576), b""):
+                            hasher.update(chunk)
+                    after = os.fstat(descriptor)
+                    current = path.lstat()
+                    if hasher.hexdigest() != asset["sha256"] or (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns) or (current.st_dev, current.st_ino) != (after.st_dev, after.st_ino):
+                        raise SafetyError("cleanup_asset_digest_mismatch")
+                    size = after.st_size
+                    path.unlink()
+                    removed += size
+                finally:
+                    os.close(descriptor)
             with self.transaction() as db:
                 db.execute("INSERT OR IGNORE INTO pruned_assets VALUES(?,?,?,?)", (row["id"], asset["sha256"], self.clock(), size))
                 self.event(db, row["id"], "confirmed_asset_pruned", {"bytes": size, "asset_digest": asset["sha256"]})

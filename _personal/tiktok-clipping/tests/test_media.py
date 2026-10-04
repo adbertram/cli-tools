@@ -266,3 +266,37 @@ def test_source_prepare_cache_uses_cli_timings(source, segments, monkeypatch):
     (cache / "source.mp4").write_bytes(b"tampered cache")
     with pytest.raises(SafetyError, match="cached_source_digest_mismatch"):
         renderer.prepare(record)
+
+
+def test_write_allowance_uses_physical_reserve_and_unlinked_workspace_bytes(config, monkeypatch):
+    from types import SimpleNamespace
+    from tiktok_clipping_cli.safety import PHYSICAL_DISK_RESERVE_BYTES, write_allowance
+    monkeypatch.setattr('tiktok_clipping_cli.safety.shutil.disk_usage', lambda _: SimpleNamespace(free=PHYSICAL_DISK_RESERVE_BYTES + 100))
+    assert write_allowance(config['workspace'], 1000, unlinked_bytes=50) == 100
+    assert write_allowance(config['workspace'], 80, unlinked_bytes=50) == 30
+    monkeypatch.setattr('tiktok_clipping_cli.safety.shutil.disk_usage', lambda _: SimpleNamespace(free=PHYSICAL_DISK_RESERVE_BYTES))
+    with pytest.raises(SafetyError, match='disk_budget_exhausted'):
+        write_allowance(config['workspace'], 1000)
+
+
+def test_media_kills_writer_when_physical_reserve_reached(config, monkeypatch):
+    from types import SimpleNamespace
+    from tiktok_clipping_cli.safety import PHYSICAL_DISK_RESERVE_BYTES
+    renderer = MediaRenderer(config)
+    readings = iter([PHYSICAL_DISK_RESERVE_BYTES + 1000, PHYSICAL_DISK_RESERVE_BYTES])
+    monkeypatch.setattr('tiktok_clipping_cli.safety.shutil.disk_usage', lambda _: SimpleNamespace(free=next(readings)))
+    with pytest.raises(SafetyError, match='disk_budget_exhausted'):
+        renderer._run([sys.executable, '-c', 'import time; time.sleep(10)'], time.monotonic() + 5)
+
+
+def test_cache_removal_does_not_assume_physical_space_reclaimed(config, monkeypatch):
+    from types import SimpleNamespace
+    from tiktok_clipping_cli.safety import PHYSICAL_DISK_RESERVE_BYTES
+    renderer = MediaRenderer(config)
+    cache = renderer.root / ('a' * 64); cache.mkdir()
+    (cache / 'source.mp4').write_bytes(b'source')
+    (cache / 'source.json').write_text('{}')
+    monkeypatch.setattr('tiktok_clipping_cli.safety.shutil.disk_usage', lambda _: SimpleNamespace(free=PHYSICAL_DISK_RESERVE_BYTES))
+    with pytest.raises(SafetyError, match='disk_budget_exhausted'):
+        renderer.prune_cache()
+    assert not cache.exists()
