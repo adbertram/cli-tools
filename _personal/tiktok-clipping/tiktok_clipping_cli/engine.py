@@ -157,7 +157,7 @@ class Engine:
             if "readiness" not in {r[1] for r in db.execute("PRAGMA table_info(jobs)")}:
                 db.execute("ALTER TABLE jobs ADD COLUMN readiness TEXT")
             reward_columns = {r[1] for r in db.execute("PRAGMA table_info(rewards)")}
-            for field, declaration in {"request_id": "TEXT", "lease_token": "TEXT", "lease_until": "REAL", "next_at": "REAL NOT NULL DEFAULT 0", "failures": "INTEGER NOT NULL DEFAULT 0", "dispatch_evidence": "TEXT", "creation_proof": "TEXT"}.items():
+            for field, declaration in {"request_id": "TEXT", "lease_token": "TEXT", "lease_until": "REAL", "next_at": "REAL NOT NULL DEFAULT 0", "failures": "INTEGER NOT NULL DEFAULT 0", "dispatch_evidence": "TEXT", "creation_proof": "TEXT", "revenue_observation": "TEXT", "last_known_revenue": "TEXT", "status_observed_at": "REAL"}.items():
                 if field not in reward_columns:
                     db.execute("ALTER TABLE rewards ADD COLUMN " + field + " " + declaration)
             visual_columns = {r[1] for r in db.execute("PRAGMA table_info(visual_attempts)")}
@@ -275,7 +275,7 @@ class Engine:
             circuit = db.execute("SELECT until FROM circuits WHERE capability=?", (method,)).fetchone()
             if circuit and circuit[0] > self.clock():
                 raise AdapterFailure("transient", "circuit_open: " + method, circuit[0] - self.clock())
-            if self.config.get("rewards_account") is not None and method in {"discover", "verify_ready", "publish", "submit_rewards", "reconcile_rewards", "reward_status"}:
+            if self.config.get("rewards_account") is not None and method in {"discover", "verify_ready", "publish", "submit_rewards", "reconcile_rewards", "reward_status", "sync_reward_revenue"}:
                 provider = db.execute("SELECT until FROM circuits WHERE capability='provider:whop'").fetchone()
                 if provider and provider[0] > self.clock():
                     raise AdapterFailure("transient", "circuit_open: provider:whop", provider[0] - self.clock(), provider="whop")
@@ -1097,7 +1097,7 @@ class Engine:
             if row is None:
                 raise SafetyError("reward_publication_missing")
             result = dict(row)
-        for field in ("submission", "earnings"):
+        for field in ("submission", "earnings", "revenue_observation", "last_known_revenue"):
             result[field] = json.loads(result[field]) if result[field] is not None else None
         result.pop("lease_token", None)
         return result
@@ -1190,39 +1190,92 @@ class Engine:
             return {"job_id": job_id, "state": state, "error": error, "monetized": False}
 
     @bounded
-    def reward_status(self, job_id):
-        previous = self.rewards(job_id)
-        if previous["state"] not in {"submitted", "accepted", "rejected", "ambiguous", "submitting"}:
-            return previous
-        result = self._call("reward_status", self.get(job_id), previous)
-        keys(result, {"status", "publication_id", "campaign_id", "observed_at", "provenance", "earnings"}, {"submission"})
-        if result["status"] not in {"pending", "accepted", "rejected", "unknown"} or result["publication_id"] != previous["publication_id"] or result["campaign_id"] != previous["campaign_id"]:
-            raise SafetyError("reward_status_mismatch")
-        string(result["provenance"])
-        if timestamp(result["observed_at"]) > self.clock() + 300:
-            raise SafetyError("future_reward_timestamp")
-        earnings = result["earnings"]
-        if earnings is not None:
-            keys(earnings, {"amount", "currency", "provenance", "observed_at"})
-            number(earnings["amount"], 0)
-            string(earnings["currency"], 16)
-            string(earnings["provenance"])
-            if timestamp(earnings["observed_at"]) > timestamp(result["observed_at"]):
-                raise SafetyError("earnings_observation_after_readback")
-        state = {"pending": "submitted", "unknown": previous["state"]}.get(result["status"], result["status"])
+    def reward_status(self, job_id, *, refresh_payouts=True):
+        from .revenue import retain_known, validate_revenue
         with self.transaction() as db:
-            db.execute("UPDATE rewards SET state=?,earnings=?,updated_at=? WHERE job_id=?", (state, canonical(earnings) if earnings is not None else None, self.clock(), job_id))
-            self.event(db, job_id, "reward_observed", result)
-        # Whop readback is already authoritative. Reuse it without another remote
-        # request; its own observation time defines revenue measurement age.
-        record = {"publication_id": previous["publication_id"], "observed_at": result["observed_at"],
-                  "measured_at": earnings["observed_at"] if earnings is not None else result["observed_at"],
-                  "provenance": earnings["provenance"] if earnings is not None else result["provenance"],
-                  **{field: None for field in METRICS}, "revenue_currency": None}
-        if earnings is not None:
-            record.update(revenue=earnings["amount"], revenue_currency=earnings["currency"])
-        self.snapshot(record, channel="rewards")
-        return self.rewards(job_id)
+            self._active(db)
+            row = db.execute('SELECT * FROM rewards WHERE job_id=?', (job_id,)).fetchone()
+            if row is None:
+                raise SafetyError('reward_publication_missing')
+            if row['state'] not in {'submitted', 'accepted', 'rejected'} or row['submission'] is None:
+                return {'job_id': job_id, 'state': row['state'], 'reason': 'verified_submission_required'}
+            if row['next_at'] > self.clock() or (row['lease_until'] is not None and row['lease_until'] > self.clock()):
+                return {'job_id': job_id, 'state': row['state'], 'retry_at': max(row['next_at'], row['lease_until'] or 0)}
+            token = secrets.token_urlsafe(32)
+            db.execute('UPDATE rewards SET lease_token=?,lease_until=? WHERE job_id=?',
+                (token, self.clock() + self.config['limits']['lease_seconds'], job_id))
+            previous = dict(row)
+        for field in ('submission', 'earnings', 'last_known_revenue'):
+            previous[field] = json.loads(previous[field]) if previous[field] is not None else None
+        try:
+            job = self.get(job_id)
+            args = (job, previous) + (() if refresh_payouts else (False,))
+            result = self._call('reward_status', *args)
+            keys(result, {'status', 'publication_id', 'campaign_id', 'observed_at', 'provenance', 'earnings'},
+                {'submission', 'revenue', 'readback_fresh'})
+            if (result['status'] not in {'pending', 'accepted', 'rejected', 'unknown'} or
+                    any(result[k] != previous[k] for k in ('publication_id', 'campaign_id'))):
+                raise SafetyError('reward_status_mismatch')
+            string(result['provenance'], self.config['limits']['max_payload_bytes'])
+            fresh = result.get('readback_fresh', True)
+            if type(fresh) is not bool:
+                raise SafetyError('reward_freshness_invalid')
+            observed = timestamp(result['observed_at']) if result['observed_at'] is not None else None
+            if (fresh and observed is None) or (observed is not None and observed > self.clock() + 300):
+                raise SafetyError('future_or_missing_reward_timestamp')
+            if fresh and observed < timestamp(job['result']['published_at']):
+                raise SafetyError('reward_readback_predates_publication')
+            revenue = result.get('revenue')
+            known = previous['last_known_revenue']
+            if revenue is not None:
+                bound = {k: previous[k] for k in ('campaign_id', 'publication_id')}
+                bound['submission_id'] = previous['submission']['submission_id']
+                validate_revenue(revenue, bound, self.config['limits']['max_payload_bytes'])
+                for at in (revenue.get('observed_at'), revenue['sync'].get('completed_at')):
+                    if at is not None and not timestamp(job['result']['published_at']) <= timestamp(at) <= self.clock() + 300:
+                        raise SafetyError('future_or_predating_revenue_timestamp')
+                known = retain_known(known, revenue)
+            earnings = result['earnings']
+            if earnings is not None:
+                keys(earnings, {'amount', 'currency', 'provenance', 'observed_at'})
+                number(earnings['amount'], 0)
+                string(earnings['currency'], 16)
+                string(earnings['provenance'])
+                if not fresh or timestamp(earnings['observed_at']) > observed:
+                    raise SafetyError('earnings_observation_after_readback')
+            with self.transaction() as db:
+                self._active(db)
+                current = db.execute('SELECT * FROM rewards WHERE job_id=?', (job_id,)).fetchone()
+                if current['lease_token'] != token or current['lease_until'] <= self.clock():
+                    return {'job_id': job_id, 'state': current['state'], 'reason': 'reward_inspection_lease_lost'}
+                if any(current[k] != previous[k] for k in ('request_id', 'publication_id', 'campaign_id')) or current['submission'] != canonical(previous['submission']):
+                    raise SafetyError('reward_inspection_binding_changed')
+                newer = fresh and (current['status_observed_at'] is None or observed > current['status_observed_at'])
+                state = ({'pending': 'submitted', 'unknown': current['state']}.get(result['status'], result['status'])
+                    if newer else current['state'])
+                stored_earnings = canonical(earnings) if earnings is not None and newer else current['earnings']
+                db.execute('UPDATE rewards SET state=?,earnings=?,revenue_observation=?,last_known_revenue=?,status_observed_at=?,next_at=?,failures=0,error=NULL,lease_token=NULL,lease_until=NULL,updated_at=? WHERE job_id=? AND lease_token=?',
+                    (state, stored_earnings, canonical(revenue) if revenue is not None else current['revenue_observation'],
+                     canonical(known) if known is not None else None, observed if newer else current['status_observed_at'],
+                     self.clock() + self.config['limits']['metrics_poll_seconds'], self.clock(), job_id, token))
+                self.event(db, job_id, 'reward_observed', result)
+            # Legacy trusted adapter earnings keep their existing unit contract.
+            # SDK cent observations live separately until explicit window/objective selection.
+            if fresh and observed is not None and newer and revenue is None:
+                record = {'publication_id': previous['publication_id'], 'observed_at': result['observed_at'],
+                    'measured_at': earnings['observed_at'] if earnings is not None else result['observed_at'],
+                    'provenance': earnings['provenance'] if earnings is not None else result['provenance'],
+                    **{field: None for field in METRICS}, 'revenue_currency': None}
+                if earnings is not None:
+                    record.update(revenue=earnings['amount'], revenue_currency=earnings['currency'])
+                self.snapshot(record, channel='rewards')
+            return self.rewards(job_id)
+        except (AdapterFailure, SafetyError) as exc:
+            delay = max(min(self.config['limits']['retry_max_seconds'], self.config['limits']['retry_base_seconds'] * 2 ** min(previous['failures'], 20)), getattr(exc, 'retry_after', None) or 0)
+            with self.transaction() as db:
+                db.execute('UPDATE rewards SET error=?,next_at=?,failures=failures+1,lease_token=NULL,lease_until=NULL WHERE job_id=? AND lease_token=?',
+                    (str(exc), self.clock() + delay, job_id, token))
+            raise
 
     def retry(self, job_id):
         """Explicitly revalidate blocked local work after a trusted adapter/config fix."""
@@ -1246,17 +1299,33 @@ class Engine:
         state = self.status()
         if state["state"] != "running":
             return {"state": state["state"], "processed": 0, "reason": state["reason"]}
-        removed = self.prune_confirmed_assets()
-        removed_visual = self.prune_visual_artifacts()
-        self._disk_check()
+        removed = removed_visual = 0
+        # Remote submission/reconciliation does not allocate media. Full media
+        # storage must not postpone its deadline; actual writers check allowance.
         with self.transaction() as db:
             self._active(db)
             self._recover(db)
             ambiguous = [r[0] for r in db.execute("SELECT j.id FROM jobs j LEFT JOIN inspections i ON i.key=j.id||':publish' WHERE j.status='ambiguous' ORDER BY coalesce(i.sequence,0),j.updated_at LIMIT 5")]
             pending_rewards = [r[0] for r in db.execute("SELECT job_id FROM rewards WHERE state IN ('pending_submission','ambiguous','submitting','dispatch_pending','reconciling') AND next_at<=? ORDER BY deadline LIMIT 5", (self.clock(),))]
-            inspect_rewards = [r[0] for r in db.execute("SELECT r.job_id FROM rewards r LEFT JOIN inspections i ON i.key=r.job_id||':rewards' WHERE r.state IN ('submitted','accepted') ORDER BY coalesce(i.sequence,0),r.updated_at LIMIT 5")]
+            inspect_rewards = [r[0] for r in db.execute("SELECT r.job_id FROM rewards r LEFT JOIN inspections i ON i.key=r.job_id||':rewards' WHERE r.state IN ('submitted','accepted','rejected') AND r.next_at<=? AND (r.lease_until IS NULL OR r.lease_until<=?) ORDER BY coalesce(i.sequence,0),r.updated_at LIMIT ?", (self.clock(), self.clock(), self.config['limits']['metrics_batch_size']))]
         results = []
+        # Deadline-bound creation/recovery precedes discretionary earnings scans.
         for method, job_ids in ((self.submit_rewards, pending_rewards), (self.reconcile, ambiguous), (self.reward_status, inspect_rewards)):
+            if method == self.reward_status and job_ids and self.config.get('rewards_account') is not None:
+                if self._deadline is not None and self._deadline <= self.clock():
+                    results.append({'state': 'revenue_sync_deferred', 'error': 'operation_time_budget_exhausted'})
+                    continue
+                try:
+                    self._call('sync_reward_revenue')
+                except (AdapterFailure, SafetyError) as exc:
+                    delay = max(self.config['limits']['retry_base_seconds'], getattr(exc, 'retry_after', None) or 0)
+                    with self.transaction() as db:
+                        for job_id in job_ids:
+                            db.execute('UPDATE rewards SET next_at=?,error=? WHERE job_id=? AND (lease_until IS NULL OR lease_until<=?)',
+                                (self.clock() + delay, str(exc), job_id, self.clock()))
+                    results.append({'state': 'revenue_sync_failed', 'error': str(exc)})
+                    continue
+                method = lambda job_id: self.reward_status(job_id, refresh_payouts=False)
             for job_id in job_ids:
                 try:
                     with self.transaction() as db:
@@ -1270,6 +1339,10 @@ class Engine:
                     results.append({"job_id": job_id, "state": "inspection_failed", "error": str(exc)})
                     if str(exc).startswith(("control_", "budget_exhausted")):
                         break
+        if self._deadline is None or self.clock() < self._deadline:
+            removed = self.prune_confirmed_assets()
+        if self._deadline is None or self.clock() < self._deadline:
+            removed_visual = self.prune_visual_artifacts()
         return {"state": self.status()["state"], "processed": len(results), "results": results, "jobs": self.status()["jobs"], "removed_asset_bytes": removed, "removed_visual_bytes": removed_visual}
 
     def prune_visual_artifacts(self):
@@ -1283,6 +1356,8 @@ class Engine:
             self._active(db)
             rows = db.execute("SELECT a.* FROM visual_attempts a JOIN jobs j ON j.id=a.job_id LEFT JOIN inspections i ON i.key=a.id||':visualcleanup' WHERE a.artifacts_cleaned=0 AND a.state IN ('approved','rejected','failed','expired') AND coalesce(a.completed_at,a.expires_at)<=? AND (j.lease_until IS NULL OR j.lease_until<=?) AND j.status NOT IN ('leased','running','visual_pending','ambiguous','reconciling') ORDER BY coalesce(i.sequence,0),a.created_at LIMIT 20", (cutoff, self.clock())).fetchall()
         for attempt in rows:
+            if self._deadline is not None and self.clock() >= self._deadline:
+                break
             with self.transaction() as db:
                 sequence = db.execute("SELECT coalesce(max(sequence),0)+1 FROM inspections").fetchone()[0]
                 db.execute("INSERT INTO inspections VALUES(?,?) ON CONFLICT(key) DO UPDATE SET sequence=excluded.sequence", (attempt["id"] + ":visualcleanup", sequence))
@@ -1349,6 +1424,8 @@ class Engine:
             rows = db.execute("SELECT j.id,j.asset FROM jobs j JOIN rewards r ON j.id=r.job_id WHERE j.status='published' AND r.state IN ('submitted','accepted','rejected') AND j.asset IS NOT NULL AND j.id NOT IN (SELECT job_id FROM pruned_assets) LIMIT 100").fetchall()
         removed = 0
         for row in rows:
+            if self._deadline is not None and self.clock() >= self._deadline:
+                break
             asset = json.loads(row["asset"])
             path = Path(asset["path"])
             if path.is_symlink() or not path.is_absolute() or not path.resolve().is_relative_to(self.workspace.resolve()):
