@@ -82,11 +82,14 @@ def deploy_browser_session(
     if probe.returncode != 0 or not all(flag in probe.stdout for flag in ("--stdin", "--expected-account-id", "--profile")):
         directory.rmdir()
         raise ValueError("Remote owning CLI does not support portable session import")
+    failure_stage = "local_export"
+    failure_code = "transfer_failed"
     try:
         exported = subprocess.run([str(executable), "auth", "session-export", *arguments, "--output", str(bundle_path)],
                                   capture_output=True, text=True, timeout=180)
         if exported.returncode != 0 or not bundle_path.is_file() or bundle_path.is_symlink():
             raise ValueError("Owning service session export failed")
+        failure_stage = "bundle_validation"
         metadata = bundle_path.stat()
         if metadata.st_uid != os.getuid() or stat.S_IMODE(metadata.st_mode) != 0o600 or metadata.st_size > PORTABLE_SESSION_MAX_BYTES:
             raise ValueError("Portable session export file is not private or exceeds size limit")
@@ -97,9 +100,15 @@ def deploy_browser_session(
         ):
             raise ValueError("Portable session export identity mismatch")
         remote_command = remote_cli + " auth session-import --stdin " + shlex.join(arguments)
+        failure_stage = "remote_import"
         imported = run_on_server_raw(remote_command, timeout=240, input_data=payload)
         if imported.returncode != 0:
+            # Accept only the owning importer's fixed diagnostic vocabulary.
+            diagnostic = re.search(r"Portable session import failed \(phase=(initializing|prepared|restoring|publishing|published|complete|preparation); code=(destination_exists|browser_close_failed|cookie_readback_failed|storage_readback_failed|identity_verification_failed|published_identity_or_close_failed|staging_browser_not_closed|restore_or_device_verification_failed|transfer_failed)\)", imported.stderr)
+            if diagnostic:
+                failure_code = diagnostic.group(1) + ":" + diagnostic.group(2)
             raise ValueError("Remote portable session import failed; private backup retained")
+        failure_stage = "remote_result_verification"
         result = json.loads(imported.stdout)
         if result.get("imported") is not True or result.get("verified") is not True or result.get("active") is not False or result.get("profile") != browser_profile or result.get("tool") != tool or result.get("identity", {}).get("account_id") != expected_account_id or (
             expected_username is not None and result.get("identity", {}).get("username", "").casefold() != expected_username.casefold()
@@ -111,7 +120,7 @@ def deploy_browser_session(
                     "imported": True, "verified": True, "active": False})
     except Exception:
         # Never disclose subprocess stderr, bundle contents, or parser errors.
-        raise ValueError("Portable browser session deployment failed; private backup retained") from None
+        raise ValueError(f"Portable browser session deployment failed (stage={failure_stage}; code={failure_code}); private backup retained") from None
 
 
 def _get_current_version() -> str:

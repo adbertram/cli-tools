@@ -102,3 +102,17 @@ def test_existing_server_helper_transports_payload_only_as_stdin(monkeypatch, lo
     arguments, options = calls[0]
     assert options["input"] == SENTINEL and SENTINEL not in str(arguments)
     assert arguments[0] == ("bash" if local else "ssh")
+
+
+def test_remote_fixed_failure_codes_survive_wrapper_without_private_stderr(deployment,monkeypatch):
+    calls,_=deployment
+    previous=commands.run_on_server_raw
+    def remote(command,**kwargs):
+        if command.endswith('--help'):return previous(command,**kwargs)
+        return subprocess.CompletedProcess(command,1,'',SENTINEL+'\nError: Portable session import failed (phase=published; code=browser_close_failed); private backup retained')
+    monkeypatch.setattr(commands,'run_on_server_raw',remote)
+    result=invoke()
+    assert result.exit_code!=0
+    assert 'stage=remote_import; code=published:browser_close_failed' in result.output
+    assert SENTINEL not in result.output
+    assert list((get_tool_data_dir('n8n')/'session-transfers').glob('deploy-*/session.json'))

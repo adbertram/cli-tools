@@ -1489,12 +1489,12 @@ class BrowserAutomation:
 
     def _portable_identity(self, expected_account_id: str, expected_username: str = None) -> dict:
         try:
-            if not isinstance(expected_account_id, str) or not expected_account_id or not self.AUTH_CHECK_URL:
+            if not isinstance(expected_account_id, str) or not expected_account_id:
                 raise ValueError
             self._auth_verified_at = 0
-            live = self.is_authenticated()
-            if not live or not live.live_check:
-                raise ValueError
+            self._portable_profile_dir = self._get_persistent_profile_dir()
+            # Opt-in service hooks fetch the authenticated account endpoint now.
+            # Its exact actor is the proof; a separate UI heuristic adds no proof.
             identity = self.config.browser_session_identity(self)
             if not isinstance(identity, dict) or set(identity) != {"account_id", "username"} or any(
                 not isinstance(value, str) or not value or len(value) > 256 for value in identity.values()
@@ -1503,21 +1503,28 @@ class BrowserAutomation:
             ):
                 raise ValueError
             return identity
-        except Exception:
+        except Exception as error:
+            if isinstance(error, BrowserAutomationError) and str(error) == "Portable session browser close failed":
+                raise
             raise BrowserAutomationError("Portable session identity verification failed or requires device verification") from None
 
     def _portable_close(self) -> None:
         """Close strictly so a transfer never hides a persistence failure."""
         service = self._service
         try:
+            directory = getattr(self, "_portable_profile_dir", None)
             if service is not None:
+                if directory is None:
+                    directory = self._get_persistent_profile_dir()
+                    self._portable_profile_dir = directory
                 service.browser_close()
+            if directory is not None and profile_process_pids(directory):
+                raise BrowserAutomationError("Portable session browser close failed")
         except Exception:
             raise BrowserAutomationError("Portable session browser close failed") from None
-        finally:
-            self._page = None
-            self._service = None
-            self._auth_verified_at = 0
+        self._page = None
+        self._service = None
+        self._auth_verified_at = 0
 
     def _validate_portable_bundle(self, bundle: dict, target_profile: str,
                                   expected_account_id: str, expected_username: str = None) -> dict:
@@ -1587,6 +1594,7 @@ class BrowserAutomation:
             target_profile = target_profile or self._profile_name()
             bundle = self._validate_portable_bundle(bundle, target_profile, expected_account_id, expected_username)
             directory = self._get_persistent_profile_dir()
+            self._portable_profile_dir = directory
             if directory.exists() and any(directory.iterdir()):
                 raise BrowserAutomationError("Portable session restore requires an empty staging browser profile")
             service = self._get_service()
@@ -1613,7 +1621,14 @@ class BrowserAutomation:
             self._portable_close()
             return {"tool": bundle["tool"], "profile": target_profile, "identity": identity,
                     "cookies": len(bundle["cookies"]), "origins": len(bundle["origins"]), "verified": True}
-        except Exception:
+        except Exception as error:
+            if isinstance(error, BrowserAutomationError) and str(error) in {
+                "Portable session browser close failed",
+                "Portable session identity verification failed or requires device verification",
+                "Portable cookie readback failed",
+                "Portable storage readback failed",
+            }:
+                raise
             raise BrowserAutomationError("Portable session restore failed or requires device verification; private staging was retained") from None
         finally:
             self._portable_close()
