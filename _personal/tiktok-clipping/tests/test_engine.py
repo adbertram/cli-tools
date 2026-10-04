@@ -410,3 +410,126 @@ def test_deadline_after_quality_does_not_create_upload_marker(engine, adapter, c
     adapter.quality = original
     assert engine.run(envelope["job_id"])["state"] == "published"
     assert len(adapter.uploads) == 1
+
+
+def test_final_metrics_failure_keeps_schedule_until_valid_snapshot(engine, adapter, clock, config):
+    envelope = claim(engine, clock)
+    result = engine.apply(payload(envelope))
+    publication_id = result['publication']['publication_id']
+    clock.now += config['limits']['metrics_max_age_seconds'] + 1
+    read = adapter.metrics
+    adapter.metrics = lambda _: (_ for _ in ()).throw(AdapterFailure('transient', 'TEST unavailable'))
+    failed = engine.prepare('metrics')['action_result']
+    assert failed['snapshots'] == 0 and failed['failures'] == 1
+    with engine.transaction() as db:
+        schedule = dict(db.execute('SELECT * FROM metric_schedule WHERE publication_id=?', (publication_id,)).fetchone())
+        assert schedule['retired'] == 0 and schedule['last_check'] is None and schedule['failures'] == 1
+        assert db.execute('SELECT count(*) FROM snapshots').fetchone()[0] == 0
+    clock.now = schedule['next_check'] + 1
+    restarted = Engine(config, adapter=adapter, clock=clock)
+    adapter.metrics = read
+    assert restarted.prepare('metrics')['action_result']['snapshots'] == 1
+    with restarted.transaction() as db:
+        schedule = dict(db.execute('SELECT * FROM metric_schedule WHERE publication_id=?', (publication_id,)).fetchone())
+        assert schedule['retired'] == 1 and schedule['last_check'] == clock() and schedule['failures'] == 0
+        assert db.execute('SELECT count(*) FROM snapshots').fetchone()[0] == 1
+
+
+def test_malformed_post_does_not_starve_other_due_metrics(engine, adapter, clock, config):
+    first = engine.apply(payload(claim(engine, clock, 'one')))
+    second = engine.apply(payload(claim(engine, clock, 'two')))
+    bad_id = first['publication']['publication_id']
+    clock.now += config['limits']['metrics_poll_seconds'] + 1
+    read = adapter.metrics
+    adapter.metrics = lambda p: {'invalid': True} if p['publication_id'] == bad_id else read(p)
+    result = engine.prepare('metrics')['action_result']
+    assert result['snapshots'] == 1 and result['failures'] == 1
+    with engine.transaction() as db:
+        assert db.execute('SELECT publication_id FROM snapshots').fetchone()[0] == second['publication']['publication_id']
+        bad = dict(db.execute('SELECT * FROM metric_schedule WHERE publication_id=?', (bad_id,)).fetchone())
+        assert bad['failures'] == 1 and bad['next_check'] > clock() and bad['last_check'] is None
+    clock.now = bad['next_check'] + 1
+    assert engine.prepare('metrics')['action_result']['failures'] == 1
+    with engine.transaction() as db:
+        bad = dict(db.execute('SELECT * FROM metric_schedule WHERE publication_id=?', (bad_id,)).fetchone())
+        assert bad['next_check'] - clock() == min(config['limits']['retry_max_seconds'], 2 * config['limits']['retry_base_seconds'])
+
+
+@pytest.mark.parametrize('replacement', ['content', 'symlink'])
+def test_cleanup_refuses_replaced_asset_without_journal(engine, adapter, clock, tmp_path, replacement):
+    envelope = claim(engine, clock)
+    engine.apply(payload(envelope))
+    asset = Path(engine.get(envelope['job_id'])['asset']['path'])
+    if replacement == 'content':
+        asset.write_bytes(b'replaced content')
+    else:
+        other = tmp_path / 'other.mp4'; other.write_bytes(b'keep')
+        asset.unlink(); asset.symlink_to(other)
+    with pytest.raises(SafetyError, match='cleanup_asset_'):
+        engine.prune_confirmed_assets()
+    assert asset.exists()
+    with engine.transaction() as db:
+        assert db.execute('SELECT count(*) FROM pruned_assets').fetchone()[0] == 0
+
+
+def test_metrics_retry_after_survives_restart_and_does_not_block_good_post(engine, adapter, clock, config):
+    first = engine.apply(payload(claim(engine, clock, 'retry-after-one')))
+    second = engine.apply(payload(claim(engine, clock, 'retry-after-two')))
+    bad_id = first['publication']['publication_id']
+    clock.now += config['limits']['metrics_poll_seconds'] + 1
+    calls = []
+    read = adapter.metrics
+    def metrics(publication):
+        calls.append(publication['publication_id'])
+        if publication['publication_id'] == bad_id:
+            raise AdapterFailure('transient', 'TEST temporarily unavailable', retry_after=300)
+        return read(publication)
+    adapter.metrics = metrics
+    result = engine.prepare('metrics')['action_result']
+    assert result['snapshots'] == 1 and result['failures'] == 1
+    assert set(calls) == {bad_id, second['publication']['publication_id']}
+    with engine.transaction() as db:
+        assert db.execute('SELECT next_check FROM metric_schedule WHERE publication_id=?', (bad_id,)).fetchone()[0] == clock() + 300
+    clock.now += 299
+    calls.clear()
+    restarted = Engine(config, adapter=adapter, clock=clock)
+    restarted.prepare('metrics')
+    assert calls == []
+
+
+def test_provider_rate_limit_pauses_capability_across_restart(engine, adapter, clock, config):
+    engine.apply(payload(claim(engine, clock, 'rate-one')))
+    engine.apply(payload(claim(engine, clock, 'rate-two')))
+    clock.now += config['limits']['metrics_poll_seconds'] + 1
+    calls=[]
+    def metrics(publication):
+        calls.append(publication['publication_id'])
+        raise AdapterFailure('rate_limit', 'TEST provider throttled', retry_after=300)
+    adapter.metrics=metrics
+    result=engine.prepare('metrics')['action_result']
+    assert result['snapshots']==0 and result['failures']==2 and len(calls)==1
+    with engine.transaction() as db:
+        assert db.execute("SELECT until FROM circuits WHERE capability='metrics'").fetchone()[0]==clock()+300
+        assert all(r[0]>=clock()+300 for r in db.execute('SELECT next_check FROM metric_schedule'))
+    clock.now+=299
+    restarted=Engine(config,adapter=adapter,clock=clock)
+    restarted.prepare('metrics')
+    assert len(calls)==1
+    with pytest.raises(AdapterFailure,match='circuit_open'):
+        restarted._call('metrics',{})
+    assert len(calls)==1
+
+
+def test_provider_rate_limit_without_header_uses_configured_initial_cooldown(engine, adapter, clock, config):
+    engine.apply(payload(claim(engine, clock, 'no-header-one')))
+    engine.apply(payload(claim(engine, clock, 'no-header-two')))
+    clock.now+=config['limits']['metrics_poll_seconds']+1
+    calls=[]
+    def metrics(publication):
+        calls.append(publication['publication_id'])
+        raise AdapterFailure('rate_limit', 'TEST throttled without header')
+    adapter.metrics=metrics
+    result=engine.prepare('metrics')['action_result']
+    assert result['failures']==2 and len(calls)==1
+    with engine.transaction() as db:
+        assert db.execute("SELECT until FROM circuits WHERE capability='metrics'").fetchone()[0]>=clock()+config['limits']['retry_base_seconds']

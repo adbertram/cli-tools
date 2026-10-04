@@ -17,7 +17,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from .safety import SafetyError, canonical, digest, keys, number, strict_json, string, validate_proposal
+from .safety import SafetyError, canonical, digest, keys, number, strict_json, string, validate_proposal, write_allowance, PHYSICAL_DISK_RESERVE_BYTES
 
 
 # Coordinates and typography are trusted constants, never model filter text.
@@ -162,7 +162,7 @@ class MediaRenderer:
         total = sum(row[2] for row in caches)
         freed = 0
         for _, path, size in sorted(caches):
-            if total + reserve <= ceiling:
+            if total + reserve <= ceiling and shutil.disk_usage(self.workspace).free > PHYSICAL_DISK_RESERVE_BYTES:
                 break
             if path == exclude:
                 continue
@@ -171,14 +171,13 @@ class MediaRenderer:
             freed += size
         if total + reserve > ceiling:
             raise SafetyError("source_cache_budget_exhausted")
+        # Logical cache deletion can reclaim no physical blocks on APFS.
+        if shutil.disk_usage(self.workspace).free <= PHYSICAL_DISK_RESERVE_BYTES:
+            raise SafetyError("disk_budget_exhausted")
         return {"cache_bytes": total, "removed_bytes": freed, "cache_limit_bytes": ceiling}
 
-    def _disk(self):
-        total = sum(p.stat().st_size for p in self.workspace.rglob("*") if p.is_file() and not p.is_symlink())
-        remaining = self.config["limits"]["max_disk_bytes"] - total
-        if remaining <= 0 or shutil.disk_usage(self.workspace).free <= 10485760:
-            raise SafetyError("disk_budget_exhausted")
-        return remaining
+    def _disk(self, unlinked_bytes=0):
+        return write_allowance(self.workspace, self.config["limits"]["max_disk_bytes"], unlinked_bytes=unlinked_bytes)
 
     def _run(self, command, deadline, *, cwd=None, output_limit=None):
         """Kill the whole CLI process tree on timeout or resource exhaustion."""
@@ -199,8 +198,7 @@ class MediaRenderer:
                 while process.poll() is None:
                     if time.monotonic() >= deadline:
                         raise TimeoutError("media_work_timeout")
-                    if self._disk() <= os.fstat(out.fileno()).st_size + os.fstat(err.fileno()).st_size:
-                        raise SafetyError("disk_budget_exhausted")
+                    self._disk(os.fstat(out.fileno()).st_size + os.fstat(err.fileno()).st_size)
                     if os.fstat(out.fileno()).st_size > output_limit or os.fstat(err.fileno()).st_size > 1048576:
                         raise SafetyError("media_process_output_limit")
                     time.sleep(min(0.1, max(0, deadline - time.monotonic())))
@@ -211,7 +209,7 @@ class MediaRenderer:
                     pass
                 process.wait(timeout=5)
                 raise
-            self._disk()
+            self._disk(os.fstat(out.fileno()).st_size + os.fstat(err.fileno()).st_size)
             if os.fstat(out.fileno()).st_size > output_limit or os.fstat(err.fileno()).st_size > 1048576:
                 raise SafetyError("media_process_output_limit")
             out.seek(0)

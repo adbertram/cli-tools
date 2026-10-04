@@ -4,12 +4,27 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import shutil
+from pathlib import Path
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 
 class SafetyError(ValueError):
     """A deterministic safety boundary rejected input."""
+
+
+PHYSICAL_DISK_RESERVE_BYTES = 1 << 30
+
+
+def write_allowance(workspace, max_disk_bytes, *, unlinked_bytes=0):
+    """Limit writes by workspace ownership and a physical 1 GiB reserve."""
+    total = sum(p.stat().st_size for p in Path(workspace).rglob("*") if p.is_file() and not p.is_symlink())
+    remaining = min(max_disk_bytes - total - unlinked_bytes,
+                    shutil.disk_usage(workspace).free - PHYSICAL_DISK_RESERVE_BYTES)
+    if remaining <= 0:
+        raise SafetyError("disk_budget_exhausted")
+    return remaining
 
 
 def canonical(value):
