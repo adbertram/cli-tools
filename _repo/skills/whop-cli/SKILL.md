@@ -3,7 +3,7 @@ name: whop-cli
 description: >-
   Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
   MANDATORY: Execute Whop operations using the `whop` CLI tool.
-  Read participant account identity and Content Rewards linked accounts, campaigns, submissions, and actual earnings.
+  Read participant Content Rewards data and explicitly submit verified published clips.
   Triggers: whop, whop cli
 ---
 
@@ -55,6 +55,9 @@ whop <command-group> <action> [arguments] [options]
 | List Content Rewards linked accounts; active bio verification is not OAuth | `whop linked-accounts list` |
 | Find a submission in at most 1000 rows per verified list; no detail route is assumed | `whop submissions get <SUBMISSION_ID>` |
 | Read submissions; history uses the observed deleted-record filter | `whop submissions list` |
+| Verify submission readiness and current campaign requirements | `whop submissions readiness <CAMPAIGN_ID> --expected-account-id <WHOP_ID> --expected-tiktok-account-id <TIKTOK_ID>` |
+| Submit one verified receipt with explicit authority and a stable UUID | `whop submissions create <REQUEST_UUID> <CAMPAIGN_ID> --publication-receipt <FILE> --requirements-digest <DIGEST> --expected-account-id <WHOP_ID> --expected-tiktok-account-id <TIKTOK_ID> --confirm` |
+| Reconcile an owned submission request without resending | `whop submissions reconcile <REQUEST_UUID>` |
 | Read server submission counts for clip and retainer records | `whop submissions status` |
 </quick_start>
 
@@ -67,7 +70,7 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
 <principle name="Participant Session and Read Boundary">
 Use an explicit named profile. `whop auth login --profile <NAME>` opens CLI-owned manual Chrome and prompts for the embedded Content Rewards URL; complete Whop sign-in and open the Rewards experience before confirming. A browser storage export is not a supported profile import. Reusable secrets belong in the CLI-tools secret manager, not `.env` files.
 
-Account output whitelists identity, balance and earnings fields and adds profile/time/provenance; session, token and verification-risk fields are excluded. Only service reads exist. Never infer OAuth readiness from `verificationSource:bio`, or earnings from a publication, views, or CPM projection. Missing amounts remain unknown. General filters are local over the bounded fetched set. Submission get searches verified lists and can report only that its bounded inspection found no row; nonempty submission and payout records have not yet been observed. Changed action IDs/encodings fail explicitly.
+Account output whitelists identity, balance and earnings fields and adds profile/time/provenance; session, token and verification-risk fields are excluded. Participant reads and one explicitly authorized submission action exist. Before upload and again immediately before Post, run readiness with the same actor/campaign/linked account and accepted requirements digest. Submit only the verified owning Studio receipt within the observed 30-minute window, using a stable request UUID and explicit `--confirm`. Never resend an uncertain request; use reconcile. The SDK persists this rule in a private indexed SQLite operation journal. Readback uses the supported campaign-only participant action, with bounded resumable pagination and head refresh; no truncated scan proves absence or permits resend. Honor structured SDK/provider Retry-After fields and durable cooldowns. A receipt is caller authority, not a cryptographic proof. Application-required campaigns fail explicitly. Never infer OAuth readiness from `verificationSource:bio`, or earnings from a publication, views, or CPM projection. Missing amounts remain unknown. General filters are local over the bounded fetched set. Submission get searches verified lists and can report only that its bounded inspection found no row; nonempty submission and payout records have not yet been observed. Changed action IDs/encodings fail explicitly.
 </principle>
 
 <principle name="Command Groups">
@@ -77,7 +80,7 @@ Account output whitelists identity, balance and earnings fields and adds profile
 - **campaigns** -- Read campaigns (subcommands: applications, get, list)
 - **earnings** -- Read earnings (subcommands: get, payouts)
 - **linked-accounts** -- Read linked accounts (subcommands: get, list)
-- **submissions** -- Read submissions (subcommands: get, list, status)
+- **submissions** -- Read and explicitly submit clips (subcommands: create, get, list, readiness, reconcile, status)
 </principle>
 </essential_principles>
 

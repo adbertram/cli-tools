@@ -1,4 +1,4 @@
-"""Read-only Whop participant CLI."""
+"""Whop participant reads and explicit journaled submissions."""
 from cli_tools_shared import create_app, run_app
 from cli_tools_shared.auth_commands import create_auth_app
 from cli_tools_shared.cache_commands import create_cache_app
@@ -8,9 +8,9 @@ from .config import get_config
 from .commands import config as config_commands
 from .commands import account, linked_accounts, campaigns, submissions, earnings
 
-app=create_app(name="whop",help="Read Whop participant account and Content Rewards data",version=__version__)
+app=create_app(name="whop",help="Read Whop Content Rewards data and explicitly submit verified clips",version=__version__)
 for name,module in [('account',account),('linked-accounts',linked_accounts),('campaigns',campaigns),('submissions',submissions),('earnings',earnings)]:
-    register_commands(app,get_config,module,name=name,help=f"Read {name.replace('-', ' ')}")
+    register_commands(app,get_config,module,name=name,help="Read and submit participant clips" if name=="submissions" else f"Read {name.replace('-', ' ')}")
 app.add_typer(create_auth_app(get_config,tool_name="whop"),name="auth")
 app.add_typer(create_cache_app(get_config),name="cache")
 app.add_typer(config_commands.app,name="config")

@@ -2,11 +2,11 @@
 
 ## DESCRIPTION
 
-Read Whop participant accounts and Content Rewards linked accounts, campaigns, submissions, and earnings. Use it to inspect campaign rules and actual creator performance through an isolated saved browser profile.
+Read Whop participant accounts and Content Rewards linked accounts, campaigns, submissions, and earnings, and explicitly submit verified published clips. Use it to inspect campaign rules and actual creator performance through an isolated saved browser profile.
 
-## Read-only scope
+## Scope
 
-The CLI uses observed participant endpoints through the shared browser engine. It offers read operations only. It cannot connect accounts, apply to campaigns, submit clips, withdraw funds, or change settings.
+The CLI uses observed participant endpoints through the shared browser engine. Reads remain separate from the explicit journaled submission operation. The CLI cannot connect accounts, apply to campaigns, withdraw funds, or change settings.
 
 ## Authentication
 
@@ -51,6 +51,22 @@ Campaigns, submissions, and payouts pass limits and cursors to the server. Linke
 Submission `get` searches the verified approved/pending/history lists for clips and retainers, bounded at 1000 rows per list. There is no observed submission-detail endpoint or nonempty record schema. Failure means the record was not found in that bounded inspection, not proof that no record exists. History sends `isDeleted:true`; it never invents a history status. Server action IDs are discovered from current page bundles and only the three verified read actions are permitted. Changed or unsupported action encodings fail explicitly.
 
 Earnings require an explicit timezone-aware date range no longer than 366 days and one unambiguous Content Rewards creator ID from the linked registry. Currency, string amounts, nulls, and measured fields remain exactly as returned. No missing amount is replaced with zero, and views or CPM forecasts are not labeled earned money. Whop account balances and Content Rewards creator analytics are separate surfaces. Active bio verification of a linked account is not proof of OAuth authorization.
+
+## Verified clip submissions
+
+```bash
+whop submissions readiness CAMPAIGN_ID --profile rewards --expected-account-id EXPECTED_WHOP_ID --expected-tiktok-account-id EXPECTED_TIKTOK_NUMERIC_ID
+whop submissions create REQUEST_UUID CAMPAIGN_ID --profile rewards --expected-account-id EXPECTED_WHOP_ID --expected-tiktok-account-id EXPECTED_TIKTOK_NUMERIC_ID --requirements-digest ACCEPTED_DIGEST --publication-receipt RECEIPT_JSON --confirm
+whop submissions reconcile REQUEST_UUID --profile rewards
+```
+
+Run readiness before private TikTok upload, then immediately before public Post with `--requirements-digest` set to the originally accepted digest. It verifies the exact authenticated Whop actor, one active linked numeric TikTok account, active public campaign with remaining TikTok funds, open campaign/platform intake, no creator cap, the current requirements, and the dynamically discovered create action. Application-required campaigns fail explicitly. Loading the observed Submit clip dialog obtains its dynamic action bundle without entering a URL, accepting a checkbox, or submitting anything. Requirements include the campaign description, reference materials, platforms and TikTok payout terms. Spend totals are checked fresh but excluded from the digest.
+
+The receipt is the owning Studio SDK runtime bridge object: `publication_id`, exact canonical `publication_url`, numeric `account_id`, `handle`, UTC `published_at`, and canonical JSON `provenance` containing `kind:studio_verified`, `request_id`, `post_project_id`, `asset_sha256`, `policy_digest`, and exact Studio items readback endpoint. The timestamp must come from the verified provider publication time. A receipt is explicit caller authority, not a cryptographic attestation; the trusted runtime constructs it from the owning SDK and coordinator journal. Whop independently validates the linked account, duplicate post and 30-minute freshness window.
+
+`create` requires `--confirm`. SDK `create_submission` accepts either explicit `True` authority or a confirmation callback called after fresh readiness immediately before dispatch. A private profile-owned SQLite journal binds UUID, actor, campaign, post, receipt and accepted brief before any mutation. Indexed request lookup and a unique actor/experience/campaign/post constraint have no operation-count cutoff. FULL synchronous commits precede dispatch. A request can dispatch at most once, with no read-transport retry loop. Repeated identical UUIDs reconcile existing state; changed bindings and another UUID for the same owned publication are refused. The states `dispatching`, `uncertain`, and `created_unverified` never authorize another write. A timeout, 429/5xx, malformed response or missing readback keeps recoverable uncertainty. Reconcile uses the observed unfiltered campaign-only participant action. A known create-response ID can verify on its exact ID/campaign/platform/post row without scanning all history. Unknown-ID recovery retains a bounded cursor/match, refreshes the head on each pass, continues across calls, and restarts after provider end-of-list. A pass reads at most eleven pages of fifty rows; no fixed total-history cutoff exists. An empty or partial inspection never authorizes another write. The denied generic submission REST-detail route is not used. Remote duplicates fail explicitly. `submitted_verified` retains an exact participant readback, while `submission.status` keeps moderation separate. Later read misses or errors may preserve this historical state with `readback_fresh:false` and the original `observed_at`; `inspection_observed_at` records the later attempt. Never use a historical result as a new earnings/moderation measurement. Missing individual earnings remain null. SDK errors expose sanitized `code`, `category`, `status`, and `retry_after_seconds` (`retry_after` alias). Uncertain/rejected operation receipts retain these in `failure`; valid Retry-After seconds or HTTP dates are preserved even beyond 24 hours. A persisted `retry_not_before` prevents immediate reconciliation reads during a provider cooldown.
+
+No real nonempty create response or submission record has yet been observed; the first valid published clip must verify this boundary before end-to-end completion is claimed.
 
 ## Cache and profile maintenance
 

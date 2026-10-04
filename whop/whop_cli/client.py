@@ -1,9 +1,10 @@
-"""Read-only observed Whop participant contracts. No mutation transport."""
+"""Observed Whop participant reads and explicit journaled submission operations."""
 import json
 import math
 import re
 import time
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from types import SimpleNamespace
 from urllib.parse import urlencode
 from cli_tools_shared.exceptions import ClientError
@@ -12,18 +13,50 @@ from .config import get_config, rewards_location
 MAX_BODY = 8_000_000
 MAX_LIMIT = 1000
 READ_ACTIONS = {"listSocialMediaAccounts", "listMySubmissionsAction", "countMySubmissionsAction"}
+class WhopError(ClientError):
+    """Sanitized provider/SDK failure with an optional minimum retry delay."""
+    def __init__(self,code,*,category='invalid_request',status=None,retry_after_seconds=None):
+        super().__init__(code)
+        self.code=code.split(':',1)[0]
+        self.category=category
+        self.status=status
+        self.retry_after_seconds=retry_after_seconds
+        self.retry_after=retry_after_seconds
+
+def retry_after_seconds(raw,now=None):
+    if not isinstance(raw,str) or len(raw)>200: return None
+    raw=raw.strip()
+    if re.fullmatch(r'[0-9]+',raw):
+        value=float(raw)
+        return value if math.isfinite(value) else None
+    try:
+        when=parsedate_to_datetime(raw)
+        if when.tzinfo is None: return None
+        value=(when-(now or datetime.now(timezone.utc))).total_seconds()
+        return max(0.0,value) if math.isfinite(value) else None
+    except (ValueError,TypeError,OverflowError): return None
+
 FETCH_JS = """async ({path, action, body}) => {
+    let reader;
     try {
         const headers = action ? {'Next-Action':action,'Content-Type':'text/plain;charset=UTF-8','Accept':'text/x-component'} : {'Accept':'application/json'};
         const r = await fetch(path, {method:action?'POST':'GET',headers,body:action?JSON.stringify(body):undefined,credentials:'include',signal:AbortSignal.timeout(20000),redirect:'error'});
-        const text = await r.text();
-        return {status:r.status,text:text.length<=MAX_BODY?text:null,retryAfter:r.headers.get('Retry-After')};
+        const retryAfter=r.headers.get('Retry-After');
+        if(!r.body)return {status:r.status,text:null,retryAfter};
+        reader=r.body.getReader();const chunks=[];let size=0;
+        while(true){const {value,done}=await reader.read();if(done)break;
+            size+=value.byteLength;if(size>MAX_BODY)return {status:r.status,text:null,retryAfter,errorClass:'ResponseTooLarge'};
+            chunks.push(value);
+        }
+        const decoder=new TextDecoder();const text=chunks.map(c=>decoder.decode(c,{stream:true})).join('')+decoder.decode();
+        return {status:r.status,text,retryAfter};
     } catch (error) {
         const safe = ['AbortError','TimeoutError','TypeError'].includes(error?.name) ? error.name : 'Error';
         return {status:0,text:null,errorClass:safe};
-    }
+    } finally {if(reader){try{await reader.cancel();}catch(_){}}}
 }"""
 FETCH_JS = FETCH_JS.replace("MAX_BODY",str(MAX_BODY))
+
 DISCOVER_ACTION_JS = r"""async (name) => {
     const scriptSources = () => [...new Set([...document.scripts].map(s=>s.src).filter(s=>s && new URL(s).origin===location.origin))];
     const sources = scriptSources();
@@ -122,21 +155,21 @@ class WhopClient:
             status=response.get('status')
             if type(status) is not int or not 0<=status<=599:
                 raise ClientError("invalid_transport_response")
+            retry_delay=retry_after_seconds(response.get('retryAfter'))
             if status==200:
                 if not isinstance(response.get('text'),str): raise ClientError("response_too_large_or_missing")
                 return decode_action(response['text']) if action else strict_json(response['text'])
-            if status in (401,403): raise ClientError("session_expired_or_access_denied: run whop auth login")
+            if status in (401,403): raise WhopError("session_expired_or_access_denied: run whop auth login",category="auth",status=status,retry_after_seconds=retry_delay)
             if status not in (0,429,500,502,503,504) or attempt==self.max_retries:
                 if status==0:
                     category=response.get('errorClass')
                     category=category if category in ('AbortError','TimeoutError','TypeError') else 'Error'
-                    raise ClientError(f"upstream_read_failed_transport_{category}")
-                raise ClientError(f"upstream_read_failed_http_{status}")
+                    raise WhopError(f"upstream_read_failed_transport_{category}",category="transient",status=0,retry_after_seconds=retry_delay)
+                raise WhopError(f"upstream_read_failed_http_{status}",category="rate_limit" if status==429 else "transient" if status>=500 else "upstream",status=status,retry_after_seconds=retry_delay)
             delay=min(self.max_delay,self.base_delay*2**attempt)
-            retry=response.get('retryAfter')
-            if isinstance(retry,str) and retry.isdigit():
-                delay=max(delay,float(retry))
-                if delay>self.max_delay: raise ClientError("rate_limited_retry_after_exceeds_bound")
+            if retry_delay is not None:
+                delay=max(delay,retry_delay)
+                if delay>self.max_delay: raise WhopError("rate_limited_retry_after_exceeds_bound",category="rate_limit" if status==429 else "transient",status=status,retry_after_seconds=retry_delay)
             time.sleep(delay)
     def _reward_page(self,suffix=''):
         origin,path=self._location()
@@ -155,6 +188,11 @@ class WhopClient:
         return result
     def _action(self,name,args,suffix):
         if name not in READ_ACTIONS: raise ClientError("action_not_read_allowlisted")
+        document=self._action_document(suffix)
+        origin,path=self._location()
+        action=self._discover_action(document,name,suffix)
+        return self._success(self._request(document,path+suffix,action,args))
+    def _action_document(self,suffix):
         page=self._reward_page(suffix)
         origin,path=self._location()
         # Whop may wrap the experience and reset its child route to discover.
@@ -186,19 +224,23 @@ class WhopClient:
             if time.monotonic()>=deadline:
                 raise ClientError("read_action_page_not_ready: "+json.dumps({'frames':frames},separators=(',',':')))
             time.sleep(0.1)
-        def scoped_evaluate(script,arg=None):
+        def scoped_evaluate(script,arg=None,*,request_timeout=None):
             guarded="""async ({origin,path,arg}) => {
                 if(location.origin!==origin || location.pathname!==path) return {scopeMatched:false};
                 return {scopeMatched:true,value:await ("""+script+""")(arg)};
             }"""
-            result=page.evaluate_in_iframe(requested_url,guarded,{'origin':origin,'path':requested_path,'arg':arg})
+            options={} if request_timeout is None else {'request_timeout':request_timeout}
+            result=page.evaluate_in_iframe(requested_url,guarded,{'origin':origin,'path':requested_path,'arg':arg},**options)
             if not isinstance(result,dict) or result.get('scopeMatched') is not True or 'value' not in result:
                 raise ClientError("read_action_document_scope_changed")
             return result['value']
-        document=SimpleNamespace(evaluate=scoped_evaluate)
+        return SimpleNamespace(evaluate=scoped_evaluate)
+    def _discover_action(self,document,name,suffix,*,fresh=False,discovery_js=DISCOVER_ACTION_JS,request_timeout=None):
         key=(suffix,name)
+        if fresh: self._actions.pop(key,None)
         if key not in self._actions:
-            value=document.evaluate(DISCOVER_ACTION_JS,name)
+            options={} if request_timeout is None else {'request_timeout':request_timeout}
+            value=document.evaluate(discovery_js,name,**options)
             if not isinstance(value,dict): raise ClientError("invalid_action_discovery_response")
             reason=value.get('reason')
             if reason not in ('ready','ambiguous','script_fetch_failed','scripts_changed','missing','script_limit'):
@@ -212,7 +254,7 @@ class WhopClient:
             if counts[1]!=1 or not isinstance(action,str) or not re.fullmatch(r'[a-f0-9]{40,64}',action):
                 raise ClientError("invalid_action_discovery_response")
             self._actions[key]=action
-        return self._success(self._request(document,path+suffix,self._actions[key],args))
+        return self._actions[key]
     def account(self):
         page=self.browser.get_page('https://whop.com/')
         row=self._request(page,'/api/v1/users/me')
@@ -226,12 +268,14 @@ class WhopClient:
                       observed_at=datetime.now(timezone.utc).isoformat(),
                       provenance={'method':'GET','endpoint':'https://whop.com/api/v1/users/me'})
         return result
-    def linked_accounts(self,limit=100):
+    def linked_accounts(self,limit=100,*,require_complete=False):
         bounds(limit)
         result=self._action('listSocialMediaAccounts',[],'/settings')
         if not isinstance(result['data'],dict) or not isinstance(result['data'].get('socialMediaAccounts'),list):
             raise ClientError("linked_accounts_schema_changed")
-        return result['data']['socialMediaAccounts'][:limit]
+        rows=result['data']['socialMediaAccounts']
+        if require_complete and len(rows)>limit: raise ClientError('linked_accounts_inspection_incomplete')
+        return rows[:limit]
     def linked_account(self,account_id):
         identifier(account_id)
         for row in self.linked_accounts(MAX_LIMIT):
@@ -280,6 +324,21 @@ class WhopClient:
                 for row in self.submissions(MAX_LIMIT,status,retainer):
                     if row.get('id')==submission_id: return row
         raise ClientError("submission_not_found_in_bounded_inspection")
+    def _submission_operation(self,name,*args,**kwargs):
+        from . import submission_operations
+        try: return getattr(submission_operations,name)(self,*args,**kwargs)
+        except WhopError: raise
+        except ClientError as error:
+            code=str(error).split(':',1)[0]
+            if not re.fullmatch(r'[A-Za-z0-9_]{1,100}',code): code='submission_read_failed'
+            category='auth' if code in ('submission_whop_actor_changed','account_identity_missing') else 'policy_changed' if code=='submission_requirements_changed' else 'not_ready' if code in ('submission_linked_tiktok_missing_or_ambiguous','submission_campaign_not_active_public','submission_application_required_or_unknown','submission_campaign_not_tiktok','submission_campaign_not_funded','submission_intake_not_open','submission_form_unavailable','submission_form_not_ready') else 'invalid_request'
+            raise WhopError(code,category=category) from None
+    def submission_readiness(self,campaign_id,*,expected_account_id,expected_tiktok_account_id,expected_requirements_digest=None):
+        return self._submission_operation('readiness',campaign_id,expected_account_id=expected_account_id,expected_tiktok_account_id=expected_tiktok_account_id,expected_requirements_digest=expected_requirements_digest)
+    def create_submission(self,request_id,campaign_id,publication,*,expected_account_id,expected_tiktok_account_id,accepted_requirements_digest,confirm):
+        return self._submission_operation('create',request_id,campaign_id,publication,expected_account_id=expected_account_id,expected_tiktok_account_id=expected_tiktok_account_id,accepted_requirements_digest=accepted_requirements_digest,confirm=confirm)
+    def reconcile_submission(self,request_id):
+        return self._submission_operation('reconcile',request_id)
     def submission_status(self):
         return {kind:self._action('countMySubmissionsAction',[{'retainer':value}],'/submissions')['data']
                 for kind,value in [('clips',False),('retainers',True)]}

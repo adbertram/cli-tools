@@ -24,3 +24,27 @@ def get(submission_id: str=typer.Argument(...),table: bool=typer.Option(False,"-
 def status(table: bool=typer.Option(False,"--table","-t")):
     """Read server submission counts for clip and retainer records."""
     render(read("submission_status"),table)
+
+@app.command('readiness')
+@command
+def readiness(campaign_id: str=typer.Argument(...), expected_account_id: str=typer.Option(...,'--expected-account-id'), expected_tiktok_account_id: str=typer.Option(...,'--expected-tiktok-account-id'), requirements_digest: Optional[str]=typer.Option(None,'--requirements-digest'), table: bool=typer.Option(False,'--table','-t')):
+    """Check actor, linked TikTok account, funding, intake, brief and live action."""
+    render(read('submission_readiness',campaign_id,expected_account_id=expected_account_id,expected_tiktok_account_id=expected_tiktok_account_id,expected_requirements_digest=requirements_digest),table)
+
+@app.command('create')
+@command
+def create(request_id: str=typer.Argument(...), campaign_id: str=typer.Argument(...), publication_receipt: str=typer.Option(...,'--publication-receipt',help='File containing the verified Studio runtime receipt JSON'), expected_account_id: str=typer.Option(...,'--expected-account-id'), expected_tiktok_account_id: str=typer.Option(...,'--expected-tiktok-account-id'), requirements_digest: str=typer.Option(...,'--requirements-digest'), confirm: bool=typer.Option(False,'--confirm',help='Explicitly authorize this participant submission'), table: bool=typer.Option(False,'--table','-t')):
+    """Send one journaled submission; an uncertain request is never retried."""
+    from ..submission_operations import read_receipt
+    from cli_tools_shared.exceptions import ClientError
+    if not confirm: raise ClientError('submission_confirmation_required')
+    receipt=read_receipt(publication_receipt)
+    render(read('create_submission',request_id,campaign_id,receipt,expected_account_id=expected_account_id,expected_tiktok_account_id=expected_tiktok_account_id,accepted_requirements_digest=requirements_digest,confirm=confirm),table)
+
+@app.command('reconcile')
+@command
+def reconcile(request_id: str=typer.Argument(...), table: bool=typer.Option(False,'--table','-t')):
+    """Read a saved request and exact participant rows without resending it."""
+    render(read('reconcile_submission',request_id),table)
+
+COMMAND_CREDENTIALS.update({name:['browser_session'] for name in ('readiness','create','reconcile')})
