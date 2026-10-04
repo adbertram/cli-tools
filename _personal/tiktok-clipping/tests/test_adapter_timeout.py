@@ -56,3 +56,12 @@ def test_real_worker_preserves_typed_provider_failure_across_process_boundary(co
         adapter.call('verify_ready', ({},))
     failure = caught.value
     assert (failure.category, failure.provider, failure.code, failure.status, failure.retry_after) == ('rate_limit', 'whop', 'read_throttled', 429, 172800.25)
+
+
+def test_real_worker_preserves_safe_diagnostics(config, monkeypatch):
+    scratch = Path(__file__).parent
+    config['adapter_module'] = 'worker_fixture'
+    monkeypatch.setenv('PYTHONPATH', str(scratch) + os.pathsep + str(scratch.parent))
+    with pytest.raises(AdapterFailure) as caught:
+        adapters.ExternalAdapter(config).call('quality', ({},))
+    assert caught.value.diagnostics == {'kind':'submission_form_predicate', 'available':False, 'context_origin':'whop_wrapper', 'route_match':False}

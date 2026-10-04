@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 import shutil
 from pathlib import Path
 from datetime import datetime, timezone
@@ -56,6 +57,35 @@ def strict_json(raw, limit=65536):
 def keys(value, required, optional=()):
     if not isinstance(value, dict) or set(value) != set(required) | (set(value) & set(optional)):
         raise SafetyError("schema_keys: expected " + ",".join(sorted(required)))
+
+
+def adapter_diagnostics(value):
+    """Only the owning SDK's bounded, text-free form predicate may cross workers."""
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise SafetyError("invalid_adapter_diagnostics")
+    base = {"kind", "available", "context_origin", "route_match"}
+    counts = {"exact_buttons", "enabled_buttons", "visible_buttons", "visible_enabled_buttons", "dialogs"}
+    keys(value, base | ({"origin", "path", "ready_state"} | counts if value.get("available") is True else set()))
+    if value["kind"] != "submission_form_predicate" or type(value["available"]) is not bool or type(value["route_match"]) is not bool or value["context_origin"] not in {"expected_app", "whop_wrapper", "other_or_missing"}:
+        raise SafetyError("invalid_adapter_diagnostics")
+    if value["available"]:
+        from whop_cli.config import rewards_location
+        from cli_tools_shared.exceptions import ClientError
+        string(value["origin"], 256)
+        string(value["path"], 256)
+        # The SDK uses this same configured-origin contract; query/fragment and
+        # any arbitrary path or browser text are forbidden here as well.
+        try:
+            origin, route = rewards_location(value["origin"] + value["path"].split("/campaigns/")[0])
+        except ClientError as exc:
+            raise SafetyError("invalid_adapter_diagnostics") from exc
+        if value["route_match"] is not True or value["context_origin"] != "expected_app" or value["origin"] != origin or not re.fullmatch(re.escape(route) + r"/campaigns/[a-f0-9-]{36}", value["path"]) or value["ready_state"] not in {"loading", "interactive", "complete"}:
+            raise SafetyError("invalid_adapter_diagnostics")
+        for field in counts:
+            number(value[field], 0, 100000, integer=True)
+    return strict_json(canonical(value), 2048)
 
 
 def number(value, minimum=0, maximum=float("inf"), integer=False):

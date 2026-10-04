@@ -1,7 +1,7 @@
 {
   "tool": "tiktok-clipping",
   "description": "CLI interface for tiktok-clipping",
-  "discovered_at": "2026-10-04T16:33:37Z",
+  "discovered_at": "2026-10-04T20:40:18Z",
   "total_commands": 16,
   "global_options": [],
   "commands": {
@@ -227,13 +227,13 @@
           ]
         },
         "retry": {
-          "help": "Revalidate blocked work after a trusted capability/configuration repair.",
+          "help": "Revalidate blocked work or an explicitly proven pre-publication visual failure.",
           "arguments": [
             {
               "name": "job_id",
               "type": "TEXT",
               "required": true,
-              "help": "Blocked job ID"
+              "help": "Blocked or proven pre-publication visual job ID"
             }
           ],
           "options": [

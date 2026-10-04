@@ -157,7 +157,14 @@ class LiveAdapter:
             code = getattr(exc, "code", None)
             if category in {"auth", "rate_limit", "transient", "upstream", "policy_changed", "not_ready", "invalid_request"} and isinstance(code, str) and re.fullmatch(r"[A-Za-z0-9_:-]{1,128}", code):
                 mapped = category if category in {"auth", "rate_limit", "transient"} else "permanent"
-                failure = AdapterFailure(mapped, "whop:" + code, getattr(exc, "retry_after_seconds", None), provider="whop", code=code, status=getattr(exc, "status", None) or None)
+                diagnostics = getattr(exc, "diagnostics", None)
+                if isinstance(diagnostics, dict) and diagnostics.get("available") is True:
+                    from whop_cli.config import rewards_location
+                    origin, route = rewards_location(client.config.rewards_url)
+                    campaign_ids = {source["campaign"]["id"] for source in self.config["sources"]}
+                    if diagnostics.get("origin") != origin or diagnostics.get("path") not in {route + "/campaigns/" + identifier for identifier in campaign_ids}:
+                        raise SafetyError("whop_diagnostic_route_changed")
+                failure = AdapterFailure(mapped, "whop:" + code, getattr(exc, "retry_after_seconds", None), provider="whop", code=code, status=getattr(exc, "status", None) or None, diagnostics=diagnostics)
                 raise failure from exc
             failure = exc
             raise
