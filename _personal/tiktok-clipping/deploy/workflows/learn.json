@@ -129,6 +129,45 @@
         "command": "=printf '%s' '{{ $json.stdinB64 }}' | /usr/bin/base64 -D | /usr/bin/env PATH='/opt/homebrew/opt/ffmpeg-full/bin:/Users/adam/.local/bin:/opt/homebrew/bin:/usr/bin:/bin' WHISPER_CPP_MODEL='/Users/adam/.local/share/cli-tools/whisper/models/ggml-small.en.bin' /Users/adam/.local/bin/tiktok-clipping jobs apply-text --config /opt/cli-tools/_personal/tiktok-clipping/deploy/config.json --n8n-execution-id '{{ $execution.id }}' --n8n-workflow-id '{{ $workflow.id }}'",
         "executeOnce": true
       }
+    },
+    {
+      "id": "read-operational-health",
+      "name": "Read operational health",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2300,
+        500
+      ],
+      "parameters": {
+        "command": "PATH=/opt/homebrew/opt/ffmpeg-full/bin:/Users/adam/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin /Users/adam/.local/bin/tiktok-clipping status get --config /opt/cli-tools/_personal/tiktok-clipping/deploy/config.json </dev/null"
+      }
+    },
+    {
+      "id": "check-operational-health",
+      "name": "Check operational health",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2520,
+        500
+      ],
+      "parameters": {
+        "jsCode": "const raw=$input.first().json.stdout;\nif(typeof raw!==\"string\" || Buffer.byteLength(raw,\"utf8\")>1048576) throw new Error(\"Invalid operational health output\");\nconst d=JSON.parse(raw), h=d.health;\nif(!h || typeof h.actionable!==\"boolean\" || !Array.isArray(h.issues)) throw new Error(\"Missing operational health contract\");\nif(h.actionable) throw new Error(\"CLIPPING_OPERATIONAL_FAILURE \"+JSON.stringify({state:h.state,issues:h.issues.slice(0,20)}));\nreturn [{json:{state:d.state,health:h}}];"
+      }
+    },
+    {
+      "id": "complete-idle-work",
+      "name": "Complete idle work",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        850,
+        600
+      ],
+      "parameters": {
+        "jsCode": "const d=$input.first().json;\nif(typeof d.ready!==\"boolean\") throw new Error(\"Missing readiness state\");\nconst action=d.action_result || d;\nreturn !d.ready && action.state!==\"visual_pending\" ? [{json:d}] : [];"
+      }
     }
   ],
   "connections": {
@@ -172,6 +211,11 @@
             "node": "Require leased job",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Complete idle work",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -208,6 +252,39 @@
           }
         ]
       ]
+    },
+    "Read operational health": {
+      "main": [
+        [
+          {
+            "node": "Check operational health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Complete idle work": {
+      "main": [
+        [
+          {
+            "node": "Read operational health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate and execute": {
+      "main": [
+        [
+          {
+            "node": "Read operational health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -215,6 +292,8 @@
     "executionTimeout": 1800,
     "saveDataErrorExecution": "all",
     "saveDataSuccessExecution": "all",
-    "timezone": "America/Chicago"
-  }
+    "timezone": "America/Chicago",
+    "errorWorkflow": "F79g2nlj6f1glf8u"
+  },
+  "active": false
 }

@@ -186,6 +186,8 @@ class Engine:
             db.execute("INSERT OR IGNORE INTO strategies VALUES(1,?,?,1)", (canonical(config["baseline"]), self.clock()))
             from .text_attempts import initialize
             initialize(db)
+            from .health import initialize as initialize_health
+            initialize_health(db)
 
     @classmethod
     def from_path(cls, path, **kwargs):
@@ -212,6 +214,8 @@ class Engine:
 
     def event(self, db, job_id, event, data):
         db.execute("INSERT INTO events(job_id,at,event,data) VALUES(?,?,?,?)", (job_id, self.clock(), event, canonical(data)))
+        from .health import model_event
+        model_event(db, event, data, self.clock())
 
     def setup_reason(self):
         if self.config["account"] is None:
@@ -304,6 +308,9 @@ class Engine:
             if self.clock() - start > remaining:
                 raise AdapterFailure("ambiguous" if method in {"publish", "submit_rewards"} else "transient", "adapter_work_timeout")
         except AdapterFailure as exc:
+            from .health import observe
+            with self.transaction() as db:
+                observe(db, method, self.clock(), category=exc.category, code=exc.code, provider=exc.provider)
             retry_after = None
             if exc.category == "rate_limit":
                 retry_after = exc.retry_after if exc.retry_after is not None else self.config["limits"]["retry_base_seconds"]
@@ -314,13 +321,21 @@ class Engine:
                 self._circuit_failure("provider:" + exc.provider, exc.retry_after if exc.retry_after is not None else self.config["limits"]["retry_base_seconds"])
             raise
         except (TimeoutError, ConnectionError) as exc:
+            from .health import observe
+            with self.transaction() as db:
+                observe(db, method, self.clock(), category="ambiguous" if method in {"publish", "submit_rewards"} else "transient", code=type(exc).__name__)
             self._circuit_failure(method)
             raise AdapterFailure("ambiguous" if method in {"publish", "submit_rewards"} else "transient", type(exc).__name__) from exc
         except Exception as exc:
+            from .health import observe
+            with self.transaction() as db:
+                observe(db, method, self.clock(), category="ambiguous" if method in {"publish", "submit_rewards"} else "permanent", code=type(exc).__name__)
             self._circuit_failure(method)
             raise AdapterFailure("ambiguous" if method in {"publish", "submit_rewards"} else "permanent", type(exc).__name__ + ": " + str(exc)[:500]) from exc
         with self.transaction() as db:
             db.execute("INSERT INTO circuits VALUES(?,0,0) ON CONFLICT(capability) DO UPDATE SET failures=0,until=0", (method,))
+            from .health import observe
+            observe(db, method, self.clock())
         return result
 
     def _job(self, db, job_id):
@@ -360,10 +375,15 @@ class Engine:
             counts = {r[0]: r[1] for r in db.execute("SELECT status,count(*) FROM jobs GROUP BY status")}
             version = int(db.execute("SELECT value FROM settings WHERE key='strategy_version'").fetchone()[0])
         reason = self.setup_reason()
-        return {"state": "unconfigured" if reason else control, "control": control, "reason": reason,
+        state = {"state": "unconfigured" if reason else control, "control": control, "reason": reason,
                 "account": self.config["account"], "jobs": counts, "budgets": budgets, "strategy_version": version,
                 "adapter_configured": self.config["adapter_module"] is not None or self.adapter is not None,
                 "policy_digest": self.policy_digest}
+        discovery = self.discovery_status() if hasattr(self, 'discovery_status') else None
+        with self.transaction() as db:
+            from .health import project
+            state['health'] = project(self, db, state, discovery)
+        return state
 
     def _new_job(self, db, kind, data, status="queued"):
         if db.execute("SELECT count(*) FROM jobs WHERE status NOT IN ('published','done','failed')").fetchone()[0] >= self.config["limits"]["max_queue"]:

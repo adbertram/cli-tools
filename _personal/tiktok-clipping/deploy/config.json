@@ -7,9 +7,9 @@
     "daily_posts": 0,
     "daily_model_calls": 0,
     "daily_runtime_seconds": 0,
-    "min_clip_seconds": 15,
+    "min_clip_seconds": 7,
     "max_clip_seconds": 60,
-    "max_attempts": 6,
+    "max_attempts": 12,
     "max_revisions": 2,
     "lease_seconds": 900,
     "max_payload_bytes": 262144,
@@ -23,7 +23,7 @@
     "caption_chars": 2200,
     "metrics_batch_size": 5,
     "metrics_poll_seconds": 3600,
-    "metrics_max_age_seconds": 864000,
+    "metrics_max_age_seconds": 1296000,
     "max_clips_per_source": 3
   },
   "learning": {
@@ -34,7 +34,28 @@
     "max_weight_delta": 0.05,
     "max_exploration": 0.1,
     "regression_fraction": 0.2,
-    "objective": "revenue"
+    "objective": "revenue",
+    "outcome_policy": {
+      "objectives": [
+        {
+          "id": "received_usd_14d",
+          "channel": "creator_net",
+          "field": "received_cents",
+          "horizon_seconds": 1209600,
+          "tolerance_seconds": 86400,
+          "currency": "USD"
+        },
+        {
+          "id": "views_24h",
+          "channel": "engagement",
+          "field": "views",
+          "horizon_seconds": 86400,
+          "tolerance_seconds": 3600,
+          "currency": null
+        }
+      ],
+      "baseline_share": 0.1
+    }
   },
   "baseline": {
     "weights": {
@@ -53,5 +74,27 @@
     "retention_seconds": 86400,
     "continuation_seconds": 30,
     "workflow_id": "iok4Q6LnQuJ4xMvg"
+  },
+  "native_text": {
+    "workflow_ids": {
+      "clip": "iok4Q6LnQuJ4xMvg",
+      "learn": "sftryxebi3TPw1Ti"
+    },
+    "model": {
+      "provider": "deepseek-official",
+      "model": "deepseek-flash"
+    },
+    "max_output_tokens": 2048,
+    "max_result_bytes": 16384,
+    "timeout_seconds": 120,
+    "continuation_seconds": 30,
+    "retention_seconds": 86400,
+    "sdk_package": "/Users/adam/.local/lib/node_modules/@deepseek-ai/dsh/package.json",
+    "python_executable": "/Users/adam/.local/share/uv/tools/tiktok-clipping-cli/bin/python"
+  },
+  "monitoring": {
+    "enabled": false,
+    "ambiguity_age_seconds": 1800,
+    "stalled_job_age_seconds": 3600
   }
 }

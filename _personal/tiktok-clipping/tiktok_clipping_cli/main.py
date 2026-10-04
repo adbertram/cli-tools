@@ -54,7 +54,18 @@ def prepare(config: ConfigPath, kind: str = typer.Option(..., "--kind", help="cl
             workflow_id: Optional[str] = typer.Option(None,"--n8n-workflow-id",help="Trusted configured native workflow ID."),
             native_text: bool = typer.Option(False,"--native-text",help="Require configured native text receipts; never issue legacy proposals.")):
     """Claim one durable job or return an explicit paused/unconfigured/idle state."""
-    _perform(lambda: _native_engine(config,execution_id,workflow_id).prepare(kind,require_native_text=native_text))
+    def action():
+        engine = _native_engine(config,execution_id,workflow_id)
+        try:
+            return engine.prepare(kind,require_native_text=native_text)
+        except SafetyError as exc:
+            daily = {"budget_exhausted: "+field:field for field in ('posts','model_calls','runtime_seconds')}
+            if str(exc) not in daily:
+                raise
+            health = engine.status()['health']
+            return {'ready':False,'state':'waiting','reason':'daily_budget_exhausted',
+                    'budget':daily[str(exc)],'retry_at':health['budget_window']['reset_at']}
+    _perform(action)
 
 
 @jobs.command("apply")

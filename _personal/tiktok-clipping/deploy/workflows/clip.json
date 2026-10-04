@@ -180,7 +180,8 @@
           "id": "SCgsQg91RETeYSdk",
           "name": "DeepSeek Harness (adam-server)"
         }
-      }
+      },
+      "continueOnFail": true
     },
     {
       "id": "encode-visual-result",
@@ -193,7 +194,7 @@
       ],
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const result=$input.first().json.result; if(typeof result!==\"string\" || result.length>65536) throw new Error(\"Invalid native review result\"); const receipt=JSON.parse(result); const e=$(\"Require visual review\").first().json.visual; if(JSON.stringify(receipt.envelope)!==JSON.stringify(e)) throw new Error(\"Native visual envelope changed\"); const stdinB64=Buffer.from(result,\"utf8\").toString(\"base64\"); if(!/^[A-Za-z0-9+/=]+$/.test(stdinB64)) throw new Error(\"Invalid visual transport\"); return [{json:{stdinB64}}];"
+        "jsCode": "const native=$input.first().json;\nconst e=$(\"Require visual review\").first().json.visual;\nif(!native || typeof native!==\"object\" || Array.isArray(native)) throw new Error(\"Invalid native visual response\");\nconst failed=Object.prototype.hasOwnProperty.call(native,\"error\");\nlet result=typeof native.result===\"string\"?native.result:null;\nif(result===null && failed && typeof native.stdout===\"string\") {\n try { const candidate=JSON.parse(native.stdout); if(candidate && candidate.envelope) result=native.stdout; } catch {}\n}\nif(result===null) {\n const timedOut=failed && native.timedOut===true;\n result=JSON.stringify({envelope:e,outcome:timedOut?\"timeout\":\"failed\",decision:null,usage_observed:false,usage:null,\n  model:{provider:\"deepseek-official\",model:\"deepseek-flash\"},observed_at:new Date().toISOString(),\n  failure:{category:timedOut?\"timeout\":\"model_failed\",code:timedOut?\"native_timeout\":\"native_receipt_missing\",status:null,retry_after_ms:null}});\n}\nif(Buffer.byteLength(result,\"utf8\")>262144) throw new Error(\"Visual receipt transport exceeded\");\nconst receipt=JSON.parse(result);\nif(JSON.stringify(receipt.envelope)!==JSON.stringify(e)) throw new Error(\"Native visual envelope changed\");\n// Keep original UTF-8 bytes: strict coordinator parsing owns authorization.\nconst stdinB64=Buffer.from(result,\"utf8\").toString(\"base64\");\nif(!/^[A-Za-z0-9+/=]+$/.test(stdinB64)) throw new Error(\"Invalid visual transport\");\nreturn [{json:{stdinB64}}];"
       }
     },
     {
@@ -206,8 +207,60 @@
         0
       ],
       "parameters": {
-        "command": "=printf '%s' '{{ $json.stdinB64 }}' | /usr/bin/base64 -D | /usr/bin/env PATH='/opt/homebrew/opt/ffmpeg-full/bin:/Users/adam/.local/bin:/opt/homebrew/bin:/usr/bin:/bin' /Users/adam/.local/bin/tiktok-clipping jobs apply-visual --config /opt/cli-tools/_personal/tiktok-clipping/deploy/config.json --n8n-execution-id '{{ $execution.id }}' --n8n-workflow-id iok4Q6LnQuJ4xMvg",
+        "command": "=printf '%s' '{{ $json.stdinB64 }}' | /usr/bin/base64 -D | /usr/bin/env PATH='/opt/homebrew/opt/ffmpeg-full/bin:/Users/adam/.local/bin:/opt/homebrew/bin:/usr/bin:/bin' /Users/adam/.local/bin/tiktok-clipping jobs apply-visual --config /opt/cli-tools/_personal/tiktok-clipping/deploy/config.json --n8n-execution-id '{{ $execution.id }}' --n8n-workflow-id {{$workflow.id}}",
         "executeOnce": true
+      }
+    },
+    {
+      "id": "read-operational-health",
+      "name": "Read operational health",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2300,
+        500
+      ],
+      "parameters": {
+        "command": "PATH=/opt/homebrew/opt/ffmpeg-full/bin:/Users/adam/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin /Users/adam/.local/bin/tiktok-clipping status get --config /opt/cli-tools/_personal/tiktok-clipping/deploy/config.json </dev/null"
+      }
+    },
+    {
+      "id": "check-operational-health",
+      "name": "Check operational health",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2520,
+        500
+      ],
+      "parameters": {
+        "jsCode": "const raw=$input.first().json.stdout;\nif(typeof raw!==\"string\" || Buffer.byteLength(raw,\"utf8\")>1048576) throw new Error(\"Invalid operational health output\");\nconst d=JSON.parse(raw), h=d.health;\nif(!h || typeof h.actionable!==\"boolean\" || !Array.isArray(h.issues)) throw new Error(\"Missing operational health contract\");\nif(h.actionable) throw new Error(\"CLIPPING_OPERATIONAL_FAILURE \"+JSON.stringify({state:h.state,issues:h.issues.slice(0,20)}));\nreturn [{json:{state:d.state,health:h}}];"
+      }
+    },
+    {
+      "id": "complete-idle-work",
+      "name": "Complete idle work",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        850,
+        600
+      ],
+      "parameters": {
+        "jsCode": "const d=$input.first().json;\nif(typeof d.ready!==\"boolean\") throw new Error(\"Missing readiness state\");\nconst action=d.action_result || d;\nreturn !d.ready && action.state!==\"visual_pending\" ? [{json:d}] : [];"
+      }
+    },
+    {
+      "id": "complete-render-work",
+      "name": "Complete render work",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        600
+      ],
+      "parameters": {
+        "jsCode": "const d=$input.first().json;\nreturn d.state!==\"visual_pending\" ? [{json:d}] : [];"
       }
     }
   ],
@@ -255,6 +308,11 @@
           },
           {
             "node": "Require visual review",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Complete idle work",
             "type": "main",
             "index": 0
           }
@@ -312,6 +370,11 @@
             "node": "Require visual review",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Complete render work",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -348,6 +411,50 @@
           }
         ]
       ]
+    },
+    "Read operational health": {
+      "main": [
+        [
+          {
+            "node": "Check operational health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Complete idle work": {
+      "main": [
+        [
+          {
+            "node": "Read operational health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Complete render work": {
+      "main": [
+        [
+          {
+            "node": "Read operational health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate visual receipt": {
+      "main": [
+        [
+          {
+            "node": "Read operational health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -355,6 +462,8 @@
     "executionTimeout": 1800,
     "saveDataErrorExecution": "all",
     "saveDataSuccessExecution": "all",
-    "timezone": "America/Chicago"
-  }
+    "timezone": "America/Chicago",
+    "errorWorkflow": "F79g2nlj6f1glf8u"
+  },
+  "active": false
 }

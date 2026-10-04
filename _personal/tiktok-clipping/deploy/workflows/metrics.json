@@ -59,6 +59,32 @@
         "mode": "runOnceForAllItems",
         "jsCode": "const raw=$input.first().json.stdout; if(typeof raw!==\"string\" || raw.length>1048576) throw new Error(\"Invalid coordinator envelope\"); const d=JSON.parse(raw); if (!d || typeof d!==\"object\" || Array.isArray(d)) throw new Error(\"Invalid coordinator result\"); return [{json:d}];"
       }
+    },
+    {
+      "id": "read-operational-health",
+      "name": "Read operational health",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2300,
+        500
+      ],
+      "parameters": {
+        "command": "PATH=/opt/homebrew/opt/ffmpeg-full/bin:/Users/adam/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin /Users/adam/.local/bin/tiktok-clipping status get --config /opt/cli-tools/_personal/tiktok-clipping/deploy/config.json </dev/null"
+      }
+    },
+    {
+      "id": "check-operational-health",
+      "name": "Check operational health",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2520,
+        500
+      ],
+      "parameters": {
+        "jsCode": "const raw=$input.first().json.stdout;\nif(typeof raw!==\"string\" || Buffer.byteLength(raw,\"utf8\")>1048576) throw new Error(\"Invalid operational health output\");\nconst d=JSON.parse(raw), h=d.health;\nif(!h || typeof h.actionable!==\"boolean\" || !Array.isArray(h.issues)) throw new Error(\"Missing operational health contract\");\nif(h.actionable) throw new Error(\"CLIPPING_OPERATIONAL_FAILURE \"+JSON.stringify({state:h.state,issues:h.issues.slice(0,20)}));\nreturn [{json:{state:d.state,health:h}}];"
+      }
     }
   ],
   "connections": {
@@ -94,6 +120,28 @@
           }
         ]
       ]
+    },
+    "Read operational health": {
+      "main": [
+        [
+          {
+            "node": "Check operational health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read coordinator result": {
+      "main": [
+        [
+          {
+            "node": "Read operational health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -101,6 +149,8 @@
     "executionTimeout": 1800,
     "saveDataErrorExecution": "all",
     "saveDataSuccessExecution": "all",
-    "timezone": "America/Chicago"
-  }
+    "timezone": "America/Chicago",
+    "errorWorkflow": "F79g2nlj6f1glf8u"
+  },
+  "active": false
 }

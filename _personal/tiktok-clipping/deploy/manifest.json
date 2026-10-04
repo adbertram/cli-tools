@@ -11,7 +11,7 @@
   "runtime_config": "/opt/cli-tools/_personal/tiktok-clipping/deploy/config.json",
   "runtime_state": "/Users/adam/.local/share/tiktok-clipping",
   "native_deepseek_credential_id": "SCgsQg91RETeYSdk",
-  "readiness": "account_and_participant_integrations_unverified",
+  "readiness": "inactive_prepared_configuration_pending_integrated_cycle",
   "verification_executions": {
     "restricted_analysis": "65466",
     "clip_unconfigured": "65477",
@@ -21,5 +21,16 @@
     "isolated_native_bridge": "65484"
   },
   "account_id": "7692213003349443597",
-  "profile": "clipper"
+  "profile": "clipper",
+  "error_workflow": "F79g2nlj6f1glf8u",
+  "prepared_contract": {
+    "native_text": true,
+    "visual_schema": 3,
+    "monitoring_enabled": false,
+    "outcome_objectives": [
+      "received_usd_14d",
+      "views_24h"
+    ],
+    "budget_day_timezone": "UTC"
+  }
 }

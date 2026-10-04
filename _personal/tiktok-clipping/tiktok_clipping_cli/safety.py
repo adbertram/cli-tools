@@ -136,7 +136,14 @@ TARGET_PROFILE = "clipper"
 
 
 def validate_config(config):
-    keys(config, {"database", "workspace", "account", "sources", "limits", "learning", "baseline", "adapter_module"}, {"visual", "rewards_account", "native_text"})
+    keys(config, {"database", "workspace", "account", "sources", "limits", "learning", "baseline", "adapter_module"}, {"visual", "rewards_account", "native_text", "monitoring"})
+    if config.get('monitoring') is not None:
+        monitoring = config['monitoring']
+        keys(monitoring, {'enabled', 'ambiguity_age_seconds', 'stalled_job_age_seconds'})
+        if type(monitoring['enabled']) is not bool:
+            raise SafetyError('monitoring_enabled_boolean_required')
+        for field in ('ambiguity_age_seconds', 'stalled_job_age_seconds'):
+            number(monitoring[field], 60, 2592000, integer=True)
     if config.get("visual") is not None:
         visual = config["visual"]
         keys(visual, {"frame_count", "max_frame_bytes", "timeout_seconds", "continuation_seconds", "retention_seconds", "workflow_id"})
