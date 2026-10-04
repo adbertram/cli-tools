@@ -326,6 +326,46 @@ class StudioPublisher:
             raise StudioPublishError("Studio request_id is not in this profile's operation journal.")
         return parse_response(row[0])
 
+    def _migrate_owned_continue(self, request_id, receipt):
+        """One operator-authorized migration of a recorded pre-upgrade Continue.
+
+        This is deliberately absent from the CLI. The caller must supply the
+        session's actual native Continue receipt, not an arbitrary draft ID.
+        It changes journal project metadata only; draft storage is untouched.
+        """
+        with self._locked():
+            operation = self.status(request_id)
+            prior = canonical(operation)
+            if operation['state'] != 'prepared' or operation.get('public_action_dispatched') is not False or operation.get('project_id') != '0' or operation['draft'].get('project_id') != '0':
+                raise StudioPublishError('Recorded Continue migration requires the original private project zero.')
+            if not isinstance(receipt, dict) or receipt.get('resumed') is not True or receipt.get('banner') != 1 or receipt.get('draft_count') != 1 or receipt.get('draft_id') != operation['draft_id'] or receipt.get('actor') != operation['actor'] or not isinstance(receipt.get('row'), dict) or not isinstance(receipt.get('dom'), dict) or receipt['dom'].get('editor') != 1:
+                raise StudioPublishError('Recorded native Continue receipt is not exact.')
+            previous = self._match_draft(operation, [receipt.get('row')])
+            if previous.get('project_id') != '0':
+                raise StudioPublishError('Recorded Continue did not start at project zero.')
+            self._verify_asset(operation)
+            page = self._page()
+            page.wait_for_timeout(1500)
+            actor = self._identity(page, operation['policy'])
+            current = self._match_draft(operation, self._drafts(page, operation['policy']))
+            if actor != operation['actor'] or not positive_decimal_id(current.get('project_id')):
+                raise StudioPublishError('Recorded Continue actor or assigned project is unverified.')
+            operation.setdefault('editor_project_transitions', []).append({
+                'kind': 'operator_recorded_native_continue_v1', 'from_project_id': '0',
+                'to_project_id': current['project_id'], 'creation_id': current['creation_id'],
+                'receipt_digest': digest(receipt), 'asset_sha256': operation['asset_sha256'],
+                'observed_at': datetime.now(timezone.utc).isoformat()})
+            operation['project_id'] = current['project_id']
+            operation['draft'] = current
+            operation['updated_at'] = datetime.now(timezone.utc).isoformat()
+            with sqlite3.connect(self.database) as db:
+                db.execute('BEGIN IMMEDIATE')
+                changed = db.execute('UPDATE operations SET record=? WHERE request_id=? AND binding=? AND record=?',
+                    (canonical(operation), request_id, operation['binding'], prior)).rowcount
+                if changed != 1:
+                    raise StudioPublishError('Recorded Continue journal changed; migration refused.')
+            return operation
+
     def _page(self):
         if self.browser is None:
             self.browser = self.config.get_browser()

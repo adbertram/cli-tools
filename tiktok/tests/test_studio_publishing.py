@@ -67,6 +67,54 @@ def prepared(publisher, **changes):
     return value
 
 
+def continue_migration(publisher, monkeypatch):
+    import copy
+    value = prepared(publisher)
+    value['project_id'] = value['draft']['project_id'] = '0'
+    publisher._save(value)
+    receipt = {'actor': value['actor'], 'draft_id': value['draft_id'], 'draft_count': 1,
+               'banner': 1, 'resumed': True, 'dom': {'editor': 1}, 'row': copy.deepcopy(value['draft'])}
+    current = {**value['draft'], 'project_id': '238786606086', 'is_locked': True, 'is_temp': False}
+    monkeypatch.setattr(publisher, '_page', lambda: SimpleNamespace(wait_for_timeout=lambda ms: None))
+    monkeypatch.setattr(publisher, '_identity', lambda page, policy: value['actor'])
+    monkeypatch.setattr(publisher, '_drafts', lambda page, policy: [current])
+    return value, receipt, current
+
+
+def test_recorded_continue_migration_updates_only_owned_journal_project(publisher, monkeypatch):
+    value, receipt, current = continue_migration(publisher, monkeypatch)
+    result = publisher._migrate_owned_continue(value['request_id'], receipt)
+    assert result['project_id'] == result['draft']['project_id'] == current['project_id']
+    assert result['binding'] == value['binding'] and result['asset_sha256'] == value['asset_sha256']
+    assert current['is_locked'] is True and current['is_temp'] is False
+    assert result['state'] == 'prepared' and result['public_action_dispatched'] is False
+    assert result['editor_project_transitions'][0]['receipt_digest'] == module.digest(receipt)
+    with pytest.raises(StudioPublishError):publisher._migrate_owned_continue(value['request_id'], receipt)
+
+
+@pytest.mark.parametrize('change', ['wrong_actor', 'no_editor', 'not_resumed', 'different_media', 'changed_receipt', 'dispatched', 'unknown_state', 'wrong_old_project', 'invalid_new_project', 'journal_race'])
+def test_recorded_continue_migration_refuses_unproven_or_changed_binding(publisher, monkeypatch, change):
+    value, receipt, current = continue_migration(publisher, monkeypatch)
+    if change == 'wrong_actor':receipt['actor'] = {**receipt['actor'], 'username': 'other'}
+    elif change == 'no_editor':receipt['dom']['editor'] = 0
+    elif change == 'not_resumed':receipt['resumed'] = False
+    elif change == 'different_media':current['video_id'] = 'different'
+    elif change == 'changed_receipt':receipt['row']['file_key'] = 'other'
+    elif change == 'dispatched':value['public_action_dispatched'] = True;publisher._save(value)
+    elif change == 'unknown_state':value['state'] = 'outcome_unknown';publisher._save(value)
+    elif change == 'wrong_old_project':value['project_id'] = '123';publisher._save(value)
+    elif change == 'invalid_new_project':current['project_id'] = '0'
+    else:
+        def race(page, policy):
+            publisher._save({**publisher.status(value['request_id']), 'concurrent_note': 'preserve'})
+            return [current]
+        monkeypatch.setattr(publisher, '_drafts', race)
+    with pytest.raises(StudioPublishError):publisher._migrate_owned_continue(value['request_id'], receipt)
+    after = publisher.status(value['request_id'])
+    assert after['draft']['project_id'] == '0'
+    assert 'editor_project_transitions' not in after
+
+
 class Page:
     def __init__(self, row):
         self.rows = [row];self.events = [];self.restored = False;self.clicked = 0
