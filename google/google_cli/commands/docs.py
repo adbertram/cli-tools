@@ -19,7 +19,7 @@ from pathlib import Path
 from googleapiclient.errors import HttpError
 from ..client import get_client
 from cli_tools_shared.output import command, print_json, print_table, handle_error, print_success, print_error
-from cli_tools_shared.filters import apply_filters as _client_side_filter_reference
+from cli_tools_shared.filters import apply_filters as _client_side_filter_reference, apply_properties_filter
 from ..filter_translator import translate_docs_filters
 
 # Export format MIME types
@@ -71,10 +71,10 @@ def docs_list(
 
         # Filter to requested properties
         if properties:
-            documents = [{k: v for k, v in d.items() if k in properties} for d in documents]
+            documents = apply_properties_filter(documents, ','.join(properties))
 
         if table:
-            table_cols = properties[:3] if properties else ['name', 'id', 'modifiedTime']
+            table_cols = [field.strip() for token in properties for field in token.split(',') if field.strip()][:3] if properties else ['name', 'id', 'modifiedTime']
             table_headers = {'name': 'Name', 'id': 'ID', 'modifiedTime': 'Modified'}
             print_table(documents, table_cols, [table_headers.get(c, c.title()) for c in table_cols])
         else:

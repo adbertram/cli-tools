@@ -13,6 +13,8 @@ dependencies = [
     "tiktok-cli",
     "n8n-cli",
     "whop-cli",
+    "google-cli",
+    "youtube-cli",
 ]
 
 [dependency-groups]
@@ -32,3 +34,5 @@ cli-tools-shared = { path = "../../_repo/cli-tools-shared", editable = true }
 tiktok-cli = { path = "../../tiktok", editable = true }
 n8n-cli = { path = "../../n8n", editable = true }
 whop-cli = { path = "../../whop", editable = true }
+google-cli = { path = "../../google", editable = true }
+youtube-cli = { path = "../../youtube", editable = true }

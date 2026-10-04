@@ -714,3 +714,19 @@ This CLI requests the following OAuth2 scopes:
 - `https://www.googleapis.com/auth/chat.memberships.readonly` - Read-only Chat memberships access
 - `https://www.googleapis.com/auth/chromewebstore` - Manage Chrome Web Store items through API v2
 - `https://www.googleapis.com/auth/datastudio` - Manage Looker Studio assets and permissions
+
+## Bounded document evidence SDK
+
+`GoogleClient.read_document_bounded(config, document_id, timeout_seconds=30,
+max_bytes=2097152)` reads the exact named profile's saved credentials without OAuth,
+a browser or an interactive client constructor. It refreshes credentials only in
+memory, streams bounded current Docs evidence from all tabs, and selects
+`SUGGESTIONS_INLINE` explicitly. `suggestions_present=true` preserves unresolved
+proposed/formatting evidence and must prevent rights admission. A document-level
+403 is `access_denied`, not proof that every Google credential is invalid. No
+alternate suggestion view or permission inference runs on denial.
+
+The caller deadline includes child execution/output draining; an additional
+0.75 seconds bounds process cleanup. Provider rate-limit delays, including valid
+HTTP dates and delays beyond 24 hours, remain typed and uncapped. Raw provider
+errors, credential arguments and stderr are never included in failures.
