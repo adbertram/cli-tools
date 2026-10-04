@@ -103,6 +103,40 @@ def test_old_immutable_manifest_remains_verifiable_for_retention(visual_engine,c
     assert VisualArtifacts(visual_engine.config).verify(envelope,asset)['schema_version']==1
 
 
+def test_terminal_workflow_before_native_call_recovers_to_visual_only_new_execution(visual_engine,adapter,clock):
+    import subprocess
+    original=issue(visual_engine,clock)
+    asset=visual_engine.get(original['job_id'])['asset']
+    calls=list(adapter.calls)
+    clock.now=original['expires_at']+1
+    visual_engine.native_execution={'execution_id':'124','workflow_id':'workflow-test'}
+    recovered=visual_engine.prepare('clip')
+    assert recovered['ready'] is False and recovered['state']=='visual_pending'
+    next_envelope=recovered['action_result']['visual']
+    assert next_envelope['attempt_id']!=original['attempt_id']
+    assert next_envelope['native_execution']['execution_id']=='124'
+    assert next_envelope['asset_sha256']==asset['sha256']
+    assert adapter.calls.count('render')==calls.count('render')
+    with visual_engine.transaction() as db:
+        old=dict(db.execute('SELECT * FROM visual_attempts WHERE id=?',(original['attempt_id'],)).fetchone())
+        assert old['state']=='expired' and old['result'] is None
+        assert db.execute('SELECT model_calls FROM budgets').fetchone()[0]==3
+        assert db.execute('SELECT count(*) FROM publications').fetchone()[0]==0
+    # Execute the actual deployed Code-node source against the SDK's real
+    # nested output, using this fixture's trusted coordinator clock.
+    workflow=Path(__file__).resolve().parents[1]/'deploy/workflows/clip.json'
+    script="const fs=require('node:fs'),vm=require('node:vm');const workflow=JSON.parse(fs.readFileSync(process.argv[1],'utf8'));const source=workflow.nodes.find(n=>n.name==='Require visual review').parameters.jsCode;const input=JSON.parse(fs.readFileSync(0,'utf8'));const result=vm.runInNewContext('(function(){'+source+'})()',{Date:{now:()=>Number(process.argv[2])},$input:{first:()=>({json:input})}});process.stdout.write(JSON.stringify(result));"
+    process=subprocess.run(['node','-e',script,str(workflow),str(clock()*1000)],input=canonical(recovered),capture_output=True,text=True,timeout=2,check=True)
+    assert json.loads(process.stdout)[0]['json']['visual']==next_envelope
+    assert visual_engine.prune_visual_artifacts()==0  # Preserve active new work.
+    assert visual_engine.apply_visual(receipt(next_envelope,clock),execute=False)['state']=='ready'
+    clock.now=next_envelope['expires_at']+visual_engine.config['visual']['retention_seconds']+1
+    assert visual_engine.prune_visual_artifacts()>0
+    with visual_engine.transaction() as db:
+        old=json.loads(db.execute('SELECT result FROM visual_attempts WHERE id=?',(original['attempt_id'],)).fetchone()[0])
+        assert old['usage_observed'] is False and old['usage'] is None
+
+
 @pytest.mark.parametrize('change',['expiry','reclaim','asset','manifest','frame','input','policy','nonce'])
 def test_changed_visual_binding_never_posts(visual_engine,adapter,clock,change):
     envelope=issue(visual_engine,clock)

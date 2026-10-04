@@ -152,7 +152,7 @@
       ],
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const input=$input.first().json; const d=input.state===\"visual_pending\"?input:input.action_result; if(!d || d.state!==\"visual_pending\") return []; const e=d.visual; if(!e || e.schema_version!==1 || !/^[a-f0-9]{32}$/.test(e.job_id) || !/^[a-f0-9]{32}$/.test(e.attempt_id) || !Number.isFinite(e.expires_at) || e.expires_at<=Date.now()/1000) throw new Error(\"Invalid visual lease\"); const task=JSON.stringify(e); if(task.length>8192) throw new Error(\"Visual task too large\"); return [{json:{visual:e,task}}];"
+        "jsCode": "const input=$input.first().json; const direct=Object.prototype.hasOwnProperty.call(input,\"visual\"); if(direct && input.action_result) throw new Error(\"Ambiguous visual envelope\"); const d=direct?input:input.action_result; if(!d || d.state!==\"visual_pending\") { if(direct || input.state===\"visual_pending\") throw new Error(\"Missing visual envelope\"); return []; } const e=d.visual; if(!e || e.schema_version!==1 || !/^[a-f0-9]{32}$/.test(e.job_id) || !/^[a-f0-9]{32}$/.test(e.attempt_id) || !Number.isFinite(e.expires_at) || e.expires_at<=Date.now()/1000) throw new Error(\"Invalid visual lease\"); const task=JSON.stringify(e); if(task.length>8192) throw new Error(\"Visual task too large\"); return [{json:{visual:e,task}}];"
       }
     },
     {
