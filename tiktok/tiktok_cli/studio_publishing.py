@@ -682,6 +682,7 @@ class StudioPublisher:
             if record["state"] == "prepared":
                 temporary.unlink()
                 self._verify_asset(record)
+                record, _ = self._ready_editor(record)
                 return record
             if record["state"] not in {"preparing", "preparation_failed"} or record["public_action_dispatched"]:
                 temporary.unlink()
@@ -857,6 +858,64 @@ class StudioPublisher:
         if measured != operation["asset_sha256"] or any(getattr(before, field) != getattr(after, field) or getattr(after, field) != getattr(current, field) for field in fields) or not stat.S_ISREG(current.st_mode):
             raise StudioPublishError("Studio staged asset bytes or file identity changed after preparation.")
 
+    def _ready_editor(self, operation):
+        """Finish private recovery before returning the exact live editor binding."""
+        request_id = operation["request_id"]
+        policy = validate_policy(operation["policy"])
+        page = self._page()
+        page.wait_for_timeout(1500)
+        self._identity(page, policy)
+        rows = self._drafts(page, policy)
+        if not any(row["draft_id"] == operation["draft_id"] for row in rows):
+            if rows:
+                raise StudioPublishError("Owned draft is missing while unknown drafts exist; preserve all drafts.")
+            # Native normal-exit cleanup can remove a private temporary row.
+            if page.evaluate(HEARTBEAT_JS, policy["account_id"]) is not True:
+                raise StudioPublishError("Missing private draft recovery has an unresolved heartbeat context.")
+            operation.setdefault("orphan_recovery", []).append({"draft_id": operation["draft_id"], "state": "missing_private_draft_rebuild", "requested_at": datetime.now(timezone.utc).isoformat()})
+            operation["state"] = "preparation_failed"
+            self._save(operation)
+            operation = self._prepare(self.root / "media" / operation["staged_name"], policy, request_id)
+            page = self._page()
+            rows = self._drafts(page, policy)
+        current = self._match_draft(operation, rows)
+        if len(rows) != 1:
+            raise StudioPublishError("Studio editor does not uniquely identify the owned draft; preserve other drafts.")
+        # The native Continue banner offers one local draft. Never click
+        # it when another candidate could be resumed instead.
+        if page.locator(CAPTION_SELECTOR).count() != 1:
+            if len(rows) == 1 and page.locator('[data-e2e="local_draft_container"]').count() == 1:
+                page.get_by_role("button", name="Continue", exact=True).click()
+                self._wait(page, lambda: page.locator(CAPTION_SELECTOR).count() == 1, "Studio exact draft did not reopen.")
+            elif current.get("is_locked") is True or current.get("is_temp") is True:
+                self._delete_owned_orphan(page, operation)
+                operation["state"] = "preparation_failed"
+                self._save(operation)
+                operation = self._prepare(self.root / "media" / operation["staged_name"], policy, request_id)
+                page = self._page()
+            else:
+                raise StudioPublishError("Studio Continue does not uniquely identify the owned draft.")
+        if page.locator('.more-btn > span:first-child:has-text("Show more")').count() == 1:
+            page.locator('.more-btn > span:first-child:has-text("Show more")').click()
+        self._wait(page, lambda: page.evaluate(CONTROLS_JS).get("upload_complete") and page.evaluate(CONTROLS_JS).get("post_enabled"), "Studio reopened upload readiness did not complete.")
+        current = self._match_draft(operation, self._drafts(page, policy))
+        try:
+            self._set_caption(page, policy, current)
+        except Exception:
+            operation['state'] = 'preparation_failed'
+            operation['caption_repair'] = {'state': 'failed', 'semantic_rollback_verified': False}
+            self._save(operation)
+            raise
+        self._verify_controls(page, policy)
+        draft = self._wait(page, lambda: self._saved_caption_draft(operation, page, policy), 'Studio saved native entities did not persist.', seconds=10)
+        # TikTok creates a fresh project on resume. Its new observed exact
+        # project ID is recorded before dispatch, retaining creation/media.
+        operation["project_id"] = draft["project_id"]
+        operation['draft'] = draft
+        self._identity(page, policy)
+        self._save(operation)
+        return operation, page
+
     def publish(self, request_id: str, *, before_public_action: Callable[[dict], None]) -> dict:
         if not callable(before_public_action):
             raise StudioPublishError("Studio public action requires a trusted before_public_action callback.")
@@ -868,57 +927,8 @@ class StudioPublisher:
             policy = validate_policy(operation["policy"])
             if digest(policy) != operation["policy_digest"] or digest({"asset_sha256": operation["asset_sha256"], "policy": policy}) != operation["binding"]:
                 raise StudioPublishError("Studio policy binding changed.")
-            page = self._page()
-            page.wait_for_timeout(1500)
-            self._identity(page, policy)
-            rows = self._drafts(page, policy)
-            if not any(row["draft_id"] == operation["draft_id"] for row in rows):
-                if rows:
-                    raise StudioPublishError("Owned draft is missing while unknown drafts exist; preserve all drafts.")
-                # Native normal-exit cleanup can remove a private temporary row.
-                if page.evaluate(HEARTBEAT_JS, policy["account_id"]) is not True:
-                    raise StudioPublishError("Missing private draft recovery has an unresolved heartbeat context.")
-                operation.setdefault("orphan_recovery", []).append({"draft_id": operation["draft_id"], "state": "missing_private_draft_rebuild", "requested_at": datetime.now(timezone.utc).isoformat()})
-                operation["state"] = "preparation_failed"
-                self._save(operation)
-                operation = self._prepare(self.root / "media" / operation["staged_name"], policy, request_id)
-                page = self._page()
-                rows = self._drafts(page, policy)
-            current = self._match_draft(operation, rows)
-            if len(rows) != 1:
-                raise StudioPublishError("Studio editor does not uniquely identify the owned draft; preserve other drafts.")
-            # The native Continue banner offers one local draft. Never click
-            # it when another candidate could be resumed instead.
-            if page.locator(CAPTION_SELECTOR).count() != 1:
-                if len(rows) == 1 and page.locator('[data-e2e="local_draft_container"]').count() == 1:
-                    page.get_by_role("button", name="Continue", exact=True).click()
-                    self._wait(page, lambda: page.locator(CAPTION_SELECTOR).count() == 1, "Studio exact draft did not reopen.")
-                elif current.get("is_locked") is True or current.get("is_temp") is True:
-                    self._delete_owned_orphan(page, operation)
-                    operation["state"] = "preparation_failed"
-                    self._save(operation)
-                    operation = self._prepare(self.root / "media" / operation["staged_name"], policy, request_id)
-                    page = self._page()
-                else:
-                    raise StudioPublishError("Studio Continue does not uniquely identify the owned draft.")
-            if page.locator('.more-btn > span:first-child:has-text("Show more")').count() == 1:
-                page.locator('.more-btn > span:first-child:has-text("Show more")').click()
-            self._wait(page, lambda: page.evaluate(CONTROLS_JS).get("upload_complete") and page.evaluate(CONTROLS_JS).get("post_enabled"), "Studio reopened upload readiness did not complete.")
-            current = self._match_draft(operation, self._drafts(page, policy))
-            try:
-                self._set_caption(page, policy, current)
-            except Exception:
-                operation['state'] = 'preparation_failed'
-                operation['caption_repair'] = {'state': 'failed', 'semantic_rollback_verified': False}
-                self._save(operation)
-                raise
-            self._verify_controls(page, policy)
-            draft = self._wait(page, lambda: self._saved_caption_draft(operation, page, policy), 'Studio saved native entities did not persist.', seconds=10)
-            # TikTok creates a fresh project on resume. Its new observed exact
-            # project ID is recorded before dispatch, retaining creation/media.
-            operation["project_id"] = draft["project_id"]
-            operation['draft'] = draft
-            self._identity(page, policy)
+            operation, page = self._ready_editor(operation)
+            draft = operation['draft']
             key = "__studio_publish_" + request_id.replace("-", "")
             page.evaluate(OBSERVER_JS, {"key": key, "path": POST_PATH,
                                          "video_id": draft["video_id"], "creation_id": draft["creation_id"],

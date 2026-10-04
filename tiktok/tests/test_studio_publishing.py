@@ -310,10 +310,53 @@ def test_prepared_same_request_and_binding_never_uploads_again(publisher, tmp_pa
     with module.sqlite3.connect(publisher.database) as db:
         db.execute("UPDATE operations SET binding=?,record=? WHERE request_id=?", (value["binding"], module.canonical(value), value["request_id"]))
     file = tmp_path / "same.mp4";file.write_bytes(b"known-mp4-bytes")
-    monkeypatch.setattr(publisher, "_page", lambda: pytest.fail("duplicate must not upload"))
+    attach(publisher, value, monkeypatch)
     assert publisher.prepare(file, policy(), value["request_id"])["state"] == "prepared"
     with pytest.raises(StudioPublishError, match="different request"):
         publisher.prepare(file, policy(), str(uuid4()))
+
+
+@pytest.mark.parametrize('recovery', ['continue', 'missing'])
+def test_prepare_returns_live_recovery_binding_before_publish_callback(publisher, monkeypatch, recovery):
+    value = prepared(publisher)
+    page = attach(publisher, value, monkeypatch)
+    if recovery == 'continue':
+        original = page.locator
+        page.opened = False
+        def locator(selector):
+            if selector == module.CAPTION_SELECTOR:
+                return SimpleNamespace(count=lambda: int(page.opened))
+            return original(selector)
+        page.locator = locator
+        def continued():
+            page.opened = True
+            page.rows[0] = {**page.rows[0], 'project_id': '987654321'}
+        page.get_by_role = lambda *args, **kwargs: SimpleNamespace(click=continued)
+    else:
+        page.rows = []
+        original_evaluate = page.evaluate
+        page.evaluate = lambda script, value=None: True if script == module.HEARTBEAT_JS else original_evaluate(script, value)
+        def rebuilt(source, policy, request_id):
+            row = {**value['draft'], 'draft_id': 'OWNED_REBUILT', 'creation_id': 'OWNED_REBUILT'}
+            result = {**value, 'draft_id': row['draft_id'], 'draft': row}
+            page.rows = [row];publisher._save(result)
+            return result
+        original_prepare = publisher._prepare
+        def prepare(source, policy, request_id):
+            if publisher.status(request_id)['state'] == 'preparation_failed':
+                return rebuilt(source, policy, request_id)
+            return original_prepare(source, policy, request_id)
+        monkeypatch.setattr(publisher, '_prepare', prepare)
+    ready = publisher.prepare(publisher.root/'media'/value['staged_name'], value['policy'], value['request_id'])
+    def deny(binding):
+        pending = publisher.status(value['request_id'])
+        assert pending['draft'] == ready['draft']
+        assert binding['draft_id'] == ready['draft_id']
+        assert binding['project_id'] == ready['project_id']
+        raise RuntimeError('trusted denial')
+    with pytest.raises(StudioPublishError, match='callback rejected'):
+        publisher.publish(value['request_id'], before_public_action=deny)
+    assert page.clicked == 0
 
 
 def test_cli_public_post_guard_runs_before_publisher_construction(monkeypatch):
