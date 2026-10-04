@@ -23,7 +23,7 @@ def media_identity(record):
 
 
 from .safety import (
-    METRICS, SafetyError, canonical, digest, keys, number, strict_json, string,
+    METRICS, TARGET_HANDLE, SafetyError, canonical, digest, keys, number, strict_json, string,
     timestamp, validate_config, validate_proposal, validate_source,
 )
 
@@ -615,12 +615,12 @@ class Engine:
     def _publication(self, record):
         keys(record, {"publication_id", "publication_url", "account_id", "handle", "published_at", "provenance"})
         account = self.config["account"]
-        if record["account_id"] != account["account_id"] or string(record["handle"]).lstrip("@").casefold() != "ata_clipping":
+        if record["account_id"] != account["account_id"] or string(record["handle"]).removeprefix("@").casefold() != TARGET_HANDLE:
             raise SafetyError("publication_account_mismatch")
         string(record["publication_id"], 256)
         from urllib.parse import urlparse
         parsed = urlparse(string(record["publication_url"]))
-        if parsed.scheme != "https" or parsed.hostname not in {"tiktok.com", "www.tiktok.com"} or not parsed.path.startswith("/@ata_clipping/video/") or parsed.username or parsed.password:
+        if parsed.scheme != "https" or parsed.hostname not in {"tiktok.com", "www.tiktok.com"} or not parsed.path.startswith(f"/@{TARGET_HANDLE}/video/") or parsed.username or parsed.password:
             raise SafetyError("publication_url_account_mismatch")
         string(record["provenance"])
         if timestamp(record["published_at"]) > self.clock() + 300:
