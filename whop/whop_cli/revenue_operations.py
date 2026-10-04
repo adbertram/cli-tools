@@ -238,6 +238,7 @@ def result(db,scope,state,operation,submission_id,campaign_id):
     verified=pending_known and received_known
     return {'submission_id':submission_id,'campaign_id':campaign_id,'publication_id':operation['binding']['publication']['publication_id'],
       'status':record.get('status') if fresh else None,'approved_at':record.get('approvedAt') if fresh else None,
+      'flagged':record.get('flagged') if fresh else None,'is_deleted':record.get('isDeleted') if fresh else None,'creator_status':record.get('creator_status') if fresh else None,
       'observed_at':state.get('completed_at') if state['complete'] else None,'readback_fresh':fresh and state['complete'],
       'pending_cents':str(pending) if pending_known else None,'received_cents':str(received) if received_known else None,'total_earned_cents':str(pending+received) if verified else None,
       'amount_basis':'creator_net','provider_display_pending_cents':str(display_pending) if not uncertain and not pending_unknown-{'pending_net_amount_unknown'} else None,

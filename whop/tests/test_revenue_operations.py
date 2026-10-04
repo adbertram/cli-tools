@@ -274,3 +274,39 @@ def test_disappeared_allocation_cannot_resurface_with_foreign_binding(client):
     client._rest.return_value=reply([]);get(client)
     client._rest.return_value=reply([payout(campaignId='other_campaign')])
     with pytest.raises(WhopError,match='binding_changed'):get(client)
+
+@pytest.mark.parametrize('raw,flagged,deleted,expected',[
+    ('pending',True,False,'rejected'),('approved',True,False,'rejected'),
+    ('pending',False,False,'pending'),('approved',False,False,'approved'),
+    ('approved',True,True,'approved'),('unrecognized',False,False,'unrecognized'),
+    ('approved',None,False,None),('approved',False,None,None),
+])
+def test_source_backed_creator_moderation(client,raw,flagged,deleted,expected):
+    row=client._action.return_value['data'][0]
+    row.update(status=raw,flagged=flagged,isDeleted=deleted)
+    result=get(client)
+    assert result['status']==raw and result['creator_status']==expected
+    assert result['flagged'] is flagged and result['is_deleted'] is deleted
+    assert result['provenance']['moderation_readback_fresh'] is True
+    with op.journal_lock(client.config) as db:
+        record=op.load(db,REQUEST)['submission']
+    assert record['flagged'] is flagged and record['isDeleted'] is deleted
+    assert record['creator_status']==expected
+
+@pytest.mark.parametrize('field,value',[('flagged',1),('flagged','true'),('isDeleted',0),('isDeleted',[])])
+def test_malformed_moderation_flags_fail_explicitly(client,field,value):
+    client._action.return_value['data'][0][field]=value
+    with pytest.raises(WhopError,match='moderation_flag_schema_changed'):get(client)
+    client._rest.assert_not_called()
+
+def test_historical_moderation_flags_are_not_fresh_status(client):
+    client._action.return_value['data'][0].update(flagged=True,isDeleted=False)
+    assert get(client)['creator_status']=='rejected'
+    client._action.return_value['data']=[]
+    result=get(client)
+    assert result['provenance']['moderation_readback_fresh'] is False
+    assert result['status'] is None and result['creator_status'] is None
+    assert result['flagged'] is None and result['is_deleted'] is None
+    with op.journal_lock(client.config) as db:
+        record=op.load(db,REQUEST)['submission']
+    assert record['creator_status']=='rejected' and record['flagged'] is True
