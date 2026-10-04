@@ -4,7 +4,7 @@ import {mkdtemp, mkdir, writeFile, symlink, rm, realpath} from 'node:fs/promises
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
-import {validateEnvelope,loadInputs,measuredUsage,classifyFailure} from '../deploy/visual-runner.mjs';
+import {validateEnvelope,loadInputs,measuredUsage,classifyFailure,parseDecision,decisionFailure} from '../deploy/visual-runner.mjs';
 const hash=v=>createHash('sha256').update(v).digest('hex');
 
 async function fixture() {
@@ -70,4 +70,24 @@ test('documented provider errors preserve Retry-After without raw messages',()=>
  assert.deepEqual(classifyFailure({kind:'error',error:{code:'RATE_LIMIT',status:429,providerRetryAfterMs:12345,message:'SECRET'}}),{category:'rate_limit',code:'RATE_LIMIT',status:429,retry_after_ms:12345});
  for(const [code,category] of [['AUTH','auth'],['SERVER','provider_unavailable'],['TIMEOUT','timeout'],['QUOTA_EXCEEDED','model_failed']])assert.equal(classifyFailure({kind:'error',error:{code}}).category,category);
  assert.equal(classifyFailure({kind:'max-tokens'}).code,'max-tokens');
+});
+
+test('native result uses authoritative duplicate-key parser and keeps valid strings',()=>{
+ const python=new URL('../.venv/bin/python',import.meta.url).pathname;
+ const value={passed:true,checks:{disclosure_visible:true,captions_readable:true,portrait_composition:true,no_obvious_visual_defects:true},reason:'Literal text: {"passed":true,"passed":false} is untrusted caption data.'};
+ assert.deepEqual(parseDecision(JSON.stringify(value),python),value);
+ for(const text of [JSON.stringify(value).replace('{"passed":true','{"passed":true,"passed":true'),JSON.stringify(value).replace('"captions_readable":true','"captions_readable":true,"captions_readable":true'),JSON.stringify(value).replace('"passed":true','"passed":NaN'),'{"passed":true,"\\u0070assed":true}'])assert.throws(()=>parseDecision(text,python));
+ assert.throws(()=>parseDecision('x'.repeat(16385),python));
+});
+
+test('parser infrastructure failure is distinct from malformed model JSON',()=>{
+ const python=new URL('../.venv/bin/python',import.meta.url).pathname;
+ const category=(text,executable,execute)=>{try{parseDecision(text,executable,execute);assert.fail('must refuse');}catch(error){return decisionFailure(error);}};
+ assert.equal(category('{"passed":true,"passed":false}',python).category,'malformed_output');
+ assert.equal(category('{}','/nonexistent-clipping-parser').code,'parser_unavailable');
+ const timedOut=()=>{throw Object.assign(Error('private diagnostic'),{code:'ETIMEDOUT'});};
+ assert.deepEqual(category('{}',python,timedOut),{category:'model_failed',code:'parser_timeout',status:null,retry_after_ms:null});
+ const importFailed=()=>{throw Object.assign(Error('private import traceback'),{status:1});};
+ assert.equal(category('{}',python,importFailed).category,'model_failed');
+ assert.equal(category('{}',python,importFailed).code,'parser_unavailable');
 });

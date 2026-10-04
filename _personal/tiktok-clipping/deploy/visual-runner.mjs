@@ -94,6 +94,27 @@ export function validDecision(value) {
   && typeof value.reason==='string' && value.reason.trim().length>0 && value.reason.length<=2000;
 }
 
+export function decisionFailure(error) {
+ const code=['parser_timeout','parser_unavailable'].includes(error?.code)?error.code:'invalid_model_result';
+ return {category:code==='invalid_model_result'?'malformed_output':'model_failed',code,status:null,retry_after_ms:null};
+}
+
+export function parseDecision(text, pythonExecutable, execute=execFileSync) {
+ if(typeof text!=='string' || Buffer.byteLength(text)>16384 || typeof pythonExecutable!=='string' || !path.isAbsolute(pythonExecutable)) throw Error('invalid_model_result');
+ // Reuse the coordinator's duplicate-key/nonfinite parser. The input stays on
+ // stdin and never enters shell source; preserve the original raw result.
+ let raw;
+ try {
+  raw=execute(pythonExecutable,['-c','import sys\nfrom tiktok_clipping_cli.safety import strict_json,canonical,SafetyError\ntry:\n result=canonical(strict_json(sys.stdin.buffer.read(16385),16384))\nexcept SafetyError:\n sys.exit(2)\nprint(result)'],{input:text,encoding:'utf8',timeout:2000,maxBuffer:32768,stdio:['pipe','pipe','ignore']});
+ } catch(error) {
+  const code=error.status===2?'invalid_model_result':error.code==='ETIMEDOUT'?'parser_timeout':'parser_unavailable';
+  throw Object.assign(Error(code),{code});
+ }
+ const decision=JSON.parse(raw);
+ if(!validDecision(decision))throw Error('invalid_model_result');
+ return decision;
+}
+
 async function run(ctx,config) {
  await ctx.get('loader')?.await();
  const {envelope,root,manifest,inputs}=await loadInputs(config.task,config);
@@ -121,8 +142,8 @@ async function run(ctx,config) {
   receipt.usage_provenance={session_id:agent.session.id,as_of_seq:ctx.sessionProjections.snapshot(agent.session).asOfSeq};
   if(reason?.kind==='completed' && Buffer.byteLength(text)<=16384) {
    receipt.raw_result=text;
-   try {const decision=JSON.parse(text);if(!validDecision(decision))throw Error('invalid_schema');receipt.decision=decision;receipt.outcome='completed';receipt.failure=null;}
-   catch {receipt.decision=null;receipt.failure={category:'malformed_output',code:'invalid_model_result',status:null,retry_after_ms:null};}
+   try {receipt.decision=parseDecision(text,config.pythonExecutable);receipt.outcome='completed';receipt.failure=null;}
+   catch(error) {receipt.decision=null;receipt.failure=decisionFailure(error);}
   } else {
    receipt.failure=classifyFailure(reason);
   }
