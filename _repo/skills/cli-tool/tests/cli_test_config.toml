@@ -366,3 +366,7 @@ excluded_from_get_required = ["audit"]
 # account get reads the single current session identity, takes no resource ID,
 # and needs no collection command for ID discovery. Other groups remain checked.
 excluded_from_list_required = ["account"]
+
+[cli_specific.whop]
+# Current participant and date-bounded creator analytics are singletons without resource-ID discovery.
+excluded_from_list_required = ["account", "earnings"]
