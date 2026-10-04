@@ -214,6 +214,8 @@ def journal_lock(config):
             payload TEXT NOT NULL CHECK(length(CAST(payload AS BLOB))<=262144),
             UNIQUE(actor,experience,campaign,post))""")
         db.execute('CREATE TABLE IF NOT EXISTS reconciliation_cursors (request_id TEXT NOT NULL,cursor_hash TEXT NOT NULL,PRIMARY KEY(request_id,cursor_hash))')
+        db.execute("CREATE INDEX IF NOT EXISTS operation_submission ON operations(json_extract(payload,'$.submission_id'),campaign)")
+        db.execute("CREATE INDEX IF NOT EXISTS operation_provider_cooldown ON operations(experience,json_extract(payload,'$.binding.profile'),json_extract(payload,'$.retry_not_before'))")
         db.commit()
         directory=os.open(root,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
         try: os.fsync(directory)
@@ -324,7 +326,7 @@ def _reconcile_locked(client,db,row):
         reconciliation_match(row,current,match_cursor)
         if progress.get('match_id') not in (None,known_id): raise ClientError('submission_reconciliation_binding_changed')
         record=next((r for r in current if r.get('id')==known_id and matches_post(r,row['binding'])),None)
-    if cursor is None: cursor=next_head
+    if cursor is None and not progress.get('pass_end_pending'): cursor=next_head
     row['inspection_complete']=False
     for _ in range(10):
         if record is not None or cursor is None: break
@@ -341,10 +343,12 @@ def _reconcile_locked(client,db,row):
             if progress.get('match_id') not in (None,known_id): raise ClientError('submission_reconciliation_binding_changed')
             record=next((r for r in records if r.get('id')==known_id and matches_post(r,row['binding'])),None)
         progress['cursor']=cursor
+        if cursor is None: progress['pass_end_pending']=True
         save(db,row)
     if cursor is None:
         row['inspection_complete']=True
         progress['completed_scans']+=1
+        progress.pop('pass_end_pending',None)
         db.execute('DELETE FROM reconciliation_cursors WHERE request_id=?',(row['request_id'],))
     progress['cursor']=cursor
     if known_id is None and row['inspection_complete'] and progress.get('match_id') is not None:
@@ -357,6 +361,10 @@ def _reconcile_locked(client,db,row):
     if record is not None:
         row.update(state='submitted_verified',submission=safe_record(record),observed_at=progress['match_observed_at'],readback_fresh=progress['match_observed_at']>=inspection_started)
     elif row['state'] not in ('rejected','submitted_verified'): row['state']='uncertain'
+    # Successful provider reads retire active transport failures, including a
+    # clean later miss. A definitive create rejection remains a terminal reason.
+    if row['state']!='rejected':
+        for key in ('failure','failure_code','retry_not_before'): row.pop(key,None)
     save(db,row)
     return row
 

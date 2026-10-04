@@ -1,8 +1,8 @@
 {
   "tool": "whop",
   "description": "CLI interface for whop",
-  "discovered_at": "2026-10-04T16:55:41Z",
-  "total_commands": 31,
+  "discovered_at": "2026-10-04T17:52:47Z",
+  "total_commands": 33,
   "global_options": [],
   "commands": {
     "account": {
@@ -615,6 +615,75 @@
               "required": false,
               "help": "Comma-separated output fields",
               "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "submission": {
+          "help": "Read individual allocations for one owned submission; unknown amounts remain null.",
+          "arguments": [
+            {
+              "name": "submission_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "campaign_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--refresh-payouts",
+              "type": "bool",
+              "required": false,
+              "help": "Advance the shared scan; disable after one explicit sync for a batch",
+              "takes_value": false,
+              "secondary": "--no-refresh-payouts",
+              "default": "refresh-payouts"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "sync": {
+          "help": "Advance one shared payout scan, reading at most eleven pages.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--restart-pass",
+              "type": "bool",
+              "required": false,
+              "help": "Discard only an incomplete scan and begin a new provider pass",
+              "takes_value": false
             },
             {
               "name": "--table",
