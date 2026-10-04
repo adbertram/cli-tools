@@ -25,13 +25,16 @@ tiktok-clipping <command-group> <action> [arguments] [options]
 |------|---------|
 | Persist control state; running requires verified exact account and approved sources | `tiktok-clipping control set <STATE>` |
 | Validate leased model JSON from stdin, then execute once through trusted adapters | `tiktok-clipping jobs apply` |
+| Account native receipt from stdin, then recheck its original lease before acting | `tiktok-clipping jobs apply-text` |
+| Validate a native image-review receipt and its exact durable lease | `tiktok-clipping jobs apply-visual` |
 | Get one durable job, excluding its ownership credential | `tiktok-clipping jobs get <JOB_ID>` |
 | Queue an allowlisted trusted source record from bounded JSON stdin | `tiktok-clipping jobs ingest` |
 | List durable jobs, including explicit failed, blocked and ambiguous states | `tiktok-clipping jobs list` |
 | Recover expired leases, reconcile uploads and maintain campaign submissions | `tiktok-clipping jobs maintain` |
 | Claim one durable job or return an explicit paused/unconfigured/idle state | `tiktok-clipping jobs prepare` |
 | Read back an ambiguous upload without repeating publication | `tiktok-clipping jobs reconcile <JOB_ID>` |
-| Revalidate blocked work after a trusted capability/configuration repair | `tiktok-clipping jobs retry <JOB_ID>` |
+| Revalidate blocked work or an explicitly proven pre-publication visual failure | `tiktok-clipping jobs retry <JOB_ID>` |
+| Revalidate blocked preproposal text work after its original native process ended | `tiktok-clipping jobs retry-text <JOB_ID>` |
 | Run a ready job; coordinator alone owns retries and side-effect budgets | `tiktok-clipping jobs run <JOB_ID>` |
 | Append a trusted timestamped metric snapshot from stdin; unknown values stay null | `tiktok-clipping metrics record` |
 | Read actual campaign acceptance/rejection and observed earnings | `tiktok-clipping rewards refresh <JOB_ID>` |
@@ -48,7 +51,7 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
 
 <principle name="Command Groups">
 - **control** -- Persist pause, stop or running state (subcommands: set)
-- **jobs** -- Prepare, validate and execute durable jobs (subcommands: apply, get, ingest, list, maintain, prepare, reconcile, retry, run)
+- **jobs** -- Prepare, validate and execute durable jobs (subcommands: apply, apply-text, apply-visual, get, ingest, list, maintain, prepare, reconcile, retry, retry-text, run)
 - **metrics** -- Record provenance-preserving measurement snapshots (subcommands: record)
 - **rewards** -- Track campaign submission separately from publication and earnings (subcommands: refresh, submit)
 - **status** -- Inspect current setup and durable budgets (subcommands: get)
@@ -64,10 +67,11 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
 
 <safety_contract>
 - Every stateful operation needs an explicit trusted absolute JSON configuration path. Pass --config after the action. Missing config, account evidence, or capabilities never means permission to invent values.
-- Exact TikTok handle is ata_clipping. Never use atalearning. This local coordinator owns no remote auth command; live service authentication remains in its owning profile and secret manager.
-- Prepare clip or learn; send only ready:true envelopes to DeepSeek. Preserve job_id, lease_token, input_digest and policy_digest when wrapping the proposal for jobs apply stdin. Parse the node's result JSON only, never reasoning.
+- Exact TikTok actor is ata_clipper, numeric ID 7692213003349443597, named profile clipper. Never use atalearning. This local coordinator owns no remote auth command; live service authentication remains in its owning profile and secret manager.
+- The updated native graphs use jobs prepare --native-text with explicit enclosing execution/workflow IDs. Send only ready:true original text.task to DeepSeekHarness. jobs apply-text accounts the original native receipt before rechecking permission to act; never use reasoning. Without native_text, manual legacy jobs apply remains supported. Read the README native text accounting contract before configuring these graphs.
 - Metrics jobs execute without a model. jobs maintain runs bounded recovery, ambiguous publication readback, immediate/pending campaign submission and campaign status checks. Unknown uploads are never repeated.
 - Upload, reward submission, campaign acceptance, and observed earnings are distinct states. Missing metrics/revenue remain null. Live readiness must prove both publishing and submission before upload.
+- Optional learning.outcome_policy chooses one named field/age/currency descriptor at a time. Exact signed SDK cents remain separate from legacy decimal revenue. A configured engagement fallback is labeled proxy; no mature outcomes is cold-start. Original fresh revenue history, per-descriptor baselines and recorded candidate/style probabilities govern learning. Read the README comparable outcome selection contract before configuring this policy.
 - Configuration example has null account, no sources/adapters, zero daily budgets and first boot paused. Its mere presence is not an authenticated end-to-end pipeline.
 - Read ../../../_personal/tiktok-clipping/README.md for the complete source, adapter, output, and configuration contract. Run jobs maintain --config PATH on a five-minute n8n cadence; only the coordinator owns retries.
 </safety_contract>

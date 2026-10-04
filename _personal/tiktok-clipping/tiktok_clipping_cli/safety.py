@@ -136,7 +136,7 @@ TARGET_PROFILE = "clipper"
 
 
 def validate_config(config):
-    keys(config, {"database", "workspace", "account", "sources", "limits", "learning", "baseline", "adapter_module"}, {"visual", "rewards_account"})
+    keys(config, {"database", "workspace", "account", "sources", "limits", "learning", "baseline", "adapter_module"}, {"visual", "rewards_account", "native_text"})
     if config.get("visual") is not None:
         visual = config["visual"]
         keys(visual, {"frame_count", "max_frame_bytes", "timeout_seconds", "continuation_seconds", "retention_seconds", "workflow_id"})
@@ -149,7 +149,6 @@ def validate_config(config):
             raise SafetyError("visual_lease_headroom_missing")
         number(visual["retention_seconds"], 60, 2592000, integer=True)
     for field in ("database", "workspace"):
-        from pathlib import Path
         if not Path(string(config[field])).is_absolute():
             raise SafetyError("absolute_path_required: " + field)
     if config["adapter_module"] is not None:
@@ -183,6 +182,29 @@ def validate_config(config):
         raise SafetyError("invalid_metrics_schedule_limits")
     if limits["lease_seconds"] < limits["work_timeout_seconds"]:
         raise SafetyError("lease_shorter_than_work_timeout")
+    if config.get("native_text") is not None:
+        native = config["native_text"]
+        keys(native, {"workflow_ids", "model", "max_output_tokens", "max_result_bytes", "timeout_seconds", "continuation_seconds", "retention_seconds", "sdk_package", "python_executable"})
+        keys(native["workflow_ids"], {"clip", "learn"})
+        for workflow in native["workflow_ids"].values():
+            if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", string(workflow, 128)):
+                raise SafetyError("invalid_text_workflow_id")
+        if native["workflow_ids"]["clip"] == native["workflow_ids"]["learn"]:
+            raise SafetyError("text_kind_workflows_must_differ")
+        keys(native["model"], {"provider", "model"})
+        if native["model"]["provider"] != "deepseek-official":
+            raise SafetyError("native_deepseek_provider_required")
+        string(native["model"]["model"], 128)
+        number(native["max_output_tokens"], 1, 2**53-1, integer=True)
+        number(native["max_result_bytes"], 1, min(65536, config["limits"]["max_payload_bytes"]), integer=True)
+        number(native["timeout_seconds"], 1, 3600, integer=True)
+        number(native["continuation_seconds"], 1, 300, integer=True)
+        if native["timeout_seconds"] + native["continuation_seconds"] > min(3600, config["limits"]["lease_seconds"]):
+            raise SafetyError("text_lease_headroom_missing")
+        number(native["retention_seconds"], 60, 2592000, integer=True)
+        for field in ("sdk_package", "python_executable"):
+            if not Path(string(native[field])).is_absolute():
+                raise SafetyError("absolute_text_runtime_path_required")
     if not isinstance(config["sources"], list):
         raise SafetyError("sources_must_be_list")
     ids = set()
@@ -219,7 +241,7 @@ def validate_config(config):
             from .rights import validate_policy
             validate_policy(source["publication_policy"], source)
     learning = config["learning"]
-    keys(learning, LEARNING)
+    keys(learning, LEARNING, {"outcome_policy"})
     for field in ("minimum_samples", "evaluation_minimum_samples"):
         number(learning[field], 2, 100000, integer=True)
     number(learning["cohort_age_seconds"], 1)
@@ -228,6 +250,11 @@ def validate_config(config):
         number(learning[field], 0, 1)
     if learning["objective"] not in METRICS:
         raise SafetyError("unknown_objective")
+    if "outcome_policy" in learning:
+        from .outcome_learning import validate_policy
+        validate_policy(learning["outcome_policy"], learning)
+        if any(objective["channel"] == "engagement" and objective["horizon_seconds"] > limits["metrics_max_age_seconds"] for objective in learning["outcome_policy"]["objectives"]):
+            raise SafetyError("engagement_horizon_exceeds_metric_retention")
     keys(config["baseline"], {"weights", "exploration"})
     validate_strategy(config["baseline"], config)
     return config
@@ -254,7 +281,7 @@ def validate_strategy(proposal, config, previous=None):
 
 
 def validate_source(record, config, now):
-    keys(record, {"source_id", "media_id", "media_url", "duration_seconds", "transcript", "observed_at", "provenance", "categories", "transcript_segments"}, {"assigned_style", "strategy_version", "strategy", "excluded_ranges", "clip_sequence", "media_key", "performance_context", "model_feedback"})
+    keys(record, {"source_id", "media_id", "media_url", "duration_seconds", "transcript", "observed_at", "provenance", "categories", "transcript_segments"}, {"assigned_style", "strategy_version", "strategy", "excluded_ranges", "clip_sequence", "media_key", "performance_context", "model_feedback", "outcome_selection"})
     source = next((s for s in config["sources"] if s["id"] == record["source_id"]), None)
     if source is None:
         raise SafetyError("source_not_allowlisted")

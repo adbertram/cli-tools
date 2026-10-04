@@ -1,8 +1,8 @@
 {
   "tool": "tiktok-clipping",
   "description": "CLI interface for tiktok-clipping",
-  "discovered_at": "2026-10-04T20:40:18Z",
-  "total_commands": 16,
+  "discovered_at": "2026-10-04T21:52:27Z",
+  "total_commands": 18,
   "global_options": [],
   "commands": {
     "control": {
@@ -57,6 +57,37 @@
               "type": "TEXT",
               "required": false,
               "help": "Trusted configured native workflow ID"
+            }
+          ]
+        },
+        "apply-text": {
+          "help": "Account native receipt from stdin, then recheck its original lease before acting.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--config",
+              "type": "file",
+              "required": true,
+              "help": "Trusted absolute JSON configuration file"
+            },
+            {
+              "name": "--n8n-execution-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Original native execution ID after node return"
+            },
+            {
+              "name": "--n8n-workflow-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Original configured clip or learn workflow ID"
+            },
+            {
+              "name": "--no-execute",
+              "type": "bool",
+              "required": false,
+              "help": "Validate/account only; leave accepted work ready without adapter actions",
+              "takes_value": false
             }
           ]
         },
@@ -204,6 +235,13 @@
               "type": "TEXT",
               "required": false,
               "help": "Trusted configured native workflow ID"
+            },
+            {
+              "name": "--native-text",
+              "type": "bool",
+              "required": false,
+              "help": "Require configured native text receipts; never issue legacy proposals",
+              "takes_value": false
             }
           ]
         },
@@ -234,6 +272,25 @@
               "type": "TEXT",
               "required": true,
               "help": "Blocked or proven pre-publication visual job ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--config",
+              "type": "file",
+              "required": true,
+              "help": "Trusted absolute JSON configuration file"
+            }
+          ]
+        },
+        "retry-text": {
+          "help": "Revalidate blocked preproposal text work after its original native process ended.",
+          "arguments": [
+            {
+              "name": "job_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Blocked text job whose prerequisite has recovered"
             }
           ],
           "options": [

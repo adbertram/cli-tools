@@ -51,9 +51,10 @@ def _stdin(engine):
 @command
 def prepare(config: ConfigPath, kind: str = typer.Option(..., "--kind", help="clip, learn or metrics; metrics never enters model node."),
             execution_id: Optional[str] = typer.Option(None,"--n8n-execution-id",help="Trusted enclosing native workflow execution ID."),
-            workflow_id: Optional[str] = typer.Option(None,"--n8n-workflow-id",help="Trusted configured native workflow ID.")):
+            workflow_id: Optional[str] = typer.Option(None,"--n8n-workflow-id",help="Trusted configured native workflow ID."),
+            native_text: bool = typer.Option(False,"--native-text",help="Require configured native text receipts; never issue legacy proposals.")):
     """Claim one durable job or return an explicit paused/unconfigured/idle state."""
-    _perform(lambda: _native_engine(config,execution_id,workflow_id).prepare(kind))
+    _perform(lambda: _native_engine(config,execution_id,workflow_id).prepare(kind,require_native_text=native_text))
 
 
 @jobs.command("apply")
@@ -65,6 +66,25 @@ def apply(config: ConfigPath, execution_id: Optional[str] = typer.Option(None,"-
         engine = _native_engine(config,execution_id,workflow_id)
         return engine.apply(_stdin(engine))
     _perform(action)
+
+
+@jobs.command("apply-text")
+@command
+def apply_text(config: ConfigPath, execution_id: str = typer.Option(...,"--n8n-execution-id",help="Original native execution ID after node return."),
+               workflow_id: str = typer.Option(...,"--n8n-workflow-id",help="Original configured clip or learn workflow ID."),
+               no_execute: bool = typer.Option(False,"--no-execute",help="Validate/account only; leave accepted work ready without adapter actions.")):
+    """Account native receipt from stdin, then recheck its original lease before acting."""
+    def action():
+        engine = _native_engine(config,execution_id,workflow_id,completed=True)
+        return engine.consume_text(_stdin(engine),execute=not no_execute)
+    _perform(action)
+
+
+@jobs.command("retry-text")
+@command
+def retry_text(job_id: str = typer.Argument(...,help="Blocked text job whose prerequisite has recovered."), config: ConfigPath = ...):
+    """Revalidate blocked preproposal text work after its original native process ended."""
+    _perform(lambda: _engine(config).retry_text(job_id))
 
 
 @jobs.command("ingest")

@@ -236,6 +236,7 @@ def test_actual_released_whop_sdk_roundtrips_runtime_receipt_binding_and_callbac
     client.account = Mock(return_value={'id': 'user_fixture', 'username': 'fixture', 'profile': 'rewards'})
     client.linked_accounts = Mock(return_value=[{'accountId': publication['account_id'], 'platform': 'tiktok', 'status': 'active', 'username': 'ata_clipper', 'id': 'linked', 'userId': 'creator_fixture'}])
     client.campaign = Mock(return_value={'id': 'campaign-1', 'name': 'TEST', 'description': 'Actual fixture brief', 'referenceMaterials': [], 'platforms': ['tiktok'],
+        'budgetCents': 100000, 'metrics': {'budgetSpentCents': 1000},
         'status': 'active', 'private': False, 'requiresApplication': False,
         'payouts': [{'platform': 'tiktok', 'payoutType': 'cpm', 'rateCents': 100, 'minPayoutCents': 100, 'maxPayoutCents': 35000, 'budgetCents': 15000, 'spentCents': 0}]})
     client._rest = Mock(return_value={'data': [{'campaignId': 'campaign-1', 'creatorMaxReached': False, 'intake': 'open', 'platformIntake': {'tiktok': 'open'}}]})
