@@ -205,7 +205,7 @@ class RecordTests(unittest.TestCase):
         # The live click-step probe drives PowerPoint; every record() test stubs it and
         # asserts on what the drive does with the measurement, not on the probe's IO.
         self.click_step_probe_patcher = mock.patch.object(
-            record, "measure_slide_click_steps", return_value={1: 1, 2: 1}
+            record, "measure_slide_click_steps", return_value=({1: 1, 2: 1}, {1: 0, 2: 0})
         )
         self.click_step_probe = self.click_step_probe_patcher.start()
         self.cue_count_check_patcher = mock.patch.object(record, "assert_cue_counts_match_click_steps")
@@ -763,9 +763,13 @@ Input #0, avfoundation, from '3':
                     mock.patch.object(record, "audio_duration", side_effect=[2.0, 3.0]), \
                     mock.patch.object(record, "run", side_effect=fake_run):
                 with contextlib.redirect_stdout(io.StringIO()):
-                    plan = record.prepare(config, {1: 1, 2: 0})
+                    plan = record.prepare(config, {1: 1}, {1: 0})
 
-            self.assertEqual(generated_silence, ["silence-lead.wav", "silence-slide.wav"])
+            self.assertEqual(generated_silence, [
+                "silence-lead.wav",
+                "silence-slide.wav",
+                "silence-terminal-after-effect.wav",
+            ])
             self.assertEqual(plan["actions"], [{
                 "at_seconds": 2.0,
                 "key": "space",
@@ -778,6 +782,149 @@ Input #0, avfoundation, from '3':
                 "value": 1,
             })
             self.assertNotIn("slide", plan["items"][0])
+
+    def prepare_plan(self, config, durations):
+        # durations: one per item, in order; prepare() then measures the joined narration once.
+        def fake_generate_silence(path, duration_seconds):
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            Path(path).write_bytes(b"silence")
+
+        def fake_normalize_audio(input_path, output_path):
+            Path(output_path).write_bytes(b"normalized")
+
+        def fake_run(command):
+            Path(command[-1]).write_bytes(b"narration")
+
+        slides = [item["identity"]["value"] for item in config["items"]]
+        with mock.patch.object(record, "generate_silence", side_effect=fake_generate_silence), \
+                mock.patch.object(record, "normalize_audio", side_effect=fake_normalize_audio), \
+                mock.patch.object(record, "audio_duration", side_effect=[*durations, 99.0]), \
+                mock.patch.object(record, "run", side_effect=fake_run):
+            with contextlib.redirect_stdout(io.StringIO()):
+                return record.prepare(
+                    config,
+                    {slide: 0 for slide in slides},
+                    {slide: 0 for slide in slides},
+                )
+
+    def test_prepare_uses_explicit_cue_offsets_verbatim(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = slide_config(Path(temp_dir))
+            config["items"][0]["segments"] = ["one", "two", "three"]
+            config["items"][0]["cue_count"] = 2
+            config["items"][0]["cue_offsets_seconds"] = [1.7, 4.25]
+
+            plan = self.prepare_plan(config, [6.0])
+
+        # Lead is 1.0s; word-ratio would have put these at 3.0 and 5.0.
+        self.assertEqual([action["at_seconds"] for action in plan["actions"]], [2.7, 5.25])
+        self.assertEqual([action["reason"] for action in plan["actions"]], ["action cue", "action cue"])
+        self.assertEqual(plan["items"][0]["cue_timing_method"], "explicit")
+
+    def test_prepare_without_explicit_cue_offsets_keeps_word_ratio(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = slide_config(Path(temp_dir))
+
+            plan = self.prepare_plan(config, [2.0])
+
+        self.assertEqual([action["at_seconds"] for action in plan["actions"]], [2.0])
+        self.assertEqual(plan["items"][0]["cue_timing_method"], "word-ratio")
+
+    def test_prepare_mixes_explicit_and_word_ratio_items(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = slide_config(Path(temp_dir))
+            second = dict(config["items"][0])
+            second.update({
+                "index": 2,
+                "label": "Slide 2",
+                "identity": {"field": "slide", "value": 2},
+                "cue_offsets_seconds": [2.5],
+            })
+            config["items"].append(second)
+
+            plan = self.prepare_plan(config, [2.0, 3.0])
+
+        cues = [action["at_seconds"] for action in plan["actions"] if action["reason"] == "action cue"]
+        # Slide 1: 1.0 lead + 2.0 * 1/2. Slide 2 starts at 1.0 + 2.0 + 0.75 pause.
+        self.assertEqual(cues, [2.0, 6.25])
+        self.assertEqual(
+            [item["cue_timing_method"] for item in plan["items"]],
+            ["word-ratio", "explicit"],
+        )
+
+    def test_prepare_rejects_explicit_cue_offset_at_or_past_audio_duration(self):
+        for offsets in ([2.0], [2.5]):
+            with self.subTest(offsets=offsets), tempfile.TemporaryDirectory() as temp_dir:
+                config = slide_config(Path(temp_dir))
+                config["items"][0]["cue_offsets_seconds"] = offsets
+
+                with self.assertRaisesRegex(
+                    ValueError,
+                    r"Slide 1 cue_offsets_seconds offset 1 .* must be less than the audio duration \(2\.0 seconds\)",
+                ):
+                    self.prepare_plan(config, [2.0])
+
+    def validate_item_with_cue_offsets(self, transcript_text, cue_offsets):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            transcript = root / "transcript.txt"
+            audio = root / "audio.wav"
+            transcript.write_text(transcript_text, encoding="utf-8")
+            audio.write_bytes(b"audio")
+            return record.validate_items([{
+                "slide": 4,
+                "transcript_path": str(transcript),
+                "audio_path": str(audio),
+                "cue_offsets_seconds": cue_offsets,
+            }], "||")[0]
+
+    def test_validate_items_keeps_explicit_cue_offsets(self):
+        item = self.validate_item_with_cue_offsets("one || two || three", [0, 1.5])
+
+        self.assertEqual(item["cue_offsets_seconds"], [0, 1.5])
+
+    def test_validate_items_accepts_empty_cue_offsets_for_a_cueless_item(self):
+        item = self.validate_item_with_cue_offsets("no cues here", [])
+
+        self.assertEqual(item["cue_offsets_seconds"], [])
+
+    def test_validate_items_omits_cue_offsets_when_the_key_is_absent(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            transcript = root / "transcript.txt"
+            audio = root / "audio.wav"
+            transcript.write_text("one || two", encoding="utf-8")
+            audio.write_bytes(b"audio")
+            items = record.validate_items([{
+                "slide": 4,
+                "transcript_path": str(transcript),
+                "audio_path": str(audio),
+            }], "||")
+
+        self.assertNotIn("cue_offsets_seconds", items[0])
+
+    def test_validate_items_rejects_invalid_explicit_cue_offsets(self):
+        cases = [
+            ("not a list", "one || two", "1.5", "Slide 4 cue_offsets_seconds must be a list of numbers"),
+            ("null", "one || two", None, "Slide 4 cue_offsets_seconds must be a list of numbers"),
+            ("too few", "one || two || three", [1.0],
+             "Slide 4 cue_offsets_seconds has 1 offsets but the transcript has 2 cue markers"),
+            ("too many", "one || two", [1.0, 2.0],
+             "Slide 4 cue_offsets_seconds has 2 offsets but the transcript has 1 cue markers"),
+            ("cueless item", "no cues here", [1.0],
+             "Slide 4 cue_offsets_seconds has 1 offsets but the transcript has 0 cue markers"),
+            ("string value", "one || two", ["1.0"], "Slide 4 cue_offsets_seconds offset 1 must be a number"),
+            ("bool value", "one || two", [True], "Slide 4 cue_offsets_seconds offset 1 must be a number"),
+            ("nan value", "one || two", [float("nan")], "Slide 4 cue_offsets_seconds offset 1 must be a number"),
+            ("negative", "one || two", [-0.1], "Slide 4 cue_offsets_seconds offset 1 must be >= 0"),
+            ("descending", "one || two || three", [2.0, 1.0],
+             "Slide 4 cue_offsets_seconds must be strictly ascending; offset 2"),
+            ("equal", "one || two || three", [1.0, 1.0],
+             "Slide 4 cue_offsets_seconds must be strictly ascending; offset 2"),
+        ]
+        for name, transcript_text, cue_offsets, message in cases:
+            with self.subTest(name), self.assertRaisesRegex(ValueError, message):
+                self.validate_item_with_cue_offsets(transcript_text, cue_offsets)
 
     def test_ui_action_renderer_builds_applescript_from_data(self):
         lines = record.render_ui_actions([
@@ -945,7 +1092,7 @@ Input #0, avfoundation, from '3':
         audio_process = FakeProcess([None, 0], 0)
         events = []
 
-        def fake_prepare(config, click_steps):
+        def fake_prepare(config, click_steps, terminal_after_effect_steps):
             events.append("prepare")
             return {
                 "narration_audio": "/tmp/narration.wav",
@@ -1968,9 +2115,10 @@ class LiveClickStepProbeTests(unittest.TestCase):
                 mock.patch.object(record, "live_slideshow_slide_index", side_effect=indexes), \
                 mock.patch.object(record, "terminal_next_click_after_effect_step", return_value=0), \
                 mock.patch.object(record.time, "sleep"):
-            counts = record.measure_slide_click_steps(config, [3, 4])
+            counts, terminal_after_effects = record.measure_slide_click_steps(config, [3, 4])
 
         self.assertEqual(counts, {3: 1, 4: 1})
+        self.assertEqual(terminal_after_effects, {3: 0, 4: 0})
         self.assertEqual(press_space.call_count, 4)
         exit_slideshow.assert_called_once()
 
@@ -1986,9 +2134,10 @@ class LiveClickStepProbeTests(unittest.TestCase):
                 mock.patch.object(record, "live_slideshow_slide_index", side_effect=indexes), \
                 mock.patch.object(record, "terminal_next_click_after_effect_step", return_value=1), \
                 mock.patch.object(record.time, "sleep"):
-            counts = record.measure_slide_click_steps(config, [26])
+            counts, terminal_after_effects = record.measure_slide_click_steps(config, [26])
 
         self.assertEqual(counts, {26: 5})
+        self.assertEqual(terminal_after_effects, {26: 1})
 
     def test_terminal_next_click_after_effect_in_xml_checks_only_the_final_click_effect(self):
         nonterminal_only = f'''<p:sld xmlns:p="{TEST_PRESENTATIONML_NAMESPACE}">
