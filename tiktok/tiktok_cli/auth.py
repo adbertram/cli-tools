@@ -28,7 +28,7 @@ def add_manual_login_option(app):
         The shared engine verifies live authentication and persists the session.
         """
         if manual:
-            if not profile or profile.strip().lower() == "default":
+            if not profile or profile.strip().lower() in ("", "default"):
                 raise typer.BadParameter("--manual requires an explicit non-default --profile")
             if credential_type not in (BROWSER_AUTH_TYPE, "browser"):
                 raise typer.BadParameter("--manual requires --credential-type browser_session")

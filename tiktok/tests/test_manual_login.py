@@ -46,7 +46,7 @@ def test_manual_routes_only_this_invocation_to_same_config(monkeypatch, tmp_path
     assert observed[-1][-1] is TiktokBrowser
 
 
-@pytest.mark.parametrize("options", [[], ["--profile", "default"], ["--profile", "clipping", "--credential-type", "custom"], ["--profile", "clipping"]])
+@pytest.mark.parametrize("options", [[], ["--profile", "default"], ["--profile", "   ", "--credential-type", "browser_session"], ["--profile", "clipping", "--credential-type", "custom"], ["--profile", "clipping"]])
 def test_manual_rejects_shared_or_non_browser_profile(monkeypatch, options):
     app = command_app(monkeypatch, lambda **kwargs: pytest.fail("must not mutate auth state"))
     result = CliRunner().invoke(app, ["auth", "login", "--manual", *options])
