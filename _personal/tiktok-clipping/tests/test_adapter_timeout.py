@@ -44,3 +44,15 @@ def test_ps_timeout_still_kills_and_reaps_real_worker(config, monkeypatch):
                     pass
             process.communicate(timeout=2)
     assert started and not alive
+
+
+def test_real_worker_preserves_typed_provider_failure_across_process_boundary(config, monkeypatch):
+    scratch = Path(__file__).parent
+    Path(config['workspace']).mkdir(parents=True)
+    config['adapter_module'] = 'worker_fixture'
+    monkeypatch.setenv('PYTHONPATH', str(scratch) + os.pathsep + str(scratch.parent))
+    adapter = adapters.ExternalAdapter(config)
+    with pytest.raises(AdapterFailure) as caught:
+        adapter.call('verify_ready', ({},))
+    failure = caught.value
+    assert (failure.category, failure.provider, failure.code, failure.status, failure.retry_after) == ('rate_limit', 'whop', 'read_throttled', 429, 172800.25)

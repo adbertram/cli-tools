@@ -10,7 +10,7 @@ import subprocess
 import time
 
 from .media import MediaRenderer
-from .safety import SafetyError, canonical, keys, number, strict_json, string, write_allowance
+from .safety import edit_duration, edit_segments, SafetyError, canonical, keys, number, strict_json, string, write_allowance
 
 CHECKS = {"disclosure_visible", "captions_readable", "portrait_composition", "no_obvious_visual_defects"}
 USAGE_FIELDS = {"uncachedInputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens"}
@@ -103,7 +103,7 @@ class VisualArtifacts:
         from .media import sha256
         if source.stat().st_size != asset["bytes"] or sha256(source) != asset["sha256"]:
             raise SafetyError("visual_asset_binding_changed")
-        duration = job["proposal"]["end_seconds"] - job["proposal"]["start_seconds"]
+        duration = edit_duration(job["proposal"])
         settings = self.config["visual"]
         count = settings["frame_count"]
         deadline = deadline if deadline is not None else time.monotonic() + self.config["limits"]["work_timeout_seconds"]

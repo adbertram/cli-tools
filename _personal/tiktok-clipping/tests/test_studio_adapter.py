@@ -138,7 +138,12 @@ class SDK:
         self.calls.append('publish')
         self.operation['state']='dispatch_pending'
         binding={k:self.operation[k] for k in ('request_id','asset_sha256','policy_digest','actor','draft_id','project_id')}
-        before_public_action(binding)
+        try:
+            before_public_action(binding)
+        except Exception:
+            # The owning publisher restores only a known pre-action abort.
+            self.operation['state'] = 'prepared'
+            raise
         self.calls.append('native-send')
         self.operation['public_action_dispatched']=True
         self.operation['post_project_id']='123'
@@ -250,3 +255,35 @@ def test_policy_music_confirmation_is_never_defaulted(engine,config,adapter,cloc
     del policy['music_rights_confirmed']
     with pytest.raises(Exception):bridge.publish(job,asset,key,policy)
     assert sdk.calls==[]
+
+
+def test_fresh_before_post_rate_limit_is_preaction_and_retains_typed_delay(engine,config,adapter,clock):
+    from tiktok_clipping_cli.engine import AdapterFailure
+    bridge,sdk,job,asset,key,policy=bridge_fixture(engine,config,adapter,clock)
+    sdk.close_fail = True
+    def readiness(binding):
+        # Private prepare completed; coordinator remains un-dispatched here.
+        with engine.transaction() as db:
+            assert db.execute('SELECT state FROM publications').fetchone()[0]=='uploading'
+        raise AdapterFailure('rate_limit','whop:read_throttled',172800.25,provider='whop',code='read_throttled',status=429)
+    with pytest.raises(AdapterFailure) as caught:
+        bridge.publish(job,asset,key,policy,pre_public_check=readiness)
+    failure=caught.value
+    assert (failure.category,failure.provider,failure.status,failure.retry_after)==('rate_limit','whop',429,172800.25)
+    assert failure.cleanup_issue == 'studio_browser_close_failed'
+    assert sdk.operation['state']=='prepared' and sdk.operation['public_action_dispatched'] is False
+    assert 'native-send' not in sdk.calls
+    with engine.transaction() as db:assert db.execute('SELECT state FROM publications').fetchone()[0]=='uploading'
+
+
+def test_original_policy_reconciliation_survives_current_campaign_change(engine,config,adapter,clock):
+    bridge,sdk,job,asset,key,policy=bridge_fixture(engine,config,adapter,clock)
+    bridge.publish(job,asset,key,policy)
+    config['sources'][0]['campaign']['enabled']=False
+    config['sources'][0]['campaign']['expires_at']='2020-01-01T00:00:00+00:00'
+    original=bridge.recorded_policy(job,asset,key)
+    assert original==policy
+    result=bridge.reconcile(job,asset,key,original)
+    assert result['state']=='published' and sdk.calls.count('native-send')==1
+    with engine.transaction() as db:db.execute("UPDATE publications SET asset_digest='foreign'")
+    assert bridge.recorded_policy(job,asset,key) is None

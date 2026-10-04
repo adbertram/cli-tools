@@ -12,6 +12,7 @@ dependencies = [
     "cli-tools-shared",
     "tiktok-cli",
     "n8n-cli",
+    "whop-cli",
 ]
 
 [dependency-groups]
@@ -30,3 +31,4 @@ include = ["tiktok_clipping_cli*"]
 cli-tools-shared = { path = "../../_repo/cli-tools-shared", editable = true }
 tiktok-cli = { path = "../../tiktok", editable = true }
 n8n-cli = { path = "../../n8n", editable = true }
+whop-cli = { path = "../../whop", editable = true }

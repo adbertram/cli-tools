@@ -106,7 +106,7 @@ TARGET_PROFILE = "clipper"
 
 
 def validate_config(config):
-    keys(config, {"database", "workspace", "account", "sources", "limits", "learning", "baseline", "adapter_module"}, {"visual"})
+    keys(config, {"database", "workspace", "account", "sources", "limits", "learning", "baseline", "adapter_module"}, {"visual", "rewards_account"})
     if config.get("visual") is not None:
         visual = config["visual"]
         keys(visual, {"frame_count", "max_frame_bytes", "timeout_seconds", "continuation_seconds", "retention_seconds", "workflow_id"})
@@ -135,6 +135,14 @@ def validate_config(config):
             raise SafetyError("account_profile_must_be_clipper")
         string(account["provenance"])
         timestamp(account["verified_at"])
+    if config.get("rewards_account") is not None:
+        rewards = config["rewards_account"]
+        keys(rewards, {"account_id", "username", "profile", "verified_at", "provenance"})
+        for field in ("account_id", "username", "profile", "provenance"):
+            string(rewards[field])
+        if rewards["profile"] != "rewards":
+            raise SafetyError("rewards_named_profile_required")
+        timestamp(rewards["verified_at"])
     limits = config["limits"]
     keys(limits, LIMITS)
     for key, value in limits.items():
@@ -149,7 +157,7 @@ def validate_config(config):
         raise SafetyError("sources_must_be_list")
     ids = set()
     for source in config["sources"]:
-        keys(source, {"id", "feed", "allowed_hosts", "reuse_evidence", "campaign"})
+        keys(source, {"id", "feed", "allowed_hosts", "reuse_evidence", "campaign"}, {"publication_policy"})
         if source["id"] in ids:
             raise SafetyError("duplicate_source")
         ids.add(string(source["id"]))
@@ -177,6 +185,9 @@ def validate_config(config):
             string(category, 128)
             if any(term in category.casefold() for term in ("gambl", "casino", "betting", "politic")):
                 raise SafetyError("forbidden_campaign_category")
+        if "publication_policy" in source:
+            from .rights import validate_policy
+            validate_policy(source["publication_policy"], source)
     learning = config["learning"]
     keys(learning, LEARNING)
     for field in ("minimum_samples", "evaluation_minimum_samples"):
@@ -246,6 +257,31 @@ def validate_source(record, config, now):
     return record
 
 
+def edit_segments(proposal, source_duration=float("inf")):
+    """One canonical ordered edit, reserving its full source bounding span."""
+    start = number(proposal["start_seconds"], 0, source_duration)
+    end = number(proposal["end_seconds"], start, source_duration)
+    cuts = proposal.get("segments", [{"start_seconds": start, "end_seconds": end}])
+    if not isinstance(cuts, list) or not 1 <= len(cuts) <= 4:
+        raise SafetyError("edit_requires_one_to_four_cuts")
+    for cut in cuts:
+        keys(cut, {"start_seconds", "end_seconds"})
+        a = number(cut["start_seconds"], 0, source_duration)
+        b = number(cut["end_seconds"], a, source_duration)
+        if b <= a:
+            raise SafetyError("edit_cut_must_be_positive")
+    ordered = sorted(cuts, key=lambda cut: cut["start_seconds"])
+    if any(a["end_seconds"] > b["start_seconds"] for a, b in zip(ordered, ordered[1:])):
+        raise SafetyError("edit_cuts_overlap_or_repeat")
+    if start != ordered[0]["start_seconds"] or end != max(cut["end_seconds"] for cut in cuts):
+        raise SafetyError("edit_bounds_must_match_cuts")
+    return cuts
+
+
+def edit_duration(proposal):
+    return sum(cut["end_seconds"] - cut["start_seconds"] for cut in edit_segments(proposal))
+
+
 def validate_proposal(kind, proposal, input_data, config):
     if isinstance(proposal, dict) and "result" in proposal:
         keys(proposal, {"result"}, {"reasoning"})
@@ -253,13 +289,18 @@ def validate_proposal(kind, proposal, input_data, config):
             raise SafetyError("deepseek_result_must_be_string")
         proposal = strict_json(proposal["result"], config["limits"]["max_payload_bytes"])
     if kind == "clip":
-        keys(proposal, {"start_seconds", "end_seconds", "caption", "style"})
+        keys(proposal, {"start_seconds", "end_seconds", "caption", "style"}, {"segments"})
         start = number(proposal["start_seconds"], 0, input_data["duration_seconds"])
         end = number(proposal["end_seconds"], 0, input_data["duration_seconds"])
-        number(end - start, config["limits"]["min_clip_seconds"], config["limits"]["max_clip_seconds"])
+        edit_segments(proposal, input_data["duration_seconds"])
+        number(edit_duration(proposal), config["limits"]["min_clip_seconds"], config["limits"]["max_clip_seconds"])
         string(proposal["caption"], config["limits"]["caption_chars"])
         if proposal["style"] not in config["baseline"]["weights"]:
             raise SafetyError("style_not_allowlisted")
+        source = next((s for s in config["sources"] if s["id"] == input_data.get("source_id")), None)
+        if source is not None and "publication_policy" in source:
+            from .rights import required_overlays
+            required_overlays(source["publication_policy"], proposal)
         if "assigned_style" in input_data and proposal["style"] != input_data["assigned_style"]:
             raise SafetyError("style_must_match_assigned_strategy")
     elif kind == "learn":
