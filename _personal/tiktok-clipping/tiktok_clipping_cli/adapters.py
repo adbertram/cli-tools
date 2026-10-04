@@ -74,10 +74,10 @@ class ExternalAdapter:
                 raise AdapterFailure("ambiguous" if method in {"publish", "submit_rewards"} else "permanent", "adapter_process_failed")
             try:
                 record = strict_json(raw, self.config["limits"]["max_payload_bytes"])
-                if not isinstance(record, dict) or set(record) not in ({"result"}, {"error", "category", "retry_after"}, {"error", "category", "retry_after", "provider", "code", "status"}):
+                if not isinstance(record, dict) or set(record) not in ({"result"}, {"error", "category", "retry_after"}, {"error", "category", "retry_after", "provider", "code", "status"}, {"error", "category", "retry_after", "provider", "code", "status", "diagnostics"}):
                     raise SafetyError("invalid_adapter_envelope")
             except SafetyError as exc:
                 raise AdapterFailure("ambiguous" if method in {"publish", "submit_rewards"} else "permanent", str(exc)) from exc
             if "error" in record:
-                raise AdapterFailure(record["category"], record["error"], record["retry_after"], provider=record.get("provider"), code=record.get("code"), status=record.get("status"))
+                raise AdapterFailure(record["category"], record["error"], record["retry_after"], provider=record.get("provider"), code=record.get("code"), status=record.get("status"), diagnostics=record.get("diagnostics"))
             return record["result"]

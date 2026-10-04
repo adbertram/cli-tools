@@ -18,7 +18,7 @@ def main():
         result = getattr(adapter, method)(*message["args"])
         output = {"result": result}
     except AdapterFailure as exc:
-        output = {"error": str(exc), "category": exc.category, "retry_after": exc.retry_after, "provider": exc.provider, "code": exc.code, "status": exc.status}
+        output = {"error": str(exc), "category": exc.category, "retry_after": exc.retry_after, "provider": exc.provider, "code": exc.code, "status": exc.status, "diagnostics": exc.diagnostics}
     except (TimeoutError, ConnectionError) as exc:
         output = {"error": type(exc).__name__, "category": "ambiguous" if method in {"publish", "submit_rewards"} else "transient", "retry_after": None}
     except Exception as exc:

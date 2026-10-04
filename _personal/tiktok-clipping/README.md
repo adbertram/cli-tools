@@ -39,7 +39,7 @@ tiktok-clipping jobs prepare --kind metrics --config /absolute/config.json
 
 Clip/learn envelopes contain `ready`, `job_id`, `lease_token`, `kind`, `prompt`, `input_digest`, `policy_digest`, and `input`. Metrics jobs execute through the trusted adapter and return `ready: false`; they never enter a model. Other explicit states include paused, stopped, unconfigured, idle, insufficient_samples, and adapter outcomes. Due validated retries execute without another model call.
 
-Apply bounded model JSON from stdin; execute an already validated job; read back an ambiguous publication; revalidate a blocked job after a trusted integration repair:
+Apply bounded model JSON from stdin; execute an already validated job; read back an ambiguous publication; revalidate blocked work or a proven pre-publication visual failure after a trusted integration repair:
 
 ```bash
 tiktok-clipping jobs apply --config /absolute/config.json < /absolute/model-envelope.json
@@ -47,6 +47,8 @@ tiktok-clipping jobs run JOB_ID --config /absolute/config.json
 tiktok-clipping jobs reconcile JOB_ID --config /absolute/config.json
 tiktok-clipping jobs retry JOB_ID --config /absolute/config.json
 ```
+
+Failed visual work may be revalidated only with a durable readiness-failure record, a retained verified asset/proposal, an expired lease, and no publication reservation, dispatch history, result or approved visual attempt. The exact observed legacy `submission_form_unavailable` readiness failure is recognized with its original job event. Recovery preserves attempts, revisions, receipts and spend; ambiguous writes always require reconciliation. `jobs get` retains the last failure and bounded owning-SDK form diagnostics (origin/route flags and counts only) after the browser closes.
 
 Apply input exact keys are `job_id`, `lease_token`, `input_digest`, `policy_digest`, `proposal`. A clip proposal has `start_seconds`, `end_seconds`, `caption`, `style` and optional `segments` (up to four ordered `{start_seconds,end_seconds}` cuts). Cuts must be finite, inside the measured source and nonoverlapping. Bounding start/end must exactly equal the minimum/maximum cut bounds; all duration limits, caption timing and visual sampling use the sum of cut lengths. The ledger conservatively reserves the entire bounding source span, including gaps, so reordered edits cannot reuse those gaps as another accepted clip. A strategy proposal has only `weights`, `exploration`. `proposal` may instead contain the n8n DeepSeek node shape `{result: "<strict JSON>", reasoning: "..."}`; only `result` is parsed. Markdown fences, duplicate JSON keys, unknown proposal keys, NaN/infinity, oversized payloads, invalid durations, foreign styles, stale leases, changed policy, and forged digests are rejected. Exact duplicate apply does not repeat publication.
 

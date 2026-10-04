@@ -28,13 +28,13 @@ def media_identity(record):
 from .safety import (
     edit_duration,
     METRICS, TARGET_HANDLE, SafetyError, canonical, digest, keys, number, strict_json, string,
-    timestamp, validate_config, validate_proposal, validate_source, write_allowance,
+    timestamp, validate_config, validate_proposal, validate_source, write_allowance, adapter_diagnostics,
 )
 
 
 class AdapterFailure(RuntimeError):
     """Trusted adapter failure. Only the coordinator schedules retries."""
-    def __init__(self, category, message, retry_after=None, *, provider=None, code=None, status=None):
+    def __init__(self, category, message, retry_after=None, *, provider=None, code=None, status=None, diagnostics=None):
         if category not in {"auth", "transient", "rate_limit", "permanent", "ambiguous"}:
             raise SafetyError("unknown_failure_category")
         if provider not in {None, "whop", "tiktok", "model"}:
@@ -44,6 +44,7 @@ class AdapterFailure(RuntimeError):
         if status is not None:
             number(status, 100, 599, integer=True)
         self.provider, self.code, self.status = provider, code, status
+        self.diagnostics = adapter_diagnostics(diagnostics)
         self.category = category
         self.retry_after = None if retry_after is None else number(retry_after, 0)
         super().__init__(message)
@@ -297,7 +298,7 @@ class Engine:
                 retry_after = exc.retry_after if exc.retry_after is not None else self.config["limits"]["retry_base_seconds"]
             self._circuit_failure(method, retry_after)
             with self.transaction() as db:
-                self.event(db, None, 'adapter_failure', {'method': method, 'category': exc.category, 'provider': exc.provider, 'code': exc.code, 'status': exc.status, 'retry_after': exc.retry_after})
+                self.event(db, None, 'adapter_failure', {'method': method, 'category': exc.category, 'provider': exc.provider, 'code': exc.code, 'status': exc.status, 'retry_after': exc.retry_after, 'diagnostics': exc.diagnostics})
             if exc.provider is not None and (exc.category == "rate_limit" or exc.retry_after is not None):
                 self._circuit_failure("provider:" + exc.provider, exc.retry_after if exc.retry_after is not None else self.config["limits"]["retry_base_seconds"])
             raise
@@ -320,9 +321,11 @@ class Engine:
     def get(self, job_id):
         with self.transaction() as db:
             job = self._job(db, job_id)
+            failure = db.execute("SELECT at,data FROM events WHERE job_id=? AND event='adapter_failure' ORDER BY id DESC LIMIT 1", (job_id,)).fetchone()
         job = decoded_job(job)
         # Lease tokens are credentials for ownership, not ordinary inspection data.
         job.pop("lease_token", None)
+        job["last_failure"] = {"at": failure["at"], **json.loads(failure["data"])} if failure else None
         return job
 
     def _adapter_job(self, job_id, worker_token):
@@ -782,8 +785,11 @@ class Engine:
             if stage == "publish" and state != "ambiguous":
                 db.execute("UPDATE publications SET state='absent' WHERE job_id=?", (job_id,))
             db.execute("UPDATE jobs SET status=?,error=?,next_at=?,updated_at=? WHERE id=?", (state, str(exc)[:1000], self.clock() + delay, self.clock(), job_id))
-            self.event(db, job_id, "adapter_failure", {"category": exc.category, "stage": stage, "state": state})
-        return {"job_id": job_id, "state": state, "error": str(exc), "category": exc.category}
+            self.event(db, job_id, "adapter_failure", {"category": exc.category, "stage": stage, "state": state,
+                "provider": exc.provider, "code": exc.code, "diagnostics": exc.diagnostics,
+                "known_pre_publication": stage == "verify_ready", "error": str(exc)[:1000],
+                "binding": {field: job[field] for field in ("input_digest", "proposal_digest", "policy_digest", "asset")}})
+        return {"job_id": job_id, "state": state, "error": str(exc), "category": exc.category, "diagnostics": exc.diagnostics}
 
     def _asset(self, asset):
         keys(asset, {"path", "sha256", "bytes", "provenance"})
@@ -1282,15 +1288,26 @@ class Engine:
         with self.transaction() as db:
             self._active(db)
             job = self._job(db, job_id)
-            if job["status"] != "blocked":
+            if job["status"] == "failed":
+                failure = db.execute("SELECT data FROM events WHERE job_id=? AND event='adapter_failure' ORDER BY id DESC LIMIT 1", (job_id,)).fetchone()
+                proof = json.loads(failure["data"]) if failure else {}
+                legacy = proof == {"category": "permanent", "stage": "verify_ready", "state": "failed"} and job["error"] == "whop:submission_form_unavailable"
+                binding = {field: job[field] for field in ("input_digest", "proposal_digest", "policy_digest", "asset")}
+                proven = proof.get("known_pre_publication") is True and proof.get("stage") == "verify_ready" and proof.get("binding") == binding and proof.get("error") == job["error"]
+                if not (legacy or proven) or job["kind"] != "clip" or job["stage"] != "visual" or job["asset"] is None or job["proposal"] is None or job["result"] is not None or (job["lease_until"] is not None and job["lease_until"] > self.clock()) or job["attempts"] >= self.config["limits"]["max_attempts"]:
+                    raise SafetyError("failed_job_pre_publication_proof_required")
+                if db.execute("SELECT 1 FROM publications WHERE job_id=?", (job_id,)).fetchone() or db.execute("SELECT 1 FROM visual_attempts WHERE job_id=? AND state='approved'", (job_id,)).fetchone() or db.execute("SELECT 1 FROM events WHERE job_id=? AND event='upload_started'", (job_id,)).fetchone():
+                    raise SafetyError("failed_job_public_action_history")
+                self._asset(json.loads(job["asset"]))
+            elif job["status"] != "blocked":
                 raise SafetyError("only_blocked_jobs_can_be_revalidated")
             data = json.loads(job["input"])
             if job["kind"] == "clip":
                 validate_source(data, self.config, self.clock())
             if job["proposal"]:
                 validate_proposal(job["kind"], json.loads(job["proposal"]), data, self.config)
-            db.execute("UPDATE jobs SET status='ready',policy_digest=?,next_at=0,error=NULL,updated_at=? WHERE id=?", (self.policy_digest, self.clock(), job_id))
-            self.event(db, job_id, "blocked_job_revalidated", {"policy_digest": self.policy_digest})
+            db.execute("UPDATE jobs SET status='ready',policy_digest=?,next_at=0,error=NULL,lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=?", (self.policy_digest, self.clock(), job_id))
+            self.event(db, job_id, "blocked_job_revalidated" if job["status"] == "blocked" else "pre_publication_job_revalidated", {"policy_digest": self.policy_digest, "previous_error": job["error"], "attempts": job["attempts"], "revisions": job["revisions"]})
         return {"job_id": job_id, "state": "ready"}
 
     @bounded
