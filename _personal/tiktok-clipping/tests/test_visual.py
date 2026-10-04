@@ -7,7 +7,7 @@ import pytest
 from conftest import claim, iso, payload
 from tiktok_clipping_cli.engine import Engine
 from tiktok_clipping_cli.safety import SafetyError, canonical
-from tiktok_clipping_cli.visual import CHECKS, VisualArtifacts, owned_bytes, validate_receipt
+from tiktok_clipping_cli.visual import CHECKS, VisualArtifacts, caption_samples, owned_bytes, validate_receipt
 
 
 @pytest.fixture
@@ -19,6 +19,11 @@ def visual_engine(config,adapter,clock,monkeypatch):
         Path(command[-1]).write_bytes(b'\xff\xd8\xffTEST frame\xff\xd9')
     from tiktok_clipping_cli.media import MediaRenderer
     monkeypatch.setattr(MediaRenderer,'_run',render_frame)
+    def render_receipt(media, job, proposal, asset):
+        data={'asset':asset,'proposal':proposal,'captions':[{'start':0,'end':proposal['end_seconds']-proposal['start_seconds'],'text':'TEST speech'}]}
+        Path(asset['path']).with_suffix('.json').write_text(canonical(data))
+        return data
+    monkeypatch.setattr(MediaRenderer,'render_receipt',render_receipt)
     engine=Engine(config,adapter=adapter,clock=clock,native_execution={'execution_id':'123','workflow_id':'workflow-test'},native_completion=True)
     adapter.visual_execution_state=lambda envelope:{**envelope['native_execution'],'terminal':True,'process_absent':True,'stopped_at':iso(envelope['model_deadline']),'provenance':'TEST exact execution terminal/process absence'}
     engine.control('running')
@@ -49,6 +54,53 @@ def test_actual_hash_bound_manifest_and_visual_receipt_publish_once(visual_engin
         attempt=db.execute('SELECT * FROM visual_attempts').fetchone()
         assert attempt['state']=='approved' and '1351' in attempt['result']
         assert db.execute('SELECT model_calls FROM budgets').fetchone()[0]==2
+
+
+def test_caption_gap_preserves_composition_sample_and_samples_speech_midpoint():
+    captions=[{'start':0,'end':2.9,'text':'One card.'},{'start':2.9,'end':3.74,'text':'Oh fun!'},{'start':6.24,'end':7,'text':'Whoa.'}]
+    cues,samples=caption_samples(7,captions,3)
+    assert cues==[{'start':cue['start'],'end':cue['end']} for cue in captions]
+    assert samples==[{'seconds':1.45,'caption_expected':True},{'seconds':3.5,'caption_expected':True},{'seconds':7*2.5/3,'caption_expected':False}]
+    # Even sparse speech missed by every uniform frame gets typography coverage.
+    _,sparse=caption_samples(7,[{'start':0,'end':0.1,'text':'Hi.'}],3)
+    assert sparse[0]=={'seconds':0.05,'caption_expected':True}
+    assert len(sparse)==3 and sparse[-1]['caption_expected'] is False
+    with pytest.raises(SafetyError,match='timed_transcript_required'):caption_samples(7,[],3)
+
+
+def test_new_manifest_expectations_bind_actual_receipt_and_missing_speech_still_fails(visual_engine,adapter,clock):
+    envelope=issue(visual_engine,clock)
+    manifest=json.loads(Path(envelope['manifest_path']).read_text())
+    assert manifest['schema_version']==2 and any(frame['caption_expected'] for frame in manifest['frames'])
+    assert 'missing captions there fails' in manifest['prompt']
+    assert 'cue gaps do not prove audio silence' in manifest['prompt'].lower()
+    rejected=receipt(envelope,clock)
+    rejected['decision']={'passed':False,'checks':{**dict.fromkeys(CHECKS,True),'captions_readable':False},'reason':'Expected burned speech is missing.'}
+    assert visual_engine.apply_visual(rejected)['state']=='queued'
+    assert adapter.uploads==[]
+
+
+@pytest.mark.parametrize('change',['receipt','expectation','cue','timestamp'])
+def test_caption_sampling_tampering_refuses(visual_engine,clock,change):
+    envelope=issue(visual_engine,clock)
+    asset=visual_engine.get(envelope['job_id'])['asset']
+    manifest_path=Path(envelope['manifest_path']);manifest=json.loads(manifest_path.read_text())
+    if change=='receipt':Path(asset['path']).with_suffix('.json').write_text('{}')
+    else:
+        if change=='expectation':manifest['frames'][0]['caption_expected']=False
+        elif change=='cue':manifest['caption_cues'][0]['end']-=1
+        else:manifest['frames'][0]['seconds']+=0.1
+        raw=canonical(manifest).encode();manifest_path.write_bytes(raw);envelope['manifest_sha256']=hashlib.sha256(raw).hexdigest()
+    with pytest.raises(SafetyError):VisualArtifacts(visual_engine.config).verify(envelope,asset)
+
+
+def test_old_immutable_manifest_remains_verifiable_for_retention(visual_engine,clock):
+    envelope=issue(visual_engine,clock);asset=visual_engine.get(envelope['job_id'])['asset']
+    path=Path(envelope['manifest_path']);manifest=json.loads(path.read_text());manifest['schema_version']=1
+    manifest.pop('caption_cues');manifest.pop('rendered_duration');manifest.pop('render_receipt_sha256')
+    for frame in manifest['frames']:frame.pop('caption_expected')
+    raw=canonical(manifest).encode();path.write_bytes(raw);envelope['manifest_sha256']=hashlib.sha256(raw).hexdigest()
+    assert VisualArtifacts(visual_engine.config).verify(envelope,asset)['schema_version']==1
 
 
 @pytest.mark.parametrize('change',['expiry','reclaim','asset','manifest','frame','input','policy','nonce'])

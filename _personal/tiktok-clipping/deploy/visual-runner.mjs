@@ -49,10 +49,21 @@ export async function loadInputs(task, config) {
  const {envelope,root}=validateEnvelope(task,config.workspace);
  await ownedFile(envelope.overlay_path,root,16384,envelope.overlay_sha256);
  const manifest=JSON.parse(await ownedFile(envelope.manifest_path,root,16384,envelope.manifest_sha256));
- if(!exactKeys(manifest,['schema_version','job_id','attempt_id','asset_sha256','frames','prompt']) || manifest.schema_version!==1 || ['job_id','attempt_id','asset_sha256'].some(k=>manifest[k]!==envelope[k]) || typeof manifest.prompt!=='string' || manifest.prompt.length>8000 || !Array.isArray(manifest.frames) || manifest.frames.length!==config.frameCount || config.frameCount<1 || config.frameCount>8) throw Error('invalid_visual_manifest');
+ const coverage=manifest.schema_version===2;
+ if(!exactKeys(manifest,['schema_version','job_id','attempt_id','asset_sha256','frames','prompt',...(coverage?['caption_cues','rendered_duration','render_receipt_sha256']:[])]) || ![1,2].includes(manifest.schema_version) || ['job_id','attempt_id','asset_sha256'].some(k=>manifest[k]!==envelope[k]) || typeof manifest.prompt!=='string' || manifest.prompt.length>8000 || !Array.isArray(manifest.frames) || manifest.frames.length!==config.frameCount || config.frameCount<1 || config.frameCount>8) throw Error('invalid_visual_manifest');
+ if(coverage) {
+  if(!Number.isFinite(manifest.rendered_duration) || manifest.rendered_duration<=0 || manifest.rendered_duration>3600 || !/^[a-f0-9]{64}$/.test(manifest.render_receipt_sha256) || !Array.isArray(manifest.caption_cues) || !manifest.caption_cues.length || manifest.caption_cues.length>1000) throw Error('invalid_visual_caption_cues');
+  let previousEnd=0;
+  for(const cue of manifest.caption_cues) {
+   if(!exactKeys(cue,['start','end']) || !Number.isFinite(cue.start) || !Number.isFinite(cue.end) || cue.start<previousEnd || cue.end<=cue.start || cue.end>manifest.rendered_duration) throw Error('invalid_visual_caption_cues');
+   previousEnd=cue.end;
+  }
+  if(!manifest.frames.some(frame=>manifest.caption_cues.some(cue=>frame.seconds===(cue.start+cue.end)/2))) throw Error('visual_caption_midpoint_missing');
+ }
  const inputs=[];
  for(const [i,item] of manifest.frames.entries()) {
-  if(!exactKeys(item,['path','sha256','bytes','seconds']) || item.path!==path.join(root,`frame-${i}.jpg`) || !/^[a-f0-9]{64}$/.test(item.sha256) || !Number.isFinite(item.seconds) || item.seconds<0) throw Error('invalid_visual_frame');
+  if(!exactKeys(item,['path','sha256','bytes','seconds',...(coverage?['caption_expected']:[])]) || item.path!==path.join(root,`frame-${i}.jpg`) || !/^[a-f0-9]{64}$/.test(item.sha256) || !Number.isFinite(item.seconds) || item.seconds<0) throw Error('invalid_visual_frame');
+  if(coverage && (typeof item.caption_expected!=='boolean' || item.caption_expected!==manifest.caption_cues.some(cue=>cue.start<=item.seconds && item.seconds<cue.end))) throw Error('invalid_visual_caption_expectation');
   const data=await ownedFile(item.path,root,config.maxFrameBytes,item.sha256);
   if(data.length!==item.bytes || data.length<5 || data[0]!==255 || data[1]!==216 || data[2]!==255 || data.at(-2)!==255 || data.at(-1)!==217) throw Error('invalid_visual_jpeg');
   inputs.push({data,mediaType:'image/jpeg',name:path.basename(item.path)});

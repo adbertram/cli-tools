@@ -12,14 +12,41 @@ async function fixture() {
  const job='a'.repeat(32),attempt='b'.repeat(32),root=path.join(workspace,'visual',job,attempt);
  await mkdir(root,{recursive:true});
  const jpeg=Buffer.from([255,216,255,1,2,255,217]),file=path.join(root,'frame-0.jpg');await writeFile(file,jpeg);
- const manifest={schema_version:1,job_id:job,attempt_id:attempt,asset_sha256:'f'.repeat(64),frames:[{path:file,bytes:jpeg.length,sha256:hash(jpeg),seconds:1}],prompt:'Return strict review.'};
+ const manifest={schema_version:2,job_id:job,attempt_id:attempt,asset_sha256:'f'.repeat(64),frames:[{path:file,bytes:jpeg.length,sha256:hash(jpeg),seconds:1,caption_expected:true}],prompt:'Return strict review.',caption_cues:[{start:0,end:2}],rendered_duration:4,render_receipt_sha256:'1'.repeat(64)};
  const raw=JSON.stringify(manifest),overlay='trusted overlay';await writeFile(path.join(root,'manifest.json'),raw);await writeFile(path.join(root,'deepseek-visual.yml'),overlay);
  const envelope={schema_version:1,job_id:job,attempt_id:attempt,lease_token:'x'.repeat(43),nonce:'y'.repeat(43),asset_sha256:'f'.repeat(64),input_digest:'c'.repeat(64),proposal_digest:'d'.repeat(64),policy_digest:'e'.repeat(64),manifest_path:path.join(root,'manifest.json'),manifest_sha256:hash(raw),overlay_path:path.join(root,'deepseek-visual.yml'),overlay_sha256:hash(overlay),native_execution:{execution_id:'123',workflow_id:'workflow-test'},model_deadline:Date.now()/1000+30,expires_at:Date.now()/1000+60};
- return {workspace,root,file,envelope,config:{workspace,frameCount:1,maxFrameBytes:1048576}};
+ return {workspace,root,file,envelope,manifest,config:{workspace,frameCount:1,maxFrameBytes:1048576}};
 }
 
 test('bounded actual frames validate before native agent construction',async()=>{
  const f=await fixture();try {const result=await loadInputs(JSON.stringify(f.envelope),f.config);assert.equal(result.inputs.length,1);}finally{await rm(f.workspace,{recursive:true});}
+});
+test('cue coverage, midpoint and typed expectation refuse malformed trusted metadata',async()=>{
+ for(const change of ['expectation','cue','midpoint','type']) {
+  const f=await fixture();try {
+   if(change==='expectation')f.manifest.frames[0].caption_expected=false;
+   if(change==='cue')f.manifest.caption_cues[0].end=-1;
+   if(change==='midpoint')f.manifest.frames[0].seconds=0.5;
+   if(change==='type')f.manifest.frames[0].caption_expected='true';
+   const raw=JSON.stringify(f.manifest);await writeFile(f.envelope.manifest_path,raw);f.envelope.manifest_sha256=hash(raw);
+   await assert.rejects(loadInputs(JSON.stringify(f.envelope),f.config));
+  }finally{await rm(f.workspace,{recursive:true});}
+ }
+});
+test('ASR gap does not require text while another sampled frame checks typography',async()=>{
+ const f=await fixture();try {
+  const second=path.join(f.root,'frame-1.jpg');const jpeg=Buffer.from([255,216,255,1,2,255,217]);await writeFile(second,jpeg);
+  f.manifest.frames.push({path:second,bytes:jpeg.length,sha256:hash(jpeg),seconds:3,caption_expected:false});f.config.frameCount=2;
+  const raw=JSON.stringify(f.manifest);await writeFile(f.envelope.manifest_path,raw);f.envelope.manifest_sha256=hash(raw);
+  assert.equal((await loadInputs(JSON.stringify(f.envelope),f.config)).inputs.length,2);
+ }finally{await rm(f.workspace,{recursive:true});}
+});
+test('legacy immutable manifest still validates',async()=>{
+ const f=await fixture();try {
+  f.manifest.schema_version=1;delete f.manifest.caption_cues;delete f.manifest.rendered_duration;delete f.manifest.render_receipt_sha256;delete f.manifest.frames[0].caption_expected;
+  const raw=JSON.stringify(f.manifest);await writeFile(f.envelope.manifest_path,raw);f.envelope.manifest_sha256=hash(raw);
+  assert.equal((await loadInputs(JSON.stringify(f.envelope),f.config)).manifest.schema_version,1);
+ }finally{await rm(f.workspace,{recursive:true});}
 });
 test('unknown paths, expired lease and altered digests reject',async()=>{
  const f=await fixture();try {
