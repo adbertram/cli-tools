@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from tiktok_clipping_cli.media import MediaRenderer, clip_segments, timed_segments
+from tiktok_clipping_cli.media import MediaRenderer, clip_segments, timed_segments, normalized_crop_segments
 from tiktok_clipping_cli.safety import SafetyError, canonical
 
 
@@ -51,6 +51,27 @@ def test_reject_bad_timestamps_and_subtitle_injection(segments, error):
 def test_plain_text_is_not_timed_speech():
     with pytest.raises(SafetyError, match="invalid_json"):
         timed_segments("Pretend transcript without timings.", 10)
+
+
+def test_crop_endpoint_normalization_retains_raw_timing():
+    raw = {"segments": [{"start": 0, "end": 6.82, "text": "A complete measured sentence."}]}
+    cues, evidence = normalized_crop_segments(raw, 6.683333)
+    assert raw["segments"][0]["end"] == 6.82
+    assert cues[0]["end"] == 6.683333
+    assert evidence["raw_segments"] == raw["segments"]
+    assert evidence["end_deltas_seconds"][0] == pytest.approx(0.136667)
+
+
+@pytest.mark.parametrize("raw,error", [
+    ({"segments": [{"start": 0, "end": 1.251, "text": "Too far."}]}, "number_out_of_bounds"),
+    ({"segments": [{"start": -0.01, "end": 1, "text": "Negative."}]}, "number_out_of_bounds"),
+    ({"segments": [{"start": 0, "end": 1.1, "text": "First."}, {"start": 1.0, "end": 1.2, "text": "Overlap."}]}, "number_out_of_bounds"),
+    ({"segments": [{"start": 0, "end": 1.1, "text": "Unfinished"}]}, "clip_ends_mid_sentence"),
+    ({"segments": [{"start": 0.3, "end": 1.1, "text": "Missing start."}]}, "clip_splits_spoken_segment"),
+])
+def test_crop_normalization_refuses_invalid_or_incomplete_speech(raw, error):
+    with pytest.raises(SafetyError, match=error):
+        normalized_crop_segments(raw, 1)
 
 
 def test_complete_sentence_boundaries(segments, proposal):
@@ -189,6 +210,103 @@ def source(config, ffmpeg):
         "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=3", "-c:v", "libx264", "-c:a", "aac", "-shortest", str(source)],
         capture_output=True, check=True, timeout=20)
     return renderer, source
+
+
+def authorized_source(renderer, path):
+    from tiktok_clipping_cli.media import sha256
+    policy = {"source_url": "https://www.youtube.com/watch?v=abcdefghijk",
+              "source_sha256": sha256(path), "source_bytes": path.stat().st_size}
+    renderer.config["sources"][0]["publication_policy"] = policy
+    return {"source_id": "approved", "media_url": policy["source_url"]}
+
+
+def measured_whisper(renderer, monkeypatch, *, fail=False):
+    original = renderer._run
+    def run(command, deadline, **kwargs):
+        if command[0] == "whisper":
+            if fail:
+                raise SafetyError("measured_transcription_failed")
+            return canonical({"segments": [{"start": 0, "end": 3, "text": "Measured fixture sentence."}]}).encode()
+        return original(command, deadline, **kwargs)
+    monkeypatch.setattr(renderer, "_run", run)
+
+
+def test_authorized_import_atomic_exact_cache_and_idempotence(source, monkeypatch):
+    renderer, path = source
+    record = authorized_source(renderer, path)
+    measured_whisper(renderer, monkeypatch)
+    imported = renderer.import_authorized_source(record, path)
+    assert imported["duration_seconds"] == pytest.approx(3)
+    assert renderer.prepare(record) == imported
+    assert renderer.import_authorized_source(record, path) == imported
+    cache = next(p for p in renderer.root.iterdir() if p.is_dir() and len(p.name) == 64)
+    assert (cache / "source.mp4").read_bytes() == path.read_bytes()
+    assert {p.name for p in cache.iterdir()} == {"source.mp4", "source.json"}
+    (cache / "source.mp4").write_bytes(b"foreign changed cache")
+    with pytest.raises(SafetyError, match="existing_source_cache_rights_mismatch"):
+        renderer.import_authorized_source(record, path)
+    assert (cache / "source.mp4").read_bytes() == b"foreign changed cache"
+
+
+@pytest.mark.parametrize("failure", ["symlink", "fifo", "hash", "transcription", "disk"])
+def test_authorized_import_failure_never_publishes_cache(source, monkeypatch, failure):
+    renderer, path = source
+    record = authorized_source(renderer, path)
+    measured_whisper(renderer, monkeypatch, fail=failure == "transcription")
+    if failure == "symlink":
+        link = path.with_name("link.mp4")
+        link.symlink_to(path)
+        path = link
+    if failure == "fifo":
+        fifo = path.with_name("pipe.mp4")
+        os.mkfifo(fifo)
+        path = fifo
+    if failure == "hash":
+        renderer.config["sources"][0]["publication_policy"]["source_sha256"] = "0" * 64
+    if failure == "disk":
+        original = renderer._disk
+        calls = []
+        def pressure(*args, **kwargs):
+            calls.append(1)
+            return 0 if len(calls) > 1 else original(*args, **kwargs)
+        monkeypatch.setattr(renderer, "_disk", pressure)
+    with pytest.raises(SafetyError):
+        renderer.import_authorized_source(record, path)
+    assert not [p for p in renderer.root.iterdir() if p.is_dir()]
+    assert path.exists()
+
+
+def test_cut_refinement_shifts_measured_order_and_preserves_binding(source, monkeypatch):
+    renderer, path = source
+    original = renderer._run
+    deadlines = []
+    def run(command, deadline, **kwargs):
+        deadlines.append(deadline)
+        if command[0] == "whisper":
+            return canonical({"segments": [{"start": 0, "end": 1.1, "text": "Measured cut."}]}).encode()
+        return original(command, deadline, **kwargs)
+    monkeypatch.setattr(renderer, "_run", run)
+    cuts = [{"start_seconds": 2, "end_seconds": 3}, {"start_seconds": 0, "end_seconds": 1}]
+    captions, evidence = renderer.refine_transcript(path, cuts)
+    assert captions == [{"start": 0, "end": 1, "text": "Measured cut."}, {"start": 1, "end": 2, "text": "Measured cut."}]
+    assert [entry["cut"] for entry in evidence["cuts"]] == cuts
+    assert all(entry["raw_segments"][0]["end"] == 1.1 for entry in evidence["cuts"])
+    assert len(set(deadlines)) == 1
+    assert not list(renderer.root.glob("refinement-*"))
+
+
+def test_refined_render_receipt_revalidates_measured_provenance(source, proposal, monkeypatch):
+    from tiktok_clipping_cli.safety import strict_json
+    renderer, path = source
+    measured_whisper(renderer, monkeypatch)
+    asset = renderer.render_local(path, [], proposal, "Measured synthetic source", refine_transcript=True)
+    assert renderer.quality({}, proposal, asset)["passed"]
+    receipt_path = Path(asset["path"]).with_suffix(".json")
+    receipt = strict_json(receipt_path.read_bytes())
+    receipt["transcript_refinement"]["cuts"][0]["raw_segments"][0]["end"] = 3.1
+    receipt_path.write_text(canonical(receipt))
+    with pytest.raises(SafetyError, match="transcript_refinement_timing_changed"):
+        renderer.quality({}, proposal, asset)
 
 
 def test_real_caption_render_quality_and_tamper(source, segments, proposal):

@@ -10,6 +10,7 @@ import fcntl
 import os
 import signal
 import shutil
+import stat
 import subprocess
 import tempfile
 import time
@@ -79,6 +80,23 @@ def _single_clip_segments(segments, proposal):
         raise SafetyError("clip_ends_mid_sentence")
     # Only trim sub-frame tolerance at source boundaries; never stretch a cue.
     return [{"start": max(0, s["start"] - start), "end": min(end - start, s["end"] - start), "text": s["text"]} for s in selected]
+
+
+def normalized_crop_segments(raw, duration, maximum=1048576):
+    """Keep measured speech; bound terminal ASR overshoot to the actual crop.
+
+    This derives timing, not evidence that a spoken word is complete. The
+    sentence gate and actual source scene/audio review remain required.
+    """
+    if isinstance(raw, (str, bytes)):
+        raw = strict_json(raw, maximum)
+    measured = timed_segments(raw, duration + BOUNDARY_TOLERANCE, maximum)
+    normalized = [{**cue, "end": min(cue["end"], duration)} for cue in measured]
+    normalized = timed_segments({"segments": normalized}, duration, maximum)
+    clip_segments(normalized, {"start_seconds": 0, "end_seconds": duration})
+    return normalized, {"raw_segments": measured, "normalized_segments": normalized,
+        "end_deltas_seconds": [a["end"] - b["end"] for a, b in zip(measured, normalized)],
+        "maximum_endpoint_correction_seconds": BOUNDARY_TOLERANCE}
 
 
 def clip_segments(segments, proposal):
@@ -275,6 +293,92 @@ class MediaRenderer:
         with self._lock(deadline):
             return self._prepare(record, deadline)
 
+    def _source_data(self, media, url, deadline, provenance):
+        measured = self.probe(media, deadline)
+        if not measured["audio_present"]:
+            raise SafetyError("source_audio_missing")
+        raw = self._run(["whisper", "transcripts", "create", str(media), "--timeout",
+            str(max(1, int(deadline - time.monotonic())))], deadline)
+        segments = timed_segments(raw, measured["duration_seconds"], self.config["limits"]["max_payload_bytes"])
+        return {"duration_seconds": measured["duration_seconds"], "transcript": " ".join(s["text"] for s in segments),
+            "transcript_segments": [{"start_seconds": s["start"], "end_seconds": s["end"], "text": s["text"]} for s in segments],
+            "sha256": sha256(media), "provenance": provenance + "; ffprobe; owning Whisper CLI: " + url}
+
+    def _publish_source_cache(self, temp, target, data):
+        """Persist both exact media and manifest before publishing the cache."""
+        encoded = canonical(data).encode()
+        strict_json(encoded, self.config["limits"]["max_payload_bytes"])
+        if len(encoded) > self._disk():
+            raise SafetyError("disk_budget_exhausted")
+        with (temp / "source.json").open("xb") as stream:
+            stream.write(encoded)
+            stream.flush()
+            os.fsync(stream.fileno())
+        with (temp / "source.mp4").open("rb") as stream:
+            os.fsync(stream.fileno())
+        def sync_directory(path):
+            fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+        sync_directory(temp)
+        self._disk()
+        temp.rename(target)
+        sync_directory(self.root)
+
+    def import_authorized_source(self, record, source_path):
+        """Install already acquired, exactly rights-bound bytes in the own cache.
+
+        Existing caches are only accepted if their bytes match; unknown or
+        changed caches are preserved and refused. Copy, transcription and
+        atomic cache installation share the normal work/disk limits.
+        """
+        deadline = self._deadline()
+        with self._lock(deadline):
+            url = self._source(record)
+            source = next(s for s in self.config["sources"] if s["id"] == record["source_id"])
+            policy = source.get("publication_policy")
+            if policy is None or policy["source_url"] != url:
+                raise SafetyError("authorized_source_policy_required")
+            path = Path(source_path)
+            if not path.is_absolute() or path.is_symlink():
+                raise SafetyError("authorized_source_regular_file_required")
+            target = self.root / digest({"url": url})
+            if target.exists():
+                media = self._path(target / "source.mp4")
+                if media.stat().st_size != policy["source_bytes"] or sha256(media) != policy["source_sha256"]:
+                    raise SafetyError("existing_source_cache_rights_mismatch")
+                return self._prepare(record, deadline)
+            self._prune_cache(reserve=policy["source_bytes"] + self.config["limits"]["max_payload_bytes"])
+            with tempfile.TemporaryDirectory(prefix="source-", dir=self.root) as temp:
+                temp = Path(temp)
+                media = temp / "source.mp4"
+                hasher, copied = hashlib.sha256(), 0
+                fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+                with os.fdopen(fd, "rb") as incoming, media.open("xb") as outgoing:
+                    before = os.fstat(incoming.fileno())
+                    if not stat.S_ISREG(before.st_mode) or before.st_size != policy["source_bytes"]:
+                        raise SafetyError("authorized_source_size_changed")
+                    while chunk := incoming.read(min(1048576, policy["source_bytes"] - copied + 1)):
+                        if time.monotonic() >= deadline:
+                            raise TimeoutError("media_work_timeout")
+                        if copied + len(chunk) > policy["source_bytes"] or len(chunk) > self._disk():
+                            raise SafetyError("authorized_source_copy_budget_exhausted")
+                        outgoing.write(chunk)
+                        outgoing.flush()
+                        hasher.update(chunk)
+                        copied += len(chunk)
+                    after = os.fstat(incoming.fileno())
+                    current = path.stat(follow_symlinks=False)
+                    identity = lambda value: (value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns, value.st_ctime_ns)
+                    if identity(before) != identity(after) or identity(after) != identity(current) or copied != policy["source_bytes"] or hasher.hexdigest() != policy["source_sha256"]:
+                        raise SafetyError("authorized_source_digest_or_identity_changed")
+                    os.fsync(outgoing.fileno())
+                data = self._source_data(media, url, deadline, "exact rights-authorized source import")
+                self._publish_source_cache(temp, target, data)
+            return {key: data[key] for key in ("duration_seconds", "transcript", "transcript_segments", "provenance")}
+
     def _prepare(self, record, deadline):
         url = self._source(record)
         target = self.root / digest({"url": url})
@@ -297,20 +401,8 @@ class MediaRenderer:
             if len(candidates) != 1:
                 raise SafetyError("single_downloaded_media_required")
             media = self._path(candidates[0])
-            measured = self.probe(media, deadline)
-            if not measured["audio_present"]:
-                raise SafetyError("source_audio_missing")
-            raw = self._run(["whisper", "transcripts", "create", str(media), "--timeout",
-                str(max(1, int(deadline - time.monotonic())))], deadline)
-            segments = timed_segments(raw, measured["duration_seconds"], self.config["limits"]["max_payload_bytes"])
+            data = self._source_data(media, url, deadline, "youtube CLI download")
             media.rename(temp / "source.mp4")
-            data = {"duration_seconds": measured["duration_seconds"], "transcript": " ".join(s["text"] for s in segments),
-                "transcript_segments": [{"start_seconds": s["start"], "end_seconds": s["end"], "text": s["text"]} for s in segments],
-                "sha256": sha256(temp / "source.mp4"), "provenance": "youtube CLI download; ffprobe; whisper CLI timed speech: " + url}
-            encoded = canonical(data).encode()
-            if len(encoded) > self.config["limits"]["max_payload_bytes"]:
-                raise SafetyError("payload_too_large")
-            (temp / "source.json").write_bytes(encoded)
             for path in temp.iterdir():
                 if path.name not in {"source.mp4", "source.json"}:
                     if path.is_dir() and not path.is_symlink():
@@ -319,8 +411,7 @@ class MediaRenderer:
                         path.unlink()
             self._prune_cache(reserve=sum(p.stat().st_size for p in temp.rglob("*") if p.is_file()))
             self._disk()
-            # Source cache install is atomic; temporary remnants clean on failure.
-            temp.rename(target)
+            self._publish_source_cache(temp, target, data)
         return {key: data[key] for key in ("duration_seconds", "transcript", "transcript_segments", "provenance")}
 
     def _prepared_segments(self, data):
@@ -333,6 +424,39 @@ class MediaRenderer:
             segments.append({"start": segment["start_seconds"], "end": segment["end_seconds"], "text": segment["text"]})
         return timed_segments({"segments": segments}, data["duration_seconds"], self.config["limits"]["max_payload_bytes"])
 
+    def refine_transcript(self, source_path, cuts, *, deadline=None):
+        """Measure each exact cut independently, retaining raw timing evidence."""
+        deadline = deadline or self._deadline()
+        source_path = self._path(source_path)
+        source_digest = sha256(source_path)
+        captions, records, offset = [], [], 0
+        with tempfile.TemporaryDirectory(prefix="refinement-", dir=self.root) as temp:
+            for index, cut in enumerate(cuts):
+                duration = cut["end_seconds"] - cut["start_seconds"]
+                crop = Path(temp) / f"cut-{index}.wav"
+                self._run([self.ffmpeg, "-v", "error", "-nostdin", "-y", "-protocol_whitelist", "file,pipe",
+                    "-ss", str(cut["start_seconds"]), "-i", str(source_path), "-t", str(duration),
+                    "-map", "0:a:0", "-vn", "-ar", "16000", "-ac", "1", str(crop)], deadline)
+                probe = strict_json(self._run([self.ffprobe, "-v", "error", "-show_entries", "format=duration",
+                    "-of", "json", str(crop)], deadline), self.config["limits"]["max_payload_bytes"])
+                crop_duration = number(float(probe["format"]["duration"]), 0.001, duration + 0.01)
+                if abs(crop_duration - duration) > 0.01:
+                    raise SafetyError("refinement_crop_duration_changed")
+                raw = self._run(["whisper", "transcripts", "create", str(crop), "--timeout",
+                    str(max(1, int(deadline - time.monotonic())))], deadline)
+                cues, evidence = normalized_crop_segments(raw, crop_duration, self.config["limits"]["max_payload_bytes"])
+                shifted = clip_segments(cues, {"start_seconds": 0, "end_seconds": duration})
+                captions.extend({**cue, "start": cue["start"] + offset, "end": cue["end"] + offset} for cue in shifted)
+                records.append({"cut": cut, "crop_sha256": sha256(crop), "crop_bytes": crop.stat().st_size,
+                    "duration_seconds": crop_duration, **evidence})
+                offset += duration
+        evidence = {"source_sha256": source_digest, "cuts": records,
+            "provenance": "exact source-only mono16k cut; owning Whisper CLI; bounded endpoint normalization"}
+        strict_json(canonical(evidence), self.config["limits"]["max_payload_bytes"])
+        if sha256(source_path) != source_digest:
+            raise SafetyError("refinement_source_changed")
+        return captions, evidence
+
     def render(self, job, proposal):
         record = job["input"]
         deadline = self._deadline()
@@ -342,9 +466,9 @@ class MediaRenderer:
             source_path = self.root / digest({"url": self._source(record)}) / "source.mp4"
             segments = self._prepared_segments(prepared)
             source = next(source for source in self.config["sources"] if source["id"] == record["source_id"])
-            return self.render_local(source_path, segments, proposal, prepared["provenance"], deadline=deadline, publication_policy=source.get("publication_policy"))
+            return self.render_local(source_path, segments, proposal, prepared["provenance"], deadline=deadline, publication_policy=source.get("publication_policy"), refine_transcript=True)
 
-    def render_local(self, source_path, segments, proposal, provenance, *, deadline=None, publication_policy=None):
+    def render_local(self, source_path, segments, proposal, provenance, *, deadline=None, publication_policy=None, refine_transcript=False):
         """Render an already approved workspace file; also used by local smoke tests."""
         deadline = deadline or self._deadline()
         source_path = self._path(source_path)
@@ -364,7 +488,11 @@ class MediaRenderer:
             overlays = required_overlays(publication_policy, proposal)
             if edit_duration(proposal) >= measured["duration_seconds"]:
                 raise SafetyError("full_source_repost_forbidden")
-        captions = clip_segments(timed_segments({"segments": segments}, measured["duration_seconds"], self.config["limits"]["max_payload_bytes"]), proposal)
+        refinement = None
+        if refine_transcript:
+            captions, refinement = self.refine_transcript(source_path, cuts, deadline=deadline)
+        else:
+            captions = clip_segments(timed_segments({"segments": segments}, measured["duration_seconds"], self.config["limits"]["max_payload_bytes"]), proposal)
         string(provenance)
         filters = self._run([self.ffmpeg, "-hide_banner", "-filters"], deadline, output_limit=262144)
         if b" subtitles " not in filters:
@@ -407,6 +535,8 @@ class MediaRenderer:
             asset = {"path": str(destination), "sha256": sha256(output), "bytes": output.stat().st_size,
                 "provenance": "ffmpeg portrait crop; loudnorm; timed Whisper caption burn-in; " + provenance}
             receipt = {"asset": asset, "proposal": proposal, "captions": captions, "source_sha256": source_digest, "measured": report, "edit": {"segments": cuts, "rendered_duration": duration, "reservation": "whole_source_bounding_span"}, "audio_provenance": {"source_sha256": source_digest, "segments": cuts, "external_audio": False}, "overlays": overlays, "rights_policy_digest": None if publication_policy is None else digest(publication_policy)}
+            if refinement is not None:
+                receipt["transcript_refinement"] = refinement
             raw = canonical(receipt).encode()
             if len(raw) > self.config["limits"]["max_payload_bytes"]:
                 raise SafetyError("payload_too_large")
@@ -428,9 +558,26 @@ class MediaRenderer:
         receipt_path = self._path(path.with_suffix(".json"))
         from .visual import owned_bytes
         receipt = strict_json(owned_bytes(receipt_path, self.root, self.config["limits"]["max_payload_bytes"]), self.config["limits"]["max_payload_bytes"])
-        keys(receipt, {"asset", "proposal", "captions", "source_sha256", "measured"}, {"edit", "audio_provenance", "overlays", "rights_policy_digest"})
+        keys(receipt, {"asset", "proposal", "captions", "source_sha256", "measured"}, {"edit", "audio_provenance", "overlays", "rights_policy_digest", "transcript_refinement"})
         if receipt["asset"] != asset or receipt["proposal"] != proposal:
             raise SafetyError("render_receipt_mismatch")
+        refinement = receipt.get("transcript_refinement")
+        if refinement is not None:
+            if not isinstance(refinement, dict) or refinement.get("source_sha256") != receipt["source_sha256"] or not isinstance(refinement.get("cuts"), list) or [record.get("cut") for record in refinement["cuts"] if isinstance(record, dict)] != edit_segments(proposal):
+                raise SafetyError("transcript_refinement_binding_changed")
+            verified, offset = [], 0
+            for record in refinement["cuts"]:
+                cut = record["cut"]
+                duration = cut["end_seconds"] - cut["start_seconds"]
+                crop_duration = number(record.get("duration_seconds"), max(0.001, duration - 0.01), duration + 0.01)
+                normalized, expected = normalized_crop_segments({"segments": record.get("raw_segments")}, crop_duration, self.config["limits"]["max_payload_bytes"])
+                if any(record.get(key) != value for key, value in expected.items()):
+                    raise SafetyError("transcript_refinement_timing_changed")
+                verified.extend({**cue, "start": cue["start"] + offset, "end": cue["end"] + offset}
+                    for cue in clip_segments(normalized, {"start_seconds": 0, "end_seconds": duration}))
+                offset += duration
+            if verified != receipt["captions"]:
+                raise SafetyError("transcript_refinement_caption_changed")
         source = next((source for source in self.config["sources"] if source["id"] == job.get("input", {}).get("source_id")), None)
         if source is None and any("publication_policy" in source for source in self.config["sources"]):
             raise SafetyError("quality_source_rights_context_missing")
