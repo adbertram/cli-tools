@@ -1,8 +1,8 @@
 {
   "tool": "tiktok",
   "description": "TikTok transcript downloader using yt-dlp",
-  "discovered_at": "2026-10-04T13:33:17Z",
-  "total_commands": 25,
+  "discovered_at": "2026-10-04T15:30:52Z",
+  "total_commands": 29,
   "global_options": [
     {
       "name": "--version",
@@ -524,6 +524,147 @@
               "required": false,
               "help": "Comma-separated fields to display",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "studio": {
+      "help": "Prepare, publish, and reconcile owned Studio drafts",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "prepare": {
+          "help": "Upload privately, verify disclosure controls, and retain the owned draft. Policy fields: schema_version=1, profile, account_id (string), username, caption, audience=Everyone, timing=now, disclosure=branded_content, music_rights_confirmed=true. Caption is used verbatim.",
+          "arguments": [
+            {
+              "name": "file",
+              "type": "file",
+              "required": true,
+              "help": "Exact local MP4 to upload privately"
+            }
+          ],
+          "options": [
+            {
+              "name": "--policy",
+              "type": "file",
+              "required": true,
+              "help": "Explicit version 1 Studio policy JSON"
+            },
+            {
+              "name": "--request-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Canonical UUID binding this operation"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display operation as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "publish": {
+          "help": "Reverify and publish one exact owned draft; never retry unknown outcomes.",
+          "arguments": [
+            {
+              "name": "request_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Prepared operation UUID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Explicitly authorize the single public Post action",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display operation as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "reconcile": {
+          "help": "Read exact receipt post ID in verified Studio; never guess by caption.",
+          "arguments": [
+            {
+              "name": "request_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Operation UUID to reconcile through verified Studio"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display operation as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "status": {
+          "help": "Read the profile's operation journal without remote browser actions.",
+          "arguments": [
+            {
+              "name": "request_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Operation UUID to read locally"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display operation as table",
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",

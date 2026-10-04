@@ -1800,8 +1800,9 @@ def test_request_browser_close_leaves_single_blank_tab_before_browser_close():
         def cdp(self, method, **params):
             events.append(f"{method}:{params.get('targetId', '')}")
 
-        def goto_url(self, url):
+        def goto_url_for_close(self, url, *, timeout):
             events.append(f"goto:{url}")
+            assert timeout == 5
 
     service._bh = type("_BH", (), {"h": _Helpers()})()
     service._chrome_proc = None
@@ -1814,3 +1815,11 @@ def test_request_browser_close_leaves_single_blank_tab_before_browser_close():
         "goto:about:blank",
         "Browser.close:",
     ]
+
+
+def test_public_framework_fill_reuses_owned_helper(monkeypatch):
+    service = BrowserHarnessService("framework-input-test"); calls = []
+    monkeypatch.setattr(service, "_require_open", lambda: calls.append("open"))
+    monkeypatch.setattr(service._bh.h, "fill_input", lambda selector, text: calls.append((selector, text)))
+    service.fill_framework_input("#exact-editor", "caption")
+    assert calls == ["open", ("#exact-editor", "caption")]
