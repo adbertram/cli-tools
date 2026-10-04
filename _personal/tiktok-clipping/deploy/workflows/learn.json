@@ -43,7 +43,7 @@
         0
       ],
       "parameters": {
-        "command": "/usr/bin/env PATH='/opt/homebrew/opt/ffmpeg-full/bin:/Users/adam/.local/bin:/opt/homebrew/bin:/usr/bin:/bin' WHISPER_CPP_MODEL='/Users/adam/.local/share/cli-tools/whisper/models/ggml-small.en.bin' /Users/adam/.local/bin/tiktok-clipping jobs prepare --kind learn --config /opt/cli-tools/_personal/tiktok-clipping/deploy/config.json",
+        "command": "=/usr/bin/env PATH='/opt/homebrew/opt/ffmpeg-full/bin:/Users/adam/.local/bin:/opt/homebrew/bin:/usr/bin:/bin' WHISPER_CPP_MODEL='/Users/adam/.local/share/cli-tools/whisper/models/ggml-small.en.bin' /Users/adam/.local/bin/tiktok-clipping jobs prepare --native-text --kind learn --config /opt/cli-tools/_personal/tiktok-clipping/deploy/config.json --n8n-execution-id '{{ $execution.id }}' --n8n-workflow-id '{{ $workflow.id }}'",
         "executeOnce": true
       }
     },
@@ -72,7 +72,7 @@
       ],
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const d=$input.first().json; if(typeof d.ready!==\"boolean\") throw new Error(\"Missing readiness state\"); if(!d.ready) return []; for(const key of [\"job_id\",\"lease_token\",\"input_digest\",\"policy_digest\",\"prompt\"]) if(typeof d[key]!==\"string\" || !d[key]) throw new Error(\"Missing job context\"); if(d.prompt.length>1048576) throw new Error(\"Prompt too large\"); return [{json:d}];"
+        "jsCode": "const d=$input.first().json;\nif(typeof d.ready!==\"boolean\") throw new Error(\"Missing readiness state\");\nif(!d.ready) return [];\nconst e=d.text;\nif(!e || e.schema_version!==1 || e.kind!==\"learn\" || e.job_id!==d.job_id || !/^[a-f0-9]{32}$/.test(e.job_id) || !/^[a-f0-9]{32}$/.test(e.attempt_id) || typeof d.task!==\"string\" || d.task.length>8192 || !Number.isFinite(e.model_deadline) || !Number.isFinite(e.expires_at) || e.expires_at<=Date.now()/1000 || e.model_deadline>=e.expires_at || !Number.isSafeInteger(d.max_payload_bytes) || d.max_payload_bytes<1024) throw new Error(\"Invalid original text attempt\");\nconst task=JSON.parse(d.task);\nif(Object.keys(task).length!==Object.keys(e).length || Object.keys(e).some(key=>JSON.stringify(task[key])!==JSON.stringify(e[key]))) throw new Error(\"Text task identity changed\");\nreturn [{json:d}];"
       }
     },
     {
@@ -85,12 +85,12 @@
         0
       ],
       "parameters": {
-        "prompt": "={{$json.prompt}}",
+        "prompt": "={{$json.task}}",
         "profile": "headless",
         "options": {
           "workingDirectory": "/opt/cli-tools/_personal/tiktok-clipping",
-          "patches": "/opt/cli-tools/_personal/tiktok-clipping/deploy/deepseek-analysis.yml",
-          "timeout": 120
+          "patches": "={{$json.text.overlay_path}}",
+          "timeout": "={{Math.max(1,Math.ceil($json.text.model_deadline-Date.now()/1000))}}"
         }
       },
       "credentials": {
@@ -98,7 +98,9 @@
           "id": "SCgsQg91RETeYSdk",
           "name": "DeepSeek Harness (adam-server)"
         }
-      }
+      },
+      "continueOnFail": true,
+      "retryOnFail": false
     },
     {
       "id": "encode-proposal",
@@ -111,7 +113,7 @@
       ],
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const job=$(\"Require leased job\").first().json; const result=$input.first().json.result; if(typeof result!==\"string\" || result.length>65536) throw new Error(\"Invalid model result size\"); const payload={job_id:job.job_id,lease_token:job.lease_token,input_digest:job.input_digest,policy_digest:job.policy_digest,proposal:{result}}; const stdinB64=Buffer.from(JSON.stringify(payload),\"utf8\").toString(\"base64\"); if(!/^[A-Za-z0-9+/=]+$/.test(stdinB64)) throw new Error(\"Invalid transport encoding\"); return [{json:{stdinB64}}];"
+        "jsCode": "const job=$(\"Require leased job\").first().json;\nconst native=$input.first().json;\nif(!native || typeof native!==\"object\" || Array.isArray(native)) throw new Error(\"Invalid native text response\");\nconst failed=Object.prototype.hasOwnProperty.call(native,\"error\");\nlet receipt_json=typeof native.result===\"string\"?native.result:(failed && typeof native.stdout===\"string\"?native.stdout:null);\nconst native_failure=failed?{timed_out:native.timedOut===true,exit_code:Number.isInteger(native.exitCode)&&native.exitCode>=-255&&native.exitCode<=255?native.exitCode:null}:null;\nconst payload={envelope:job.text,receipt_json,native_failure};\n// If string escaping exceeds the transport budget, the coordinator reads the\n// fsynced original result.json instead. No usage or JSON is truncated.\nif(Buffer.byteLength(JSON.stringify(payload),\"utf8\")>job.max_payload_bytes) payload.receipt_json=null;\nconst raw=JSON.stringify(payload);\nif(Buffer.byteLength(raw,\"utf8\")>job.max_payload_bytes) throw new Error(\"Text transport budget exceeded\");\nconst stdinB64=Buffer.from(raw,\"utf8\").toString(\"base64\");\nif(!/^[A-Za-z0-9+/=]+$/.test(stdinB64)) throw new Error(\"Invalid transport encoding\");\nreturn [{json:{stdinB64}}];"
       }
     },
     {
@@ -124,7 +126,7 @@
         0
       ],
       "parameters": {
-        "command": "=printf '%s' '{{ $json.stdinB64 }}' | /usr/bin/base64 -D | /usr/bin/env PATH='/opt/homebrew/opt/ffmpeg-full/bin:/Users/adam/.local/bin:/opt/homebrew/bin:/usr/bin:/bin' WHISPER_CPP_MODEL='/Users/adam/.local/share/cli-tools/whisper/models/ggml-small.en.bin' /Users/adam/.local/bin/tiktok-clipping jobs apply --config /opt/cli-tools/_personal/tiktok-clipping/deploy/config.json",
+        "command": "=printf '%s' '{{ $json.stdinB64 }}' | /usr/bin/base64 -D | /usr/bin/env PATH='/opt/homebrew/opt/ffmpeg-full/bin:/Users/adam/.local/bin:/opt/homebrew/bin:/usr/bin:/bin' WHISPER_CPP_MODEL='/Users/adam/.local/share/cli-tools/whisper/models/ggml-small.en.bin' /Users/adam/.local/bin/tiktok-clipping jobs apply-text --config /opt/cli-tools/_personal/tiktok-clipping/deploy/config.json --n8n-execution-id '{{ $execution.id }}' --n8n-workflow-id '{{ $workflow.id }}'",
         "executeOnce": true
       }
     }

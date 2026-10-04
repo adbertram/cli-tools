@@ -37,7 +37,7 @@ tiktok-clipping jobs prepare --kind learn --config /absolute/config.json
 tiktok-clipping jobs prepare --kind metrics --config /absolute/config.json
 ```
 
-Clip/learn envelopes contain `ready`, `job_id`, `lease_token`, `kind`, `prompt`, `input_digest`, `policy_digest`, and `input`. Metrics jobs execute through the trusted adapter and return `ready: false`; they never enter a model. Other explicit states include paused, stopped, unconfigured, idle, insufficient_samples, and adapter outcomes. Due validated retries execute without another model call.
+Without `native_text`, legacy clip/learn envelopes contain `ready`, `job_id`, `lease_token`, `kind`, `prompt`, `input_digest`, `policy_digest`, and `input`. Metrics jobs execute through the trusted adapter and return `ready: false`; they never enter a model. Other explicit states include paused, stopped, unconfigured, idle, insufficient_samples, and adapter outcomes. Due validated retries execute without another model call.
 
 Apply bounded model JSON from stdin; execute an already validated job; read back an ambiguous publication; revalidate blocked work or a proven pre-publication visual failure after a trusted integration repair:
 
@@ -94,6 +94,44 @@ tiktok-clipping rewards refresh JOB_ID --config /absolute/config.json
 ```
 
 Metric snapshot exact fields: `publication_id`, `observed_at`, `measured_at`, `provenance`, `views`, `likes`, `comments`, `shares`, `watch_seconds`, `revenue`, `revenue_currency`. Unknown numbers and currency stay `null`. The example uses views as a proxy objective; actual revenue optimization requires objective `revenue`, a mature campaign-specific cohort age, and authoritative observed earnings. Legacy trusted adapter earnings retain their separate snapshot unit contract. The live Whop SDK instead retains independently nullable `pending_cents`, `received_cents`, and `total_earned_cents` as exact signed integer strings with `amount_basis: creator_net`, currency, actual scan interval, moderation freshness, and source provenance. These cents are not converted to floats or copied into the legacy learning objective. A later explicit field/window migration is required for net-income learning; views or a CPM rate never establish earnings. Revenue snapshots cannot overwrite ordinary view observations. Known revenue requires currency. Snapshots preserve revisions, timestamps, and provenance. Cohorts select the latest revision at comparable post age; revisions to unknown replace older known values. Different revenue currencies are never pooled. Insufficient known samples prevent learning. Experiments change only existing style weights within configured per-weight delta and exploration bounds. Approved-source queue priority uses mature comparable-age objective evidence only after the configured minimum samples; bounded seeded exploration retains other sources. Clip prompts include source/media, caption, duration, style and revenue performance context. Seeded weighted style assignment uses the active strategy; the proposed style must equal the assigned style. Results retain the strategy version used at proposal, plus source/style and actual revenue evidence. The same evidence cannot repeatedly create versions. Measured regressions restore baseline.
+
+## Native text accounting
+
+The updated clip and learn graphs require `jobs prepare --native-text`. An absent `native_text` block returns explicit unconfigured state without spending a model call. Existing visual-only/manual configurations remain valid; the legacy `jobs apply` proposal boundary remains available only while `native_text` is absent. Each text kind requires its own configured native workflow ID. Learning never falls back to the clipping workflow.
+
+Configure this optional trusted block only after installing and verifying its native workflows and SDK paths:
+
+```json
+"native_text": {
+  "workflow_ids": {"clip": "VERIFIED_CLIP_WORKFLOW_ID", "learn": "VERIFIED_LEARN_WORKFLOW_ID"},
+  "model": {"provider": "deepseek-official", "model": "deepseek-flash"},
+  "max_output_tokens": 2048,
+  "max_result_bytes": 16384,
+  "timeout_seconds": 120,
+  "continuation_seconds": 30,
+  "retention_seconds": 86400,
+  "sdk_package": "/absolute/installed/dsh/package.json",
+  "python_executable": "/absolute/coordinator/venv/bin/python"
+}
+```
+
+Timeout plus continuation must fit the configured job lease. Existing daily call/runtime budgets and explicit token/output caps apply; token prices are not required. Issuance commits the original lease, immutable manifest/overlay hashes and one atomic model-call/runtime reservation before writing artifacts. Its reservation retains the original UTC day across restarts and midnight. Missing native timing proof keeps the runtime ceiling reserved.
+
+```bash
+tiktok-clipping jobs prepare --kind clip --native-text --config /absolute/config.json --n8n-execution-id EXECUTION_ID --n8n-workflow-id CLIP_WORKFLOW_ID
+tiktok-clipping jobs apply-text --config /absolute/config.json --n8n-execution-id EXECUTION_ID --n8n-workflow-id CLIP_WORKFLOW_ID < /absolute/native-receipt.json
+tiktok-clipping jobs retry-text JOB_ID --config /absolute/config.json
+```
+
+`prepare` returns `ready`, the original `text` envelope, its exact serialized `task`, and the transport byte limit. Only the native DeepSeekHarness node receives that task and trusted overlay. The runner disables tools/retries and durably writes the receipt before stdout. Native bridges preserve result bytes for Python strict JSON parsing, use the original prepare identity, ignore reasoning, and strip failure messages. If escaping exceeds the transport budget or stdout is lost, the coordinator reads only the exact owned original `result.json`.
+
+`jobs apply-text --no-execute` accounts and validates without adapter actions, leaving accepted proposals ready for an operator or the next normal workflow. Receipt accounting is independent of permission to act. Four measured disjoint token buckets are retained with session/sequence provenance; unavailable usage stays null. Identical replay accounts once. Paused, stopped, expired or superseded leases can still record usage but cannot authorize a proposal. Validated proposals and applied-attempt state commit together. Late responses and typed transient/timeouts requeue under existing attempts/backoff; positive provider Retry-After is durable across clip, learn and visual calls, including HTTP 503 and delays longer than a day.
+
+`queued` means autonomous bounded recovery. `blocked` means an unknown original worker or a prerequisite failure. `retry-text` is explicit prerequisite revalidation for blocked work with no proposal or public-action history and a terminated original native attempt. It preserves attempts, reservations and provider cooldown, never refunds unknown usage, and never bypasses publication reconciliation.
+
+Active maintenance handles deadline-bound reward submission and uncertain public actions before text recovery. Paused maintenance can ingest local receipts. Expired text attempts remain fenced until exact native termination is proven. Original runner markers bind process PID/start identity; cleanup additionally checks the terminal owning n8n execution. A persisted trusted native-node return can establish completion when failure occurred before the runner marker, with preparation-worker absence and separately annotated provenance. If the callback was also lost and no marker exists, the launch remains explicitly unknown (`text_native_launch_proof_missing`); timer expiry alone never reissues that token. This residual crash gap is visible in the attempt's durable cleanup issue.
+
+Maintenance rotates bounded text inspections and prunes only known owned artifacts after retention, receipt ingestion and process proof. Hash inventory commits before unlink; interrupted cleanup resumes without deleting new/changed files. Ledger receipts, token provenance, original reservation and termination evidence survive pruning.
 
 ## Native visual review
 

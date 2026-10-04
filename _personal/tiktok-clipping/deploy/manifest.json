@@ -1,5 +1,5 @@
 {
-  "target": "ata_clipping",
+  "target": "ata_clipper",
   "n8n_base_url": "http://100.117.198.37:5678",
   "workflows": {
     "clip": "iok4Q6LnQuJ4xMvg",
@@ -19,5 +19,7 @@
     "learn_unconfigured": "65479",
     "maintain_unconfigured": "65480",
     "isolated_native_bridge": "65484"
-  }
+  },
+  "account_id": "7692213003349443597",
+  "profile": "clipper"
 }
