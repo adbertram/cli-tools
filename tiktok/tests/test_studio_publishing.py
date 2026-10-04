@@ -44,11 +44,18 @@ def test_policy_rejects_unknown_or_unsafe_values(change):
 
 
 def draft(operation, **changes):
+    caption = changes.get('caption', operation['policy']['caption'])
+    raw = {'blocks': [{'text': caption, 'entityRanges': []}], 'entityMap': {}}
+    for index, token in enumerate(module.caption_tokens(caption)):
+        text = token.group();user = text.startswith('@')
+        raw['blocks'][0]['entityRanges'].append({'key': index, 'offset': len(caption[:token.start()].encode('utf-16-le')) // 2, 'length': len(text.encode('utf-16-le')) // 2})
+        raw['entityMap'][str(index)] = {'type': 'mention' if user else '#mention', 'mutability': 'IMMUTABLE', 'data': {'mention': {'name': text[1:], 'type': 'at' if user else 'hashTag', 'id': '1234567890' if user else text[1:]}}}
     return {"draft_id": "EXACT_DRAFT", "creation_id": "EXACT_DRAFT", "video_id": "v_exact",
             "file_key": "file_exact", "file_name": operation["staged_name"],
             "file_size": operation["asset_bytes"], "duration_ms": 8266,
             "project_id": "238232531206", "stage": "complete", "percent": 100,
             "caption": operation["policy"]["caption"], "privacy": {"visibility_type": 0},
+            'caption_markup': json.dumps(raw), 'caption_text_extra': [],
             "commercial": {"commerce_toggle_info": {"branded_content_type": 2001}}, **changes}
 
 
@@ -65,6 +72,78 @@ def prepared(publisher, **changes):
     value["draft"] = draft(value)
     publisher._save(value)
     return value
+
+
+def continue_migration(publisher, monkeypatch):
+    import copy
+    value = prepared(publisher)
+    value['project_id'] = value['draft']['project_id'] = '0'
+    publisher._save(value)
+    receipt = {'actor': value['actor'], 'draft_id': value['draft_id'], 'draft_count': 1,
+               'banner': 1, 'resumed': True, 'dom': {'editor': 1}, 'row': copy.deepcopy(value['draft'])}
+    current = {**value['draft'], 'project_id': '238786606086', 'is_locked': True, 'is_temp': False}
+    monkeypatch.setattr(publisher, '_page', lambda: SimpleNamespace(wait_for_timeout=lambda ms: None))
+    monkeypatch.setattr(publisher, '_identity', lambda page, policy: value['actor'])
+    monkeypatch.setattr(publisher, '_drafts', lambda page, policy: [current])
+    return value, receipt, current
+
+
+def test_recorded_continue_migration_updates_only_owned_journal_project(publisher, monkeypatch):
+    value, receipt, current = continue_migration(publisher, monkeypatch)
+    result = publisher._migrate_owned_continue(value['request_id'], receipt)
+    assert result['project_id'] == result['draft']['project_id'] == current['project_id']
+    assert result['binding'] == value['binding'] and result['asset_sha256'] == value['asset_sha256']
+    assert current['is_locked'] is True and current['is_temp'] is False
+    assert result['state'] == 'prepared' and result['public_action_dispatched'] is False
+    assert result['editor_project_transitions'][0]['receipt_digest'] == module.digest(receipt)
+    with pytest.raises(StudioPublishError):publisher._migrate_owned_continue(value['request_id'], receipt)
+
+
+def test_failed_private_continue_migration_preserves_unconfigured_state(publisher, monkeypatch):
+    value, receipt, current = continue_migration(publisher, monkeypatch)
+    value['state'] = 'preparation_failed'
+    for row in (value['draft'], receipt['row'], current):
+        row.update(caption='original uploaded filename', commercial=None)
+    publisher._save(value)
+    result = publisher._migrate_owned_continue(value['request_id'], receipt)
+    assert result['state'] == 'preparation_failed' and result['public_action_dispatched'] is False
+    assert result['draft']['caption'] == 'original uploaded filename'
+    assert result['draft']['commercial'] is None
+    assert result['project_id'] == current['project_id']
+
+
+@pytest.mark.parametrize('field', ['caption', 'privacy', 'commercial', 'create_time'])
+def test_failed_private_continue_migration_refuses_changed_retained_state(publisher, monkeypatch, field):
+    value, receipt, current = continue_migration(publisher, monkeypatch)
+    value['state'] = 'preparation_failed'
+    publisher._save(value)
+    current[field] = 'changed'
+    with pytest.raises(StudioPublishError):
+        publisher._migrate_owned_continue(value['request_id'], receipt)
+    assert publisher.status(value['request_id'])['draft']['project_id'] == '0'
+
+
+@pytest.mark.parametrize('change', ['wrong_actor', 'no_editor', 'not_resumed', 'different_media', 'changed_receipt', 'dispatched', 'unknown_state', 'wrong_old_project', 'invalid_new_project', 'journal_race'])
+def test_recorded_continue_migration_refuses_unproven_or_changed_binding(publisher, monkeypatch, change):
+    value, receipt, current = continue_migration(publisher, monkeypatch)
+    if change == 'wrong_actor':receipt['actor'] = {**receipt['actor'], 'username': 'other'}
+    elif change == 'no_editor':receipt['dom']['editor'] = 0
+    elif change == 'not_resumed':receipt['resumed'] = False
+    elif change == 'different_media':current['video_id'] = 'different'
+    elif change == 'changed_receipt':receipt['row']['file_key'] = 'other'
+    elif change == 'dispatched':value['public_action_dispatched'] = True;publisher._save(value)
+    elif change == 'unknown_state':value['state'] = 'outcome_unknown';publisher._save(value)
+    elif change == 'wrong_old_project':value['project_id'] = '123';publisher._save(value)
+    elif change == 'invalid_new_project':current['project_id'] = '0'
+    else:
+        def race(page, policy):
+            publisher._save({**publisher.status(value['request_id']), 'concurrent_note': 'preserve'})
+            return [current]
+        monkeypatch.setattr(publisher, '_drafts', race)
+    with pytest.raises(StudioPublishError):publisher._migrate_owned_continue(value['request_id'], receipt)
+    after = publisher.status(value['request_id'])
+    assert after['draft']['project_id'] == '0'
+    assert 'editor_project_transitions' not in after
 
 
 class Page:
@@ -87,6 +166,7 @@ class Page:
         assert role == "button" and kwargs == {"name": "Continue", "exact": True}
         return SimpleNamespace(click=lambda: self.events.append("Continue"))
     def evaluate(self, script, value=None):
+        if script == module.CAPTION_TEXT_JS:return self.rows[0]['caption']
         if script == module.CONTROLS_JS:return {"upload_complete": True, "post_enabled": True}
         if script == module.DRAFTS_JS:return self.rows
         if script == module.OBSERVER_JS:self.events.append("observe");return True
@@ -230,10 +310,53 @@ def test_prepared_same_request_and_binding_never_uploads_again(publisher, tmp_pa
     with module.sqlite3.connect(publisher.database) as db:
         db.execute("UPDATE operations SET binding=?,record=? WHERE request_id=?", (value["binding"], module.canonical(value), value["request_id"]))
     file = tmp_path / "same.mp4";file.write_bytes(b"known-mp4-bytes")
-    monkeypatch.setattr(publisher, "_page", lambda: pytest.fail("duplicate must not upload"))
+    attach(publisher, value, monkeypatch)
     assert publisher.prepare(file, policy(), value["request_id"])["state"] == "prepared"
     with pytest.raises(StudioPublishError, match="different request"):
         publisher.prepare(file, policy(), str(uuid4()))
+
+
+@pytest.mark.parametrize('recovery', ['continue', 'missing'])
+def test_prepare_returns_live_recovery_binding_before_publish_callback(publisher, monkeypatch, recovery):
+    value = prepared(publisher)
+    page = attach(publisher, value, monkeypatch)
+    if recovery == 'continue':
+        original = page.locator
+        page.opened = False
+        def locator(selector):
+            if selector == module.CAPTION_SELECTOR:
+                return SimpleNamespace(count=lambda: int(page.opened))
+            return original(selector)
+        page.locator = locator
+        def continued():
+            page.opened = True
+            page.rows[0] = {**page.rows[0], 'project_id': '987654321'}
+        page.get_by_role = lambda *args, **kwargs: SimpleNamespace(click=continued)
+    else:
+        page.rows = []
+        original_evaluate = page.evaluate
+        page.evaluate = lambda script, value=None: True if script == module.HEARTBEAT_JS else original_evaluate(script, value)
+        def rebuilt(source, policy, request_id):
+            row = {**value['draft'], 'draft_id': 'OWNED_REBUILT', 'creation_id': 'OWNED_REBUILT'}
+            result = {**value, 'draft_id': row['draft_id'], 'draft': row}
+            page.rows = [row];publisher._save(result)
+            return result
+        original_prepare = publisher._prepare
+        def prepare(source, policy, request_id):
+            if publisher.status(request_id)['state'] == 'preparation_failed':
+                return rebuilt(source, policy, request_id)
+            return original_prepare(source, policy, request_id)
+        monkeypatch.setattr(publisher, '_prepare', prepare)
+    ready = publisher.prepare(publisher.root/'media'/value['staged_name'], value['policy'], value['request_id'])
+    def deny(binding):
+        pending = publisher.status(value['request_id'])
+        assert pending['draft'] == ready['draft']
+        assert binding['draft_id'] == ready['draft_id']
+        assert binding['project_id'] == ready['project_id']
+        raise RuntimeError('trusted denial')
+    with pytest.raises(StudioPublishError, match='callback rejected'):
+        publisher.publish(value['request_id'], before_public_action=deny)
+    assert page.clicked == 0
 
 
 def test_cli_public_post_guard_runs_before_publisher_construction(monkeypatch):
@@ -263,19 +386,21 @@ def test_native_transport_guard_blocks_wrong_binding_and_duplicate_before_send()
     class XHR{open(){} send(){sends++} abort(){aborts++} addEventListener(){}}
     global.XMLHttpRequest=XHR;
     const install=OBSERVER;
-    const exact={post_common_info:{creation_id:'OWNED',enter_post_page_from:1,post_type:2},single_post_req_list:[{video_id:'VIDEO',batch_index:0}]};
+    const exact={post_common_info:{creation_id:'OWNED',enter_post_page_from:1,post_type:2},single_post_req_list:[{video_id:'VIDEO',batch_index:0,single_post_feature_info:{text:'CAPTION',text_extra:[]}}]};
     function attempt(payload){const x=new XHR();x.open('POST','/tiktok/web/project/post/v1/');try{x.send(JSON.stringify(payload))}catch(e){}}
     const invalid=[
       {...exact,post_common_info:{...exact.post_common_info,creation_id:'FOREIGN'}},
       {...exact,post_common_info:{...exact.post_common_info,project_id:'UNSUPPORTED'}},
       {...exact,single_post_req_list:[{video_id:'FOREIGN',batch_index:0}]},
       {...exact,single_post_req_list:[{video_id:'VIDEO',batch_index:1}]},
-      {...exact,single_post_req_list:[exact.single_post_req_list[0],exact.single_post_req_list[0]]}];
+      {...exact,single_post_req_list:[exact.single_post_req_list[0],exact.single_post_req_list[0]]},
+      {...exact,single_post_req_list:[{...exact.single_post_req_list[0],single_post_feature_info:{text:'WRONG',text_extra:[]}}]},
+      {...exact,single_post_req_list:[{...exact.single_post_req_list[0],single_post_feature_info:{text:'CAPTION',text_extra:[{type:0,user_id:'OTHER'}]}}]}];
     for(let i=0;i<invalid.length;i++){const key='invalid'+i;
-      install({key,path:'/tiktok/web/project/post/v1/',creation_id:'OWNED',video_id:'VIDEO'});
+      install({key,path:'/tiktok/web/project/post/v1/',creation_id:'OWNED',video_id:'VIDEO',caption:'CAPTION',caption_text_extra:[]});
       attempt(invalid[i]);if(sends!==0||aborts!==i+1)throw Error('mismatch sent');window[key].restore();}
-    install({key:'exact',path:'/tiktok/web/project/post/v1/',creation_id:'OWNED',video_id:'VIDEO'});
-    attempt(exact);attempt(exact);if(sends!==1||aborts!==6||window.exact.count!==2)throw Error('duplicate sent');
+    install({key:'exact',path:'/tiktok/web/project/post/v1/',creation_id:'OWNED',video_id:'VIDEO',caption:'CAPTION',caption_text_extra:[]});
+    attempt(exact);attempt(exact);if(sends!==1||aborts!==8||window.exact.count!==2)throw Error('duplicate sent');
     window.exact.restore();console.log('ZERO_MISMATCH_SENDS_ONE_EXACT_SEND');
     """.replace('OBSERVER', '(' + module.OBSERVER_JS + ')')
     result = subprocess.run(['node', '-e', script], capture_output=True, text=True, check=True)
@@ -492,3 +617,66 @@ def test_private_failed_recovery_refuses_changed_duration(publisher, monkeypatch
     with pytest.raises(StudioPublishError, match="media binding changed"):
         publisher._recover_private_preparation(value)
     assert not page.events and page.clicked == 0
+
+
+def test_saved_native_entities_preserve_utf16_offsets_and_duplicate_tokens():
+    caption = '🙂 @hardscope @hardscope #ad'
+    row = draft({'policy': {'caption': caption}, 'staged_name': 'asset.mp4', 'asset_bytes': 1})
+    result = module.caption_entities(row, caption)
+    assert [value['start'] for value in result] == [3, 14, 25]
+    assert [value['type'] for value in result] == [0, 0, 1]
+    assert result[0]['user_id'] == result[1]['user_id'] == '1234567890'
+    assert result[2]['hashtag_name'] == 'ad'
+
+
+@pytest.mark.parametrize('change', ['empty_map', 'wrong_name', 'numeric_uid', 'zero_uid', 'wrong_type', 'mutable', 'wrong_offset', 'bool_offset', 'wrong_extra'])
+def test_saved_entity_verification_denies_plain_or_contradictory_semantics(change):
+    caption = '@hardscope #ad'
+    row = draft({'policy': {'caption': caption}, 'staged_name': 'asset.mp4', 'asset_bytes': 1})
+    raw = json.loads(row['caption_markup'])
+    if change == 'empty_map':raw['entityMap'] = {}
+    elif change == 'wrong_name':raw['entityMap']['0']['data']['mention']['name'] = 'hardscope.evil'
+    elif change == 'numeric_uid':raw['entityMap']['0']['data']['mention']['id'] = 123
+    elif change == 'zero_uid':raw['entityMap']['0']['data']['mention']['id'] = '0'
+    elif change == 'wrong_type':raw['entityMap']['0']['type'] = '#mention'
+    elif change == 'mutable':raw['entityMap']['0']['mutability'] = 'MUTABLE'
+    elif change == 'wrong_offset':raw['blocks'][0]['entityRanges'][0]['offset'] = 1
+    elif change == 'bool_offset':raw['blocks'][0]['entityRanges'][0]['offset'] = False
+    else:row['caption_text_extra'] = [{'type': 0, 'user_id': 'wrong'}]
+    row['caption_markup'] = json.dumps(raw)
+    with pytest.raises(StudioPublishError, match='entities are unverified'):
+        module.caption_entities(row, caption)
+
+
+def test_already_correct_entities_skip_edit_and_reverify_controls_before_callback(publisher, monkeypatch):
+    value = prepared(publisher);page = attach(publisher, value, monkeypatch)
+    monkeypatch.setattr(publisher, '_verify_controls', lambda *args: page.events.append('controls'))
+    def deny(binding):
+        assert page.events[-2:] == ['controls', 'observe']
+        raise RuntimeError('trusted denial')
+    with pytest.raises(StudioPublishError, match='callback rejected'):
+        publisher.publish(value['request_id'], before_public_action=deny)
+    assert page.clicked == 0 and publisher.status(value['request_id'])['state'] == 'prepared'
+
+
+@pytest.mark.parametrize('options', [[], [{'id': 'mention-option-a-0', 'name': 'other'}], [{'id': 'mention-option-a-0', 'name': 'hardscope'}, {'id': 'mention-option-a-1', 'name': 'hardscope'}]])
+def test_failed_exact_selection_restores_text_and_marks_semantics_unverified(publisher, monkeypatch, options):
+    class CaptionPage:
+        text = 'Original text'
+        def evaluate(self, script, argument=None):
+            if script == module.CAPTION_TEXT_JS:return self.text
+            if script == module.CAPTION_READY_JS:return True
+            if script == module.CAPTION_OPTIONS_JS:return options
+            raise AssertionError(script)
+        def fill_framework_input(self, selector, text):self.text = text
+        def type_text(self, text):self.text += text
+        def get_by_role(self, *args, **kwargs):return SimpleNamespace(count=lambda: 1, click=lambda: self.type_text('@'))
+        def locator(self, selector):pytest.fail('must never click a wrong or ambiguous option')
+    page = CaptionPage()
+    def once(page, predicate, message, seconds=60):
+        result = predicate()
+        if not result:raise StudioPublishError(message)
+        return result
+    monkeypatch.setattr(publisher, '_wait', once)
+    with pytest.raises(StudioPublishError):publisher._set_caption(page, policy() | {'caption': '@hardscope'})
+    assert page.text == 'Original text' and publisher._caption_semantic_rollback_unverified is True

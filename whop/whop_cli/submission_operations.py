@@ -113,6 +113,26 @@ def publication(value,expected_actor,*,check_age=False):
         if not 0<=age<=1800: raise ClientError('publication_outside_30_minute_window')
     return result
 
+def funding_evidence(campaign,payout):
+    """Current provider-reported funds, never a guaranteed TikTok allocation."""
+    metrics=campaign.get('metrics')
+    budget=campaign.get('budgetCents');spent=metrics.get('budgetSpentCents') if isinstance(metrics,dict) else None
+    if any(type(value) is not int or value<0 for value in (budget,spent)):
+        raise ClientError('submission_campaign_funding_schema_changed')
+    if budget<=spent:raise ClientError('submission_campaign_not_funded')
+    shared={'budget_cents':budget,'spent_cents':spent,'remaining_cents':budget-spent}
+    platform_budget=payout.get('budgetCents');platform_spent=payout.get('spentCents')
+    if platform_budget is None and platform_spent is None:
+        if any(isinstance(row,dict) and (row.get('budgetCents') is not None or row.get('spentCents') is not None) for row in campaign['payouts']):
+            raise ClientError('submission_campaign_platform_funding_unknown')
+        return {'scope':'campaign_reported','remaining_cents':budget-spent,'campaign':shared,'platform':None}
+    if any(type(value) is not int or value<0 for value in (platform_budget,platform_spent)):
+        raise ClientError('submission_campaign_payout_schema_changed')
+    if platform_budget<=platform_spent:raise ClientError('submission_campaign_not_funded')
+    platform={'budget_cents':platform_budget,'spent_cents':platform_spent,'remaining_cents':platform_budget-platform_spent}
+    return {'scope':'platform','remaining_cents':platform['remaining_cents'],'campaign':shared,'platform':platform}
+
+
 def readiness(client,campaign_id,*,expected_account_id,expected_tiktok_account_id,expected_requirements_digest=None):
     identifier(campaign_id);identifier(expected_account_id);decimal(expected_tiktok_account_id)
     if not expected_account_id.startswith('user_'): raise ClientError('invalid_expected_whop_actor')
@@ -136,16 +156,20 @@ def readiness(client,campaign_id,*,expected_account_id,expected_tiktok_account_i
     terms=[r for r in payouts if isinstance(r,dict) and r.get('platform')=='tiktok']
     if len(terms)!=1: raise ClientError('submission_campaign_payout_missing_or_ambiguous')
     payout=terms[0]
-    for key in ('budgetCents','spentCents','rateCents','minPayoutCents','maxPayoutCents'):
+    for key in ('rateCents','minPayoutCents','maxPayoutCents'):
         if type(payout.get(key)) is not int or payout[key]<0: raise ClientError('submission_campaign_payout_schema_changed')
-    if payout['budgetCents']<=payout['spentCents']: raise ClientError('submission_campaign_not_funded')
+    if payout['rateCents']<=0:raise ClientError('submission_campaign_not_funded')
+    funding=funding_evidence(campaign,payout)
     if not isinstance(payout.get('payoutType'),str): raise ClientError('submission_campaign_payout_schema_changed')
     intake=client._rest('/api/submission/submissions/intake',{'campaignIds':campaign_id})['data']
     if not isinstance(intake,list): raise ClientError('submission_intake_schema_changed')
     rows=[r for r in intake if isinstance(r,dict) and r.get('campaignId')==campaign_id]
     if len(rows)!=1: raise ClientError('submission_intake_missing_or_ambiguous')
     gate=rows[0]
-    if gate.get('creatorMaxReached') is not False or gate.get('intake')!='open' or not isinstance(gate.get('platformIntake'),dict) or gate['platformIntake'].get('tiktok')!='open':
+    platform_intake=gate.get('platformIntake')
+    if platform_intake is not None and (not isinstance(platform_intake,dict) or platform_intake.get('tiktok') not in (None,'open','closed')):
+        raise ClientError('submission_intake_schema_changed')
+    if gate.get('creatorMaxReached') is not False or gate.get('intake')!='open' or (platform_intake or {}).get('tiktok')=='closed':
         raise ClientError('submission_intake_not_open')
     origin,path=client._location()
     requirements={'campaign_id':campaign_id,'experience':origin+path,**{k:campaign[k] for k in ('name','description','referenceMaterials','platforms','requiresApplication','private')},
@@ -172,7 +196,7 @@ def readiness(client,campaign_id,*,expected_account_id,expected_tiktok_account_i
     return {'ready':True,'actor':{'account_id':actor['id'],'username':actor['username'],'profile':actor['profile']},
             'linked_account':{'account_id':expected_tiktok_account_id,'username':linked['username'],'id':linked.get('id')},
             'campaign_id':campaign_id,'requirements':requirements,'requirements_digest':requirements_digest,
-            'funding_remaining_cents':payout['budgetCents']-payout['spentCents'],'intake':'open','readback':{'kind':'participant_campaign_action','first_page_count':len(participant_rows),'has_more':participant_cursor is not None},
+            'funding_remaining_cents':funding['remaining_cents'],'funding':funding,'intake':'open','readback':{'kind':'participant_campaign_action','first_page_count':len(participant_rows),'has_more':participant_cursor is not None},
             'action':{'name':'createSubmissionAction','reference':action},'observed_at':datetime.now(timezone.utc).isoformat()}
 
 def private_regular(path,*,create=False):

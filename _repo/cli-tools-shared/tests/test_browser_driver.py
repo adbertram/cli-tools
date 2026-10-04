@@ -1874,3 +1874,47 @@ def test_daemon_stop_rebinds_owner_and_leaves_other_endpoint_intact(tmp_path,mon
     assert signals==[11111]
     assert not (owner._runtime_dir/'bu.pid').exists()
     assert (other._runtime_dir/'bu.pid').read_text()=='22222'
+
+
+def test_native_click_reuses_existing_mouse_press_and_release(monkeypatch):
+    service = BrowserHarnessService('native-click-proof')
+    service._opened = True
+    calls = []
+    monkeypatch.setattr(service, 'evaluate', lambda script, selector: {'x': 12.5, 'y': 42})
+    monkeypatch.setattr(bh_helpers, 'cdp', lambda method, **params: calls.append((method, params)))
+    monkeypatch.setattr(service._bh.h, 'click_at_xy', bh_helpers.click_at_xy)
+    service.click_native('#exact-option')
+    assert [call[1]['type'] for call in calls] == ['mousePressed', 'mouseReleased']
+    assert all(call[0] == 'Input.dispatchMouseEvent' and call[1]['x'] == 12.5 and call[1]['y'] == 42 for call in calls)
+
+
+@pytest.mark.parametrize('point', [None, {'x': True, 'y': 1}, {'x': -1, 'y': 1}, {'x': float('nan'), 'y': 1}, {'x': 1, 'y': float('inf')}, {'x': 1, 'y': 1, 'extra': 1}])
+def test_native_click_malformed_coordinates_never_dispatch(monkeypatch, point):
+    service = BrowserHarnessService('native-click-refusal')
+    service._opened = True
+    monkeypatch.setattr(service, 'evaluate', lambda *args: point)
+    monkeypatch.setattr(service._bh.h, 'click_at_xy', lambda *args: pytest.fail('no native event permitted'))
+    with pytest.raises(BrowserHarnessError, match='coordinates_invalid'):
+        service.click_native('#exact-option')
+
+
+def test_native_click_actual_dom_guard_refuses_ambiguous_and_occluded_targets(monkeypatch):
+    import json
+    import subprocess
+    service = BrowserHarnessService('native-click-dom-guard');service._opened = True
+    scripts = []
+    monkeypatch.setattr(service, 'evaluate', lambda script, selector: scripts.append(script) or {'x': 10, 'y': 10})
+    monkeypatch.setattr(service._bh.h, 'click_at_xy', lambda *args: None)
+    service.click_native('#exact')
+    script = r'''const click=EXPRESSION;
+    global.innerWidth=100;global.innerHeight=100;
+    const target={isConnected:true,disabled:false,getAttribute(){return null},scrollIntoView(){},getBoundingClientRect(){return {left:0,top:0,width:20,height:20}},contains(x){return x===this}};
+    let rows=[target],hit=target;
+    global.document={querySelectorAll(){return rows},elementFromPoint(){return hit}};
+    global.getComputedStyle=()=>({visibility:'visible',display:'block'});
+    const point=click('#exact');if(point.x!==10||point.y!==10)throw Error('wrong coordinate');
+    rows=[target,target];try{click('#exact');throw Error('ambiguous accepted')}catch(e){if(e.message!=='NATIVE_CLICK_TARGET_NOT_UNIQUE')throw e}
+    rows=[target];hit={};try{click('#exact');throw Error('occluded accepted')}catch(e){if(e.message!=='NATIVE_CLICK_TARGET_NOT_HIT')throw e}
+    console.log('EXACT_HIT_ONLY');'''.replace('EXPRESSION', '(' + scripts[0] + ')')
+    result = subprocess.run(['node', '-e', script], capture_output=True, text=True, check=True)
+    assert result.stdout.strip() == 'EXACT_HIT_ONLY'
