@@ -193,3 +193,41 @@ def test_malformed_owned_path_cannot_match_valid_or_replacement_profile(monkeypa
     processes=_mock_process_bytes(monkeypatch,raw)
     assert processes.profile_process_pids(profile,current_pid=200,parent_pid=100)==[]
     assert processes.profile_process_pids(str(profile)+'�-byte',current_pid=200,parent_pid=100)==[]
+
+
+def test_bounded_inspection_hung_ps_does_not_signal(monkeypatch):
+    import subprocess
+    import pytest
+    from cli_tools_shared.browser import processes as p
+    def hung(*args,**kwargs):
+        assert 0<kwargs['timeout']<=.2
+        raise subprocess.TimeoutExpired('SECRET ARGV',kwargs['timeout'])
+    monkeypatch.setattr(p.subprocess,'run',hung)
+    monkeypatch.setattr(p.os,'kill',lambda *args:pytest.fail('signal after unknown inspection'))
+    with pytest.raises(p.ProcessTableUnavailableError,match='inspection timed out') as exc:
+        p.terminate_process(123,timeout=.3,inspection_timeout=.2)
+    assert 'SECRET' not in str(exc.value)
+
+
+def test_bounded_termination_rechecks_owner_before_each_signal_and_rejects_pid_reuse(monkeypatch):
+    import signal
+    import pytest
+    from cli_tools_shared.browser import processes as p
+    signals=[];checks=iter([True,False])
+    monkeypatch.setattr(p,'_pid_running',lambda *args,**kwargs:True)
+    monkeypatch.setattr(p.os,'kill',lambda pid,sig:signals.append(sig))
+    with pytest.raises(RuntimeError,match='ownership changed'):
+        p.terminate_process(123,timeout=.02,poll_interval=.002,inspection_timeout=.01,ownership_check=lambda remaining:next(checks))
+    assert signals==[signal.SIGTERM]
+
+
+def test_bounded_termination_uses_decreasing_remaining_budget(monkeypatch):
+    import pytest,time
+    from cli_tools_shared.browser import processes as p
+    budgets=[]
+    def inspection(pid,*,timeout):budgets.append(timeout);time.sleep(min(timeout,.006));return True
+    monkeypatch.setattr(p,'_pid_running',inspection)
+    monkeypatch.setattr(p.os,'kill',lambda *args:None)
+    with pytest.raises((RuntimeError,p.ProcessTableUnavailableError)):
+        p.terminate_process(123,timeout=.03,poll_interval=.001,inspection_timeout=1)
+    assert all(b<=.03 for b in budgets) and budgets[-1]<budgets[0]

@@ -148,6 +148,18 @@ def bounds(limit):
     return limit
 
 class WhopClient:
+    @staticmethod
+    def campaigns_page_bounded(config, *, expected_account_id, limit=50, sort='newest', cursor=None, timeout_seconds, max_bytes):
+        from .catalog_reads import read
+        return read(config,'page',{'limit':limit,'sort':sort,'cursor':cursor},expected_account_id=expected_account_id,timeout_seconds=timeout_seconds,max_bytes=max_bytes)
+    @staticmethod
+    def campaign_bounded(config,campaign_id,*,expected_account_id,timeout_seconds,max_bytes):
+        from .catalog_reads import read
+        return read(config,'campaign',{'campaign_id':campaign_id},expected_account_id=expected_account_id,timeout_seconds=timeout_seconds,max_bytes=max_bytes)
+    @staticmethod
+    def recover_catalog_read(config,*,expected_account_id,attempt_id,timeout_seconds=30):
+        from .catalog_reads import recover
+        return recover(config,expected_account_id=expected_account_id,attempt_id=attempt_id,timeout_seconds=timeout_seconds)
     def __init__(self, config=None, browser=None):
         self.config=config or get_config()
         self.browser=browser if browser is not None else self.config.get_browser()

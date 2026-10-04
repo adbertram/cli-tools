@@ -9,9 +9,10 @@ import signal
 import subprocess
 import time
 import errno
+import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Callable
 
 
 class ProcessTableUnavailableError(RuntimeError):
@@ -37,7 +38,7 @@ def _process_table_error(exc: BaseException) -> bool:
     return False
 
 
-def list_process_commands() -> list[ProcessCommand]:
+def list_process_commands(*, timeout: float | None = None) -> list[ProcessCommand]:
     """Return process-table rows with parent PID and command text."""
     try:
         result = subprocess.run(
@@ -49,7 +50,10 @@ def list_process_commands() -> list[ProcessCommand]:
             encoding="utf-8",
             errors="surrogateescape",
             check=True,
+            timeout=timeout,
         )
+    except subprocess.TimeoutExpired:
+        raise ProcessTableUnavailableError("Process table inspection timed out") from None
     except (OSError, subprocess.CalledProcessError) as exc:
         if _process_table_error(exc):
             raise ProcessTableUnavailableError(
@@ -172,8 +176,8 @@ def profile_process_pids(
     return pids
 
 
-def _pid_running(pid: int) -> bool:
-    for process in list_process_commands():
+def _pid_running(pid: int, *, timeout: float | None = None) -> bool:
+    for process in list_process_commands(**({"timeout": timeout} if timeout is not None else {})):
         if process.pid == pid:
             return not process.stat.startswith("Z")
     return False
@@ -201,8 +205,37 @@ def terminate_process(
     *,
     timeout: float = 5.0,
     poll_interval: float = 0.1,
+    inspection_timeout: float | None = None,
+    ownership_check: Callable[[float], bool] | None = None,
 ) -> None:
     """Terminate one process and fail if it remains alive."""
+    if inspection_timeout is not None:
+        if any(type(n) not in (int, float) or not math.isfinite(n) or n <= 0 for n in (timeout, poll_interval, inspection_timeout)):
+            raise ValueError("Invalid bounded process termination timeout")
+        deadline = time.monotonic() + timeout
+        def remaining():
+            value = deadline - time.monotonic()
+            if value <= 0:
+                raise ProcessTableUnavailableError("Process termination deadline exceeded")
+            return min(inspection_timeout, value)
+        for sig in (signal.SIGTERM, signal.SIGKILL):
+            if not _pid_running(pid, timeout=remaining()):
+                return
+            if ownership_check is not None and ownership_check(remaining()) is not True:
+                raise RuntimeError("Browser process ownership changed")
+            remaining()
+            try:
+                os.kill(pid, sig)
+            except ProcessLookupError:
+                return
+            phase_end = min(deadline, time.monotonic() + timeout / 2)
+            while time.monotonic() < phase_end:
+                if not _pid_running(pid, timeout=remaining()):
+                    return
+                time.sleep(min(poll_interval, max(0, phase_end - time.monotonic())))
+        raise RuntimeError("Browser process did not exit before deadline")
+    if ownership_check is not None:
+        raise ValueError("Ownership verification requires bounded inspection")
     try:
         os.kill(pid, signal.SIGTERM)
     except ProcessLookupError:

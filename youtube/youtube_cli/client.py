@@ -28,6 +28,12 @@ YT_DLP_SUBTITLE_FORMATS = {"srt", "vtt"}
 class YoutubeClient:
     """Client for downloading YouTube transcripts using yt-dlp."""
 
+    @staticmethod
+    def get_source_metadata(url: str, *, timeout_seconds, max_bytes) -> Dict:
+        """Bounded exact-video facts and caption languages; no download/auth."""
+        from .source_metadata import get_source_metadata
+        return get_source_metadata(url,timeout_seconds=timeout_seconds,max_bytes=max_bytes)
+
     def __init__(self):
         """Initialize YouTube client."""
         self.ytdlp_path = self._find_ytdlp()

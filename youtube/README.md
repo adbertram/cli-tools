@@ -421,3 +421,13 @@ metadata and OAuth behavior stay in one implementation.
 ```bash
 youtube shorts upload short.mp4 --title "Title" --description "Description" --privacy public --profile CHANNEL_PROFILE
 ```
+
+## Bounded source metadata SDK
+
+`YoutubeClient.get_source_metadata(url, timeout_seconds=30, max_bytes=65536)`
+reads only exact video ID, title, duration, channel name/ID and upload date through
+the owning yt-dlp wrapper. It avoids the interactive/unbounded client constructor,
+format inventories, playback URLs and caption URLs. Reported manual/automatic
+language codes describe extractor availability; they do not prove a usable transcript
+or authorize reuse. A separate 0.75-second process cleanup allowance follows the
+caller deadline. Failures expose sanitized code/category/status/retry_after_seconds.

@@ -125,3 +125,31 @@ Bundles must remain in private CLI runtime storage. Import requires an absent na
 Participant readback preserves raw `status` and nullable boolean `flagged`/`isDeleted`. Its source-backed `creator_status` is `rejected` only for verified `flagged=true` and `isDeleted=false`; otherwise it retains raw status only when both flags are verified booleans. Missing flags leave creator status unknown. Per-submission revenue adds `flagged`, `is_deleted`, and `creator_status` only for fresh moderation readback; later missing/error reads return null while retaining historical evidence in the operation journal. Provider raw enums are not guessed.
 
 Submission readiness reports current funding as `funding.scope=platform` when an explicit TikTok allocation exists, or `campaign_reported` when all platform allocations are absent and the provider reports positive campaign budget minus campaign spend. It preserves both raw campaign and platform amounts; campaign-reported funds are not a guaranteed TikTok allocation or payout. Unknown/exhausted campaign funds and partial/unknown platform allocations refuse readiness. Native campaign intake must be open with no explicit TikTok closure; the provider's omitted optional `platformIntake` map is valid. Every pre-Post readiness call rechecks these current facts, separately from the immutable requirements digest.
+
+## Bounded catalog SDK
+
+`WhopClient.campaigns_page_bounded(config, expected_account_id=..., limit=50,
+sort="newest", cursor=None, timeout_seconds=120, max_bytes=2097152)` returns one
+observed collapsed-group page with `rows`, `next_cursor`, `provider_end`, `scope`
+and `observed_at`. `campaign_bounded(config, campaign_id, ...)` reads one exact
+detail through the existing guarded participant REST context. Missing/failed
+pagination never becomes an empty feed or provider-end claim. Every account
+preflight must match the requested named actor. Neither method submits anything.
+
+A private profile lease and durable ownership marker prevent competing catalog
+workers. The existing browser lifecycle lock still governs native browser opens.
+The child records exact Chrome/daemon PID and start identity, closes strictly and
+proves no profile browser or recorded daemon remains. Parent timeout recovery
+signals only that durable, freshly revalidated owner. Unknown/unmarked ownership
+retains the marker and blocks automatic takeover; there is no blanket profile kill.
+The requested timeout (minimum 14 seconds) covers preflight, child execution,
+kill/reap and exact browser cleanup under one monotonic deadline. Launch reserves
+10.75 seconds for cleanup and refuses insufficient remaining time. The child
+waits for its exact durable PID/start marker before constructing a browser.
+`WhopClient.recover_catalog_read(config, expected_account_id=..., attempt_id=...,
+timeout_seconds=30)` explicitly recovers a retained known-owner attempt: it proves
+the recorded original worker ended or safely terminates that exact PID/start, then
+cleans only the recorded Chrome/daemon owners. A reused PID, missing worker record
+or unrecorded browser owner remains blocked for explicit ownership investigation.
+No read automatically takes over retained state. Provider status/category/minimum
+retry delay remain typed.
