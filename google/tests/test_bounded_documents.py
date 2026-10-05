@@ -73,12 +73,45 @@ def test_worker_streams_exact_docs_route_no_redirects_and_all_tabs(monkeypatch):
  assert get[2]['params']=={'includeTabsContent':'true','suggestionsViewMode':'SUGGESTIONS_INLINE'}
  assert get[2]['stream'] is True and get[2]['allow_redirects'] is False
 
-@pytest.mark.parametrize('status,category',[(401,'auth'),(403,'access_denied'),(429,'rate_limit'),(503,'transient')])
-def test_error_stream_not_read_and_uncapped_provider_delay_preserved(monkeypatch,status,category):
+@pytest.mark.parametrize('status,category',[(401,'auth'),(429,'rate_limit'),(503,'transient')])
+def test_non_403_error_stream_not_read_and_uncapped_provider_delay_preserved(monkeypatch,status,category):
  response,calls=transport(monkeypatch,status=status,header='172800')
  with pytest.raises(bd.DocumentReadError) as exc:bd._worker('adbertram',DOCID,65536,12)
  assert exc.value.status==status and exc.value.category==category and exc.value.retry_after_seconds==172800
  assert response.closed and not any(c[0]=='chunks' for c in calls)
+
+
+@pytest.mark.parametrize('body,category',[
+ ({'error':{'code':403,'message':'quota','errors':[{'domain':'usageLimits','reason':'rateLimitExceeded'}]}},'rate_limit'),
+ ({'error':{'code':403,'message':'quota','errors':[{'domain':'usageLimits','reason':'userRateLimitExceeded'}]}},'rate_limit'),
+ ({'error':{'code':403,'message':'quota','errors':[{'domain':'usageLimits','reason':'dailyLimitExceeded'}]}},'rate_limit'),
+ ({'error':{'code':403,'message':'quota','status':'RESOURCE_EXHAUSTED'}},'rate_limit'),
+ ({'error':{'code':403,'message':'quota','details':[{'reason':'quotaExceeded'}]}},'rate_limit'),
+ ({'error':{'code':403,'message':'forbidden','errors':[{'domain':'global','reason':'forbidden'}]}},'access_denied'),
+ ({'error':{'code':403,'message':'forbidden','status':'PERMISSION_DENIED'}},'access_denied'),
+ ({'error':{'code':403,'message':'forbidden'}},'access_denied'),
+])
+def test_403_body_distinguishes_quota_from_permission(monkeypatch,body,category):
+ response,calls=transport(monkeypatch,status=403,header='120',chunks=[json.dumps(body).encode()])
+ with pytest.raises(bd.DocumentReadError) as exc:bd._worker('adbertram',DOCID,65536,12)
+ assert exc.value.code=='document_http_403' and exc.value.category==category
+ assert exc.value.status==403 and exc.value.retry_after_seconds==120
+ assert response.closed and any(c[0]=='chunks' for c in calls)
+
+
+@pytest.mark.parametrize('chunks',[[],[b'not-json'],[b'\xff'],[b'{"error":"quota"}']])
+def test_unparseable_or_shapeless_403_body_keeps_access_denied(monkeypatch,chunks):
+ response,calls=transport(monkeypatch,status=403,chunks=chunks)
+ with pytest.raises(bd.DocumentReadError) as exc:bd._worker('adbertram',DOCID,65536,12)
+ assert exc.value.code=='document_http_403' and exc.value.category=='access_denied'
+ assert response.closed
+
+
+def test_quota_403_body_read_is_bounded(monkeypatch):
+ response,calls=transport(monkeypatch,status=403,chunks=[b'{']+[b'x'*2048]*64)
+ with pytest.raises(bd.DocumentReadError) as exc:bd._worker('adbertram',DOCID,65536,12)
+ assert exc.value.category=='access_denied'
+ assert sum(1 for call in calls if call[0]=='chunks')<=9
 
 
 def test_byte_bound_closes_stream_before_decode(monkeypatch):
