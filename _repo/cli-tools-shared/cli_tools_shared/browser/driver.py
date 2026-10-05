@@ -207,6 +207,7 @@ class BrowserHarnessService:
         # Chrome that is already serving this process.
         self._cdp_ws: Optional[str] = None
         self._opened = False
+        self._native_network_capture = None
         # Persistent Chromium user-data-dir. Set by ``browser_open`` from the
         # caller-supplied ``persistent_profile_dir``. Attribute (not method)
         # because the daemon-key scope and the Chrome user-data-dir scope are
@@ -560,6 +561,7 @@ class BrowserHarnessService:
         self._stop_daemon()
         self._terminate_chrome()
         self._opened = False
+        self._native_network_capture = None
         self._cdp_port = None
         self._cdp_ws = None
 
@@ -1206,7 +1208,8 @@ class BrowserHarnessService:
             raise BrowserHarnessError('native_click_coordinates_invalid')
         self._bh.h.click_at_xy(point['x'], point['y'])
 
-    def begin_network_observation(self, *, max_bytes: int = 1_000_000) -> str:
+    def begin_network_observation(self, *, max_bytes: int = 1_000_000,
+                                  method: str = None, origin: str = None, path: str = None) -> str:
         """Keep bounded response bodies outside the renderer across navigation.
 
         Uses Network.enable/getResponseBody from the owning CDP connection:
@@ -1215,14 +1218,52 @@ class BrowserHarnessService:
         self._require_open()
         if type(max_bytes) is not int or not 1 <= max_bytes <= 1_000_000:
             raise BrowserHarnessError('network_observation_limit_invalid')
+        if self._native_network_capture is not None:
+            raise BrowserHarnessError('network_observation_already_armed')
+        routed = any(value is not None for value in (method, origin, path))
+        if routed:
+            from browser_harness.network_capture import route_scope
+            try:
+                route_scope('pending', method, origin, path, max_bytes)
+            except ValueError as exc:
+                raise BrowserHarnessError('network_observation_arguments_invalid') from exc
         session = self._bh.h._send({'meta': 'session'}, timeout=5).get('session_id')
         if not isinstance(session, str) or not session:
             raise BrowserHarnessError('network_observation_session_missing')
-        self._bh.h.cdp('Network.enable', session_id=session, request_timeout=5,
-                       maxTotalBufferSize=max_bytes*4, maxResourceBufferSize=max_bytes,
-                       maxPostDataSize=max_bytes, enableDurableMessages=True)
-        self._bh.h._send({'meta': 'drain_events'}, timeout=5).get('events')
+        if routed:
+            scope = route_scope(session, method, origin, path, max_bytes)
+            capture = self._bh.h._send({'meta': 'begin_network_capture', 'scope': scope}, timeout=5)
+            if (not isinstance(capture, dict) or set(capture) != {'capture_id', 'scope'}
+                    or capture['scope'] != scope or not isinstance(capture['capture_id'], str)
+                    or not re.fullmatch(r'[a-f0-9]{32}', capture['capture_id'])):
+                raise BrowserHarnessError('network_observation_capture_invalid')
+            self._native_network_capture = capture
+        try:
+            self._bh.h.cdp('Network.enable', session_id=session, request_timeout=5,
+                           maxTotalBufferSize=max_bytes*4, maxResourceBufferSize=max_bytes,
+                           maxPostDataSize=max_bytes, enableDurableMessages=True)
+        except Exception:
+            if routed:
+                try:
+                    self.end_network_observation(session)
+                except Exception:
+                    pass  # Preserve the original arming failure, never Post.
+            raise
+        if not routed:
+            self._bh.h._send({'meta': 'drain_events'}, timeout=5).get('events')
         return session
+
+    def end_network_observation(self, session_id: str = None) -> None:
+        """Release only this service's registered route capture."""
+        capture = self._native_network_capture
+        if capture is None:
+            return
+        if session_id is not None and session_id != capture['scope']['session_id']:
+            raise BrowserHarnessError('network_observation_scope_changed')
+        result = self._bh.h._send({'meta': 'end_network_capture', **capture}, timeout=5)
+        if result != {'ended': True}:
+            raise BrowserHarnessError('network_observation_cleanup_invalid')
+        self._native_network_capture = None
 
     def network_observations(self, session_id: str, *, method: str, origin: str, path: str,
                              request_ids=(), max_bytes: int = 1_000_000, timeout: float = 5) -> List[Dict[str, Any]]:
@@ -1230,8 +1271,25 @@ class BrowserHarnessService:
         self._require_open()
         if type(max_bytes) is not int or not 1 <= max_bytes <= 1_000_000 or not isinstance(session_id, str) or not session_id or method not in ('POST', 'PUT', 'PATCH') or not isinstance(origin, str) or not isinstance(path, str) or not path.startswith('/') or not isinstance(request_ids, (tuple, list)) or len(request_ids) > 100 or any(not isinstance(value, str) or not 1 <= len(value) <= 128 for value in request_ids) or type(timeout) not in (int, float) or not 0 < timeout <= 5:
             raise BrowserHarnessError('network_observation_arguments_invalid')
-        events = self._bh.h._send({'meta': 'drain_events'}, timeout=timeout).get('events')
-        if not isinstance(events, list) or len(events) >= 500:
+        capture = self._native_network_capture
+        if capture is not None:
+            from browser_harness.network_capture import route_scope
+            try:
+                scope = route_scope(session_id, method, origin, path, max_bytes)
+            except ValueError as exc:
+                raise BrowserHarnessError('network_observation_arguments_invalid') from exc
+            if scope != capture['scope']:
+                raise BrowserHarnessError('network_observation_scope_changed')
+            observed = self._bh.h._send({'meta': 'drain_network_capture', **capture}, timeout=timeout)
+            if (not isinstance(observed, dict) or set(observed) != {'capture_id', 'scope', 'events', 'loss'}
+                    or observed['capture_id'] != capture['capture_id'] or observed['scope'] != scope):
+                raise BrowserHarnessError('network_observation_capture_invalid')
+            if observed['loss'] is not None:
+                raise BrowserHarnessError('network_observation_capture_loss')
+            events = observed['events']
+        else:
+            events = self._bh.h._send({'meta': 'drain_events'}, timeout=timeout).get('events')
+        if not isinstance(events, list) or len(events) > 500 or capture is None and len(events) >= 500:
             raise BrowserHarnessError('network_observation_buffer_inconclusive')
         matched, result = set(request_ids), []
         for event in events:
