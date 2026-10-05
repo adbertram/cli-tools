@@ -9,6 +9,7 @@ navigation, selectors, cookies, and storage.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import time
@@ -18,6 +19,22 @@ from urllib.parse import parse_qsl, urlsplit, urlunsplit
 
 from . import BrowserHarnessError
 from ._elements import _ServiceElement, _ServiceLocator
+from .processes import (
+    ProcessCommand,
+    ProcessTableUnavailableError,
+    ProfileInUseError,
+    acquire_profile_lifecycle_lock,
+    format_profile_in_use_message,
+    list_process_commands,
+    pid_is_running,
+    profile_process_owner,
+    release_profile_lifecycle_lock,
+    remove_stale_profile_artifacts,
+    resolve_user_data_dir,
+)
+
+
+logger = logging.getLogger(__name__)
 
 
 class WebwrightServiceError(BrowserHarnessError):
@@ -85,6 +102,8 @@ class WebwrightBrowserService:
         self._environment = None
         self._opened = False
         self._user_data_dir: Optional[Path] = None
+        self._lifecycle_lock_file = None
+        self._lifecycle_lock_profile: Optional[Path] = None
 
     @staticmethod
     def _safe_url_for_log(url: str) -> str:
@@ -100,6 +119,102 @@ class WebwrightBrowserService:
             return urlunsplit((parts.scheme, parts.netloc, parts.path, query, fragment))
         except Exception:
             return "<unparseable url>"
+
+    def _resolved_user_data_dir(self) -> Optional[Path]:
+        if self._user_data_dir is None:
+            return None
+        return resolve_user_data_dir(self._user_data_dir)
+
+    def _list_process_table(self) -> List[ProcessCommand]:
+        """Return process-table rows for profile ownership diagnostics."""
+        try:
+            return list_process_commands()
+        except ProcessTableUnavailableError:
+            raise
+        except RuntimeError as exc:
+            raise WebwrightServiceError(f"Failed to inspect process table: {exc}") from exc
+
+    def _profile_owner(self):
+        user_data_dir = self._resolved_user_data_dir()
+        if user_data_dir is None:
+            return None
+        return profile_process_owner(
+            user_data_dir,
+            processes=self._list_process_table(),
+        )
+
+    def _profile_owner_error(
+        self,
+        owner,
+        *,
+        parent_command_unavailable: bool = False,
+    ) -> WebwrightServiceError:
+        return WebwrightServiceError(
+            format_profile_in_use_message(
+                self._resolved_user_data_dir(),
+                owner,
+                parent_command_unavailable=parent_command_unavailable,
+            )
+        )
+
+    def _acquire_profile_lifecycle_lock(self) -> None:
+        """Serialize Webwright with every other backend using this profile."""
+        user_data_dir = self._resolved_user_data_dir()
+        if user_data_dir is None:
+            raise WebwrightServiceError("Cannot lock a browser profile before it is resolved.")
+        if self._lifecycle_lock_file is not None:
+            if self._lifecycle_lock_profile == user_data_dir:
+                return
+            raise WebwrightServiceError("Cannot switch Chrome profiles while the current profile is open.")
+        self._lifecycle_lock_file = acquire_profile_lifecycle_lock(user_data_dir)
+        self._lifecycle_lock_profile = user_data_dir
+
+    def _release_profile_lifecycle_lock(self) -> None:
+        """Release this service's persistent-profile ownership lock."""
+        if self._lifecycle_lock_file is None:
+            return
+        try:
+            release_profile_lifecycle_lock(self._lifecycle_lock_file)
+        finally:
+            self._lifecycle_lock_file = None
+            self._lifecycle_lock_profile = None
+
+    def _raise_if_profile_in_use(self) -> None:
+        try:
+            owner = self._profile_owner()
+        except ProcessTableUnavailableError as exc:
+            raise WebwrightServiceError(
+                f"Cannot verify whether Chrome profile {self._resolved_user_data_dir()} is in use "
+                "because the process table cannot be inspected."
+            ) from exc
+        if owner is not None:
+            raise self._profile_owner_error(owner)
+
+    def _cleanup_stale_profile_locks(self) -> None:
+        """Remove runtime artifacts only when no live Chrome owns this profile."""
+        user_data_dir = self._resolved_user_data_dir()
+        if user_data_dir is None:
+            return
+        try:
+            remove_stale_profile_artifacts(
+                user_data_dir,
+                owner_lookup=self._profile_owner,
+                process_is_running=pid_is_running,
+            )
+        except ProfileInUseError as exc:
+            raise self._profile_owner_error(
+                exc.owner,
+                parent_command_unavailable=exc.parent_command_unavailable,
+            ) from exc
+        except ProcessTableUnavailableError as exc:
+            raise WebwrightServiceError(
+                f"Cannot remove stale Chrome profile artifacts for {user_data_dir} because "
+                "the process table cannot be inspected."
+            ) from exc
+        except OSError as exc:
+            raise WebwrightServiceError(
+                f"Failed to remove stale browser lock file for {user_data_dir}: {exc}"
+            ) from exc
 
     def _require_open(self) -> None:
         if not self._opened or self._environment is None:
@@ -168,44 +283,47 @@ class WebwrightBrowserService:
         if self._opened:
             self.browser_close()
 
-        profile_dir = Path(persistent_profile_dir)
+        profile_dir = resolve_user_data_dir(persistent_profile_dir)
         profile_dir.mkdir(parents=True, exist_ok=True)
         self._user_data_dir = profile_dir
 
         width_height = _parse_window_size(window_size)
-        launch_args: list[str] = ["--restore-last-session"]
-        if user_agent:
-            launch_args.append(f"--user-agent={user_agent}")
-
-        output_dir = profile_dir.parent / "webwright" / self.session
-        kwargs: dict[str, Any] = {
-            "browser_mode": self.browser_mode,
-            "headless": not headed,
-            "output_dir": output_dir,
-            "user_data_dir": profile_dir,
-            "browser_timeout_ms": self.default_timeout * 1000,
-            "browser_navigation_timeout_ms": self.default_timeout * 1000,
-            "launch_args": launch_args,
-        }
-        if self.local_cdp_url is not None:
-            kwargs["local_cdp_url"] = self.local_cdp_url
-        if self.local_cdp_executable is not None:
-            kwargs["local_cdp_executable"] = self.local_cdp_executable
-        if self.local_cdp_new_page is not None:
-            kwargs["local_cdp_new_page"] = self.local_cdp_new_page
-        if self.local_cdp_close_page_on_exit is not None:
-            kwargs["local_cdp_close_page_on_exit"] = self.local_cdp_close_page_on_exit
-        if self.local_cdp_close_started_browser_on_exit is not None:
-            kwargs["local_cdp_close_started_browser_on_exit"] = (
-                self.local_cdp_close_started_browser_on_exit
-            )
-        if width_height is not None:
-            kwargs["browser_width"], kwargs["browser_height"] = width_height
-
-        env_cls = _load_local_browser_environment()
-        environment = env_cls(**kwargs)
-        self._environment = environment
+        self._acquire_profile_lifecycle_lock()
         try:
+            self._cleanup_stale_profile_locks()
+
+            launch_args: list[str] = ["--restore-last-session"]
+            if user_agent:
+                launch_args.append(f"--user-agent={user_agent}")
+
+            output_dir = profile_dir.parent / "webwright" / self.session
+            kwargs: dict[str, Any] = {
+                "browser_mode": self.browser_mode,
+                "headless": not headed,
+                "output_dir": output_dir,
+                "user_data_dir": profile_dir,
+                "browser_timeout_ms": self.default_timeout * 1000,
+                "browser_navigation_timeout_ms": self.default_timeout * 1000,
+                "launch_args": launch_args,
+            }
+            if self.local_cdp_url is not None:
+                kwargs["local_cdp_url"] = self.local_cdp_url
+            if self.local_cdp_executable is not None:
+                kwargs["local_cdp_executable"] = self.local_cdp_executable
+            if self.local_cdp_new_page is not None:
+                kwargs["local_cdp_new_page"] = self.local_cdp_new_page
+            if self.local_cdp_close_page_on_exit is not None:
+                kwargs["local_cdp_close_page_on_exit"] = self.local_cdp_close_page_on_exit
+            if self.local_cdp_close_started_browser_on_exit is not None:
+                kwargs["local_cdp_close_started_browser_on_exit"] = (
+                    self.local_cdp_close_started_browser_on_exit
+                )
+            if width_height is not None:
+                kwargs["browser_width"], kwargs["browser_height"] = width_height
+
+            env_cls = _load_local_browser_environment()
+            environment = env_cls(**kwargs)
+            self._environment = environment
             environment.prepare(
                 task=f"Open {url}" if url else "Open browser",
                 task_id=self.session,
@@ -214,11 +332,22 @@ class WebwrightBrowserService:
             self._opened = True
             return self._page_info()
         except Exception as exc:
+            environment = self._environment
             self._environment = None
             self._opened = False
+            try:
+                if environment is not None:
+                    environment.close()
+            except Exception as close_exc:  # noqa: BLE001 - preserve the launch failure.
+                logger.debug("Failed to close Webwright after open error: %s", close_exc)
+            finally:
+                self._release_profile_lifecycle_lock()
+            if isinstance(exc, WebwrightServiceError):
+                raise
             raise WebwrightServiceError(f"Failed to open Webwright browser: {exc}") from exc
 
-    def browser_close(self) -> Dict[str, Any]:
+    def _close_browser_locked(self) -> None:
+        """Close Webwright-owned state while the profile lock remains held."""
         environment = self._environment
         self._environment = None
         self._opened = False
@@ -229,7 +358,13 @@ class WebwrightBrowserService:
                 raise WebwrightServiceError(
                     f"Failed to close Webwright browser: {exc}"
                 ) from exc
-        return {"success": True, "message": "Browser closed"}
+
+    def browser_close(self) -> Dict[str, Any]:
+        try:
+            self._close_browser_locked()
+            return {"success": True, "message": "Browser closed"}
+        finally:
+            self._release_profile_lifecycle_lock()
 
     def page_goto(self, url: str, wait_until: str | None = "domcontentloaded") -> Dict[str, Any]:
         self._run_on_page(lambda page: page.goto(url, wait_until=wait_until))
@@ -290,10 +425,19 @@ class WebwrightBrowserService:
         return result or []
 
     def data_delete(self) -> Dict[str, Any]:
-        self.browser_close()
-        if self._user_data_dir is not None and self._user_data_dir.exists():
-            shutil.rmtree(self._user_data_dir)
-        return {"success": True, "message": "Session data deleted"}
+        user_data_dir = self._resolved_user_data_dir()
+        if user_data_dir is None:
+            return {"success": True, "message": "Session data deleted"}
+        try:
+            self._acquire_profile_lifecycle_lock()
+            self._close_browser_locked()
+            self._raise_if_profile_in_use()
+            self._cleanup_stale_profile_locks()
+            if user_data_dir.exists():
+                shutil.rmtree(user_data_dir)
+            return {"success": True, "message": "Session data deleted"}
+        finally:
+            self._release_profile_lifecycle_lock()
 
     def locator(self, selector: str) -> _ServiceLocator:
         return _ServiceLocator(self, selector)

@@ -126,6 +126,64 @@ def test_macos_app_launch_uses_new_instance_command():
         assert command == args
 
 
+def test_macos_app_launch_routes_chrome_stderr_to_bounded_diagnostic_file(tmp_path):
+    chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    args = [chrome, "--user-data-dir=/tmp/profile"]
+    stderr_path = tmp_path / "chrome.stderr"
+
+    command = driver._chrome_launch_command(chrome, args, stderr_path=stderr_path)
+
+    if driver.sys.platform == "darwin":
+        assert command[:5] == [
+            "/usr/bin/open",
+            "-na",
+            "/Applications/Google Chrome.app",
+            "--stderr",
+            str(stderr_path),
+        ]
+    else:
+        assert command == args
+
+
+def test_failed_cdp_launch_reports_profile_owner_and_redacts_parent_secret(tmp_path, monkeypatch):
+    service = BrowserHarnessService("sample-browser-session")
+    profile = tmp_path / "chromium-profile"
+    profile.mkdir()
+    service._user_data_dir = profile
+    (service._runtime_dir / "chrome.stderr").write_text(
+        "Failed to create a ProcessSingleton for your profile directory.\n"
+        "Failed to create SingletonLock: File exists (17)\n"
+    )
+    monkeypatch.setattr(
+        service,
+        "_list_process_table",
+        lambda: [
+            ProcessCommand(300, 1, "S", "python cli.py --token very-secret-value"),
+            ProcessCommand(
+                301,
+                300,
+                "S",
+                f"/Applications/Google Chrome --user-data-dir={profile.resolve()}",
+            ),
+        ],
+    )
+
+    error = service._chrome_start_failure(BrowserHarnessError("CDP timed out"))
+
+    assert "PID 301" in str(error)
+    assert "parent PID 300" in str(error)
+    assert "<redacted>" in str(error)
+    assert "very-secret-value" not in str(error)
+
+
+def test_non_profile_chrome_stderr_does_not_change_cdp_error(tmp_path):
+    service = BrowserHarnessService("sample-browser-session")
+    (service._runtime_dir / "chrome.stderr").write_text("ordinary Chrome startup warning")
+    original = BrowserHarnessError("CDP timed out")
+
+    assert service._chrome_start_failure(original) is original
+
+
 def test_wait_for_cdp_requires_and_returns_browser_websocket_url(monkeypatch):
     class Response:
         status = 200
@@ -204,7 +262,7 @@ def test_wait_for_cdp_rechecks_when_final_sleep_reaches_deadline(monkeypatch):
     assert calls == 2
 
 
-def test_cleanup_stale_session_stops_daemon_kills_matching_pids_and_clears_locks(tmp_path, monkeypatch):
+def test_cleanup_stale_session_removes_proven_stale_artifacts_without_signaling_profile_owner(tmp_path, monkeypatch):
     service = BrowserHarnessService("sample-browser-session")
     user_data_dir = tmp_path / "ud-sample-browser-session"
     user_data_dir.mkdir(parents=True)
@@ -218,17 +276,19 @@ def test_cleanup_stale_session_stops_daemon_kills_matching_pids_and_clears_locks
         path.write_text("stale")
 
     restarted: list[str] = []
-    killed: list[int] = []
 
     service._user_data_dir = user_data_dir
     monkeypatch.setattr("browser_harness.admin.restart_daemon", lambda name=None: restarted.append(name))
-    monkeypatch.setattr(service, "_session_process_pids", lambda: [201, 202])
-    monkeypatch.setattr(service, "_terminate_session_pid", lambda pid: killed.append(pid))
+    monkeypatch.setattr(service, "_profile_owner", lambda: None)
+    monkeypatch.setattr(
+        driver.os,
+        "kill",
+        lambda *_args: pytest.fail("profile cleanup must not signal live Chrome"),
+    )
 
     service._cleanup_stale_session()
 
     assert restarted == ["sample-browser-session"]
-    assert killed == [201, 202]
     for path in lock_paths:
         assert not path.exists()
 
@@ -316,7 +376,7 @@ def test_cleanup_session_lock_files_reports_live_profile_lock_without_process_ta
         ),
     )
 
-    with pytest.raises(BrowserHarnessError, match="held by PID 12345"):
+    with pytest.raises(BrowserHarnessError, match="already in use by PID 12345"):
         service._cleanup_session_lock_files()
 
     assert checked == [12345]
@@ -432,6 +492,65 @@ def test_browser_open_serializes_same_session_until_first_owner_closes(tmp_path,
 
     assert acquired.is_set() is True
     second.browser_close()
+
+
+def test_cdp_and_playwright_backends_share_one_resolved_profile_lock(tmp_path):
+    from cli_tools_shared.browser.playwright_service import PlaywrightBrowserService
+
+    profile = tmp_path / "profiles" / ".." / "chromium-profile"
+    cdp = BrowserHarnessService("cdp-owner")
+    playwright = PlaywrightBrowserService("playwright-owner")
+    cdp._user_data_dir = profile
+    playwright._user_data_dir = profile.resolve()
+    cdp._acquire_lifecycle_lock()
+    acquired = threading.Event()
+
+    def acquire_playwright_owner():
+        playwright._acquire_profile_lifecycle_lock()
+        acquired.set()
+
+    thread = threading.Thread(target=acquire_playwright_owner)
+    thread.start()
+    try:
+        assert not acquired.wait(timeout=0.1)
+    finally:
+        cdp._release_lifecycle_lock()
+    assert acquired.wait(timeout=1)
+    playwright._release_profile_lifecycle_lock()
+    thread.join(timeout=1)
+    assert not thread.is_alive()
+
+
+def test_driver_data_delete_refuses_live_external_profile_owner(tmp_path, monkeypatch):
+    service = BrowserHarnessService("sample-browser-session")
+    profile = tmp_path / "chromium-profile"
+    profile.mkdir()
+    (tmp_path / "profiles").mkdir()
+    equivalent_profile = tmp_path / "profiles" / ".." / "chromium-profile"
+    service._user_data_dir = profile
+    monkeypatch.setattr(
+        service,
+        "_list_process_table",
+        lambda: [
+            ProcessCommand(700, 1, "S", "python external-cli.py"),
+            ProcessCommand(
+                701,
+                700,
+                "S",
+                f"/Applications/Google Chrome --user-data-dir={equivalent_profile}",
+            ),
+        ],
+    )
+    monkeypatch.setattr(
+        driver.os,
+        "kill",
+        lambda *_args: pytest.fail("data_delete must not signal an external Chrome owner"),
+    )
+
+    with pytest.raises(BrowserHarnessError, match="PID 701"):
+        service.data_delete()
+
+    assert profile.exists()
 
 
 # ---------------- wait_for_selector / query_selector ----------------
@@ -758,6 +877,7 @@ def test_cleanup_session_lock_raises_when_singletonlock_points_at_live_pid(tmp_p
     # Chrome's SingletonLock is a symlink whose target is "<hostname>-<pid>".
     lock.symlink_to("somehost-12345")
     monkeypatch.setattr(service, "_user_data_dir", lambda: ud)
+    monkeypatch.setattr(service, "_profile_owner", lambda: None)
     monkeypatch.setattr(driver, "pid_is_running", lambda pid: pid == 12345)
 
     with pytest.raises(BrowserHarnessError, match="12345"):
@@ -774,6 +894,7 @@ def test_cleanup_session_lock_deletes_when_pid_is_dead(tmp_path, monkeypatch):
     lock = ud / "SingletonLock"
     lock.symlink_to("somehost-99999")
     monkeypatch.setattr(service, "_user_data_dir", lambda: ud)
+    monkeypatch.setattr(service, "_profile_owner", lambda: None)
     monkeypatch.setattr(driver, "pid_is_running", lambda pid: False)
 
     service._cleanup_session_lock_files()
@@ -789,6 +910,7 @@ def test_cleanup_session_lock_treats_unparseable_target_as_stale(tmp_path, monke
     lock = ud / "SingletonLock"
     lock.symlink_to("garbage")
     monkeypatch.setattr(service, "_user_data_dir", lambda: ud)
+    monkeypatch.setattr(service, "_profile_owner", lambda: None)
     # pid_is_running should NOT be called when parsing fails.
     monkeypatch.setattr(
         driver,
