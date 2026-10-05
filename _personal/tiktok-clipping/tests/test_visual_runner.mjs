@@ -152,3 +152,17 @@ test('native generation limit is typed and supported selection disables thinking
   const receipt=JSON.parse(output);assert.equal(receipt.outcome,'failed');assert.equal(receipt.decision,null);assert.deepEqual(receipt.failure,{category:'model_failed',code:'generation_limit',status:null,retry_after_ms:null});assert.deepEqual(receipt.usage,usage);assert.ok(receipt.usage_observed);assert.ok(selected);assert.equal(output.includes('private reasoning'),false);
  }finally {process.stdout.write=original;await rm(f.workspace,{recursive:true});}
 });
+
+
+test('visual transport accepts exactly one whole json block under same strict schema',()=>{
+ const python=new URL('../.venv/bin/python',import.meta.url).pathname;
+ const expected=['captions_readable','portrait_composition','no_obvious_visual_defects','required_attribution_visible','no_added_ad_disclaimer'];
+ const decision={passed:true,checks:Object.fromEntries(expected.map(name=>[name,true])),reason:'Visible subject, captions and trusted attribution.'};
+ const raw=JSON.stringify(decision),fenced='```json\n'+raw+'\n```';
+ assert.deepEqual(parseDecision(fenced,python,undefined,expected),decision);
+ assert.deepEqual(parseDecision(raw,python,undefined,expected),decision);
+ for(const invalid of ['Prose\n'+fenced,fenced+'\nProse',fenced+'\n'+fenced,
+  '```\n'+raw+'\n```',fenced.replace('"passed":true','"passed":true,"passed":false'),
+  fenced.replace('"passed":true','"passed":NaN'),'```json\n{}\n```',fenced.replace('"captions_readable":true','"captions_readable":1')])
+  assert.throws(()=>parseDecision(invalid,python,undefined,expected));
+});

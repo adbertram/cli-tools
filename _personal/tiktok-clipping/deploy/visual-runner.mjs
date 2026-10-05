@@ -105,11 +105,12 @@ export function decisionFailure(error) {
 
 export function parseDecision(text, pythonExecutable, execute=execFileSync, expectedChecks=legacyChecks) {
  if(typeof text!=='string' || Buffer.byteLength(text)>16384 || typeof pythonExecutable!=='string' || !path.isAbsolute(pythonExecutable)) throw Error('invalid_model_result');
- // Reuse the coordinator's duplicate-key/nonfinite parser. The input stays on
+ // Reuse the visual boundary's whole-response transport normalizer and
+ // authoritative duplicate-key/nonfinite parser. The input stays on
  // stdin and never enters shell source; preserve the original raw result.
  let raw;
  try {
-  raw=execute(pythonExecutable,['-c','import sys\nfrom tiktok_clipping_cli.safety import strict_json,canonical,SafetyError\ntry:\n result=canonical(strict_json(sys.stdin.buffer.read(16385),16384))\nexcept SafetyError:\n sys.exit(2)\nprint(result)'],{input:text,encoding:'utf8',timeout:2000,maxBuffer:32768,stdio:['pipe','pipe','ignore']});
+  raw=execute(pythonExecutable,['-c','import sys\nfrom tiktok_clipping_cli.safety import canonical,SafetyError\nfrom tiktok_clipping_cli.visual import parse_visual_model_result\ntry:\n result=canonical(parse_visual_model_result(sys.stdin.buffer.read(16385)))\nexcept SafetyError:\n sys.exit(2)\nprint(result)'],{input:text,encoding:'utf8',timeout:2000,maxBuffer:32768,stdio:['pipe','pipe','ignore']});
  } catch(error) {
   const code=error.status===2?'invalid_model_result':error.code==='ETIMEDOUT'?'parser_timeout':'parser_unavailable';
   throw Object.assign(Error(code),{code});

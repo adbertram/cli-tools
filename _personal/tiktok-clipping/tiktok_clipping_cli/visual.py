@@ -63,6 +63,24 @@ def owned_bytes(path, workspace, maximum, expected=None, *, minimum=1):
     return raw
 
 
+def parse_visual_model_result(raw):
+    """Accept bare JSON or one whole LF-delimited json code block only."""
+    if not isinstance(raw, (str, bytes)):
+        raise SafetyError('visual_model_result_type_invalid')
+    try:
+        payload = raw.encode('utf-8') if isinstance(raw, str) else raw
+    except UnicodeError as exc:
+        raise SafetyError('visual_model_result_encoding_invalid') from exc
+    if len(payload) > 16384:
+        raise SafetyError('payload_too_large')
+    if payload.startswith(b'```'):
+        fenced = re.fullmatch(rb'```json\n([\s\S]*)\n```(?:\n)?', payload)
+        if fenced is None or re.search(rb'(?m)^[ \t]*```', fenced[1]):
+            raise SafetyError('visual_model_fence_invalid')
+        payload = fenced[1]
+    return strict_json(payload, 16384)
+
+
 def validate_receipt(receipt, *, classify_model_failure=False):
     keys(receipt, {"envelope", "outcome", "decision", "usage_observed", "usage", "model", "observed_at"}, {"raw_result", "failure", "usage_provenance"})
     keys(receipt["envelope"], ENVELOPE_FIELDS)
@@ -79,7 +97,7 @@ def validate_receipt(receipt, *, classify_model_failure=False):
         decision = receipt["decision"]
         if "raw_result" in receipt:
             try:
-                if strict_json(receipt["raw_result"], 16384) != decision:
+                if parse_visual_model_result(receipt["raw_result"]) != decision:
                     raise SafetyError("visual_raw_result_changed")
             except SafetyError:
                 if not classify_model_failure:

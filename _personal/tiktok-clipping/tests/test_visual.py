@@ -717,3 +717,37 @@ def test_full_frame_context_reaches_actual_hash_bound_visual_manifest(visual_eng
     assert 'within the preserved source-video panel' in manifest['prompt']
     assert 'full_frame never automatically passes' in manifest['prompt']
     assert VisualArtifacts(engine.config).verify(envelope,engine.get(envelope['job_id'])['asset'])==manifest
+
+
+def test_visual_only_whole_json_fence_preserves_raw_receipt_and_usage(visual_engine,clock):
+    from tiktok_clipping_cli.visual import parse_visual_model_result
+    envelope=issue(visual_engine,clock);incoming=receipt(envelope,clock)
+    raw='```json\n'+canonical(incoming['decision'])+'\n```'
+    incoming['raw_result']=raw
+    assert parse_visual_model_result(raw)==incoming['decision']
+    assert parse_visual_model_result(canonical(incoming['decision']))==incoming['decision']
+    checked=validate_receipt(incoming)
+    assert checked['raw_result']==raw and checked['usage']==incoming['usage']
+    assert visual_engine.apply_visual(incoming,execute=False)['state']=='ready'
+    saved=visual_engine.get(envelope['job_id'])
+    assert saved['stage']=='publish'
+    with visual_engine.transaction() as db:
+        persisted=json.loads(db.execute('SELECT result FROM visual_attempts WHERE id=?',(envelope['attempt_id'],)).fetchone()[0])
+        assert persisted['raw_result']==raw and persisted['usage']==incoming['usage']
+    # Generic CLI/model-proposal JSON remains strict; this is visual transport only.
+    from tiktok_clipping_cli.safety import strict_json
+    with pytest.raises(SafetyError):strict_json(raw)
+    failed={**incoming,'outcome':'failed','decision':None,'failure':{'category':'malformed_output','code':'invalid_model_result','status':None,'retry_after_ms':None}}
+    assert validate_receipt(failed)['outcome']=='failed'
+
+
+@pytest.mark.parametrize('raw',[
+    'Prose before\n```json\n{}\n```', '```json\n{}\n```\nProse after',
+    '```json\n{}\n```\n```json\n{}\n```', '```\n{}\n```',
+    '```JSON\n{}\n```', ' ```json\n{}\n```',
+    '```json\n{"passed":true,"passed":false}\n```',
+    '```json\n{"value":NaN}\n```', '```json\n{"value":Infinity}\n```',
+    '```json\n'+(' '*16384)+'{}\n```', None, 3])
+def test_visual_fence_rejects_nonwhole_duplicate_nonfinite_and_oversize(raw):
+    from tiktok_clipping_cli.visual import parse_visual_model_result
+    with pytest.raises(SafetyError):parse_visual_model_result(raw)
