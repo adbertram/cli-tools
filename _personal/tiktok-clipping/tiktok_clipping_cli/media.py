@@ -170,6 +170,13 @@ class MediaRenderer:
         self.root.mkdir(exist_ok=True)
         self._path(self.root, directory=True)
         self.ffmpeg, self.ffprobe = ffmpeg, ffprobe
+        self._render_ownership = None
+        self._media_lock_fd = None
+
+    def _temporary(self, kind):
+        if self._render_ownership is not None:
+            return self._render_ownership.temporary(kind)
+        return tempfile.TemporaryDirectory(prefix=kind+'-', dir=self.root)
 
     def _path(self, path, *, directory=False):
         path = Path(path)
@@ -203,8 +210,11 @@ class MediaRenderer:
                         raise TimeoutError("media_lock_timeout")
                     time.sleep(0.05)
             try:
+                previous = self._media_lock_fd
+                self._media_lock_fd = stream.fileno()
                 yield
             finally:
+                self._media_lock_fd = previous
                 fcntl.flock(stream, fcntl.LOCK_UN)
 
     def prune_cache(self):
@@ -253,16 +263,24 @@ class MediaRenderer:
         if time.monotonic() >= deadline:
             raise TimeoutError("media_work_timeout")
         self._disk()
-        with tempfile.TemporaryDirectory(prefix="process-", dir=self.root) as process_temp, tempfile.TemporaryFile(dir=process_temp) as out, tempfile.TemporaryFile(dir=process_temp) as err:
+        with self._temporary('process') as process_temp, tempfile.TemporaryFile(dir=process_temp) as out, tempfile.TemporaryFile(dir=process_temp) as err:
             environment = os.environ.copy()
             # Whisper temporary WAVs belong inside the measured workspace too.
             environment["TMPDIR"] = process_temp
+            ticket=(self._render_ownership.child_intent(command) if self._render_ownership is not None
+                    and command[0] not in {self.ffmpeg,self.ffprobe} else None)
             try:
                 process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=out, stderr=err,
-                    cwd=cwd, env=environment, start_new_session=True)
+                    cwd=cwd, env=environment, start_new_session=True,
+                    pass_fds=() if self._media_lock_fd is None or command[0] not in {self.ffmpeg,self.ffprobe} else (self._media_lock_fd,))
             except FileNotFoundError as exc:
+                if self._render_ownership is not None:
+                    try:self._render_ownership.child_not_started(ticket)
+                    except Exception:exc.add_note('Render child intent cleanup held; no process started.')
                 raise SafetyError("media_executable_missing: " + command[0]) from exc
             try:
+                if self._render_ownership is not None:
+                    self._render_ownership.child_started(ticket,process)
                 while process.poll() is None:
                     if time.monotonic() >= deadline:
                         raise TimeoutError("media_work_timeout")
@@ -471,7 +489,7 @@ class MediaRenderer:
         source_path = self._path(source_path)
         source_digest = sha256(source_path)
         captions, records, offset = [], [], 0
-        with tempfile.TemporaryDirectory(prefix="refinement-", dir=self.root) as temp:
+        with self._temporary('refinement') as temp:
             for index, cut in enumerate(cuts):
                 duration = cut["end_seconds"] - cut["start_seconds"]
                 crop = Path(temp) / f"cut-{index}.wav"
@@ -502,14 +520,19 @@ class MediaRenderer:
         record = job["input"]
         deadline = self._deadline()
         with self._lock(deadline):
-            prepared = self._prepare(record, deadline)
-            validate_proposal("clip", proposal, {**record, **prepared}, self.config)
-            source_path = self.root / digest({"url": self._source(record)}) / "source.mp4"
-            segments = self._prepared_segments(prepared)
-            source = next(source for source in self.config["sources"] if source["id"] == record["source_id"])
-            return self.render_local(source_path, segments, proposal, prepared["provenance"], deadline=deadline, publication_policy=source.get("publication_policy"), refine_transcript=True)
+            from .asset_retention import RenderOwnership
+            self._render_ownership = RenderOwnership(self.config,job,proposal,deadline=deadline)
+            try:
+                prepared = self._prepare(record, deadline)
+                validate_proposal("clip", proposal, {**record, **prepared}, self.config)
+                source_path = self.root / digest({"url": self._source(record)}) / "source.mp4"
+                segments = self._prepared_segments(prepared)
+                source = next(source for source in self.config["sources"] if source["id"] == record["source_id"])
+                return self.render_local(source_path, segments, proposal, prepared["provenance"], deadline=deadline, publication_policy=source.get("publication_policy"), refine_transcript=True, render_owner=self._render_ownership.owner)
+            finally:
+                self._render_ownership = None
 
-    def render_local(self, source_path, segments, proposal, provenance, *, deadline=None, publication_policy=None, refine_transcript=False):
+    def render_local(self, source_path, segments, proposal, provenance, *, deadline=None, publication_policy=None, refine_transcript=False, render_owner=None):
         """Render an already approved workspace file; also used by local smoke tests."""
         deadline = deadline or self._deadline()
         source_path = self._path(source_path)
@@ -541,10 +564,11 @@ class MediaRenderer:
             raise SafetyError("ffmpeg_subtitles_filter_required")
         x, zoom, font_size = STYLES[proposal["style"]]
         duration = edit_duration(proposal)
-        name = digest({"source": source_digest, "proposal": proposal, "captions": captions, "publication_policy": publication_policy, "caption_style": CAPTION_STYLE})
+        name = digest({"source": source_digest, "proposal": proposal, "captions": captions, "publication_policy": publication_policy, "caption_style": CAPTION_STYLE,
+            **({'render_owner':render_owner} if render_owner is not None else {})})
         destination = self.root / (name + ".mp4")
         receipt_path = self.root / (name + ".json")
-        with tempfile.TemporaryDirectory(prefix="render-", dir=self.root) as temp:
+        with self._temporary('render') as temp:
             temp = Path(temp)
             # Fixed ASS layout and markup come from trusted style constants.
             # Provider text is checked before we add the emphasis commands.
@@ -580,13 +604,22 @@ class MediaRenderer:
             receipt = {"asset": asset, "proposal": proposal, "captions": captions, "caption_style": {**CAPTION_STYLE, "font_size": styled_font}, "source_sha256": source_digest, "measured": report, "edit": {"segments": cuts, "rendered_duration": duration, "reservation": "whole_source_bounding_span"}, "audio_provenance": {"source_sha256": source_digest, "segments": cuts, "external_audio": False}, "overlays": overlays, "rights_policy_digest": None if publication_policy is None else digest(publication_policy)}
             if refinement is not None:
                 receipt["transcript_refinement"] = refinement
+            if render_owner is not None:
+                receipt['render_owner'] = render_owner
             raw = canonical(receipt).encode()
             if len(raw) > self.config["limits"]["max_payload_bytes"]:
                 raise SafetyError("payload_too_large")
             (temp / "receipt.json").write_bytes(raw)
             self._disk()
+            if self._render_ownership is not None:
+                self._render_ownership.intent(asset,receipt)
+                for pending in (output,temp/'receipt.json'):
+                    with pending.open('rb') as stream:os.fsync(stream.fileno())
             output.replace(destination)
             (temp / "receipt.json").replace(receipt_path)
+            if self._render_ownership is not None:
+                from .asset_retention import fsync_directory
+                fsync_directory(destination.parent)
         return asset
 
     def _decode(self, path, deadline):
@@ -601,9 +634,12 @@ class MediaRenderer:
         receipt_path = self._path(path.with_suffix(".json"))
         from .visual import owned_bytes
         receipt = strict_json(owned_bytes(receipt_path, self.root, self.config["limits"]["max_payload_bytes"]), self.config["limits"]["max_payload_bytes"])
-        keys(receipt, {"asset", "proposal", "captions", "source_sha256", "measured"}, {"edit", "audio_provenance", "overlays", "rights_policy_digest", "transcript_refinement", "caption_style"})
+        keys(receipt, {"asset", "proposal", "captions", "source_sha256", "measured"}, {"edit", "audio_provenance", "overlays", "rights_policy_digest", "transcript_refinement", "caption_style", "render_owner"})
         if receipt["asset"] != asset or receipt["proposal"] != proposal:
             raise SafetyError("render_receipt_mismatch")
+        if receipt.get('render_owner') is not None:
+            from .asset_retention import render_owner
+            if receipt['render_owner'] != render_owner(job):raise SafetyError('render_receipt_owner_changed')
         if receipt.get('caption_style') is not None:
             expected_style = {**CAPTION_STYLE, 'font_size': round(CAPTION_STYLE['font_size'] * STYLES[proposal['style']][2] / 20)}
             if receipt['caption_style'] != expected_style:raise SafetyError('render_caption_style_changed')

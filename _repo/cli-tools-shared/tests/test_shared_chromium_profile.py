@@ -429,9 +429,6 @@ def test_plain_chrome_tool_session_survives_second_tool_playwright_lifecycle(
     monkeypatch.setattr(
         PlaywrightBrowserService, "_cleanup_stale_profile_locks", lambda self: None
     )
-    monkeypatch.setattr(
-        PlaywrightBrowserService, "_cleanup_stale_profile_processes", lambda self: None
-    )
 
     tool_a = _PlainRealKeychainTool(chromium)
     tool_a.authenticate(shared_profile)

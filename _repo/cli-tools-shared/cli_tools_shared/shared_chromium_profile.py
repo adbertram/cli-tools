@@ -6,17 +6,15 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from .browser.processes import ProcessTableUnavailableError, profile_process_pids
+from .browser.processes import (
+    CHROMIUM_PROFILE_RUNTIME_ARTIFACTS,
+    ProcessTableUnavailableError,
+    profile_process_pids,
+)
 from .exceptions import ConfigError
 
 
 _COOKIES_PATH = Path("Default") / "Cookies"
-_RUNTIME_ARTIFACTS = (
-    "DevToolsActivePort",
-    "SingletonCookie",
-    "SingletonLock",
-    "SingletonSocket",
-)
 
 
 def chromium_profile_has_cookies(profile_dir: Path) -> bool:
@@ -102,7 +100,7 @@ def seed_shared_chromium_profile(source: Path, target: Path) -> Path:
             source,
             staged_profile,
             symlinks=True,
-            ignore=shutil.ignore_patterns(*_RUNTIME_ARTIFACTS),
+            ignore=shutil.ignore_patterns(*CHROMIUM_PROFILE_RUNTIME_ARTIFACTS),
         )
         if not chromium_profile_has_cookies(staged_profile):
             raise ConfigError(

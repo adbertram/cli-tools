@@ -1,5 +1,5 @@
 import asyncio
-from pathlib import Path
+import threading
 
 import pytest
 
@@ -131,6 +131,83 @@ def test_webwright_service_opens_persistent_profile_and_navigates(tmp_path, monk
     ]
     assert result["url"] == "https://example.com/dashboard"
     assert result["title"] == "Fake title"
+    service.browser_close()
+
+
+def test_webwright_service_holds_profile_lifecycle_lock_until_close(tmp_path, monkeypatch):
+    from cli_tools_shared.browser import webwright as webwright_module
+    from cli_tools_shared.browser.webwright import WebwrightBrowserService
+
+    monkeypatch.setattr(
+        webwright_module,
+        "_load_local_browser_environment",
+        lambda: _FakeEnvironment,
+    )
+    profile_dir = tmp_path / "chromium-profile"
+    service = WebwrightBrowserService("service-default")
+
+    service.browser_open(persistent_profile_dir=profile_dir)
+
+    assert service._lifecycle_lock_file is not None
+    assert (tmp_path / ".chromium-profile.lifecycle.lock").is_file()
+
+    service.browser_close()
+
+    assert service._lifecycle_lock_file is None
+
+
+def test_driver_and_webwright_backends_share_one_resolved_profile_lock(tmp_path):
+    from cli_tools_shared.browser.driver import BrowserHarnessService
+    from cli_tools_shared.browser.webwright import WebwrightBrowserService
+
+    profile = tmp_path / "profiles" / ".." / "chromium-profile"
+    driver = BrowserHarnessService("cdp-owner")
+    webwright = WebwrightBrowserService("webwright-owner")
+    driver._user_data_dir = profile
+    webwright._user_data_dir = profile.resolve()
+    driver._acquire_lifecycle_lock()
+    acquired = threading.Event()
+
+    def acquire_webwright_owner():
+        webwright._acquire_profile_lifecycle_lock()
+        acquired.set()
+
+    thread = threading.Thread(target=acquire_webwright_owner)
+    thread.start()
+    try:
+        assert not acquired.wait(timeout=0.1)
+    finally:
+        driver._release_lifecycle_lock()
+    assert acquired.wait(timeout=1)
+    webwright._release_profile_lifecycle_lock()
+    thread.join(timeout=1)
+    assert not thread.is_alive()
+
+
+def test_webwright_service_releases_lifecycle_lock_after_failed_prepare(tmp_path, monkeypatch):
+    from cli_tools_shared.browser import webwright as webwright_module
+    from cli_tools_shared.browser.webwright import (
+        WebwrightBrowserService,
+        WebwrightServiceError,
+    )
+
+    class _FailingEnvironment(_FakeEnvironment):
+        def prepare(self, **kwargs):
+            self.prepared.append(kwargs)
+            raise RuntimeError("prepare failed")
+
+    monkeypatch.setattr(
+        webwright_module,
+        "_load_local_browser_environment",
+        lambda: _FailingEnvironment,
+    )
+    service = WebwrightBrowserService("service-default")
+
+    with pytest.raises(WebwrightServiceError, match="prepare failed"):
+        service.browser_open(persistent_profile_dir=tmp_path / "chromium-profile")
+
+    assert service._lifecycle_lock_file is None
+    assert _FakeEnvironment.instances[0].closed is True
 
 
 def test_webwright_service_passes_local_cdp_options(tmp_path, monkeypatch):
@@ -165,6 +242,7 @@ def test_webwright_service_passes_local_cdp_options(tmp_path, monkeypatch):
     assert env.kwargs["local_cdp_new_page"] is True
     assert env.kwargs["local_cdp_close_page_on_exit"] is True
     assert env.kwargs["local_cdp_close_started_browser_on_exit"] is False
+    service.browser_close()
 
 
 def test_webwright_service_exposes_page_helpers_and_deletes_profile(tmp_path, monkeypatch):
@@ -203,10 +281,88 @@ def test_webwright_service_exposes_page_helpers_and_deletes_profile(tmp_path, mo
     assert env._page.keyboard.pressed == ["Enter"]
     assert env._page.keyboard.typed == ["hello"]
 
+    monkeypatch.setattr(service, "_list_process_table", list)
     service.data_delete()
 
     assert env.closed is True
     assert not profile_dir.exists()
+
+
+def test_webwright_data_delete_holds_lifecycle_lock_across_close_and_removal(tmp_path, monkeypatch):
+    from cli_tools_shared.browser import webwright as webwright_module
+    from cli_tools_shared.browser.webwright import WebwrightBrowserService
+
+    profile_dir = tmp_path / "chromium-profile"
+    profile_dir.mkdir()
+    service = WebwrightBrowserService("service-default")
+    service._user_data_dir = profile_dir
+    events = []
+    original_rmtree = webwright_module.shutil.rmtree
+
+    def close_browser():
+        assert service._lifecycle_lock_file is not None
+        events.append("close")
+
+    def verify_owner():
+        assert service._lifecycle_lock_file is not None
+        events.append("owner-check")
+
+    def cleanup_artifacts():
+        assert service._lifecycle_lock_file is not None
+        events.append("cleanup")
+
+    def remove_profile(path):
+        assert service._lifecycle_lock_file is not None
+        events.append("remove")
+        original_rmtree(path)
+
+    monkeypatch.setattr(service, "_close_browser_locked", close_browser)
+    monkeypatch.setattr(service, "_raise_if_profile_in_use", verify_owner)
+    monkeypatch.setattr(service, "_cleanup_stale_profile_locks", cleanup_artifacts)
+    monkeypatch.setattr(webwright_module.shutil, "rmtree", remove_profile)
+
+    service.data_delete()
+
+    assert events == ["close", "owner-check", "cleanup", "remove"]
+    assert service._lifecycle_lock_file is None
+    assert not profile_dir.exists()
+
+
+def test_webwright_data_delete_refuses_live_external_profile_owner(tmp_path, monkeypatch):
+    from cli_tools_shared.browser import webwright as webwright_module
+    from cli_tools_shared.browser.processes import ProcessCommand
+    from cli_tools_shared.browser.webwright import (
+        WebwrightBrowserService,
+        WebwrightServiceError,
+    )
+
+    profile_dir = tmp_path / "chromium-profile"
+    profile_dir.mkdir()
+    service = WebwrightBrowserService("service-default")
+    service._user_data_dir = profile_dir
+    monkeypatch.setattr(
+        service,
+        "_list_process_table",
+        lambda: [
+            ProcessCommand(67274, 1, "S", "python external-cli.py"),
+            ProcessCommand(
+                67275,
+                67274,
+                "S",
+                f"/Applications/Google Chrome --user-data-dir={profile_dir.resolve()}",
+            ),
+        ],
+    )
+    monkeypatch.setattr(
+        webwright_module.os,
+        "kill",
+        lambda *_args: pytest.fail("data_delete must not signal an external profile owner"),
+    )
+
+    with pytest.raises(WebwrightServiceError, match="PID 67275"):
+        service.data_delete()
+
+    assert profile_dir.exists()
 
 
 def test_webwright_browser_automation_uses_webwright_service(monkeypatch):

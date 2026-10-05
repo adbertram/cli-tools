@@ -2,9 +2,7 @@
 from __future__ import annotations
 
 import json
-import hashlib
 import os
-import stat
 import secrets
 import sqlite3
 import time
@@ -177,6 +175,8 @@ class Engine:
             db.executescript(SCHEMA)
             from .outcome_learning import HISTORY_SCHEMA
             db.executescript(HISTORY_SCHEMA)
+            from .asset_retention import SCHEMA as ASSET_SCHEMA
+            db.executescript(ASSET_SCHEMA)
             db.execute("BEGIN IMMEDIATE")
             for table in ("source_jobs", "clips"):
                 columns = {r[1] for r in db.execute("PRAGMA table_info(" + table + ")")}
@@ -1879,6 +1879,9 @@ class Engine:
             removed = self.prune_confirmed_assets()
         if self._deadline is None or self.clock() < self._deadline:
             removed_visual = self.prune_visual_artifacts()
+        if self._deadline is None or self.clock() < self._deadline:
+            from .asset_retention import prune_owned
+            removed += prune_owned(self)
         return {"state": self.status()["state"], "processed": len(results), "results": results, "jobs": self.status()["jobs"], "removed_asset_bytes": removed, "removed_visual_bytes": removed_visual, "text_results": text_results}
 
     def prune_visual_artifacts(self):
@@ -1967,6 +1970,7 @@ class Engine:
 
     def prune_confirmed_assets(self):
         """Delete only assets whose publication and campaign submission are confirmed."""
+        from .asset_retention import exact_file,fsync_directory,unlink_checked
         with self.transaction() as db:
             self._active(db)
             rows = db.execute("SELECT j.id,j.asset FROM jobs j JOIN rewards r ON j.id=r.job_id WHERE j.status='published' AND r.state IN ('submitted','accepted','rejected') AND j.asset IS NOT NULL AND j.id NOT IN (SELECT job_id FROM pruned_assets) LIMIT 100").fetchall()
@@ -1979,26 +1983,23 @@ class Engine:
             if path.is_symlink() or not path.is_absolute() or not path.resolve().is_relative_to(self.workspace.resolve()):
                 raise SafetyError("cleanup_asset_path_rejected")
             size = 0
+            identity = None
             if path.exists():
-                descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
                 try:
-                    before = os.fstat(descriptor)
-                    if not stat.S_ISREG(before.st_mode):
-                        raise SafetyError("cleanup_asset_path_rejected")
-                    hasher = hashlib.sha256()
-                    with os.fdopen(descriptor, "rb", closefd=False) as stream:
-                        for chunk in iter(lambda: stream.read(1048576), b""):
-                            hasher.update(chunk)
-                    after = os.fstat(descriptor)
-                    current = path.lstat()
-                    if hasher.hexdigest() != asset["sha256"] or (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns) or (current.st_dev, current.st_ino) != (after.st_dev, after.st_ino):
-                        raise SafetyError("cleanup_asset_digest_mismatch")
-                    size = after.st_size
-                    path.unlink()
-                    removed += size
-                finally:
-                    os.close(descriptor)
+                    deadline=time.monotonic()+max(0,min(2,(self._deadline or self.clock()+2)-self.clock()))
+                    _,identity=exact_file(path,self.workspace,self.config['limits']['max_disk_bytes'],
+                        {'path':str(path),'bytes':asset['bytes'],'sha256':asset['sha256']},minimum=1,deadline=deadline,with_identity=True)
+                except SafetyError as exc:
+                    raise SafetyError('cleanup_asset_digest_mismatch') from exc
             with self.transaction() as db:
+                self._active(db)
+                current=db.execute("SELECT j.asset,j.lease_until FROM jobs j JOIN rewards r ON j.id=r.job_id WHERE j.id=? AND j.status='published' AND r.state IN ('submitted','accepted','rejected')",(row['id'],)).fetchone()
+                if current is None or current['asset']!=row['asset']:continue
+                if identity is not None:
+                    unlink_checked(path,identity);fsync_directory(path.parent);size=identity[2]
                 db.execute("INSERT OR IGNORE INTO pruned_assets VALUES(?,?,?,?)", (row["id"], asset["sha256"], self.clock(), size))
+                db.execute('UPDATE rendered_assets SET cleaned_at=?,cleanup_issue=NULL WHERE job_id=? AND asset=? AND cleaned_at IS NULL',
+                    (self.clock(),row['id'],canonical(asset)))
                 self.event(db, row["id"], "confirmed_asset_pruned", {"bytes": size, "asset_digest": asset["sha256"]})
+                removed+=size
         return removed

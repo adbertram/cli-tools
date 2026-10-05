@@ -10,11 +10,8 @@ from __future__ import annotations
 
 import json
 import os
-import signal
 import shutil
-import subprocess
 import time
-import fcntl
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qsl, urlsplit, urlunsplit
@@ -22,12 +19,19 @@ from urllib.parse import parse_qsl, urlsplit, urlunsplit
 from . import BrowserHarnessError
 from ._elements import _ServiceElement, _ServiceLocator
 from .processes import (
+    ProfileInUseError,
     ProcessCommand,
     ProcessTableUnavailableError,
+    acquire_profile_lifecycle_lock,
     command_user_data_dir,
+    format_profile_in_use_message,
     list_process_commands,
     pid_is_running,
+    profile_process_owner,
     profile_process_pids,
+    remove_stale_profile_artifacts,
+    release_profile_lifecycle_lock,
+    resolve_user_data_dir,
 )
 
 
@@ -101,6 +105,7 @@ class PlaywrightBrowserService:
         self._opened = False
         self._user_data_dir: Optional[Path] = None
         self._lifecycle_lock_file = None
+        self._lifecycle_lock_profile: Optional[Path] = None
 
     @staticmethod
     def _safe_url_for_log(url: str) -> str:
@@ -156,78 +161,55 @@ class PlaywrightBrowserService:
             return []
         return profile_process_pids(self._user_data_dir, processes=self._list_process_table())
 
-    def _pid_running(self, pid: int) -> bool:
-        return pid_is_running(pid)
+    def _resolved_user_data_dir(self) -> Optional[Path]:
+        if self._user_data_dir is None:
+            return None
+        return resolve_user_data_dir(self._user_data_dir)
 
-    def _terminate_session_pid(self, pid: int) -> None:
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except ProcessLookupError:
-            return
-        except OSError as exc:
-            raise PlaywrightServiceError(
-                f"Failed to stop stale browser process {pid}: {exc}"
-            ) from exc
-
-        deadline = time.time() + 5
-        while time.time() < deadline:
-            if not self._pid_running(pid):
-                return
-            time.sleep(0.1)
-
-        try:
-            os.kill(pid, signal.SIGKILL)
-        except ProcessLookupError:
-            return
-        except OSError as exc:
-            raise PlaywrightServiceError(
-                f"Failed to force-stop stale browser process {pid}: {exc}"
-            ) from exc
-
-        deadline = time.time() + 5
-        while time.time() < deadline:
-            if not self._pid_running(pid):
-                return
-            time.sleep(0.1)
-
-        raise PlaywrightServiceError(
-            f"Stale browser process {pid} for session '{self.session}' did not exit"
+    def _profile_owner(self):
+        user_data_dir = self._resolved_user_data_dir()
+        if user_data_dir is None:
+            return None
+        return profile_process_owner(
+            user_data_dir,
+            processes=self._list_process_table(),
         )
 
-    def _cleanup_stale_profile_processes(self) -> None:
-        """Terminate Chrome helpers that still own this exact user-data-dir."""
-        try:
-            pids = self._session_process_pids()
-        except ProcessTableUnavailableError:
-            return
-        for pid in pids:
-            self._terminate_session_pid(pid)
+    def _profile_owner_error(
+        self,
+        owner,
+        *,
+        parent_command_unavailable: bool = False,
+    ) -> PlaywrightServiceError:
+        return PlaywrightServiceError(
+            format_profile_in_use_message(
+                self._resolved_user_data_dir(),
+                owner,
+                parent_command_unavailable=parent_command_unavailable,
+            )
+        )
 
     def _acquire_profile_lifecycle_lock(self) -> None:
-        """Serialize browser ownership for this exact persistent profile."""
-        if self._lifecycle_lock_file is not None:
-            return
-        if self._user_data_dir is None:
+        """Serialize browser ownership for this exact resolved profile."""
+        user_data_dir = self._resolved_user_data_dir()
+        if user_data_dir is None:
             raise PlaywrightServiceError("Cannot lock a browser profile before it is resolved.")
-        lock_path = self._user_data_dir.parent / f".{self._user_data_dir.name}.lifecycle.lock"
-        lock_path.parent.mkdir(parents=True, exist_ok=True)
-        lock_file = open(lock_path, "a+")
-        try:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
-        except Exception:
-            lock_file.close()
-            raise
-        self._lifecycle_lock_file = lock_file
+        if self._lifecycle_lock_file is not None:
+            if self._lifecycle_lock_profile == user_data_dir:
+                return
+            raise PlaywrightServiceError("Cannot switch Chrome profiles while the current profile is open.")
+        self._lifecycle_lock_file = acquire_profile_lifecycle_lock(user_data_dir)
+        self._lifecycle_lock_profile = user_data_dir
 
     def _release_profile_lifecycle_lock(self) -> None:
         """Release this service's persistent-profile ownership lock."""
         if self._lifecycle_lock_file is None:
             return
         try:
-            fcntl.flock(self._lifecycle_lock_file.fileno(), fcntl.LOCK_UN)
+            release_profile_lifecycle_lock(self._lifecycle_lock_file)
         finally:
-            self._lifecycle_lock_file.close()
             self._lifecycle_lock_file = None
+            self._lifecycle_lock_profile = None
 
     @staticmethod
     def _command_user_data_dir(command: str) -> Optional[str]:
@@ -235,41 +217,40 @@ class PlaywrightBrowserService:
 
     def _raise_if_profile_in_use(self) -> None:
         try:
-            pids = self._session_process_pids()
-        except ProcessTableUnavailableError:
-            return
-        if not pids:
-            return
-        raise PlaywrightServiceError(
-            "Playwright profile is already in use by Chrome process(es) "
-            f"{', '.join(str(pid) for pid in pids)}: {self._user_data_dir}"
-        )
+            owner = self._profile_owner()
+        except ProcessTableUnavailableError as exc:
+            raise PlaywrightServiceError(
+                f"Cannot verify whether Chrome profile {self._resolved_user_data_dir()} is in use "
+                "because the process table cannot be inspected."
+            ) from exc
+        if owner is not None:
+            raise self._profile_owner_error(owner)
 
     def _cleanup_stale_profile_locks(self) -> None:
         """Remove singleton artifacts only after proving no profile owner exists."""
+        user_data_dir = self._resolved_user_data_dir()
+        if user_data_dir is None:
+            return
         try:
-            pids = self._session_process_pids()
-        except ProcessTableUnavailableError:
-            return
-        if pids:
-            raise PlaywrightServiceError(
-                "Playwright profile is already in use by Chrome process(es) "
-                f"{', '.join(str(pid) for pid in pids)}: {self._user_data_dir}"
+            remove_stale_profile_artifacts(
+                user_data_dir,
+                owner_lookup=self._profile_owner,
+                process_is_running=pid_is_running,
             )
-        if self._user_data_dir is None:
-            return
-        for name in ("SingletonCookie", "SingletonLock", "SingletonSocket", "DevToolsActivePort"):
-            path = self._user_data_dir / name
-            if not path.exists() and not path.is_symlink():
-                continue
-            try:
-                path.unlink()
-            except FileNotFoundError:
-                continue
-            except OSError as exc:
-                raise PlaywrightServiceError(
-                    f"Failed to remove stale browser lock file {path}: {exc}"
-                ) from exc
+        except ProfileInUseError as exc:
+            raise self._profile_owner_error(
+                exc.owner,
+                parent_command_unavailable=exc.parent_command_unavailable,
+            ) from exc
+        except ProcessTableUnavailableError as exc:
+            raise PlaywrightServiceError(
+                f"Cannot remove stale Chrome profile artifacts for {user_data_dir} because "
+                "the process table cannot be inspected."
+            ) from exc
+        except OSError as exc:
+            raise PlaywrightServiceError(
+                f"Failed to remove stale browser lock file for {user_data_dir}: {exc}"
+            ) from exc
 
     def browser_open(
         self,
@@ -296,7 +277,7 @@ class PlaywrightBrowserService:
                 "Playwright is not installed in this CLI environment."
             ) from exc
 
-        profile_dir = Path(persistent_profile_dir)
+        profile_dir = resolve_user_data_dir(persistent_profile_dir)
         profile_dir.mkdir(parents=True, exist_ok=True)
         self._user_data_dir = profile_dir
         self._acquire_profile_lifecycle_lock()
@@ -367,11 +348,11 @@ class PlaywrightBrowserService:
                 other.close()
         page.goto("about:blank")
 
-    def browser_close(self) -> Dict[str, Any]:
+    def _close_browser_locked(self) -> None:
+        """Close Playwright-owned state while the profile lock remains held."""
         context = self._context
         page = self._page
         playwright = self._playwright
-        cleanup_owned_profile = self._opened or context is not None or playwright is not None
         self._context = None
         self._page = None
         self._playwright = None
@@ -384,15 +365,14 @@ class PlaywrightBrowserService:
                 finally:
                     context.close()
         finally:
-            try:
-                if playwright is not None:
-                    playwright.stop()
-            finally:
-                try:
-                    if cleanup_owned_profile:
-                        self._cleanup_stale_profile_processes()
-                finally:
-                    self._release_profile_lifecycle_lock()
+            if playwright is not None:
+                playwright.stop()
+
+    def browser_close(self) -> Dict[str, Any]:
+        try:
+            self._close_browser_locked()
+        finally:
+            self._release_profile_lifecycle_lock()
         return {"success": True, "message": "Browser closed"}
 
     def page_goto(self, url: str, wait_until: str | None = "domcontentloaded") -> Dict[str, Any]:
@@ -459,12 +439,18 @@ class PlaywrightBrowserService:
         return result or []
 
     def data_delete(self) -> Dict[str, Any]:
-        self.browser_close()
-        if self._user_data_dir is not None and self._user_data_dir.exists():
-            self._cleanup_stale_profile_processes()
+        user_data_dir = self._resolved_user_data_dir()
+        if user_data_dir is None:
+            return {"success": True, "message": "Session data deleted"}
+        try:
+            self._acquire_profile_lifecycle_lock()
+            self._close_browser_locked()
             self._raise_if_profile_in_use()
-            shutil.rmtree(self._user_data_dir)
-        return {"success": True, "message": "Session data deleted"}
+            if user_data_dir.exists():
+                shutil.rmtree(user_data_dir)
+            return {"success": True, "message": "Session data deleted"}
+        finally:
+            self._release_profile_lifecycle_lock()
 
     def locator(self, selector: str) -> _ServiceLocator:
         return _ServiceLocator(self, selector)
