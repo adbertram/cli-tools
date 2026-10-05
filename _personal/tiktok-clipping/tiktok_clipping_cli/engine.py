@@ -303,7 +303,8 @@ class Engine:
         day = self._day() if day is None else day
         db.execute("INSERT OR IGNORE INTO budgets(day) VALUES(?)", (day,))
         value = db.execute(f"SELECT {field} FROM budgets WHERE day=?", (day,)).fetchone()[0]
-        if value + amount > self.config["limits"]["daily_" + field]:
+        limit = self.config["limits"]["daily_" + field]
+        if limit is not None and value + amount > limit:
             raise SafetyError("budget_exhausted: " + field)
         db.execute(f"UPDATE budgets SET {field}={field}+? WHERE day=?", (amount, day))
 

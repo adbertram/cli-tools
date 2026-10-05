@@ -55,8 +55,8 @@ def project(engine, db, state, discovery=None):
     enabled = bool(policy and policy['enabled'])
     day = engine._day()
     budget = db.execute('SELECT * FROM budgets WHERE day=?',(day,)).fetchone()
-    remaining = {field:engine.config['limits']['daily_'+field]-(budget[field] if budget else 0) for field in ('posts','model_calls','runtime_seconds')}
-    exhausted = [field for field,value in remaining.items() if value<=0 or (field=='runtime_seconds' and value<engine.config['limits']['work_timeout_seconds'])]
+    remaining = {field:(None if engine.config['limits']['daily_'+field] is None else engine.config['limits']['daily_'+field]-(budget[field] if budget else 0)) for field in ('posts','model_calls','runtime_seconds')}
+    exhausted = [field for field,value in remaining.items() if value is not None and (value<=0 or (field=='runtime_seconds' and value<engine.config['limits']['work_timeout_seconds']))]
     reset_at = (datetime.fromtimestamp(now,timezone.utc).replace(hour=0,minute=0,second=0,microsecond=0)+timedelta(days=1)).timestamp()
     issues, capabilities, observed_only = [], [], []
     for row in db.execute('SELECT h.*,coalesce(c.until,0) AS retry_at FROM capability_health h LEFT JOIN circuits c ON c.capability=h.capability ORDER BY h.capability'):

@@ -16,7 +16,7 @@ Python 3.11 or later is required. The JSON/SQLite core uses the standard library
 
 ## Safe first boot
 
-`config.example.json` deliberately has `account: null`, `sources: []`, `adapter_module: null`, and zero daily budgets. These values cannot publish or spend model calls. Copy it to an absolute path and set trusted verified values before enabling operation. The database and workspace must be absolute paths writable by the service account. Initial control state is paused.
+`config.example.json` deliberately has `account: null`, `sources: []`, `adapter_module: null`, and zero daily posts. These values cannot publish. The daily published-clip goal (`daily_posts`) is the only required daily budget; `daily_model_calls` and `daily_runtime_seconds` may be `null` for no daily cap, while every operation still carries its configured timeout and lease. Copy the example to an absolute path and set trusted verified values before enabling operation. The database and workspace must be absolute paths writable by the service account. Initial control state is paused.
 
 The only allowed TikTok identity is `ata_clipper` (leading `@` is accepted). A distinct immutable account ID, owning service profile, timestamp, and live verification provenance are required. `atalearning`, `Fred`, and any other handle are rejected. Account, source, campaign, permissions, executable code, limits, and completion criteria are never model outputs.
 

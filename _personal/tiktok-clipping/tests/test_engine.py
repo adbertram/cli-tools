@@ -280,6 +280,44 @@ def test_runtime_budget_persists(engine, config, adapter, clock):
     assert limited.get(envelope["job_id"])["status"] == "ready"
 
 
+def test_null_model_and_runtime_caps_leave_posts_as_only_daily_budget(engine, config, adapter, clock):
+    config["limits"]["daily_model_calls"] = None
+    config["limits"]["daily_runtime_seconds"] = None
+    config["limits"]["daily_posts"] = 1
+    current = Engine(config, adapter=adapter, clock=clock); current.control("running")
+    envelope = claim(current, clock)
+    assert current.apply(payload(envelope))["state"] == "published"
+    with current.transaction() as db:
+        row = db.execute("SELECT posts,model_calls,runtime_seconds FROM budgets").fetchone()
+        assert row["posts"] == 1 and row["model_calls"] >= 1 and row["runtime_seconds"] > 0
+    second = claim(current, clock)
+    result = current.apply(payload(second, start_seconds=30, end_seconds=50))
+    assert result["state"] == "ready" and "budget_exhausted: posts" in result["error"]
+    assert len(adapter.uploads) == 1
+
+
+def test_null_caps_allowed_only_for_model_and_runtime(config):
+    config["limits"]["daily_model_calls"] = None
+    config["limits"]["daily_runtime_seconds"] = None
+    validate_config(config)
+    config["limits"]["daily_posts"] = None
+    with pytest.raises(SafetyError, match="unbounded_limit_not_allowed"):
+        validate_config(config)
+
+
+def test_health_reports_unbounded_caps_as_null_remaining(engine, config, adapter, clock):
+    config["limits"]["daily_model_calls"] = None
+    config["limits"]["daily_runtime_seconds"] = None
+    current = Engine(config, adapter=adapter, clock=clock); current.control("running")
+    envelope = claim(current, clock)
+    current.apply(payload(envelope))
+    window = current.status()["health"]["budget_window"]
+    assert window["remaining"]["posts"] == config["limits"]["daily_posts"] - 1
+    assert window["remaining"]["model_calls"] is None
+    assert window["remaining"]["runtime_seconds"] is None
+    assert window["exhausted"] == []
+
+
 def test_multiple_nonoverlapping_clips_per_source_bounded(engine, adapter, clock, config):
     first = claim(engine, clock)
     engine.apply(payload(first))

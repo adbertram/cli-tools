@@ -5,8 +5,8 @@
   "sources": [],
   "limits": {
     "daily_posts": 0,
-    "daily_model_calls": 0,
-    "daily_runtime_seconds": 0,
+  "daily_model_calls": null,
+  "daily_runtime_seconds": null,
     "min_clip_seconds": 15,
     "max_clip_seconds": 60,
     "max_attempts": 6,
