@@ -88,6 +88,15 @@ tiktok-clipping control set stopped --config /absolute/config.json
 tiktok-clipping strategy rollback --config /absolute/config.json
 ```
 
+Install an intentional future baseline/style-space change against the existing database:
+
+```bash
+tiktok-clipping strategy baseline-state --config /absolute/new-config.json > /absolute/expected-baseline.json
+tiktok-clipping strategy install-baseline --config /absolute/new-config.json --reason "Allow future full-frame clips" < /absolute/expected-baseline.json
+```
+
+The new trusted configuration must retain existing style names (zero weight is allowed) and use installed renderer styles. The snapshot binds both baseline/current strategy versions and proposal digests, exact configured existing objective identities, the active pointer, target baseline and policy. Installation refuses leased/running work and pending native attempts. It appends new baseline versions and updates only future pointers, preserving all existing jobs, ambiguous publication records, observations and budgets. Inactive historical descriptors remain unchanged; a later configuration switch can migrate them explicitly. Learning or rollback after the snapshot causes a conflict. Retrying the exact request is a no-op only while its complete installed post-state still matches; a fresh same-baseline request preserves any later learned strategy. Legacy rollback uses the explicit installed baseline pointer, with the original earliest baseline as the read fallback when no pointer exists. Models cannot invoke this administrative migration or expand the style allowlist.
+
 Append trusted performance evidence; submit or inspect campaign rewards independently of uploaded state:
 
 ```bash

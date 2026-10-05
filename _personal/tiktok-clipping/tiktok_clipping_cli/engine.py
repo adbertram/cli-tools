@@ -673,6 +673,22 @@ class Engine:
         proposal = json.loads(db.execute("SELECT proposal FROM strategies WHERE version=?", (version,)).fetchone()[0])
         return version, proposal
 
+    def baseline_state(self):
+        """Read the exact future baseline/current pointer snapshot for migration."""
+        from .baseline_install import state
+        with self.transaction() as db:
+            return state(self, db)
+
+    def install_baseline(self, expected_snapshot, reason):
+        """Append trusted baseline versions under exact pointer and digest CAS."""
+        from .baseline_install import install
+        with self.transaction() as db:
+            return install(self, db, expected_snapshot, reason)
+
+    def _baseline_version(self, db):
+        from .baseline_install import legacy_baseline_version
+        return legacy_baseline_version(db)
+
     def outcome_strategy(self, db, objective):
         """A new descriptor gets its own baseline; historical versions survive."""
         from .outcome_learning import objective_key
@@ -841,7 +857,7 @@ class Engine:
             current, _ = self._strategy(db)
             objective = db.execute("SELECT value FROM settings WHERE key='active_outcome_objective'").fetchone()
             state = db.execute('SELECT * FROM objective_strategies WHERE objective_key=?', (objective[0],)).fetchone() if objective else None
-            baseline = state['baseline_version'] if state else db.execute("SELECT version FROM strategies WHERE baseline=1 ORDER BY version LIMIT 1").fetchone()[0]
+            baseline = state['baseline_version'] if state else self._baseline_version(db)
             if state:
                 current = state['current_version']
                 db.execute('UPDATE objective_strategies SET current_version=? WHERE objective_key=?', (baseline, state['objective_key']))
@@ -855,7 +871,7 @@ class Engine:
         samples = self.cohorts()
         with self.transaction() as db:
             version, strategy = self._strategy(db)
-            baseline_version = db.execute("SELECT version FROM strategies WHERE baseline=1 ORDER BY version LIMIT 1").fetchone()[0]
+            baseline_version = self._baseline_version(db)
         baseline = [r["value"] for r in samples if r["version"] == baseline_version]
         current = [r["value"] for r in samples if r["version"] == version]
         minimum = self.config["learning"]["minimum_samples"]

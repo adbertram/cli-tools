@@ -222,6 +222,23 @@ def rollback(config: ConfigPath):
     _perform(lambda: _engine(config).rollback())
 
 
+@strategy.command("baseline-state")
+@command
+def baseline_state(config: ConfigPath):
+    """Read exact baseline/current versions and digests for an explicit migration."""
+    _perform(lambda: _engine(config).baseline_state())
+
+
+@strategy.command("install-baseline")
+@command
+def install_baseline(config: ConfigPath, reason: str = typer.Option(..., "--reason", help="Trusted reason for the intentional future style-space change.")):
+    """Append configured baseline versions using the bounded expected snapshot on stdin."""
+    def action():
+        engine = _engine(config)
+        return engine.install_baseline(_stdin(engine), reason)
+    _perform(action)
+
+
 @metrics.command("record")
 @command
 def record(config: ConfigPath):
