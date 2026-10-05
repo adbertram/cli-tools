@@ -210,6 +210,8 @@ class TextAttempts:
                 if failure is not None:
                     delay = failure['retry_after_ms'] / 1000 if failure['retry_after_ms'] is not None else (engine.config['limits']['retry_base_seconds'] if failure['category'] == 'rate_limit' else None)
                     engine._circuit_failure('model', delay, db=db)
+            from .native_runtime import settle_native
+            settle_native(engine,db,envelope,attempt['kind'],strict_json(attempt['reservation'])['reservation_id'],receipt)
             current = db.execute('SELECT * FROM text_attempts WHERE id=?', (attempt['id'],)).fetchone()
             return dict(current), attempt['result_digest'] is not None
 
@@ -273,12 +275,12 @@ class TextAttempts:
                 if not directories:
                     raise SafetyError('text_cleanup_unknown_directory')
                 continue
-            top = {'manifest.json', 'deepseek-text.yml', 'result.json', 'process-start.json'}
+            top = {'manifest.json', 'deepseek-text.yml', 'result.json', 'process-start.json', 'runtime.json', '.runtime.pending.json'}
             attachment = re.fullmatch(r'artifacts/attachments/v1/objects/([a-f0-9]{2})/([a-f0-9]{64})', relative)
             session = re.fullmatch(r'sessions/[^/]+/session-[a-f0-9-]{36}/session\.jsonl(?:\.zstd)?', relative)
             if relative not in top and not attachment and not session:
                 raise SafetyError('text_cleanup_unknown_file')
-            raw = owned_bytes(path, self.workspace, 8 << 20)
+            raw = owned_bytes(path, self.workspace, 8 << 20, minimum=0 if relative == '.runtime.pending.json' else 1)
             measured = hashlib.sha256(raw).hexdigest()
             if attachment and (attachment[1] != measured[:2] or attachment[2] != measured):
                 raise SafetyError('text_cleanup_object_changed')
@@ -303,6 +305,9 @@ class TextAttempts:
             root = self.workspace / 'model' / row['job_id'] / row['id']
             if root.resolve() != root or not root.is_relative_to(self.workspace.resolve()):
                 raise SafetyError('text_cleanup_path_changed')
+            if row['result'] is not None:
+                from .native_runtime import settle_native
+                settle_native(engine,db,strict_json(row['envelope']),row['kind'],strict_json(row['reservation'])['reservation_id'],strict_json(row['result']))
             current = self.inventory(root)
             if row['cleanup_inventory'] is None:
                 inventory = current
@@ -318,7 +323,7 @@ class TextAttempts:
             raise SafetyError('text_cleanup_inventory_changed')
         for item in current:
             path = root / item['path']
-            owned_bytes(path, self.workspace, 8 << 20, item['sha256'])
+            owned_bytes(path, self.workspace, 8 << 20, item['sha256'], minimum=0 if item['path'] == '.runtime.pending.json' else 1)
             path.unlink()
             _fsync_directory(path.parent)
         for path in sorted((p for p in root.rglob('*') if p.is_dir()), key=lambda p: len(p.parts), reverse=True):

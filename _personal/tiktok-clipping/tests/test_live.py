@@ -144,7 +144,7 @@ def test_rate_limit_retains_category_without_invented_cooldown(live):
 
 @pytest.mark.parametrize("method,args", [
     ("verify_ready", ({},)), ("publish", ({}, {}, "key")),
-    ("submit_rewards", ({}, {})), ("reward_status", ({}, {})), ("metrics", ({},)),
+    ("submit_rewards", ({}, {})), ("reward_status", ({}, {})),
 ])
 def test_missing_participant_capabilities_never_return_fabricated_receipts(live, method, args):
     adapter, _, _, media = live

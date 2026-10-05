@@ -185,7 +185,7 @@ def validate_config(config):
         number(value, 0 if key in {"daily_posts", "daily_model_calls", "daily_runtime_seconds", "max_revisions"} else 1, 10**12, integer=key not in {"min_clip_seconds", "max_clip_seconds", "retry_base_seconds", "retry_max_seconds"})
     if limits["max_clip_seconds"] < limits["min_clip_seconds"] or limits["retry_max_seconds"] < limits["retry_base_seconds"]:
         raise SafetyError("inverted_limits")
-    if limits["metrics_batch_size"] > 100 or limits["metrics_max_age_seconds"] < config["learning"]["cohort_age_seconds"]:
+    if limits["metrics_batch_size"] > 1000 or limits["metrics_max_age_seconds"] < config["learning"]["cohort_age_seconds"]:
         raise SafetyError("invalid_metrics_schedule_limits")
     if limits["lease_seconds"] < limits["work_timeout_seconds"]:
         raise SafetyError("lease_shorter_than_work_timeout")

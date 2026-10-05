@@ -28,7 +28,7 @@ class ReadResult:
     stderr_bytes: int
 
 
-def run_bounded_read(argv, *, timeout_seconds, max_stdout_bytes, max_stderr_bytes=65536, on_start=None):
+def run_bounded_read(argv, *, timeout_seconds, max_stdout_bytes, max_stderr_bytes=65536, on_start=None, on_poll=None):
     """Retain raw stdout bytes; count/discard stderr, never put argv in errors.
 
     Wall deadline includes draining and child exit. A separate 0.75s allowance
@@ -41,9 +41,9 @@ def run_bounded_read(argv, *, timeout_seconds, max_stdout_bytes, max_stderr_byte
         raise BoundedReadError('read_process_timeout_invalid')
     if any(type(n) is not int or not 0 < n <= 32 * 1024 * 1024 for n in (max_stdout_bytes, max_stderr_bytes)):
         raise BoundedReadError('read_process_byte_bound_invalid')
-    if on_start is not None and not callable(on_start):
+    if any(callback is not None and not callable(callback) for callback in (on_start, on_poll)):
         raise BoundedReadError('read_process_callback_invalid')
-    return _run(argv, timeout_seconds, max_stdout_bytes, max_stderr_bytes, on_start=on_start)
+    return _run(argv, timeout_seconds, max_stdout_bytes, max_stderr_bytes, on_start=on_start, on_poll=on_poll)
 
 
 def _group_has_no_live_members(pgid):
@@ -61,7 +61,7 @@ def _group_has_no_live_members(pgid):
         return False
 
 
-def _run(argv, timeout_seconds, max_stdout_bytes, max_stderr_bytes, *, numeric_inspection=False,cleanup_seconds=.75,on_start=None):
+def _run(argv, timeout_seconds, max_stdout_bytes, max_stderr_bytes, *, numeric_inspection=False,cleanup_seconds=.75,on_start=None,on_poll=None):
     deadline = time.monotonic() + timeout_seconds
     try:
         process = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
@@ -80,6 +80,7 @@ def _run(argv, timeout_seconds, max_stdout_bytes, max_stderr_bytes, *, numeric_i
             os.set_blocking(stream.fileno(), False)
             selector.register(stream, selectors.EVENT_READ, name)
         while True:
+            if on_poll is not None:on_poll(deadline)
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise BoundedReadError('read_process_deadline_exceeded')
@@ -127,5 +128,8 @@ def _run(argv, timeout_seconds, max_stdout_bytes, max_stderr_bytes, *, numeric_i
             cleanup_unconfirmed=True
         if cleanup_unconfirmed:
             if isinstance(failure, BoundedReadError):failure.cleanup_failed=True
+            elif failure is not None and hasattr(failure,'cleanup_failed'):
+                try:failure.cleanup_failed=True
+                except (AttributeError,TypeError):pass
             elif failure is None:raise BoundedReadError('read_process_cleanup_unconfirmed') from None
     return ReadResult(bytes(output), process.returncode, stderr_bytes)

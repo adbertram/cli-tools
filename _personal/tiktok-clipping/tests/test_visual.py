@@ -484,3 +484,86 @@ def test_current_visual_contract_requires_attribution_and_no_added_disclaimer(vi
     legacy['decision']['checks'].pop('required_attribution_visible');legacy['decision']['checks'].pop('no_added_ad_disclaimer')
     legacy['decision']['checks']['disclosure_visible']=True
     with pytest.raises(SafetyError,match='current_review_checks'):visual_engine.apply_visual(legacy,execute=False)
+
+
+def test_late_native_file_accounts_once_and_keeps_proof_before_cleanup(visual_engine,adapter,clock,monkeypatch):
+    envelope=issue(visual_engine,clock)
+    root=Path(envelope['manifest_path']).parent
+    completed=receipt(envelope,clock)
+    raw=(json.dumps(completed)+'\n').encode();(root/'native-receipt.json').write_bytes(raw)
+    identity={'pid':123,'start_identity':'TEST native process identity'}
+    (root/'process-start.json').write_text(canonical({'schema_version':1,'job_id':envelope['job_id'],'attempt_id':envelope['attempt_id'],'nonce':envelope['nonce'],**identity}))
+    proof={'schema_version':1,'envelope':envelope,'process':identity,'started_at':iso(clock()),'completed_at':iso(clock()+2.4),'monotonic_started_ms':1000,'monotonic_completed_ms':3400,'elapsed_seconds':2.4,'receipt_sha256':hashlib.sha256(raw).hexdigest(),'provenance':'native_process_monotonic'}
+    (root/'runtime.json').write_text(canonical(proof))
+    # Native output was durable, but the continuation crashed before DB ingestion.
+    clock.now=envelope['expires_at']+121
+    with visual_engine.transaction() as db:visual_engine._recover(db)
+    original=VisualArtifacts.prune
+    def interrupted(artifacts,e,inventory):
+        (root/'runtime.json').unlink()
+        raise OSError('TEST cleanup crash after timing proof unlink')
+    monkeypatch.setattr(VisualArtifacts,'prune',interrupted)
+    assert visual_engine.prune_visual_artifacts()==0
+    with visual_engine.transaction() as db:
+        row=db.execute('SELECT * FROM visual_attempts').fetchone()
+        assert row['state']=='expired' and json.loads(row['result'])==completed
+        assert db.execute("SELECT count(*) FROM events WHERE event='visual_usage_observed'").fetchone()[0]==1
+        reservation=db.execute('SELECT * FROM runtime_reservations WHERE kind=\'visual\'').fetchone()
+        assert reservation['settled_seconds']==3 and json.loads(reservation['native_proof'])==proof
+    assert adapter.uploads==[]
+    monkeypatch.setattr(VisualArtifacts,'prune',original)
+    # Newly ingested accounting receives the normal retention window too.
+    clock.now+=visual_engine.config['visual']['retention_seconds']+1
+    assert visual_engine.prune_visual_artifacts()>0
+    assert not root.exists() and adapter.uploads==[]
+    with visual_engine.transaction() as db:
+        assert db.execute("SELECT count(*) FROM events WHERE event='visual_usage_observed'").fetchone()[0]==1
+
+
+@pytest.mark.parametrize('invalid',['malformed','binding'])
+def test_late_invalid_native_file_is_visible_and_preserved(visual_engine,adapter,clock,invalid):
+    envelope=issue(visual_engine,clock);root=Path(envelope['manifest_path']).parent
+    completed=receipt(envelope,clock)
+    if invalid=='binding':completed['envelope']={**envelope,'native_execution':{'execution_id':'other','workflow_id':'workflow-test'}}
+    (root/'native-receipt.json').write_text('{' if invalid=='malformed' else canonical(completed))
+    clock.now=envelope['expires_at']+121
+    with visual_engine.transaction() as db:visual_engine._recover(db)
+    assert visual_engine.prune_visual_artifacts()==0
+    with visual_engine.transaction() as db:
+        row=db.execute('SELECT * FROM visual_attempts').fetchone()
+        assert row['result'] is None and row['cleanup_issue'] and not row['artifacts_cleaned']
+    assert (root/'native-receipt.json').exists() and adapter.uploads==[]
+
+
+def test_failed_visual_provider_delay_pauses_all_model_kinds(visual_engine,clock):
+    envelope=issue(visual_engine,clock)
+    failure={'category':'provider_unavailable','code':'SERVER','status':503,'retry_after_ms':172800000}
+    result=visual_engine.apply_visual(receipt(envelope,clock,outcome='failed',decision=None,failure=failure),execute=False)
+    assert result['state']=='ready'
+    with visual_engine.transaction() as db:
+        assert db.execute("SELECT until FROM circuits WHERE capability='model'").fetchone()[0]==clock()+172800
+        with pytest.raises(Exception,match='circuit_open: model'):visual_engine._model_available(db)
+
+
+def test_known_other_attempt_receipt_cannot_be_recovered_from_wrong_owned_path(visual_engine,adapter,clock):
+    envelope=issue(visual_engine,clock)
+    root=Path(envelope['manifest_path']).parent
+    other={**envelope,'attempt_id':'f'*32,'nonce':'TEST other known attempt nonce'}
+    other_receipt=receipt(other,clock)
+    (root/'native-receipt.json').write_text(canonical(other_receipt))
+    clock.now=envelope['expires_at']+121
+    with visual_engine.transaction() as db:
+        visual_engine._recover(db)
+        # Both envelopes are known to the ledger. Only the original expired
+        # attempt is eligible for cleanup, and its path contains B's receipt.
+        db.execute("INSERT INTO visual_attempts(id,job_id,state,envelope,created_at,expires_at) VALUES(?,?,'pending',?,?,?)",
+            (other['attempt_id'],other['job_id'],canonical(other),envelope['model_deadline']-30,clock()+60))
+    assert visual_engine.prune_visual_artifacts()==0
+    with visual_engine.transaction() as db:
+        rows={r['id']:dict(r)for r in db.execute('SELECT * FROM visual_attempts')}
+        assert rows[envelope['attempt_id']]['cleanup_issue']
+        assert rows[other['attempt_id']]['state']=='pending'
+        assert all(r['result'] is None and not r['artifacts_cleaned']for r in rows.values())
+        assert db.execute("SELECT count(*) FROM events WHERE event='visual_usage_observed'").fetchone()[0]==0
+        assert db.execute("SELECT settled_seconds FROM runtime_reservations WHERE kind='visual'").fetchone()[0] is None
+    assert (root/'native-receipt.json').is_file() and adapter.uploads==[]

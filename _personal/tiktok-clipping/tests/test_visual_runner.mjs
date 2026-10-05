@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp, mkdir, writeFile, symlink, rm, realpath} from 'node:fs/promises';
+import {mkdtemp, mkdir, writeFile, symlink, rm, realpath, readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
-import {validateEnvelope,loadInputs,measuredUsage,classifyFailure,parseDecision,decisionFailure} from '../deploy/visual-runner.mjs';
+import {validateEnvelope,loadInputs,measuredUsage,classifyFailure,parseDecision,decisionFailure,run} from '../deploy/visual-runner.mjs';
 const hash=v=>createHash('sha256').update(v).digest('hex');
 
 async function fixture() {
@@ -100,4 +100,40 @@ test('current no-Ad decision uses explicit attribution and disclaimer checks',as
  assert.equal(validDecision(decision),false);
  const execute=()=>JSON.stringify(decision);
  assert.deepEqual(parseDecision(JSON.stringify(decision),'/trusted/python',execute,expected),decision);
+});
+
+
+test('visual timing fsync failure cannot suppress emitted terminal receipt',async()=>{
+ const f=await fixture();let output='',exit;
+ const original=process.stdout.write;
+ try {
+  const usage={uncachedInputTokens:2,outputTokens:3,cacheReadTokens:0,cacheWriteTokens:0};
+  const decision={passed:true,checks:{disclosure_visible:true,captions_readable:true,portrait_composition:true,no_obvious_visual_defects:true},reason:'fixture'};
+  const session={id:'test-session',seq:0,events:[]};
+  const agent={session,whenIdle:async()=>{},followup:()=>{session.events.push({seq:1,type:'assistant/message',data:{usage,message:{content:[{type:'text',text:JSON.stringify(decision)}]}}},{seq:2,type:'turn/end',data:{reason:{kind:'completed'}}});}};
+  const ctx={get:key=>key==='appExit'?code=>{exit=code;}:undefined,attachments:{saveImages:async()=>[]},agents:{create:async()=>({agent})},sessions:{flush:async()=>{}},sessionProjections:{snapshot:()=>({asOfSeq:2,values:{tokenUsage:usage}})}};
+  const config={...f.config,task:JSON.stringify(f.envelope),pythonExecutable:path.resolve('.venv/bin/python')};
+  process.stdout.write=(value)=>{output+=value;return true;};
+  await run(ctx,config,async()=>({installModelSelection:()=>{},createUserMessage:value=>value,SessionId:value=>value}),async()=>{throw Error('injected timing link failure');});
+  assert.equal(exit,0);
+  const emitted=JSON.parse(output);assert.equal(emitted.outcome,'completed');assert.deepEqual(emitted.usage,usage);
+  assert.deepEqual(JSON.parse(await readFile(path.join(f.root,'native-receipt.json'),'utf8')),emitted);
+  await assert.rejects(readFile(path.join(f.root,'runtime.json')),{code:'ENOENT'});
+ }finally {process.stdout.write=original;await rm(f.workspace,{recursive:true});}
+});
+
+test('caught documented visual provider failure retains long Retry-After and measured usage',async()=>{
+ const f=await fixture();let output='',idle=0;
+ const original=process.stdout.write;
+ try {
+  const usage={uncachedInputTokens:2,outputTokens:3,cacheReadTokens:0,cacheWriteTokens:0};
+  const session={id:'test-session',seq:0,events:[]};
+  const agent={session,whenIdle:async()=>{if(++idle===2)throw Object.assign(Error('SECRET'),{failure:{code:'SERVER',status:503,providerRetryAfterMs:172800000,message:'SECRET'}});},followup:()=>{session.events.push({seq:1,type:'assistant/message',data:{usage,message:{content:[]}}});}};
+  const ctx={get:key=>key==='appExit'?()=>{}:undefined,attachments:{saveImages:async()=>[]},agents:{create:async()=>({agent})},sessions:{flush:async()=>{}},sessionProjections:{snapshot:()=>({asOfSeq:2,values:{tokenUsage:usage}})}};
+  process.stdout.write=value=>{output+=value;return true;};
+  await run(ctx,{...f.config,task:JSON.stringify(f.envelope)},async()=>({installModelSelection:()=>{},createUserMessage:value=>value,SessionId:value=>value}));
+  const emitted=JSON.parse(output);assert.equal(emitted.outcome,'failed');assert.deepEqual(emitted.usage,usage);
+  assert.deepEqual(emitted.failure,{category:'provider_unavailable',code:'SERVER',status:503,retry_after_ms:172800000});
+  assert.equal(output.includes('SECRET'),false);
+ }finally{process.stdout.write=original;await rm(f.workspace,{recursive:true});}
 });

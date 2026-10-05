@@ -43,7 +43,7 @@ def sample_caption_cues(duration, cues, count):
     return [{"seconds": second, "caption_expected": any(cue["start"] <= second < cue["end"] for cue in cues)} for second in sorted(seconds)]
 
 
-def owned_bytes(path, workspace, maximum, expected=None):
+def owned_bytes(path, workspace, maximum, expected=None, *, minimum=1):
     """Read one stable regular file without following parent/file symlinks."""
     path, workspace = Path(path), Path(workspace)
     if not path.is_absolute() or path.resolve() != path or workspace.resolve() != workspace or not path.is_relative_to(workspace):
@@ -51,7 +51,7 @@ def owned_bytes(path, workspace, maximum, expected=None):
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     with os.fdopen(fd, "rb") as stream:
         before = os.fstat(stream.fileno())
-        if not stat.S_ISREG(before.st_mode) or not 0 < before.st_size <= maximum:
+        if not stat.S_ISREG(before.st_mode) or not minimum <= before.st_size <= maximum:
             raise SafetyError("visual_file_size_or_kind_invalid")
         raw = stream.read(maximum + 1)
         after = os.fstat(stream.fileno())
@@ -227,12 +227,12 @@ class VisualArtifacts:
             if path.is_dir():
                 continue
             rel = path.relative_to(root).as_posix()
-            top = {"manifest.json", "deepseek-visual.yml", "native-receipt.json", "process-start.json"} | {f"frame-{i}.jpg" for i in range(self.config["visual"]["frame_count"])}
+            top = {"manifest.json", "deepseek-visual.yml", "native-receipt.json", "process-start.json", "runtime.json", ".runtime.pending.json"} | {f"frame-{i}.jpg" for i in range(self.config["visual"]["frame_count"])}
             attachment = re.fullmatch(r"artifacts/attachments/v1/objects/([a-f0-9]{2})/([a-f0-9]{64})", rel)
             session = re.fullmatch(r"sessions/[^/]+/session-[a-f0-9-]{36}/session\.jsonl(?:\.zstd)?", rel)
             if rel not in top and attachment is None and session is None:
                 raise SafetyError("visual_cleanup_unknown_file")
-            raw = owned_bytes(path, self.workspace, 8 << 20)
+            raw = owned_bytes(path, self.workspace, 8 << 20, minimum=0 if rel == '.runtime.pending.json' else 1)
             measured = hashlib.sha256(raw).hexdigest()
             if attachment and (attachment[1] != measured[:2] or attachment[2] != measured):
                 raise SafetyError("visual_attachment_object_changed")
@@ -257,7 +257,7 @@ class VisualArtifacts:
         removed = 0
         for record in current:
             path = root / record["path"]
-            owned_bytes(path, self.workspace, 8 << 20, record["sha256"])
+            owned_bytes(path, self.workspace, 8 << 20, record["sha256"], minimum=0 if record["path"] == ".runtime.pending.json" else 1)
             path.unlink()
             removed += record["bytes"]
         for directory in sorted((p for p in root.rglob("*") if p.is_dir()), key=lambda p: len(p.parts), reverse=True):

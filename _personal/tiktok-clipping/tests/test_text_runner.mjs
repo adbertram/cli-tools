@@ -159,3 +159,11 @@ test('missing trusted model limits refuse before agent creation',async()=>withFi
   try {const receipt=await run(h.ctx,f.config,h.sdkLoader);assert.equal(receipt.outcome,'timeout');assert.equal(receipt.failure.category,'timeout');assert.deepEqual(receipt.usage,usage);assert.equal(receipt.raw_result,JSON.stringify(clip));}
   finally {mock.restoreAll();}
  }));
+
+test('optional timing proof failure preserves exact durable terminal response and usage',async()=>withFixture(async f=>{
+ const h=sdkHarness();
+ const receipt=await run(h.ctx,f.config,h.sdkLoader,async()=>{throw Error('injected timing fsync failure');});
+ assert.equal(receipt.outcome,'completed');assert.deepEqual(receipt.usage,usage);
+ assert.deepEqual(JSON.parse(await readFile(path.join(f.root,'result.json'),'utf8')),receipt);
+ await assert.rejects(stat(path.join(f.root,'runtime.json')),{code:'ENOENT'});
+}));

@@ -118,3 +118,29 @@ def test_start_callback_failure_kills_reaps_and_closes_pipes(monkeypatch):
  child=children[0]
  assert child.returncode==-signal.SIGKILL and child.stdout.closed and child.stderr.closed
  with pytest.raises(ChildProcessError):os.waitpid(child.pid,os.WNOHANG)
+
+
+def test_poll_guard_failure_preserves_error_and_kills_reaps_owned_group(tmp_path,monkeypatch):
+ marker=tmp_path/'owned-child';real_popen=subprocess.Popen;leaders=[]
+ def launch(*args,**kwargs):
+  p=real_popen(*args,**kwargs);leaders.append(p);return p
+ monkeypatch.setattr(subprocess,'Popen',launch)
+ class GuardError(Exception):pass
+ failure=GuardError('disk guard')
+ def poll(deadline):
+  assert deadline>time.monotonic()
+  if marker.exists():raise failure
+ code="import os,time;from pathlib import Path;p=os.fork();\nif p==0:Path("+repr(str(marker))+").write_text(str(os.getpid()));os.close(1);os.close(2);time.sleep(30)\nelse:time.sleep(30)"
+ with pytest.raises(GuardError) as caught:run(code,on_poll=poll)
+ assert caught.value is failure and leaders[0].returncode==-signal.SIGKILL
+ assert leaders[0].stdout.closed and leaders[0].stderr.closed
+ with pytest.raises(ChildProcessError):os.waitpid(leaders[0].pid,os.WNOHANG)
+ listing=subprocess.run(['/bin/ps','-o','stat=','-p',marker.read_text()],capture_output=True,text=True,timeout=1,check=False)
+ assert all(s.strip().startswith('Z') for s in listing.stdout.splitlines())
+
+
+def test_poll_time_counts_against_original_deadline():
+ started=time.monotonic();calls=[]
+ def poll(deadline):calls.append(deadline);time.sleep(.04)
+ with pytest.raises(BoundedReadError,match='deadline_exceeded'):run('import time;time.sleep(30)',timeout_seconds=.1,on_poll=poll)
+ assert len(set(calls))==1 and time.monotonic()-started<.3

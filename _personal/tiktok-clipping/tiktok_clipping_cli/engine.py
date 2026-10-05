@@ -64,12 +64,41 @@ def bounded(method):
         if owner:
             self._deadline = self.clock() + self.config["limits"]["work_timeout_seconds"]
             self._runtime_reserved = False
+            self._runtime_owner = {'id':secrets.token_hex(16),'method':method.__name__,'started':self.monotonic(),'reservation_id':None}
+        primary = None
         try:
             return method(self, *args, **kwargs)
+        except BaseException as exc:
+            primary = exc
+            raise
         finally:
             if owner:
-                self._deadline = None
-                self._runtime_reserved = False
+                try:
+                    context = self._runtime_owner
+                    if context['reservation_id'] is not None:
+                        from .runtime_budget import settle_runtime
+                        elapsed = self.monotonic()-context['started']
+                        with self.transaction() as db:
+                            settle_runtime(self,db,context['reservation_id'],elapsed,'trusted_coordinator_monotonic')
+                except Exception as exc:
+                    # Accounting cannot replace an already committed business outcome.
+                    try:
+                        with self.transaction() as db:
+                            row = db.execute("SELECT reserved_seconds,settled_seconds FROM runtime_reservations WHERE id=?", (context['reservation_id'],)).fetchone()
+                            self.event(db, None, 'runtime_settlement_held', {
+                                'reservation_id': context['reservation_id'],
+                                'reason': str(exc) if isinstance(exc, SafetyError) else type(exc).__name__,
+                                'reserved_seconds': row['reserved_seconds'] if row else None,
+                                'settled_seconds': row['settled_seconds'] if row else None,
+                            })
+                    except Exception:
+                        pass  # The durable reservation remains the recovery authority.
+                    if primary is not None:
+                        primary.add_note('runtime_settlement_failed; no refund applied')
+                finally:
+                    self._deadline = None
+                    self._runtime_reserved = False
+                    self._runtime_owner = None
     return run
 
 
@@ -119,10 +148,11 @@ def decoded_job(row):
 
 
 class Engine:
-    def __init__(self, config, adapter=None, clock=time.time, *, native_execution=None, native_completion=False):
+    def __init__(self, config, adapter=None, clock=time.time, *, native_execution=None, native_completion=False, monotonic=time.monotonic):
         self.config = validate_config(config)
         self.policy_digest = digest(config)
         self.clock = clock
+        self.monotonic = monotonic
         self.native_execution = native_execution
         self.native_completion = native_completion
         if native_execution is not None:
@@ -142,6 +172,7 @@ class Engine:
         self.adapter = adapter
         self._deadline = None
         self._runtime_reserved = False
+        self._runtime_owner = None
         with self.transaction() as db:
             db.executescript(SCHEMA)
             from .outcome_learning import HISTORY_SCHEMA
@@ -167,6 +198,8 @@ class Engine:
                 if field not in reward_columns:
                     db.execute("ALTER TABLE rewards ADD COLUMN " + field + " " + declaration)
             visual_columns = {r[1] for r in db.execute("PRAGMA table_info(visual_attempts)")}
+            if "runtime_reservation" not in visual_columns:
+                db.execute("ALTER TABLE visual_attempts ADD COLUMN runtime_reservation TEXT")
             if "artifact_inventory" not in visual_columns:
                 db.execute("ALTER TABLE visual_attempts ADD COLUMN artifact_inventory TEXT")
             if "native_completed_at" not in visual_columns:
@@ -282,6 +315,7 @@ class Engine:
         if circuit and circuit[0] > self.clock():
             raise AdapterFailure("transient", "circuit_open: model", circuit[0] - self.clock())
 
+    @bounded
     def _call(self, method, *args):
         remaining = self.config["limits"]["work_timeout_seconds"] if self._deadline is None else self._deadline - self.clock()
         if remaining <= 0:
@@ -295,8 +329,14 @@ class Engine:
                 provider = db.execute("SELECT until FROM circuits WHERE capability='provider:whop'").fetchone()
                 if provider and provider[0] > self.clock():
                     raise AdapterFailure("transient", "circuit_open: provider:whop", provider[0] - self.clock(), provider="whop")
+            if method in {'metrics', 'metrics_batch'}:
+                provider = db.execute("SELECT until FROM circuits WHERE capability='provider:tiktok'").fetchone()
+                if provider and provider[0] > self.clock():
+                    raise AdapterFailure('transient', 'circuit_open: provider:tiktok', provider[0]-self.clock(), provider='tiktok')
             if not self._runtime_reserved:
-                self._budget(db, "runtime_seconds", self.config["limits"]["work_timeout_seconds"])
+                from .runtime_budget import reserve_operation
+                owner = self._runtime_owner
+                owner['reservation_id'] = reserve_operation(self,db,owner['id'],owner['method'],self.config['limits']['work_timeout_seconds'])
                 self._runtime_reserved = True
         start = self.clock()
         try:
@@ -455,15 +495,15 @@ class Engine:
             current = self._job(db, job_id)
             if current["status"] != "running" or current["lease_until"] <= self.clock() or not secrets.compare_digest(current["lease_token"] or "", worker_token):
                 raise SafetyError("visual_worker_lease_changed")
-            self._budget(db, "model_calls", 1)
-            # Reserve before any file creation; interrupted attempts remain owned.
-            self._budget(db, "runtime_seconds", self.config["visual"]["timeout_seconds"])
+            # One call/runtime reservation, atomically owned before artifacts.
+            reservation = self._reserve_model_attempt(db, attempt_id, 'visual', self.config['visual']['timeout_seconds'])
             envelope = {"schema_version": 1, "job_id": job_id, "attempt_id": attempt_id, "lease_token": worker_token,
                 "nonce": secrets.token_urlsafe(32), "asset_sha256": asset["sha256"], "input_digest": current["input_digest"],
                 "proposal_digest": current["proposal_digest"], "policy_digest": current["policy_digest"], "native_execution": self.native_execution}
             db.execute("UPDATE jobs SET stage='visual',updated_at=? WHERE id=?", (self.clock(), job_id))
             db.execute("INSERT INTO visual_attempts(id,job_id,state,envelope,proposal_snapshot,artifacts_ready,preparation_process,created_at,expires_at) VALUES(?,?,'preparing',?,?,0,?,?,?)",
                        (attempt_id, job_id, canonical(envelope), current["proposal"], canonical(process), self.clock(), current["lease_until"]))
+            db.execute('UPDATE visual_attempts SET runtime_reservation=? WHERE id=?',(reservation['reservation_id'],attempt_id))
         deadline = None if self._deadline is None else time.monotonic() + max(0, self._deadline - self.clock())
         try:
             artifacts = VisualArtifacts(self.config).prepare(job, asset, attempt_id, deadline=deadline)
@@ -489,41 +529,50 @@ class Engine:
             raise
         return {"job_id": job_id, "state": "visual_pending", "visual": envelope}
 
+    def _record_visual_receipt(self, db, receipt):
+        """Accounting only. A terminal model result never grants action here."""
+        from .visual import validate_receipt
+        if len(canonical(receipt).encode()) > self.config['limits']['max_payload_bytes']:
+            raise SafetyError('payload_too_large')
+        receipt = validate_receipt(receipt, classify_model_failure=True)
+        envelope = receipt['envelope']
+        result_digest = digest(receipt)
+        attempt = db.execute('SELECT * FROM visual_attempts WHERE id=? AND job_id=?', (envelope['attempt_id'],envelope['job_id'])).fetchone()
+        if attempt is None or strict_json(attempt['envelope'],self.config['limits']['max_payload_bytes']) != envelope:
+            raise SafetyError('visual_attempt_binding_changed')
+        if not attempt['created_at']-5 <= timestamp(receipt['observed_at']) <= self.clock()+5:
+            raise SafetyError('visual_observation_time_invalid')
+        duplicate = attempt['result_digest'] is not None
+        if duplicate and attempt['result_digest'] != result_digest:
+            raise SafetyError('visual_duplicate_result_changed')
+        if self.native_completion:
+            if self.native_execution != envelope['native_execution']:
+                raise SafetyError('visual_native_completion_owner_changed')
+            db.execute('UPDATE visual_attempts SET native_completed_at=? WHERE id=?',(self.clock(),envelope['attempt_id']))
+        if not duplicate:
+            db.execute('UPDATE visual_attempts SET result=?,result_digest=?,completed_at=? WHERE id=?',(canonical(receipt),result_digest,self.clock(),envelope['attempt_id']))
+            self.event(db,envelope['job_id'],'visual_usage_observed',{'attempt_id':envelope['attempt_id'],'usage_observed':receipt['usage_observed'],'usage':receipt['usage'],'outcome':receipt['outcome']})
+            failure=receipt.get('failure')
+            if receipt['outcome'] != 'completed':
+                retry=None
+                if failure:
+                    retry=failure['retry_after_ms']/1000 if failure['retry_after_ms'] is not None else (self.config['limits']['retry_base_seconds'] if failure['category']=='rate_limit' else None)
+                self._circuit_failure('model',retry,db=db)
+        from .native_runtime import settle_native
+        settle_native(self,db,envelope,'visual',attempt['runtime_reservation'],receipt)
+        return dict(attempt),receipt,duplicate
+
     @bounded
     def apply_visual(self, receipt, execute=True):
         """Retain native usage/result before validating authority to continue."""
-        from .visual import VisualArtifacts, validate_receipt
-        if len(canonical(receipt).encode()) > self.config["limits"]["max_payload_bytes"]:
-            raise SafetyError("payload_too_large")
-        receipt = validate_receipt(receipt, classify_model_failure=True)
-        from .safety import timestamp
-        observed = timestamp(receipt["observed_at"])
-        envelope = receipt["envelope"]
-        result_digest = digest(receipt)
+        from .visual import VisualArtifacts
         with self.transaction() as db:
-            attempt = db.execute("SELECT * FROM visual_attempts WHERE id=? AND job_id=?", (envelope["attempt_id"], envelope["job_id"])).fetchone()
-            if attempt is None or strict_json(attempt["envelope"], self.config["limits"]["max_payload_bytes"]) != envelope:
-                raise SafetyError("visual_attempt_binding_changed")
-            if self.native_completion:
-                if self.native_execution != envelope["native_execution"]:
-                    raise SafetyError("visual_native_completion_owner_changed")
-                db.execute("UPDATE visual_attempts SET native_completed_at=? WHERE id=?", (self.clock(), envelope["attempt_id"]))
-            if attempt["result_digest"] is not None:
-                if attempt["result_digest"] != result_digest:
-                    raise SafetyError("visual_duplicate_result_changed")
-                if attempt["state"] != "pending":
-                    return {"job_id": envelope["job_id"], "state": self._job(db, envelope["job_id"])["status"], "deduplicated": True}
-            # Usage from an expired/failed native call still belongs to its exact
-            # reserved attempt. It never authorizes a newer worker or attempt.
-            else:
-                db.execute("UPDATE visual_attempts SET result=?,result_digest=?,completed_at=? WHERE id=?", (canonical(receipt), result_digest, self.clock(), envelope["attempt_id"]))
-                self.event(db, envelope["job_id"], "visual_usage_observed", {"attempt_id": envelope["attempt_id"], "usage_observed": receipt["usage_observed"], "usage": receipt["usage"], "outcome": receipt["outcome"]})
-                failure = receipt.get("failure")
-                if receipt["outcome"] != "completed":
-                    retry = None
-                    if failure and failure["category"] == "rate_limit":
-                        retry = failure["retry_after_ms"] / 1000 if failure["retry_after_ms"] is not None else self.config["limits"]["retry_base_seconds"]
-                    self._circuit_failure("model", retry, db=db)
+            attempt,receipt,duplicate = self._record_visual_receipt(db,receipt)
+            envelope=receipt['envelope']
+            if duplicate and attempt['state'] != 'pending':
+                return {'job_id':envelope['job_id'],'state':self._job(db,envelope['job_id'])['status'],'deduplicated':True}
+        observed=timestamp(receipt['observed_at'])
+        result_digest=digest(receipt)
         with self.transaction() as db:
             self._active(db)
             job = self._job(db, envelope["job_id"])
@@ -1353,6 +1402,18 @@ class Engine:
             if job["kind"] == "metrics":
                 with self.transaction() as db:
                     publications = list(db.execute("SELECT p.id,p.data,s.failures FROM publications p JOIN metric_schedule s ON p.id=s.publication_id WHERE p.state='published' AND s.retired=0 AND s.next_check<=? ORDER BY s.next_check,p.id LIMIT ?", (self.clock(), self.config["limits"]["metrics_batch_size"])))
+                from .adapters import ExternalAdapter
+                adapter = self._adapter()
+                if isinstance(adapter, ExternalAdapter) or callable(getattr(adapter,'metrics_batch',None)):
+                    from .studio_metrics import run_batch
+                    try:
+                        result = run_batch(self,job,worker_token,publications)
+                    except SafetyError as exc:
+                        if not str(exc).startswith('metric_worker_'):raise
+                        return {'job_id':job_id,'state':self.get(job_id)['status'],'eligible':False,'reason':str(exc)}
+                    with self.transaction() as db:
+                        changed = db.execute("UPDATE jobs SET status='done',result=?,updated_at=? WHERE id=? AND status='running' AND lease_token=? AND lease_until>?",(canonical(result),self.clock(),job_id,worker_token,self.clock())).rowcount
+                    return {'job_id':job_id,'state':'done' if changed else self.get(job_id)['status'],**result}
                 count = failures = 0
                 for row in publications:
                     publication_id = row["id"]
@@ -1516,6 +1577,11 @@ class Engine:
         return {"job_id": job_id, "state": "ambiguous", "upload_repeated": False}
 
     def snapshot(self, record, channel="performance"):
+        with self.transaction() as db:
+            self._insert_snapshot(db,record,channel)
+        return {"publication_id": record["publication_id"], "snapshot_digest": digest(record)}
+
+    def _insert_snapshot(self, db, record, channel):
         if channel not in {"performance", "rewards"}:
             raise SafetyError("unknown_metric_channel")
         keys(record, {"publication_id", "observed_at", "measured_at", "provenance", "revenue_currency"} | METRICS)
@@ -1531,14 +1597,12 @@ class Engine:
             string(record["revenue_currency"], 16)
         elif record["revenue_currency"] is not None:
             string(record["revenue_currency"], 16)
-        with self.transaction() as db:
-            publication = db.execute("SELECT data FROM publications WHERE id=? AND state='published'", (record["publication_id"],)).fetchone()
-            if publication is None:
-                raise SafetyError("unknown_publication")
-            if measured < timestamp(json.loads(publication[0])["published_at"]):
-                raise SafetyError("metrics_predate_publication")
-            db.execute("INSERT OR IGNORE INTO snapshots(publication_id,observed_at,measured_at,digest,data,channel) VALUES(?,?,?,?,?,?)", (record["publication_id"], observed, measured, digest({"record": record, "channel": channel}), canonical(record), channel))
-        return {"publication_id": record["publication_id"], "snapshot_digest": digest(record)}
+        publication = db.execute("SELECT data FROM publications WHERE id=? AND state='published'", (record["publication_id"],)).fetchone()
+        if publication is None:
+            raise SafetyError("unknown_publication")
+        if measured < timestamp(json.loads(publication[0])["published_at"]):
+            raise SafetyError("metrics_predate_publication")
+        return db.execute("INSERT OR IGNORE INTO snapshots(publication_id,observed_at,measured_at,digest,data,channel) VALUES(?,?,?,?,?,?)", (record["publication_id"], observed, measured, digest({"record": record, "channel": channel}), canonical(record), channel)).rowcount
 
     def rewards(self, job_id):
         with self.transaction() as db:
@@ -1859,13 +1923,25 @@ class Engine:
                         inventory = artifacts.inventory(envelope)
                     else:
                         inventory = strict_json(current["artifact_inventory"], self.config["limits"]["max_payload_bytes"])
-                    # Persist terminal proof and unknown-usage timeout before
-                    # deleting files. Restart can resume partial exact cleanup.
+                    # Recover exact native accounting before artifact deletion;
+                    # expired decisions never go through the authorization path.
+                    native_path = Path(envelope['manifest_path']).parent / 'native-receipt.json' if current['artifacts_ready'] else None
+                    if current['result'] is None and native_path is not None and native_path.exists():
+                        from .visual import owned_bytes
+                        native_receipt = strict_json(owned_bytes(native_path,Path(self.config['workspace']),self.config['limits']['max_payload_bytes']),self.config['limits']['max_payload_bytes'])
+                        if not isinstance(native_receipt,dict) or native_receipt.get('envelope') != envelope:
+                            raise SafetyError('visual_native_file_binding_changed')
+                        self._record_visual_receipt(db,native_receipt)
+                        current = db.execute('SELECT * FROM visual_attempts WHERE id=?',(attempt['id'],)).fetchone()
+                    # Only absence of an exact terminal file permits unknown usage.
                     if current["result"] is None and current["artifacts_ready"]:
                         timeout = {"envelope": envelope, "outcome": "timeout", "decision": None, "usage_observed": False, "usage": None,
                             "model": {"provider": "deepseek-official", "model": "deepseek-flash"}, "observed_at": datetime.fromtimestamp(ended, timezone.utc).isoformat(),
                             "failure": {"category": "timeout", "code": "native_terminal_without_receipt", "status": None, "retry_after_ms": None}}
                         db.execute("UPDATE visual_attempts SET result=?,result_digest=?,completed_at=? WHERE id=?", (canonical(timeout), digest(timeout), ended, attempt["id"]))
+                    if current['result'] is not None:
+                        from .native_runtime import settle_native
+                        settle_native(self,db,envelope,'visual',current['runtime_reservation'],strict_json(current['result'],self.config['limits']['max_payload_bytes']))
                     db.execute("UPDATE visual_attempts SET native_completed_at=?,native_termination_proof=?,artifact_inventory=? WHERE id=?", (ended, canonical(terminal), canonical(inventory), attempt["id"]))
                     self.event(db, attempt["job_id"], "visual_native_termination_verified", {"attempt_id": attempt["id"], "provenance": terminal["provenance"]})
                 with self.transaction() as db:

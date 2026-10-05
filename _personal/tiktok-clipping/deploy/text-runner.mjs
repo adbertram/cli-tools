@@ -1,3 +1,4 @@
+import {startRuntime,preserveReceiptTiming} from './runtime-proof.mjs';
 /** Native text-only dsh runner. Credentials stay in DeepSeekHarness. */
 import {open, realpath, link, unlink, lstat} from 'node:fs/promises';
 import {constants} from 'node:fs';
@@ -96,7 +97,8 @@ async function loadSdk(config) {
  return {installModelSelection,createUserMessage,SessionId};
 }
 
-export async function run(ctx,config,sdkLoader=loadSdk) {
+export async function run(ctx,config,sdkLoader=loadSdk,runtimeWriter) {
+ const runtimeStarted=startRuntime();
  await ctx.get('loader')?.await();
  const {envelope,root,manifest}=await loadInputs(config);
  const model=config.model;
@@ -105,7 +107,8 @@ export async function run(ctx,config,sdkLoader=loadSdk) {
  try {await lstat(path.join(root,'result.json'));throw fail('text_attempt_already_completed');}catch(error){if(error.code!=='ENOENT')throw error;}
  const start=execFileSync('/bin/ps',['-p',String(process.pid),'-o','lstart='],{encoding:'utf8',timeout:2000,env:{...process.env,LC_ALL:'C'}}).trim();
  if(!start)throw fail('native_process_start_unverified');
- await publishReceipt(root,'process-start.json',{schema_version:1,job_id:envelope.job_id,attempt_id:envelope.attempt_id,nonce:envelope.nonce,pid:process.pid,start_identity:start});
+ const processIdentity={pid:process.pid,start_identity:start};
+ await publishReceipt(root,'process-start.json',{schema_version:1,job_id:envelope.job_id,attempt_id:envelope.attempt_id,nonce:envelope.nonce,...processIdentity});
  const receipt={envelope,outcome:'failed',raw_result:null,usage_observed:false,usage:null,usage_provenance:{session_id:null,as_of_seq:null},model:{...model},observed_at:new Date().toISOString(),failure:failureFacts({kind:'native_call_not_completed'})};
  const worstBase={...receipt,usage_observed:true,usage:Object.fromEntries(['uncachedInputTokens','outputTokens','cacheReadTokens','cacheWriteTokens'].map(k=>[k,Number.MAX_SAFE_INTEGER])),usage_provenance:{session_id:'session-'+randomUUID(),as_of_seq:Number.MAX_SAFE_INTEGER},failure:{category:'model_failed',code:'X'.repeat(128),status:599,retry_after_ms:Number.MAX_VALUE}};
  if(Buffer.byteLength(JSON.stringify(worstBase))+1>config.maxReceiptBytes)throw fail('text_receipt_headroom_exhausted');
@@ -151,6 +154,7 @@ export async function run(ctx,config,sdkLoader=loadSdk) {
  if(Buffer.byteLength(JSON.stringify(receipt))+1>config.maxReceiptBytes) {receipt.raw_result=null;receipt.outcome='failed';receipt.failure={category:'malformed_output',code:'output_limit',status:null,retry_after_ms:null};}
  if(Buffer.byteLength(JSON.stringify(receipt))+1>config.maxReceiptBytes)throw fail('text_receipt_headroom_exhausted');
  await publishReceipt(root,'result.json',receipt);
+ await preserveReceiptTiming(root,envelope,processIdentity,runtimeStarted,JSON.stringify(receipt)+'\n',runtimeWriter);
  return receipt;
 }
 
