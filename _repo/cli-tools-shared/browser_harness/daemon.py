@@ -5,6 +5,7 @@ from collections import deque
 from pathlib import Path
 
 from . import _ipc as ipc
+from .network_capture import NetworkCapture, route_scope
 from cdp_use.client import CDPClient
 
 
@@ -245,6 +246,7 @@ class Daemon:
         self.session = None
         self.target_id = None
         self.events = deque(maxlen=BUF)
+        self.network_capture = None
         self.dialog = None
         self.stop = None  # asyncio.Event, set inside start()
 
@@ -299,6 +301,8 @@ class Daemon:
         mark_js = "if(!document.title.startsWith('\U0001F434'))document.title='\U0001F434 '+document.title"
         async def tap(method, params, session_id=None):
             self.events.append({"method": method, "params": params, "session_id": session_id})
+            if self.network_capture is not None:
+                self.network_capture.record(method, params, session_id)
             if method == "Page.javascriptDialogOpening":
                 self.dialog = params
             elif method == "Page.javascriptDialogClosed":
@@ -324,6 +328,36 @@ class Daemon:
         if meta == "drain_events":
             out = list(self.events); self.events.clear()
             return {"events": out}
+        if meta == "begin_network_capture":
+            try:
+                scope = route_scope(**req.get("scope", {}))
+            except (TypeError, ValueError):
+                return {"error": "network_capture_scope_invalid"}
+            if scope["session_id"] != self.session or self.network_capture is not None:
+                return {"error": "network_capture_session_or_owner_changed"}
+            self.network_capture = NetworkCapture(scope)
+            return {"capture_id": self.network_capture.id, "scope": self.network_capture.scope}
+        if meta in ("drain_network_capture", "end_network_capture"):
+            capture = self.network_capture
+            if (capture is None or req.get("capture_id") != capture.id or req.get("scope") != capture.scope
+                    or capture.scope["session_id"] != self.session):
+                return {"error": "network_capture_binding_changed"}
+            if meta == "end_network_capture":
+                self.network_capture = None
+                return {"ended": True}
+            # An IPC listener can outlive its CDP connection. Require an actual
+            # bounded session round-trip before an empty drain can be trusted.
+            if capture.loss is None:
+                try:
+                    probe = await self.handle({"method": "Runtime.evaluate", "params": {"expression": "void 0"},
+                        "session_id": capture.scope["session_id"], "request_timeout": 2, "token": req.get("token")})
+                    value = probe.get("result") if isinstance(probe, dict) else None
+                    if (not isinstance(probe, dict) or set(probe) != {'result'} or not isinstance(value, dict)
+                            or set(value) != {'result'} or value['result'] != {'type': 'undefined'}):
+                        capture.loss = "connection_unavailable"
+                except Exception:
+                    capture.loss = "connection_unavailable"
+            return capture.drain()
         if meta == "session":     return {"session_id": self.session}
         if meta == "current_tab":
             # Resolve the attached page's target info server-side. Helpers can't

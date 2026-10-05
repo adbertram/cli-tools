@@ -336,7 +336,7 @@ class _PostNetworkObserver:
     """One native requestId/response pair, independent of renderer lifetime."""
     def __init__(self, page, operation, save):
         self.page, self.operation, self.save = page, operation, save
-        self.session = page.begin_network_observation()
+        self.session = page.begin_network_observation(method='POST', origin='https://www.tiktok.com', path=POST_PATH)
         self.requests, self.responses, self.finished = {}, {}, set()
         operation['network_observation'] = {'state': 'armed', 'request_count': 0}
         save(operation)
@@ -1248,6 +1248,14 @@ class StudioPublisher:
             except Exception:
                 # The dispatch/receipt boundary was saved before cleanup.
                 # Failed diagnostic persistence cannot replace its outcome.
+                pass
+        try:
+            page.end_network_observation()
+        except Exception as exc:
+            operation['network_cleanup_issue'] = {'error_type': type(exc).__name__, 'recoverable': True}
+            try:
+                self._save(operation)
+            except Exception:
                 pass
 
     def _reconcile(self, operation):

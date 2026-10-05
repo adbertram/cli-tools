@@ -155,7 +155,10 @@ class Page:
         self.network_after_click_error = False
         self.observer_options = None
         self.network_sent = False
-    def begin_network_observation(self, **kwargs):return 'exact-session'
+    def begin_network_observation(self, **kwargs):
+        assert kwargs == {'method': 'POST', 'origin': 'https://www.tiktok.com', 'path': module.POST_PATH}
+        return 'exact-session'
+    def end_network_observation(self):pass
     def native_request(self):
         opts = self.observer_options
         return {'post_common_info': {'creation_id': opts['creation_id'], 'enter_post_page_from': 1, 'post_type': 1},
