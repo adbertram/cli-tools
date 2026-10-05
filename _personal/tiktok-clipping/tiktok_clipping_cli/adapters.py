@@ -6,6 +6,7 @@ import os
 import signal
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 from .safety import SafetyError, canonical, strict_json
@@ -23,13 +24,22 @@ class ExternalAdapter:
 
     def call(self, method, args):
         from .engine import AdapterFailure
-        message = canonical({"config": self.config, "method": method, "args": args}).encode()
+        request = {"config": self.config, "method": method, "args": args}
+        outer_deadline = None
+        if method == 'discover' and self.config.get('source_discovery'):
+            from .catalog_runtime import DISCOVERY_OUTER_CLEANUP_SECONDS
+            # Same-host monotonic basis, with owning browser cleanup and receipt exit.
+            outer_deadline = time.monotonic() + self.timeout
+            request['operation_deadline'] = outer_deadline - DISCOVERY_OUTER_CLEANUP_SECONDS
+            if request['operation_deadline'] - time.monotonic() <= 15:
+                raise AdapterFailure('transient','catalog_startup_headroom_insufficient')
+        message = canonical(request).encode()
         with tempfile.TemporaryFile() as output, tempfile.TemporaryFile() as error:
             try:
                 process = subprocess.Popen([sys.executable, "-m", "tiktok_clipping_cli.adapter_worker"],
                     stdin=subprocess.PIPE, stdout=output, stderr=error, start_new_session=True)
                 try:
-                    process.communicate(message, timeout=self.timeout)
+                    process.communicate(message, timeout=max(0,outer_deadline-time.monotonic()) if outer_deadline is not None else self.timeout)
                 except subprocess.TimeoutExpired:
                     # Freeze the worker's process group before bounded inspection.
                     # Killing/reaping that group must happen even if ps itself fails.

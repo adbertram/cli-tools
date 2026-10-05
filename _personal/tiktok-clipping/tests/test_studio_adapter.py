@@ -292,10 +292,14 @@ def test_original_policy_reconciliation_survives_current_campaign_change(engine,
 @pytest.mark.parametrize('boundary', ['lease', 'source'])
 def test_guard_rejects_dispatch_without_bounded_drain_headroom(engine, config, adapter, clock, boundary):
     from datetime import datetime, timezone
+    if boundary == 'source':
+        from tiktok_clipping_cli.engine import Engine
+        config['sources'][0]['campaign']['expires_at']=datetime.fromtimestamp(clock()+60,timezone.utc).isoformat()
+        engine=Engine(config,adapter=adapter,clock=clock)
     guard, binding, _, job, _, _ = guard_fixture(engine, config, adapter, clock)
     if boundary == 'lease':
         with engine.transaction() as db:db.execute('UPDATE jobs SET lease_until=? WHERE id=?',(clock()+5,job['id']))
-    else:config['sources'][0]['campaign']['expires_at']=datetime.fromtimestamp(clock()+5,timezone.utc).isoformat()
+    else:clock.now+=55  # Original source authority now has exactly five seconds left.
     with pytest.raises(SafetyError, match='headroom'):guard(binding)
     with engine.transaction() as db:assert db.execute('SELECT state FROM publications').fetchone()[0]=='uploading'
 
