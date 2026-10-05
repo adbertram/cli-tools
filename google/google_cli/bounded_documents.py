@@ -10,6 +10,7 @@ import sys
 import time
 
 from cli_tools_shared.bounded_read import run_bounded_read
+from requests import RequestException
 from .client import ClientError
 
 
@@ -30,6 +31,34 @@ def retry_after(raw):
             value=max(0.,(when-datetime.now(timezone.utc)).total_seconds())
         return value if math.isfinite(value) else None
     except (ValueError,TypeError,OverflowError):return None
+
+
+_QUOTA_SIGNALS={'rateLimitExceeded','userRateLimitExceeded','quotaExceeded','dailyLimitExceeded','RESOURCE_EXHAUSTED','usageLimits'}
+
+
+def _error_body(response,deadline,limit=16384):
+    raw=bytearray()
+    try:
+        for chunk in response.iter_content(2048):
+            if time.monotonic()>=deadline or len(raw)+len(chunk)>limit:break
+            raw.extend(chunk)
+    except RequestException:return b''
+    return bytes(raw)
+
+
+def _quota_exceeded(raw):
+    try:body=json.loads(raw.decode('utf-8'))
+    except (ValueError,UnicodeError,RecursionError):return False
+    if type(body) is not dict:return False
+    error=body.get('error')
+    if type(error) is not dict:return False
+    values=[error.get('status')]
+    for group in ('errors','details'):
+        entries=error.get(group)
+        if type(entries) is list:
+            for entry in entries:
+                if type(entry) is dict:values.extend((entry.get('reason'),entry.get('domain')))
+    return any(value in _QUOTA_SIGNALS for value in values if type(value) is str)
 
 
 def _validate(profile,document_id,max_bytes,timeout_seconds):
@@ -135,7 +164,8 @@ def _worker(profile,document_id,max_bytes,timeout_seconds):
             try:
                 status=response.status_code;delay=retry_after(response.headers.get('Retry-After'))
                 if status!=200:
-                    raise DocumentReadError('document_http_'+str(status),category='auth' if status==401 else 'access_denied' if status==403 else 'rate_limit' if status==429 else 'transient' if status>=500 else 'upstream',status=status,retry_after_seconds=delay)
+                    limited=status==403 and _quota_exceeded(_error_body(response,deadline))
+                    raise DocumentReadError('document_http_'+str(status),category='auth' if status==401 else 'rate_limit' if status==429 or limited else 'access_denied' if status==403 else 'transient' if status>=500 else 'upstream',status=status,retry_after_seconds=delay)
                 raw=bytearray()
                 for chunk in response.iter_content(4096):
                     if time.monotonic()>=deadline:raise DocumentReadError('document_read_deadline_exceeded')
