@@ -569,3 +569,107 @@ def test_known_other_attempt_receipt_cannot_be_recovered_from_wrong_owned_path(v
         assert db.execute("SELECT count(*) FROM events WHERE event='visual_usage_observed'").fetchone()[0]==0
         assert db.execute("SELECT settled_seconds FROM runtime_reservations WHERE kind='visual'").fetchone()[0] is None
     assert (root/'native-receipt.json').is_file() and adapter.uploads==[]
+
+
+def test_subject_framing_requirements_reach_hash_bound_native_manifest(visual_engine, clock):
+    envelope = issue(visual_engine, clock)
+    raw = Path(envelope['manifest_path']).read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == envelope['manifest_sha256']
+    manifest = json.loads(raw)
+    assert manifest['schema_version'] == 3 and set(manifest['checks']) == CHECKS
+    prompt = manifest['prompt']
+    for instruction in ('assess the visible subject and framing in every sampled frame',
+                        'not just a 9:16 shape', 'faces and heads visible',
+                        'without severe cropping at the edges', 'Reject mostly empty walls',
+                        'do not compensate for poor subject framing',
+                        'Do not assume unsampled frames repair a bad sampled frame'):
+        assert instruction in prompt
+
+
+def test_bad_subject_framing_uses_existing_bounded_revisions_and_never_posts(visual_engine, adapter, clock):
+    for index in range(visual_engine.config['limits']['max_revisions'] + 1):
+        envelope = issue(visual_engine, clock)
+        incoming = receipt(envelope, clock, decision={
+            'passed': False,
+            'checks': {**dict.fromkeys(CHECKS, True), 'portrait_composition': False},
+            'reason': 'Talking subject is absent in one sample and severely cropped in the others.'})
+        result = visual_engine.apply_visual(incoming)
+        job = visual_engine.get(envelope['job_id'])
+        assert result['state'] == ('queued' if index < 2 else 'failed')
+        # The exhausted rejection is recorded too; it cannot queue a fourth proposal.
+        assert job['revisions'] == index + 1
+        assert adapter.uploads == []
+        with visual_engine.transaction() as db:
+            saved = json.loads(db.execute('SELECT result FROM visual_attempts WHERE id=?',
+                                         (envelope['attempt_id'],)).fetchone()[0])
+            assert saved['decision'] == incoming['decision']
+            assert db.execute('SELECT COUNT(*) FROM publications').fetchone()[0] == 0
+        if index < 2:
+            assert job['proposal'] is None and job['asset'] is None
+
+
+def test_composition_rejection_assigns_full_frame_with_conditioned_propensity(visual_engine,adapter,clock,monkeypatch):
+    from copy import deepcopy
+    from conftest import source
+    from test_outcome_learning import objective
+    config=deepcopy(visual_engine.config)
+    config['database']=str(Path(config['database']).with_name('framing-policy.db'))
+    config['baseline']['weights']={'right':.9,'full_frame':.1}
+    config['learning']['outcome_policy']={'objectives':[objective()],'baseline_share':.1}
+    engine=Engine(config,adapter=adapter,clock=clock,native_execution=visual_engine.native_execution,native_completion=True)
+    engine.control('running')
+    with monkeypatch.context() as fixed:
+        fixed.setattr('tiktok_clipping_cli.engine.secrets.token_hex',lambda size:'a'*(size*2))
+        engine.ingest(source(clock))
+    first=engine.prepare('clip')
+    assert first['input']['assigned_style']=='right'
+    review=engine.apply(payload(first))['visual']
+    rejected=receipt(review,clock,decision={'passed':False,
+        'checks':{**dict.fromkeys(CHECKS,True),'portrait_composition':False},
+        'reason':'One frame shows only drums; other frames crop the speaker at the edge.'})
+    assert engine.apply_visual(rejected)['state']=='queued'
+    next=engine.prepare('clip')
+    assert next['input']['assigned_style']=='full_frame'
+    assignment=next['input']['outcome_selection']['style_assignment']
+    assert assignment=={'style':'full_frame','propensity':{'numerator':'1','denominator':'1'},
+                        'distribution':{'full_frame':{'numerator':'1','denominator':'1'}}}
+    assert next['input']['strategy']==config['baseline']
+    assert next['input']['model_feedback']['proposal']['style']=='right'
+    assert adapter.uploads==[]
+
+
+@pytest.mark.parametrize('branch,expected_style',[('baseline','right'),('exploitation','right'),('exploration','full_frame')])
+def test_composition_alternative_support_matches_selected_outcome_branch(visual_engine,adapter,clock,monkeypatch,branch,expected_style):
+    from copy import deepcopy
+    from conftest import source
+    from test_outcome_learning import objective
+    config=deepcopy(visual_engine.config)
+    config['database']=str(Path(config['database']).with_name('zero-frame-'+branch+'.db'))
+    config['baseline']['weights']={'right':1,'full_frame':0}
+    config['baseline']['exploration']=.05
+    config['learning']['outcome_policy']={'objectives':[objective()],'baseline_share':.1}
+    engine=Engine(config,adapter=adapter,clock=clock,native_execution=visual_engine.native_execution,native_completion=True)
+    engine.control('running');engine.ingest(source(clock))
+    original_select=engine._select_clip_candidates
+    selected_branch='exploitation'
+    def select(db,candidates):
+        row,outcome=original_select(db,candidates)
+        # Test the trusted selector branch seam; mixture draws are covered by
+        # outcome-learning tests and the positive-weight prepare test above.
+        outcome['decision']['branch']=selected_branch
+        return row,outcome
+    monkeypatch.setattr(engine,'_select_clip_candidates',select)
+    first=engine.prepare('clip');assert first['input']['assigned_style']=='right'
+    review=engine.apply(payload(first))['visual']
+    rejected=receipt(review,clock,decision={'passed':False,
+        'checks':{**dict.fromkeys(CHECKS,True),'portrait_composition':False},
+        'reason':'Talking subject cropped out.'})
+    assert engine.apply_visual(rejected)['state']=='queued'
+    selected_branch=branch
+    next=engine.prepare('clip')
+    assert next['input']['outcome_selection']['branch']==branch
+    assert next['input']['assigned_style']==expected_style
+    assignment=next['input']['outcome_selection']['style_assignment']
+    assert assignment['propensity']=={'numerator':'1','denominator':'1'}
+    assert assignment['distribution'][expected_style]=={'numerator':'1','denominator':'1'}
+    assert adapter.uploads==[]

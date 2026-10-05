@@ -29,9 +29,12 @@ STYLES = {
     "left": ("0", 1.0, 20),
     "right": ("iw-ow", 1.0, 20),
     "readable": ("(iw-ow)/2", 1.0, 28),
+    "full_frame": ("0", 1.0, 20),
 }
 CAPTION_STYLE = {"version": 2, "font": "Arial", "font_size": 48, "bold": True,
                  "outline": 4, "shadow": 2, "margin_vertical": 230, "emphasis": "last_word_yellow"}
+FULL_FRAME_LAYOUT = {"version": 1, "kind": "full_frame", "fit": "aspect_preserved_contain",
+                     "canvas_width": 720, "canvas_height": 1280, "background": "0x101820"}
 BOUNDARY_TOLERANCE = 0.25
 
 
@@ -613,6 +616,7 @@ class MediaRenderer:
         x, zoom, font_size = STYLES[proposal["style"]]
         duration = edit_duration(proposal)
         name = digest({"source": source_digest, "proposal": proposal, "captions": captions, "publication_policy": publication_policy, "caption_style": CAPTION_STYLE,
+            **({"video_layout": FULL_FRAME_LAYOUT} if proposal["style"] == "full_frame" else {}),
             **({'render_owner':render_owner} if render_owner is not None else {})})
         destination = self.root / (name + ".mp4")
         receipt_path = self.root / (name + ".json")
@@ -623,7 +627,10 @@ class MediaRenderer:
             styled_font = round(CAPTION_STYLE['font_size'] * font_size / 20)
             (temp / "captions.ass").write_text(ass_captions(captions, styled_font), encoding="utf-8")
             crop = f"crop=w='min(iw,ih*9/16)/{zoom}':h='min(ih,iw*16/9)/{zoom}':x='{x}':y='(ih-oh)/2'"
-            video_filter = crop + ",scale=720:1280,setsar=1,subtitles=filename=captions.ass"
+            layout = ("scale=720:1280:force_original_aspect_ratio=decrease:force_divisible_by=2,"
+                      "pad=720:1280:(ow-iw)/2:(oh-ih)/2:color=0x101820"
+                      if proposal["style"] == "full_frame" else crop + ",scale=720:1280")
+            video_filter = layout + ",setsar=1,subtitles=filename=captions.ass"
             for index, text in enumerate(overlays):
                 (temp / f"overlay-{index}.txt").write_text(text, encoding="utf-8")
                 video_filter += f",drawtext=textfile=overlay-{index}.txt:x=(w-text_w)/2:y={40+index*64}:fontsize=40:fontcolor=white:box=1:boxcolor=black@0.85:boxborderw=12"
@@ -648,8 +655,10 @@ class MediaRenderer:
                 raise SafetyError("render_duration_or_audio_invalid")
             self._decode(output, deadline)
             asset = {"path": str(destination), "sha256": sha256(output), "bytes": output.stat().st_size,
-                "provenance": "ffmpeg portrait crop; loudnorm; timed Whisper caption burn-in; " + provenance}
+                "provenance": ("ffmpeg aspect-preserved full-frame portrait panel" if proposal["style"] == "full_frame" else "ffmpeg portrait crop") + "; loudnorm; timed Whisper caption burn-in; " + provenance}
             receipt = {"asset": asset, "proposal": proposal, "captions": captions, "caption_style": {**CAPTION_STYLE, "font_size": styled_font}, "source_sha256": source_digest, "measured": report, "edit": {"segments": cuts, "rendered_duration": duration, "reservation": "whole_source_bounding_span"}, "audio_provenance": {"source_sha256": source_digest, "segments": cuts, "external_audio": False}, "overlays": overlays, "rights_policy_digest": None if publication_policy is None else digest(publication_policy)}
+            if proposal["style"] == "full_frame":
+                receipt["video_layout"] = dict(FULL_FRAME_LAYOUT)
             if refinement is not None:
                 receipt["transcript_refinement"] = refinement
             if render_owner is not None:
@@ -682,7 +691,11 @@ class MediaRenderer:
         receipt_path = self._path(path.with_suffix(".json"))
         from .visual import owned_bytes
         receipt = strict_json(owned_bytes(receipt_path, self.root, self.config["limits"]["max_payload_bytes"]), self.config["limits"]["max_payload_bytes"])
-        keys(receipt, {"asset", "proposal", "captions", "source_sha256", "measured"}, {"edit", "audio_provenance", "overlays", "rights_policy_digest", "transcript_refinement", "caption_style", "render_owner"})
+        keys(receipt, {"asset", "proposal", "captions", "source_sha256", "measured"}, {"edit", "audio_provenance", "overlays", "rights_policy_digest", "transcript_refinement", "caption_style", "render_owner", "video_layout"})
+        if proposal["style"] == "full_frame" and receipt.get("video_layout") != FULL_FRAME_LAYOUT:
+            raise SafetyError("render_video_layout_changed")
+        if proposal["style"] != "full_frame" and "video_layout" in receipt:
+            raise SafetyError("render_video_layout_changed")
         if receipt["asset"] != asset or receipt["proposal"] != proposal:
             raise SafetyError("render_receipt_mismatch")
         if receipt.get('render_owner') is not None:

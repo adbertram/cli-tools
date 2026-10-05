@@ -38,10 +38,11 @@
   },
   "baseline": {
     "weights": {
-      "centered": 0.25,
-      "tight": 0.25,
-      "left": 0.25,
-      "right": 0.25
+      "centered": 0.1875,
+      "tight": 0.1875,
+      "left": 0.1875,
+      "right": 0.1875,
+      "full_frame": 0.25
     },
     "exploration": 0.05
   },

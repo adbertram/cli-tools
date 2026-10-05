@@ -1,5 +1,6 @@
 """Media boundary tests and a real local FFmpeg render; never publish fixtures."""
 import os
+import json
 import shutil
 import subprocess
 import sys
@@ -598,3 +599,69 @@ def test_actual_libass_literal_sequences_do_not_add_lines(source,proposal):
         if sum(1 for i in range(0,len(row),3) if min(row[i:i+3])>190)>5:active.append(y)
     runs=sum(1 for index,y in enumerate(active) if index==0 or y>active[index-1]+2)
     assert active and runs<=2 and min(active)>800 and max(active)<1100
+
+
+def test_real_full_frame_preserves_four_corners_and_separate_caption_attribution(source):
+    from test_rights import scoped_policy
+    from tiktok_clipping_cli.media import FULL_FRAME_LAYOUT, sha256
+    renderer, old_path = source
+    renderer.config['baseline']['weights'] = {'centered': .5, 'full_frame': .5}
+    path = old_path.with_name('four-corners.mp4')
+    picture = ('color=c=black:s=640x360:r=24:d=3,'
+               'drawbox=x=0:y=0:w=64:h=64:color=0xff0000:t=fill,'
+               'drawbox=x=576:y=0:w=64:h=64:color=0x00ff00:t=fill,'
+               'drawbox=x=0:y=296:w=64:h=64:color=0x0000ff:t=fill,'
+               'drawbox=x=576:y=296:w=64:h=64:color=0xffff00:t=fill')
+    subprocess.run([renderer.ffmpeg, '-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', picture,
+                    '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=3',
+                    '-c:v', 'libx264', '-c:a', 'aac', '-shortest', str(path)],
+                   capture_output=True, check=True, timeout=20)
+    configured = renderer.config['sources'][0]
+    configured.update(reuse_evidence='https://docs.google.com/document/d/TEST/edit',
+                      campaign={'id':'test-campaign'}, feed='https://www.youtube.com/watch?v=fixture')
+    policy = scoped_policy(configured)
+    policy.update(schema_version=2, required_on_screen_text=['@hardscope'], source_sha256=sha256(path),
+                  source_bytes=path.stat().st_size, minimum_clip_seconds=1, clip_rules=[])
+    configured['publication_policy'] = policy
+    proposal = {'start_seconds':0, 'end_seconds':2, 'caption':'@hardscope #ad', 'style':'full_frame'}
+    segments = [{'start':i, 'end':i+1, 'text':f'Complete sentence {i}.'} for i in range(3)]
+    asset = renderer.render_local(path, segments, proposal, 'Synthetic four-corner fixture; never publish',
+                                  publication_policy=policy)
+    report = renderer.quality({'input':{'source_id':configured['id']}}, proposal, asset)
+    assert report['passed'] and (report['width'], report['height']) == (720,1280)
+    receipt_path = Path(asset['path']).with_suffix('.json')
+    receipt = json.loads(receipt_path.read_text())
+    assert receipt['video_layout'] == FULL_FRAME_LAYOUT
+    assert receipt['source_sha256'] == sha256(path)
+    assert receipt['audio_provenance'] == {'source_sha256':sha256(path), 'segments':[
+        {'start_seconds':0,'end_seconds':2}], 'external_audio':False}
+    assert receipt['proposal'] == proposal and receipt['overlays'] == ['@hardscope']
+    frame = subprocess.run([renderer.ffmpeg,'-v','error','-ss','0.5','-i',asset['path'],'-frames:v','1',
+                            '-f','rawvideo','-pix_fmt','rgb24','-'],capture_output=True,check=True,timeout=20).stdout
+    assert len(frame) == 720*1280*3
+    def pixel(x,y):
+        offset=(y*720+x)*3
+        return tuple(frame[offset:offset+3])
+    # The complete landscape panel fits720x404 at y438; cropping loses these corners.
+    for x,y,expected in [(20,458,(255,0,0)),(700,458,(0,255,0)),
+                         (20,820,(0,0,255)),(700,820,(255,255,0))]:
+        assert all(abs(a-b)<25 for a,b in zip(pixel(x,y),expected))
+    assert all(abs(a-b)<8 for a,b in zip(pixel(5,300),(16,24,32)))
+    def white_count(y0,y1):
+        return sum(min(frame[offset:offset+3])>200 for offset in range(y0*720*3,y1*720*3,3))
+    assert white_count(0,200)>100 and white_count(880,1200)>100
+    # The new explicit layout is bound; missing/changed layout cannot authorize quality.
+    for changed in (None,{**FULL_FRAME_LAYOUT,'fit':'crop'}):
+        altered=dict(receipt)
+        if changed is None:altered.pop('video_layout')
+        else:altered['video_layout']=changed
+        receipt_path.write_text(json.dumps(altered))
+        with pytest.raises(SafetyError,match='render_video_layout_changed'):
+            renderer.quality({'input':{'source_id':configured['id']}},proposal,asset)
+
+
+def test_full_frame_requires_explicit_baseline_permission(source,segments,proposal):
+    renderer,path=source
+    assert renderer.config['baseline']['weights']=={'centered':1}
+    with pytest.raises(SafetyError,match='style_not_allowlisted'):
+        renderer.render_local(path,segments,{**proposal,'style':'full_frame'},'TEST no silent fallback')

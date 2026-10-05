@@ -1059,6 +1059,8 @@ class Engine:
                     version = outcome['baseline_version'] if baseline_branch else outcome['strategy_version']
                     strategy = outcome['baseline'] if baseline_branch else outcome['strategy']
                 styles = sorted(strategy["weights"])
+                exploration_support = (strategy["exploration"] > 0 if outcome is None else
+                                       outcome['decision']['branch'] == 'exploration')
                 render_feedback = db.execute("SELECT data FROM events WHERE job_id=? AND event='quality_rejected' ORDER BY id DESC LIMIT 1", (row['id'],)).fetchone()
                 if render_feedback is not None:
                     feedback = strict_json(render_feedback['data'],self.config['limits']['max_payload_bytes']).get('render_feedback')
@@ -1076,7 +1078,11 @@ class Engine:
                             prior_font = STYLES.get(prior_proposal["style"], (None, None, 0))[2]
                             clearer = [style for style in alternatives if STYLES.get(style, (None, None, 0))[2] > prior_font]
                             alternatives = clearer or alternatives
-                        if alternatives and (strategy["exploration"] > 0 or any(strategy["weights"][style] > 0 for style in alternatives)):
+                        full_frame_eligible = ("full_frame" in styles and
+                            (strategy["weights"]["full_frame"] > 0 or exploration_support))
+                        if review["checks"]["portrait_composition"] is False and prior_proposal["style"] != "full_frame" and full_frame_eligible:
+                            alternatives = ["full_frame"]
+                        if alternatives and (exploration_support or any(strategy["weights"][style] > 0 for style in alternatives)):
                             styles = alternatives
                 if outcome is not None:
                     from .outcome_learning import assign_style
