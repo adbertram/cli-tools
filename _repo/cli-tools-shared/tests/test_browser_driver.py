@@ -294,6 +294,7 @@ def test_cleanup_stale_session_removes_proven_stale_artifacts_without_signaling_
 
 
 def test_browser_open_continues_when_process_table_unavailable_without_profile_lock(tmp_path, monkeypatch):
+    from contextlib import nullcontext
     service = BrowserHarnessService("sample-browser-session")
     events: list[str] = []
     persistent = tmp_path / "chromium-profile"
@@ -336,7 +337,7 @@ def test_browser_open_continues_when_process_table_unavailable_without_profile_l
         def wait_for_load(self, timeout):
             events.append(f"load:{timeout}")
 
-    service._bh = type("_BH", (), {"h": _Helpers()})()
+    service._bh = type("_BH", (), {"h": _Helpers(), "bound": lambda self: nullcontext(self.h)})()
 
     service.browser_open("https://example.com/dashboard", persistent_profile_dir=persistent)
     service.browser_close()

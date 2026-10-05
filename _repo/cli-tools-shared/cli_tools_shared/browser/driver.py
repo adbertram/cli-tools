@@ -21,6 +21,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qsl, urlsplit, urlunsplit
@@ -167,6 +168,26 @@ class _BrowserHarness:
         helpers.NAME = self.session
         helpers.SOCK = _ipc.sock_addr(self.session)
         return helpers
+
+    @contextmanager
+    def bound(self):
+        """Scope administrative cleanup to this owner and restore cached IPC."""
+        from browser_harness import _ipc, helpers
+        environment = {key: os.environ.get(key) for key in
+            ("BH_RUNTIME_DIR", "BH_TMP_DIR", "BH_IPC_TIMEOUT")}
+        attributes = [(module, key, getattr(module, key)) for module, keys in
+            ((_ipc, ("_TMP", "_RUNTIME", "BH_TMP_DIR", "BH_RUNTIME_DIR")),
+             (helpers, ("NAME", "SOCK"))) for key in keys]
+        try:
+            yield self.h
+        finally:
+            for key, value in environment.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+            for module, key, value in attributes:
+                setattr(module, key, value)
 
 class BrowserHarnessService:
     """Browser automation service backed by browser-harness.
@@ -505,8 +526,9 @@ class BrowserHarnessService:
         from browser_harness.admin import restart_daemon
 
         logger.debug("_cleanup_stale_session: session=%s", self.session)
-        restart_daemon(name=self.session)
-        self._cleanup_session_lock_files()
+        with self._bh.bound():
+            restart_daemon(name=self.session)
+            self._cleanup_session_lock_files()
 
     def _acquire_lifecycle_lock(self) -> None:
         """Acquire this resolved profile's cross-backend lock until close/delete."""
