@@ -90,7 +90,9 @@ def _single_clip_segments(segments, proposal):
     if not selected:
         raise SafetyError("no_caption_in_clip")
     first = segments.index(selected[0])
-    if abs(selected[0]["start"] - start) > BOUNDARY_TOLERANCE or abs(selected[-1]["end"] - end) > BOUNDARY_TOLERANCE:
+    # A cue-free lead/tail is allowed. Reject cuts crossing measured speech,
+    # rather than requiring speech to fill the entire crop.
+    if start - selected[0]["start"] > BOUNDARY_TOLERANCE or selected[-1]["end"] - end > BOUNDARY_TOLERANCE:
         raise SafetyError("clip_splits_spoken_segment")
     sentence_ends = lambda text: text.rstrip().rstrip('"\u201d\u2019\')]').endswith((".", "?", "!"))
     if first and not sentence_ends(segments[first - 1]["text"]):

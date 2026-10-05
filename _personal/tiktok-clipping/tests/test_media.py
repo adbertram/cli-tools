@@ -64,7 +64,6 @@ def test_crop_endpoint_normalization_retains_raw_timing():
     ({"segments": [{"start": -0.01, "end": 1, "text": "Negative."}]}, "number_out_of_bounds"),
     ({"segments": [{"start": 0, "end": 1.1, "text": "First."}, {"start": 1.0, "end": 1.2, "text": "Overlap."}]}, "number_out_of_bounds"),
     ({"segments": [{"start": 0, "end": 1.1, "text": "Unfinished"}]}, "clip_ends_mid_sentence"),
-    ({"segments": [{"start": 0.3, "end": 1.1, "text": "Missing start."}]}, "clip_splits_spoken_segment"),
 ])
 def test_crop_normalization_refuses_invalid_or_incomplete_speech(raw, error):
     with pytest.raises(SafetyError, match=error):
@@ -118,6 +117,53 @@ def test_complete_sentence_boundaries(segments, proposal):
     proposal["start_seconds"] = 0.5
     with pytest.raises(SafetyError, match="clip_splits_spoken_segment"):
         clip_segments(segments, proposal)
+
+
+@pytest.mark.parametrize("start,end", [(1, 10), (0, 9), (1, 9)])
+def test_complete_contained_cues_allow_leading_trailing_or_both_gaps(start, end):
+    cues = [{"start": start, "end": end, "text": "A complete measured sentence."}]
+    assert clip_segments(cues, {"start_seconds": 0, "end_seconds": 10}) == cues
+    normalized, evidence = normalized_crop_segments({"segments": cues}, 10)
+    assert normalized == evidence["raw_segments"] == cues
+    assert evidence["end_deltas_seconds"] == [0]
+
+
+@pytest.mark.parametrize("cut", [{"start_seconds": 1, "end_seconds": 10},
+    {"start_seconds": 0, "end_seconds": 9}])
+def test_directional_boundary_gate_still_rejects_crossing_each_side(cut):
+    with pytest.raises(SafetyError, match="clip_splits_spoken_segment"):
+        clip_segments([{"start": 0, "end": 10, "text": "Complete."}], cut)
+
+
+def test_contained_cue_gaps_do_not_bypass_sentence_or_no_caption_gates():
+    with pytest.raises(SafetyError, match="clip_starts_mid_sentence"):
+        clip_segments([{"start": 0, "end": 1, "text": "Unfinished preceding speech"},
+            {"start": 2, "end": 3, "text": "and its end."}],
+            {"start_seconds": 1.5, "end_seconds": 4})
+    with pytest.raises(SafetyError, match="clip_ends_mid_sentence"):
+        normalized_crop_segments({"segments": [{"start": 1, "end": 9, "text": "Unfinished speech"}]}, 10)
+    with pytest.raises(SafetyError, match="no_caption_in_clip"):
+        clip_segments([{"start": 5, "end": 6, "text": "Outside."}], {"start_seconds": 0, "end_seconds": 4})
+
+
+def test_reordered_multicuts_keep_cue_gaps_and_exact_rendered_offsets():
+    cues = [{"start": 1, "end": 3, "text": "Earlier complete sentence."},
+        {"start": 7, "end": 9, "text": "Later complete sentence."}]
+    proposal = {"start_seconds": 0, "end_seconds": 10,
+        "segments": [{"start_seconds": 6, "end_seconds": 10}, {"start_seconds": 0, "end_seconds": 4}]}
+    assert clip_segments(cues, proposal) == [
+        {"start": 1, "end": 3, "text": "Later complete sentence."},
+        {"start": 5, "end": 7, "text": "Earlier complete sentence."}]
+
+
+def test_directional_boundary_keeps_tolerance_and_never_stretches_cues():
+    cues = [{"start": 0, "end": 2, "text": "Complete."}]
+    assert clip_segments(cues, {"start_seconds": 0.25, "end_seconds": 1.75}) == [
+        {"start": 0, "end": 1.5, "text": "Complete."}]
+    for cut in [{"start_seconds": 0.250001, "end_seconds": 2},
+        {"start_seconds": 0, "end_seconds": 1.749999}]:
+        with pytest.raises(SafetyError, match="clip_splits_spoken_segment"):
+            clip_segments(cues, cut)
 
 
 def test_reject_mid_sentence_boundaries(proposal):
