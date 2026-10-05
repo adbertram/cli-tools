@@ -137,8 +137,8 @@ def reconcile(job_id: str = typer.Argument(..., help="Ambiguous job ID."), confi
 
 @jobs.command("retry")
 @command
-def retry(job_id: str = typer.Argument(..., help="Blocked or proven pre-publication visual job ID."), config: ConfigPath = ...):
-    """Revalidate blocked work or an explicitly proven pre-publication visual failure."""
+def retry(job_id: str = typer.Argument(..., help="Blocked or proven pre-publication visual/render job ID."), config: ConfigPath = ...):
+    """Revalidate blocked work or an explicitly proven pre-publication visual/render failure."""
     _perform(lambda: _engine(config).retry(job_id))
 
 
