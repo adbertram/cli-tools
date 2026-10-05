@@ -1,3 +1,9 @@
+import builtins
+import errno
+import importlib.util
+import sys
+import types
+
 from cli_tools_shared.browser.processes import (
     ProcessCommand,
     command_user_data_dir,
@@ -121,6 +127,55 @@ def test_profile_lifecycle_lock_path_uses_resolved_profile_path(tmp_path):
     profile = tmp_path / "nested" / ".." / "chromium-profile"
 
     assert profile_lifecycle_lock_path(profile) == tmp_path / ".chromium-profile.lifecycle.lock"
+
+
+def test_processes_import_does_not_require_fcntl_at_module_load(monkeypatch):
+    from cli_tools_shared.browser import processes
+
+    real_import = builtins.__import__
+
+    def import_without_fcntl(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "fcntl":
+            raise AssertionError("processes.py must not import fcntl at module load")
+        return real_import(name, globals, locals, fromlist, level)
+
+    module_name = "cli_tools_shared.browser._processes_without_fcntl_probe"
+    spec = importlib.util.spec_from_file_location(module_name, processes.__file__)
+    assert spec is not None
+    assert spec.loader is not None
+    probe = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, module_name, probe)
+    monkeypatch.setattr(builtins, "__import__", import_without_fcntl)
+
+    spec.loader.exec_module(probe)
+
+
+def test_profile_lifecycle_lock_uses_windows_msvcrt_and_retries_contention(tmp_path, monkeypatch):
+    from cli_tools_shared.browser import processes
+
+    calls = []
+    sleeps = []
+    attempts = 0
+
+    def locking(_fd, mode, count):
+        nonlocal attempts
+        calls.append((mode, count))
+        if mode == 1:
+            attempts += 1
+            if attempts == 1:
+                raise OSError(errno.EACCES, "profile lock is busy")
+
+    fake_msvcrt = types.SimpleNamespace(LK_NBLCK=1, LK_UNLCK=2, locking=locking)
+    monkeypatch.setitem(sys.modules, "msvcrt", fake_msvcrt)
+    monkeypatch.setattr(processes, "_uses_windows_file_locking", lambda: True)
+    monkeypatch.setattr(processes.time, "sleep", sleeps.append)
+
+    lock_file = processes.acquire_profile_lifecycle_lock(tmp_path / "chromium-profile")
+    processes.release_profile_lifecycle_lock(lock_file)
+
+    assert calls == [(1, 1), (1, 1), (2, 1)]
+    assert sleeps == [processes._WINDOWS_LOCK_RETRY_SECONDS]
+    assert lock_file.closed
 
 
 def test_profile_owner_reports_root_chrome_and_redacts_parent_secret(tmp_path):

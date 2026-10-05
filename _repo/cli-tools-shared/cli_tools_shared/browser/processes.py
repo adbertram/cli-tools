@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
+import errno
+import math
 import os
 import re
 import shlex
 import signal
 import subprocess
 import time
-import errno
-import math
-import fcntl
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable, TextIO
@@ -57,6 +56,67 @@ CHROMIUM_PROFILE_RUNTIME_ARTIFACTS = (
     "SingletonLock",
     "SingletonSocket",
 )
+
+_WINDOWS_LOCK_RETRY_SECONDS = 0.05
+
+
+def _uses_windows_file_locking() -> bool:
+    """Return whether lifecycle locks need the Windows locking primitive."""
+    return os.name == "nt"
+
+
+def _is_windows_lock_contention(exc: OSError) -> bool:
+    """Return whether ``msvcrt.locking`` failed because another owner holds it."""
+    return exc.errno in {errno.EACCES, errno.EAGAIN} or getattr(exc, "winerror", None) in {32, 33}
+
+
+def _acquire_windows_file_lock(lock_file: TextIO) -> None:
+    """Block until an exclusive one-byte lock is available on Windows."""
+    # Import lazily: ``fcntl`` is unavailable on Windows, and importing this
+    # module is part of every browser backend's startup path.
+    import msvcrt
+
+    lock_file.seek(0, os.SEEK_END)
+    if lock_file.tell() == 0:
+        lock_file.write("\0")
+        lock_file.flush()
+    lock_file.seek(0)
+    while True:
+        try:
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+            return
+        except OSError as exc:
+            if not _is_windows_lock_contention(exc):
+                raise
+            time.sleep(_WINDOWS_LOCK_RETRY_SECONDS)
+
+
+def _release_windows_file_lock(lock_file: TextIO) -> None:
+    """Release an exclusive lifecycle lock acquired with ``msvcrt``."""
+    import msvcrt
+
+    lock_file.seek(0)
+    msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+
+
+def _acquire_exclusive_file_lock(lock_file: TextIO) -> None:
+    """Acquire a blocking exclusive lock without importing POSIX APIs on Windows."""
+    if _uses_windows_file_locking():
+        _acquire_windows_file_lock(lock_file)
+        return
+    import fcntl
+
+    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+
+
+def _release_exclusive_file_lock(lock_file: TextIO) -> None:
+    """Release a lock acquired by :func:`_acquire_exclusive_file_lock`."""
+    if _uses_windows_file_locking():
+        _release_windows_file_lock(lock_file)
+        return
+    import fcntl
+
+    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 def _process_table_error(exc: BaseException) -> bool:
@@ -144,7 +204,7 @@ def acquire_profile_lifecycle_lock(user_data_dir: str | Path) -> TextIO:
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     lock_file = lock_path.open("a+")
     try:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        _acquire_exclusive_file_lock(lock_file)
     except Exception:
         lock_file.close()
         raise
@@ -154,7 +214,7 @@ def acquire_profile_lifecycle_lock(user_data_dir: str | Path) -> TextIO:
 def release_profile_lifecycle_lock(lock_file: TextIO) -> None:
     """Release a lock returned by :func:`acquire_profile_lifecycle_lock`."""
     try:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+        _release_exclusive_file_lock(lock_file)
     finally:
         lock_file.close()
 
