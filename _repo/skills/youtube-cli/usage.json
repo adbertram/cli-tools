@@ -1,8 +1,8 @@
 {
   "tool": "youtube",
   "description": "YouTube transcript and video downloader (yt-dlp), channel management (Data API v3), and browser-session community posting",
-  "discovered_at": "2026-09-27T00:02:19Z",
-  "total_commands": 28,
+  "discovered_at": "2026-10-04T23:54:24Z",
+  "total_commands": 29,
   "global_options": [
     {
       "name": "--version",
@@ -13,6 +13,116 @@
     }
   ],
   "commands": {
+    "analytics": {
+      "help": "YouTube Analytics reports for your channel",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "report": {
+          "help": "Report YouTube Analytics for videos on the authenticated user's channel.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--video",
+              "type": "TEXT",
+              "required": false,
+              "help": "Restrict to video ID(s) or URL(s); repeat or comma-separate. Default: all uploads on the authenticated channel",
+              "short": "-v"
+            },
+            {
+              "name": "--channel",
+              "type": "bool",
+              "required": false,
+              "help": "Channel-level totals (by day) instead of per-video rows",
+              "takes_value": false
+            },
+            {
+              "name": "--start-date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Start date YYYY-MM-DD (default: 28 days ago)"
+            },
+            {
+              "name": "--end-date",
+              "type": "TEXT",
+              "required": false,
+              "help": "End date YYYY-MM-DD (default: today)"
+            },
+            {
+              "name": "--metrics",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated Analytics API metrics",
+              "short": "-m",
+              "default": "views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,subscribersGained,likes,comments,shares"
+            },
+            {
+              "name": "--dimensions",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated Analytics API dimensions (default: video, or day with --channel)",
+              "short": "-d"
+            },
+            {
+              "name": "--sort",
+              "type": "TEXT",
+              "required": false,
+              "help": "Sort spec, e.g. -views (default: -views)"
+            },
+            {
+              "name": "--max-results",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Max rows per API query (1-200)",
+              "default": "200"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Max uploaded videos to scan (0 = all; ignored with --video/--channel)",
+              "short": "-l",
+              "default": "0"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., views:gt:1000)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include in output",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display results as a table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
+        }
+      }
+    },
     "auth": {
       "help": "Manage authentication",
       "arguments": [],
