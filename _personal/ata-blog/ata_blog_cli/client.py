@@ -455,7 +455,8 @@ class AtaBlogClient:
         compact_page_id = self._compact_page_id(page_id)
         for extension in ("webp", "png", "jpg", "jpeg"):
             key = f"{SCHEDULED_FEATURED_IMAGE_KEY_PREFIX}{compact_page_id}.{extension}"
-            if self._existing_scheduled_featured_image(key) is None:
+            remote = self._existing_scheduled_featured_image(key)
+            if remote is None:
                 continue
             local_path = STATIC_REPOSITORY_ROOT / "posts" / compact_page_id / f"featured_image.{extension}"
             local_path.parent.mkdir(parents=True, exist_ok=True)
@@ -467,8 +468,36 @@ class AtaBlogClient:
                 timeout=300,
                 label="Scheduled featured image download",
             )
+            self._verify_recovered_featured_image(local_path, remote, key)
             return local_path
         return None
+
+    @staticmethod
+    def _verify_recovered_featured_image(local_path: Path, remote: Dict[str, Any], key: str) -> None:
+        """Verify a just-downloaded recovery image's bytes against its R2 object.
+
+        `_validate_featured_image` only checks existence, size, and extension,
+        so a truncated or corrupted download would otherwise pass straight
+        through and publish bad bytes. Compare against the size and MD5 ETag
+        the earlier R2 list lookup already recorded for this object.
+        """
+        try:
+            expected_size = int(remote["size"])
+        except (KeyError, TypeError, ValueError) as exc:
+            local_path.unlink(missing_ok=True)
+            raise ClientError(
+                f"Scheduled featured image object {key} has no valid size"
+            ) from exc
+        expected_etag = str(remote.get("etag") or "").strip('"').lower()
+        actual_size = local_path.stat().st_size
+        actual_etag = _file_md5(local_path)
+        if actual_size != expected_size or actual_etag != expected_etag:
+            local_path.unlink(missing_ok=True)
+            raise ClientError(
+                f"Downloaded scheduled featured image does not match its R2 object {key} "
+                f"(expected size={expected_size} etag={expected_etag}, "
+                f"got size={actual_size} etag={actual_etag})"
+            )
 
     def _resolve_featured_image_with_recovery(
         self, page_id: str, featured_image: Optional[str]
@@ -4206,6 +4235,40 @@ class AtaBlogClient:
             featured_image=featured_image,
             force=force,
         )
+
+    def backfill_scheduled_featured_images(self) -> Dict[str, Any]:
+        """Mirror local featured images to R2 for pages `Scheduled` before the mirror existed.
+
+        `_schedule_article` only started mirroring the resolved featured image
+        to R2 once `_upload_scheduled_featured_image` shipped. A page that was
+        already `Scheduled` before then has no R2 object for
+        `_resolve_featured_image_with_recovery` to recover, so its due
+        `--status publish` run still fails off-host with the original error.
+        Run this once, on every host that might hold the local image for an
+        already-`Scheduled` page, to close that gap.
+        """
+        mirrored: List[str] = []
+        already_mirrored: List[str] = []
+        no_local_image: List[str] = []
+        for article in self.list_articles(status="Scheduled", limit=1000):
+            page_id = article["id"]
+            compact_page_id = self._compact_page_id(page_id)
+            try:
+                image_path = self._resolve_featured_image(page_id, None)
+            except ClientError:
+                no_local_image.append(compact_page_id)
+                continue
+            key = SCHEDULED_FEATURED_IMAGE_KEY_PREFIX + compact_page_id + image_path.suffix.lower()
+            if self._existing_scheduled_featured_image(key) is not None:
+                already_mirrored.append(compact_page_id)
+                continue
+            self._upload_scheduled_featured_image(page_id, image_path)
+            mirrored.append(compact_page_id)
+        return {
+            "mirrored": mirrored,
+            "already_mirrored": already_mirrored,
+            "no_local_image": no_local_image,
+        }
 
     @staticmethod
     def _slug_from_url(url: str, required: bool = True) -> Optional[str]:

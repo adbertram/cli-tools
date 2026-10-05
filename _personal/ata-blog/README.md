@@ -32,6 +32,7 @@ ata-blog notion-page publish PAGE_ID --date 2026-09-24T15:00:00+00:00   # schedu
 ata-blog notion-page publish PAGE_ID --status draft      # existing journaled static preview behavior
 ata-blog notion-page publish PAGE_ID --status preview    # build + Cloudflare Pages preview, no Notion publication write
 ata-blog notion-page publish PAGE_ID --status publish    # build + deploy + promote to production
+ata-blog notion-page backfill-scheduled-images   # one-time: mirror already-Scheduled posts' local images to R2
 ata-blog notion-page unpublish PAGE_ID --dry-run
 ata-blog notion-page unpublish SCHEDULED_PAGE_ID --yes   # unschedule: back to Ready to Publish
 ata-blog notion-page unpublish my-post-slug --yes
@@ -82,7 +83,17 @@ when that property is empty. A `Slug` value the publisher would have to alter
 
 The featured image is `posts/<page-id>/featured_image.{webp,png,jpg,jpeg}`
 under the ATABlogger repository root, whatever the working directory;
-`--featured-image PATH` overrides it for a preview or promotion.
+`--featured-image PATH` overrides it for a preview or promotion. Because
+`posts/` is excluded from Dropbox sync, `--auto-schedule`/`--date` also
+mirrors the resolved image to R2 at
+`wp-content/uploads/publisher/scheduled/<compact-page-id>.<ext>`. A due
+`--status publish` run with no local copy and no `--featured-image` recovers
+that object instead of failing, verifies its bytes against the R2 object's
+size and ETag, and writes it to the conventional local path; an explicit
+`--featured-image PATH` that is missing still fails immediately, unchanged.
+Pages `Scheduled` before this mirror existed have no R2 object to recover:
+run `ata-blog notion-page backfill-scheduled-images` once, on whatever host
+still holds each page's local image, to mirror it.
 
 `notion-page unpublish` is the inverse. It accepts a Notion page ID, a post
 URL, or a slug, removes the post file from the static site source, runs the

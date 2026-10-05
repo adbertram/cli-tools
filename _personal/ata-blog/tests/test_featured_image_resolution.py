@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 from types import SimpleNamespace
@@ -152,6 +153,10 @@ def test_explicit_featured_image_path_still_validates(tmp_path):
 _PAGE_ID = "3495d9c85b2b81eebac8e532046b5b58"
 
 
+def _md5_hex(data: bytes) -> str:
+    return hashlib.md5(data, usedforsecurity=False).hexdigest()
+
+
 def test_schedule_uploads_resolved_image_to_its_page_keyed_r2_object(tmp_path, monkeypatch):
     """Scheduling mirrors the resolved image so another host can recover it."""
 
@@ -184,6 +189,7 @@ def test_publish_recovers_scheduled_image_from_r2_when_no_local_copy_exists(
     monkeypatch.setattr(client_module, "STATIC_REPOSITORY_ROOT", tmp_path)
     key = f"wp-content/uploads/publisher/scheduled/{_PAGE_ID}.webp"
     remote_bytes = b"recovered-webp-bytes"
+    remote_etag = _md5_hex(remote_bytes)
 
     client = AtaBlogClient.__new__(AtaBlogClient)
 
@@ -191,7 +197,9 @@ def test_publish_recovers_scheduled_image_from_r2_when_no_local_copy_exists(
         if command[1:4] == ["r2", "objects", "list"]:
             if command[6] == key:
                 return SimpleNamespace(
-                    stdout=json.dumps([{"key": key, "size": len(remote_bytes)}])
+                    stdout=json.dumps(
+                        [{"key": key, "size": len(remote_bytes), "etag": remote_etag}]
+                    )
                 )
             return SimpleNamespace(stdout=json.dumps([]))
         assert command[1:4] == ["r2", "objects", "get"]
@@ -208,6 +216,41 @@ def test_publish_recovers_scheduled_image_from_r2_when_no_local_copy_exists(
     expected_path = tmp_path / "posts" / _PAGE_ID / "featured_image.webp"
     assert resolved == expected_path
     assert resolved.read_bytes() == remote_bytes
+
+
+def test_publish_recovery_rejects_downloaded_image_that_does_not_match_r2_etag(
+    tmp_path, monkeypatch
+):
+    """A truncated or corrupted download must not silently publish bad bytes:
+    verify it against the R2 object's recorded size/ETag before accepting it."""
+
+    monkeypatch.setattr(client_module, "STATIC_REPOSITORY_ROOT", tmp_path)
+    key = f"wp-content/uploads/publisher/scheduled/{_PAGE_ID}.webp"
+    remote_bytes = b"recovered-webp-bytes"
+
+    client = AtaBlogClient.__new__(AtaBlogClient)
+
+    def run(command, **_kwargs):
+        if command[1:4] == ["r2", "objects", "list"]:
+            if command[6] == key:
+                return SimpleNamespace(
+                    stdout=json.dumps(
+                        [{"key": key, "size": len(remote_bytes), "etag": _md5_hex(remote_bytes)}]
+                    )
+                )
+            return SimpleNamespace(stdout=json.dumps([]))
+        assert command[1:4] == ["r2", "objects", "get"]
+        output_path = tmp_path / "posts" / _PAGE_ID / "featured_image.webp"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"truncated-and-wrong-bytes")
+        return SimpleNamespace(stdout="")
+
+    monkeypatch.setattr(client, "_run_checked_command", run)
+
+    with pytest.raises(ClientError, match="does not match its R2 object"):
+        client._resolve_featured_image_with_recovery(_PAGE_ID, None)
+
+    assert not (tmp_path / "posts" / _PAGE_ID / "featured_image.webp").exists()
 
 
 def test_publish_recovery_leaves_original_error_when_nothing_was_ever_scheduled(
@@ -243,3 +286,84 @@ def test_explicit_missing_featured_image_path_skips_r2_recovery(tmp_path, monkey
 
     with pytest.raises(ClientError, match=f"Featured image not found: {missing_path}"):
         client._resolve_featured_image_with_recovery(_PAGE_ID, missing_path)
+
+
+# --- backfilling pages Scheduled before the R2 mirror existed --------------
+
+
+def test_backfill_mirrors_local_images_for_pages_scheduled_before_the_mirror_existed(
+    tmp_path, monkeypatch
+):
+    """A page `Scheduled` before `_upload_scheduled_featured_image` shipped has
+    no R2 object; the backfill must mirror its still-local image so a later
+    off-host `--status publish` run can recover it."""
+
+    monkeypatch.setattr(client_module, "STATIC_REPOSITORY_ROOT", tmp_path)
+    page_id = "a" * 32
+    image_path = tmp_path / "posts" / page_id / "featured_image.webp"
+    image_path.parent.mkdir(parents=True)
+    image_path.write_bytes(b"local-bytes")
+
+    client = AtaBlogClient.__new__(AtaBlogClient)
+    client.list_articles = lambda **_kwargs: [{"id": page_id}]
+
+    put_commands = []
+
+    def run(command, **_kwargs):
+        if command[1:4] == ["r2", "objects", "list"]:
+            return SimpleNamespace(stdout=json.dumps([]))
+        assert command[1:4] == ["r2", "objects", "put"]
+        put_commands.append(command)
+        return SimpleNamespace(stdout=json.dumps({"key": command[5]}))
+
+    monkeypatch.setattr(client, "_run_checked_command", run)
+
+    result = client.backfill_scheduled_featured_images()
+
+    assert result == {"mirrored": [page_id], "already_mirrored": [], "no_local_image": []}
+    assert put_commands[0][5] == f"wp-content/uploads/publisher/scheduled/{page_id}.webp"
+
+
+def test_backfill_skips_pages_already_mirrored(tmp_path, monkeypatch):
+    """A page already mirrored to R2 must not be re-uploaded."""
+
+    monkeypatch.setattr(client_module, "STATIC_REPOSITORY_ROOT", tmp_path)
+    page_id = "b" * 32
+    image_path = tmp_path / "posts" / page_id / "featured_image.webp"
+    image_path.parent.mkdir(parents=True)
+    image_path.write_bytes(b"local-bytes")
+    key = f"wp-content/uploads/publisher/scheduled/{page_id}.webp"
+
+    client = AtaBlogClient.__new__(AtaBlogClient)
+    client.list_articles = lambda **_kwargs: [{"id": page_id}]
+
+    def run(command, **_kwargs):
+        if command[1:4] == ["r2", "objects", "list"]:
+            return SimpleNamespace(stdout=json.dumps([{"key": key, "size": 11}]))
+        pytest.fail(f"unexpected R2 write for an already-mirrored page: {command}")
+
+    monkeypatch.setattr(client, "_run_checked_command", run)
+
+    result = client.backfill_scheduled_featured_images()
+
+    assert result == {"mirrored": [], "already_mirrored": [page_id], "no_local_image": []}
+
+
+def test_backfill_skips_pages_with_no_local_image_on_this_host(tmp_path, monkeypatch):
+    """A page whose image only exists on a different host must be reported,
+    not treated as an error that aborts the whole backfill."""
+
+    monkeypatch.setattr(client_module, "STATIC_REPOSITORY_ROOT", tmp_path)
+    page_id = "c" * 32
+
+    client = AtaBlogClient.__new__(AtaBlogClient)
+    client.list_articles = lambda **_kwargs: [{"id": page_id}]
+
+    def run(command, **_kwargs):
+        pytest.fail(f"unexpected R2 call for a page with no local image: {command}")
+
+    monkeypatch.setattr(client, "_run_checked_command", run)
+
+    result = client.backfill_scheduled_featured_images()
+
+    assert result == {"mirrored": [], "already_mirrored": [], "no_local_image": [page_id]}
