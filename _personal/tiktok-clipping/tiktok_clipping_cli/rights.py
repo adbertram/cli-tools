@@ -6,15 +6,32 @@ from .safety import SafetyError,edit_duration,edit_segments,keys,number,string
 
 
 def validate_policy(policy, source):
-    keys(policy, {'schema_version','campaign_id','brief_url','brief_content_sha256','source_url','source_sha256','source_bytes','video_reuse_allowed','original_audio_reuse_allowed','external_audio_allowed','full_source_repost_allowed','minimum_clip_seconds','required_caption_tokens','required_on_screen_text','clip_rules'})
+    common = {'schema_version','campaign_id','source_url','source_sha256','source_bytes','video_reuse_allowed','original_audio_reuse_allowed','external_audio_allowed','full_source_repost_allowed','minimum_clip_seconds','required_caption_tokens','required_on_screen_text','clip_rules'}
+    commission = 'commission_evidence' in policy
+    keys(policy, common | ({'commission_evidence'} if commission else {'brief_url','brief_content_sha256'}))
     if type(policy['schema_version']) is not int or policy['schema_version'] not in (1,2):
         raise SafetyError('rights_policy_version_invalid')
-    if policy['campaign_id']!=source['campaign']['id'] or policy['brief_url']!=source['reuse_evidence'] or policy['source_url']!=source['feed']:
+    if policy['campaign_id']!=source['campaign']['id'] or policy['source_url']!=source['feed']:
         raise SafetyError('rights_policy_source_campaign_brief_mismatch')
-    brief=urlparse(policy['brief_url'])
-    if brief.scheme!='https' or brief.hostname!='docs.google.com' or not re.fullmatch(r'/document/d/[A-Za-z0-9_-]+/edit',brief.path) or brief.username or brief.password:
-        raise SafetyError('rights_brief_url_invalid')
-    for field in ('brief_content_sha256','source_sha256'):
+    hashes = ['source_sha256']
+    if commission:
+        evidence = policy['commission_evidence']
+        keys(evidence, {'kind','catalog_source_id','evidence_version','facts_version','compiler_version','campaign_id','experience_id','campaign_evidence_digest'})
+        if evidence['kind']!='catalog_commission' or source.get('commission_evidence')!=evidence or evidence['campaign_id']!=policy['campaign_id']:
+            raise SafetyError('rights_commission_trusted_evidence_required')
+        if evidence['compiler_version']!='supplied-av-episode-commission-v1':
+            raise SafetyError('rights_commission_compiler_unsupported')
+        if not re.fullmatch(r'exp_[A-Za-z0-9]+', evidence['experience_id']):
+            raise SafetyError('rights_commission_experience_invalid')
+        for field in ('catalog_source_id','evidence_version','facts_version','campaign_evidence_digest'):
+            if not isinstance(evidence[field],str) or not re.fullmatch('[a-f0-9]{64}',evidence[field]):raise SafetyError('rights_sha256_invalid')
+    else:
+        if policy['brief_url']!=source['reuse_evidence']:raise SafetyError('rights_policy_source_campaign_brief_mismatch')
+        brief=urlparse(policy['brief_url'])
+        if brief.scheme!='https' or brief.hostname!='docs.google.com' or not re.fullmatch(r'/document/d/[A-Za-z0-9_-]+/edit',brief.path) or brief.username or brief.password:
+            raise SafetyError('rights_brief_url_invalid')
+        hashes.append('brief_content_sha256')
+    for field in hashes:
         if not isinstance(policy[field],str) or not re.fullmatch('[a-f0-9]{64}',policy[field]):raise SafetyError('rights_sha256_invalid')
     number(policy['source_bytes'],1,30_000_000_000,integer=True)
     number(policy['minimum_clip_seconds'],1,60)

@@ -179,6 +179,15 @@ CREATE TABLE IF NOT EXISTS catalog_versions(source_id TEXT NOT NULL,version TEXT
 """
 
 
+def stable_campaign(detail):
+    """Exact participant commission facts; funding remains an observation."""
+    stable={key:detail.get(key) for key in ('id','name','description','platforms','private','requiresApplication','referenceMaterials','creatorRequirements')}
+    payouts=detail.get('payouts')
+    row=next((row for row in payouts if type(row) is dict and row.get('platform')=='tiktok'),{}) if type(payouts) is list else {}
+    stable['tiktok_payout']={key:row.get(key) for key in ('platform','payoutType','rateCents','minPayoutCents','maxPayoutCents')}
+    return stable
+
+
 class SourceCatalog:
     """Private operational DB independent of execution configuration hashes.
 
@@ -391,10 +400,9 @@ class SourceCatalog:
         detail=providers.campaign(work['campaign_id'],deadline=deadline)
         if type(detail) is not dict or detail.get('id')!=work['campaign_id']:raise SafetyError('catalog_campaign_identity_changed')
         encoded(detail);state=self._campaign_state(detail)
-        stable={key:detail.get(key) for key in ('id','name','description','platforms','private','requiresApplication','referenceMaterials','creatorRequirements')}
+        stable=stable_campaign(detail)
         payouts=detail.get('payouts')
         row=next((row for row in payouts if type(row) is dict and row.get('platform')=='tiktok'),{}) if type(payouts) is list else {}
-        stable['tiktok_payout']={key:row.get(key) for key in ('platform','payoutType','rateCents','minPayoutCents','maxPayoutCents')}
         with self._db() as db:
             reference=self._put(db,stable);previous=db.execute('SELECT * FROM catalog_campaigns WHERE id=?',(work['campaign_id'],)).fetchone()
             db.execute('INSERT INTO catalog_campaigns VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET current_ref=excluded.current_ref,state=excluded.state,funding=excluded.funding,observed_at=excluded.observed_at',
@@ -512,6 +520,11 @@ class SourceCatalog:
                 'compiler_version':row['compiler_version'],'permission':self._blob(row['permission_ref']) if row['permission_ref'] else None}
 
     def candidate_evidence(self,source_id,evidence_version):return self.get_version(source_id,evidence_version)['evidence']
+
+    def provider_binding(self):
+        with self._db() as db:
+            row=db.execute("SELECT value FROM catalog_settings WHERE key='binding'").fetchone()
+        return None if row is None else json.loads(row[0])
 
     def source_observation(self,source_id):
         with self._db() as db:row=db.execute('SELECT * FROM catalog_asset_observations WHERE source_id=?',(source_id,)).fetchone()

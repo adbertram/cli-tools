@@ -19,6 +19,7 @@ from uuid import UUID
 from cli_tools_shared.exceptions import ClientError
 from .client import DISCOVER_ACTION_JS, FETCH_JS, MAX_LIMIT, WhopError, retry_after_seconds, decode_action, identifier, strict_json
 
+PUBLICATION_MAX_AGE_SECONDS = 1800  # Observed participant product post-age contract.
 MAX_JOURNAL = 262144
 STUDIO_READBACK = 'https://www.tiktok.com/tiktok/creator/manage/item_list/v1/'
 # Read and create-action discovery share the same bounded, stable-snapshot scanner.
@@ -110,7 +111,7 @@ def publication(value,expected_actor,*,check_age=False):
     result['published_at']=when.isoformat()
     if check_age:
         age=(datetime.now(timezone.utc)-when).total_seconds()
-        if not 0<=age<=1800: raise ClientError('publication_outside_30_minute_window')
+        if not 0<=age<=PUBLICATION_MAX_AGE_SECONDS: raise ClientError('publication_outside_30_minute_window')
     return result
 
 def funding_evidence(campaign,payout):

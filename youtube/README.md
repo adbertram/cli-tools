@@ -468,3 +468,7 @@ the SDK never deletes a foreign file or selects the last file in a directory.
 Failures expose sanitized `code`, `category`, `status`, and
 `retry_after_seconds`; provider Retry-After is preserved without a one-day cap.
 No signed playback/caption URLs or provider response bodies are returned.
+
+### Owned acquisition recovery
+
+`YoutubeClient.acquire_source_media` optionally accepts `ownership_path`, the private canonical sibling marker for its fixed output stage. The marker records request binding, stage identity and exact child PID/start before provider work. `YoutubeClient.recover_source_media` accepts the same request arguments under the caller's workspace lock. It only recovers an exact ended worker with an empty owned process group: a completed file is remeasured against its immutable receipt; exact partial files are durably retired before a new acquisition. Unknown ownership, replaced bytes, foreign files or live processes refuse recovery. Neither API adopts arbitrary files or kills unrelated processes.

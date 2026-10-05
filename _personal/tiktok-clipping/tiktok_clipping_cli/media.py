@@ -10,6 +10,7 @@ import fcntl
 import os
 import signal
 import shutil
+import sqlite3
 import stat
 import subprocess
 import tempfile
@@ -330,7 +331,11 @@ class MediaRenderer:
             "audio_present": any(s.get("codec_type") == "audio" for s in data["streams"])}
 
     def _source(self, record):
-        source = next((s for s in self.config["sources"] if s["id"] == record["source_id"]), None)
+        if 'catalog_admission' in record:
+            from .catalog_runtime import resolve_job_source
+            source=resolve_job_source(self.config,record,require_current=True)['source']
+        else:
+            source = next((s for s in self.config["sources"] if s["id"] == record["source_id"]), None)
         parsed = urlparse(string(record["media_url"]))
         if source is None or parsed.scheme != "https" or parsed.hostname not in source["allowed_hosts"] or parsed.username or parsed.password:
             raise SafetyError("media_host_not_allowlisted")
@@ -439,6 +444,18 @@ class MediaRenderer:
             return {key: data[key] for key in ("duration_seconds", "transcript", "transcript_segments", "provenance")}
 
     def _prepare(self, record, deadline):
+        if 'catalog_admission' in record:
+            from .catalog_runtime import resolve_job_source
+            resolve_job_source(self.config,record,require_current=True)
+            with sqlite3.connect(Path(self.config['database']).as_uri()+'?mode=ro',uri=True,timeout=2) as db:
+                row=db.execute('SELECT media FROM catalog_admissions WHERE id=?',(record['catalog_admission']['id'],)).fetchone()
+            if row is None:raise SafetyError('catalog_admission_missing')
+            media=strict_json(row[0],2*1048576)
+            path=self._path(media['file_path'])
+            from youtube_cli.source_media import _regular_digest
+            actual,size=_regular_digest(path,media['source_bytes'],deadline)
+            if actual!=media['source_sha256'] or size!=media['source_bytes']:raise SafetyError('catalog_cached_media_changed')
+            return {key:record[key] for key in ('duration_seconds','transcript','transcript_segments','provenance')}
         url = self._source(record)
         target = self.root / digest({"url": url})
         self._prune_cache(exclude=target)
@@ -525,9 +542,16 @@ class MediaRenderer:
             try:
                 prepared = self._prepare(record, deadline)
                 validate_proposal("clip", proposal, {**record, **prepared}, self.config)
-                source_path = self.root / digest({"url": self._source(record)}) / "source.mp4"
+                if 'catalog_admission' in record:
+                    with sqlite3.connect(Path(self.config['database']).as_uri()+'?mode=ro',uri=True,timeout=2) as db:
+                        receipt=db.execute('SELECT media FROM catalog_admissions WHERE id=?',(record['catalog_admission']['id'],)).fetchone()
+                    source_path=Path(strict_json(receipt[0],2*1048576)['file_path'])
+                else:
+                    source_path = self.root / digest({"url": self._source(record)}) / "source.mp4"
                 segments = self._prepared_segments(prepared)
-                source = next(source for source in self.config["sources"] if source["id"] == record["source_id"])
+                from .catalog_runtime import resolve_job_source
+                source=resolve_job_source(self.config,record,require_current=True)['source']
+
                 return self.render_local(source_path, segments, proposal, prepared["provenance"], deadline=deadline, publication_policy=source.get("publication_policy"), refine_transcript=True, render_owner=self._render_ownership.owner)
             finally:
                 self._render_ownership = None
@@ -660,7 +684,11 @@ class MediaRenderer:
                 offset += duration
             if verified != receipt["captions"]:
                 raise SafetyError("transcript_refinement_caption_changed")
-        source = next((source for source in self.config["sources"] if source["id"] == job.get("input", {}).get("source_id")), None)
+        if 'catalog_admission' in job.get('input',{}):
+            from .catalog_runtime import resolve_job_source
+            source=resolve_job_source(self.config,job['input'],require_current=False)['source']
+        else:
+            source = next((source for source in self.config["sources"] if source["id"] == job.get("input", {}).get("source_id")), None)
         if source is None and any("publication_policy" in source for source in self.config["sources"]):
             raise SafetyError("quality_source_rights_context_missing")
         policy = None if source is None else source.get("publication_policy")

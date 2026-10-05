@@ -136,7 +136,25 @@ TARGET_PROFILE = "clipper"
 
 
 def validate_config(config):
-    keys(config, {"database", "workspace", "account", "sources", "limits", "learning", "baseline", "adapter_module"}, {"visual", "rewards_account", "native_text", "monitoring"})
+    keys(config, {"database", "workspace", "account", "sources", "limits", "learning", "baseline", "adapter_module"}, {"visual", "rewards_account", "native_text", "monitoring", "source_discovery"})
+    if config.get('source_discovery') is not None:
+        discovery=config['source_discovery']
+        keys(discovery, {'google_profile','page_budget','campaign_budget','brief_budget','asset_budget','refresh_seconds','retry_base_seconds','retry_max_seconds','authorization_seconds','refresh_timeout_seconds','materialize_timeout_seconds','max_source_bytes','max_resolution','submission_window_seconds'})
+        if not re.fullmatch('[A-Za-z0-9_-]{1,64}', string(discovery['google_profile'],64)):
+            raise SafetyError('catalog_google_profile_invalid')
+        number(discovery['page_budget'],2,20,integer=True)
+        for field in ('campaign_budget','brief_budget','asset_budget'):number(discovery[field],1,20,integer=True)
+        for field in ('refresh_seconds','authorization_seconds'):number(discovery[field],60,86400,integer=True)
+        number(discovery['retry_base_seconds'],1,3600,integer=True)
+        number(discovery['retry_max_seconds'],discovery['retry_base_seconds'],86400,integer=True)
+        from .catalog_runtime import DISCOVERY_OUTER_CLEANUP_SECONDS
+        for field in ('refresh_timeout_seconds','materialize_timeout_seconds'):
+            number(discovery[field],15,config['limits']['work_timeout_seconds']-DISCOVERY_OUTER_CLEANUP_SECONDS)
+        from whop_cli.submission_operations import PUBLICATION_MAX_AGE_SECONDS
+        number(discovery['submission_window_seconds'],1,PUBLICATION_MAX_AGE_SECONDS,integer=True)
+        number(discovery['max_source_bytes'],1048576,1073741824,integer=True)
+        if discovery['max_resolution'] not in (240,360,480):raise SafetyError('catalog_resolution_invalid')
+        if config.get('rewards_account') is None:raise SafetyError('catalog_rewards_account_required')
     if config.get('monitoring') is not None:
         monitoring = config['monitoring']
         keys(monitoring, {'enabled', 'ambiguity_age_seconds', 'stalled_job_age_seconds'})
@@ -287,9 +305,14 @@ def validate_strategy(proposal, config, previous=None):
     return proposal
 
 
-def validate_source(record, config, now):
-    keys(record, {"source_id", "media_id", "media_url", "duration_seconds", "transcript", "observed_at", "provenance", "categories", "transcript_segments"}, {"assigned_style", "strategy_version", "strategy", "excluded_ranges", "clip_sequence", "media_key", "performance_context", "model_feedback", "outcome_selection"})
-    source = next((s for s in config["sources"] if s["id"] == record["source_id"]), None)
+def validate_source(record, config, now, *, db=None):
+    keys(record, {"source_id", "media_id", "media_url", "duration_seconds", "transcript", "observed_at", "provenance", "categories", "transcript_segments"}, {"assigned_style", "strategy_version", "strategy", "excluded_ranges", "clip_sequence", "media_key", "performance_context", "model_feedback", "outcome_selection", "catalog_admission", "source_window"})
+    if 'catalog_admission' in record:
+        from .catalog_runtime import resolve_job_source
+        source = resolve_job_source(config,record,require_current=True,now=now,db=db)['source']
+    else:
+        if 'source_window' in record:raise SafetyError('catalog_window_requires_trusted_admission')
+        source = next((s for s in config["sources"] if s["id"] == record["source_id"]), None)
     if source is None:
         raise SafetyError("source_not_allowlisted")
     if timestamp(source["campaign"]["expires_at"]) <= now:
@@ -346,7 +369,7 @@ def edit_duration(proposal):
     return sum(cut["end_seconds"] - cut["start_seconds"] for cut in edit_segments(proposal))
 
 
-def validate_proposal(kind, proposal, input_data, config):
+def validate_proposal(kind, proposal, input_data, config, *, now=None, db=None):
     if isinstance(proposal, dict) and "result" in proposal:
         keys(proposal, {"result"}, {"reasoning"})
         if not isinstance(proposal["result"], str):
@@ -356,12 +379,19 @@ def validate_proposal(kind, proposal, input_data, config):
         keys(proposal, {"start_seconds", "end_seconds", "caption", "style"}, {"segments"})
         start = number(proposal["start_seconds"], 0, input_data["duration_seconds"])
         end = number(proposal["end_seconds"], 0, input_data["duration_seconds"])
-        edit_segments(proposal, input_data["duration_seconds"])
+        cuts=edit_segments(proposal, input_data["duration_seconds"])
+        if 'source_window' in input_data:
+            from .source_windows import require_window_cuts
+            require_window_cuts(input_data['source_window'],cuts)
         number(edit_duration(proposal), config["limits"]["min_clip_seconds"], config["limits"]["max_clip_seconds"])
         string(proposal["caption"], config["limits"]["caption_chars"])
         if proposal["style"] not in config["baseline"]["weights"]:
             raise SafetyError("style_not_allowlisted")
-        source = next((s for s in config["sources"] if s["id"] == input_data.get("source_id")), None)
+        if 'catalog_admission' in input_data:
+            from .catalog_runtime import resolve_job_source
+            source=resolve_job_source(config,input_data,require_current=True,now=now,db=db)['source']
+        else:
+            source = next((s for s in config['sources'] if s['id'] == input_data.get('source_id')), None)
         if source is not None and "publication_policy" in source:
             from .rights import required_overlays
             required_overlays(source["publication_policy"], proposal)

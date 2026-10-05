@@ -72,11 +72,6 @@ class StudioPublicActionGuard:
                 raise SafetyError("studio_callback_job_not_running_publication")
             if not isinstance(current["lease_token"], str) or not secrets.compare_digest(current["lease_token"], token) or number(current["lease_until"], 0) <= self.clock():
                 raise SafetyError("studio_callback_lease_expired_or_reclaimed")
-            sources = [source for source in self.config['sources'] if source['id'] == self.job['input']['source_id']]
-            if len(sources) != 1:raise SafetyError('studio_callback_source_changed')
-            deadline = min(current['lease_until'], timestamp(sources[0]['campaign']['expires_at']))
-            if deadline <= self.clock() + 5:
-                raise SafetyError('studio_callback_dispatch_headroom_exhausted')
             if current["policy_digest"] != digest(self.config) or current["policy_digest"] != self.job["policy_digest"]:
                 raise SafetyError("studio_callback_coordinator_policy_changed")
             maximum = self.config["limits"]["max_payload_bytes"]
@@ -86,6 +81,15 @@ class StudioPublicActionGuard:
                     raise SafetyError("studio_callback_" + field + "_changed")
             if strict_json(current["asset"], maximum) != self.asset:
                 raise SafetyError("studio_callback_asset_changed")
+            # The common resolver validates immutable admitted rights against
+            # current local evidence. It never makes network calls or renews
+            # the original worker/source authority inside this transaction.
+            from .catalog_runtime import resolve_job_source
+            source = resolve_job_source(self.config,strict_json(current['input'],maximum),
+                require_current=True,now=self.clock(),db=db)
+            deadline = min(current['lease_until'],number(source['valid_until'],0),timestamp(source['source']['campaign']['expires_at']))
+            if deadline <= self.clock() + 5:
+                raise SafetyError('studio_callback_dispatch_headroom_exhausted')
             if reservation is None or reservation["state"] != "uploading" or reservation["id"] != self.key or reservation["idempotency_key"] != self.key or reservation["account_id"] != actor["account_id"] or reservation["asset_digest"] != binding["asset_sha256"]:
                 raise SafetyError("studio_callback_publication_reservation_changed")
             identity = studio_reservation_identity(binding)
