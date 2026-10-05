@@ -29,6 +29,16 @@ from .safety import (
     timestamp, validate_config, validate_proposal, validate_source, write_allowance, adapter_diagnostics,
 )
 
+# Render-stage rejections caused by the candidate proposal or transcript
+# content, not by a renderer fault. They fail the job without marking the
+# render capability unhealthy or tripping its circuit.
+RENDER_CANDIDATE_REJECTIONS = {
+    "timed_transcript_required", "caption_markup_forbidden", "number_out_of_bounds",
+    "empty_caption_interval", "payload_too_large", "no_caption_in_clip",
+    "clip_splits_spoken_segment", "clip_starts_mid_sentence", "clip_ends_mid_sentence",
+    "caption_control_character_forbidden",
+}
+
 
 class AdapterFailure(RuntimeError):
     """Trusted adapter failure. Only the coordinator schedules retries."""
@@ -405,9 +415,15 @@ class Engine:
             raise AdapterFailure("ambiguous" if method in {"publish", "submit_rewards"} else "transient", type(exc).__name__) from exc
         except Exception as exc:
             from .health import observe
+            candidate_rejection = method == "render" and str(exc) in RENDER_CANDIDATE_REJECTIONS
             with self.transaction() as db:
-                observe(db, method, self.clock(), category="ambiguous" if method in {"publish", "submit_rewards"} else "permanent", code=type(exc).__name__)
-            self._circuit_failure(method)
+                if candidate_rejection:
+                    observe(db, method, self.clock())
+                    self.event(db, None, 'render_candidate_rejected', {'code': str(exc), 'diagnostics': None})
+                else:
+                    observe(db, method, self.clock(), category="ambiguous" if method in {"publish", "submit_rewards"} else "permanent", code=type(exc).__name__)
+            if not candidate_rejection:
+                self._circuit_failure(method)
             raise AdapterFailure("ambiguous" if method in {"publish", "submit_rewards"} else "permanent", type(exc).__name__ + ": " + str(exc)[:500]) from exc
         with self.transaction() as db:
             db.execute("INSERT INTO circuits VALUES(?,0,0) ON CONFLICT(capability) DO UPDATE SET failures=0,until=0", (method,))

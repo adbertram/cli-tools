@@ -378,6 +378,37 @@ def test_discovery_failures_open_circuit(engine, adapter, clock, config):
         engine.prepare("clip")
 
 
+def test_render_input_rejection_keeps_renderer_capability_healthy(engine, adapter, clock):
+    def rejected(job, proposal):
+        raise SafetyError("clip_ends_mid_sentence")
+    adapter.render = rejected
+    envelope = claim(engine, clock)
+    result = engine.apply(payload(envelope))
+    assert result["state"] == "failed" and "clip_ends_mid_sentence" in result["error"]
+    assert engine.get(envelope["job_id"])["status"] == "failed"
+    health = engine.status()["health"]
+    assert not health["actionable"]
+    assert not [i for i in health["issues"] if i["reason"] == "capability_failure"]
+    render = next(c for c in health["capabilities"] if c["capability"] == "render")
+    assert render["state"] == "healthy"
+    with engine.transaction() as db:
+        assert db.execute("SELECT 1 FROM events WHERE event='render_candidate_rejected'").fetchone() is not None
+
+
+def test_renderer_process_failure_still_marks_renderer_unhealthy(engine, adapter, clock):
+    def broken(job, proposal):
+        raise SafetyError("media_process_failed: ffmpeg: boom")
+    adapter.render = broken
+    envelope = claim(engine, clock)
+    engine.apply(payload(envelope))
+    health = engine.status()["health"]
+    render = next(c for c in health["capabilities"] if c["capability"] == "render")
+    assert render["state"] == "action_required"
+    with engine.transaction() as db:
+        row = db.execute("SELECT failures FROM circuits WHERE capability='render'").fetchone()
+        assert row is not None and row[0] >= 1
+
+
 def test_model_claim_does_not_spend_runtime_but_execution_does(engine, adapter, clock, config):
     envelope = claim(engine, clock)
     assert engine.status()["budgets"][0]["runtime_seconds"] == 0
