@@ -459,11 +459,14 @@
   },
   "settings": {
     "executionOrder": "v1",
-    "executionTimeout": 1800,
+    "executionTimeout": 2400,
     "saveDataErrorExecution": "all",
     "saveDataSuccessExecution": "all",
     "timezone": "America/Chicago",
-    "errorWorkflow": "F79g2nlj6f1glf8u"
+    "errorWorkflow": "F79g2nlj6f1glf8u",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
   },
   "active": false
 }
