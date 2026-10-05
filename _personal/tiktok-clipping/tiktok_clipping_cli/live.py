@@ -35,6 +35,13 @@ class LiveAdapter:
         self.media = media if media is not None else MediaRenderer(config)
         self.opener = opener
         self.whop_factory, self.studio_factory = whop_factory, studio_factory
+        self._operation_deadline = None
+
+    def set_operation_deadline(self, deadline):
+        import math
+        if type(deadline) not in (int,float) or not math.isfinite(deadline) or deadline<=time.monotonic():
+            raise SafetyError('catalog_operation_deadline_invalid')
+        self._operation_deadline = deadline
 
     def campaign(self, campaign_id):
         """Read the exact JSON route observed in public campaign previews."""
@@ -96,6 +103,19 @@ class LiveAdapter:
 
     def discover(self, source):
         """Prepare one explicitly selected video after live source approval."""
+        if source is None and self.config.get('source_discovery'):
+            from .catalog_runtime import CatalogDiscovery
+            from cli_tools_shared.bounded_read import BoundedReadError
+            if self._operation_deadline is None:raise SafetyError('catalog_parent_deadline_required')
+            try:
+                return CatalogDiscovery(self.config,self.media).discover(self._operation_deadline)
+            except (BoundedReadError,TimeoutError) as exc:
+                raise AdapterFailure('transient','catalog_bounded_work_unavailable') from exc
+            except Exception as exc:
+                category=getattr(exc,'category',None)
+                if category in ('auth','rate_limit','transient','upstream'):
+                    raise AdapterFailure('transient' if category=='upstream' else category,getattr(exc,'code','catalog_provider_failed'),getattr(exc,'retry_after_seconds',None),provider='youtube',code=getattr(exc,'code',None),status=getattr(exc,'status',None) or None) from exc
+                raise
         if source not in self.config["sources"]:
             raise SafetyError("source_not_allowlisted")
         if timestamp(source["campaign"]["expires_at"]) <= time.time():
@@ -126,14 +146,15 @@ class LiveAdapter:
         return actor
 
     def _job_source(self, job):
-        source = next((source for source in self.config["sources"] if source["id"] == job.get("input", {}).get("source_id")), None)
+        from .catalog_runtime import resolve_job_source
+        source = resolve_job_source(self.config,job.get('input',{}),require_current=True)['source']
         if source is None:
             raise SafetyError("publication_source_context_missing")
         if "publication_policy" not in source:
             raise SafetyError("explicit_scoped_publication_policy_required")
         return source
 
-    def _participant_call(self, operation):
+    def _participant_call(self, operation, *, campaign_id=None):
         actor = self._reward_actor()
         # This read precedes external SDK work and holds no transaction open.
         with sqlite3.connect(Path(self.config["database"]).as_uri() + "?mode=ro", uri=True, timeout=2) as db:
@@ -162,6 +183,7 @@ class LiveAdapter:
                     from whop_cli.config import rewards_location
                     origin, route = rewards_location(client.config.rewards_url)
                     campaign_ids = {source["campaign"]["id"] for source in self.config["sources"]}
+                    if campaign_id is not None:campaign_ids.add(campaign_id)
                     if diagnostics.get("origin") != origin or diagnostics.get("path") not in {route + "/campaigns/" + identifier for identifier in campaign_ids}:
                         raise SafetyError("whop_diagnostic_route_changed")
                 failure = AdapterFailure(mapped, "whop:" + code, getattr(exc, "retry_after_seconds", None), provider="whop", code=code, status=getattr(exc, "status", None) or None, diagnostics=diagnostics)
@@ -198,8 +220,13 @@ class LiveAdapter:
             number(ready.get("funding_remaining_cents"), 1, integer=True)
             if not 0 <= time.time() - timestamp(ready.get("observed_at")) <= self.config["limits"]["work_timeout_seconds"]:
                 raise SafetyError("whop_readiness_stale")
+            if 'commission_evidence' in source:
+                from .source_catalog import stable_campaign
+                actual=client.campaign(source['campaign']['id'])
+                if digest(stable_campaign(actual))!=source['commission_evidence']['campaign_evidence_digest']:
+                    raise SafetyError('catalog_fresh_commission_changed')
             return ready
-        return self._participant_call(read)
+        return self._participant_call(read,campaign_id=source['campaign']['id'])
 
     def _fresh_readiness(self, job, expected_digest=None):
         source = self._job_source(job)
@@ -207,13 +234,19 @@ class LiveAdapter:
         current_render_policy(source["publication_policy"])
         if timestamp(source["campaign"]["expires_at"]) <= time.time():
             raise SafetyError("campaign_expired")
-        campaign = self.campaign(source["campaign"]["id"])
-        remaining = campaign["budgetCents"] - campaign["metrics"]["budgetSpentCents"]
-        if campaign.get("status") != "active" or "tiktok" not in campaign["platforms"] or remaining <= 0:
-            raise SafetyError("campaign_not_active_funded_for_tiktok")
-        evidence = self._source_evidence(source, campaign)
-        if self.media._source(job["input"]) != self.media._source({"source_id": source["id"], "media_url": evidence["publication_policy"]["source_url"]}):
-            raise SafetyError("publication_source_no_longer_authorized")
+        if 'commission_evidence' in source:
+            if job['input']['media_url']!=source['publication_policy']['source_url']:
+                raise SafetyError('publication_source_no_longer_authorized')
+            evidence={'kind':'catalog_commission','commission_evidence':source['commission_evidence'],
+                      'publication_policy_digest':digest(source['publication_policy'])}
+        else:
+            campaign = self.campaign(source["campaign"]["id"])
+            remaining = campaign["budgetCents"] - campaign["metrics"]["budgetSpentCents"]
+            if campaign.get("status") != "active" or "tiktok" not in campaign["platforms"] or remaining <= 0:
+                raise SafetyError("campaign_not_active_funded_for_tiktok")
+            evidence = self._source_evidence(source, campaign)
+            if self.media._source(job["input"]) != self.media._source({"source_id": source["id"], "media_url": evidence["publication_policy"]["source_url"]}):
+                raise SafetyError("publication_source_no_longer_authorized")
         from .rights import required_overlays
         required_overlays(source["publication_policy"], job["proposal"])
         ready = self._whop_ready(source, expected_digest)
@@ -222,7 +255,7 @@ class LiveAdapter:
     def _readiness_snapshot(self, source, ready, evidence):
         snapshot = {"kind": "whop_ready", "actor": ready["actor"], "linked_account": ready["linked_account"],
             "campaign_id": ready["campaign_id"], "requirements_digest": ready["requirements_digest"],
-            "brief_content_sha256": source["publication_policy"]["brief_content_sha256"],
+            **({'commission_evidence':source['commission_evidence']} if 'commission_evidence' in source else {'brief_content_sha256':source['publication_policy']['brief_content_sha256']}),
             "publication_policy_digest": digest(source["publication_policy"]), "observed_at": ready["observed_at"],
             "source_evidence": evidence, "readiness": ready}
         strict_json(canonical(snapshot), self.config["limits"]["max_payload_bytes"])
@@ -255,7 +288,9 @@ class LiveAdapter:
         if not isinstance(readiness, dict):
             raise SafetyError("persisted_publication_readiness_missing")
         previous = strict_json(readiness["provenance"], self.config["limits"]["max_payload_bytes"])
-        if previous.get("campaign_id") != source["campaign"]["id"] or previous.get("brief_content_sha256") != source["publication_policy"]["brief_content_sha256"] or previous.get("publication_policy_digest") != digest(source["publication_policy"]):
+        evidence_field='commission_evidence' if 'commission_evidence' in source else 'brief_content_sha256'
+        expected_evidence=source['commission_evidence'] if evidence_field=='commission_evidence' else source['publication_policy']['brief_content_sha256']
+        if previous.get("campaign_id") != source["campaign"]["id"] or previous.get(evidence_field) != expected_evidence or previous.get("publication_policy_digest") != digest(source["publication_policy"]):
             raise SafetyError("persisted_publication_readiness_policy_changed")
         policy = self._studio_policy(job, asset)
         def fresh_before_post(binding):

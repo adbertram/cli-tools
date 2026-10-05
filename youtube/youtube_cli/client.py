@@ -45,12 +45,21 @@ class YoutubeClient:
 
     @staticmethod
     def acquire_source_media(url: str, *, expected_video_id, duration_seconds, output_dir,
-                             max_source_bytes, max_stage_bytes, max_resolution, timeout_seconds) -> Dict:
+                             max_source_bytes, max_stage_bytes, max_resolution, timeout_seconds, ownership_path=None) -> Dict:
         """Exact full-video bytes; caller supplies an empty private owned stage."""
         from .source_media import acquire_source_media
         return acquire_source_media(url, expected_video_id=expected_video_id, duration_seconds=duration_seconds,
                                     output_dir=output_dir, max_source_bytes=max_source_bytes, max_stage_bytes=max_stage_bytes,
-                                    max_resolution=max_resolution, timeout_seconds=timeout_seconds)
+                                    max_resolution=max_resolution, timeout_seconds=timeout_seconds, ownership_path=ownership_path)
+
+    @staticmethod
+    def recover_source_media(url: str, *, expected_video_id, duration_seconds, output_dir,
+                             max_source_bytes, max_stage_bytes, max_resolution, timeout_seconds, ownership_path) -> Dict:
+        """Recover only a durable exact ended owning acquisition attempt."""
+        from .source_media_recovery import recover
+        return recover(dict(url=url,expected_video_id=expected_video_id,duration_seconds=duration_seconds,
+            output_dir=str(output_dir),max_source_bytes=max_source_bytes,max_stage_bytes=max_stage_bytes,
+            max_resolution=max_resolution,timeout_seconds=timeout_seconds,ownership_path=str(ownership_path)))
 
     def __init__(self):
         """Initialize YouTube client."""

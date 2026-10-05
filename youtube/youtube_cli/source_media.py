@@ -23,7 +23,7 @@ BUFFER_BYTES = 65536
 
 def validate(request,*,worker=False):
     fields={'url','expected_video_id','duration_seconds','output_dir','max_source_bytes','max_stage_bytes','max_resolution','timeout_seconds'}
-    if type(request) is not dict or set(request)!=fields:fail('source_media_request_invalid','invalid_request')
+    if type(request) is not dict or set(request)-{'ownership_path','owner_attempt'}!=fields:fail('source_media_request_invalid','invalid_request')
     identifier,canonical=canonical_video(request['url'])
     if identifier!=request['expected_video_id']:fail('source_media_identity_invalid','invalid_request')
     positive(request['duration_seconds'],86400)
@@ -62,6 +62,9 @@ def guard(directory,identity,request,*,initial=False):
 def download(request):
     identifier,canonical,directory,identity=validate(request,worker=True)
     if any(directory.iterdir()):fail('source_media_empty_stage_required','invalid_request')
+    if 'ownership_path' in request:
+        from .source_media_recovery import await_owner
+        owner=await_owner(request,identity)
     guard(directory,identity,request,initial=True)
     os.umask(0o077)
     # Per-file hard cap includes ffmpeg descendants. A merge can concurrently
@@ -91,6 +94,9 @@ def download(request):
     progress(None)
     path=directory/'source.mp4'
     if not path.is_file():fail('source_media_expected_file_missing')
+    if 'ownership_path' in request:
+        from .source_media_recovery import completed_download
+        completed_download(request,owner)
     return {'video_id':identifier,'filename':'source.mp4','duration_seconds':request['duration_seconds']}
 
 
@@ -115,9 +121,10 @@ def _regular_digest(path,maximum,deadline):
     finally:os.close(fd)
 
 
-def acquire_source_media(url,*,expected_video_id,duration_seconds,output_dir,max_source_bytes,max_stage_bytes,max_resolution,timeout_seconds):
+def acquire_source_media(url,*,expected_video_id,duration_seconds,output_dir,max_source_bytes,max_stage_bytes,max_resolution,timeout_seconds,ownership_path=None):
     started=time.monotonic()
     request=dict(url=url,expected_video_id=expected_video_id,duration_seconds=duration_seconds,output_dir=str(output_dir),max_source_bytes=max_source_bytes,max_stage_bytes=max_stage_bytes,max_resolution=max_resolution,timeout_seconds=timeout_seconds)
+    if ownership_path is not None:request['ownership_path']=str(ownership_path)
     identifier,canonical,directory,identity=validate(request)
     if any(directory.iterdir()):fail('source_media_empty_stage_required','invalid_request')
     guard(directory,identity,request,initial=True)
@@ -127,8 +134,13 @@ def acquire_source_media(url,*,expected_video_id,duration_seconds,output_dir,max
     # Reserve cleanup/probe/hash capacity within the single caller deadline.
     worker=request|{'timeout_seconds':deadline-time.monotonic()-12}
     if worker['timeout_seconds']<=.75:fail('source_media_deadline_insufficient','transient')
+    start_hook=None
+    if ownership_path is not None:
+        from .source_media_recovery import begin,launched
+        owner=begin(request,identity);worker['owner_attempt']=owner['attempt']
+        start_hook=lambda pid,child_deadline:launched(request,owner,pid,child_deadline)
     result=run_bounded_read([sys.executable,'-m',__name__,json.dumps(worker,separators=(',',':'))],timeout_seconds=worker['timeout_seconds']-.75,max_stdout_bytes=16384,
-                            on_poll=lambda _:guard(directory,identity,request))
+                            on_poll=lambda _:guard(directory,identity,request),on_start=start_hook)
     try:
         envelope=json.loads(result.stdout.decode('utf-8'))
         if result.returncode==1 and set(envelope)=={'failure'}:
@@ -142,6 +154,12 @@ def acquire_source_media(url,*,expected_video_id,duration_seconds,output_dir,max
             raise SourceAcquisitionError(**failure)
         if result.returncode!=0 or envelope!={'result':{'video_id':identifier,'filename':'source.mp4','duration_seconds':duration_seconds}}:raise ValueError()
     except (ValueError,TypeError,KeyError,UnicodeError):raise SourceAcquisitionError('source_media_worker_schema_changed','invalid_data') from None
+    return verify_media(request,deadline,identity)
+
+
+def verify_media(request,deadline,identity):
+    identifier,canonical,directory,_=validate(request)
+    executable=shutil.which('ffprobe')
     guard(directory,identity,request)
     remaining=deadline-time.monotonic()-.75
     if remaining<=0:fail('source_media_deadline_exceeded','transient')
@@ -149,17 +167,21 @@ def acquire_source_media(url,*,expected_video_id,duration_seconds,output_dir,max
     try:
         measured=json.loads(probe.stdout.decode());streams=measured['streams'];videos=[s for s in streams if s['codec_type']=='video']
         duration=float(measured['format']['duration'])
-        if probe.returncode or len(videos)!=1 or not any(s['codec_type']=='audio' for s in streams) or not math.isfinite(duration) or abs(duration-duration_seconds)>1:
+        if probe.returncode or len(videos)!=1 or not any(s['codec_type']=='audio' for s in streams) or not math.isfinite(duration) or abs(duration-request['duration_seconds'])>1:
             raise ValueError()
         width,height=videos[0]['width'],videos[0]['height']
-        if type(width) is not int or type(height) is not int or not 0<width<=8192 or not 0<height<=max_resolution:raise ValueError()
+        if type(width) is not int or type(height) is not int or not 0<width<=8192 or not 0<height<=request['max_resolution']:raise ValueError()
     except (ValueError,TypeError,KeyError,UnicodeError):fail('source_media_full_video_probe_mismatch')
-    sha,size=_regular_digest(directory/'source.mp4',max_source_bytes,deadline)
+    sha,size=_regular_digest(directory/'source.mp4',request['max_source_bytes'],deadline)
     guard(directory,identity,request)
     if time.monotonic()>=deadline:fail('source_media_deadline_exceeded','transient')
-    return {'video_id':identifier,'url':canonical,'file_path':str(directory/'source.mp4'),'source_sha256':sha,'source_bytes':size,
+    receipt={'video_id':identifier,'url':canonical,'file_path':str(directory/'source.mp4'),'source_sha256':sha,'source_bytes':size,
             'duration_seconds':duration,'width':width,'height':height,'audio_present':True,
-            'provenance':{'kind':'owning_youtube_full_source_acquisition','timebase':'original_full_video_seconds','metadata_duration_seconds':duration_seconds,'resolution_limit':max_resolution}}
+            'provenance':{'kind':'owning_youtube_full_source_acquisition','timebase':'original_full_video_seconds','metadata_duration_seconds':request['duration_seconds'],'resolution_limit':request['max_resolution']}}
+    if 'ownership_path' in request:
+        from .source_media_recovery import completed_verification
+        completed_verification(request,receipt)
+    return receipt
 
 
 def main():
