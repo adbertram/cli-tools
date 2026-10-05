@@ -198,6 +198,8 @@ class Engine:
                 if field not in reward_columns:
                     db.execute("ALTER TABLE rewards ADD COLUMN " + field + " " + declaration)
             visual_columns = {r[1] for r in db.execute("PRAGMA table_info(visual_attempts)")}
+            if "runtime_reservation" not in visual_columns:
+                db.execute("ALTER TABLE visual_attempts ADD COLUMN runtime_reservation TEXT")
             if "artifact_inventory" not in visual_columns:
                 db.execute("ALTER TABLE visual_attempts ADD COLUMN artifact_inventory TEXT")
             if "native_completed_at" not in visual_columns:
@@ -489,15 +491,15 @@ class Engine:
             current = self._job(db, job_id)
             if current["status"] != "running" or current["lease_until"] <= self.clock() or not secrets.compare_digest(current["lease_token"] or "", worker_token):
                 raise SafetyError("visual_worker_lease_changed")
-            self._budget(db, "model_calls", 1)
-            # Reserve before any file creation; interrupted attempts remain owned.
-            self._budget(db, "runtime_seconds", self.config["visual"]["timeout_seconds"])
+            # One call/runtime reservation, atomically owned before artifacts.
+            reservation = self._reserve_model_attempt(db, attempt_id, 'visual', self.config['visual']['timeout_seconds'])
             envelope = {"schema_version": 1, "job_id": job_id, "attempt_id": attempt_id, "lease_token": worker_token,
                 "nonce": secrets.token_urlsafe(32), "asset_sha256": asset["sha256"], "input_digest": current["input_digest"],
                 "proposal_digest": current["proposal_digest"], "policy_digest": current["policy_digest"], "native_execution": self.native_execution}
             db.execute("UPDATE jobs SET stage='visual',updated_at=? WHERE id=?", (self.clock(), job_id))
             db.execute("INSERT INTO visual_attempts(id,job_id,state,envelope,proposal_snapshot,artifacts_ready,preparation_process,created_at,expires_at) VALUES(?,?,'preparing',?,?,0,?,?,?)",
                        (attempt_id, job_id, canonical(envelope), current["proposal"], canonical(process), self.clock(), current["lease_until"]))
+            db.execute('UPDATE visual_attempts SET runtime_reservation=? WHERE id=?',(reservation['reservation_id'],attempt_id))
         deadline = None if self._deadline is None else time.monotonic() + max(0, self._deadline - self.clock())
         try:
             artifacts = VisualArtifacts(self.config).prepare(job, asset, attempt_id, deadline=deadline)
@@ -523,41 +525,50 @@ class Engine:
             raise
         return {"job_id": job_id, "state": "visual_pending", "visual": envelope}
 
+    def _record_visual_receipt(self, db, receipt):
+        """Accounting only. A terminal model result never grants action here."""
+        from .visual import validate_receipt
+        if len(canonical(receipt).encode()) > self.config['limits']['max_payload_bytes']:
+            raise SafetyError('payload_too_large')
+        receipt = validate_receipt(receipt, classify_model_failure=True)
+        envelope = receipt['envelope']
+        result_digest = digest(receipt)
+        attempt = db.execute('SELECT * FROM visual_attempts WHERE id=? AND job_id=?', (envelope['attempt_id'],envelope['job_id'])).fetchone()
+        if attempt is None or strict_json(attempt['envelope'],self.config['limits']['max_payload_bytes']) != envelope:
+            raise SafetyError('visual_attempt_binding_changed')
+        if not attempt['created_at']-5 <= timestamp(receipt['observed_at']) <= self.clock()+5:
+            raise SafetyError('visual_observation_time_invalid')
+        duplicate = attempt['result_digest'] is not None
+        if duplicate and attempt['result_digest'] != result_digest:
+            raise SafetyError('visual_duplicate_result_changed')
+        if self.native_completion:
+            if self.native_execution != envelope['native_execution']:
+                raise SafetyError('visual_native_completion_owner_changed')
+            db.execute('UPDATE visual_attempts SET native_completed_at=? WHERE id=?',(self.clock(),envelope['attempt_id']))
+        if not duplicate:
+            db.execute('UPDATE visual_attempts SET result=?,result_digest=?,completed_at=? WHERE id=?',(canonical(receipt),result_digest,self.clock(),envelope['attempt_id']))
+            self.event(db,envelope['job_id'],'visual_usage_observed',{'attempt_id':envelope['attempt_id'],'usage_observed':receipt['usage_observed'],'usage':receipt['usage'],'outcome':receipt['outcome']})
+            failure=receipt.get('failure')
+            if receipt['outcome'] != 'completed':
+                retry=None
+                if failure:
+                    retry=failure['retry_after_ms']/1000 if failure['retry_after_ms'] is not None else (self.config['limits']['retry_base_seconds'] if failure['category']=='rate_limit' else None)
+                self._circuit_failure('model',retry,db=db)
+        from .native_runtime import settle_native
+        settle_native(self,db,envelope,'visual',attempt['runtime_reservation'],receipt)
+        return dict(attempt),receipt,duplicate
+
     @bounded
     def apply_visual(self, receipt, execute=True):
         """Retain native usage/result before validating authority to continue."""
-        from .visual import VisualArtifacts, validate_receipt
-        if len(canonical(receipt).encode()) > self.config["limits"]["max_payload_bytes"]:
-            raise SafetyError("payload_too_large")
-        receipt = validate_receipt(receipt, classify_model_failure=True)
-        from .safety import timestamp
-        observed = timestamp(receipt["observed_at"])
-        envelope = receipt["envelope"]
-        result_digest = digest(receipt)
+        from .visual import VisualArtifacts
         with self.transaction() as db:
-            attempt = db.execute("SELECT * FROM visual_attempts WHERE id=? AND job_id=?", (envelope["attempt_id"], envelope["job_id"])).fetchone()
-            if attempt is None or strict_json(attempt["envelope"], self.config["limits"]["max_payload_bytes"]) != envelope:
-                raise SafetyError("visual_attempt_binding_changed")
-            if self.native_completion:
-                if self.native_execution != envelope["native_execution"]:
-                    raise SafetyError("visual_native_completion_owner_changed")
-                db.execute("UPDATE visual_attempts SET native_completed_at=? WHERE id=?", (self.clock(), envelope["attempt_id"]))
-            if attempt["result_digest"] is not None:
-                if attempt["result_digest"] != result_digest:
-                    raise SafetyError("visual_duplicate_result_changed")
-                if attempt["state"] != "pending":
-                    return {"job_id": envelope["job_id"], "state": self._job(db, envelope["job_id"])["status"], "deduplicated": True}
-            # Usage from an expired/failed native call still belongs to its exact
-            # reserved attempt. It never authorizes a newer worker or attempt.
-            else:
-                db.execute("UPDATE visual_attempts SET result=?,result_digest=?,completed_at=? WHERE id=?", (canonical(receipt), result_digest, self.clock(), envelope["attempt_id"]))
-                self.event(db, envelope["job_id"], "visual_usage_observed", {"attempt_id": envelope["attempt_id"], "usage_observed": receipt["usage_observed"], "usage": receipt["usage"], "outcome": receipt["outcome"]})
-                failure = receipt.get("failure")
-                if receipt["outcome"] != "completed":
-                    retry = None
-                    if failure and failure["category"] == "rate_limit":
-                        retry = failure["retry_after_ms"] / 1000 if failure["retry_after_ms"] is not None else self.config["limits"]["retry_base_seconds"]
-                    self._circuit_failure("model", retry, db=db)
+            attempt,receipt,duplicate = self._record_visual_receipt(db,receipt)
+            envelope=receipt['envelope']
+            if duplicate and attempt['state'] != 'pending':
+                return {'job_id':envelope['job_id'],'state':self._job(db,envelope['job_id'])['status'],'deduplicated':True}
+        observed=timestamp(receipt['observed_at'])
+        result_digest=digest(receipt)
         with self.transaction() as db:
             self._active(db)
             job = self._job(db, envelope["job_id"])
@@ -1893,13 +1904,25 @@ class Engine:
                         inventory = artifacts.inventory(envelope)
                     else:
                         inventory = strict_json(current["artifact_inventory"], self.config["limits"]["max_payload_bytes"])
-                    # Persist terminal proof and unknown-usage timeout before
-                    # deleting files. Restart can resume partial exact cleanup.
+                    # Recover exact native accounting before artifact deletion;
+                    # expired decisions never go through the authorization path.
+                    native_path = Path(envelope['manifest_path']).parent / 'native-receipt.json' if current['artifacts_ready'] else None
+                    if current['result'] is None and native_path is not None and native_path.exists():
+                        from .visual import owned_bytes
+                        native_receipt = strict_json(owned_bytes(native_path,Path(self.config['workspace']),self.config['limits']['max_payload_bytes']),self.config['limits']['max_payload_bytes'])
+                        if not isinstance(native_receipt,dict) or native_receipt.get('envelope') != envelope:
+                            raise SafetyError('visual_native_file_binding_changed')
+                        self._record_visual_receipt(db,native_receipt)
+                        current = db.execute('SELECT * FROM visual_attempts WHERE id=?',(attempt['id'],)).fetchone()
+                    # Only absence of an exact terminal file permits unknown usage.
                     if current["result"] is None and current["artifacts_ready"]:
                         timeout = {"envelope": envelope, "outcome": "timeout", "decision": None, "usage_observed": False, "usage": None,
                             "model": {"provider": "deepseek-official", "model": "deepseek-flash"}, "observed_at": datetime.fromtimestamp(ended, timezone.utc).isoformat(),
                             "failure": {"category": "timeout", "code": "native_terminal_without_receipt", "status": None, "retry_after_ms": None}}
                         db.execute("UPDATE visual_attempts SET result=?,result_digest=?,completed_at=? WHERE id=?", (canonical(timeout), digest(timeout), ended, attempt["id"]))
+                    if current['result'] is not None:
+                        from .native_runtime import settle_native
+                        settle_native(self,db,envelope,'visual',current['runtime_reservation'],strict_json(current['result'],self.config['limits']['max_payload_bytes']))
                     db.execute("UPDATE visual_attempts SET native_completed_at=?,native_termination_proof=?,artifact_inventory=? WHERE id=?", (ended, canonical(terminal), canonical(inventory), attempt["id"]))
                     self.event(db, attempt["job_id"], "visual_native_termination_verified", {"attempt_id": attempt["id"], "provenance": terminal["provenance"]})
                 with self.transaction() as db:

@@ -1,3 +1,4 @@
+import {startRuntime,preserveReceiptTiming} from './runtime-proof.mjs';
 /** Native dsh runner. Credentials remain in the owning n8n node. */
 import {open, realpath, writeFile} from 'node:fs/promises';
 import {constants} from 'node:fs';
@@ -118,19 +119,26 @@ export function parseDecision(text, pythonExecutable, execute=execFileSync, expe
  return decision;
 }
 
-async function run(ctx,config) {
+async function loadSdk(config) {
+ const require=createRequire(config.sdkPackage);
+ const [{installModelSelection},{createUserMessage},{SessionId}]=await Promise.all(['@deepseek-ai/dsh-agent','@deepseek-ai/dsh-llm','@deepseek-ai/dsh-session'].map(p=>import(pathToFileURL(require.resolve(p)).href)));
+ return {installModelSelection,createUserMessage,SessionId};
+}
+
+export async function run(ctx,config,sdkLoader=loadSdk,runtimeWriter) {
+ const runtimeStarted=startRuntime();
  await ctx.get('loader')?.await();
  const {envelope,root,manifest,inputs}=await loadInputs(config.task,config);
  const start=execFileSync('/bin/ps',['-p',String(process.pid),'-o','lstart='],{encoding:'utf8',timeout:2000,env:{...process.env,LC_ALL:'C'}}).trim();
  if(!start)throw Error('native_process_start_unverified');
- await writeFile(path.join(root,'process-start.json'),JSON.stringify({schema_version:1,job_id:envelope.job_id,attempt_id:envelope.attempt_id,nonce:envelope.nonce,pid:process.pid,start_identity:start})+'\n',{flag:'wx',mode:0o600});
+ const processIdentity={pid:process.pid,start_identity:start};
+ await writeFile(path.join(root,'process-start.json'),JSON.stringify({schema_version:1,job_id:envelope.job_id,attempt_id:envelope.attempt_id,nonce:envelope.nonce,...processIdentity})+'\n',{flag:'wx',mode:0o600});
  const selection={provider:'deepseek-official',model:'deepseek-flash'};
  const receipt={envelope,outcome:'failed',decision:null,usage_observed:false,usage:null,usage_provenance:{session_id:null,as_of_seq:null},model:selection,observed_at:new Date().toISOString(),failure:classifyFailure({kind:'native_call_not_completed'})};
  let agent,firstSeq;
  try {
   const attachments=await ctx.attachments.saveImages(inputs);
-  const require=createRequire(config.sdkPackage);
-  const [{installModelSelection},{createUserMessage},{SessionId}]=await Promise.all(['@deepseek-ai/dsh-agent','@deepseek-ai/dsh-llm','@deepseek-ai/dsh-session'].map(p=>import(pathToFileURL(require.resolve(p)).href)));
+  const {installModelSelection,createUserMessage,SessionId}=await sdkLoader(config);
   ({agent}=await ctx.agents.create({sessionId:SessionId(`session-${randomUUID()}`),meta:{cwd:process.cwd()},agentOptions:{...selection,maxTokens:2500,reasoningEffort:'off'},setup:agentCtx=>{installModelSelection(agentCtx,{current:selection,assembled:undefined});}}));
   await agent.whenIdle();firstSeq=agent.session.seq;
   agent.followup(createUserMessage({content:[{type:'text',text:manifest.prompt},...attachments.map(attachment=>({type:'image',attachment}))],source:{kind:'user'}}));
@@ -156,12 +164,13 @@ async function run(ctx,config) {
    Object.assign(receipt,measuredUsage(agent.session.events,firstSeq,ctx.sessionProjections.snapshot(agent.session)));
    receipt.usage_provenance={session_id:agent.session.id,as_of_seq:ctx.sessionProjections.snapshot(agent.session).asOfSeq};
   }
-  receipt.failure=classifyFailure({kind:'error',error:{code:error.code||error.name||'UNKNOWN'}});
+  receipt.failure=classifyFailure({kind:'error',error:error.failure??{code:error.code||error.name||'UNKNOWN'}});
  }
  receipt.observed_at=new Date().toISOString();
  // Persist failed usage too, before stdout/appExit. The native node's hard
  // timeout handles processes which cannot produce a terminal receipt.
  await writeFile(path.join(root,'native-receipt.json'),JSON.stringify(receipt)+'\n',{flag:'wx',mode:0o600});
+ await preserveReceiptTiming(root,envelope,processIdentity,runtimeStarted,JSON.stringify(receipt)+'\n',runtimeWriter);
  process.stdout.write(JSON.stringify(receipt)+'\n');ctx.get('appExit')(0);
 }
 

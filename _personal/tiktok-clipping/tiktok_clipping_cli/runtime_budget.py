@@ -11,6 +11,10 @@ def reservation_schema(db):
         id TEXT PRIMARY KEY, attempt_id TEXT UNIQUE NOT NULL, kind TEXT NOT NULL,
         day TEXT NOT NULL, reserved_seconds REAL NOT NULL, created_at REAL NOT NULL,
         settled_seconds REAL, settled_at REAL)""")
+    columns = {row[1] for row in db.execute('PRAGMA table_info(runtime_reservations)')}
+    for name in ('native_proof', 'native_proof_digest', 'held_reason'):
+        if name not in columns:
+            db.execute('ALTER TABLE runtime_reservations ADD COLUMN '+name+' TEXT')
 
 
 def reserve_operation(engine, db, operation_id, method, ceiling):

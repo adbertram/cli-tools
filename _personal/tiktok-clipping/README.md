@@ -137,7 +137,7 @@ Configure this optional trusted block only after installing and verifying its na
 }
 ```
 
-Timeout plus continuation must fit the configured job lease. Existing daily call/runtime budgets and explicit token/output caps apply; token prices are not required. Issuance commits the original lease, immutable manifest/overlay hashes and one atomic model-call/runtime reservation before writing artifacts. Its reservation retains the original UTC day across restarts and midnight. Missing native timing proof keeps the runtime ceiling reserved.
+Timeout plus continuation must fit the configured job lease. Existing daily call/runtime budgets and explicit token/output caps apply; token prices are not required. Issuance commits the original lease, immutable manifest/overlay hashes and one atomic model-call/runtime reservation before writing artifacts. Its reservation retains the original UTC day across restarts and midnight. Native runtime proof binds the exact attempt envelope, original process identity, durable terminal receipt hash and measured monotonic start/end. Valid timing settles once against the original UTC reservation day; invalid, missing or legacy timing keeps the runtime ceiling reserved. Optional timing-write failure preserves the original native receipt and usage. Verified proof survives artifact cleanup in the reservation ledger.
 
 ```bash
 tiktok-clipping jobs prepare --kind clip --native-text --config /absolute/config.json --n8n-execution-id EXECUTION_ID --n8n-workflow-id CLIP_WORKFLOW_ID
