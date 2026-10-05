@@ -38,6 +38,7 @@ tiktok-clipping <command-group> <action> [arguments] [options]
 | Revalidate blocked preproposal text work after its original native process ended | `tiktok-clipping jobs retry-text <JOB_ID>` |
 | Run a ready job; coordinator alone owns retries and side-effect budgets | `tiktok-clipping jobs run <JOB_ID>` |
 | Append a trusted timestamped metric snapshot from stdin; unknown values stay null | `tiktok-clipping metrics record` |
+| Read every clip's state, publication and latest measured performance | `tiktok-clipping activity list` |
 | Read actual campaign acceptance/rejection and observed earnings | `tiktok-clipping rewards refresh <JOB_ID>` |
 | Submit one post to its verified campaign before its verified campaign-specific deadline | `tiktok-clipping rewards submit <JOB_ID>` |
 | Inspect setup, control, account, durable budgets and strategy version | `tiktok-clipping status get` |
@@ -53,6 +54,7 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
 </principle>
 
 <principle name="Command Groups">
+- **activity** -- Read the per-clip activity projection for dashboards (subcommands: list)
 - **control** -- Persist pause, stop or running state (subcommands: set)
 - **jobs** -- Prepare, validate and execute durable jobs (subcommands: apply, apply-text, apply-visual, get, ingest, list, maintain, prepare, reconcile, retry, retry-text, run)
 - **metrics** -- Record provenance-preserving measurement snapshots (subcommands: record)

@@ -1,10 +1,59 @@
 {
   "tool": "tiktok-clipping",
   "description": "CLI interface for tiktok-clipping",
-  "discovered_at": "2026-10-05T05:40:45Z",
-  "total_commands": 20,
+  "discovered_at": "2026-10-05T20:01:23Z",
+  "total_commands": 21,
   "global_options": [],
   "commands": {
+    "activity": {
+      "help": "Read the per-clip activity projection for dashboards.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "list": {
+          "help": "List every clip's state, publication and latest measured performance.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--config",
+              "type": "file",
+              "required": true,
+              "help": "Trusted absolute JSON configuration file"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[1<=x<=100000]  Maximum clip rows",
+              "short": "-l",
+              "default": "10000"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display rows as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
     "control": {
       "help": "Persist pause, stop or running state.",
       "arguments": [],
