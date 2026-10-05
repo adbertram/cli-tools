@@ -242,10 +242,16 @@ class CatalogDiscovery:
             return []
         with self._db() as db:
             states={row['source_id']:row for row in db.execute('SELECT * FROM catalog_materializations')}
+            admitted={(row['source_id'],row['evidence_version']) for row in db.execute('SELECT source_id,evidence_version FROM catalog_admissions WHERE valid_until>?',(self.clock(),))}
         due=[c for c in candidates if c['id'] not in states or states[c['id']]['next_at']<=self.clock()]
         if not due:return []
-        # Durable due times rotate candidates without changing video identity.
-        candidate=min(due,key=lambda c:(states[c['id']]['next_at'] if c['id'] in states else 0,c['id']))
+        # Finish a due owned pipeline before opening another acquisition.
+        # Ready caches return to ordinary fairness after a current admission.
+        def priority(candidate):
+            state=states.get(candidate['id'])
+            unfinished=state is not None and (state['phase'] in ('media','captions','evicting') or (state['phase']=='ready' and (candidate['id'],candidate['current_version']) not in admitted))
+            return (0 if unfinished else 1,state['next_at'] if state is not None else 0,candidate['id'])
+        candidate=min(due,key=priority)
         snapshot=self.catalog.validate_current(candidate['id'],candidate['current_version'])
         asset=snapshot['evidence']['asset'];state=states.get(candidate['id'])
         stage=Path(self.config['workspace'])/'catalog-media'/candidate['id']

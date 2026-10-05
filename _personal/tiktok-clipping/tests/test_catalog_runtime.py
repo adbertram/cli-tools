@@ -286,3 +286,57 @@ def test_cache_replacement_during_probe_never_deleted(prepared,clock,monkeypatch
         with pytest.raises(SafetyError,match='changed_during_verification'):d._evict_cache(None,100,d.monotonic()+120)
     assert path.read_bytes()==replacement
     with p.engine.transaction() as db:assert db.execute('SELECT phase FROM catalog_materializations').fetchone()[0]=='evicting'
+
+
+@pytest.mark.parametrize('has_evicted',[False,True])
+def test_unfinished_pipeline_admits_before_unseen_or_evicted_acquisition(prepared,clock,monkeypatch,has_evicted):
+    p=prepared;stage=Path(p.media['file_path']).parent
+    with p.engine.transaction() as db:
+        db.execute('DELETE FROM catalog_admissions')
+        if has_evicted:db.execute('INSERT INTO catalog_materializations(source_id,evidence_version,phase,next_at) VALUES(?,?,?,?)',('0'*64,'f'*64,'evicted',0))
+        db.execute('INSERT INTO catalog_materializations(source_id,evidence_version,phase,stage,media,next_at) VALUES(?,?,?,?,?,?)',(p.snapshot['source_id'],p.snapshot['evidence_version'],'captions',str(stage),canonical(p.media),clock()))
+    from tiktok_clipping_cli.media import MediaRenderer
+    media=MediaRenderer(p.config);monkeypatch.setattr(media,'probe',lambda *a,**k:{'duration_seconds':1800,'audio_present':True})
+    calls=[];sdk=SimpleNamespace(acquire_source_media=lambda *a,**k:pytest.fail('finish due caption/admission before opening another download'),read_source_transcript=lambda *a,**k:(calls.append('captions') or p.captions))
+    d=cr.CatalogDiscovery(p.config,media,providers=p.providers,youtube=sdk,clock=clock)
+    real={'id':p.snapshot['source_id'],'current_version':p.snapshot['evidence_version']}
+    unseen=[{'id':str(i)*64,'current_version':'f'*64} for i in (0,1)]
+    monkeypatch.setattr(d.catalog,'eligible',lambda **k:{'sources':unseen+[real]})
+    original=d.catalog.validate_current
+    def current(identifier,revision):
+        assert identifier==real['id'],'unseen source chosen before pipeline completes'
+        return original(identifier,revision)
+    monkeypatch.setattr(d.catalog,'validate_current',current)
+    assert d.discover(d.monotonic()+120)==[]
+    records=d.discover(d.monotonic()+120)
+    assert len(records)==1 and records[0]['source_id']==real['id'] and calls==['captions']
+
+
+@pytest.mark.parametrize('reason',['backoff','expired'])
+def test_unfinished_backoff_or_expired_source_cannot_starve_viable_work(prepared,clock,monkeypatch,reason):
+    p=prepared;blocked={'id':'0'*64,'current_version':'f'*64}
+    with p.engine.transaction() as db:db.execute('INSERT INTO catalog_materializations(source_id,evidence_version,phase,next_at) VALUES(?,?,?,?)',(blocked['id'],blocked['current_version'],'captions',clock()+60))
+    from tiktok_clipping_cli.media import MediaRenderer
+    d=cr.CatalogDiscovery(p.config,MediaRenderer(p.config),providers=p.providers,youtube=SimpleNamespace(),clock=clock)
+    real={'id':p.snapshot['source_id'],'current_version':p.snapshot['evidence_version']}
+    # The owning catalog omits expired dependencies; due filter omits backoff.
+    monkeypatch.setattr(d.catalog,'eligible',lambda **k:{'sources':([blocked] if reason=='backoff' else [])+[real]})
+    def selected(identifier,revision):
+        assert identifier==real['id']
+        raise SafetyError('TEST_viable_selected')
+    monkeypatch.setattr(d.catalog,'validate_current',selected)
+    with pytest.raises(SafetyError,match='TEST_viable_selected'):d.discover(d.monotonic()+120)
+
+
+def test_currently_admitted_ready_source_keeps_new_source_fairness(prepared,clock,monkeypatch):
+    p=prepared
+    with p.engine.transaction() as db:db.execute('INSERT INTO catalog_materializations(source_id,evidence_version,phase,next_at) VALUES(?,?,?,?)',(p.snapshot['source_id'],p.snapshot['evidence_version'],'ready',clock()))
+    from tiktok_clipping_cli.media import MediaRenderer
+    d=cr.CatalogDiscovery(p.config,MediaRenderer(p.config),providers=p.providers,youtube=SimpleNamespace(),clock=clock)
+    unseen={'id':'0'*64,'current_version':'f'*64};real={'id':p.snapshot['source_id'],'current_version':p.snapshot['evidence_version']}
+    monkeypatch.setattr(d.catalog,'eligible',lambda **k:{'sources':[unseen,real]})
+    def selected(identifier,revision):
+        assert identifier==unseen['id']
+        raise SafetyError('TEST_unseen_selected')
+    monkeypatch.setattr(d.catalog,'validate_current',selected)
+    with pytest.raises(SafetyError,match='TEST_unseen_selected'):d.discover(d.monotonic()+120)
