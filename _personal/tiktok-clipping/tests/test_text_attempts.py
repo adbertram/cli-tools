@@ -404,3 +404,63 @@ def test_duplicate_native_return_keeps_first_completion_timestamp(native, clock)
     first=attempt(native,env)['native_completed_at'];clock.now+=1
     native.apply_text(data,execute=False)
     assert attempt(native,env)['native_completed_at']==first
+
+
+def failed_render(native,adapter,clock):
+    envelope=issue(native)
+    native.apply_text(receipt(native,envelope),execute=False)
+    def broken_render(job,proposal):raise KeyError('lease_token')
+    adapter.render=broken_render
+    result=native.run(envelope['job_id'])
+    assert result['state']=='failed' and result['error']=="KeyError: 'lease_token'"
+    adapter.visual_execution_state=lambda e:{**e['native_execution'],'terminal':True,'process_absent':True,'stopped_at':iso(clock()),'provenance':'TEST owning execution terminal and exact child absent'}
+    return envelope
+
+
+def test_failed_render_retry_requires_expired_original_lease_and_preserves_accounting(native,adapter,clock):
+    envelope=failed_render(native,adapter,clock)
+    before=native.get(envelope['job_id']);budgets=native.status()['budgets']
+    with pytest.raises(SafetyError,match='failed_render_recovery_proof_required'):native.retry(envelope['job_id'])
+    clock.now+=native.config['limits']['lease_seconds']+1
+    assert native.retry(envelope['job_id'])['state']=='ready'
+    after=native.get(envelope['job_id'])
+    for key in ('proposal','proposal_digest','attempts','revisions','input_digest','policy_digest'):
+        assert before[key]==after[key]
+    assert native.status()['budgets'][0]['model_calls']==budgets[0]['model_calls']
+    assert native.status()['budgets'][0]['posts']==budgets[0]['posts']
+
+
+@pytest.mark.parametrize('boundary',['process','execution','changed','public','wrong_error'])
+def test_failed_render_retry_denies_unknown_or_changed_boundaries(native,adapter,clock,boundary):
+    envelope=failed_render(native,adapter,clock);clock.now+=native.config['limits']['lease_seconds']+1
+    original=adapter.visual_execution_state
+    if boundary in {'process','execution','changed'}:
+        def state(e):
+            proof=original(e)
+            if boundary=='process':proof['process_absent']=False
+            elif boundary=='execution':proof['execution_id']='999'
+            else:
+                with native.transaction() as db:db.execute("UPDATE jobs SET error='changed' WHERE id=?",(envelope['job_id'],))
+            return proof
+        adapter.visual_execution_state=state
+    else:
+        with native.transaction() as db:
+            if boundary=='public':native.event(db,envelope['job_id'],'upload_started',{})
+            else:db.execute("UPDATE jobs SET error='different' WHERE id=?",(envelope['job_id'],))
+    with pytest.raises(SafetyError):native.retry(envelope['job_id'])
+    assert native.get(envelope['job_id'])['status']=='failed'
+
+
+@pytest.mark.parametrize('boundary',['policy','expiry'])
+def test_failed_render_retry_never_rebinds_policy_or_renews_original_source(native,adapter,clock,boundary):
+    from tiktok_clipping_cli.safety import timestamp
+    envelope=failed_render(native,adapter,clock)
+    before=native.get(envelope['job_id'])
+    clock.now+=native.config['limits']['lease_seconds']+1
+    if boundary=='policy':native.policy_digest='f'*64
+    else:clock.now=timestamp(native.config['sources'][0]['campaign']['expires_at'])+1
+    with pytest.raises(SafetyError):native.retry(envelope['job_id'])
+    after=native.get(envelope['job_id'])
+    assert after['status']=='failed'
+    for field in ('input','input_digest','policy_digest','attempts','proposal','revisions'):
+        assert after[field]==before[field]

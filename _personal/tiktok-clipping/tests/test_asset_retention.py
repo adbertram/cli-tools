@@ -494,3 +494,32 @@ def test_whisper_nested_inventory_survives_partial_unlink_restart(engine,clock,m
     with engine.transaction() as db:assert db.execute('SELECT inventory FROM render_temporaries').fetchone()[0]
     monkeypatch.setattr(module,'unlink_checked',original)
     assert prune_owned(engine)>0 and not path.exists()
+
+
+def test_run_passes_original_lease_to_render_without_public_inspection_leak(engine,adapter,clock):
+    envelope=claim(engine,clock)
+    prepared=engine.apply(payload(envelope),execute=False)
+    assert prepared['state']=='ready'
+    assert 'lease_token' not in engine.get(envelope['job_id'])
+    original=adapter.render
+    seen=[]
+    def render(job,proposal):
+        owner=RenderOwnership(engine.config,job,proposal,clock=clock)
+        owner.root.mkdir(exist_ok=True)
+        with owner.temporary('render') as path:
+            assert Path(path).is_dir()
+            seen.append(job['lease_token'])
+        return original(job,proposal)
+    adapter.render=render
+    result=engine.run(envelope['job_id'])
+    assert result['state']=='published',result
+    assert seen==[envelope['lease_token']]
+    assert 'lease_token' not in engine.get(envelope['job_id'])
+
+
+def test_adapter_job_refuses_reclaimed_lease(engine,clock):
+    owner,job,proposal=owner_fixture(engine,clock)
+    with engine.transaction() as db:
+        db.execute("UPDATE jobs SET lease_token='reclaimed' WHERE id=?",(job['id'],))
+    with pytest.raises(SafetyError,match='publication_worker_lease_changed'):
+        engine._adapter_job(job['id'],job['lease_token'])

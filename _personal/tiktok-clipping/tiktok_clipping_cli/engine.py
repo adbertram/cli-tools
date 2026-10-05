@@ -1442,7 +1442,7 @@ class Engine:
                 return {"job_id": job_id, "state": "failed", "error": "attempts_exhausted"}
             worker_token = job["lease_token"] or secrets.token_urlsafe(32)
             db.execute("UPDATE jobs SET status='running',attempts=attempts+1,lease_token=?,lease_until=?,updated_at=? WHERE id=?", (worker_token, self.clock() + self.config["limits"]["lease_seconds"], self.clock(), job_id))
-        job = self.get(job_id)
+        job = self._adapter_job(job_id, worker_token)
         stage = job["stage"]
         upload_started = False
         try:
@@ -1860,14 +1860,47 @@ class Engine:
                     (str(exc), self.clock() + delay, job_id, token))
             raise
 
+    @bounded
     def retry(self, job_id):
         """Explicitly revalidate blocked local work after a trusted adapter/config fix."""
+        render_recovery = None
+        with self.transaction() as db:
+            original = self._job(db, job_id)
+            if original['status'] == 'failed' and original['stage'] == 'render' and original['error'] == "KeyError: 'lease_token'":
+                failure = db.execute("SELECT data FROM events WHERE job_id=? AND event='adapter_failure' ORDER BY id DESC LIMIT 1", (job_id,)).fetchone()
+                proof = strict_json(failure['data']) if failure else {}
+                binding = {field: original[field] for field in ('input_digest', 'proposal_digest', 'policy_digest', 'asset')}
+                if original['policy_digest'] != self.policy_digest:
+                    raise SafetyError('failed_render_original_policy_changed')
+                if (proof.get('stage') != 'render' or proof.get('category') != 'permanent' or proof.get('error') != original['error']
+                        or proof.get('binding') != binding or original['asset'] is not None or original['proposal'] is None
+                        or original['result'] is not None or original['lease_until'] is None or original['lease_until'] > self.clock()
+                        or original['attempts'] >= self.config['limits']['max_attempts']):
+                    raise SafetyError('failed_render_recovery_proof_required')
+                if db.execute('SELECT 1 FROM publications WHERE job_id=?', (job_id,)).fetchone() or db.execute('SELECT 1 FROM visual_attempts WHERE job_id=?', (job_id,)).fetchone() or db.execute("SELECT 1 FROM events WHERE job_id=? AND event='upload_started'", (job_id,)).fetchone():
+                    raise SafetyError('failed_job_public_action_history')
+                attempt = db.execute("SELECT * FROM text_attempts WHERE job_id=? AND state='applied' ORDER BY created_at DESC LIMIT 1", (job_id,)).fetchone()
+                if attempt is None or attempt['result'] is None:
+                    raise SafetyError('failed_render_native_proof_required')
+                receipt = strict_json(attempt['result'])
+                envelope = strict_json(attempt['envelope'])
+                if receipt['outcome'] != 'completed' or any(envelope[field] != original[field] for field in ('input_digest','policy_digest','lease_token')):
+                    raise SafetyError('failed_render_native_binding_changed')
+                render_recovery = {'original': original, 'attempt': dict(attempt)}
+        if render_recovery is not None:
+            from .text_attempts import TextAttempts
+            render_recovery['terminal'] = TextAttempts(self).native_state(render_recovery['attempt'])
         with self.transaction() as db:
             self._active(db)
             job = self._job(db, job_id)
             if job['proposal'] is None and db.execute('SELECT 1 FROM text_attempts WHERE job_id=?', (job_id,)).fetchone():
                 raise SafetyError('preproposal_text_job_requires_retry_text_or_native_recovery')
-            if job["status"] == "failed":
+            if render_recovery is not None:
+                if job != render_recovery['original']:
+                    raise SafetyError('failed_render_recovery_binding_changed')
+                if db.execute('SELECT 1 FROM publications WHERE job_id=?', (job_id,)).fetchone() or db.execute('SELECT 1 FROM visual_attempts WHERE job_id=?', (job_id,)).fetchone() or db.execute("SELECT 1 FROM events WHERE job_id=? AND event='upload_started'", (job_id,)).fetchone():
+                    raise SafetyError('failed_job_public_action_history')
+            elif job["status"] == "failed":
                 failure = db.execute("SELECT data FROM events WHERE job_id=? AND event='adapter_failure' ORDER BY id DESC LIMIT 1", (job_id,)).fetchone()
                 proof = json.loads(failure["data"]) if failure else {}
                 legacy = proof == {"category": "permanent", "stage": "verify_ready", "state": "failed"} and job["error"] == "whop:submission_form_unavailable"
@@ -1887,6 +1920,8 @@ class Engine:
                 validate_proposal(job["kind"], json.loads(job["proposal"]), data, self.config,now=self.clock(),db=db)
             db.execute("UPDATE jobs SET status='ready',policy_digest=?,next_at=0,error=NULL,lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=?", (self.policy_digest, self.clock(), job_id))
             self.event(db, job_id, "blocked_job_revalidated" if job["status"] == "blocked" else "pre_publication_job_revalidated", {"policy_digest": self.policy_digest, "previous_error": job["error"], "attempts": job["attempts"], "revisions": job["revisions"]})
+            if render_recovery is not None:
+                self.event(db, job_id, 'failed_render_native_revalidated', {'attempt_id': render_recovery['attempt']['id'], 'terminal': render_recovery['terminal']})
         return {"job_id": job_id, "state": "ready"}
 
     @bounded

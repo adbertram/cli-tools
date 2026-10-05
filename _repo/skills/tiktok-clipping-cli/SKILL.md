@@ -33,7 +33,7 @@ tiktok-clipping <command-group> <action> [arguments] [options]
 | Recover expired leases, reconcile uploads and maintain campaign submissions | `tiktok-clipping jobs maintain` |
 | Claim one durable job or return an explicit paused/unconfigured/idle state | `tiktok-clipping jobs prepare` |
 | Read back an ambiguous upload without repeating publication | `tiktok-clipping jobs reconcile <JOB_ID>` |
-| Revalidate blocked work or an explicitly proven pre-publication visual failure | `tiktok-clipping jobs retry <JOB_ID>` |
+| Revalidate blocked work or an explicitly proven pre-publication visual/render failure | `tiktok-clipping jobs retry <JOB_ID>` |
 | Revalidate blocked preproposal text work after its original native process ended | `tiktok-clipping jobs retry-text <JOB_ID>` |
 | Run a ready job; coordinator alone owns retries and side-effect budgets | `tiktok-clipping jobs run <JOB_ID>` |
 | Append a trusted timestamped metric snapshot from stdin; unknown values stay null | `tiktok-clipping metrics record` |

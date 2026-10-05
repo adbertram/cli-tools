@@ -39,7 +39,7 @@ tiktok-clipping jobs prepare --kind metrics --config /absolute/config.json
 
 Without `native_text`, legacy clip/learn envelopes contain `ready`, `job_id`, `lease_token`, `kind`, `prompt`, `input_digest`, `policy_digest`, and `input`. Metrics jobs execute through the trusted adapter and return `ready: false`; they never enter a model. Other explicit states include paused, stopped, unconfigured, idle, insufficient_samples, and adapter outcomes. Due validated retries execute without another model call.
 
-Apply bounded model JSON from stdin; execute an already validated job; read back an ambiguous publication; revalidate blocked work or a proven pre-publication visual failure after a trusted integration repair:
+Apply bounded model JSON from stdin; execute an already validated job; read back an ambiguous publication; revalidate blocked work or a proven pre-publication visual/render failure after a trusted integration repair:
 
 ```bash
 tiktok-clipping jobs apply --config /absolute/config.json < /absolute/model-envelope.json
@@ -233,3 +233,5 @@ Dynamic source records add trusted `catalog_admission` and `source_window` refer
 Full provider captions retain their original source timeline and raw hash. Deterministic windows cover the episode fairly, each at most 600 seconds and 24 KiB of serialized cues plus transcript. Cuts must stay within the admitted window. Window cursors commit with admission or a durable exhausted-window skip; windows remain one video for selection weighting. Exact selected-cut Whisper measurements still supply rendered word timing. Commission rights permit only the supplied episode and embedded original audio. No added on-video advertising disclaimer is permitted; creator/show attribution, required description tags and native disclosure remain separate.
 
 Owned media acquisition markers allow exact dead-worker recovery. Completed receipts are immutable; changed bytes are rejected on every retry. Cache eviction fences claims and admissions, preserves active or uncertain public dependencies and compact receipts, and deletes only hash/inode-verified ledger-owned full media. Unknown stages or worker ownership require explicit recovery rather than takeover.
+
+The known missing-render-lease failure can recover its original proposal only after the original lease expires, exact native execution and child termination are proven, and unchanged policy/source validity pass revalidation. This path preserves attempt counts, budgets, and original source timestamps; any public-action history refuses recovery.
