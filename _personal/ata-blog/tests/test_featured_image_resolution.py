@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from types import SimpleNamespace
 
 import pytest
 from typer.testing import CliRunner
@@ -144,3 +145,101 @@ def test_explicit_featured_image_path_still_validates(tmp_path):
     image_path.write_bytes(b"jpg-bytes")
 
     assert AtaBlogClient._resolve_featured_image("page-id", str(image_path)) == image_path
+
+
+# --- recovery from R2 when scheduling and publishing run on different hosts -
+
+_PAGE_ID = "3495d9c85b2b81eebac8e532046b5b58"
+
+
+def test_schedule_uploads_resolved_image_to_its_page_keyed_r2_object(tmp_path, monkeypatch):
+    """Scheduling mirrors the resolved image so another host can recover it."""
+
+    client = AtaBlogClient.__new__(AtaBlogClient)
+    image_path = tmp_path / "featured_image.webp"
+    image_path.write_bytes(b"webp-bytes")
+    commands = []
+
+    def run(command, **_kwargs):
+        commands.append(command)
+        assert command[1:4] == ["r2", "objects", "put"]
+        return SimpleNamespace(stdout=json.dumps({"key": command[5]}))
+
+    monkeypatch.setattr(client, "_run_checked_command", run)
+
+    client._upload_scheduled_featured_image(_PAGE_ID, image_path)
+
+    assert commands[0][4] == "ata-blog-media"
+    assert commands[0][5] == f"wp-content/uploads/publisher/scheduled/{_PAGE_ID}.webp"
+    assert commands[0][7] == str(image_path)
+
+
+def test_publish_recovers_scheduled_image_from_r2_when_no_local_copy_exists(
+    tmp_path, monkeypatch
+):
+    """The due publisher's host has no local pipeline output for this post,
+    but the scheduling host already mirrored it to R2; publish must recover it
+    instead of failing with 'Featured image is required for publishing'."""
+
+    monkeypatch.setattr(client_module, "STATIC_REPOSITORY_ROOT", tmp_path)
+    key = f"wp-content/uploads/publisher/scheduled/{_PAGE_ID}.webp"
+    remote_bytes = b"recovered-webp-bytes"
+
+    client = AtaBlogClient.__new__(AtaBlogClient)
+
+    def run(command, **_kwargs):
+        if command[1:4] == ["r2", "objects", "list"]:
+            if command[6] == key:
+                return SimpleNamespace(
+                    stdout=json.dumps([{"key": key, "size": len(remote_bytes)}])
+                )
+            return SimpleNamespace(stdout=json.dumps([]))
+        assert command[1:4] == ["r2", "objects", "get"]
+        assert command[5] == key
+        output_path = tmp_path / "posts" / _PAGE_ID / "featured_image.webp"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(remote_bytes)
+        return SimpleNamespace(stdout="")
+
+    monkeypatch.setattr(client, "_run_checked_command", run)
+
+    resolved = client._resolve_featured_image_with_recovery(_PAGE_ID, None)
+
+    expected_path = tmp_path / "posts" / _PAGE_ID / "featured_image.webp"
+    assert resolved == expected_path
+    assert resolved.read_bytes() == remote_bytes
+
+
+def test_publish_recovery_leaves_original_error_when_nothing_was_ever_scheduled(
+    tmp_path, monkeypatch
+):
+    """No R2 object was ever uploaded for this page: the original local-lookup
+    blocker must still be raised, unchanged."""
+
+    monkeypatch.setattr(client_module, "STATIC_REPOSITORY_ROOT", tmp_path)
+    client = AtaBlogClient.__new__(AtaBlogClient)
+
+    def run(command, **_kwargs):
+        assert command[1:4] == ["r2", "objects", "list"]
+        return SimpleNamespace(stdout=json.dumps([]))
+
+    monkeypatch.setattr(client, "_run_checked_command", run)
+
+    with pytest.raises(ClientError, match="Featured image is required for publishing"):
+        client._resolve_featured_image_with_recovery(_PAGE_ID, None)
+
+
+def test_explicit_missing_featured_image_path_skips_r2_recovery(tmp_path, monkeypatch):
+    """A caller-supplied --featured-image that is missing must fail exactly
+    as before; recovery only applies to the implicit conventional lookup."""
+
+    client = AtaBlogClient.__new__(AtaBlogClient)
+
+    def run(command, **_kwargs):
+        pytest.fail(f"unexpected R2 call for an explicit --featured-image: {command}")
+
+    monkeypatch.setattr(client, "_run_checked_command", run)
+    missing_path = str(tmp_path / "does-not-exist.png")
+
+    with pytest.raises(ClientError, match=f"Featured image not found: {missing_path}"):
+        client._resolve_featured_image_with_recovery(_PAGE_ID, missing_path)

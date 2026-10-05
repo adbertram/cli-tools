@@ -42,6 +42,12 @@ STATIC_MEDIA_BUCKET = "ata-blog-media"
 # Every image lives under this key prefix: the public media URL path the built
 # pages reference.
 _STATIC_MEDIA_KEY_PREFIX = "wp-content/uploads/"
+# Scheduling and publishing a post can run on different hosts, since `posts/`
+# is excluded from Dropbox sync. `_schedule_article` mirrors the resolved
+# featured image here, keyed by page id rather than content hash, so a due
+# publisher on a host with no local copy can recover it without first
+# knowing its bytes. See `_recover_scheduled_featured_image`.
+SCHEDULED_FEATURED_IMAGE_KEY_PREFIX = "wp-content/uploads/publisher/scheduled/"
 STATIC_SITE_ORIGIN = "https://adamtheautomator.com"
 EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 EMPTY_UUID = "00000000-0000-4000-8000-000000000000"
@@ -397,6 +403,92 @@ class AtaBlogClient:
             f"Checked: {candidate_list}. "
             "Run image-gen first or pass --featured-image PATH."
         )
+
+    def _upload_scheduled_featured_image(self, page_id: str, image_path: Path) -> None:
+        """Mirror a just-resolved featured image into R2 under its page-keyed path.
+
+        Called by `_schedule_article` while the image still exists on the
+        scheduling host, so the due publisher can recover it on another host.
+        """
+        key = SCHEDULED_FEATURED_IMAGE_KEY_PREFIX + self._compact_page_id(page_id) + image_path.suffix.lower()
+        content_type = mimetypes.guess_type(image_path.name)[0]
+        if not content_type:
+            raise ClientError(f"Could not determine image content type: {image_path}")
+        self._run_checked_command(
+            [
+                "cloudflare",
+                "r2",
+                "objects",
+                "put",
+                STATIC_MEDIA_BUCKET,
+                key,
+                "--file",
+                str(image_path),
+                "--content-type",
+                content_type,
+            ],
+            timeout=300,
+            label="Scheduled featured image upload",
+        )
+
+    def _existing_scheduled_featured_image(self, key: str) -> Optional[Dict[str, Any]]:
+        """Return the R2 object at one scheduled-featured-image key, else None."""
+        result = self._run_checked_command(
+            ["cloudflare", "r2", "objects", "list", STATIC_MEDIA_BUCKET, "--prefix", key, "--limit", "2"],
+            timeout=300,
+            label="Scheduled featured image lookup",
+        )
+        objects = self._parse_checked_command_json(result, "Scheduled featured image lookup")
+        if not isinstance(objects, list):
+            raise ClientError("Scheduled featured image lookup did not return a JSON array")
+        matches = [item for item in objects if item.get("key") == key]
+        if len(matches) > 1:
+            raise ClientError(f"Scheduled featured image lookup returned duplicate keys for {key}")
+        return matches[0] if matches else None
+
+    def _recover_scheduled_featured_image(self, page_id: str) -> Optional[Path]:
+        """Download the scheduled featured image from R2 to its local conventional path.
+
+        Returns the recovered local path, or None if no host ever scheduled
+        this page with `_upload_scheduled_featured_image`.
+        """
+        compact_page_id = self._compact_page_id(page_id)
+        for extension in ("webp", "png", "jpg", "jpeg"):
+            key = f"{SCHEDULED_FEATURED_IMAGE_KEY_PREFIX}{compact_page_id}.{extension}"
+            if self._existing_scheduled_featured_image(key) is None:
+                continue
+            local_path = STATIC_REPOSITORY_ROOT / "posts" / compact_page_id / f"featured_image.{extension}"
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+            self._run_checked_command(
+                [
+                    "cloudflare", "r2", "objects", "get", STATIC_MEDIA_BUCKET, key,
+                    "--output", str(local_path),
+                ],
+                timeout=300,
+                label="Scheduled featured image download",
+            )
+            return local_path
+        return None
+
+    def _resolve_featured_image_with_recovery(
+        self, page_id: str, featured_image: Optional[str]
+    ) -> Path:
+        """Resolve the publish-time featured image, recovering it from R2 if needed.
+
+        `_resolve_featured_image` only looks at this host's local filesystem,
+        which is empty for a post scheduled on a different host. Only an
+        implicit (conventional) lookup falls back to R2; an explicit
+        `--featured-image PATH` that is missing fails exactly as before.
+        """
+        try:
+            return self._resolve_featured_image(page_id, featured_image)
+        except ClientError:
+            if featured_image:
+                raise
+            recovered = self._recover_scheduled_featured_image(page_id)
+            if recovered is None:
+                raise
+            return self._validate_featured_image(str(recovered))
 
     @staticmethod
     def _require_publish_metadata(article: Dict[str, Any]) -> None:
@@ -3430,7 +3522,7 @@ class AtaBlogClient:
         self._require_publish_metadata(article)
         markdown_content = self.get_article_markdown(page_id)
         self._validate_publish_markdown(markdown_content)
-        image_path = self._resolve_featured_image(page_id, featured_image)
+        image_path = self._resolve_featured_image_with_recovery(page_id, featured_image)
         source_revision = self._source_revision(article, markdown_content, image_path)
         idempotency_key = self._publisher_idempotency_key(page_id, source_revision)
         paths = self._publisher_paths(page_id, idempotency_key)
@@ -4013,7 +4105,8 @@ class AtaBlogClient:
                 raise ClientError(f"Notion page {page_id} has no Title")
             self._require_publish_metadata(article)
             self._validate_publish_markdown(self.get_article_markdown(page_id))
-            self._resolve_featured_image(page_id, None)
+            scheduled_image_path = self._resolve_featured_image(page_id, None)
+            self._upload_scheduled_featured_image(page_id, scheduled_image_path)
             self._resolve_static_term_ids(
                 "categories", self._notion_term_names(article, "Category")
             )
