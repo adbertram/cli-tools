@@ -13,6 +13,7 @@ from .source_metadata import canonical_video
 
 NORMALIZATION_VERSION = 'json3-single-window-continuation-v1'
 TIMESTAMP_PRECISION_MS = 1
+TERMINAL_CAPTION_OVERSHOOT_MS = 5000
 
 
 class SourceAcquisitionError(ClientError):
@@ -108,7 +109,11 @@ def normalize_json3(raw, *, duration_seconds, max_cues):
             fail('source_caption_spoken_append_unsupported')
         end = start + length
         if start < 0 or end > duration_seconds * 1000:
-            fail('source_caption_outside_video')
+            if start < 0 or start >= duration_seconds * 1000 or end - duration_seconds * 1000 > TERMINAL_CAPTION_OVERSHOOT_MS:
+                fail('source_caption_outside_video')
+            # A provider display tail may linger past the reported video end;
+            # shorten only that bounded display tail to the exact video end.
+            end = duration_seconds * 1000
         offsets = [seg.get('tOffsetMs', 0) for seg in segs]
         if any(type(offset) is not int or offset < 0 or offset >= length for offset in offsets) or offsets != sorted(offsets):
             fail('source_caption_word_offsets_invalid')

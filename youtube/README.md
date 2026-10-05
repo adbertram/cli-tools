@@ -442,7 +442,10 @@ the tool's declared yt-dlp dependency. It returns original full-video timestamps
 the raw response SHA-256/byte count, and an explicit normalization version.
 Same-window continuation events are merged only at the measured 1ms precision
 boundary; unsupported speaker changes or speech overlaps fail explicitly.
-Caption timestamps describe provider display timing, not forced alignment. Large
+Caption timestamps describe provider display timing, not forced alignment. A
+terminal caption display tail may run up to five seconds past the reported
+duration; that bounded tail is shortened to the exact video end, while a larger
+mismatch still fails as outside-video evidence. Large
 transcripts require caller-owned fair time windows; the SDK does not truncate.
 
 `YoutubeClient.acquire_source_media(url, expected_video_id=..., duration_seconds=...,

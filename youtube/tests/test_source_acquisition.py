@@ -51,6 +51,30 @@ def test_raw_event_and_cue_limits_refuse():
         source.normalize_json3(fixture(),duration_seconds=3522,max_cues=1)
 
 
+def terminal_tail(start_ms,end_ms):
+    return {'wireMagic':'pb3','events':[
+        {'tStartMs':0,'dDurationMs':1000,'wWinId':1,'segs':[{'utf8':'Hello world.'}]},
+        {'tStartMs':start_ms,'dDurationMs':end_ms-start_ms,'wWinId':1,'segs':[{'utf8':'Bye.'}]}]}
+
+
+def test_bounded_terminal_caption_tail_is_shortened_to_video_end():
+    for end_ms in (101840,105000):
+        result=source.normalize_json3(terminal_tail(99900,end_ms),duration_seconds=100,max_cues=100)
+        assert result[-1]['end']==100.0 and result[-1]['text']=='Bye.'
+        assert result[0]['end']==1.0
+
+
+@pytest.mark.parametrize('end_ms',[105001,4000000])
+def test_larger_caption_overshoot_still_refuses(end_ms):
+    with pytest.raises(source.SourceAcquisitionError,match='outside_video'):
+        source.normalize_json3(terminal_tail(99900,end_ms),duration_seconds=100,max_cues=100)
+
+
+def test_caption_cue_starting_after_video_end_refuses():
+    with pytest.raises(source.SourceAcquisitionError,match='outside_video'):
+        source.normalize_json3(terminal_tail(100000,101000),duration_seconds=100,max_cues=100)
+
+
 def args():
     return dict(url='https://www.youtube.com/watch?v=h1FbFhWkcGI',expected_video_id='h1FbFhWkcGI',duration_seconds=3522,language='en',timeout_seconds=30,max_caption_bytes=8388608,max_cues=10000,max_result_bytes=1048576)
 
