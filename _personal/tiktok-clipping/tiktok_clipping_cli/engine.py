@@ -487,7 +487,11 @@ class Engine:
                     old=json.loads(prior['input'])
                     same=(old.get('catalog_admission',{}).get('evidence_version')==record['catalog_admission']['evidence_version'] and old.get('source_window')==record.get('source_window')) if 'catalog_admission' in record else digest({k:v for k,v in old.items() if k in record and k not in {'observed_at','provenance'}})==stable_digest
                     if same:same_failed.append(prior)
-            active=next((r for r in reserved if r['status'] not in {'published','failed','done'}),None)
+            # An unknown publication outcome is reconciled separately and is
+            # never re-uploaded, so it must not block new non-overlapping clips
+            # from the same source. It still counts against max_clips_per_source
+            # through `reserved`.
+            active=next((r for r in reserved if r['status'] not in {'published','failed','done','ambiguous','reconciling'}),None)
             if active:
                 return {'job_id':active['id'],'deduplicated':True,'source_revised':existing is not None and existing[1]!=stable_digest}
             if len(reserved)>=self.config['limits']['max_clips_per_source']:

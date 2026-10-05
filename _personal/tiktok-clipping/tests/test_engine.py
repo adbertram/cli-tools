@@ -296,6 +296,36 @@ def test_multiple_nonoverlapping_clips_per_source_bounded(engine, adapter, clock
     assert len(adapter.uploads) == config["limits"]["max_clips_per_source"]
 
 
+def test_ambiguous_publication_does_not_block_new_nonoverlapping_clip(engine, adapter, clock):
+    ambiguous = claim(engine, clock)
+    adapter.fail_publish = AdapterFailure("ambiguous", "unknown upload after send")
+    assert engine.apply(payload(ambiguous))["state"] == "ambiguous"
+    with engine.transaction() as db:
+        assert db.execute("SELECT state FROM publications WHERE job_id=?", (ambiguous["job_id"],)).fetchone()[0] == "ambiguous"
+    result = engine.ingest(source(clock))
+    assert result["deduplicated"] is False and result["job_id"] != ambiguous["job_id"]
+    created = engine.get(result["job_id"])
+    assert created["status"] == "queued"
+    assert {"start_seconds": 10, "end_seconds": 30} in created["input"]["excluded_ranges"]
+    assert engine.get(ambiguous["job_id"])["status"] == "ambiguous"
+    with engine.transaction() as db:
+        assert db.execute("SELECT state FROM publications WHERE job_id=?", (ambiguous["job_id"],)).fetchone()[0] == "ambiguous"
+
+
+def test_ambiguous_job_still_counts_toward_source_clip_limit(engine, adapter, clock, config):
+    first = claim(engine, clock)
+    engine.apply(payload(first))
+    adapter.fail_publish = AdapterFailure("ambiguous", "unknown upload after send")
+    second = claim(engine, clock)
+    assert engine.apply(payload(second, start_seconds=30, end_seconds=50))["state"] == "ambiguous"
+    adapter.fail_publish = None
+    third = claim(engine, clock)
+    engine.apply(payload(third, start_seconds=50, end_seconds=70))
+    result = engine.ingest(source(clock))
+    assert result["deduplicated"] and result["exhausted"]
+    assert len(adapter.uploads) == config["limits"]["max_clips_per_source"]
+
+
 def test_expired_campaign_does_not_block_final_metrics(engine, config, adapter, clock):
     envelope = claim(engine, clock)
     result = engine.apply(payload(envelope))
