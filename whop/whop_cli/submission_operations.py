@@ -25,14 +25,15 @@ STUDIO_READBACK = 'https://www.tiktok.com/tiktok/creator/manage/item_list/v1/'
 # Read and create-action discovery share the same bounded, stable-snapshot scanner.
 SUBMISSION_DISCOVERY_JS = DISCOVER_ACTION_JS
 
-# Capture the failed predicate in the same evaluation, before the caller closes
-# the browser. The selection and click behavior are unchanged.
+# Select the unique visible enabled exact control and capture failed counts in
+# the same evaluation, before the caller closes the browser.
 OPEN_SUBMISSION_FORM_JS = """() => {
+    const visible=b=>{const r=b.getBoundingClientRect(),s=getComputedStyle(b);
+        return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden';};
     const exact=[...document.querySelectorAll('button')].filter(b=>b.innerText.trim()==='Submit clip');
     const enabled=exact.filter(b=>!b.disabled);
-    if(enabled.length!==1){
-        const visible=b=>{const r=b.getBoundingClientRect(),s=getComputedStyle(b);
-            return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden';};
+    const actionable=enabled.filter(visible);
+    if(actionable.length!==1){
         const count=n=>Math.min(n,100000);
         return {opened:false,diagnostics:{origin:location.origin,path:location.pathname,
             ready_state:document.readyState,exact_buttons:count(exact.length),
@@ -40,7 +41,7 @@ OPEN_SUBMISSION_FORM_JS = """() => {
             visible_enabled_buttons:count(enabled.filter(visible).length),
             dialogs:count(document.querySelectorAll('[role=dialog]').length)}};
     }
-    enabled[0].click(); return true;
+    actionable[0].click(); return true;
 }"""
 
 def form_failure(value, origin, expected_path):

@@ -176,10 +176,12 @@ def test_form_diagnostics_other_origin_is_enum_only(origin):
 
 @pytest.mark.parametrize('buttons,clicked',[
     ([],0),([{'disabled':True,'visible':True}],0),
-    ([{'disabled':False,'visible':True},{'disabled':False,'visible':False}],0),
-    ([{'disabled':False,'visible':False}],1),
+    ([{'disabled':False,'visible':True},{'disabled':False,'visible':False}],1),
+    ([{'disabled':False,'visible':False}],0),
+    ([{'disabled':False,'visible':True},{'disabled':False,'visible':False},{'disabled':False,'visible':False}],1),
+    ([{'disabled':False,'visible':True},{'disabled':False,'visible':True},{'disabled':False,'visible':False}],0),
 ])
-def test_actual_js_atomic_form_predicate_counts_and_unchanged_click(buttons,clicked):
+def test_actual_js_atomic_form_predicate_counts_and_unique_visible_click(buttons,clicked):
     import subprocess
     script='''let clicks=0;
     globalThis.location={origin:'https://example.apps.whop.com',pathname:'/c/exp_TEST/campaigns/campaign_TEST',search:'?token=SECRET',hash:'#SECRET'};
