@@ -85,7 +85,7 @@ export function measuredUsage(events, firstSeq, projection) {
 
 export function classifyFailure(reason) {
  const error=reason?.error;
- const code=String(error?.code||reason?.kind||'UNKNOWN').slice(0,128);
+ const code=reason?.kind==='max-tokens'?'generation_limit':String(error?.code||reason?.kind||'UNKNOWN').slice(0,128);
  const status=Number.isInteger(error?.status) && error.status>=100 && error.status<=599 ? error.status:null;
  const retry=Number.isFinite(error?.providerRetryAfterMs) && error.providerRetryAfterMs>=0 ? Math.ceil(error.providerRetryAfterMs):null;
  const category=code==='RATE_LIMIT'?'rate_limit':['AUTH','MISSING_CREDENTIAL'].includes(code)?'auth':code==='TIMEOUT'?'timeout':code==='SERVER'?'provider_unavailable':'model_failed';
@@ -139,7 +139,7 @@ export async function run(ctx,config,sdkLoader=loadSdk,runtimeWriter) {
  try {
   const attachments=await ctx.attachments.saveImages(inputs);
   const {installModelSelection,createUserMessage,SessionId}=await sdkLoader(config);
-  ({agent}=await ctx.agents.create({sessionId:SessionId(`session-${randomUUID()}`),meta:{cwd:process.cwd()},agentOptions:{...selection,maxTokens:2500,reasoningEffort:'off'},setup:agentCtx=>{installModelSelection(agentCtx,{current:selection,assembled:undefined});}}));
+  ({agent}=await ctx.agents.create({sessionId:SessionId(`session-${randomUUID()}`),meta:{cwd:process.cwd()},agentOptions:{...selection,maxTokens:2500},setup:agentCtx=>{installModelSelection(agentCtx,{current:{...selection,reasoningEffort:'off'},assembled:undefined});}}));
   await agent.whenIdle();firstSeq=agent.session.seq;
   agent.followup(createUserMessage({content:[{type:'text',text:manifest.prompt},...attachments.map(attachment=>({type:'image',attachment}))],source:{kind:'user'}}));
   await agent.whenIdle();await ctx.sessions.flush(agent.session);

@@ -50,6 +50,7 @@ export async function loadInputs(config) {
 
 /** SDK facts live on turn reason.error or caught LlmError.failure. */
 export function failureFacts(value) {
+ if(value?.kind==='max-tokens')return classifyFailure(value);
  const facts=value?.failure ?? value?.error;
  if(facts && typeof facts==='object')return classifyFailure({kind:value?.kind||'error',error:facts});
  return classifyFailure({kind:value?.kind||'error',error:{code:value?.code||value?.name||'UNKNOWN'}});
@@ -121,7 +122,7 @@ export async function run(ctx,config,sdkLoader=loadSdk,runtimeWriter) {
  try {
   if(Date.now()/1000>=envelope.model_deadline)throw fail('text_model_deadline_exceeded');
   const {installModelSelection,createUserMessage,SessionId}=await sdkLoader(config);
-  ({agent}=await ctx.agents.create({sessionId:SessionId(`session-${randomUUID()}`),meta:{cwd:process.cwd()},agentOptions:{...model,maxTokens:config.maxTokens,reasoningEffort:'off'},setup:agentCtx=>{installModelSelection(agentCtx,{current:model,assembled:undefined});}}));
+  ({agent}=await ctx.agents.create({sessionId:SessionId(`session-${randomUUID()}`),meta:{cwd:process.cwd()},agentOptions:{...model,maxTokens:config.maxTokens},setup:agentCtx=>{installModelSelection(agentCtx,{current:{...model,reasoningEffort:'off'},assembled:undefined});}}));
   await agent.whenIdle();firstSeq=agent.session.seq;
   if(Date.now()/1000>=envelope.model_deadline)throw fail('text_model_deadline_exceeded');
   agent.followup(createUserMessage({content:[{type:'text',text:manifest.prompt}],source:{kind:'user'}}));

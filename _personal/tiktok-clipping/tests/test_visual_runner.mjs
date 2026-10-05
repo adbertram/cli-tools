@@ -69,7 +69,7 @@ test('chunk plus message usage reads projection once rather than summing',()=>{
 test('documented provider errors preserve Retry-After without raw messages',()=>{
  assert.deepEqual(classifyFailure({kind:'error',error:{code:'RATE_LIMIT',status:429,providerRetryAfterMs:12345,message:'SECRET'}}),{category:'rate_limit',code:'RATE_LIMIT',status:429,retry_after_ms:12345});
  for(const [code,category] of [['AUTH','auth'],['SERVER','provider_unavailable'],['TIMEOUT','timeout'],['QUOTA_EXCEEDED','model_failed']])assert.equal(classifyFailure({kind:'error',error:{code}}).category,category);
- assert.equal(classifyFailure({kind:'max-tokens'}).code,'max-tokens');
+ assert.equal(classifyFailure({kind:'max-tokens'}).code,'generation_limit');
 });
 
 test('native result uses authoritative duplicate-key parser and keeps valid strings',()=>{
@@ -136,4 +136,19 @@ test('caught documented visual provider failure retains long Retry-After and mea
   assert.deepEqual(emitted.failure,{category:'provider_unavailable',code:'SERVER',status:503,retry_after_ms:172800000});
   assert.equal(output.includes('SECRET'),false);
  }finally{process.stdout.write=original;await rm(f.workspace,{recursive:true});}
+});
+
+
+test('native generation limit is typed and supported selection disables thinking',async()=>{
+ const f=await fixture();let output='',selected=false;
+ const original=process.stdout.write;
+ try {
+  const usage={uncachedInputTokens:9468,outputTokens:2048,cacheReadTokens:0,cacheWriteTokens:0};
+  const session={id:'limit-session',seq:0,events:[]};
+  const agent={session,whenIdle:async()=>{},followup:()=>{session.events.push({seq:1,type:'assistant/message',data:{usage,message:{content:[{type:'reasoning',text:'private reasoning'}]}}},{seq:2,type:'turn/end',data:{reason:{kind:'max-tokens'}}});}};
+  const ctx={get:key=>key==='appExit'?()=>{}:undefined,attachments:{saveImages:async()=>[]},agents:{create:async options=>{assert.equal(Object.hasOwn(options.agentOptions,'reasoningEffort'),false);assert.equal(options.setup({}),undefined);return {agent};}},sessions:{flush:async()=>{}},sessionProjections:{snapshot:()=>({asOfSeq:2,values:{tokenUsage:usage}})}};
+  process.stdout.write=value=>{output+=value;return true;};
+  await run(ctx,{...f.config,task:JSON.stringify(f.envelope)},async()=>({installModelSelection:(_ctx,selection)=>{assert.deepEqual(selection.current,{provider:'deepseek-official',model:'deepseek-flash',reasoningEffort:'off'});selected=true;},createUserMessage:value=>value,SessionId:value=>value}));
+  const receipt=JSON.parse(output);assert.equal(receipt.outcome,'failed');assert.equal(receipt.decision,null);assert.deepEqual(receipt.failure,{category:'model_failed',code:'generation_limit',status:null,retry_after_ms:null});assert.deepEqual(receipt.usage,usage);assert.ok(receipt.usage_observed);assert.ok(selected);assert.equal(output.includes('private reasoning'),false);
+ }finally {process.stdout.write=original;await rm(f.workspace,{recursive:true});}
 });

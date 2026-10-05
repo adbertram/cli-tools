@@ -45,6 +45,8 @@ def receipt(envelope,clock,**changes):
 
 def test_actual_hash_bound_manifest_and_visual_receipt_publish_once(visual_engine,adapter,clock):
     envelope=issue(visual_engine,clock)
+    overlay = Path(envelope['overlay_path']).read_text()
+    assert "- id: llm-deepseek\n  config:\n    thinking: disabled\n    reasoningEffort: 'off'\n    maxTokens: 2500\n" in overlay
     assert adapter.uploads==[]
     result=visual_engine.apply_visual(receipt(envelope,clock))
     assert result['state']=='published' and len(adapter.uploads)==1
