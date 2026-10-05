@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from tiktok_clipping_cli.media import MediaRenderer, clip_segments, timed_segments, normalized_crop_segments
+from tiktok_clipping_cli.media import MediaRenderer, RefinementTimingError, clip_segments, timed_segments, normalized_crop_segments
 from tiktok_clipping_cli.safety import SafetyError, canonical
 
 
@@ -60,7 +60,7 @@ def test_crop_endpoint_normalization_retains_raw_timing():
 
 
 @pytest.mark.parametrize("raw,error", [
-    ({"segments": [{"start": 0, "end": 1.251, "text": "Too far."}]}, "number_out_of_bounds"),
+    ({"segments": [{"start": 0, "end": 1.251, "text": "Too far."}]}, "refinement_asr_endpoint_out_of_bounds"),
     ({"segments": [{"start": -0.01, "end": 1, "text": "Negative."}]}, "number_out_of_bounds"),
     ({"segments": [{"start": 0, "end": 1.1, "text": "First."}, {"start": 1.0, "end": 1.2, "text": "Overlap."}]}, "number_out_of_bounds"),
     ({"segments": [{"start": 0, "end": 1.1, "text": "Unfinished"}]}, "clip_ends_mid_sentence"),
@@ -69,6 +69,48 @@ def test_crop_endpoint_normalization_retains_raw_timing():
 def test_crop_normalization_refuses_invalid_or_incomplete_speech(raw, error):
     with pytest.raises(SafetyError, match=error):
         normalized_crop_segments(raw, 1)
+
+
+def test_actual_crop_endpoint_failure_is_typed_without_transcript_or_clamping():
+    raw = {"segments": [{"start": 0, "end": 4.58, "text": "Private measured speech."},
+        {"start": 4.58, "end": 8.76, "text": "More measured speech."},
+        {"start": 8.76, "end": 15.32, "text": "Final measured speech."}]}
+    original = canonical(raw)
+    with pytest.raises(RefinementTimingError) as captured:
+        normalized_crop_segments(raw, 13.36)
+    error = captured.value
+    assert error.code == str(error) == "refinement_asr_endpoint_out_of_bounds"
+    assert error.diagnostics == {"kind": "refinement_asr_timing", "cue_index": 2,
+        "crop_duration_seconds": 13.36, "measured_endpoint_seconds": 15.32,
+        "maximum_endpoint_correction_seconds": 0.25}
+    assert "speech" not in canonical(error.diagnostics)
+    assert canonical(raw) == original
+
+
+@pytest.mark.parametrize("end,accepted", [(1.25, True), (1.250000001, False)])
+def test_crop_endpoint_correction_keeps_exact_existing_limit(end, accepted):
+    raw = {"segments": [{"start": 0, "end": end, "text": "Complete."}]}
+    if accepted:
+        normalized, evidence = normalized_crop_segments(raw, 1)
+        assert normalized[0]["end"] == 1
+        assert evidence["raw_segments"][0]["end"] == end
+    else:
+        with pytest.raises(RefinementTimingError):
+            normalized_crop_segments(raw, 1)
+
+
+@pytest.mark.parametrize("end", [float("inf"), float("nan"), True, -1])
+def test_malformed_endpoint_never_becomes_quality_revision(end):
+    with pytest.raises(SafetyError) as captured:
+        normalized_crop_segments({"segments": [{"start": 0, "end": end, "text": "Invalid."}]}, 1)
+    assert not isinstance(captured.value, RefinementTimingError)
+
+
+@pytest.mark.parametrize("text", [None, 42, "", " \t\n", "Bad\x00text", "x" * 501])
+def test_malformed_text_with_overshoot_never_becomes_quality_revision(text):
+    with pytest.raises(SafetyError, match="invalid_string") as captured:
+        normalized_crop_segments({"segments": [{"start": 0, "end": 15.32, "text": text}]}, 13.36)
+    assert not isinstance(captured.value, RefinementTimingError)
 
 
 def test_complete_sentence_boundaries(segments, proposal):
@@ -289,6 +331,28 @@ def test_cut_refinement_shifts_measured_order_and_preserves_binding(source, monk
     assert [entry["cut"] for entry in evidence["cuts"]] == cuts
     assert all(entry["raw_segments"][0]["end"] == 1.1 for entry in evidence["cuts"])
     assert len(set(deadlines)) == 1
+    assert not list(renderer.root.glob("refinement-*"))
+
+
+def test_refinement_failure_binds_exact_cut_among_equal_durations(source, monkeypatch):
+    renderer, path = source
+    original = renderer._run
+    calls = []
+    def run(command, deadline, **kwargs):
+        if command[0] == "whisper":
+            calls.append(command)
+            end = 1 if len(calls) == 1 else 1.251
+            return canonical({"segments": [{"start": 0, "end": end, "text": "Measured."}]}).encode()
+        return original(command, deadline, **kwargs)
+    monkeypatch.setattr(renderer, "_run", run)
+    cuts = [{"start_seconds": 2, "end_seconds": 3}, {"start_seconds": 0, "end_seconds": 1}]
+    with pytest.raises(RefinementTimingError) as captured:
+        renderer.refine_transcript(path, cuts)
+    assert captured.value.diagnostics == {"kind": "refinement_asr_timing", "cue_index": 0,
+        "crop_duration_seconds": 1, "measured_endpoint_seconds": 1.251,
+        "maximum_endpoint_correction_seconds": 0.25, "cut_index": 1,
+        "cut_start_seconds": 0, "cut_end_seconds": 1}
+    assert len(calls) == 2
     assert not list(renderer.root.glob("refinement-*"))
 
 

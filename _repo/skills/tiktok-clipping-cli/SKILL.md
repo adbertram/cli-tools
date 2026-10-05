@@ -34,6 +34,7 @@ tiktok-clipping <command-group> <action> [arguments] [options]
 | Claim one durable job or return an explicit paused/unconfigured/idle state | `tiktok-clipping jobs prepare` |
 | Read back an ambiguous upload without repeating publication | `tiktok-clipping jobs reconcile <JOB_ID>` |
 | Revalidate blocked work or an explicitly proven pre-publication visual/render failure | `tiktok-clipping jobs retry <JOB_ID>` |
+| Request a bounded new proposal for a proven quiescent failed render | `tiktok-clipping jobs retry <JOB_ID> --revise-render --reason "Measured cut timing rejection"` |
 | Revalidate blocked preproposal text work after its original native process ended | `tiktok-clipping jobs retry-text <JOB_ID>` |
 | Run a ready job; coordinator alone owns retries and side-effect budgets | `tiktok-clipping jobs run <JOB_ID>` |
 | Append a trusted timestamped metric snapshot from stdin; unknown values stay null | `tiktok-clipping metrics record` |
@@ -82,3 +83,7 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
 - Output is displayed in requested format
 - Correct command and flags used, verified against the live help output or `usage.json` when present
 </success_criteria>
+
+<render_revision>
+Typed measured ASR endpoint rejection consumes the configured revision allowance and passes exact rejected cuts and timing feedback to the next proposal. Other render failures never become quality rejections automatically. `jobs retry --revise-render --reason` requires original unchanged policy, current original rights, an expired lease, the completed original native proposal and terminal process proof, and quiescent owned render/ASR ledgers. Asset, visual or public-action history forbids revision. It records operator intent, preserves existing spend, limits and original deadlines, charges recovery runtime normally, and never renews authority. It queues a new proposal rather than directly retrying the retained proposal.
+</render_revision>

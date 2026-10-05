@@ -60,11 +60,24 @@ def keys(value, required, optional=()):
 
 
 def adapter_diagnostics(value):
-    """Only the owning SDK's bounded, text-free form predicate may cross workers."""
+    """Only closed, bounded owning-service diagnostics may cross workers."""
     if value is None:
         return None
     if not isinstance(value, dict):
         raise SafetyError("invalid_adapter_diagnostics")
+    if value.get('kind') == 'refinement_asr_timing':
+        keys(value, {'kind','cue_index','crop_duration_seconds','measured_endpoint_seconds',
+                     'maximum_endpoint_correction_seconds','cut_index','cut_start_seconds','cut_end_seconds'})
+        for field in ('cue_index','cut_index'):
+            number(value[field],0,100000,integer=True)
+        for field in ('crop_duration_seconds','measured_endpoint_seconds','cut_start_seconds','cut_end_seconds'):
+            number(value[field],0,86400)
+        if (value['maximum_endpoint_correction_seconds'] != 0.25 or type(value['maximum_endpoint_correction_seconds']) not in (int,float)
+                or value['crop_duration_seconds'] <= 0 or value['cut_end_seconds'] <= value['cut_start_seconds']
+                or abs(value['cut_end_seconds']-value['cut_start_seconds']-value['crop_duration_seconds']) > 0.01
+                or value['measured_endpoint_seconds'] <= value['crop_duration_seconds']+0.25):
+            raise SafetyError('invalid_adapter_diagnostics')
+        return strict_json(canonical(value),2048)
     base = {"kind", "available", "context_origin", "route_match"}
     counts = {"exact_buttons", "enabled_buttons", "visible_buttons", "visible_enabled_buttons", "dialogs"}
     keys(value, base | ({"origin", "path", "ready_state"} | counts if value.get("available") is True else set()))
@@ -306,7 +319,7 @@ def validate_strategy(proposal, config, previous=None):
 
 
 def validate_source(record, config, now, *, db=None):
-    keys(record, {"source_id", "media_id", "media_url", "duration_seconds", "transcript", "observed_at", "provenance", "categories", "transcript_segments"}, {"assigned_style", "strategy_version", "strategy", "excluded_ranges", "clip_sequence", "media_key", "performance_context", "model_feedback", "outcome_selection", "catalog_admission", "source_window"})
+    keys(record, {"source_id", "media_id", "media_url", "duration_seconds", "transcript", "observed_at", "provenance", "categories", "transcript_segments"}, {"assigned_style", "strategy_version", "strategy", "excluded_ranges", "clip_sequence", "media_key", "performance_context", "model_feedback", "render_feedback", "outcome_selection", "catalog_admission", "source_window"})
     if 'catalog_admission' in record:
         from .catalog_runtime import resolve_job_source
         source = resolve_job_source(config,record,require_current=True,now=now,db=db)['source']
@@ -341,6 +354,26 @@ def validate_source(record, config, now, *, db=None):
         raise SafetyError("future_source_timestamp")
     if not isinstance(record["categories"], list) or not record["categories"] or not set(record["categories"]).issubset(set(source["campaign"]["categories"])):
         raise SafetyError("source_category_not_allowed")
+    if 'render_feedback' in record:
+        feedback=record['render_feedback']
+        keys(feedback,{'reason','rejected_proposal'}, {'diagnostics','origin'})
+        string(feedback['reason'],1000)
+        proposal=feedback['rejected_proposal']
+        keys(proposal,{'start_seconds','end_seconds','caption','style'},{'segments'})
+        cuts=edit_segments(proposal,record['duration_seconds'])
+        number(edit_duration(proposal),config['limits']['min_clip_seconds'],config['limits']['max_clip_seconds'])
+        string(proposal['caption'],config['limits']['caption_chars'])
+        if proposal['style'] not in config['baseline']['weights']:
+            raise SafetyError('render_feedback_style_not_allowlisted')
+        if 'diagnostics' in feedback:
+            if set(feedback) != {'reason','rejected_proposal','diagnostics'} or feedback['reason'] != 'refinement_asr_endpoint_out_of_bounds':
+                raise SafetyError('invalid_render_feedback')
+            diagnostic=adapter_diagnostics(feedback['diagnostics'])
+            if diagnostic is None or diagnostic['kind'] != 'refinement_asr_timing' or diagnostic['cut_index']>=len(cuts) or cuts[diagnostic['cut_index']] != {'start_seconds':diagnostic['cut_start_seconds'],'end_seconds':diagnostic['cut_end_seconds']}:
+                raise SafetyError('render_feedback_cut_binding_changed')
+        elif set(feedback) != {'reason','rejected_proposal','origin'} or feedback['origin'] != 'operator_requested_render_revision':
+            raise SafetyError('invalid_render_feedback')
+        strict_json(canonical(feedback),min(32768,config['limits']['max_payload_bytes']))
     return record
 
 

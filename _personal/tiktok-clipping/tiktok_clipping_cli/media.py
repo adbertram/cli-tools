@@ -35,6 +35,18 @@ CAPTION_STYLE = {"version": 2, "font": "Arial", "font_size": 48, "bold": True,
 BOUNDARY_TOLERANCE = 0.25
 
 
+class RefinementTimingError(SafetyError):
+    """A measured cut needs a new proposal, never a wider ASR timing bound."""
+
+    code = "refinement_asr_endpoint_out_of_bounds"
+
+    def __init__(self, cue_index, crop_duration, measured_endpoint):
+        self.diagnostics = {"kind": "refinement_asr_timing", "cue_index": cue_index,
+            "crop_duration_seconds": crop_duration, "measured_endpoint_seconds": measured_endpoint,
+            "maximum_endpoint_correction_seconds": BOUNDARY_TOLERANCE}
+        super().__init__(self.code)
+
+
 def sha256(path):
     hasher = hashlib.sha256()
     with Path(path).open("rb") as stream:
@@ -43,7 +55,7 @@ def sha256(path):
     return hasher.hexdigest()
 
 
-def timed_segments(raw, duration, maximum=1048576):
+def timed_segments(raw, duration, maximum=1048576, *, refinement_crop_duration=None):
     """Validate measured segments without repairing or inventing timestamps."""
     if isinstance(raw, (str, bytes)):
         raw = strict_json(raw, maximum)
@@ -54,12 +66,16 @@ def timed_segments(raw, duration, maximum=1048576):
     for segment in raw["segments"]:
         keys(segment, {"start", "end", "text"})
         start = number(segment["start"], previous_end, duration)
-        end = number(segment["end"], start, duration)
-        if end <= start:
-            raise SafetyError("empty_caption_interval")
         text = string(segment["text"], 500).strip()
         if any(ord(c) < 32 and c not in "\n\r\t" for c in text):
             raise SafetyError("caption_markup_forbidden")
+        end = number(segment["end"], start)
+        if end > duration:
+            if refinement_crop_duration is not None:
+                raise RefinementTimingError(len(result), refinement_crop_duration, end)
+            raise SafetyError("number_out_of_bounds")
+        if end <= start:
+            raise SafetyError("empty_caption_interval")
         result.append({"start": start, "end": end, "text": text})
         previous_end = end
     if len(canonical({"segments": result}).encode()) > maximum:
@@ -93,7 +109,8 @@ def normalized_crop_segments(raw, duration, maximum=1048576):
     """
     if isinstance(raw, (str, bytes)):
         raw = strict_json(raw, maximum)
-    measured = timed_segments(raw, duration + BOUNDARY_TOLERANCE, maximum)
+    measured = timed_segments(raw, duration + BOUNDARY_TOLERANCE, maximum,
+        refinement_crop_duration=duration)
     normalized = [{**cue, "end": min(cue["end"], duration)} for cue in measured]
     normalized = timed_segments({"segments": normalized}, duration, maximum)
     clip_segments(normalized, {"start_seconds": 0, "end_seconds": duration})
@@ -520,7 +537,12 @@ class MediaRenderer:
                     raise SafetyError("refinement_crop_duration_changed")
                 raw = self._run(["whisper", "transcripts", "create", str(crop), "--timeout",
                     str(max(1, int(deadline - time.monotonic())))], deadline)
-                cues, evidence = normalized_crop_segments(raw, crop_duration, self.config["limits"]["max_payload_bytes"])
+                try:
+                    cues, evidence = normalized_crop_segments(raw, crop_duration, self.config["limits"]["max_payload_bytes"])
+                except RefinementTimingError as exc:
+                    exc.diagnostics.update({"cut_index": index, "cut_start_seconds": cut["start_seconds"],
+                        "cut_end_seconds": cut["end_seconds"]})
+                    raise
                 shifted = clip_segments(cues, {"start_seconds": 0, "end_seconds": duration})
                 captions.extend({**cue, "start": cue["start"] + offset, "end": cue["end"] + offset} for cue in shifted)
                 records.append({"cut": cut, "crop_sha256": sha256(crop), "crop_bytes": crop.stat().st_size,

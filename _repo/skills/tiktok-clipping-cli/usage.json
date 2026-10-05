@@ -1,7 +1,7 @@
 {
   "tool": "tiktok-clipping",
   "description": "CLI interface for tiktok-clipping",
-  "discovered_at": "2026-10-05T02:19:11Z",
+  "discovered_at": "2026-10-05T03:47:10Z",
   "total_commands": 18,
   "global_options": [],
   "commands": {
@@ -280,6 +280,19 @@
               "type": "file",
               "required": true,
               "help": "Trusted absolute JSON configuration file"
+            },
+            {
+              "name": "--revise-render",
+              "type": "bool",
+              "required": false,
+              "help": "Request a new proposal for a proven quiescent failed render",
+              "takes_value": false
+            },
+            {
+              "name": "--reason",
+              "type": "TEXT",
+              "required": false,
+              "help": "Required bounded explanation for an operator render revision"
             }
           ]
         },

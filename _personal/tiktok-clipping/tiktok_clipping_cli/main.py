@@ -137,9 +137,11 @@ def reconcile(job_id: str = typer.Argument(..., help="Ambiguous job ID."), confi
 
 @jobs.command("retry")
 @command
-def retry(job_id: str = typer.Argument(..., help="Blocked or proven pre-publication visual/render job ID."), config: ConfigPath = ...):
+def retry(job_id: str = typer.Argument(..., help="Blocked or proven pre-publication visual/render job ID."), config: ConfigPath = ...,
+          revise_render: bool = typer.Option(False, '--revise-render', help='Request a new proposal for a proven quiescent failed render.'),
+          reason: str | None = typer.Option(None, '--reason', help='Required bounded explanation for an operator render revision.')):
     """Revalidate blocked work or an explicitly proven pre-publication visual/render failure."""
-    _perform(lambda: _engine(config).retry(job_id))
+    _perform(lambda: _engine(config).retry(job_id, revise_render=revise_render, reason=reason))
 
 
 @jobs.command("maintain")

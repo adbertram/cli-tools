@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from .engine import AdapterFailure
-from .media import MediaRenderer
+from .media import MediaRenderer, RefinementTimingError
 from .safety import SafetyError, canonical, digest, number, strict_json, string, timestamp
 
 
@@ -134,7 +134,10 @@ class LiveAdapter:
             "provenance": measured["provenance"] + "; campaign source list: " + source["reuse_evidence"]}]
 
     def render(self, job, proposal):
-        return self.media.render(job, proposal)
+        try:
+            return self.media.render(job, proposal)
+        except RefinementTimingError as exc:
+            raise AdapterFailure('permanent', exc.code, code=exc.code, diagnostics=exc.diagnostics) from exc
 
     def quality(self, job, proposal, asset):
         return self.media.quality(job, proposal, asset)
