@@ -395,6 +395,35 @@ def test_repeatedly_failing_source_cannot_starve_viable_work(prepared,clock,monk
     with pytest.raises(SafetyError,match='TEST_viable_selected'):d.discover(d.monotonic()+120)
 
 
+def queue_active_job(prepared):
+    p=prepared
+    with p.engine.transaction() as db:
+        db.execute('INSERT INTO catalog_materializations(source_id,evidence_version,phase,next_at) VALUES(?,?,?,?)',(p.snapshot['source_id'],p.snapshot['evidence_version'],'ready',p.engine.clock()))
+    p.engine.ingest(p.record(0))
+
+
+def test_busy_source_yields_to_free_candidate(prepared,clock,monkeypatch):
+    p=prepared;queue_active_job(p)
+    busy={'id':p.snapshot['source_id'],'current_version':p.snapshot['evidence_version']};free={'id':'0'*64,'current_version':'f'*64}
+    from tiktok_clipping_cli.media import MediaRenderer
+    d=cr.CatalogDiscovery(p.config,MediaRenderer(p.config),providers=p.providers,youtube=SimpleNamespace(),clock=clock)
+    monkeypatch.setattr(d.catalog,'eligible',lambda **k:{'sources':[busy,free]})
+    def selected(identifier,revision):
+        assert identifier==free['id'],'busy source chosen before free work'
+        raise SafetyError('TEST_free_selected')
+    monkeypatch.setattr(d.catalog,'validate_current',selected)
+    with pytest.raises(SafetyError,match='TEST_free_selected'):d.discover(d.monotonic()+120)
+
+
+def test_all_busy_sources_return_no_discovery_work(prepared,clock,monkeypatch):
+    p=prepared;queue_active_job(p)
+    from tiktok_clipping_cli.media import MediaRenderer
+    d=cr.CatalogDiscovery(p.config,MediaRenderer(p.config),providers=p.providers,youtube=SimpleNamespace(),clock=clock)
+    monkeypatch.setattr(d.catalog,'eligible',lambda **k:{'sources':[{'id':p.snapshot['source_id'],'current_version':p.snapshot['evidence_version']}]})
+    monkeypatch.setattr(d.catalog,'validate_current',lambda *a,**k:pytest.fail('busy source must be skipped'))
+    assert d.discover(d.monotonic()+120)==[]
+
+
 def test_currently_admitted_ready_source_keeps_new_source_fairness(prepared,clock,monkeypatch):
     p=prepared
     with p.engine.transaction() as db:db.execute('INSERT INTO catalog_materializations(source_id,evidence_version,phase,next_at) VALUES(?,?,?,?)',(p.snapshot['source_id'],p.snapshot['evidence_version'],'ready',clock()))

@@ -243,7 +243,10 @@ class CatalogDiscovery:
         with self._db() as db:
             states={row['source_id']:row for row in db.execute('SELECT * FROM catalog_materializations')}
             admitted={(row['source_id'],row['evidence_version']) for row in db.execute('SELECT source_id,evidence_version FROM catalog_admissions WHERE valid_until>?',(self.clock(),))}
-        due=[c for c in candidates if c['id'] not in states or states[c['id']]['next_at']<=self.clock()]
+            busy={row[0] for row in db.execute("SELECT DISTINCT s.source_id FROM source_jobs s JOIN jobs j ON j.id=s.job_id WHERE j.status NOT IN ('published','done','failed','ambiguous','reconciling')")}
+        # A source with an active job already owns its media: new materialized
+        # records would only deduplicate, so they must not starve free sources.
+        due=[c for c in candidates if (c['id'] not in states or states[c['id']]['next_at']<=self.clock()) and c['id'] not in busy]
         if not due:return []
         # Finish a due owned pipeline before opening another acquisition.
         # Ready caches return to ordinary fairness after a current admission.
