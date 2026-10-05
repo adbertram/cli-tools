@@ -187,6 +187,7 @@ class Page:
         assert role == "button" and kwargs == {"name": "Continue", "exact": True}
         return SimpleNamespace(click=lambda: self.events.append("Continue"))
     def evaluate(self, script, value=None):
+        if script == module.EDITOR_STATE_JS:return editor_state(self.rows[0])
         if script == module.CAPTION_TEXT_JS:return self.rows[0]['caption']
         if script == module.CONTROLS_JS:return {"upload_complete": True, "post_enabled": True}
         if script == module.DRAFTS_JS:return self.rows
@@ -194,6 +195,73 @@ class Page:
         if script == module.DEADLINE_JS:self.dispatch_deadline = value['deadline'];return True
         if script == module.RESTORE_JS:self.restored = True;return True
         raise AssertionError(script)
+
+
+def editor_state(row):
+    return {'project': {'projectId': row['project_id'], 'creationId': row['creation_id']},
+            'track_id': row['creation_id'], 'draft_id': None, 'draft_type': None,
+            'draft_resumed_from': None, 'full_screen_upload': False,
+            'current_file_key': row['file_key'], 'file_keys': [row['file_key']],
+            'editor_count': 1, 'caption_state_count': 1, 'inputs': [],
+            'files': [{k: row[k] for k in module.MEDIA_BINDING_FIELDS if k != 'creation_id'}]}
+
+
+def fresh_state():
+    return {'project': {'projectId': '', 'creationId': ''}, 'track_id': 'NEW_CREATION',
+            'draft_id': None, 'draft_type': None, 'draft_resumed_from': None,
+            'full_screen_upload': True, 'current_file_key': '', 'file_keys': [],
+            'files': [], 'editor_count': 0, 'caption_state_count': 0, 'inputs': [{'disabled': False, 'multiple': False}]}
+
+
+def test_fresh_native_entry_preserves_existing_draft(publisher):
+    state = fresh_state();page = SimpleNamespace(evaluate=lambda script: state)
+    assert publisher._fresh_entry(page, [{'creation_id': 'OLD_CREATION'}]) == 'NEW_CREATION'
+
+
+@pytest.mark.parametrize('change', [
+    {'project': {'projectId': '1', 'creationId': 'OLD_CREATION'}},
+    {'draft_id': 'OLD'}, {'draft_type': 'local'}, {'draft_resumed_from': 'local'},
+    {'editor_count': 1}, {'file_keys': ['old_file']}, {'current_file_key': 'old_file'},
+    {'files': [{'file_key': 'old_file'}]}, {'full_screen_upload': False},
+    {'track_id': 'OLD_CREATION'}, {'inputs': [{'disabled': True, 'multiple': False}]},
+    {'inputs': [{'disabled': False, 'multiple': True}]}, {'inputs': []},
+])
+def test_fresh_native_entry_rejects_resumed_or_unproven_context(publisher, change):
+    page = SimpleNamespace(evaluate=lambda script: fresh_state() | change)
+    with pytest.raises(StudioPublishError):publisher._fresh_entry(page, [{'creation_id': 'OLD_CREATION'}])
+
+
+@pytest.mark.parametrize('field', ['project', 'track_id', 'current_file_key', 'file_keys', 'files', 'editor_count', 'full_screen_upload', 'inputs'])
+def test_owned_editor_wrong_native_binding_fails_before_edits(publisher, field):
+    value = prepared(publisher);state = editor_state(value['draft'])
+    state[field] = {'projectId': 'other', 'creationId': 'other'} if field == 'project' else None
+    with pytest.raises(StudioPublishError):publisher._verify_editor(SimpleNamespace(evaluate=lambda script: state), value['draft'])
+
+
+@pytest.mark.parametrize('field', module.MEDIA_BINDING_FIELDS)
+def test_owned_editor_rejects_other_media_despite_matching_local_row(publisher, field):
+    value = prepared(publisher);state = editor_state(value['draft'])
+    if field == 'creation_id':state['project']['creationId'] = 'OTHER'
+    else:state['files'][0][field] = 'OTHER'
+    with pytest.raises(StudioPublishError):publisher._verify_editor(SimpleNamespace(evaluate=lambda script: state), value['draft'])
+
+
+def test_preserved_draft_missing_or_changed_is_never_ignored(publisher):
+    prior = {'draft_id': 'OLD', 'creation_id': 'OLD', 'video_id': 'old_vid'}
+    operation = {'prior_drafts': {'OLD': module.digest(prior)}}
+    publisher._preserve_prior_drafts(operation, [prior, {'draft_id': 'NEW'}])
+    for rows in [[], [prior | {'video_id': 'other'}], [prior, prior]]:
+        with pytest.raises(StudioPublishError):publisher._preserve_prior_drafts(operation, rows)
+
+
+def test_exact_current_editor_allows_other_untouched_drafts(publisher, monkeypatch):
+    value = prepared(publisher);page = attach(publisher, value, monkeypatch)
+    old = draft(value, draft_id='OLD', creation_id='OLD', file_name='old.mp4', file_key='old_key', video_id='old_vid')
+    value['prior_drafts'] = {'OLD': module.digest(old)}
+    page.rows.append(old)
+    result, _ = publisher._ready_editor(value)
+    assert result['draft_id'] == value['draft_id'] and old in page.rows
+    assert 'Continue' not in page.events and page.clicked == 0
 
 
 def attach(publisher, value, monkeypatch):
@@ -915,3 +983,114 @@ def test_crash_after_native_acceptance_retains_project_receipt_before_optional_i
     with pytest.raises(StudioPublishError,match='retry'):
         publisher.publish(value['request_id'],before_public_action=lambda binding:pytest.fail('no callback'))
     assert page.clicked==1
+
+
+def test_editor_changed_after_authority_callback_aborts_without_post(publisher, monkeypatch):
+    value = prepared(publisher);page = attach(publisher, value, monkeypatch)
+    original = page.evaluate
+    changed = False
+    def evaluate(script, argument=None):
+        if script == module.EDITOR_STATE_JS and changed:
+            state = editor_state(page.rows[0]);state['project']['creationId'] = 'OTHER_EDITOR';return state
+        return original(script, argument)
+    page.evaluate = evaluate
+    def authorize(binding):
+        nonlocal changed
+        changed = True
+    with pytest.raises(StudioPublishError, match='before dispatch'):
+        publisher.publish(value['request_id'], before_public_action=authorize)
+    assert page.clicked == 0
+    assert publisher.status(value['request_id'])['state'] == 'prepared'
+
+
+@pytest.mark.parametrize('missing', ['draft_id', 'draft_type', 'draft_resumed_from'])
+def test_missing_native_context_fields_are_not_fresh_defaults(publisher, missing):
+    state = fresh_state();del state[missing]
+    with pytest.raises(StudioPublishError):
+        publisher._fresh_entry(SimpleNamespace(evaluate=lambda script: state), [])
+
+
+@pytest.mark.parametrize('state', [None, {}, {'pressed': True, 'released': False, 'blocked': False, 'expired': False}, {'pressed': True, 'released': True, 'blocked': True, 'expired': False}, {'pressed': True, 'released': True, 'blocked': False, 'expired': True}])
+def test_caption_gesture_requires_exact_complete_guard_receipt(publisher, monkeypatch, state):
+    monkeypatch.setattr(publisher, '_verify_editor', lambda *a: {'exact': True})
+    calls = []
+    def evaluate(script, value):
+        calls.append(script)
+        return True if script == module.CAPTION_SELECTION_JS else state
+    page = SimpleNamespace(evaluate=evaluate, click_native=lambda selector: calls.append(selector))
+    with pytest.raises(StudioPublishError, match='changed before native'):
+        publisher._select_caption_option(page, {}, {'id': 'mention-option-x-0'}, 'hashtag', '#ad', '#ad')
+    assert calls[-1] == module.CAPTION_SELECTION_DONE_JS
+
+
+def test_caption_gesture_cleanup_preserves_primary_click_failure(publisher, monkeypatch):
+    monkeypatch.setattr(publisher, '_verify_editor', lambda *a: {})
+    calls = []
+    def evaluate(script, value):
+        calls.append(script)
+        if script == module.CAPTION_SELECTION_JS:return True
+        raise RuntimeError('cleanup')
+    page = SimpleNamespace(evaluate=evaluate, click_native=lambda *a: (_ for _ in ()).throw(ValueError('primary')))
+    with pytest.raises(ValueError, match='primary'):
+        publisher._select_caption_option(page, {}, {'id': 'mention-option-x-0'}, 'hashtag', '#ad', '#ad')
+    assert calls[-1] == module.CAPTION_SELECTION_DONE_JS
+
+
+def test_caption_gesture_cleanup_failure_denies_success(publisher, monkeypatch):
+    monkeypatch.setattr(publisher, '_verify_editor', lambda *a: {})
+    def evaluate(script, value):
+        if script == module.CAPTION_SELECTION_JS:return True
+        raise RuntimeError('cleanup')
+    page = SimpleNamespace(evaluate=evaluate, click_native=lambda *a: None)
+    with pytest.raises(StudioPublishError, match='cleanup is unverified'):
+        publisher._select_caption_option(page, {}, {'id': 'mention-option-x-0'}, 'hashtag', '#ad', '#ad')
+
+
+
+def test_native_resume_waits_for_exact_hydrated_file_context(publisher, monkeypatch):
+    value = prepared(publisher)
+    checks = []
+    monkeypatch.setattr(publisher, '_drafts', lambda *a: [value['draft']])
+    def verify(page, row):
+        checks.append(row)
+        if len(checks) == 1:raise StudioPublishError('Studio native editor file context is ambiguous.')
+        return {}
+    monkeypatch.setattr(publisher, '_verify_editor', verify)
+    def wait(page, predicate, message, seconds):
+        assert predicate() is None
+        return predicate()
+    monkeypatch.setattr(publisher, '_wait', wait)
+    assert publisher._wait_owned_editor(None, value) == value['draft']
+    assert len(checks) == 2
+
+
+def test_native_resume_retains_exact_failure_when_hydration_never_verifies(publisher, monkeypatch):
+    value = prepared(publisher)
+    changed = value['draft'] | {'video_id': 'wrong'}
+    monkeypatch.setattr(publisher, '_drafts', lambda *a: [changed])
+    monkeypatch.setattr(publisher, '_verify_editor', lambda *a: pytest.fail('wrong media must never reach editor acceptance'))
+    def wait(page, predicate, message, seconds):
+        assert predicate() is None
+        raise StudioPublishError(message)
+    monkeypatch.setattr(publisher, '_wait', wait)
+    with pytest.raises(StudioPublishError, match='media binding changed'):
+        publisher._wait_owned_editor(None, value)
+
+
+def test_native_local_resume_same_key_twice_is_single_owned_post(publisher):
+    value = prepared(publisher); state = editor_state(value['draft'])
+    state.update(draft_type='local', draft_resumed_from='local', file_keys=[value['draft']['file_key']]*2)
+    assert publisher._verify_editor(SimpleNamespace(evaluate=lambda script: state), value['draft']) == state
+
+
+@pytest.mark.parametrize('change', [
+    {'draft_type': None}, {'draft_resumed_from': None},
+    {'file_keys': ['file', 'foreign']}, {'file_keys': ['file']*3},
+    {'caption_state_count': 2}, {'caption_state_count': 0}, {'caption_state_count': True},
+])
+def test_native_local_resume_duplicate_key_rejects_other_or_batch_context(publisher, change):
+    value = prepared(publisher); state = editor_state(value['draft'])
+    state.update(draft_type='local', draft_resumed_from='local', file_keys=[value['draft']['file_key']]*2)
+    state.update(change)
+    with pytest.raises(StudioPublishError):
+        publisher._verify_editor(SimpleNamespace(evaluate=lambda script: state), value['draft'])

@@ -20,7 +20,7 @@ import sqlite3
 import stat
 import time
 from typing import Callable
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from .client import (ACCOUNT_INFO_PATH, ClientError, TikTokWebClient,
                      normalize_account_identity)
@@ -37,6 +37,30 @@ MAX_ASSET_BYTES = 30_000_000_000  # Studio's observed 30 GB upload limit.
 MIN_FREE_BYTES = 1 << 30  # Keep 1 GiB free after the private staging copy.
 MEDIA_BINDING_FIELDS = ("creation_id", "video_id", "file_key", "file_name", "file_size", "duration_ms")
 ORPHAN_BINDING_FIELDS = ("draft_id", "project_id") + MEDIA_BINDING_FIELDS
+
+# Native Studio's React Provider exposes the Redux store used by its own
+# upload handlers. Read only its current creation/file state, never dispatch.
+EDITOR_STATE_JS = r"""() => {
+ const editor=document.querySelectorAll('[data-e2e="caption_container"] [contenteditable="true"]');
+ const inputs=document.querySelectorAll('input[type="file"][accept="video/*"]');
+ const anchor=editor[0]||inputs[0];if(!anchor)throw Error('STUDIO_CONTEXT_MISSING');
+ const key=Object.keys(anchor).find(k=>k.startsWith('__reactFiber$'));
+ if(!key)throw Error('STUDIO_CONTEXT_MISSING');
+ const stores=new Set();let fiber=anchor[key];
+ for(let i=0;fiber&&i<160;i++,fiber=fiber.return){const p=fiber.memoizedProps;
+  for(const store of [p?.store,p?.value?.store])if(store&&typeof store.getState==='function')stores.add(store);
+ }
+ if(stores.size!==1)throw Error('STUDIO_CONTEXT_AMBIGUOUS');
+ const state=[...stores][0].getState(),u=state.upload,v=state.uploader;
+ if(!u||!v||!v.fileInfoMap||Object.keys(v.fileInfoMap).length>30)throw Error('STUDIO_CONTEXT_CHANGED');
+ return {project:u.projectBasicInfo,track_id:u.trackId,draft_resumed_from:u.draftResumedFrom??null,
+  draft_type:u.draftType??null,draft_id:u.draftId??null,full_screen_upload:u.showFullScreenUpload,
+  current_file_key:v.currentFileKey,file_keys:v.fileKeyList,editor_count:editor.length,
+  caption_state_count:state.form?.videoFormDataMap?.[v.currentFileKey]?.mentionEditorStates?.length??0,
+  inputs:[...inputs].map(x=>({disabled:x.disabled,multiple:x.multiple})),
+  files:Object.values(v.fileInfoMap).map(x=>({file_key:x.fileKey,file_name:x.rawFile?.name,
+   file_size:x.rawFile?.size,video_id:x.vid??null,duration_ms:Math.floor(1000*x.duration)}))};
+}"""
 
 DRAFTS_JS = r"""async (owner) => {
  if(!(await indexedDB.databases()).some(x=>x.name==='web_creation_draft'))return [];
@@ -165,6 +189,31 @@ CAPTION_READY_JS = r"""(selector)=>{const e=document.querySelector(selector),s=w
  const r=document.createRange();r.selectNodeContents(e);r.setStart(s.focusNode,s.focusOffset);return r.toString()===''}"""
 CAPTION_OPTIONS_JS = r"""(kind)=>[...document.querySelectorAll(kind==='mention'?'[role=option].mention-suggestion-item':'[role=option].hashtag-suggestion-item')]
  .filter(x=>x.getClientRects().length).map(x=>({id:x.id,name:kind==='mention'?x.querySelector('.user-id')?.innerText.split(' · ')[0]:x.querySelector('.hash-tag-topic')?.innerText}))"""
+CAPTION_SELECTION_JS = "(opts)=>{const native=()=> (" + EDITOR_STATE_JS + ")();" + r"""
+ const name=el=>opts.kind==='mention'?el.querySelector('.user-id')?.innerText.split(' · ')[0]:el.querySelector('.hash-tag-topic')?.innerText;
+ const equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+ const text=()=>[...document.querySelector(opts.selector).querySelectorAll('[data-block=true]')].map(x=>x.textContent).join('\n');
+ const target=document.getElementById(opts.id);
+ if(window[opts.key]!==undefined||!target||name(target)!==opts.name||text()!==opts.prefix||!equal(native(),opts.editor))throw Error('CAPTION_SELECTION_NOT_EXACT');
+ const box=target.getBoundingClientRect();if(!box.width||!box.height)throw Error('CAPTION_SELECTION_NOT_VISIBLE');
+ const state={pressed:false,released:false,blocked:false,expired:false};let timer;
+ const types=['mousedown','mouseup'];
+ const dispose=()=>{for(const type of types)document.removeEventListener(type,guard,true);clearTimeout(timer)};
+ const guard=event=>{
+  const option=event.target.closest?.('[role=option].mention-suggestion-item,[role=option].hashtag-suggestion-item');
+  // Bind this one menu gesture, leaving unrelated document controls alone.
+  const inBox=event.clientX>=box.left&&event.clientX<=box.right&&event.clientY>=box.top&&event.clientY<=box.bottom;
+  if(!option&&!inBox)return;
+  let exact=false;try{exact=option?.id===opts.id&&name(option)===opts.name&&text()===opts.prefix&&equal(native(),opts.editor)}catch(e){}
+  if(state.blocked||state.expired||!exact||event.type==='mouseup'&&!state.pressed){state.blocked=true;event.preventDefault();event.stopImmediatePropagation();return}
+  state[event.type==='mousedown'?'pressed':'released']=true;
+ };
+ for(const type of types)document.addEventListener(type,guard,true);
+ timer=setTimeout(()=>{state.expired=true;dispose()},5000);
+ window[opts.key]={state,dispose};return true;
+}"""
+CAPTION_SELECTION_DONE_JS = r"""(key)=>{const value=window[key];if(!value)return null;
+ value.dispose();delete window[key];return value.state;}"""
 CAPTION_TOKEN_RE = re.compile(r'(?<![\w.@])(@[A-Za-z0-9._]+|#\w+)', re.UNICODE)
 
 
@@ -524,9 +573,71 @@ class StudioPublisher:
 
     def _drafts(self, page, policy):
         rows = page.evaluate(DRAFTS_JS, policy["account_id"])
-        if not isinstance(rows, list) or any(not isinstance(row, dict) or not isinstance(row.get("draft_id"), str) for row in rows):
+        if not isinstance(rows, list) or any(not isinstance(row, dict) or not isinstance(row.get("draft_id"), str) for row in rows) or len({row['draft_id'] for row in rows}) != len(rows):
             raise StudioPublishError("Studio local draft inventory is malformed.")
         return rows
+
+    def _native_editor(self, page):
+        state = page.evaluate(EDITOR_STATE_JS)
+        fields = {'project', 'track_id', 'draft_resumed_from', 'draft_type', 'draft_id', 'full_screen_upload', 'current_file_key', 'file_keys', 'editor_count', 'caption_state_count', 'inputs', 'files'}
+        if not isinstance(state, dict) or set(state) != fields or not isinstance(state.get('project'), dict) or not isinstance(state.get('file_keys'), list) or not isinstance(state.get('files'), list) or not isinstance(state.get('inputs'), list):
+            raise StudioPublishError('Studio native editor context is unavailable or malformed.')
+        if type(state.get('caption_state_count')) is not int or state['caption_state_count'] < 0 or type(state.get('editor_count')) is not int or type(state.get('full_screen_upload')) is not bool or not isinstance(state.get('track_id'), str) or not state['track_id'] or not isinstance(state.get('current_file_key'), str):
+            raise StudioPublishError('Studio native editor context changed.')
+        if len(state['files']) > 30 or len(state['file_keys']) > 30 or any(not isinstance(x, dict) for x in state['files'] + state['inputs']) or any(not isinstance(x, str) or not x for x in state['file_keys']):
+            raise StudioPublishError('Studio native editor file context is ambiguous.')
+        return state
+
+    def _fresh_entry(self, page, rows):
+        state = self._native_editor(page)
+        if state['caption_state_count'] != 0 or state['editor_count'] != 0 or state['full_screen_upload'] is not True or state['project'] != {'projectId': '', 'creationId': ''} or state['current_file_key'] != '' or state['file_keys'] or state['files'] or any(state.get(k) is not None for k in ('draft_id', 'draft_type', 'draft_resumed_from')):
+            raise StudioPublishError('Studio upload entry is not a fresh independent creation; preserve existing drafts.')
+        if any(row.get('creation_id') == state['track_id'] for row in rows) or state['inputs'] != [{'disabled': False, 'multiple': False}]:
+            raise StudioPublishError('Studio fresh creation or single-file input is unavailable or ambiguous.')
+        return state['track_id']
+
+    def _verify_editor(self, page, row):
+        state = self._native_editor(page)
+        expected = {k: row[k] for k in MEDIA_BINDING_FIELDS if k != 'creation_id'}
+        # Native local Continue restores one key then its upload hook appends
+        # that same key again. Posting uses the single current file and caption
+        # state, never this list. Support only that observed local-resume shape.
+        keys_match = state['file_keys'] == [row['file_key']] or (
+            state['file_keys'] == [row['file_key'], row['file_key']]
+            and state['draft_type'] == 'local' and state['draft_resumed_from'] == 'local')
+        if state['caption_state_count'] != 1 or state['editor_count'] != 1 or state['full_screen_upload'] is not False or state['project'] != {'projectId': row['project_id'], 'creationId': row['creation_id']} or state['track_id'] != row['creation_id'] or state['current_file_key'] != row['file_key'] or not keys_match or state['files'] != [expected]:
+            raise StudioPublishError('Studio current editor does not match the exact owned creation and media.')
+        # A resumed local draft must name this creation. Fresh uploads have
+        # no draftId yet; unrelated old rows never establish editor ownership.
+        if state.get('draft_id') not in (None, row['draft_id']) or state.get('draft_type') not in (None, 'local') or state.get('draft_resumed_from') not in (None, 'local'):
+            raise StudioPublishError('Studio current editor resumed an unrelated draft.')
+        return state
+
+    def _wait_owned_editor(self, page, operation, *, seconds=15):
+        # Native Continue restores the editor before asynchronous file/project
+        # hydration completes. Wait only for the unchanged exact media binding.
+        failure = None
+        def ready():
+            nonlocal failure
+            try:
+                row = self._match_draft(operation, self._drafts(page, operation['policy']), check_controls=False)
+                self._verify_editor(page, row)
+                return row
+            except StudioPublishError as error:
+                failure = error
+                return None
+        try:
+            return self._wait(page, ready, 'Studio exact owned editor hydration did not complete.', seconds=seconds)
+        except StudioPublishError:
+            if failure is not None:raise failure from None
+            raise
+
+    def _preserve_prior_drafts(self, operation, rows):
+        prior = operation.get('prior_drafts', {})
+        for draft_id, fingerprint in prior.items():
+            matches = [row for row in rows if row['draft_id'] == draft_id]
+            if len(matches) != 1 or digest(matches[0]) != fingerprint:
+                raise StudioPublishError('Studio preceding draft changed or disappeared; further edits refused.')
 
     def _wait(self, page, predicate, message, seconds=60):
         deadline = time.monotonic() + seconds
@@ -585,6 +696,28 @@ class StudioPublisher:
         # separate unchecked music checkbox fails verification before Post.
         return self._verify_controls(page, policy)
 
+    def _select_caption_option(self, page, saved, option, kind, text, prefix):
+        editor = self._verify_editor(page, saved)
+        key = '__studio_caption_' + uuid4().hex
+        selection = None
+        try:
+            armed = page.evaluate(CAPTION_SELECTION_JS, {'key': key, 'id': option['id'],
+                'kind': kind, 'name': text[1:] if kind == 'mention' else text,
+                'selector': CAPTION_SELECTOR, 'prefix': prefix, 'editor': editor})
+            if armed is not True:
+                raise StudioPublishError('Studio exact caption selection guard was not armed.')
+            page.click_native('#' + option['id'])
+        except BaseException:
+            try:page.evaluate(CAPTION_SELECTION_DONE_JS, key)
+            except Exception:pass  # Self-expiry still disarms; preserve the primary failure.
+            raise
+        else:
+            try:selection = page.evaluate(CAPTION_SELECTION_DONE_JS, key)
+            except Exception:
+                raise StudioPublishError('Studio caption selection guard cleanup is unverified.') from None
+        if selection != {'pressed': True, 'released': True, 'blocked': False, 'expired': False}:
+            raise StudioPublishError('Studio caption suggestion changed before native selection; no entity accepted.')
+
     def _set_caption(self, page, policy, saved=None):
         self._caption_semantic_rollback_unverified = False
         caption = policy['caption']
@@ -626,7 +759,7 @@ class StudioPublisher:
                 option = self._wait(page, exact_option, 'Studio exact caption suggestion is unavailable.', seconds=10)
                 if not isinstance(option.get('id'), str) or not re.fullmatch(r'mention-option-[A-Za-z0-9_-]+', option['id']):
                     raise StudioPublishError('Studio caption suggestion target is unverified.')
-                page.click_native('#'+option['id'])
+                self._select_caption_option(page, saved, option, kind, text, caption[:token.end()])
                 expected = caption[:token.end()]
                 actual = self._wait(page, lambda: (value if (value := page.evaluate(CAPTION_TEXT_JS, CAPTION_SELECTOR)) in (expected, expected + ' ') else None), 'Studio selected entity did not update the caption.', seconds=3)
                 if actual == expected + ' ':
@@ -685,6 +818,8 @@ class StudioPublisher:
         if len(matches) != 1:
             raise StudioPublishError("Studio exact owned draft is missing or ambiguous.")
         row = matches[0]
+        if any(other is not row and any(other.get(key) == row.get(key) for key in ('creation_id', 'file_key', 'video_id')) for other in rows):
+            raise StudioPublishError('Studio native media does not uniquely identify the owned draft.')
         fields = MEDIA_BINDING_FIELDS
         if exact and any(row.get(key) != operation["draft"][key] for key in fields):
             raise StudioPublishError("Studio exact draft media binding changed.")
@@ -798,9 +933,9 @@ class StudioPublisher:
             operation["actor"] = self._identity(page, policy)
             before = self._drafts(page, policy)
             operation["drafts_before"] = [r["draft_id"] for r in before]
+            operation['prior_drafts'] = {r['draft_id']: digest(r) for r in before}
+            operation['fresh_creation_id'] = self._fresh_entry(page, before)
             self._save(operation)
-            if page.locator('[data-e2e="local_draft_container"]').count():
-                raise StudioPublishError("Studio has an existing draft awaiting Continue; preserve it before preparing another request.")
             if page.evaluate(HEARTBEAT_JS, policy["account_id"]) is not True:
                 raise StudioPublishError("Studio private preparation has an unresolved heartbeat context.")
             if page.locator(FILE_SELECTOR).count() != 1:
@@ -812,6 +947,12 @@ class StudioPublisher:
             rows = self._wait(page, new_draft, "Studio upload did not yield an exact local draft.")
             if len(rows) != 1:
                 raise StudioPublishError("Studio upload produced ambiguous draft IDs.")
+            if rows[0]['creation_id'] != operation['fresh_creation_id']:
+                raise StudioPublishError('Studio new upload reused an unrelated creation.')
+            if any(any(old.get(key) == rows[0].get(key) for key in ('creation_id', 'file_key', 'video_id')) for old in before):
+                raise StudioPublishError('Studio new upload reused preceding draft media; further edits refused.')
+            self._preserve_prior_drafts(operation, self._drafts(page, policy))
+            self._verify_editor(page, rows[0])
             operation["draft_id"] = rows[0]["draft_id"]
             operation["draft"] = rows[0]
             self._save(operation)
@@ -829,6 +970,8 @@ class StudioPublisher:
                     if time.monotonic() >= deadline:raise
                     page.wait_for_timeout(250)
             self._identity(page, policy)
+            self._preserve_prior_drafts(operation, self._drafts(page, policy))
+            self._verify_editor(page, operation['draft'])
             operation["project_id"] = operation["draft"]["project_id"]
             operation["state"] = "prepared"
             self._save(operation)
@@ -956,8 +1099,7 @@ class StudioPublisher:
             page = self._page()
             rows = self._drafts(page, policy)
         current = self._match_draft(operation, rows)
-        if len(rows) != 1:
-            raise StudioPublishError("Studio editor does not uniquely identify the owned draft; preserve other drafts.")
+        self._preserve_prior_drafts(operation, rows)
         # The native Continue banner offers one local draft. Never click
         # it when another candidate could be resumed instead.
         if page.locator(CAPTION_SELECTOR).count() != 1:
@@ -972,10 +1114,12 @@ class StudioPublisher:
                 page = self._page()
             else:
                 raise StudioPublishError("Studio Continue does not uniquely identify the owned draft.")
+        current = self._wait_owned_editor(page, operation)
         if page.locator('.more-btn > span:first-child:has-text("Show more")').count() == 1:
             page.locator('.more-btn > span:first-child:has-text("Show more")').click()
         self._wait(page, lambda: page.evaluate(CONTROLS_JS).get("upload_complete") and page.evaluate(CONTROLS_JS).get("post_enabled"), "Studio reopened upload readiness did not complete.")
         current = self._match_draft(operation, self._drafts(page, policy))
+        self._verify_editor(page, current)
         try:
             self._set_caption(page, policy, current)
         except Exception:
@@ -989,6 +1133,8 @@ class StudioPublisher:
         # project ID is recorded before dispatch, retaining creation/media.
         operation["project_id"] = draft["project_id"]
         operation['draft'] = draft
+        self._preserve_prior_drafts(operation, self._drafts(page, policy))
+        self._verify_editor(page, draft)
         self._identity(page, policy)
         self._save(operation)
         return operation, page
@@ -1006,6 +1152,7 @@ class StudioPublisher:
                 raise StudioPublishError("Studio policy binding changed.")
             operation, page = self._ready_editor(operation)
             draft = operation['draft']
+            self._verify_editor(page, draft)
             key = "__studio_publish_" + request_id.replace("-", "")
             page.evaluate(OBSERVER_JS, {"key": key, "path": POST_PATH,
                                          "video_id": draft["video_id"], "creation_id": draft["creation_id"],
@@ -1040,6 +1187,15 @@ class StudioPublisher:
                 self._save(operation)
                 failure_stage = 'native_observation_refresh'
                 network.before_dispatch()
+                try:
+                    rows = self._drafts(page, policy)
+                    current = self._match_draft(operation, rows, require_entities=True)
+                    self._preserve_prior_drafts(operation, rows)
+                    self._verify_editor(page, current)
+                except Exception:
+                    operation['state'] = 'prepared'
+                    self._save(operation)
+                    raise
                 page.evaluate(DEADLINE_JS, {'key': key, 'deadline': deadline})
                 if deadline is not None and time.time() >= deadline:
                     operation['state'] = 'prepared'
