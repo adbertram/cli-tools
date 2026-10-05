@@ -206,6 +206,10 @@ def publisher(tmp_path, monkeypatch):
     client.get_article = lambda _page_id: dict(article)
     client.get_article_markdown = lambda _page_id: markdown
     client._resolve_featured_image = lambda _page_id, _supplied: image
+    client.scheduled_image_uploads = []
+    client._upload_scheduled_featured_image = (
+        lambda page_id, image_path: client.scheduled_image_uploads.append((page_id, image_path))
+    )
 
     def media(stage):
         counters["media"] += 1
@@ -2183,7 +2187,7 @@ SLOT = "2026-09-01T13:00:00+00:00"
 def test_auto_schedule_writes_scheduled_status_and_publish_date_with_zero_publisher_effects(
     publisher, monkeypatch
 ):
-    client, article, _markdown, _image, _manifest, counters, _token = publisher
+    client, article, _markdown, image, _manifest, counters, _token = publisher
     article["Status"] = "Ready to Publish"
     _freeze_utc_now(monkeypatch, datetime(2026, 8, 4, 7, 15, 0, tzinfo=timezone.utc))  # Tuesday
 
@@ -2199,6 +2203,9 @@ def test_auto_schedule_writes_scheduled_status_and_publish_date_with_zero_publis
     assert client.update_calls == [(PAGE_ID, "Scheduled", {"Publish Date": slot})]
     assert counters["notion"] == 1
     _assert_no_publisher_effects(client, counters)
+    # The due publisher can run on a different host than the one that
+    # scheduled this post, so the resolved image is mirrored to R2 here.
+    assert client.scheduled_image_uploads == [(PAGE_ID, image)]
 
 
 def test_explicit_date_schedules_without_journal_or_runtime_record(publisher):

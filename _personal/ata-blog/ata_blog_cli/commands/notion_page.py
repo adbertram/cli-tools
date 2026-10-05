@@ -17,6 +17,7 @@ COMMAND_CREDENTIALS = {
     "get": ["custom"],
     "create": ["custom"],
     "publish": ["custom"],
+    "backfill-scheduled-images": ["custom"],
     "unpublish": ["custom"],
     "update": ["custom"],
     "search": ["custom"],
@@ -239,6 +240,27 @@ def articles_publish(
 
     print_info(f"Static URL: {result['static_url']}")
     print_json(result)
+
+
+@app.command("backfill-scheduled-images")
+@command
+def articles_backfill_scheduled_images():
+    """Mirror local featured images to R2 for Scheduled pages that predate the recovery mirror.
+
+    Scheduling started mirroring the resolved featured image to R2 so a due
+    `publish --status publish` run can recover it on a different host. A page
+    that was already `Scheduled` before that shipped has no R2 object to
+    recover. Run this once, on every host that might hold the local image for
+    an already-`Scheduled` page, to mirror it.
+    """
+    client = get_client()
+    result = client.backfill_scheduled_featured_images()
+    print_json(result)
+    print_success(
+        f"Mirrored {len(result['mirrored'])}; "
+        f"{len(result['already_mirrored'])} already mirrored; "
+        f"{len(result['no_local_image'])} had no local image on this host"
+    )
 
 
 @app.command("unpublish")
