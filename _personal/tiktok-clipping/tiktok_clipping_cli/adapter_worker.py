@@ -11,7 +11,7 @@ def main():
     keys(message, {"config", "method", "args"})
     config = validate_config(message["config"])
     method = message["method"]
-    if method not in {"discover", "render", "quality", "publish", "reconcile", "metrics", "submit_rewards", "reconcile_rewards", "reward_status", "verify_ready", "visual_execution_state"}:
+    if method not in {"discover", "render", "quality", "publish", "reconcile", "metrics", "metrics_batch", "sync_reward_revenue", "submit_rewards", "reconcile_rewards", "reward_status", "verify_ready", "visual_execution_state"}:
         raise ValueError("unknown_adapter_method")
     try:
         adapter = importlib.import_module(config["adapter_module"]).create_adapter(config)

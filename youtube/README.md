@@ -429,5 +429,42 @@ reads only exact video ID, title, duration, channel name/ID and upload date thro
 the owning yt-dlp wrapper. It avoids the interactive/unbounded client constructor,
 format inventories, playback URLs and caption URLs. Reported manual/automatic
 language codes describe extractor availability; they do not prove a usable transcript
-or authorize reuse. A separate 0.75-second process cleanup allowance follows the
+or authorize reuse. The 0.75-second process cleanup allowance is reserved inside the
 caller deadline. Failures expose sanitized code/category/status/retry_after_seconds.
+
+
+## Bounded full-source and timed-caption SDK
+
+`YoutubeClient.read_source_transcript(url, expected_video_id=..., duration_seconds=...,
+language="en", timeout_seconds=..., max_caption_bytes=..., max_cues=...,
+max_result_bytes=...)` reads provider automatic English JSON3 captions through
+the tool's declared yt-dlp dependency. It returns original full-video timestamps,
+the raw response SHA-256/byte count, and an explicit normalization version.
+Same-window continuation events are merged only at the measured 1ms precision
+boundary; unsupported speaker changes or speech overlaps fail explicitly.
+Caption timestamps describe provider display timing, not forced alignment. Large
+transcripts require caller-owned fair time windows; the SDK does not truncate.
+
+`YoutubeClient.acquire_source_media(url, expected_video_id=..., duration_seconds=...,
+output_dir=..., max_source_bytes=..., max_stage_bytes=..., max_resolution=...,
+timeout_seconds=...)` downloads a complete audiovisual source to the fixed
+`source.mp4` in an existing empty caller-owned private directory. Resolution is
+240, 360, or 480; the supported format is HTTPS AVC video plus MP4A audio merged
+to MP4. It verifies actual full duration and audio with ffprobe, then returns
+the real regular-file SHA-256 and byte count. No selected segment is labeled
+as a full source. ffmpeg and ffprobe must be available before download starts.
+
+The caller must hold its existing workspace lock or byte reservation and pass
+an available stage allowance covering three maximum-sized files plus 1MiB
+headroom (input tracks plus merged output). Initial physical free space must
+cover that allowance plus the 1GiB reserve. Bounded progress/supervisor checks
+inspect at most 16 stage files and current free space. Per-file RLIMIT_FSIZE
+and 64KiB transfer buffers constrain writes; these checks do not promise zero
+overshoot or enforce a separate caller's concurrent writes. Preflight, child
+work, kill/reap cleanup, probe, and hashing share one caller deadline. Failed
+acquisition retains the exact caller-owned partial stage for caller cleanup;
+the SDK never deletes a foreign file or selects the last file in a directory.
+
+Failures expose sanitized `code`, `category`, `status`, and
+`retry_after_seconds`; provider Retry-After is preserved without a one-day cap.
+No signed playback/caption URLs or provider response bodies are returned.

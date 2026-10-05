@@ -329,6 +329,10 @@ class Engine:
                 provider = db.execute("SELECT until FROM circuits WHERE capability='provider:whop'").fetchone()
                 if provider and provider[0] > self.clock():
                     raise AdapterFailure("transient", "circuit_open: provider:whop", provider[0] - self.clock(), provider="whop")
+            if method in {'metrics', 'metrics_batch'}:
+                provider = db.execute("SELECT until FROM circuits WHERE capability='provider:tiktok'").fetchone()
+                if provider and provider[0] > self.clock():
+                    raise AdapterFailure('transient', 'circuit_open: provider:tiktok', provider[0]-self.clock(), provider='tiktok')
             if not self._runtime_reserved:
                 from .runtime_budget import reserve_operation
                 owner = self._runtime_owner
@@ -1398,6 +1402,18 @@ class Engine:
             if job["kind"] == "metrics":
                 with self.transaction() as db:
                     publications = list(db.execute("SELECT p.id,p.data,s.failures FROM publications p JOIN metric_schedule s ON p.id=s.publication_id WHERE p.state='published' AND s.retired=0 AND s.next_check<=? ORDER BY s.next_check,p.id LIMIT ?", (self.clock(), self.config["limits"]["metrics_batch_size"])))
+                from .adapters import ExternalAdapter
+                adapter = self._adapter()
+                if isinstance(adapter, ExternalAdapter) or callable(getattr(adapter,'metrics_batch',None)):
+                    from .studio_metrics import run_batch
+                    try:
+                        result = run_batch(self,job,worker_token,publications)
+                    except SafetyError as exc:
+                        if not str(exc).startswith('metric_worker_'):raise
+                        return {'job_id':job_id,'state':self.get(job_id)['status'],'eligible':False,'reason':str(exc)}
+                    with self.transaction() as db:
+                        changed = db.execute("UPDATE jobs SET status='done',result=?,updated_at=? WHERE id=? AND status='running' AND lease_token=? AND lease_until>?",(canonical(result),self.clock(),job_id,worker_token,self.clock())).rowcount
+                    return {'job_id':job_id,'state':'done' if changed else self.get(job_id)['status'],**result}
                 count = failures = 0
                 for row in publications:
                     publication_id = row["id"]
@@ -1561,6 +1577,11 @@ class Engine:
         return {"job_id": job_id, "state": "ambiguous", "upload_repeated": False}
 
     def snapshot(self, record, channel="performance"):
+        with self.transaction() as db:
+            self._insert_snapshot(db,record,channel)
+        return {"publication_id": record["publication_id"], "snapshot_digest": digest(record)}
+
+    def _insert_snapshot(self, db, record, channel):
         if channel not in {"performance", "rewards"}:
             raise SafetyError("unknown_metric_channel")
         keys(record, {"publication_id", "observed_at", "measured_at", "provenance", "revenue_currency"} | METRICS)
@@ -1576,14 +1597,12 @@ class Engine:
             string(record["revenue_currency"], 16)
         elif record["revenue_currency"] is not None:
             string(record["revenue_currency"], 16)
-        with self.transaction() as db:
-            publication = db.execute("SELECT data FROM publications WHERE id=? AND state='published'", (record["publication_id"],)).fetchone()
-            if publication is None:
-                raise SafetyError("unknown_publication")
-            if measured < timestamp(json.loads(publication[0])["published_at"]):
-                raise SafetyError("metrics_predate_publication")
-            db.execute("INSERT OR IGNORE INTO snapshots(publication_id,observed_at,measured_at,digest,data,channel) VALUES(?,?,?,?,?,?)", (record["publication_id"], observed, measured, digest({"record": record, "channel": channel}), canonical(record), channel))
-        return {"publication_id": record["publication_id"], "snapshot_digest": digest(record)}
+        publication = db.execute("SELECT data FROM publications WHERE id=? AND state='published'", (record["publication_id"],)).fetchone()
+        if publication is None:
+            raise SafetyError("unknown_publication")
+        if measured < timestamp(json.loads(publication[0])["published_at"]):
+            raise SafetyError("metrics_predate_publication")
+        return db.execute("INSERT OR IGNORE INTO snapshots(publication_id,observed_at,measured_at,digest,data,channel) VALUES(?,?,?,?,?,?)", (record["publication_id"], observed, measured, digest({"record": record, "channel": channel}), canonical(record), channel)).rowcount
 
     def rewards(self, job_id):
         with self.transaction() as db:
