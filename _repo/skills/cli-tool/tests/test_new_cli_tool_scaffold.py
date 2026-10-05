@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
 import textwrap
 import tomllib
+import uuid
 from pathlib import Path
 
 import pytest
@@ -95,6 +97,85 @@ def _read_env_file(path: Path) -> dict[str, str]:
         key, value = stripped.split("=", 1)
         values[key] = value
     return values
+
+
+@pytest.mark.skipif(os.name == "nt", reason="new-cli-tool's direct entrypoint is POSIX-only")
+def test_new_cli_tool_scaffolds_without_site_packages(tmp_path: Path, monkeypatch) -> None:
+    tool_name = f"scaffold-no-dotenv-{uuid.uuid4().hex}"
+    tool_dir = REPO_ROOT / tool_name
+    assert not tool_dir.exists()
+    data_home = tmp_path / "data"
+    home = tmp_path / "home"
+    isolated_bin = tmp_path / "bin"
+    isolated_bin.mkdir()
+    isolated_python = isolated_bin / "python3"
+    isolated_python.write_text(f"#!/bin/sh\nexec {shlex.quote(sys.executable)} -S \"$@\"\n")
+    isolated_python.chmod(0o755)
+    original_cli_tools_doc = CLI_TOOLS_DOC.read_text()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("XDG_DATA_HOME", str(data_home))
+    env = os.environ.copy()
+    env.pop("PYTHONHOME", None)
+    env.pop("PYTHONPATH", None)
+    env.update(
+        {
+            "HOME": str(home),
+            "PATH": f"{isolated_bin}{os.pathsep}{env.get('PATH', os.defpath)}",
+            "PYTHONNOUSERSITE": "1",
+            "XDG_DATA_HOME": str(data_home),
+        }
+    )
+
+    try:
+        help_result = subprocess.run(
+            [str(SKILL_ROOT / "scripts/new-cli-tool"), "--help"],
+            cwd=REPO_ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        assert help_result.returncode == 0, help_result.stderr
+        assert "Create a new CLI tool from templates" in help_result.stdout
+
+        result = subprocess.run(
+            [
+                str(SKILL_ROOT / "scripts/new-cli-tool"),
+                "--name",
+                tool_name,
+                "--type",
+                "api",
+                "--base-url",
+                "https://api.example.test",
+                "--no-install",
+            ],
+            cwd=REPO_ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert tool_dir.is_dir()
+
+        profile_env = (
+            data_home
+            / "cli-tools"
+            / tool_name
+            / "authentication_profiles"
+            / "default"
+            / ".env"
+        )
+        assert profile_env == get_profiles_base_dir(tool_name) / "default" / ".env"
+        assert _read_env_file(profile_env)["ACTIVE"] == "true"
+        root_env = data_home / "cli-tools" / tool_name / ".env"
+        assert root_env == config_env_path_for_tool(tool_name)
+        assert _read_env_file(root_env)["BASE_URL"] == "https://api.example.test"
+    finally:
+        CLI_TOOLS_DOC.write_text(original_cli_tools_doc)
+        shutil.rmtree(tool_dir, ignore_errors=True)
 
 
 def test_new_cli_tool_wrapper_fails_when_upstream_cli_cannot_be_provisioned(

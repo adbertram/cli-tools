@@ -24,11 +24,29 @@ CLI_TOOLS_DIR = Path(__file__).resolve().parents[4]
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 LOCAL_BIN_DIR = Path.home() / ".local" / "bin"  # Symlinks go here (works in all shells)
 CLI_TOOLS_DOC = CLI_TOOLS_DIR / "_repo" / "docs" / "cli_tools.md"
-SHARED_ROOT = CLI_TOOLS_DIR / "_repo" / "cli-tools-shared"
-if str(SHARED_ROOT) not in sys.path:
-    sys.path.insert(0, str(SHARED_ROOT))
 
-from cli_tools_shared.config import config_env_path_for_tool, env_path_for_profile
+
+# The scaffold is a documented direct entrypoint, so it must be able to create
+# its initial runtime files before generated-tool dependencies are installed.
+# Keep these path-only helpers aligned with cli_tools_shared.config's public
+# config_env_path_for_tool() and env_path_for_profile() functions.
+def cli_tools_data_root() -> Path:
+    """Return the platform-specific root for cli-tools runtime data."""
+    if os.name == "nt":
+        base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+    return base / "cli-tools"
+
+
+def config_env_path_for_tool(tool_name: str) -> Path:
+    """Return the root config path for one scaffolded tool."""
+    return cli_tools_data_root() / tool_name / ".env"
+
+
+def env_path_for_profile(tool_name: str, profile_name: str) -> Path:
+    """Return the profile env path for one scaffolded tool."""
+    return cli_tools_data_root() / tool_name / "authentication_profiles" / profile_name / ".env"
 
 # Common CLI command to brew package name mappings
 # Add entries here when the brew package name differs from the CLI command
