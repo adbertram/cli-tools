@@ -1,8 +1,8 @@
 {
   "tool": "tiktok-clipping",
   "description": "CLI interface for tiktok-clipping",
-  "discovered_at": "2026-10-05T03:47:10Z",
-  "total_commands": 18,
+  "discovered_at": "2026-10-05T05:40:45Z",
+  "total_commands": 20,
   "global_options": [],
   "commands": {
     "control": {
@@ -444,6 +444,36 @@
       "arguments": [],
       "options": [],
       "commands": {
+        "baseline-state": {
+          "help": "Read exact baseline/current versions and digests for an explicit migration.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--config",
+              "type": "file",
+              "required": true,
+              "help": "Trusted absolute JSON configuration file"
+            }
+          ]
+        },
+        "install-baseline": {
+          "help": "Append configured baseline versions using the bounded expected snapshot on stdin.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--config",
+              "type": "file",
+              "required": true,
+              "help": "Trusted absolute JSON configuration file"
+            },
+            {
+              "name": "--reason",
+              "type": "TEXT",
+              "required": true,
+              "help": "Trusted reason for the intentional future style-space change"
+            }
+          ]
+        },
         "rollback": {
           "help": "Restore recorded baseline; models cannot change hard policy.",
           "arguments": [],

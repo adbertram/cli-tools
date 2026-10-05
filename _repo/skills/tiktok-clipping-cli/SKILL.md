@@ -42,6 +42,8 @@ tiktok-clipping <command-group> <action> [arguments] [options]
 | Submit one post to its verified campaign before its verified campaign-specific deadline | `tiktok-clipping rewards submit <JOB_ID>` |
 | Inspect setup, control, account, durable budgets and strategy version | `tiktok-clipping status get` |
 | Restore recorded baseline; models cannot change hard policy | `tiktok-clipping strategy rollback` |
+| Read exact baseline/current pointer and proposal-digest snapshot | `tiktok-clipping strategy baseline-state --config /absolute/config.json` |
+| Explicitly install configured future baseline using expected snapshot JSON on stdin | `tiktok-clipping strategy install-baseline --reason "Intentional future style space" --config /absolute/config.json` |
 </quick_start>
 
 <essential_principles>
@@ -56,7 +58,7 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
 - **metrics** -- Record provenance-preserving measurement snapshots (subcommands: record)
 - **rewards** -- Track campaign submission separately from publication and earnings (subcommands: refresh, submit)
 - **status** -- Inspect current setup and durable budgets (subcommands: get)
-- **strategy** -- Bounded strategy versions and rollback (subcommands: rollback)
+- **strategy** -- Bounded strategy versions and rollback (subcommands: baseline-state, install-baseline, rollback)
 </principle>
 </essential_principles>
 
