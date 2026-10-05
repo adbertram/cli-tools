@@ -839,8 +839,16 @@ def test_manual_login_without_tty_waits_for_browser_window_close(tmp_path, monke
         "_wait_for_manual_browser_close",
         lambda process, profile_dir: waited.append((process, Path(profile_dir))),
     )
-    monkeypatch.setattr("cli_tools_shared.auth.terminate_profile_processes", lambda _profile_dir: None)
-    monkeypatch.setattr("cli_tools_shared.auth.time.sleep", lambda _seconds: None)
+    lifecycle_lock = object()
+    lock_events = []
+    monkeypatch.setattr(
+        "cli_tools_shared.auth.acquire_profile_lifecycle_lock",
+        lambda profile_dir: lock_events.append(("acquire", Path(profile_dir))) or lifecycle_lock,
+    )
+    monkeypatch.setattr(
+        "cli_tools_shared.auth.release_profile_lifecycle_lock",
+        lambda lock: lock_events.append(("release", lock)),
+    )
     monkeypatch.setattr(browser, "is_authenticated", lambda: AuthResult(True, live_check=True))
 
     browser.authenticate(force=False)
@@ -848,6 +856,10 @@ def test_manual_login_without_tty_waits_for_browser_window_close(tmp_path, monke
     assert waited == [(proc, tmp_path / "chromium-profile")]
     assert proc.terminated is True
     assert popen_calls[0][0][0][0] == "/tmp/chrome"
+    assert lock_events == [
+        ("acquire", tmp_path / "chromium-profile"),
+        ("release", lifecycle_lock),
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -932,12 +944,13 @@ def test_clear_session_invalidates_cached_service(tmp_path, monkeypatch):
     assert browser._service is None
 
 
-def test_manual_login_cleanup_uses_shared_profile_process_terminator(tmp_path, monkeypatch):
+def test_manual_login_cleanup_preserves_shared_profile_artifacts(tmp_path):
     config = _TestConfig(tmp_path)
     profile_dir = config.get_persistent_profile_dir()
     browser = _TestBrowser(config)
-    terminated_profiles = []
-    run_calls = []
+    profile_dir.mkdir()
+    singleton_lock = profile_dir / "SingletonLock"
+    singleton_lock.write_text("owned-by-another-cli")
 
     class _LoginLauncher:
         def __init__(self):
@@ -948,25 +961,10 @@ def test_manual_login_cleanup_uses_shared_profile_process_terminator(tmp_path, m
 
     launcher = _LoginLauncher()
 
-    def fake_profile_terminator(path):
-        terminated_profiles.append(Path(path))
-
-    def fake_subprocess_run(*args, **kwargs):
-        run_calls.append((args, kwargs))
-
-    monkeypatch.setattr(
-        "cli_tools_shared.auth.terminate_profile_processes",
-        fake_profile_terminator,
-        raising=False,
-    )
-    monkeypatch.setattr("cli_tools_shared.auth.subprocess.run", fake_subprocess_run)
-    monkeypatch.setattr("cli_tools_shared.auth.time.sleep", lambda _seconds: None)
-
-    browser._quit_login_chrome(launcher, profile_dir)
+    browser._quit_login_chrome(launcher)
 
     assert launcher.terminated is True
-    assert terminated_profiles == [profile_dir]
-    assert run_calls == []
+    assert singleton_lock.read_text() == "owned-by-another-cli"
 
 
 # ---------------------------------------------------------------------------

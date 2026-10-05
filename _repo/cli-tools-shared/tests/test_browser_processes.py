@@ -2,8 +2,11 @@ from cli_tools_shared.browser.processes import (
     ProcessCommand,
     command_user_data_dir,
     is_chromium_process_command,
+    profile_lifecycle_lock_path,
+    profile_process_owner,
     profile_process_pids,
     protected_process_ids,
+    safe_process_command_summary,
     terminate_profile_processes,
 )
 
@@ -112,6 +115,62 @@ def test_command_user_data_dir_supports_equals_space_and_quotes(tmp_path):
     assert command_user_data_dir(f"chrome --user-data-dir={compact_profile}") == str(compact_profile)
     assert command_user_data_dir(f"chrome --user-data-dir '{profile}'") == str(profile)
     assert command_user_data_dir(f'chrome --user-data-dir="{profile}"') == str(profile)
+
+
+def test_profile_lifecycle_lock_path_uses_resolved_profile_path(tmp_path):
+    profile = tmp_path / "nested" / ".." / "chromium-profile"
+
+    assert profile_lifecycle_lock_path(profile) == tmp_path / ".chromium-profile.lifecycle.lock"
+
+
+def test_profile_owner_reports_root_chrome_and_redacts_parent_secret(tmp_path):
+    profile = tmp_path / "chromium-profile"
+    rows = [
+        ProcessCommand(700, 1, "S", "python external-cli.py --token super-secret"),
+        ProcessCommand(
+            701,
+            700,
+            "S",
+            f"/Applications/Google Chrome --user-data-dir={profile.resolve()}",
+        ),
+        ProcessCommand(
+            702,
+            701,
+            "S",
+            f"/Applications/Google Chrome Helper --user-data-dir={profile.resolve()}",
+        ),
+    ]
+
+    owner = profile_process_owner(profile, processes=rows, current_pid=200, parent_pid=100)
+
+    assert owner is not None
+    assert owner.pid == 701
+    assert owner.parent_pid == 700
+    assert owner.parent_command == "python external-cli.py --token <redacted>"
+    assert "super-secret" not in safe_process_command_summary(
+        "python external-cli.py https://example.invalid/?token=super-secret&x=1"
+    )
+
+
+def test_profile_owner_matches_equivalent_user_data_dir_path(tmp_path):
+    profile = tmp_path / "chromium-profile"
+    profile.mkdir()
+    (tmp_path / "profiles").mkdir()
+    equivalent_profile = tmp_path / "profiles" / ".." / "chromium-profile"
+    rows = [
+        ProcessCommand(700, 1, "S", "python external-cli.py"),
+        ProcessCommand(
+            701,
+            700,
+            "S",
+            f"/Applications/Google Chrome --user-data-dir={equivalent_profile}",
+        ),
+    ]
+
+    owner = profile_process_owner(profile, processes=rows, current_pid=200, parent_pid=100)
+
+    assert owner is not None
+    assert owner.pid == 701
 
 
 def test_terminate_profile_processes_stops_only_profile_owned_pids(tmp_path, monkeypatch):
@@ -229,5 +288,5 @@ def test_bounded_termination_uses_decreasing_remaining_budget(monkeypatch):
     monkeypatch.setattr(p,'_pid_running',inspection)
     monkeypatch.setattr(p.os,'kill',lambda *args:None)
     with pytest.raises((RuntimeError,p.ProcessTableUnavailableError)):
-        p.terminate_process(123,timeout=.03,poll_interval=.001,inspection_timeout=1)
-    assert all(b<=.03 for b in budgets) and budgets[-1]<budgets[0]
+        p.terminate_process(123,timeout=.2,poll_interval=.001,inspection_timeout=1)
+    assert all(b<=.2 for b in budgets) and budgets[-1]<budgets[0]

@@ -15,14 +15,12 @@ import json
 import math
 import os
 import re
-import signal
 import socket
 import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
-import fcntl
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qsl, urlsplit, urlunsplit
@@ -31,12 +29,19 @@ from .._debug_logging import get_debug_logger
 from . import BrowserHarnessError
 from ._elements import _ServiceLocator
 from .processes import (
+    ProfileInUseError,
     ProcessCommand,
     ProcessTableUnavailableError,
+    acquire_profile_lifecycle_lock,
     command_user_data_dir,
+    format_profile_in_use_message,
     list_process_commands,
     pid_is_running,
+    profile_process_owner,
     profile_process_pids,
+    remove_stale_profile_artifacts,
+    release_profile_lifecycle_lock,
+    resolve_user_data_dir,
 )
 
 logger = get_debug_logger("cli_tools.browser_service")
@@ -82,11 +87,19 @@ def _chrome_binary() -> str:
     )
 
 
-def _chrome_launch_command(chrome: str, args: list[str]) -> list[str]:
+def _chrome_launch_command(
+    chrome: str,
+    args: list[str],
+    *,
+    stderr_path: Path | None = None,
+) -> list[str]:
     """Return the command that starts an isolated Chrome instance."""
     if sys.platform == "darwin" and ".app/Contents/MacOS/" in chrome:
         app_path = chrome.split("/Contents/MacOS/", 1)[0]
-        return ["/usr/bin/open", "-na", app_path, "--args", *args[1:]]
+        command = ["/usr/bin/open", "-na", app_path]
+        if stderr_path is not None:
+            command.extend(["--stderr", str(stderr_path)])
+        return [*command, "--args", *args[1:]]
     return args
 
 
@@ -179,8 +192,8 @@ class BrowserHarnessService:
         # decoupled — the caller resolves the path through config.
         self._user_data_dir: Optional[Path] = None
         self._runtime_dir = _ensure_runtime_dir(session)
-        self._lifecycle_lock_path = self._runtime_dir / "lifecycle.lock"
         self._lifecycle_lock_file = None
+        self._lifecycle_lock_profile: Optional[Path] = None
         # browser_harness._ipc reads BH_RUNTIME_DIR / BH_TMP_DIR at import
         # time and caches the resolved paths in module globals.  Set the env
         # vars BEFORE any browser_harness import (including the helper bind
@@ -300,6 +313,58 @@ class BrowserHarnessService:
         finally:
             self._chrome_proc = None
 
+    def _prepare_chrome_stderr(self) -> Path:
+        """Return an empty bounded diagnostic file for this launch only."""
+        path = self._runtime_dir / "chrome.stderr"
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+        return path
+
+    def _chrome_profile_collision_detail(self) -> str | None:
+        """Return a bounded Chrome profile-collision diagnostic after failure."""
+        path = self._runtime_dir / "chrome.stderr"
+        try:
+            output = path.read_text(encoding="utf-8", errors="replace")[-4096:]
+        except OSError:
+            return None
+        lower = output.lower()
+        if not any(marker in lower for marker in (
+            "singletonlock",
+            "processsingleton",
+            "profile directory",
+            "user data directory",
+        )):
+            return None
+        lines = [line.strip() for line in output.splitlines() if line.strip()]
+        if not lines:
+            return None
+        return " ".join(lines[-4:])[:1000]
+
+    def _chrome_start_failure(self, error: BrowserHarnessError) -> BrowserHarnessError:
+        """Enrich a failed Chrome launch only when stderr proves profile contention."""
+        detail = self._chrome_profile_collision_detail()
+        if detail is None:
+            return error
+        owner_detail = ""
+        try:
+            owner = self._profile_owner()
+        except (BrowserHarnessError, ProcessTableUnavailableError):
+            owner = None
+        if owner is not None:
+            if owner.parent_command:
+                owner_detail = (
+                    f" Owner PID {owner.pid} has parent PID {owner.parent_pid}: "
+                    f"{owner.parent_command}."
+                )
+            else:
+                owner_detail = f" Owner PID {owner.pid}."
+        return BrowserHarnessError(
+            f"Chrome profile {self._resolved_user_data_dir()} is already in use.{owner_detail} "
+            f"Chrome reported: {detail}"
+        )
+
     def _reset_tabs_for_restore(self) -> None:
         """Leave exactly one blank tab so the next launch restores nothing.
 
@@ -365,144 +430,105 @@ class BrowserHarnessService:
     def _command_user_data_dir(command: str) -> Optional[str]:
         return command_user_data_dir(command)
 
-    def _pid_running(self, pid: int) -> bool:
-        for proc in self._list_process_table():
-            if proc.pid == pid:
-                return not proc.stat.startswith("Z")
-        return False
+    def _resolved_user_data_dir(self) -> Optional[Path]:
+        """Return the active profile path, accepting legacy callable test fixtures."""
+        user_data_dir = self._user_data_dir
+        if user_data_dir is None:
+            return None
+        if callable(user_data_dir):
+            user_data_dir = user_data_dir()
+        return resolve_user_data_dir(user_data_dir)
 
-    def _terminate_session_pid(self, pid: int) -> None:
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except ProcessLookupError:
-            return
-        except OSError as e:
-            raise BrowserHarnessError(
-                f"Failed to stop stale browser process {pid}: {e}"
-            ) from e
-
-        deadline = time.time() + 5
-        while time.time() < deadline:
-            if not self._pid_running(pid):
-                return
-            time.sleep(0.1)
-
-        try:
-            os.kill(pid, signal.SIGKILL)
-        except ProcessLookupError:
-            return
-        except OSError as e:
-            raise BrowserHarnessError(
-                f"Failed to force-stop stale browser process {pid}: {e}"
-            ) from e
-
-        deadline = time.time() + 5
-        while time.time() < deadline:
-            if not self._pid_running(pid):
-                return
-            time.sleep(0.1)
-
-        raise BrowserHarnessError(
-            f"Stale browser process {pid} for session '{self.session}' did not exit"
+    def _profile_owner(self):
+        """Return the current external Chrome owner for this profile, if any."""
+        user_data_dir = self._resolved_user_data_dir()
+        if user_data_dir is None:
+            return None
+        return profile_process_owner(
+            user_data_dir,
+            processes=self._list_process_table(),
         )
 
+    def _profile_owner_error(
+        self,
+        owner,
+        *,
+        parent_command_unavailable: bool = False,
+    ) -> BrowserHarnessError:
+        return BrowserHarnessError(
+            format_profile_in_use_message(
+                self._resolved_user_data_dir(),
+                owner,
+                parent_command_unavailable=parent_command_unavailable,
+            )
+        )
+
+    def _raise_if_profile_in_use(self) -> None:
+        try:
+            owner = self._profile_owner()
+        except ProcessTableUnavailableError as exc:
+            raise BrowserHarnessError(
+                f"Cannot verify whether Chrome profile {self._resolved_user_data_dir()} is in use "
+                "because the process table cannot be inspected."
+            ) from exc
+        if owner is not None:
+            raise self._profile_owner_error(owner)
+
     def _cleanup_session_lock_files(self) -> None:
-        """Delete stale lock files, but refuse to clobber a live SingletonLock.
-
-        Chrome stores its single-instance guard as a symlink at
-        ``SingletonLock`` whose target is ``<hostname>-<pid>``. When that
-        PID is still alive, another Chrome process owns the persistent
-        profile and starting a second one would corrupt the user data dir.
-        Fail fast with the PID and an actionable hint — never delete the
-        live lock.
-
-        Unparseable targets are treated as stale (Chrome leaves these
-        behind after a crash) and deleted.
-        """
-        # Resolve user-data-dir for this session. Tests monkeypatch
-        # ``service._user_data_dir`` directly with a Path; the attribute
-        # may also still be set via ``browser_open`` in real flows.
-        ud = self._user_data_dir
+        """Remove singleton artifacts only after proving no live owner exists."""
+        ud = self._resolved_user_data_dir()
         if ud is None:
             return
-        if callable(ud):  # legacy test paths
-            ud = ud()
-        lock_path = ud / "SingletonLock"
-        if lock_path.is_symlink():
-            target = os.readlink(str(lock_path))
-            # Target format: ``<hostname>-<pid>``. Parse PID from the right.
-            pid: Optional[int] = None
-            if "-" in target:
-                _, _, tail = target.rpartition("-")
-                try:
-                    pid = int(tail)
-                except ValueError:
-                    pid = None
-            if pid is not None and pid_is_running(pid):
-                raise BrowserHarnessError(
-                    f"Browser session '{self.session}' is held by PID {pid}. "
-                    "Finish or kill it before retrying."
-                )
-            # Stale or unparseable — fall through to delete below.
-
-        for name in (
-            "SingletonCookie",
-            "SingletonLock",
-            "SingletonSocket",
-            "DevToolsActivePort",
-        ):
-            path = ud / name
-            if not path.exists() and not path.is_symlink():
-                continue
-            try:
-                path.unlink()
-            except FileNotFoundError:
-                continue
-            except OSError as e:
-                raise BrowserHarnessError(
-                    f"Failed to remove stale browser lock file {path}: {e}"
-                ) from e
+        try:
+            remove_stale_profile_artifacts(
+                ud,
+                owner_lookup=self._profile_owner,
+                process_is_running=pid_is_running,
+            )
+        except ProfileInUseError as exc:
+            raise self._profile_owner_error(
+                exc.owner,
+                parent_command_unavailable=exc.parent_command_unavailable,
+            ) from exc
+        except ProcessTableUnavailableError as exc:
+            raise BrowserHarnessError(
+                f"Cannot remove stale Chrome profile artifacts for {ud} because "
+                "the process table cannot be inspected."
+            ) from exc
+        except OSError as exc:
+            raise BrowserHarnessError(
+                f"Failed to remove stale browser lock file for {ud}: {exc}"
+            ) from exc
 
     def _cleanup_stale_session(self) -> None:
-        """Kill only stale browser-harness/Chrome state for this named session."""
+        """Restart this daemon and remove profile artifacts proven stale."""
         from browser_harness.admin import restart_daemon
 
         logger.debug("_cleanup_stale_session: session=%s", self.session)
         restart_daemon(name=self.session)
-        for pid in self._stale_session_process_pids():
-            logger.debug("_cleanup_stale_session: stopping stale pid=%s", pid)
-            self._terminate_session_pid(pid)
         self._cleanup_session_lock_files()
 
-    def _stale_session_process_pids(self) -> List[int]:
-        try:
-            return self._session_process_pids()
-        except ProcessTableUnavailableError as exc:
-            logger.debug("process-table cleanup unavailable for session %s: %s", self.session, exc)
-            return []
-
     def _acquire_lifecycle_lock(self) -> None:
-        """Acquire the per-session lifecycle lock until close/delete."""
+        """Acquire this resolved profile's cross-backend lock until close/delete."""
+        user_data_dir = self._resolved_user_data_dir()
+        if user_data_dir is None:
+            raise BrowserHarnessError("Cannot lock a browser profile before it is resolved.")
         if self._lifecycle_lock_file is not None:
-            return
-        self._lifecycle_lock_path.parent.mkdir(parents=True, exist_ok=True)
-        lock_file = open(self._lifecycle_lock_path, "a+")
-        try:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
-        except Exception:
-            lock_file.close()
-            raise
-        self._lifecycle_lock_file = lock_file
+            if self._lifecycle_lock_profile == user_data_dir:
+                return
+            raise BrowserHarnessError("Cannot switch Chrome profiles while the current profile is open.")
+        self._lifecycle_lock_file = acquire_profile_lifecycle_lock(user_data_dir)
+        self._lifecycle_lock_profile = user_data_dir
 
     def _release_lifecycle_lock(self) -> None:
-        """Release the per-session lifecycle lock if held by this instance."""
+        """Release this service's cross-backend profile lock if held."""
         if self._lifecycle_lock_file is None:
             return
         try:
-            fcntl.flock(self._lifecycle_lock_file.fileno(), fcntl.LOCK_UN)
+            release_profile_lifecycle_lock(self._lifecycle_lock_file)
         finally:
-            self._lifecycle_lock_file.close()
             self._lifecycle_lock_file = None
+            self._lifecycle_lock_profile = None
 
     def _close_browser_locked(self) -> None:
         """Close browser and daemon while assuming the lifecycle lock is held."""
@@ -511,8 +537,6 @@ class BrowserHarnessService:
         self._request_browser_close()
         self._stop_daemon()
         self._terminate_chrome()
-        for pid in self._stale_session_process_pids():
-            self._terminate_session_pid(pid)
         self._opened = False
         self._cdp_port = None
         self._cdp_ws = None
@@ -545,13 +569,17 @@ class BrowserHarnessService:
         if headed and os.getenv("CLI_TOOL_TEST_NO_HEADED_BROWSER") == "1":
             headed = False
         try:
-            self._acquire_lifecycle_lock()
+            requested_profile = resolve_user_data_dir(persistent_profile_dir)
+            if self._opened and self._resolved_user_data_dir() != requested_profile:
+                self._close_browser_locked()
+                self._release_lifecycle_lock()
 
-            # Resolve and persist the user-data-dir for this open() so that
-            # ``_session_process_pids``, ``_cleanup_session_lock_files``, and
-            # ``data_delete`` all agree on a single path.
-            self._user_data_dir = Path(persistent_profile_dir)
+            # Resolve and persist the user-data-dir before acquiring the
+            # cross-backend lock so both browser engines serialize on the
+            # exact same profile identity.
+            self._user_data_dir = requested_profile
             self._user_data_dir.mkdir(parents=True, exist_ok=True)
+            self._acquire_lifecycle_lock()
 
             if self._opened:
                 self._close_browser_locked()
@@ -581,14 +609,28 @@ class BrowserHarnessService:
             if not headed:
                 args.append("--headless=new")
             logger.debug("browser_open: spawning chrome args=%s", args)
-            launch_args = _chrome_launch_command(chrome, args)
+            chrome_stderr = self._prepare_chrome_stderr()
+            launch_args = _chrome_launch_command(
+                chrome,
+                args,
+                stderr_path=chrome_stderr,
+            )
             try:
-                self._chrome_proc = subprocess.Popen(
-                    launch_args,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    start_new_session=True,
-                )
+                if sys.platform == "darwin" and ".app/Contents/MacOS/" in chrome:
+                    self._chrome_proc = subprocess.Popen(
+                        launch_args,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        start_new_session=True,
+                    )
+                else:
+                    with chrome_stderr.open("wb") as stderr_file:
+                        self._chrome_proc = subprocess.Popen(
+                            launch_args,
+                            stdout=subprocess.DEVNULL,
+                            stderr=stderr_file,
+                            start_new_session=True,
+                        )
             except OSError as e:
                 raise BrowserHarnessError(f"Failed to spawn Chrome: {e}")
 
@@ -596,16 +638,23 @@ class BrowserHarnessService:
                 self._cdp_ws = _wait_for_cdp(
                     self._cdp_port, timeout=self.default_timeout
                 )
-            except BrowserHarnessError:
+            except BrowserHarnessError as exc:
                 self._terminate_chrome()
-                raise
+                failure = self._chrome_start_failure(exc)
+                if failure is exc:
+                    raise
+                raise failure from exc
 
             # Start the harness daemon bound to this Chrome's CDP endpoint.
             try:
                 self._start_daemon()
             except Exception as e:
                 self._terminate_chrome()
-                raise BrowserHarnessError(f"Failed to start browser-harness daemon: {e}")
+                error = BrowserHarnessError(f"Failed to start browser-harness daemon: {e}")
+                failure = self._chrome_start_failure(error)
+                if failure is error:
+                    raise error from e
+                raise failure from e
 
             self._opened = True
 
@@ -1449,10 +1498,14 @@ class BrowserHarnessService:
         owns turning those failures into actionable error messages.
         """
         import shutil
+        if self._resolved_user_data_dir() is None:
+            return {"success": True, "message": "Session data deleted"}
         try:
             self._acquire_lifecycle_lock()
             self._close_browser_locked()
-            ud = self._user_data_dir
+            self._raise_if_profile_in_use()
+            self._cleanup_session_lock_files()
+            ud = self._resolved_user_data_dir()
             if ud is not None and ud.exists():
                 shutil.rmtree(ud)
             return {"success": True, "message": "Session data deleted"}

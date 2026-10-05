@@ -20,7 +20,7 @@ Override the shared location with `CLI_TOOLS_SHARED_CHROME_PROFILE=/path/to/prof
 
 ## Concurrency
 
-Chrome permits one live process per user-data-dir. Browser CLIs using the shared profile must run sequentially. Existing profile-process and lifecycle-lock checks fail fast rather than corrupting the directory. Use an isolated named profile or `CLI_TOOLS_ISOLATE_CHROME_PROFILE=1` when concurrent Chrome processes are required.
+Chrome permits one live process per user-data-dir. Browser CLIs using the shared profile wait on one cross-backend lifecycle lock keyed by the resolved profile path, then run sequentially. A live Chrome process that did not take that lock is reported with its owner PID (and parent command when available) instead of being terminated. Use an isolated named profile or `CLI_TOOLS_ISOLATE_CHROME_PROFILE=1` when concurrent Chrome processes are required.
 
 ## Logout and reset
 

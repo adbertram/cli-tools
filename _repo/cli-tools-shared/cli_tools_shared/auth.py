@@ -41,9 +41,11 @@ from .exceptions import ClientError
 from .output import print_info, print_success, print_warning
 from .browser import BrowserHarnessService, BrowserHarnessError
 from .browser.processes import (
+    acquire_profile_lifecycle_lock,
     list_process_commands,
     profile_process_pids,
-    terminate_profile_processes,
+    release_profile_lifecycle_lock,
+    resolve_user_data_dir,
 )
 
 logger = get_debug_logger("cli_tools.auth")
@@ -1318,30 +1320,33 @@ class BrowserAutomation:
         # persistent profile is unlocked for the plain browser.
         self.close()
 
-        profile_dir = self._get_persistent_profile_dir()
+        profile_dir = resolve_user_data_dir(self._get_persistent_profile_dir())
         profile_dir.mkdir(parents=True, exist_ok=True)
-
-        chrome = os.environ.get("CLI_TOOLS_CHROME_BINARY") or _chrome_binary()
-        args = [
-            chrome,
-            f"--user-data-dir={profile_dir}",
-            "--no-first-run",
-            "--no-default-browser-check",
-            self.LOGIN_URL,
-        ]
-        print_info("Opening a normal browser window for login (no automation attached).")
-        print_info("Log in fully — finish any OTP/CAPTCHA — until your account page is visible.")
-        print_info("Then come back here and press Enter to capture the session.")
-
-        proc = subprocess.Popen(
-            args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
+        lifecycle_lock = acquire_profile_lifecycle_lock(profile_dir)
         try:
-            confirmed = self._prompt_enter_eof_safe(allow_no_tty=True)
-            if not confirmed:
-                self._wait_for_manual_browser_close(proc, profile_dir)
+            chrome = os.environ.get("CLI_TOOLS_CHROME_BINARY") or _chrome_binary()
+            args = [
+                chrome,
+                f"--user-data-dir={profile_dir}",
+                "--no-first-run",
+                "--no-default-browser-check",
+                self.LOGIN_URL,
+            ]
+            print_info("Opening a normal browser window for login (no automation attached).")
+            print_info("Log in fully — finish any OTP/CAPTCHA — until your account page is visible.")
+            print_info("Then come back here and press Enter to capture the session.")
+
+            proc = subprocess.Popen(
+                args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+            try:
+                confirmed = self._prompt_enter_eof_safe(allow_no_tty=True)
+                if not confirmed:
+                    self._wait_for_manual_browser_close(proc, profile_dir)
+            finally:
+                self._quit_login_chrome(proc)
         finally:
-            self._quit_login_chrome(proc, profile_dir)
+            release_profile_lifecycle_lock(lifecycle_lock)
 
         if not self.is_authenticated():
             raise BrowserAutomationError(
@@ -1375,23 +1380,20 @@ class BrowserAutomation:
             "Timed out waiting for the manual login browser window to close."
         )
 
-    def _quit_login_chrome(self, proc, profile_dir) -> None:
-        """Quit the plain login browser bound to this profile so cookies flush
-        and the user-data-dir lock is released. Scoped to THIS profile's
-        ``--user-data-dir`` so the user's other browser windows are untouched.
-        """
+    def _quit_login_chrome(self, proc, profile_dir=None) -> None:
+        """Stop this manual-login launcher without touching shared profile state."""
         try:
             proc.terminate()
         except Exception:
             pass
-        terminate_profile_processes(profile_dir)
-        time.sleep(3)
-        lock = Path(profile_dir) / "SingletonLock"
-        try:
-            if lock.is_symlink() or lock.exists():
-                lock.unlink()
-        except OSError:
-            pass
+        wait = getattr(proc, "wait", None)
+        if callable(wait):
+            try:
+                wait(timeout=5)
+            except subprocess.TimeoutExpired as exc:
+                raise BrowserAutomationError(
+                    "Manual login Chrome did not exit after it was closed."
+                ) from exc
 
     # ---- Token-cookie auth check (AUTH_TOKEN_COOKIE) ----
 
