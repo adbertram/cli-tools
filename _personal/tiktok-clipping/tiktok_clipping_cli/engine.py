@@ -389,7 +389,12 @@ class Engine:
             self._circuit_failure(method, retry_after)
             with self.transaction() as db:
                 self.event(db, None, 'adapter_failure', {'method': method, 'category': exc.category, 'provider': exc.provider, 'code': exc.code, 'status': exc.status, 'retry_after': exc.retry_after, 'diagnostics': exc.diagnostics})
-            if exc.provider is not None and (exc.category == "rate_limit" or exc.retry_after is not None):
+            # Caption acquisition is source-scoped: another source's captions can
+            # succeed while one video throttles. The failure still backs off the
+            # discover call and stays visible in health, but it must not lock out
+            # every provider operation.
+            source_scoped = method == "discover" and isinstance(exc.code, str) and exc.code.startswith("source_caption_")
+            if exc.provider is not None and (exc.category == "rate_limit" or exc.retry_after is not None) and not source_scoped:
                 self._circuit_failure("provider:" + exc.provider, exc.retry_after if exc.retry_after is not None else self.config["limits"]["retry_base_seconds"])
             raise
         except (TimeoutError, ConnectionError) as exc:

@@ -247,10 +247,13 @@ class CatalogDiscovery:
         if not due:return []
         # Finish a due owned pipeline before opening another acquisition.
         # Ready caches return to ordinary fairness after a current admission.
+        # A source that keeps failing is retried only when no zero-failure
+        # candidate is due, so one throttled video cannot starve the rest.
         def priority(candidate):
             state=states.get(candidate['id'])
+            failures=state['failures'] if state is not None else 0
             unfinished=state is not None and (state['phase'] in ('media','captions','evicting') or (state['phase']=='ready' and (candidate['id'],candidate['current_version']) not in admitted))
-            return (0 if unfinished else 1,state['next_at'] if state is not None else 0,candidate['id'])
+            return (0 if failures==0 else 1,0 if unfinished else 1,state['next_at'] if state is not None else 0,candidate['id'])
         candidate=min(due,key=priority)
         snapshot=self.catalog.validate_current(candidate['id'],candidate['current_version'])
         asset=snapshot['evidence']['asset'];state=states.get(candidate['id'])

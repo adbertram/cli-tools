@@ -55,14 +55,18 @@ def create_adapter(config):
     assert (failure.category,failure.provider,failure.code,failure.status,failure.retry_after)==('rate_limit','youtube','source_caption_http_429',429,delay)
     cooldown=delay if delay is not None else config['limits']['retry_base_seconds']
     with engine.transaction() as db:
-        assert db.execute("SELECT until FROM circuits WHERE capability='provider:youtube'").fetchone()[0]==clock()+cooldown
+        assert db.execute("SELECT until FROM circuits WHERE capability='discover'").fetchone()[0]==clock()+cooldown
+        provider=db.execute("SELECT until FROM circuits WHERE capability='provider:youtube'").fetchone()
+        assert provider is None or provider[0]==0
         event=json.loads(db.execute("SELECT data FROM events WHERE event='adapter_failure' ORDER BY id DESC LIMIT 1").fetchone()[0])
         assert event['provider']=='youtube' and event['status']==429 and event['retry_after']==delay
-        # Ensure the provider-wide guard itself works, independent of method guard.
+        # Only the discover call backs off; a source-scoped caption failure must
+        # not lock out unrelated provider work.
         db.execute("DELETE FROM circuits WHERE capability='discover'")
     restarted=Engine(config,clock=clock)
-    with pytest.raises(AdapterFailure,match='circuit_open: provider:youtube'):restarted._call('discover',None)
-    assert counter.read_text()=='1'
+    with pytest.raises(AdapterFailure) as second:restarted._call('discover',None)
+    assert 'circuit_open' not in str(second.value)
+    assert counter.read_text()=='2'
 
 
 @pytest.mark.parametrize('provider',['whop','google','youtube'])
@@ -371,6 +375,21 @@ def test_unfinished_backoff_or_expired_source_cannot_starve_viable_work(prepared
     monkeypatch.setattr(d.catalog,'eligible',lambda **k:{'sources':([blocked] if reason=='backoff' else [])+[real]})
     def selected(identifier,revision):
         assert identifier==real['id']
+        raise SafetyError('TEST_viable_selected')
+    monkeypatch.setattr(d.catalog,'validate_current',selected)
+    with pytest.raises(SafetyError,match='TEST_viable_selected'):d.discover(d.monotonic()+120)
+
+
+def test_repeatedly_failing_source_cannot_starve_viable_work(prepared,clock,monkeypatch):
+    p=prepared;failing={'id':'0'*64,'current_version':'f'*64}
+    with p.engine.transaction() as db:
+        db.execute('INSERT INTO catalog_materializations(source_id,evidence_version,phase,next_at,failures,error) VALUES(?,?,?,?,?,?)',(failing['id'],failing['current_version'],'captions',clock(),3,'source_caption_http_429'))
+    from tiktok_clipping_cli.media import MediaRenderer
+    d=cr.CatalogDiscovery(p.config,MediaRenderer(p.config),providers=p.providers,youtube=SimpleNamespace(),clock=clock)
+    real={'id':p.snapshot['source_id'],'current_version':p.snapshot['evidence_version']}
+    monkeypatch.setattr(d.catalog,'eligible',lambda **k:{'sources':[failing,real]})
+    def selected(identifier,revision):
+        assert identifier==real['id'],'failing source chosen before viable work'
         raise SafetyError('TEST_viable_selected')
     monkeypatch.setattr(d.catalog,'validate_current',selected)
     with pytest.raises(SafetyError,match='TEST_viable_selected'):d.discover(d.monotonic()+120)
