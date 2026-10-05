@@ -35,7 +35,7 @@ class AdapterFailure(RuntimeError):
     def __init__(self, category, message, retry_after=None, *, provider=None, code=None, status=None, diagnostics=None):
         if category not in {"auth", "transient", "rate_limit", "permanent", "ambiguous"}:
             raise SafetyError("unknown_failure_category")
-        if provider not in {None, "whop", "tiktok", "model"}:
+        if provider not in {None, "whop", "tiktok", "youtube", "google", "model"}:
             raise SafetyError("unknown_failure_provider")
         if code is not None:
             string(code, 128)
@@ -344,6 +344,11 @@ class Engine:
                 provider = db.execute("SELECT until FROM circuits WHERE capability='provider:tiktok'").fetchone()
                 if provider and provider[0] > self.clock():
                     raise AdapterFailure('transient', 'circuit_open: provider:tiktok', provider[0]-self.clock(), provider='tiktok')
+            if method=='discover' and self.config.get('source_discovery'):
+                for name in ('youtube','google'):
+                    provider=db.execute('SELECT until FROM circuits WHERE capability=?',('provider:'+name,)).fetchone()
+                    if provider and provider[0]>self.clock():
+                        raise AdapterFailure('transient','circuit_open: provider:'+name,provider[0]-self.clock(),provider=name)
             if not self._runtime_reserved:
                 from .runtime_budget import reserve_operation
                 owner = self._runtime_owner

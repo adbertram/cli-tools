@@ -25,6 +25,54 @@ def settings(config):
     return config
 
 
+@pytest.mark.parametrize('delay',[None,172800.25])
+def test_actual_discovery_worker_preserves_youtube_rate_limit_and_restart_cooldown(config,clock,tmp_path,monkeypatch,delay):
+    from tiktok_clipping_cli.engine import AdapterFailure
+    settings(config)
+    # Real ExternalAdapter -> fixed worker -> LiveAdapter.discover catch -> SDK error.
+    module=tmp_path/'test_catalog_throttled_adapter.py'
+    counter=tmp_path/'provider-call-count'
+    module.write_text("""from pathlib import Path
+from tiktok_clipping_cli import catalog_runtime
+from tiktok_clipping_cli.live import LiveAdapter
+from youtube_cli.source_acquisition import SourceAcquisitionError
+class Discovery:
+    def __init__(self,*args):pass
+    def discover(self,deadline):
+        path=Path(%r)
+        path.write_text(str(int(path.read_text())+1) if path.exists() else '1')
+        raise SourceAcquisitionError('source_caption_http_429','rate_limit',429,%r)
+def create_adapter(config):
+    catalog_runtime.CatalogDiscovery=Discovery
+    return LiveAdapter(config)
+""" % (str(counter),delay))
+    import os
+    monkeypatch.setenv('PYTHONPATH',str(tmp_path)+os.pathsep+os.environ.get('PYTHONPATH',''))
+    config['adapter_module']=module.stem
+    engine=Engine(config,clock=clock);engine.control('running')
+    with pytest.raises(AdapterFailure) as failed:engine._call('discover',None)
+    failure=failed.value
+    assert (failure.category,failure.provider,failure.code,failure.status,failure.retry_after)==('rate_limit','youtube','source_caption_http_429',429,delay)
+    cooldown=delay if delay is not None else config['limits']['retry_base_seconds']
+    with engine.transaction() as db:
+        assert db.execute("SELECT until FROM circuits WHERE capability='provider:youtube'").fetchone()[0]==clock()+cooldown
+        event=json.loads(db.execute("SELECT data FROM events WHERE event='adapter_failure' ORDER BY id DESC LIMIT 1").fetchone()[0])
+        assert event['provider']=='youtube' and event['status']==429 and event['retry_after']==delay
+        # Ensure the provider-wide guard itself works, independent of method guard.
+        db.execute("DELETE FROM circuits WHERE capability='discover'")
+    restarted=Engine(config,clock=clock)
+    with pytest.raises(AdapterFailure,match='circuit_open: provider:youtube'):restarted._call('discover',None)
+    assert counter.read_text()=='1'
+
+
+@pytest.mark.parametrize('provider',['whop','google','youtube'])
+def test_declared_catalog_provider_identity_is_explicit(provider):
+    from tiktok_clipping_cli.engine import AdapterFailure
+    assert AdapterFailure('transient','TEST bounded provider failure',provider=provider).provider==provider
+    with pytest.raises(SafetyError,match='unknown_failure_provider'):
+        AdapterFailure('transient','TEST unknown provider',provider='arbitrary')
+
+
 @pytest.fixture
 def prepared(config,clock,adapter):
     settings(config)
