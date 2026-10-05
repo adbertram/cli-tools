@@ -4,7 +4,7 @@ import pytest
 
 from tiktok_clipping_cli.engine import Engine, AdapterFailure
 from tiktok_clipping_cli.health import observe
-from conftest import claim
+from conftest import claim, payload
 from test_text_attempts import native
 
 
@@ -77,6 +77,49 @@ def test_old_ambiguous_request_remains_actionable_after_readback_and_does_not_fe
     assert h['actionable'] and h['issues'][0]['age_seconds']==61
     with engine.transaction() as db: engine._active(db)
     assert engine.status()['state']=='running'
+
+
+def unknown_publication(engine,adapter,clock):
+    """Real ambiguous job with a recorded upload attempt and pending readback."""
+    monitored(engine)
+    adapter.fail_publish=AdapterFailure('ambiguous','connection_lost_after_upload')
+    envelope=claim(engine,clock)
+    assert engine.apply(payload(envelope))['state']=='ambiguous'
+    return envelope
+
+
+def test_aged_ambiguous_publication_without_readback_is_actionable(engine,adapter,clock):
+    envelope=unknown_publication(engine,adapter,clock)
+    clock.now+=61
+    h=engine.status()['health']
+    aged=[i for i in h['issues'] if i['reason']=='publication_outcome_unknown']
+    assert h['actionable'] and len(aged)==1
+    assert aged[0]['job_id']==envelope['job_id'] and aged[0]['request_id'] is not None and aged[0]['age_seconds']==61
+
+
+def test_unreconcilable_readback_stays_observed_not_actionable(engine,adapter,clock):
+    envelope=unknown_publication(engine,adapter,clock)
+    adapter.reconciliation='unknown'
+    clock.now+=61
+    engine.maintain()
+    with engine.transaction() as db:
+        assert db.execute("SELECT 1 FROM inspections WHERE key=?",(envelope['job_id']+':publish',)).fetchone() is not None
+        assert db.execute("SELECT status FROM jobs WHERE id=?",(envelope['job_id'],)).fetchone()[0]=='ambiguous'
+    h=engine.status()['health']
+    assert not h['actionable']
+    assert not [i for i in h['issues'] if i['reason']=='publication_outcome_unknown']
+    observed=[i for i in h['observed_issues'] if i['reason']=='publication_outcome_unknown']
+    assert len(observed)==1 and observed[0]['job_id']==envelope['job_id'] and observed[0]['age_seconds']==61
+    assert len(adapter.uploads)==1
+
+
+def test_recent_ambiguous_publication_is_unflagged_until_aged(engine,adapter,clock):
+    unknown_publication(engine,adapter,clock)
+    h=engine.status()['health']
+    assert not h['actionable']
+    assert not [i for i in h['observed_issues'] if i['reason']=='publication_outcome_unknown']
+    clock.now+=61
+    assert [i for i in engine.status()['health']['issues'] if i['reason']=='publication_outcome_unknown']
 
 
 def test_catalog_partial_empty_and_unit_access_never_claim_global_empty_or_auth(engine):

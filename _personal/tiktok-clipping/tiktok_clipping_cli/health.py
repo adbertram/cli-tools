@@ -58,7 +58,7 @@ def project(engine, db, state, discovery=None):
     remaining = {field:engine.config['limits']['daily_'+field]-(budget[field] if budget else 0) for field in ('posts','model_calls','runtime_seconds')}
     exhausted = [field for field,value in remaining.items() if value<=0 or (field=='runtime_seconds' and value<engine.config['limits']['work_timeout_seconds'])]
     reset_at = (datetime.fromtimestamp(now,timezone.utc).replace(hour=0,minute=0,second=0,microsecond=0)+timedelta(days=1)).timestamp()
-    issues, capabilities = [], []
+    issues, capabilities, observed_only = [], [], []
     for row in db.execute('SELECT h.*,coalesce(c.until,0) AS retry_at FROM capability_health h LEFT JOIN circuits c ON c.capability=h.capability ORDER BY h.capability'):
         item = dict(row)
         # Known single-provider operations may have legacy failure rows without
@@ -125,8 +125,15 @@ def project(engine, db, state, discovery=None):
         if policy and barrier and not cooling and since is not None and now-since >= policy['stalled_job_age_seconds']:
             issues.append({'reason':'discovery_progress_stalled','age_seconds':now-since,'last_progress_kind':progress['kind'] if progress else None})
     if policy:
-        for row in db.execute("SELECT j.id,p.idempotency_key,coalesce((SELECT min(at) FROM events e WHERE e.job_id=j.id AND e.event='upload_started'),j.created_at) AS started_at FROM jobs j LEFT JOIN publications p ON p.job_id=j.id WHERE j.status IN ('ambiguous','reconciling') AND started_at<=? ORDER BY started_at LIMIT 20", (now-policy['ambiguity_age_seconds'],)):
-            issues.append({'reason': 'publication_outcome_unknown', 'job_id': row['id'], 'request_id': row['idempotency_key'], 'age_seconds': now-row['started_at']})
+        # An aged unknown publication always stays observable; it is actionable
+        # only while no reconciliation readback was ever attempted (the maintain
+        # loop records a <job_id>:publish inspection before each attempt).
+        for row in db.execute("SELECT j.id,p.idempotency_key,(SELECT 1 FROM inspections i WHERE i.key=j.id||':publish') AS inspected,coalesce((SELECT min(at) FROM events e WHERE e.job_id=j.id AND e.event='upload_started'),j.created_at) AS started_at FROM jobs j LEFT JOIN publications p ON p.job_id=j.id WHERE j.status IN ('ambiguous','reconciling') AND started_at<=? ORDER BY started_at LIMIT 20", (now-policy['ambiguity_age_seconds'],)):
+            item = {'reason': 'publication_outcome_unknown', 'job_id': row['id'], 'request_id': row['idempotency_key'], 'age_seconds': now-row['started_at']}
+            if row['inspected']:
+                observed_only.append(item)
+            else:
+                issues.append(item)
         for row in db.execute("SELECT job_id,request_id,deadline,state FROM rewards WHERE state IN ('pending_submission','ambiguous','submitting','dispatch_pending','reconciling') AND deadline<=? ORDER BY deadline LIMIT 20", (now,)):
             issues.append({'reason': 'reward_submission_overdue' if row['state']=='pending_submission' else 'reward_outcome_unknown', 'job_id': row['job_id'], 'request_id': row['request_id'], 'overdue_seconds': now-row['deadline']})
         for row in db.execute("SELECT id,updated_at FROM jobs WHERE status='blocked' AND updated_at<=? ORDER BY updated_at LIMIT 20", (now-policy['stalled_job_age_seconds'],)):
@@ -159,6 +166,6 @@ def project(engine, db, state, discovery=None):
             health_state = 'budget_waiting' if exhausted else 'healthy'
     terminal_failures = db.execute("SELECT count(*) FROM jobs WHERE status='failed'").fetchone()[0]
     return {'state': health_state, 'monitoring_enabled': enabled, 'actionable': bool(active_issues),
-            'issues': active_issues, 'observed_issues': issues, 'capabilities': capabilities,
+            'issues': active_issues, 'observed_issues': issues + observed_only, 'capabilities': capabilities,
             'last_success': last, 'discovery': discovery, 'terminal_failed_jobs':terminal_failures,
             'budget_window':{'day':day,'timezone':'UTC','reset_at':reset_at,'remaining':remaining,'exhausted':exhausted},'observed_at': now}
