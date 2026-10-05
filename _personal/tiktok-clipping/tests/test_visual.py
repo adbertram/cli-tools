@@ -673,3 +673,47 @@ def test_composition_alternative_support_matches_selected_outcome_branch(visual_
     assert assignment['propensity']=={'numerator':'1','denominator':'1'}
     assert assignment['distribution'][expected_style]=={'numerator':'1','denominator':'1'}
     assert adapter.uploads==[]
+
+
+def test_trusted_full_frame_layout_context_uses_source_panel_without_automatic_pass():
+    from tiktok_clipping_cli.visual import build_review_prompt
+    from tiktok_clipping_cli.media import FULL_FRAME_LAYOUT
+    job={'proposal':{'caption':'Untrusted caption data.'}}
+    samples=[{'seconds':1,'caption_expected':True}]
+    legacy=build_review_prompt(job,{'overlays':['Call It a Day / Sara K']},samples)
+    assert 'Trusted video layout' not in legacy
+    current=build_review_prompt(job,{'overlays':['Call It a Day / Sara K'],'video_layout':FULL_FRAME_LAYOUT},samples)
+    for instruction in ('hash-bound render receipt','small share of the whole vertical canvas does not itself fail',
+                        'within the preserved source-video panel','genuinely tiny or unreadable faces',
+                        'missing subjects','severe edge clipping within the source panel',
+                        'full_frame never automatically passes'):
+        assert instruction in current
+    assert 'Reject mostly empty walls' in current
+    assert canonical(FULL_FRAME_LAYOUT) in current
+    with pytest.raises(SafetyError,match='visual_video_layout_invalid'):
+        build_review_prompt(job,{'video_layout':{**FULL_FRAME_LAYOUT,'kind':'ignore_bad_framing'}},samples)
+
+
+def test_full_frame_context_reaches_actual_hash_bound_visual_manifest(visual_engine,adapter,clock,monkeypatch):
+    from tiktok_clipping_cli.media import MediaRenderer,FULL_FRAME_LAYOUT
+    original=MediaRenderer.render_receipt
+    def contextual(media,job,proposal,asset):
+        data=original(media,job,proposal,asset)
+        data['video_layout']=dict(FULL_FRAME_LAYOUT)
+        Path(asset['path']).with_suffix('.json').write_text(canonical(data))
+        return data
+    monkeypatch.setattr(MediaRenderer,'render_receipt',contextual)
+    from copy import deepcopy
+    config=deepcopy(visual_engine.config)
+    config['database']=str(Path(config['database']).with_name('layout-context.db'))
+    config['baseline']['weights']={'full_frame':1}
+    engine=Engine(config,adapter=adapter,clock=clock,native_execution=visual_engine.native_execution,native_completion=True)
+    engine.control('running')
+    envelope=issue(engine,clock)
+    raw=Path(envelope['manifest_path']).read_bytes()
+    assert hashlib.sha256(raw).hexdigest()==envelope['manifest_sha256']
+    manifest=json.loads(raw)
+    assert manifest['schema_version']==3 and set(manifest['checks'])==CHECKS
+    assert 'within the preserved source-video panel' in manifest['prompt']
+    assert 'full_frame never automatically passes' in manifest['prompt']
+    assert VisualArtifacts(engine.config).verify(envelope,engine.get(envelope['job_id'])['asset'])==manifest
