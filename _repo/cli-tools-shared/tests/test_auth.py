@@ -1349,3 +1349,37 @@ def test_check_auth_settled_gives_up_after_the_configured_attempts():
     assert _SettlingBrowser()._check_auth_settled(page) is False
     assert page.checks == 4
     assert page.waits == [10, 10, 10]
+
+
+def test_named_daemon_endpoints_bind_each_owner_on_alternating_calls(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from browser_harness import _ipc
+
+    touched = []
+    browsers = []
+    for name in ("whop_rewards_TEST", "tiktok_clipper_TEST"):
+        service = SimpleNamespace(session=name)
+
+        class Harness:
+            def __init__(self, owner):
+                self.owner = owner
+
+            @property
+            def h(self):
+                touched.append(("bind", self.owner))
+                return None
+
+        service._bh = Harness(name)
+        browsers.append(SimpleNamespace(_get_service=lambda service=service: service))
+
+    monkeypatch.setattr(_ipc, "pid_path", lambda session: tmp_path / (session + ".pid"))
+    monkeypatch.setattr(_ipc, "cleanup_endpoint", lambda session: touched.append(("cleanup", session)))
+    for browser in (browsers[0], browsers[1], browsers[0]):
+        name = browser._get_service().session
+        assert BrowserAutomation.daemon_endpoint_path(browser) == tmp_path / (name + ".pid")
+        BrowserAutomation.cleanup_daemon_endpoint(browser)
+    assert touched == [
+        ("bind", "whop_rewards_TEST"), ("bind", "whop_rewards_TEST"), ("cleanup", "whop_rewards_TEST"),
+        ("bind", "tiktok_clipper_TEST"), ("bind", "tiktok_clipper_TEST"), ("cleanup", "tiktok_clipper_TEST"),
+        ("bind", "whop_rewards_TEST"), ("bind", "whop_rewards_TEST"), ("cleanup", "whop_rewards_TEST"),
+    ]

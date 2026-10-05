@@ -63,9 +63,7 @@ def identity(pid,timeout):
  return {'pid':pid,'start_identity':started}
 
 def daemon_path(browser):
- service=browser._get_service();service._bh.h
- from browser_harness import _ipc
- return _ipc.pid_path(service.session)
+ return browser.daemon_endpoint_path()
 
 def daemon_pid(browser):
  path=daemon_path(browser)
@@ -131,10 +129,8 @@ def clean(marker,config,browser,timeout=10):
  pid=daemon_pid(browser)
  if pid is not None and identity(pid,min(2,remaining())) is not None:raise failure('catalog_reader_daemon_not_closed')
  # Remove only the recorded daemon endpoint after its exact process is absent.
- from browser_harness import _ipc
- service=browser._get_service();service._bh.h
  path=daemon_path(browser)
- if path.exists() and daemon_pid(browser)==owned['daemon'][0]['pid']:path.unlink();_ipc.cleanup_endpoint(service.session)
+ if path.exists() and daemon_pid(browser)==owned['daemon'][0]['pid']:path.unlink();browser.cleanup_daemon_endpoint()
  return True
 
 def budget(deadline):

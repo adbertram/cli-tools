@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 from whop_cli import catalog_reads as cr
 from whop_cli.client import WhopClient
+from cli_tools_shared.auth import BrowserAutomation
 from cli_tools_shared.bounded_read import BoundedReadError
 
 REAL_STOP_WORKER=cr.stop_worker
@@ -13,6 +14,8 @@ REAL_IDENTITY=cr.identity
 def setup(tmp_path,monkeypatch):
  directory=tmp_path.resolve();data=directory/'browser-data'
  browser=SimpleNamespace()
+ browser.daemon_endpoint_path=lambda:BrowserAutomation.daemon_endpoint_path(browser)
+ browser.cleanup_daemon_endpoint=lambda:BrowserAutomation.cleanup_daemon_endpoint(browser)
  config=SimpleNamespace(get_active_profile_name=lambda:'rewards',get_profile_data_dir=lambda:directory,get_persistent_profile_dir=lambda:data,rewards_url='https://example.apps.whop.com/c/exp_TEST',get_browser=lambda:browser)
  monkeypatch.setattr(cr,'list_process_commands',lambda **kwargs:[])
  monkeypatch.setattr(cr,'daemon_pid',lambda browser:None)

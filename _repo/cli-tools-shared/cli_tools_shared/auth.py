@@ -616,6 +616,20 @@ class BrowserAutomation:
             )
         return self._service
 
+    def daemon_endpoint_path(self):
+        """Resolve only this browser's bound named daemon endpoint."""
+        service = self._get_service()
+        service._bh.h
+        from browser_harness import _ipc
+        return _ipc.pid_path(service.session)
+
+    def cleanup_daemon_endpoint(self):
+        """Remove endpoint files after the caller proves its owner has ended."""
+        service = self._get_service()
+        service._bh.h
+        from browser_harness import _ipc
+        _ipc.cleanup_endpoint(service.session)
+
     _safe_url_for_log = staticmethod(BrowserHarnessService._safe_url_for_log)
 
     def _prompt_enter_eof_safe(self, message: str = "", *, allow_no_tty: bool = False) -> bool:
