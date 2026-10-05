@@ -49,6 +49,8 @@ def test_issue_reserves_one_original_day_and_artifacts(native):
     assert row['state'] == 'pending'
     assert strict_json(row['reservation'])['day'] == '2026-10-03'
     assert TextAttempts(native).verify_artifacts(row).is_dir()
+    overlay = Path(env['overlay_path']).read_text()
+    assert "- id: llm-deepseek\n  config:\n    thinking: disabled\n    reasoningEffort: 'off'\n    maxTokens: 2048\n" in overlay
     assert native.status()['budgets'][0]['model_calls'] == 1
     assert native.status()['budgets'][0]['runtime_seconds'] == 30
 

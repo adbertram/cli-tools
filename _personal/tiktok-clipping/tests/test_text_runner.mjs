@@ -26,9 +26,9 @@ async function fixture(kind='clip') {
 async function withFixture(callback,kind='clip') {const f=await fixture(kind);try{return await callback(f);}finally{await rm(f.workspace,{recursive:true,force:true});}}
 function sdkHarness({text=JSON.stringify(clip),reason={kind:'completed'},observed=true,caught=null,flushError=null,badUsage=false}={}) {
  const session={id:'session-fixture',seq:0,events:[]};let pending=false,setupCalled=false;
- const sdkLoader=async()=>({SessionId:v=>v,createUserMessage:v=>v,installModelSelection:()=>{setupCalled=true;return {not_a_runtime_transaction:true};}});
+ const sdkLoader=async()=>({SessionId:v=>v,createUserMessage:v=>v,installModelSelection:(_ctx,selection)=>{assert.deepEqual(selection.current,{provider:'deepseek-official',model:'deepseek-flash',reasoningEffort:'off'});setupCalled=true;return {not_a_runtime_transaction:true};}});
  const ctx={get:()=>null,sessions:{flush:async()=>{if(flushError)throw flushError;}},sessionProjections:{snapshot:()=>({asOfSeq:session.events.length,values:{tokenUsage:badUsage?{...usage,outputTokens:Infinity}:usage}})},agents:{create:async options=>{
-  assert.equal(options.setup({}),undefined);assert.equal(options.agentOptions.reasoningEffort,'off');assert.equal(options.agentOptions.maxTokens,2500);
+  assert.equal(options.setup({}),undefined);assert.equal(Object.hasOwn(options.agentOptions,'reasoningEffort'),false);assert.equal(options.agentOptions.maxTokens,2500);
   return {agent:{session,whenIdle:async()=>{if(pending && caught)throw caught;},followup:message=>{
    assert.equal(message.content.length,1);assert.equal(message.content[0].type,'text');pending=true;
    if(observed)session.events.push({seq:1,type:'assistant/chunk',data:{chunk:{type:'usage'}}});
@@ -94,6 +94,7 @@ test('malformed completed response preserves usage and raw result but fails',asy
 test('max-tokens and provider failures keep measured usage without authorizing result',async()=>{
  for(const reason of [{kind:'max-tokens'},{kind:'error',error:{code:'RATE_LIMIT',status:429,providerRetryAfterMs:172800000,message:'SECRET'}},{kind:'aborted',reason:{kind:'user'}},{kind:'interrupted'}])await withFixture(async f=>{
   const h=sdkHarness({reason});const receipt=await run(h.ctx,f.config,h.sdkLoader);assert.equal(receipt.outcome,'failed');assert.deepEqual(receipt.usage,usage);assert.equal(JSON.stringify(receipt).includes('SECRET'),false);
+  if(reason.kind==='max-tokens')assert.deepEqual(receipt.failure,{category:'model_failed',code:'generation_limit',status:null,retry_after_ms:null});
   if(reason.error)assert.equal(receipt.failure.retry_after_ms,172800000);
  });
 });
