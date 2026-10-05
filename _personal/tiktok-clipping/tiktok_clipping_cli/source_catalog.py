@@ -159,6 +159,7 @@ COMPILERS = {COMMISSION_VERSION:commission_permission}
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS catalog_settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS catalog_refresh_renewals(campaign_id TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS catalog_stream(id INTEGER PRIMARY KEY CHECK(id=1),cursor TEXT,end_pending INTEGER NOT NULL DEFAULT 0,
  next_check REAL NOT NULL DEFAULT 0,observed_at TEXT);
 INSERT OR IGNORE INTO catalog_stream(id) VALUES(1);
@@ -286,8 +287,49 @@ class SourceCatalog:
         db.execute("INSERT INTO catalog_work(kind,id,campaign_id,url,input_version,data,due) VALUES(?,?,?,?,?,?,?) ON CONFLICT(kind,id) DO UPDATE SET input_version=excluded.input_version,data=excluded.data,status=CASE WHEN input_version!=excluded.input_version OR status='obsolete' THEN 'pending' ELSE status END,due=CASE WHEN input_version!=excluded.input_version OR status='obsolete' THEN excluded.due ELSE due END,value_ref=CASE WHEN input_version!=excluded.input_version OR status='obsolete' THEN NULL ELSE value_ref END",
                    (kind,identifier,campaign_id,url,revision,serialized,self.clock()))
 
-    def _due(self,kind,limit):
-        with self._db() as db:return [dict(row) for row in db.execute("SELECT * FROM catalog_work WHERE kind=? AND status!='obsolete' AND due<=? ORDER BY due,id LIMIT ?",(kind,self.clock(),limit))]
+    def _due(self,kind,limit,*,renewal=None,campaign_id=None):
+        clauses=["w.kind=?", "w.status!='obsolete'", "w.due<=?"];args=[kind,self.clock()]
+        if renewal is not None:
+            known=("EXISTS (SELECT 1 FROM catalog_refresh_renewals r JOIN catalog_campaigns c ON c.id=r.campaign_id "
+                   "WHERE r.campaign_id=w.campaign_id AND c.state IN ('funded','funding_unknown'))")
+            clauses.append(known if renewal else 'NOT ('+known+')')
+        if campaign_id is not None:clauses.append('w.campaign_id=?');args.append(campaign_id)
+        with self._db() as db:
+            return [dict(row) for row in db.execute('SELECT w.* FROM catalog_work w WHERE '+' AND '.join(clauses)+' ORDER BY w.due,w.id LIMIT ?',(*args,limit))]
+
+    def _refresh_work(self,providers,work,deadline,policy,report):
+        kind=work['kind'];provider={'detail':'whop','brief':'google','asset':'youtube'}[kind]
+        try:
+            value=getattr(self,'_'+kind)(providers,work,deadline,policy)
+            if value:report[{'detail':'campaigns_updated','brief':'briefs_updated','asset':'sources_updated'}[kind]]+=1
+        except Exception as error:
+            failure,until=self._failure(error,provider,policy,work['failures'])
+            with self._db() as db:
+                db.execute("UPDATE catalog_work SET status='failed',failures=failures+1,failure=?,due=? WHERE kind=? AND id=?",(encoded(failure),until,kind,work['id']))
+                if kind=='asset':
+                    db.execute("UPDATE catalog_sources SET state='stale',reason='refresh_failed',next_check=? WHERE id=?",(until,work['id']))
+                else:
+                    db.execute("UPDATE catalog_sources SET state='stale',reason='refresh_failed',next_check=? WHERE campaign_id=?",(until,work['campaign_id']))
+            report['failures'].append(failure)
+
+    def _dependency_phase(self,providers,budgets,renewal,deadline,policy,report):
+        remaining=dict(budgets)
+        while self.monotonic()<deadline:
+            heads=[]
+            for kind,provider in (('detail','whop'),('brief','google'),('asset','youtube')):
+                if remaining[kind] and self._cooldown(provider) is None:
+                    heads+=self._due(kind,1,renewal=renewal)
+            if not heads:break
+            campaign=min(heads,key=lambda row:(row['due'],row['id']))['campaign_id']
+            # Carry one dependency chain forward before starting another detail.
+            for kind,provider in (('detail','whop'),('brief','google'),('asset','youtube')):
+                if self.monotonic()>=deadline:break
+                if not remaining[kind] or self._cooldown(provider) is not None:continue
+                rows=self._due(kind,1,renewal=renewal,campaign_id=campaign)
+                if rows:
+                    remaining[kind]-=1
+                    self._refresh_work(providers,rows[0],deadline,policy,report)
+        return remaining
 
     def _saved(self,work,value_ref,policy,status='ok'):
         with self._db() as db:
@@ -306,7 +348,7 @@ class SourceCatalog:
         if type(retry_policy) is not dict or set(retry_policy)!={'base_seconds','max_seconds','refresh_seconds'}:raise SafetyError('catalog_retry_policy_invalid')
         if any(type(v) not in (int,float) or not math.isfinite(v) or v<=0 for v in retry_policy.values()) or retry_policy['base_seconds']>retry_policy['max_seconds']:raise SafetyError('catalog_retry_policy_invalid')
         if type(timeout_seconds) not in (int,float) or not math.isfinite(timeout_seconds) or not 0<timeout_seconds<=3600:raise SafetyError('catalog_timeout_invalid')
-        deadline=self.monotonic()+timeout_seconds
+        started_monotonic=self.monotonic();deadline=started_monotonic+timeout_seconds
         with self._refresh_lock():
             self._bind(providers)
             started_at=self.clock()
@@ -315,22 +357,28 @@ class SourceCatalog:
                 db.execute("INSERT INTO catalog_settings VALUES('last_refresh_started',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(encoded(started_at),))
                 db.execute("INSERT INTO catalog_settings VALUES('refresh_running','true') ON CONFLICT(key) DO UPDATE SET value='true'")
             report={'pages_read':0,'campaigns_updated':0,'briefs_updated':0,'sources_updated':0,'scope':'collapsed_groups','provider_end':False,'failures':[]}
-            self._walk(providers,page_budget,retry_policy,deadline,report)
-            for kind,provider,budget in (('detail','whop',campaign_budget),('brief','google',brief_budget),('asset','youtube',asset_budget)):
-                for work in self._due(kind,budget):
-                    if self.monotonic()>=deadline or self._cooldown(provider) is not None:break
-                    try:
-                        value=getattr(self,'_'+kind)(providers,work,deadline,retry_policy)
-                        if value:report[{'detail':'campaigns_updated','brief':'briefs_updated','asset':'sources_updated'}[kind]]+=1
-                    except Exception as error:
-                        failure,until=self._failure(error,provider,retry_policy,work['failures'])
-                        with self._db() as db:
-                            db.execute("UPDATE catalog_work SET status='failed',failures=failures+1,failure=?,due=? WHERE kind=? AND id=?",(encoded(failure),until,kind,work['id']))
-                            if kind=='asset':
-                                db.execute("UPDATE catalog_sources SET state='stale',reason='refresh_failed',next_check=? WHERE id=?",(until,work['id']))
-                            else:
-                                db.execute("UPDATE catalog_sources SET state='stale',reason='refresh_failed',next_check=? WHERE campaign_id=?",(until,work['campaign_id']))
-                        report['failures'].append(failure)
+            budgets={'detail':campaign_budget,'brief':brief_budget,'asset':asset_budget}
+            with self._db() as db:
+                db.execute('DELETE FROM catalog_refresh_renewals')
+                compilers=sorted(COMPILERS)
+                if compilers:
+                    db.execute("INSERT INTO catalog_refresh_renewals SELECT DISTINCT s.campaign_id FROM catalog_sources s "
+                               "JOIN catalog_versions v ON v.source_id=s.id AND v.version=s.current_version "
+                               "JOIN catalog_campaigns c ON c.id=s.campaign_id WHERE s.state IN ('eligible','stale') "
+                               "AND c.state IN ('funded','funding_unknown') AND v.permission_ref IS NOT NULL AND v.compiler_version IN ("+','.join('?' for _ in compilers)+")",compilers)
+                row=db.execute("SELECT value FROM catalog_settings WHERE key='renewal_turn'").fetchone()
+                turn=json.loads(row[0]) if row else True
+                db.execute("INSERT INTO catalog_settings VALUES('renewal_turn',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(encoded(not turn),))
+            renewal={kind:(budget+1)//2 if budget>1 else int(turn) for kind,budget in budgets.items()}
+            exploration={kind:budgets[kind]-renewal[kind] for kind in budgets}
+            # Renew first with a bounded half of the original operation deadline.
+            # Page reads cannot consume the candidate renewal opportunity.
+            renewal_deadline=started_monotonic+timeout_seconds/2
+            unused=self._dependency_phase(providers,renewal,True,renewal_deadline,retry_policy,report)
+            page_deadline=started_monotonic+timeout_seconds*3/4
+            self._walk(providers,page_budget,retry_policy,page_deadline,report)
+            exploration={kind:exploration[kind]+unused[kind] for kind in budgets}
+            self._dependency_phase(providers,exploration,False,deadline,retry_policy,report)
             with self._db() as db:
                 report['next_cursor']=db.execute('SELECT cursor FROM catalog_stream WHERE id=1').fetchone()[0]
                 report['cooldowns']={row['provider']:row['until'] for row in db.execute('SELECT * FROM catalog_cooldowns WHERE until>?',(self.clock(),))}

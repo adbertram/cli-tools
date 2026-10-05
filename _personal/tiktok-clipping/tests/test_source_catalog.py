@@ -33,7 +33,7 @@ class Providers:
         self.briefs={DOC:{'documentId':'document_TEST','content':'Test rights facts. '+VIDEO,'links':[VIDEO],'suggestions_view_mode':'SUGGESTIONS_INLINE','suggestions_present':False,'tabs_complete':True}}
         self.assets={VIDEO:{'id':'abcdefghijk','title':'Test asset','duration':60,'channel_id':'channel_TEST'}}
     def read(self,kind,key,deadline):
-        assert deadline==120
+        assert 0<deadline<=120
         self.calls.append((kind,key))
         if (kind,key) in self.failures:raise self.failures[(kind,key)]
     def campaigns_page(self,*,limit,sort,cursor,deadline):
@@ -277,8 +277,12 @@ def test_no_lifetime_1000_campaign_cap_and_continuation_survives_calls(state):
 def test_deadline_stops_future_calls_and_retains_atomic_page_checkpoint(state):
     catalog,provider,_=state
     provider.pages[None]['next_cursor']='A'
-    ticks=iter([0,0,121,121,121,121,121])
-    catalog.monotonic=lambda:next(ticks)
+    ticks=[0]
+    catalog.monotonic=lambda:ticks[0]
+    original=provider.campaigns_page
+    def page(**kwargs):
+        result=original(**kwargs);ticks[0]=121;return result
+    provider.campaigns_page=page
     result=refresh(catalog,provider)
     assert provider.calls==[('page',None)]
     assert result['next_cursor']=='A' and result['deadline_reached']
@@ -574,3 +578,112 @@ def test_never_successful_scan_retains_original_start_without_inventing_progress
  refresh(catalog,provider);timer.now+=121;refresh(catalog,provider)
  assert catalog.status()['scan']['first_refresh_started']==1000
  assert catalog.status()['scan']['last_progress'] is None
+
+
+def renewal_backlog(state,monkeypatch,count=579):
+    catalog,provider,timer=state
+    monkeypatch.setitem(sc.COMPILERS,'test-reviewed-v1',reviewed_test_compiler)
+    other=copy.deepcopy(provider.details['campaign_TEST']);other['id']='campaign_RENEW'
+    provider.details[other['id']]=other;provider.pages[None]['rows'].append({'id':other['id']})
+    refresh(catalog,provider)
+    assert len(catalog.eligible(limit=5)['sources'])==2
+    timer.now+=121;provider.calls=[]
+    with catalog._db() as db:
+        for index in range(count):
+            name=f'campaign_NEW_{index:04}'
+            detail=copy.deepcopy(other);detail.update(id=name,status='inactive');provider.details[name]=detail
+            catalog._queue(db,'detail',name,name,None,{'id':name})
+            db.execute("UPDATE catalog_work SET due=? WHERE kind='detail' AND id=?",(timer.now-300,name))
+    return catalog,provider,timer
+
+
+def test_renewal_chains_beat_579_older_details_and_keep_exploration_every_round(state,monkeypatch):
+    catalog,provider,timer=renewal_backlog(state,monkeypatch)
+    for _ in range(3):
+        provider.calls=[];refresh(catalog,provider,campaign_budget=4,brief_budget=4,asset_budget=4)
+        details=[key for kind,key in provider.calls if kind=='detail']
+        assert set(details[:2])=={'campaign_TEST','campaign_RENEW'}
+        assert any(key.startswith('campaign_NEW_') for key in details)
+        page_index=next(index for index,row in enumerate(provider.calls) if row[0]=='page')
+        assert {'detail','brief','asset'}<=set(kind for kind,_ in provider.calls[:page_index])
+        assert len(catalog.eligible(limit=5)['sources'])==2
+        timer.now+=121
+
+
+def test_budget_one_alternates_durably_across_restart_without_starving_either_class(state,monkeypatch):
+    catalog,provider,timer=renewal_backlog(state,monkeypatch)
+    calls=[]
+    for _ in range(4):
+        provider.calls=[];refresh(catalog,provider,campaign_budget=1,brief_budget=1,asset_budget=1)
+        calls.append([key for kind,key in provider.calls if kind=='detail'])
+        catalog=sc.SourceCatalog(catalog.path,clock=lambda:timer.now,monotonic=lambda:0)
+    assert all(len(row)==1 for row in calls)
+    assert any(row[0].startswith('campaign_NEW_') for row in calls)
+    assert any(row[0] in ('campaign_TEST','campaign_RENEW') for row in calls)
+
+
+def test_revoked_unfunded_and_future_backoff_do_not_keep_renewal_priority(state,monkeypatch):
+    catalog,provider,timer=renewal_backlog(state,monkeypatch)
+    with catalog._db() as db:
+        db.execute("UPDATE catalog_campaigns SET state='unfunded_or_unknown_rate' WHERE id='campaign_RENEW'")
+        db.execute("UPDATE catalog_work SET due=? WHERE campaign_id='campaign_TEST'",(timer.now+100,))
+    provider.calls=[];refresh(catalog,provider,campaign_budget=2,brief_budget=2,asset_budget=2)
+    assert not any(kind=='detail' and key in ('campaign_TEST','campaign_RENEW') for kind,key in provider.calls)
+    assert any(kind=='detail' and key.startswith('campaign_NEW_') for kind,key in provider.calls)
+    monkeypatch.delitem(sc.COMPILERS,'test-reviewed-v1')
+    timer.now+=101;provider.calls=[];refresh(catalog,provider,campaign_budget=1,brief_budget=1,asset_budget=1)
+    assert any(kind=='detail' and key.startswith('campaign_NEW_') for kind,key in provider.calls)
+
+
+def test_renewal_half_deadline_leaves_page_and_exploration_time_and_resumes_chain(state,monkeypatch):
+    catalog,provider,timer=renewal_backlog(state,monkeypatch)
+    elapsed=[0];catalog.monotonic=lambda:elapsed[0]
+    def read(kind,key,deadline):
+        assert elapsed[0]<deadline<=120
+        provider.calls.append((kind,key))
+        elapsed[0]+=30 if not (kind=='detail' and key.startswith('campaign_NEW_')) else 1
+    provider.read=read
+    result=refresh(catalog,provider,campaign_budget=4,brief_budget=4,asset_budget=4)
+    # Two bounded renewal calls consume the first half; exploration still gets a page.
+    assert provider.calls[0][0]=='detail' and provider.calls[1][0]=='brief'
+    assert provider.calls[2][0]=='page'
+    assert any(kind=='detail' and key.startswith('campaign_NEW_') for kind,key in provider.calls)
+    assert result['sources_updated']==0
+    elapsed[0]=0;provider.read=lambda kind,key,deadline:provider.calls.append((kind,key))
+    result=refresh(catalog,provider,campaign_budget=4,brief_budget=4,asset_budget=4)
+    assert result['sources_updated']>0 and catalog.eligible(limit=5)['sources']
+
+
+def test_slow_head_and_continuation_pages_leave_new_dependencies_time_each_round(state,monkeypatch):
+    catalog,provider,timer=renewal_backlog(state,monkeypatch)
+    provider.pages[None]['next_cursor']='A'
+    provider.pages['A']={'rows':[{'id':'campaign_NEW_0578'}],'next_cursor':None}
+    elapsed=[0];catalog.monotonic=lambda:elapsed[0]
+    def read(kind,key,deadline):
+        cost=(deadline-elapsed[0] if key=='A' else 40) if kind=='page' else 1
+        assert elapsed[0]+cost<=deadline
+        provider.calls.append((kind,key));elapsed[0]+=cost
+    provider.read=read
+    for _ in range(3):
+        elapsed[0]=0;provider.calls=[]
+        result=refresh(catalog,provider,campaign_budget=4,brief_budget=4,asset_budget=4)
+        assert [key for kind,key in provider.calls if kind=='page']==[None,'A']
+        assert any(kind=='detail' and key.startswith('campaign_NEW_') for kind,key in provider.calls)
+        assert result['provider_end'] is True and elapsed[0]<=120
+        timer.now+=121
+
+
+def test_renewal_provider_429_survives_restart_and_blocks_reads_until_full_minimum(state,monkeypatch):
+    catalog,provider,timer=renewal_backlog(state,monkeypatch)
+    provider.failures[('detail','campaign_RENEW')]=ProviderFailure('rate_limit',90000)
+    result=refresh(catalog,provider,campaign_budget=4,brief_budget=4,asset_budget=4)
+    assert result['failures'][0]['category']=='rate_limit'
+    assert result['failures'][0]['retry_after_seconds']==90000
+    until=result['cooldowns']['whop'];assert until==timer.now+90000
+    catalog=sc.SourceCatalog(catalog.path,clock=lambda:timer.now,monotonic=lambda:0)
+    provider.calls=[];timer.now=until-1
+    refresh(catalog,provider,campaign_budget=4,brief_budget=4,asset_budget=4)
+    assert not any(kind in ('detail','page') for kind,_ in provider.calls)
+    provider.failures.clear();provider.calls=[];timer.now=until
+    result=refresh(catalog,provider,campaign_budget=4,brief_budget=4,asset_budget=4)
+    assert ('detail','campaign_RENEW') in provider.calls and not result['failures']
