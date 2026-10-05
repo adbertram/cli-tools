@@ -305,7 +305,13 @@ class StudioPublicationAdapter:
                 return {"state": "unknown", "provenance": "Exact Studio operation binding changed; preserve reservation."}
             if operation.get("state") in PRE_ACTION_STATES and operation.get("public_action_dispatched") is False:
                 return {"state": "absent", "authoritative": True, "provenance": canonical({"kind": "studio_pre_action_journal", **binding, "state": operation["state"]})}
-            result = sdk.reconcile(binding["request_id"])
+            from tiktok_cli.client import ClientError
+            try:
+                result = sdk.reconcile(binding["request_id"])
+            except ClientError as exc:
+                # A missing or unreadable feed item never proves absence; keep
+                # the exact request pending for a later bounded readback.
+                return {"state": "unknown", "provenance": canonical({"kind": "studio_reconcile_inconclusive", **binding, "error": type(exc).__name__, "code": getattr(exc, "code", None)})}
             if not self._matches(result, binding, policy):
                 raise SafetyError("studio_reconciliation_binding_changed")
             if result.get("state") == "published_verified":

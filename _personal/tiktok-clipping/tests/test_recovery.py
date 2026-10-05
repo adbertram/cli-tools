@@ -80,6 +80,23 @@ def test_concurrent_reconciliation_has_single_owner(config,adapter,clock):
     assert adapter.calls.count('publish')==2
 
 
+def test_failed_reconcile_readback_releases_its_lock(config,adapter,clock):
+    current=Engine(config,adapter=adapter,clock=clock)
+    current.control('running')
+    adapter.fail_publish=AdapterFailure('ambiguous','connection_lost_after_upload')
+    envelope=claim(current,clock)
+    assert current.apply(payload(envelope))['state']=='ambiguous'
+    def broken(job,key):
+        raise AdapterFailure('transient','studio read limited')
+    adapter.reconcile=broken
+    with pytest.raises(AdapterFailure,match='studio read limited'):
+        current.reconcile(envelope['job_id'])
+    assert current.get(envelope['job_id'])['status']=='ambiguous'
+    with current.transaction() as db:
+        row=db.execute("SELECT lease_token,lease_until FROM jobs WHERE id=?",(envelope['job_id'],)).fetchone()
+        assert row['lease_token'] is None and row['lease_until'] is None
+
+
 def test_expired_campaign_still_records_past_earnings(engine,config,adapter,clock):
     lease=claim(engine,clock)
     assert engine.apply(payload(lease))['state']=='published'

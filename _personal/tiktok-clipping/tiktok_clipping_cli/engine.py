@@ -1738,7 +1738,16 @@ class Engine:
             key = publication["idempotency_key"]
             token = secrets.token_urlsafe(32)
             db.execute("UPDATE jobs SET status='reconciling',lease_token=?,lease_until=?,updated_at=? WHERE id=?", (token, self.clock() + self.config["limits"]["lease_seconds"], self.clock(), job_id))
-        result = self._call("reconcile", self.get(job_id), key)
+        try:
+            result = self._call("reconcile", self.get(job_id), key)
+        except (AdapterFailure, SafetyError):
+            # A failed readback must not leave the job locked in reconciling:
+            # return it to ambiguous so a later bounded inspection can retry.
+            with self.transaction() as db:
+                current = self._job(db, job_id)
+                if current["status"] == "reconciling" and current["lease_token"] == token:
+                    db.execute("UPDATE jobs SET status='ambiguous',lease_token=NULL,lease_until=NULL,updated_at=? WHERE id=?", (self.clock(), job_id))
+            raise
         if not isinstance(result, dict) or result.get("state") not in {"published", "absent", "unknown"}:
             raise SafetyError("invalid_reconciliation")
         if result["state"] == "published":

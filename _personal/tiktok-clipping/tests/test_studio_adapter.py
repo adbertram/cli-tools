@@ -250,6 +250,18 @@ def test_absence_requires_exact_journal_and_explicit_pre_action_boundary(engine,
     assert 'native-send' not in sdk.calls and 'prepare' not in sdk.calls
 
 
+def test_feed_lag_during_readback_stays_unknown_and_never_proves_absence(engine,config,adapter,clock):
+    from tiktok_cli.client import ClientError
+    bridge,sdk,job,asset,key,policy=bridge_fixture(engine,config,adapter,clock)
+    sdk.operation['state']='project_accepted';sdk.operation['public_action_dispatched']=True
+    def limited(request):
+        raise ClientError('studio_video_not_found')
+    sdk.reconcile=limited
+    result=bridge.reconcile(job,asset,key,policy)
+    assert result['state']=='unknown' and 'studio_reconcile_inconclusive' in result['provenance']
+    assert 'native-send' not in sdk.calls and 'prepare' not in sdk.calls
+
+
 def test_policy_music_confirmation_is_never_defaulted(engine,config,adapter,clock):
     bridge,sdk,job,asset,key,policy=bridge_fixture(engine,config,adapter,clock)
     del policy['music_rights_confirmed']
