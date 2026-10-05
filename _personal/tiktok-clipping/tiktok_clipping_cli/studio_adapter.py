@@ -173,12 +173,25 @@ class StudioPublicationAdapter:
 
     def _failure(self, sdk, binding, policy, exc):
         from .engine import AdapterFailure
+        diagnostics = None
+        matched = False
         try:
             operation = sdk.status(binding["request_id"])
-            pre_action = self._matches(operation, binding, policy) and operation.get("state") in PRE_ACTION_STATES and operation.get("public_action_dispatched") is False
+            matched = self._matches(operation, binding, policy)
+            pre_action = matched and operation.get("state") in PRE_ACTION_STATES and operation.get("public_action_dispatched") is False
         except Exception:
             pre_action = False
-        return AdapterFailure("transient" if pre_action else "ambiguous", "studio_publish: " + type(exc).__name__, getattr(exc, "retry_after", None), provider=getattr(exc, "provider", None), code=getattr(exc, "code", None), status=getattr(exc, "status", None))
+            matched = False
+        if matched:
+            failure = operation.get('post_failure')
+            if isinstance(failure, dict) and set(failure) == {'stage', 'error_type'}:
+                from .safety import adapter_diagnostics
+                try:
+                    diagnostics = adapter_diagnostics({'kind': 'studio_publish_failure', **failure})
+                except SafetyError:
+                    # Optional observations cannot change dispatch authority.
+                    pass
+        return AdapterFailure("transient" if pre_action else "ambiguous", "studio_publish: " + type(exc).__name__, getattr(exc, "retry_after", None), provider=getattr(exc, "provider", None), code=getattr(exc, "code", None), status=getattr(exc, "status", None), diagnostics=diagnostics)
 
     def _close(self, sdk, binding, policy, verified_receipt=None, prior_failure=None):
         try:

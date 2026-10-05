@@ -27,6 +27,19 @@ def create_adapter(config):
                             exc.diagnostics.update(cut_index=0,cut_start_seconds=start,cut_end_seconds=end)
                             raise
             return LiveAdapter(config,media=MeasuredMedia()).render(job,proposal)
+        def publish(self, job, asset, key, policy):
+            from types import SimpleNamespace
+            from tiktok_clipping_cli.studio_adapter import StudioPublicationAdapter
+            from tiktok_clipping_cli.safety import digest
+            bridge=StudioPublicationAdapter(config,publisher_factory=lambda:None)
+            binding=bridge._binding(asset,key,policy)
+            operation={**binding,'policy':policy,'binding':digest({'asset_sha256':asset['sha256'],'policy':policy}),
+                       'state':'outcome_unknown','public_action_dispatched':True,'post_failure':job['post_failure']}
+            sdk=SimpleNamespace(status=lambda request:operation)
+            exc=TimeoutError('SECRET session payload must never be emitted')
+            exc.retry_after=172800.25
+            exc.provider,exc.code,exc.status='tiktok','publication_transport_failed',503
+            raise bridge._failure(sdk,binding,policy,exc)
         def quality(self, *args):
             from tiktok_clipping_cli.engine import AdapterFailure
             raise AdapterFailure('transient', 'whop:submission_form_unavailable', provider='whop',

@@ -65,6 +65,16 @@ def adapter_diagnostics(value):
         return None
     if not isinstance(value, dict):
         raise SafetyError("invalid_adapter_diagnostics")
+    if value.get('kind') == 'studio_publish_failure':
+        import keyword
+        keys(value, {'kind', 'stage', 'error_type'})
+        if (type(value['stage']) is not str or value['stage'] not in
+                {'native_observation_refresh', 'native_post_action', 'post_receipt_read'}
+                or type(value['error_type']) is not str
+                or not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]{0,127}', value['error_type'])
+                or keyword.iskeyword(value['error_type'])):
+            raise SafetyError('invalid_adapter_diagnostics')
+        return strict_json(canonical(value), 2048)
     if value.get('kind') == 'refinement_asr_timing':
         keys(value, {'kind','cue_index','crop_duration_seconds','measured_endpoint_seconds',
                      'maximum_endpoint_correction_seconds','cut_index','cut_start_seconds','cut_end_seconds'})
