@@ -24,7 +24,15 @@ from .utils.notion_markdown import normalize_notion_markdown
 
 NOTION_CONTENT_WRITE_TIMEOUT_SECONDS = 300
 
-STATIC_REPOSITORY_ROOT = Path("/Users/adam/Dropbox/GitRepos/Agents/ATABlogger")
+# Overridable per machine since this repo is Dropbox-synced but the
+# ATABlogger checkout it points at may live at a different path on another
+# host (e.g. a server without Dropbox). Defaults to Adam's Mac layout.
+STATIC_REPOSITORY_ROOT = Path(
+    os.environ.get(
+        "ATA_BLOG_STATIC_REPOSITORY_ROOT",
+        "/Users/adam/Dropbox/GitRepos/Agents/ATABlogger",
+    )
+)
 STATIC_SITE_ROOT = STATIC_REPOSITORY_ROOT / "static-site"
 STATIC_RELEASE_MANIFEST = STATIC_SITE_ROOT / "dist" / "release-manifest.json"
 # The static site's own record of every image and the resized variants its
