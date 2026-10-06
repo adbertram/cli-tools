@@ -1,8 +1,8 @@
 {
   "tool": "tiktok",
   "description": "TikTok transcript downloader using yt-dlp",
-  "discovered_at": "2026-10-04T19:26:14Z",
-  "total_commands": 30,
+  "discovered_at": "2026-10-06T22:00:21Z",
+  "total_commands": 31,
   "global_options": [
     {
       "name": "--version",
@@ -25,6 +25,53 @@
         }
       ],
       "commands": {
+        "check": {
+          "help": "Report each recent post's For You eligibility, restriction reason, and appeal state. Read-only. Unreadable values stay null. TikTok web has no Account check page, so account standing is always null; per-post penalties are real.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--username",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact session owner handle",
+              "short": "-u"
+            },
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Fail unless the current numeric account ID matches exactly"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Most recent posts to check",
+              "short": "-l",
+              "default": "20"
+            },
+            {
+              "name": "--video-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Also check this post ID, even if Studio no longer lists it (repeatable)"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display posts as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "get": {
           "help": "Get the authenticated account ID and username from TikTok's account endpoint. Numeric account IDs remain strings to preserve 64-bit precision. Optional expected-identity guards fail before returning data if the session differs.",
           "arguments": [],

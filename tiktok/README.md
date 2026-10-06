@@ -79,6 +79,46 @@ reports `studio_lookup_inconclusive` instead of asserting absence. The live
 account currently has one post; multiple-page behavior is covered by fixtures.
 These reads do not establish whether an attempted upload created a new post.
 
+## Account check (post restrictions)
+
+`account check` reports, for each recent post, whether TikTok restricted it,
+the stated reason, and the appeal state. It is read-only: it never appeals,
+answers the feedback prompt, or changes anything.
+
+```bash
+tiktok account check --profile clipper --username ata_clipper --expected-account-id 7692213003349443597
+tiktok account check --profile clipper --username ata_clipper --expected-account-id 7692213003349443597 --limit 5 --table
+# Also check uploads Studio accepted that may no longer exist
+tiktok account check --profile clipper --username ata_clipper --expected-account-id 7692213003349443597 --video-id 7693639883012705549
+```
+
+| Option | Description |
+|--------|-------------|
+| `--username`, `-u` | Exact session owner handle (required) |
+| `--expected-account-id` | Fail unless the session's numeric account ID matches |
+| `--limit`, `-l` | Most recent posts to check (default 20, max 1000) |
+| `--video-id` | Extra post ID to check, repeatable (max 100) |
+| `--table`, `-t` | Show posts as a table |
+
+Posts come from the Studio content feed; each one's penalty comes from
+`GET /mod/v1/getPenaltyDetails/?vid=<id>`, the call Studio's own post analytics
+page makes. Per post: `id`, `url`, `caption`, `posted_at`, `status`,
+`visibility`, `in_review`, `in_studio_feed`, `eligibility` (`restricted`,
+`no_penalty`, or `null`), `reasons` (`code` and TikTok's `title`),
+`appeal_status` (`can_submit`, `cannot_submit`, `no_penalty`, `reviewing`,
+`succeeded`, `failed`, `timeout`), `penalty_type` (`NR`: not eligible for the
+For You feed and restricted in search; `NFF`: not eligible for the For You
+feed), `penalized_at`, `penalty_issuer`, and `penalty_error`.
+
+Anything TikTok did not return stays `null`. A penalty read that fails (TikTok
+answers `status_code 4` for posts that no longer exist) leaves `eligibility`
+`null` with the reason in `penalty_error`. A `--video-id` absent from the
+complete feed has `in_studio_feed: false`; if the scan stopped early it is
+`null`. `account.standing` is always `null`: TikTok's website has no Account
+check page, so account-level standing is only visible in the phone app. Reason
+code 10 ("Reproduced account") is the one account-level penalty that shows up
+here, on the posts it affects.
+
 ## Studio publishing
 
 Studio publishing uses an explicit named browser profile and a version 1 JSON

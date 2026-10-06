@@ -449,7 +449,8 @@ class TikTokWebClient:
         from .studio import retry_after_seconds
         return retry_after_seconds(raw)
 
-    def _fetch_json(self, page, path: str, *, method: str = "GET", csrf: bool = False) -> dict:
+    def _fetch_json(self, page, path: str, *, method: str = "GET", csrf: bool = False,
+                    check_status: bool = True) -> dict:
         """Run one in-page request with retry and return its JSON payload."""
         policy = self._retry_policy
         last_exception: Optional[Exception] = None
@@ -502,7 +503,7 @@ class TikTokWebClient:
                     f"TikTok web request {path} returned a non-JSON body: {exc}"
                 ) from exc
             status_code = payload.get("statusCode", payload.get("status_code"))
-            if status_code not in (0, None):
+            if check_status and status_code not in (0, None):
                 raise ClientError(
                     f"TikTok web request {path} returned status code {status_code}: "
                     f"{payload.get('statusMsg') or payload.get('status_msg')}"
@@ -611,6 +612,55 @@ class TikTokWebClient:
                               retry_after_seconds=error.retry_after_seconds) from None
         with self._studio_session(username, expected_account_id) as reader:
             return batch_read(reader, request)
+
+    def check_account(self, username: str, *, limit: int = 20, expected_account_id: Optional[str] = None,
+                      video_ids: Optional[List[str]] = None) -> Dict:
+        """Read each recent own post's moderation penalty; read-only.
+
+        ``video_ids`` are also looked up: one missing from the complete Studio
+        feed is reported with ``in_studio_feed: false``, never guessed deleted.
+        """
+        from .account_check import PENALTY_PATH, normalize_penalty
+        from .studio import MAX_STUDIO_ITEMS, MAX_STUDIO_PAGES
+        if type(limit) is not int or not 1 <= limit <= MAX_STUDIO_ITEMS:
+            raise ClientError(f"--limit must be between 1 and {MAX_STUDIO_ITEMS}.")
+        wanted = list(dict.fromkeys(video_ids or []))
+        if len(wanted) > 100 or any(not re.fullmatch(r"[1-9][0-9]{0,63}", value) for value in wanted):
+            raise ClientError("--video-id takes up to 100 positive numeric IDs.")
+        with self._studio_session(username, expected_account_id) as reader:
+            found, cursor, complete = {}, 0, False
+            for _ in range(MAX_STUDIO_PAGES):
+                items, more, cursor = reader.read_page(cursor)
+                found.update((item["id"], item) for item in items)
+                if not more:
+                    complete = True
+                    break
+                if len(found) >= limit and all(value in found for value in wanted):
+                    break
+            recent = list(found)[:limit]
+            posts = []
+            for video_id in recent + [value for value in wanted if value not in recent]:
+                item = found.get(video_id)
+                post = {"id": video_id, "in_studio_feed": True if item else False if complete else None}
+                for field in ("url", "caption", "posted_at", "status", "visibility", "in_review"):
+                    post[field] = item[field] if item else None
+                post.update(normalize_penalty(self._fetch_json(
+                    reader.page, f"{PENALTY_PATH}?aid=1988&vid={video_id}", check_status=False)))
+                posts.append(post)
+            identity = reader.identity
+        return {
+            "account": {**{field: identity[field] for field in ("account_id", "username", "profile")},
+                        "standing": None,
+                        "standing_note": "TikTok web exposes no Account check; only per-post penalties are readable."},
+            "observed_at": datetime.now(timezone.utc).isoformat(),
+            "feed_complete": complete,
+            "summary": {"posts": len(posts),
+                        **{state: sum(post["eligibility"] == state for post in posts) for state in ("restricted", "no_penalty")},
+                        "unknown": sum(post["eligibility"] is None for post in posts),
+                        "missing_from_feed": sum(post["in_studio_feed"] is False for post in posts)},
+            "posts": posts,
+            "provenance": "https://www.tiktok.com" + PENALTY_PATH,
+        }
 
     def list_studio_videos(self, username: str, limit: int = 100, expected_account_id: Optional[str] = None) -> List[Dict]:
         return self._studio_read(username, limit=limit, expected_account_id=expected_account_id)
