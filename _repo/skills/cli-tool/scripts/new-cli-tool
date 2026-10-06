@@ -252,9 +252,62 @@ def validate_template_dir(template_dir: Path) -> None:
         raise FileNotFoundError(f"Template {template_dir.name} is missing required file(s): {names}")
 
 
+def refuses_worktree_install() -> bool:
+    """Return True if CLI_TOOLS_DIR is a linked git worktree and the
+    refusal has not been bypassed.
+
+    `uv tool install` writes into a single global registry shared by every
+    checkout (~/.local/share/uv/tools/<pkg>), so installing from a linked
+    worktree overlays cli-tools-shared from that worktree's copy into the
+    global registry -- once the worktree is removed, every CLI installed
+    from here keeps resolving to the now-missing path. This is the same
+    defect that broke the production bricklink and garrul CLIs, guarded the
+    same way in install-cli-tool.sh.
+
+    CLI_TOOLS_ALLOW_WORKTREE_INSTALL=1 bypasses this, for tests/CI that
+    redirect HOME to a throwaway fixture so there is no real global registry
+    to corrupt.
+    """
+    if os.environ.get("CLI_TOOLS_ALLOW_WORKTREE_INSTALL") == "1":
+        return False
+    try:
+        git_dir_raw = subprocess.run(
+            ["git", "-C", str(CLI_TOOLS_DIR), "rev-parse", "--git-dir"],
+            capture_output=True, text=True,
+        ).stdout.strip()
+        git_common_dir_raw = subprocess.run(
+            ["git", "-C", str(CLI_TOOLS_DIR), "rev-parse", "--git-common-dir"],
+            capture_output=True, text=True,
+        ).stdout.strip()
+    except OSError:
+        return False
+    if not git_dir_raw or not git_common_dir_raw:
+        return False
+    git_dir = Path(git_dir_raw)
+    if not git_dir.is_absolute():
+        git_dir = CLI_TOOLS_DIR / git_dir
+    git_common_dir = Path(git_common_dir_raw)
+    if not git_common_dir.is_absolute():
+        git_common_dir = CLI_TOOLS_DIR / git_common_dir
+    if not git_dir.is_dir() or not git_common_dir.is_dir():
+        return False
+    return git_dir.resolve() != git_common_dir.resolve()
+
+
 def install_with_uv(tool_dir: Path, tool_name: str, tool_type: str):
     """Install the package using uv tool install."""
     print_step("Installing via uv tool install...")
+
+    if refuses_worktree_install():
+        print_error(
+            f"new-cli-tool refuses to run 'uv tool install' from a linked git worktree "
+            f"({CLI_TOOLS_DIR}). uv tool install writes into a single global registry "
+            "shared by every checkout, so this run would overlay cli-tools-shared from "
+            "this worktree's copy -- once the worktree is removed, that dependency "
+            "silently breaks for every CLI installed from here. Run this from the "
+            "canonical cli-tools checkout instead, or pass --no-install to scaffold only."
+        )
+        return False
 
     # Always pin the interpreter. Without --python, uv's default
     # python-preference = "managed" installs the CLI against a uv-managed
