@@ -188,7 +188,7 @@ CAPTION_READY_JS = r"""(selector)=>{const e=document.querySelector(selector),s=w
  if(!e||!e.contains(document.activeElement)||!s||!s.isCollapsed||!e.contains(s.anchorNode)||!e.contains(s.focusNode))return false;
  const r=document.createRange();r.selectNodeContents(e);r.setStart(s.focusNode,s.focusOffset);return r.toString()===''}"""
 CAPTION_OPTIONS_JS = r"""(kind)=>[...document.querySelectorAll(kind==='mention'?'[role=option].mention-suggestion-item':'[role=option].hashtag-suggestion-item')]
- .filter(x=>x.getClientRects().length).map(x=>({id:x.id,name:kind==='mention'?x.querySelector('.user-id')?.innerText.split(' · ')[0]:x.querySelector('.hash-tag-topic')?.innerText}))"""
+ .filter(x=>x.getClientRects().length).map(x=>({id:x.id,label:x.innerText,name:kind==='mention'?x.querySelector('.user-id')?.innerText.split(' · ')[0]:x.querySelector('.hash-tag-topic')?.innerText}))"""
 CAPTION_SELECTION_JS = "(opts)=>{const native=()=> (" + EDITOR_STATE_JS + ")();" + r"""
  const name=el=>opts.kind==='mention'?el.querySelector('.user-id')?.innerText.split(' · ')[0]:el.querySelector('.hash-tag-topic')?.innerText;
  const equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
@@ -754,9 +754,13 @@ class StudioPublisher:
                     options = page.evaluate(CAPTION_OPTIONS_JS, kind)
                     if not isinstance(options, list):raise StudioPublishError('Studio caption suggestions changed schema.')
                     matches = [x for x in options if isinstance(x, dict) and x.get('name') == (text[1:] if kind == 'mention' else text)]
-                    if len(matches) > 1:raise StudioPublishError('Studio exact caption suggestion is ambiguous.')
+                    # Studio lists one hashtag twice when the query has capitals
+                    # (observed: both rows carry the same challenge and text). A
+                    # hashtag entity is its name alone, so identical rows are one.
+                    if len(matches) > 1 and (kind == 'mention' or not isinstance(matches[0].get('label'), str) or any(x.get('label') != matches[0]['label'] for x in matches)):
+                        raise StudioPublishError('Studio exact caption suggestion is ambiguous.')
                     return matches[0] if matches else None
-                option = self._wait(page, exact_option, 'Studio exact caption suggestion is unavailable.', seconds=10)
+                option = self._wait(page, exact_option, f'Studio exact caption suggestion is unavailable. Studio offered no native {kind} named {text}.', seconds=10)
                 if not isinstance(option.get('id'), str) or not re.fullmatch(r'mention-option-[A-Za-z0-9_-]+', option['id']):
                     raise StudioPublishError('Studio caption suggestion target is unverified.')
                 self._select_caption_option(page, saved, option, kind, text, caption[:token.end()])

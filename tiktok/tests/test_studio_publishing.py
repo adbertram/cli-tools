@@ -805,6 +805,64 @@ def test_failed_exact_selection_restores_text_and_marks_semantics_unverified(pub
     assert page.text == 'Original text' and publisher._caption_semantic_rollback_unverified is True
 
 
+# Rows captured live 2026-10-06: typing #CHLOEexplains lists the one challenge twice.
+CHLOE_ROWS = [{'id': 'mention-option-af15k-0', 'label': '#CHLOEexplains\n400 posts', 'name': '#CHLOEexplains'},
+              {'id': 'mention-option-af15k-1', 'label': '#CHLOEexplains\n400 posts', 'name': '#CHLOEexplains'},
+              {'id': 'mention-option-af15k-2', 'label': '#monkeexplains\n141 posts', 'name': '#monkeexplains'}]
+LYRICAL_ROWS = [{'id': 'mention-option-2icrq-0', 'label': 'Lyrical Lemonade\nlyricalemonade · 2.0M follower', 'name': 'lyricalemonade'},
+                {'id': 'mention-option-2icrq-3', 'label': '_lyricallemonade_\n_lyricallemonade_1 · 2.6K follower', 'name': '_lyricallemonade_1'}]
+
+
+def caption_page(options):
+    class CaptionPage:
+        text = ''
+        def evaluate(self, script, argument=None):
+            if script == module.CAPTION_TEXT_JS:return self.text
+            if script == module.CAPTION_READY_JS:return True
+            if script == module.CAPTION_OPTIONS_JS:return options
+            raise AssertionError(script)
+        def fill_framework_input(self, selector, text):self.text = text
+        def type_text(self, text):self.text += text
+        def get_by_role(self, role, name, exact):return SimpleNamespace(count=lambda: 1, click=lambda: self.type_text('@' if name == 'Mention' else '#'))
+    return CaptionPage()
+
+
+def once(page, predicate, message, seconds=60):
+    result = predicate()
+    if not result:raise StudioPublishError(message)
+    return result
+
+
+def test_identical_duplicate_hashtag_rows_select_the_first_native_row(publisher, monkeypatch):
+    chosen = []
+    def select(page, saved, option, kind, text, prefix):
+        chosen.append((option['id'], kind, text, prefix))
+        raise StudioPublishError('stop after selection')
+    monkeypatch.setattr(publisher, '_wait', once)
+    monkeypatch.setattr(publisher, '_select_caption_option', select)
+    with pytest.raises(StudioPublishError, match='stop after selection'):
+        publisher._set_caption(caption_page(CHLOE_ROWS), policy() | {'caption': '#CHLOEexplains test'})
+    assert chosen == [('mention-option-af15k-0', 'hashtag', '#CHLOEexplains', '#CHLOEexplains')]
+
+
+@pytest.mark.parametrize('caption,options', [
+    ('#CHLOEexplains', [CHLOE_ROWS[0], CHLOE_ROWS[1] | {'label': '#CHLOEexplains\n7 posts'}]),
+    ('#CHLOEexplains', [{k: v for k, v in row.items() if k != 'label'} for row in CHLOE_ROWS[:2]]),
+    ('@hardscope', [{'id': 'mention-option-a-0', 'label': 'same', 'name': 'hardscope'}, {'id': 'mention-option-a-1', 'label': 'same', 'name': 'hardscope'}])])
+def test_distinguishable_or_mention_duplicates_stay_ambiguous(publisher, monkeypatch, caption, options):
+    monkeypatch.setattr(publisher, '_wait', once)
+    monkeypatch.setattr(publisher, '_select_caption_option', lambda *args: pytest.fail('must never select an ambiguous row'))
+    with pytest.raises(StudioPublishError, match='suggestion is ambiguous'):
+        publisher._set_caption(caption_page(options), policy() | {'caption': caption})
+
+
+def test_near_miss_handle_is_refused_and_named(publisher, monkeypatch):
+    monkeypatch.setattr(publisher, '_wait', once)
+    monkeypatch.setattr(publisher, '_select_caption_option', lambda *args: pytest.fail('must never select a near-miss handle'))
+    with pytest.raises(StudioPublishError, match=r'suggestion is unavailable\. Studio offered no native mention named @lyricallemonade\.'):
+        publisher._set_caption(caption_page(LYRICAL_ROWS), policy() | {'caption': '@lyricallemonade #CHLOEexplains test'})
+
+
 def test_navigation_context_loss_still_persists_exact_native_acceptance(publisher, monkeypatch):
     value = prepared(publisher);page = attach(publisher, value, monkeypatch)
     page.click_error = True;page.network_after_click_error = True

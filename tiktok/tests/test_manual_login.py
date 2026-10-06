@@ -86,7 +86,7 @@ def test_manual_uses_plain_profile_chrome_and_cleans_up(monkeypatch, tmp_path, o
     monkeypatch.setattr(shared_auth.subprocess, "Popen", lambda args, **kwargs: launched.append(args) or process)
     closed = []
     monkeypatch.setattr(browser, "close", lambda: None)
-    monkeypatch.setattr(browser, "_quit_login_chrome", lambda proc, path: closed.append((proc, path)))
+    monkeypatch.setattr(browser, "_quit_login_chrome", lambda proc: closed.append(proc))
     monkeypatch.setattr(browser, "_prompt_enter_eof_safe", lambda **kwargs: outcome not in ("timeout",))
     if outcome == "cancel":
         def cancel(**kwargs):
@@ -107,5 +107,5 @@ def test_manual_uses_plain_profile_chrome_and_cleans_up(monkeypatch, tmp_path, o
         with pytest.raises(BrowserAutomationError):
             browser.authenticate()
     assert launched == [["/fake/chrome", f"--user-data-dir={config.get_persistent_profile_dir()}", "--no-first-run", "--no-default-browser-check", "https://www.tiktok.com/login"]]
-    assert closed == [(process, config.get_persistent_profile_dir())]
+    assert closed == [process]
     assert checked == ([True] if outcome in ("success", "unauthenticated") else [])
