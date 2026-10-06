@@ -82,7 +82,10 @@ when that property is empty. A `Slug` value the publisher would have to alter
 (not lowercase-hyphenated, or over 50 characters) is rejected in both modes.
 
 The featured image is `posts/<page-id>/featured_image.{webp,png,jpg,jpeg}`
-under the ATABlogger repository root, whatever the working directory;
+under the ATABlogger repository root, whatever the working directory. That
+root defaults to `/Users/adam/Dropbox/GitRepos/Agents/ATABlogger` and can be
+overridden per machine with the `ATA_BLOG_STATIC_REPOSITORY_ROOT` environment
+variable (e.g. on a host without Dropbox);
 `--featured-image PATH` overrides it for a preview or promotion. Because
 `posts/` is excluded from Dropbox sync, `--auto-schedule`/`--date` also
 mirrors the resolved image to R2 at
