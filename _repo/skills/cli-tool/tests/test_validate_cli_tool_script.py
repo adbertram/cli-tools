@@ -475,6 +475,11 @@ chmod +x "$HOME/.local/bin/ata-blog"
         "HOME": str(fake_home),
         "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
         "UV_ARGS_FILE": str(uv_args_file),
+        # This checkout may itself be a linked git worktree (e.g. an Issue
+        # Manager repair worktree). HOME above is already redirected to a
+        # throwaway fixture, so uv's "global" registry is sandboxed and the
+        # worktree-overlay risk the installer guards against does not apply.
+        "CLI_TOOLS_ALLOW_WORKTREE_INSTALL": "1",
     }
     result = subprocess.run(
         [str(script), "ata-blog"],
