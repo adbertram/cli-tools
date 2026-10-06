@@ -30,6 +30,32 @@ if [ ! -d "$TOOL_DIR" ] && [ -d "$CLI_TOOLS_DIR/_personal/$CLI_NAME" ]; then
 fi
 LOCAL_SHARED_DIR="$CLI_TOOLS_DIR/_repo/cli-tools-shared"
 
+# ============================================================================
+# Warn when running from a linked git worktree
+# ============================================================================
+# `uv tool install` writes into a single global venv per CLI
+# (~/.local/share/uv/tools/<pkg>), shared by every checkout on the machine --
+# there is no per-worktree install. Installing from a linked worktree
+# therefore overlays cli-tools-shared (below) from that worktree's copy into
+# the *global* registry; once the worktree is removed, every CLI that
+# depends on cli-tools-shared keeps resolving to the now-missing path (see
+# workflows/update-cli.md's "Worktree validation" section, which already
+# says not to run this script's shared-registry install from a worktree).
+# A linked worktree's git-dir lives under the primary checkout's .git, so it
+# differs from --git-common-dir; a plain checkout reports the same path for
+# both.
+GIT_DIR_RAW="$(git -C "$CLI_TOOLS_DIR" rev-parse --git-dir 2>/dev/null)"
+GIT_COMMON_DIR_RAW="$(git -C "$CLI_TOOLS_DIR" rev-parse --git-common-dir 2>/dev/null)"
+if [ -n "$GIT_DIR_RAW" ] && [ -n "$GIT_COMMON_DIR_RAW" ]; then
+    [[ "$GIT_DIR_RAW" = /* ]] || GIT_DIR_RAW="$CLI_TOOLS_DIR/$GIT_DIR_RAW"
+    [[ "$GIT_COMMON_DIR_RAW" = /* ]] || GIT_COMMON_DIR_RAW="$CLI_TOOLS_DIR/$GIT_COMMON_DIR_RAW"
+    GIT_DIR_ABS="$(cd "$GIT_DIR_RAW" 2>/dev/null && pwd)"
+    GIT_COMMON_DIR_ABS="$(cd "$GIT_COMMON_DIR_RAW" 2>/dev/null && pwd)"
+    if [ -n "$GIT_DIR_ABS" ] && [ -n "$GIT_COMMON_DIR_ABS" ] && [ "$GIT_DIR_ABS" != "$GIT_COMMON_DIR_ABS" ]; then
+        echo "WARNING: install-cli-tool.sh is running from a linked git worktree ($CLI_TOOLS_DIR). uv tool install writes into a single global registry shared by every checkout, so this run will overlay cli-tools-shared from this worktree's copy at $LOCAL_SHARED_DIR -- once the worktree is removed, that dependency silently breaks for every CLI installed from here. Run this from the canonical cli-tools checkout instead." >&2
+    fi
+fi
+
 if [ ! -d "$TOOL_DIR" ]; then
     echo '{"error": "CLI tool directory not found: '"$TOOL_DIR"'"}' >&2
     exit 1
