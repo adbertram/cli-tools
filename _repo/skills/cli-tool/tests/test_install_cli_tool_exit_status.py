@@ -80,6 +80,12 @@ def _run_installer(tmp_path: Path, help_exit: int) -> subprocess.CompletedProces
         "FAKE_TOOL_DIR": str(REPO_ROOT / "cloudflare"),
         "FAKE_SHARED_DIR": str(SHARED_DIR),
         "FAKE_HELP_EXIT": str(help_exit),
+        # This checkout may itself be a linked git worktree (e.g. an
+        # Issue Manager repair worktree). That's irrelevant here: HOME above
+        # is redirected to a throwaway fixture, so uv's "global" registry is
+        # already sandboxed and the worktree-overlay risk the installer
+        # guards against does not apply to this run.
+        "CLI_TOOLS_ALLOW_WORKTREE_INSTALL": "1",
     }
     return subprocess.run(
         [str(INSTALLER), "cloudflare"],
