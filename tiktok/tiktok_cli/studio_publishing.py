@@ -104,7 +104,8 @@ HEARTBEAT_JS = r"""(owner) => {
  }
  return true
 }"""
-DELETE_ORPHAN_JS = "async (opts) => {(" + HEARTBEAT_JS + ")(opts.owner);" + r"""
+# Shared exact-binding removal: one locked or temporary row, or nothing.
+DELETE_BOUND_DRAFT_JS = r"""
  return await new Promise((resolve,reject)=>{
   const r=indexedDB.open('web_creation_draft');r.onerror=()=>reject(Error('DRAFT_READ_FAILED'));
   r.onsuccess=()=>{const db=r.result,store='local_draft_'+opts.owner;
@@ -124,6 +125,7 @@ DELETE_ORPHAN_JS = "async (opts) => {(" + HEARTBEAT_JS + ")(opts.owner);" + r"""
   }
  })
 }"""
+DELETE_ORPHAN_JS = "async (opts) => {(" + HEARTBEAT_JS + ")(opts.owner);" + DELETE_BOUND_DRAFT_JS
 
 CHECKBOX_JS = r"""(label) => {
  return [...document.querySelectorAll('input[type=checkbox]:not([role=switch])')].map(e=>{

@@ -1,8 +1,8 @@
 {
   "tool": "tiktok",
   "description": "TikTok transcript downloader using yt-dlp",
-  "discovered_at": "2026-10-06T22:00:21Z",
-  "total_commands": 31,
+  "discovered_at": "2026-10-06T22:54:33Z",
+  "total_commands": 32,
   "global_options": [
     {
       "name": "--version",
@@ -583,7 +583,7 @@
       }
     },
     "studio": {
-      "help": "Prepare, publish, and reconcile owned Studio drafts",
+      "help": "Prepare, check, publish, and reconcile owned Studio drafts",
       "arguments": [],
       "options": [
         {
@@ -594,6 +594,52 @@
         }
       ],
       "commands": {
+        "check": {
+          "help": "Read Studio's own pre-post verdict for a file; never posts. Uploads the file as a private draft, waits for Studio's automatic Content check lite and music copyright check, returns their verdicts, and removes that draft. Each run uses one of the account's daily checks. `verdict` is `pass`, `restricted`, or null when Studio gave none; see `status`.",
+          "arguments": [
+            {
+              "name": "file",
+              "type": "file",
+              "required": true,
+              "help": "Exact local MP4 to check before posting"
+            }
+          ],
+          "options": [
+            {
+              "name": "--username",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact session owner handle"
+            },
+            {
+              "name": "--account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact numeric session owner ID"
+            },
+            {
+              "name": "--timeout",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[30<=x<=900]  Seconds to wait for Studio's checks",
+              "default": "900"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display the verdict as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "inventory": {
           "help": "Read exact owned post IDs in one Studio scan; unresolved IDs stay unknown.",
           "arguments": [

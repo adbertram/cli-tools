@@ -119,6 +119,61 @@ check page, so account-level standing is only visible in the phone app. Reason
 code 10 ("Reproduced account") is the one account-level penalty that shows up
 here, on the posts it affects.
 
+## Pre-post check (Content check lite)
+
+`studio check` asks TikTok Studio what it thinks of a local MP4 before anything
+is posted. It uploads the file as a private draft, waits for the two checks
+Studio runs by itself after an upload, returns their verdicts, and removes that
+draft. It never clicks Post, never flips a check switch, and never starts a
+check itself.
+
+```bash
+tiktok studio check clip.mp4 --profile clipper --username ata_clipper --account-id 7692213003349443597
+tiktok studio check clip.mp4 --profile clipper --username ata_clipper --account-id 7692213003349443597 --timeout 300 --table
+```
+
+| Option | Description |
+|--------|-------------|
+| `--username` | Exact session owner handle (required) |
+| `--account-id` | Exact numeric session owner ID (required) |
+| `--timeout` | Seconds to wait for Studio's checks, 30 to 900 (default 900, Studio's own polling window) |
+| `--table`, `-t` | Show status, verdict, issues, music verdict, and seconds as a table |
+
+The result's `status` is `completed`, `not_finished` (no answer within
+`--timeout`), `check_failed`, `limit_reached` (TikTok's daily check limit),
+`unavailable`, `switch_off` (the account's automatic content check is off), or
+`not_offered` (Studio showed no content check). `verdict` is `pass` or
+`restricted` only when `status` is `completed`; otherwise it is `null`. Each
+entry in `issues` carries TikTok's `code`, `type`, `result_code`, `text`, and
+flagged `segments` in milliseconds. `content_check` holds the raw
+`check_status`, `results`, check and video IDs, and the message Studio showed
+(`ui_state`, `ui_text`). `music_copyright.verdict` is `no_issue`,
+`copyright_violated`, or `null` when that check did not finish. `timings`,
+`provenance`, and `draft` (`posted: false`, `removed: true`) complete it.
+Anything Studio did not return stays `null`.
+
+Studio's content check has one model, "unoriginal", with two results: pass or
+not recommended. A not-recommended result is shown by Studio as "Content may be
+restricted" with the reason "Unoriginal, low-quality, and QR code content", the
+same reason `account check` reports on a restricted post. A pass is not a
+guarantee: Studio's own message says the video can still be actioned later.
+
+Observed on @ata_clipper (2026-10-06): Studio creates the check with
+`POST /tiktok/v1/creator/content/check/create` (`{"video_id", "tasks": [0]}`),
+polls `GET /tiktok/v1/creator/content/check/` every 10 seconds, and reads music
+from `GET /tiktok/copyright/music/check/v1/`. The same clip passed five times in
+about 22 seconds each. Another clip's check never finished in three tries (one
+left running for 20 minutes), so `not_finished` is a real outcome. Only pass, checking, and a failed music
+check were captured live; the restricted shape follows Studio's own code.
+
+Every run uses one of the account's daily checks and leaves the uploaded video
+on TikTok's servers unposted. The run is journaled (`studio status <request_id>`
+shows `kind: content_check` and `draft_removed`). Removal closes the run's own
+editor with Studio's Discard, deletes only its exact temporary draft row (or
+confirms Studio already dropped it), and fails if any other draft changed. If the process is killed mid-check its draft
+stays behind: the next time Studio's upload page loads, Studio offers that draft
+to continue and drops any other unlocked draft, so do not kill a running check.
+
 ## Studio publishing
 
 Studio publishing uses an explicit named browser profile and a version 1 JSON

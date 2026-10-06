@@ -1,4 +1,4 @@
-"""Prepare and inspect journaled Studio operations; publish only with --yes."""
+"""Prepare, check, and inspect journaled Studio operations; publish only with --yes."""
 from pathlib import Path
 
 import typer
@@ -10,10 +10,10 @@ from ..studio_publishing import StudioPublisher, StudioPublishError, validate_po
 
 MAX_POLICY_BYTES = 64 * 1024  # Fixed schema plus a 4000-character escaped caption.
 
-app = typer.Typer(help="Prepare, publish, and reconcile owned Studio drafts", no_args_is_help=True)
+app = typer.Typer(help="Prepare, check, publish, and reconcile owned Studio drafts", no_args_is_help=True)
 COMMAND_CREDENTIALS = {"prepare": ["browser_session"], "publish": ["browser_session"],
                        "reconcile": ["browser_session"], "status": ["no_auth"],
-                       "inventory": ["browser_session"]}
+                       "inventory": ["browser_session"], "check": ["browser_session"]}
 
 
 def _print_operation(result, table):
@@ -53,6 +53,37 @@ def studio_prepare(
     finally:
         publisher.close()
     _print_operation(result, table)
+
+
+@app.command("check")
+@command
+def studio_check(
+    file: Path = typer.Argument(..., exists=True, dir_okay=False, help="Exact local MP4 to check before posting"),
+    username: str = typer.Option(..., "--username", help="Exact session owner handle"),
+    account_id: str = typer.Option(..., "--account-id", help="Exact numeric session owner ID"),
+    timeout: int = typer.Option(900, "--timeout", min=30, max=900, help="Seconds to wait for Studio's checks"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display the verdict as table"),
+):
+    """Read Studio's own pre-post verdict for a file; never posts.
+
+    Uploads the file as a private draft, waits for Studio's automatic Content
+    check lite and music copyright check, returns their verdicts, and removes
+    that draft. Each run uses one of the account's daily checks. `verdict` is
+    `pass`, `restricted`, or null when Studio gave none; see `status`.
+    """
+    from ..studio_check import check
+    publisher = StudioPublisher(get_config())
+    try:
+        result = check(publisher, file, username=username, account_id=account_id, timeout=timeout)
+    finally:
+        publisher.close()
+    if table:
+        row = {"status": result["status"], "verdict": result["verdict"],
+               "issues": "; ".join(issue["text"] or f"code {issue['code']}" for issue in result["issues"]),
+               "music": result["music_copyright"]["verdict"], "seconds": result["timings"]["content_check_seconds"]}
+        print_table([row], list(row), list(row))
+    else:
+        print_json(result)
 
 
 @app.command("publish")
