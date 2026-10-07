@@ -11,6 +11,10 @@ venv/
 .venv/
 *.egg-info/
 
+# progress-servicenow ships as preserved bytecode (original source was lost); track its restored modules.
+!_personal/progress-servicenow/progress_servicenow_cli/_bytecode_cache/*.pyc
+!_personal/progress-servicenow/progress_servicenow_cli/*/_bytecode_cache/*.pyc
+
 # OS
 .DS_Store
 

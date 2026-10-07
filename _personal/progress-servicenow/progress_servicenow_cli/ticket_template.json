@@ -1,0 +1,751 @@
+{
+  "catalog_items": {
+    "other_development_request": {
+      "name": "Other Development Request",
+      "description": "Requests for Other Development Resources",
+      "category": "Development Support",
+      "sys_id": "838c9810dbe5db0408f33a1b7c961930",
+      "url": "?id=sc_cat_item&sys_id=838c9810dbe5db0408f33a1b7c961930",
+      "required_fields": [
+        "product",
+        "description",
+        "req_impact"
+      ],
+      "fields": {
+        "product": {
+          "label": "Product",
+          "type": "dropdown",
+          "required": true,
+          "variable": "var_product",
+          "sn_type": "select_box",
+          "options": [
+            "-- None --",
+            "Chef",
+            "Corticon",
+            "DataDirect Connect",
+            "Fidler",
+            "File Transfer ",
+            "Flowmon",
+            "Kendo",
+            "LoadMaster",
+            "Nuclia",
+            "MarkLogic",
+            "OpenEdge",
+            "Podio",
+            "Semaphore",
+            "ShareFile",
+            "Sitefinity",
+            "SmartLogic",
+            "Telerik Controls",
+            "Telerik Testing Studio",
+            "WhatsUp Gold"
+          ]
+        },
+        "description": {
+          "label": "Description",
+          "type": "textarea",
+          "required": true,
+          "variable": "description__desc",
+          "sn_type": "html"
+        },
+        "req_impact": {
+          "label": "What's the impact of the problem on your productivity?",
+          "type": "dropdown",
+          "required": true,
+          "variable": "ReqImpact",
+          "sn_type": "select_box",
+          "options": [
+            "Low",
+            "Medium",
+            "High"
+          ]
+        }
+      }
+    },
+    "purchase_request": {
+      "name": "Purchase Request",
+      "description": "Begin process here for vendors, service providers, and all purchasing needs (except End User Equipment).",
+      "category": "Purchasing & Travel",
+      "sys_id": "6c9102ab1b3ec010fa01c91e1e4bcb1c",
+      "url": "?id=sc_cat_item&sys_id=6c9102ab1b3ec010fa01c91e1e4bcb1c",
+      "required_fields": [
+        "requested_for",
+        "vrm_please_define_the_business_need_please",
+        "how_long_do_you_expect_to_use_the_service_product",
+        "vrm_new_product_service_purchase",
+        "implement_this_system",
+        "does_the_solution_product_have_any_ai_features_embedded_in_it",
+        "do_you_plan_on_utilizing_the_ai_features",
+        "provide_askprogress_ticket_number",
+        "will_the_vendor_require_any_progress_system_access",
+        "vrm_vendor_name",
+        "vrm_estimated_total_cost",
+        "vrm_employees_pii",
+        "due_date",
+        "vrm_not_finalized_specify_remaining_terms",
+        "els_contracting_progress_entity",
+        "vrm_cost_center",
+        "vrm_product_division"
+      ],
+      "fields": {
+        "requested_for": {
+          "label": "Requested for",
+          "type": "reference",
+          "required": true,
+          "variable": "requested_for",
+          "sn_type": "reference"
+        },
+        "contract_number": {
+          "label": "Contract number",
+          "type": "dropdown",
+          "required": false,
+          "variable": "contract_number",
+          "sn_type": "select_box",
+          "options": [
+            "-- None --",
+            "Yes",
+            "No contract needed"
+          ]
+        },
+        "number": {
+          "label": "Number",
+          "type": "text",
+          "required": false,
+          "variable": "number",
+          "sn_type": "single_line_text"
+        },
+        "vrm_please_process_and_create_legal_sub_task": {
+          "label": "Create Legal Sub Task",
+          "type": "checkbox",
+          "required": false,
+          "variable": "var_vrm_please_process_and_create_legal_sub_task",
+          "sn_type": "check_box"
+        },
+        "vrm_create_information_security_sub_task": {
+          "label": "Create Information Security Sub Task",
+          "type": "checkbox",
+          "required": false,
+          "variable": "var_vrm_create_information_security_sub_task",
+          "sn_type": "check_box"
+        },
+        "vrm_request_legal_infosec_audit_approvals": {
+          "label": "Request Legal, Infosec, Audit Approvals",
+          "type": "checkbox",
+          "required": false,
+          "variable": "var_vrm_request_legal_infosec_audit_approvals",
+          "sn_type": "check_box"
+        },
+        "vrm_request_manager_approval": {
+          "label": "Request Manager approval",
+          "type": "checkbox",
+          "required": false,
+          "variable": "var_vrm_request_manager_approval",
+          "sn_type": "check_box"
+        },
+        "vrm_please_define_the_business_need_please": {
+          "label": "Description",
+          "type": "textarea",
+          "required": true,
+          "variable": "var_vrm_please_define_the_business_need_please__desc",
+          "sn_type": "multi_line_text"
+        },
+        "how_long_do_you_expect_to_use_the_service_product": {
+          "label": "How long do you expect to use the service/product?",
+          "type": "text",
+          "required": true,
+          "variable": "how_long_do_you_expect_to_use_the_service_product",
+          "sn_type": "single_line_text"
+        },
+        "vrm_new_product_service_purchase": {
+          "label": "New product/service purchase",
+          "type": "checkbox",
+          "required": true,
+          "variable": "var_vrm_new_product_service_purchase",
+          "sn_type": "check_box"
+        },
+        "vrm_renewal_of_an_existing_product_service": {
+          "label": "Renewal of an existing product/service",
+          "type": "checkbox",
+          "required": false,
+          "variable": "var_vrm_renewal_of_an_existing_product_service",
+          "sn_type": "check_box"
+        },
+        "vrm_one_time_purchase": {
+          "label": "One-time purchase",
+          "type": "checkbox",
+          "required": false,
+          "variable": "var_vrm_one_time_purchase",
+          "sn_type": "check_box"
+        },
+        "vrm_subscription": {
+          "label": "Subscription",
+          "type": "checkbox",
+          "required": false,
+          "variable": "var_vrm_subscription",
+          "sn_type": "check_box"
+        },
+        "vrm_we_have_done_business_with_this_vendor_before": {
+          "label": "We have done business with this vendor before",
+          "type": "checkbox",
+          "required": false,
+          "variable": "var_vrm_we_have_done_business_with_this_vendor_before",
+          "sn_type": "check_box"
+        },
+        "vrm_contractor_services": {
+          "label": "Contractor Services",
+          "type": "checkbox",
+          "required": false,
+          "variable": "var_vrm_contractor_services",
+          "sn_type": "check_box"
+        },
+        "implement_this_system": {
+          "label": "Implement a system",
+          "type": "checkbox",
+          "required": true,
+          "variable": "implement_this_system",
+          "sn_type": "check_box"
+        },
+        "integrate_this_system_with_a_progress_tool_system": {
+          "label": "Integrate a system with an existing Progress' system",
+          "type": "checkbox",
+          "required": false,
+          "variable": "integrate_this_system_with_a_progress_tool_system",
+          "sn_type": "check_box"
+        },
+        "support_this_system_internally_in_any_way_e_g_manage_a_corporate_account_provision_licenses_etc": {
+          "label": "Support a system internally (e.g., manage a corporate account, provision licenses, etc.)",
+          "type": "checkbox",
+          "required": false,
+          "variable": "support_this_system_internally_in_any_way_e_g_manage_a_corporate_account_provision_licenses_etc",
+          "sn_type": "check_box"
+        },
+        "embed_this_system_in_a_progress_product": {
+          "label": "Incorporate/bundle a system in/with Progress’ products and hosted services",
+          "type": "checkbox",
+          "required": false,
+          "variable": "embed_this_system_in_a_progress_product",
+          "sn_type": "check_box"
+        },
+        "none_of_the_above": {
+          "label": "None of the above",
+          "type": "checkbox",
+          "required": false,
+          "variable": "none_of_the_above",
+          "sn_type": "check_box"
+        },
+        "vrm_please_provide_more_information_about_the_product": {
+          "label": "Please provide more information about the Application/system/product/subscription",
+          "type": "textarea",
+          "required": false,
+          "variable": "var_vrm_please_provide_more_information_about_the_product",
+          "sn_type": "multi_line_text"
+        },
+        "does_the_solution_product_have_any_ai_features_embedded_in_it": {
+          "label": "Does the solution/product have any AI features embedded in it?",
+          "type": "dropdown",
+          "required": true,
+          "variable": "does_the_solution_product_have_any_ai_features_embedded_in_it",
+          "sn_type": "yes_no",
+          "options": [
+            "-- None --",
+            "Yes",
+            "No"
+          ]
+        },
+        "do_you_plan_on_utilizing_the_ai_features": {
+          "label": "Do you plan on utilizing the AI features?",
+          "type": "dropdown",
+          "required": true,
+          "variable": "do_you_plan_on_utilizing_the_ai_features",
+          "sn_type": "yes_no",
+          "options": [
+            "-- None --",
+            "Yes",
+            "No"
+          ]
+        },
+        "provide_askprogress_ticket_number": {
+          "label": "ASKprogress ticket number",
+          "type": "text",
+          "required": true,
+          "variable": "provide_askprogress_ticket_number",
+          "sn_type": "single_line_text"
+        },
+        "will_the_vendor_require_any_progress_system_access": {
+          "label": "Will the vendor require any Progress system access?",
+          "type": "dropdown",
+          "required": true,
+          "variable": "will_the_vendor_require_any_progress_system_access",
+          "sn_type": "yes_no",
+          "options": [
+            "-- None --",
+            "Yes",
+            "No"
+          ]
+        },
+        "please_describe_the_needed_access_and_why": {
+          "label": "Please describe the needed access and why",
+          "type": "text",
+          "required": false,
+          "variable": "please_describe_the_needed_access_and_why",
+          "sn_type": "single_line_text"
+        },
+        "vrm_vendor_name": {
+          "label": "Vendor name",
+          "type": "text",
+          "required": true,
+          "variable": "var_vrm_vendor_name",
+          "sn_type": "single_line_text"
+        },
+        "vrm_vendor_email_address": {
+          "label": "Vendor e-mail address",
+          "type": "text",
+          "required": false,
+          "variable": "var_vrm_vendor_email_address",
+          "sn_type": "single_line_text"
+        },
+        "vrm_vendor_contact_names": {
+          "label": "Vendor contact names",
+          "type": "text",
+          "required": false,
+          "variable": "var_vrm_vendor_contact_names",
+          "sn_type": "single_line_text"
+        },
+        "vrm_country_of_vendor": {
+          "label": "Country of the vendor",
+          "type": "text",
+          "required": false,
+          "variable": "var_vrm_country_of_vendor",
+          "sn_type": "single_line_text"
+        },
+        "vrm_vendors_website": {
+          "label": "Please provide a link to the vendor’s website.  This helps us learn about the vendor’s business and goods/services",
+          "type": "text",
+          "required": false,
+          "variable": "var_vrm_vendors_website",
+          "sn_type": "single_line_text"
+        },
+        "vrm_estimated_total_cost": {
+          "label": "What is the total value of the product/service (in USD)?",
+          "type": "text",
+          "required": true,
+          "variable": "var_vrm_estimated_total_cost",
+          "sn_type": "single_line_text"
+        },
+        "vrm_none": {
+          "label": "None",
+          "type": "checkbox",
+          "required": false,
+          "variable": "var_vrm_none",
+          "sn_type": "check_box"
+        },
+        "vrm_employees_pii": {
+          "label": "Progress' Employee(s) or Customer(s) PII (names, e-mail addresses, etc.)",
+          "type": "checkbox",
+          "required": true,
+          "variable": "var_vrm_employees_pii",
+          "sn_type": "check_box"
+        },
+        "vrm_vendor_pii": {
+          "label": "Vendor is providing Progress with PII (e.g. lead data, attendee lists)",
+          "type": "checkbox",
+          "required": false,
+          "variable": "var_vrm_vendor_pii",
+          "sn_type": "check_box"
+        },
+        "vrm_progress_or_progress_customers_ci": {
+          "label": "Progress' or Progress Customers' Confidential Information",
+          "type": "checkbox",
+          "required": false,
+          "variable": "var_vrm_progress_or_progress_customers_ci",
+          "sn_type": "check_box"
+        },
+        "vrm_vendor_s_ci": {
+          "label": "Vendor's Confidential Information",
+          "type": "checkbox",
+          "required": false,
+          "variable": "var_vrm_vendor_s_ci",
+          "sn_type": "check_box"
+        },
+        "vrm_other_pii_or_ci": {
+          "label": "Other",
+          "type": "checkbox",
+          "required": false,
+          "variable": "var_vrm_other_pii_or_ci",
+          "sn_type": "check_box"
+        },
+        "vrm_please_provide_any_information": {
+          "label": "Please provide any information available",
+          "type": "textarea",
+          "required": false,
+          "variable": "var_vrm_please_provide_any_information_",
+          "sn_type": "multi_line_text"
+        },
+        "vrm_please_provide_details": {
+          "label": "Please provide more information",
+          "type": "textarea",
+          "required": false,
+          "variable": "var_vrm_please_provide_details",
+          "sn_type": "multi_line_text"
+        },
+        "due_date": {
+          "label": "Target date for finalization of purchase",
+          "type": "text",
+          "required": true,
+          "variable": "due_date",
+          "sn_type": "date"
+        },
+        "justification": {
+          "label": "Justification",
+          "type": "textarea",
+          "required": false,
+          "variable": "justification",
+          "sn_type": "multi_line_text"
+        },
+        "vrm_not_finalized_specify_remaining_terms": {
+          "label": "If not all business terms are finalized or accurate, please specify any remaining or inaccurate terms and explain what needs to be added or corrected",
+          "type": "textarea",
+          "required": true,
+          "variable": "var_vrm_not_finalized_specify_remaining_terms",
+          "sn_type": "multi_line_text"
+        },
+        "els_contracting_progress_entity": {
+          "label": "Paying Progress Entity",
+          "type": "dropdown",
+          "required": true,
+          "variable": "var_els_contracting_progress_entity",
+          "sn_type": "select_box",
+          "options": [
+            "-- None --",
+            "Australia - Progress Software Pty. Ltd. (300)",
+            "Belgium - Progress Software NV (202)",
+            "Brazil - Progress Software do Brasil Ltda (111)",
+            "Bulgaria - Progress Software EAD (234)",
+            "Canada - Progress Software Corporation of Canada, Ltd. (101)",
+            "Costa Rica - Progress Software de Costa Rica SRL (116)",
+            "Czechia - Flowmon Networks a.s. (250)",
+            "Denmark - Progress Software A/S (205)",
+            "Finland - Progress Software Oy (206)",
+            "France - Progress Software S.A.S. (207)",
+            "Germany - Progress Software GmbH (208)",
+            "Hong Kong - Progress Software Corp Ltd (301)",
+            "India Bangalore - Progress Software Development Private Limited (404)",
+            "India Hyderabad - Progress Software Dev Pvt Ltd (400)",
+            "Ireland - Progress Software Technologies Limited (249)",
+            "Italy - Progress Software Italy Srl (209)",
+            "Japan - Ipswitch Japan KK (306)",
+            "Netherlands - Progress Software BV (201)",
+            "Netherlands - Progress Software Europe B.V. (200)",
+            "Norway - Progress Software A/S (210)",
+            "Poland - Progress Software Sp. z.o.o. (211)",
+            "Singapore - Progress Software Corp. (S) Pte Ltd (303)",
+            "Spain - Progress Software S.L.U. (212)",
+            "Sweden - Progress Software Svenska AB (213)",
+            "Switzerland - Progress Software AG (214)",
+            "United Kingdom - MarkLogic (UK) Limited (217)",
+            "United Kingdom - Progress Software Limited (215)",
+            "USA - MarkLogic Corporation (123)",
+            "USA - Progress Software Corporation (100)",
+            "USA - Progress Software Global Corporation (108)",
+            "Other"
+          ]
+        },
+        "vrm_cost_center": {
+          "label": "Cost Center",
+          "type": "reference",
+          "required": true,
+          "variable": "var_vrm_cost_center",
+          "sn_type": "reference"
+        },
+        "vrm_product_division": {
+          "label": "Product Division",
+          "type": "reference",
+          "required": true,
+          "variable": "var_vrm_product_division",
+          "sn_type": "reference"
+        },
+        "vrm_additional_comments_requirements_special_instructions": {
+          "label": "Additional comments / Requirements / Special Instructions",
+          "type": "textarea",
+          "required": false,
+          "variable": "var_vrm_additional_comments_requirements_special_instructions",
+          "sn_type": "multi_line_text"
+        }
+      }
+    },
+    "development_database_request": {
+      "name": "Development Database Request",
+      "description": "Request a new development database or client installation or reconfiguration.",
+      "category": "Development Support",
+      "sys_id": "ef0477c4db65db0408f33a1b7c96196d",
+      "url": "?id=sc_cat_item&sys_id=ef0477c4db65db0408f33a1b7c96196d",
+      "required_fields": [
+        "description",
+        "req_desired_database_location",
+        "req_impact"
+      ],
+      "fields": {
+        "description": {
+          "label": "Description",
+          "type": "textarea",
+          "required": true,
+          "variable": "description__desc",
+          "sn_type": "html"
+        },
+        "req_desired_database_location": {
+          "label": "Desired Database Location",
+          "type": "dropdown",
+          "required": true,
+          "variable": "ReqDesiredDatabaseLocation",
+          "sn_type": "select_box",
+          "options": [
+            "-- None --",
+            "Bedford",
+            "Brno",
+            "Hyderabad",
+            "Limerick",
+            "London",
+            "Melville",
+            "Morrisville",
+            "Santa Clara ",
+            "Other"
+          ]
+        },
+        "req_impact": {
+          "label": "What's the impact of the problem on your productivity?",
+          "type": "dropdown",
+          "required": true,
+          "variable": "ReqImpact",
+          "sn_type": "select_box",
+          "options": [
+            "Low",
+            "Medium",
+            "High"
+          ]
+        }
+      }
+    },
+    "application_assistance_issue_reporting": {
+      "name": "Application Assistance & Issue Reporting",
+      "description": "The business application displays an error message or does not perform as expected",
+      "category": "Business Applications",
+      "sys_id": "23124200dbf9c34055a35878dc961967",
+      "url": "?id=sc_cat_item&sys_id=23124200dbf9c34055a35878dc961967",
+      "required_fields": [
+        "permission_level",
+        "description"
+      ],
+      "fields": {
+        "impact": {
+          "label": "What's the business impact?",
+          "type": "dropdown",
+          "required": false,
+          "variable": "impact",
+          "sn_type": "select_box",
+          "options": [
+            "1 - High",
+            "2 - Medium",
+            "3 - Low"
+          ]
+        },
+        "cmdb_ci": {
+          "label": "Please select the application from the list",
+          "type": "reference",
+          "required": false,
+          "variable": "cmdb_ci",
+          "sn_type": "reference"
+        },
+        "unknow_application": {
+          "label": "Please specify the application",
+          "type": "text",
+          "required": false,
+          "variable": "unknow_application",
+          "sn_type": "single_line_text"
+        },
+        "check_unknow_application": {
+          "label": "Unable to find the application in the list above",
+          "type": "checkbox",
+          "required": false,
+          "variable": "check_unknow_application",
+          "sn_type": "check_box"
+        },
+        "instance": {
+          "label": "Instance",
+          "type": "dropdown",
+          "required": false,
+          "variable": "var_instance",
+          "sn_type": "lookup_select_box",
+          "options": [
+            "-- None --"
+          ]
+        },
+        "permission_level": {
+          "label": "Permission level",
+          "type": "dropdown",
+          "required": true,
+          "variable": "permission_level",
+          "sn_type": "select_box",
+          "options": [
+            "-- None --",
+            "Read-only user",
+            "Administrator",
+            "Power user"
+          ]
+        },
+        "additional_requirement": {
+          "label": "Additional Requirement",
+          "type": "dropdown",
+          "required": false,
+          "variable": "additional_requirement",
+          "sn_type": "lookup_select_box",
+          "options": [
+            "-- None --"
+          ]
+        },
+        "organization": {
+          "label": "Organization",
+          "type": "dropdown",
+          "required": false,
+          "variable": "organization",
+          "sn_type": "lookup_select_box",
+          "options": [
+            "-- None --"
+          ]
+        },
+        "environment": {
+          "label": "Environment",
+          "type": "dropdown",
+          "required": false,
+          "variable": "environment",
+          "sn_type": "select_box",
+          "options": [
+            "-- None --",
+            "Artifactory",
+            "Chef Billing",
+            "Chef CD",
+            "Chef CDS POC",
+            "Chef Central",
+            "Chef Community",
+            "Chef Engineering",
+            "Chef ES",
+            "Chef External",
+            "Chef Operations",
+            "Chef Secure",
+            "Chef Support",
+            "Chef Training",
+            "Chef Utility",
+            "CIA",
+            "Data Analytics",
+            "Habitat",
+            "Learn Chef",
+            "Marketplace",
+            "Omnibus Packages",
+            "Partner Engineering",
+            "Private CD",
+            "Public CD",
+            "SA-GovCloud",
+            "Solutions Architects (SA)",
+            "Success Engineering",
+            "Supermarket",
+            "Telemetry"
+          ]
+        },
+        "category_for_sales": {
+          "label": "Please select the category on which this request needs to be applied",
+          "type": "dropdown",
+          "required": false,
+          "variable": "category_for_sales",
+          "sn_type": "select_box",
+          "options": [
+            "-- None --",
+            "Account/Contact/Opp Updates",
+            "Approver Assignments",
+            "Contact/User Changes",
+            "Data Quality",
+            "Enhancement",
+            "Lead Management",
+            "Lead Management - Support",
+            "Account Merges (Duplicate Accounts)",
+            "Create New Account",
+            "Other",
+            "Problem",
+            "Question",
+            "Quote/Order",
+            "Renewals",
+            "Reporting",
+            "Sales Intelligence Tools",
+            "Trials/Assets"
+          ]
+        },
+        "please_select_the_category": {
+          "label": "Please select the category for service cloud",
+          "type": "dropdown",
+          "required": false,
+          "variable": "please_select_the_category",
+          "sn_type": "select_box",
+          "options": [
+            "-- None --",
+            "Community",
+            "Coveo",
+            "Data Management",
+            "Defect Management",
+            "Email to Case Premium",
+            "Enhancement",
+            "Knowledgebase",
+            "PANs",
+            "Problem",
+            "Qualtrics – Survey",
+            "Reporting",
+            "SupportLink",
+            "Workflow & Automation",
+            "Question",
+            "Other"
+          ]
+        },
+        "does_it_impact_mqls": {
+          "label": "Does it impact MQLs?",
+          "type": "dropdown",
+          "required": false,
+          "variable": "var_does_it_impact_mqls",
+          "sn_type": "yes_no",
+          "options": [
+            "-- None --",
+            "Yes",
+            "No"
+          ]
+        },
+        "salesforce_assistance_sales_intelligence_tools": {
+          "label": "Sales Intelligence Tools",
+          "type": "reference",
+          "required": false,
+          "variable": "var_salesforce_assistance_sales_intelligence_tools",
+          "sn_type": "reference"
+        },
+        "select_a_subscription": {
+          "label": "Select a Subscription:",
+          "type": "dropdown",
+          "required": false,
+          "variable": "select_a_subscription",
+          "sn_type": "multiple_choice",
+          "options": [
+            "Chef",
+            "Flowmon",
+            "Kemp",
+            "MarkLogic",
+            "MOVEit Automation",
+            "MOVEit Transfer",
+            "ShareFile",
+            "WUG"
+          ]
+        },
+        "description": {
+          "label": "Description",
+          "type": "textarea",
+          "required": true,
+          "variable": "description",
+          "sn_type": "html"
+        }
+      }
+    }
+  }
+}
