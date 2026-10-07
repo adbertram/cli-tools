@@ -107,6 +107,30 @@ def test_unparseable_or_shapeless_403_body_keeps_access_denied(monkeypatch,chunk
  assert response.closed
 
 
+OFFICE_400={'error':{'code':400,'message':'This operation is not supported for this document. The document must not be an Office file.','status':'FAILED_PRECONDITION'}}
+
+
+def test_400_office_file_is_permanent_unsupported_document(monkeypatch):
+ response,calls=transport(monkeypatch,status=400,chunks=[json.dumps(OFFICE_400).encode()])
+ with pytest.raises(bd.DocumentReadError) as exc:bd._worker('adbertram',DOCID,65536,12)
+ assert exc.value.code=='document_office_file_unsupported' and exc.value.category=='unsupported' and exc.value.status==400
+ assert response.closed
+
+
+@pytest.mark.parametrize('chunks',[[],[b'not-json'],[b'{"error":{"status":"FAILED_PRECONDITION","message":"other"}}'],[b'{"error":{"status":"INVALID_ARGUMENT","message":"The document must not be an Office file."}}']])
+def test_other_400_stays_upstream_http_error(monkeypatch,chunks):
+ response,calls=transport(monkeypatch,status=400,chunks=chunks)
+ with pytest.raises(bd.DocumentReadError) as exc:bd._worker('adbertram',DOCID,65536,12)
+ assert exc.value.code=='document_http_400' and exc.value.category=='upstream'
+
+
+def test_unsupported_failure_crosses_the_worker_envelope(monkeypatch):
+ failure={'code':'document_office_file_unsupported','category':'unsupported','status':400,'retry_after_seconds':None}
+ monkeypatch.setattr(bd,'run_bounded_read',lambda *a,**k:SimpleNamespace(returncode=1,stdout=json.dumps({'failure':failure}).encode()))
+ with pytest.raises(bd.DocumentReadError) as exc:bd.read_document_bounded(SimpleNamespace(get_active_profile_name=lambda:'adbertram'),DOCID,timeout_seconds=12,max_bytes=65536)
+ assert exc.value.category=='unsupported' and exc.value.code=='document_office_file_unsupported'
+
+
 def test_quota_403_body_read_is_bounded(monkeypatch):
  response,calls=transport(monkeypatch,status=403,chunks=[b'{']+[b'x'*2048]*64)
  with pytest.raises(bd.DocumentReadError) as exc:bd._worker('adbertram',DOCID,65536,12)

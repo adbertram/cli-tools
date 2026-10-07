@@ -61,6 +61,14 @@ def _quota_exceeded(raw):
     return any(value in _QUOTA_SIGNALS for value in values if type(value) is str)
 
 
+def _office_file_rejected(raw):
+    """True for the Docs API's permanent refusal of an uploaded Office file opened in Docs."""
+    try:body=json.loads(raw.decode('utf-8'))
+    except (ValueError,UnicodeError,RecursionError):return False
+    error=body.get('error') if type(body) is dict else None
+    return type(error) is dict and error.get('status')=='FAILED_PRECONDITION' and type(error.get('message')) is str and 'must not be an Office file' in error['message']
+
+
 def _validate(profile,document_id,max_bytes,timeout_seconds):
     if type(profile) is not str or not re.fullmatch('[A-Za-z0-9_-]{1,64}',profile):raise DocumentReadError('document_profile_invalid',category='invalid_request')
     if type(document_id) is not str or not re.fullmatch('[A-Za-z0-9_-]{1,256}',document_id):raise DocumentReadError('document_id_invalid',category='invalid_request')
@@ -80,7 +88,7 @@ def read_document_bounded(config,document_id,*,timeout_seconds,max_bytes):
             if result.returncode!=1:raise ValueError()
             failure=envelope['failure']
             if type(failure) is not dict or set(failure)!={'code','category','status','retry_after_seconds'}:raise ValueError()
-            if failure['category'] not in ('auth','access_denied','transient','rate_limit','upstream','invalid_data','invalid_request'):raise ValueError()
+            if failure['category'] not in ('auth','access_denied','transient','rate_limit','upstream','invalid_data','invalid_request','unsupported'):raise ValueError()
             if type(failure['code']) is not str or not re.fullmatch('[a-z0-9_]{1,128}',failure['code']):raise ValueError()
             status=failure['status'];delay=failure['retry_after_seconds']
             if status is not None and (type(status) is not int or not 100<=status<=599):raise ValueError()
@@ -163,6 +171,8 @@ def _worker(profile,document_id,max_bytes,timeout_seconds):
                 stream=True,allow_redirects=False,timeout=remaining,max_allowed_time=remaining)
             try:
                 status=response.status_code;delay=retry_after(response.headers.get('Retry-After'))
+                if status==400 and _office_file_rejected(_error_body(response,deadline)):
+                    raise DocumentReadError('document_office_file_unsupported',category='unsupported',status=status,retry_after_seconds=delay)
                 if status!=200:
                     limited=status==403 and _quota_exceeded(_error_body(response,deadline))
                     raise DocumentReadError('document_http_'+str(status),category='auth' if status==401 else 'rate_limit' if status==429 or limited else 'access_denied' if status==403 else 'transient' if status>=500 else 'upstream',status=status,retry_after_seconds=delay)
