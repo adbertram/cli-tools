@@ -153,6 +153,11 @@ google docs tables update <document-id> -t 0 -r 1 -c 1 --content "New value"  # 
 google docs tables update <document-id> -t 0 -l "Row Label" -c 1 --content "New value"  # By label
 google docs tables update <document-id> --data '[{"table":0,"row":1,"col":1,"content":"Value"}]'
 google docs tables update <document-id> --file updates.json
+# Empty cells are filled by inserting at the cell's paragraph start (no delete)
+
+# Insert empty table rows (default: 1 row below the reference row)
+google docs tables insert-rows <document-id> --table 0 --row 2              # 1 row below row 2
+google docs tables insert-rows <document-id> -t 3 -r 1 --count 3 --above    # 3 rows above row 1
 ```
 
 ### Google Drive

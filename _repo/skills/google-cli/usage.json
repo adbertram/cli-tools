@@ -1,8 +1,8 @@
 {
   "tool": "google",
   "description": "CLI interface for Google Workspace APIs",
-  "discovered_at": "2026-09-26T23:58:13Z",
-  "total_commands": 109,
+  "discovered_at": "2026-10-07T14:09:30Z",
+  "total_commands": 110,
   "global_options": [
     {
       "name": "--version",
@@ -1779,6 +1779,58 @@
           "arguments": [],
           "options": [],
           "commands": {
+            "insert-rows": {
+              "help": "Insert empty rows into a table in a Google Doc. Inserts COUNT rows below (or with --above, above) row ROW of table TABLE. Each row is one Docs API insertTableRow request; all run in one batchUpdate.",
+              "examples": [
+                "google docs tables insert-rows DOC_ID --table 0 --row 2",
+                "google docs tables insert-rows DOC_ID --table 3 --row 1 --count 3 --above"
+              ],
+              "arguments": [
+                {
+                  "name": "document_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Document ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Table index (0-based)",
+                  "short": "-t"
+                },
+                {
+                  "name": "--row",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Reference row index (0-based)",
+                  "short": "-r"
+                },
+                {
+                  "name": "--count",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Number of rows to insert (at least 1)",
+                  "short": "-n",
+                  "default": "1"
+                },
+                {
+                  "name": "--above",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Insert above the reference row instead of below it",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ]
+            },
             "update": {
               "help": "Update table cells in a Google Doc. Supports two modes: 1. Single cell update: Use --table, --row (or --label), --col, and --content 2. Batch updates: Use --data or --file with array of updates For batch updates, JSON format: [ {\"table\": 0, \"row\": 1, \"col\": 1, \"content\": \"New value\"}, {\"table\": 0, \"label\": \"Course Title\", \"col\": 1, \"content\": \"My Course\"} ] When using --label, it finds the row where the first column matches the label.",
               "examples": [

@@ -35,7 +35,7 @@ shared launcher.
 
 ```bash
 TOOL_DIR="<resolved tool directory in this worktree>"
-uv sync --project "$TOOL_DIR"
+uv sync --project "$TOOL_DIR" --python "$(command -v python3)"
 CLI_EXECUTABLE="$TOOL_DIR/.venv/bin/$TOOL_NAME"
 test -f "$CLI_EXECUTABLE" && test -x "$CLI_EXECUTABLE"
 "$CLI_EXECUTABLE" --help >/dev/null 2>&1

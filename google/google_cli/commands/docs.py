@@ -561,9 +561,12 @@ def _find_tables_in_document(document: dict) -> List[Dict[str, Any]]:
 
                 # Extract cell text content and the full range it occupies. Updates
                 # replace this whole range, so no per-paragraph range is tracked.
+                # An empty cell still holds one newline-only paragraph; its range
+                # is kept so an update can insert at that paragraph's start.
                 all_text = []
                 all_text_start = None
                 all_text_end = None
+                first_para_range = None
 
                 for content in cell.get('content', []):
                     if 'paragraph' in content:
@@ -584,10 +587,15 @@ def _find_tables_in_document(document: dict) -> List[Dict[str, Any]]:
 
                         # Track full content range (first start to last end)
                         para_content = ''.join(para_text).strip()
+                        if para_start is not None and first_para_range is None:
+                            first_para_range = (para_start, para_end)
                         if para_start is not None and para_content:
                             if all_text_start is None:
                                 all_text_start = para_start
                             all_text_end = para_end
+
+                if all_text_start is None and first_para_range is not None:
+                    all_text_start, all_text_end = first_para_range
 
                 row_data.append({
                     'start_index': cell_start,
@@ -604,21 +612,6 @@ def _find_tables_in_document(document: dict) -> List[Dict[str, Any]]:
         table_index += 1
 
     return tables
-
-
-def _get_cell_content_range(cell: Dict[str, Any]) -> tuple:
-    """Get the start and end indices for the content within a table cell.
-
-    Returns (content_start, content_end) for replacing cell content.
-    Cell structure: startIndex points to cell start, content starts after that.
-    We need to find the actual text range within the cell.
-    """
-    # The cell content starts after the cell start index
-    # We need to account for the paragraph structure
-    content_start = cell['start_index'] + 2  # Skip cell marker and paragraph start
-    content_end = cell['end_index'] - 1  # Before cell end marker
-
-    return content_start, content_end
 
 
 # Create tables subcommand group
@@ -777,20 +770,6 @@ def tables_update(
 
             cell = row[col_idx]
 
-            # Get the actual text range within the cell
-            text_start = cell.get('text_start')
-            text_end = cell.get('text_end')
-
-            # If no text content found, use cell structure estimate
-            if text_start is None or text_end is None:
-                text_start = cell['start_index'] + 2
-                text_end = cell['end_index'] - 1
-
-            # text_end includes trailing newline which is structural - exclude it
-            # We want to replace content but keep the final newline
-            if text_end > text_start:
-                text_end = text_end - 1
-
             # Compare against the SAME range the update below replaces. text_start
             # and text_end span the cell's full text, so comparing only the first
             # paragraph skipped writes that would have removed the cell's trailing
@@ -798,18 +777,22 @@ def tables_update(
             # content.
             existing_content = cell['content'].strip()
 
-            # DEBUG (uncomment to enable)
-            # print(f"DEBUG: table={table_idx} row={row_idx} col={col_idx}")
-            # print(f"  existing_content: {repr(existing_content[:50])}")
-            # print(f"  new_content: {repr(new_content[:50] if new_content else '')}")
-
             # Skip only when the cell already holds exactly what would be written.
             if existing_content == new_content.strip():
                 continue
 
-            # Skip if range is invalid
-            if text_end <= text_start:
-                continue
+            # The cell's text range, including its final structural newline.
+            # An empty cell's range is its newline-only paragraph, so dropping
+            # that newline leaves an empty range: insert only, nothing to delete.
+            text_start = cell.get('text_start')
+            text_end = cell.get('text_end')
+            if text_start is None or text_end is None or text_end <= text_start:
+                print_error(
+                    f"Cannot resolve the text range of table {table_idx} row {row_idx} "
+                    f"col {col_idx}: the cell has no paragraph text to replace"
+                )
+                raise typer.Exit(1)
+            text_end -= 1
 
             update_positions.append({
                 'start': text_start,
@@ -825,7 +808,7 @@ def tables_update(
         update_positions.sort(key=lambda x: x['start'], reverse=True)
 
         for pos in update_positions:
-            # Delete existing content in the first paragraph
+            # Delete the cell's existing text (an empty cell has none)
             if pos['end'] > pos['start']:
                 requests.append({
                     'deleteContentRange': {
@@ -874,5 +857,71 @@ def tables_update(
     except HttpError as e:
         print_error(f"HTTP error: {e}")
         raise typer.Exit(1)
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+
+
+@tables_app.command("insert-rows")
+@command
+def tables_insert_rows(
+    document_id: str = typer.Argument(..., help="Document ID"),
+    table_index: int = typer.Option(..., "--table", "-t", help="Table index (0-based)"),
+    row: int = typer.Option(..., "--row", "-r", help="Reference row index (0-based)"),
+    count: int = typer.Option(1, "--count", "-n", help="Number of rows to insert (at least 1)"),
+    above: bool = typer.Option(False, "--above", help="Insert above the reference row instead of below it"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+):
+    """Insert empty rows into a table in a Google Doc.
+
+    Inserts COUNT rows below (or with --above, above) row ROW of table TABLE.
+    Each row is one Docs API insertTableRow request; all run in one batchUpdate.
+
+    Examples:
+        # Insert one row below row 2 of table 0
+        google docs tables insert-rows DOC_ID --table 0 --row 2
+
+        # Insert three rows above row 1 of table 3
+        google docs tables insert-rows DOC_ID --table 3 --row 1 --count 3 --above
+    """
+    if count < 1:
+        print_error(f"--count must be at least 1 (got {count})")
+        raise typer.Exit(1)
+
+    client = get_client(profile=profile)
+    service = client.get_docs_service()
+
+    document = service.documents().get(documentId=document_id).execute()
+    tables = _find_tables_in_document(document)
+
+    if not 0 <= table_index < len(tables):
+        print_error(f"Table {table_index} not found (document has {len(tables)} tables)")
+        raise typer.Exit(1)
+
+    table_data = tables[table_index]
+    row_count = len(table_data['rows'])
+    if not 0 <= row < row_count:
+        print_error(f"Row {row} not found in table {table_index} (table has {row_count} rows)")
+        raise typer.Exit(1)
+
+    request = {
+        'insertTableRow': {
+            'tableCellLocation': {
+                'tableStartLocation': {'index': table_data['start_index']},
+                'rowIndex': row,
+                'columnIndex': 0,
+            },
+            'insertBelow': not above,
+        }
+    }
+
+    service.documents().batchUpdate(
+        documentId=document_id,
+        body={'requests': [request] * count}
+    ).execute()
+
+    position = "above" if above else "below"
+    print_success(f"Inserted {count} row(s) {position} row {row} of table {table_index}")
+    print_json({
+        'documentId': document_id,
+        'title': document.get('title'),
+        'url': f"https://docs.google.com/document/d/{document_id}/edit",
+        'rowsInserted': count
+    })
