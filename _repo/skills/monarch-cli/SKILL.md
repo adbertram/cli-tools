@@ -44,7 +44,7 @@ For requests to review, categorize, recategorize, audit, clean up, or start revi
 
 For these review workflows, do not read `usage.json`, run `monarch` commands, list transactions, load categories, or perform setup in the parent session before spawning the reviewer. The reviewer agent owns those steps.
 
-The subagent prompt must be complete and self-contained, must not use `fork_context`, and must explicitly reference `/Users/adam/Dropbox/.agents/skills/agent-expert/references/global-standards.md`.
+The subagent prompt must be complete and self-contained, must not use `fork_context`, and must explicitly reference `/Users/adam/.agents/skills/agent-expert/references/global-standards.md`.
 </principle>
 
 <principle name="Renderer Selection">
