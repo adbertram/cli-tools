@@ -96,25 +96,8 @@ def test_transport_or_bad_json_errors_never_echo_response_body(page):
     assert "PRIVATE" not in str(error.value) and "DO-NOT-EXPOSE" not in str(error.value)
 
 
-@pytest.fixture
-def clipping_profile(tmp_path, monkeypatch):
-    """Provide a `clipping` auth profile in a temp data root, never the host's real profiles."""
-    from tiktok_cli.config import Config, reset_config
-    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "xdg"))
-    reset_config()
-    for name, active in [("default", "true"), ("clipping", "false")]:
-        path = Config(profile="default").profile_path_for(name)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("AUTH_TYPE=browser_session\nACTIVE=" + active + "\n")
-    cookies = Config(profile="clipping").get_persistent_profile_dir() / "Default" / "Cookies"
-    cookies.parent.mkdir(parents=True)
-    cookies.touch()
-    yield
-    reset_config()
-
-
 @pytest.mark.parametrize("failure", [False, True])
-def test_cli_uses_requested_profile_and_always_closes_client(clipping_profile, monkeypatch, failure):
+def test_cli_uses_requested_profile_and_always_closes_client(monkeypatch, failure):
     seen = []
     closed = []
     class FakeClient:
