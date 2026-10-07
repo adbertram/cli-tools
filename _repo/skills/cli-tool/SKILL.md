@@ -651,6 +651,11 @@ default in-repo location does not apply. You must pass the canonical skill path:
 ```
 
 Do not create an in-repo skill folder merely to use the default path.
+When the CLI tracks `usage.json` in its own tool directory (the skill's copy is
+a link to it), that tracked copy is canonical: regenerate the one in the checkout
+that changed the CLI (`--usage-json <checkout>/<tool>/usage.json`) and commit it
+with the change. The usage-map compliance tests read that same copy, so a
+worktree never writes the skill link or another checkout's map.
 When an existing `usage.json` declares `binary`, the generator uses that exact
 absolute executable path. This is the launcher contract for non-uv tools whose
 command differs from the skill name. Without `binary`, the generator requires
