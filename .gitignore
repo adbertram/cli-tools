@@ -36,3 +36,12 @@ n8n/build/
 n8n/plans/
 n8n/agent_workspaces/
 n8n/_temp/
+
+# Browser profiles, cookie stores, API caches, test droppings, and downloaded
+# logs hold credentials or private data; this repo is public, never commit them.
+**/.profiles/
+**/.storage/
+chromium-profile/
+*/cache/
+MagicMock/
+_personal/azlogs/data/
