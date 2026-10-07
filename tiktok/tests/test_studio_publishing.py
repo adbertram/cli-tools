@@ -991,12 +991,57 @@ def test_unexpected_request_before_click_refuses_public_action(publisher, monkey
 
 
 def test_inconclusive_refresh_never_posts_or_accepts_receipt(publisher, monkeypatch):
+    """Measured on adam-server 2026-10-07: another process quit Chrome while the
+    trusted callback ran, so the pre-click refresh failed with Post never clicked.
+    The draft stays resumable instead of being stranded as outcome_unknown."""
     value = prepared(publisher);page = attach(publisher, value, monkeypatch)
+    monkeypatch.setattr(publisher, "_reconcile", lambda v: v)
+    original = page.network_observations
     def observations(*args, **kwargs):raise RuntimeError('buffer overflow')
     page.network_observations = observations
-    with pytest.raises(StudioPublishError):publisher.publish(value['request_id'], before_public_action=lambda binding: None)
+    with pytest.raises(StudioPublishError) as error:publisher.publish(value['request_id'], before_public_action=lambda binding: None)
     saved = publisher.status(value['request_id'])
-    assert page.clicked == 0 and saved['state'] == 'outcome_unknown' and 'post_project_id' not in saved
+    assert page.clicked == 0 and 'post_project_id' not in saved and error.value.category == 'pre_action_abort'
+    assert saved['state'] == 'prepared' and saved['resume_requires_owned_draft'] is True
+    assert saved['post_failure'] == {'stage': 'native_observation_refresh', 'error_type': 'RuntimeError'}
+    # The retry posts exactly once and keeps the earlier failure as history.
+    page.network_observations = original
+    publisher.publish(value['request_id'], before_public_action=lambda binding: None)
+    saved = publisher.status(value['request_id'])
+    assert page.clicked == 1 and saved['public_action_dispatched'] is True and 'post_failure' not in saved
+    assert saved['post_failure_history'] == [{'stage': 'native_observation_refresh', 'error_type': 'RuntimeError'}]
+
+
+def test_a_draft_gone_after_a_failed_pre_click_attempt_is_never_rebuilt(publisher, monkeypatch):
+    value = prepared(publisher);page = attach(publisher, value, monkeypatch)
+    def observations(*args, **kwargs):raise RuntimeError('browser closed')
+    page.network_observations = observations
+    with pytest.raises(StudioPublishError):publisher.publish(value['request_id'], before_public_action=lambda binding: None)
+    page.rows.clear()
+    with pytest.raises(StudioPublishError) as error:publisher._ready_editor(publisher.status(value['request_id']))
+    saved = publisher.status(value['request_id'])
+    assert error.value.category == 'ambiguous_post_action' and page.clicked == 0
+    assert saved['state'] == 'outcome_unknown' and saved['network_observation']['state'] == 'resume_draft_missing'
+    assert module.never_dispatched(saved) is False
+
+
+def test_a_record_journalled_unknown_before_its_click_is_resumed_by_prepare(publisher, monkeypatch, tmp_path):
+    value = prepared(publisher, state='outcome_unknown', network_observation={'state': 'armed', 'request_count': 0},
+                     post_failure={'stage': 'native_observation_refresh', 'error_type': 'BrowserHarnessError'})
+    page = attach(publisher, value, monkeypatch)
+    source = tmp_path / 'clip.mp4';source.write_bytes(b'known-mp4-bytes')
+    result = publisher.prepare(source, value['policy'], value['request_id'])
+    assert result['state'] == 'prepared' and result['resume_requires_owned_draft'] is True and page.clicked == 0
+
+
+@pytest.mark.parametrize('change', [{'network_observation': {'state': 'unexpected_pre_dispatch_exchange', 'request_count': 0}},
+                                    {'post_failure': {'stage': 'native_post_action', 'error_type': 'RuntimeError'}},
+                                    {'post_action_issue': {'error_type': 'RuntimeError', 'recoverable': True}},
+                                    {'post_project_id': '555'}, {'public_action_dispatched': True}])
+def test_any_sign_of_a_click_or_exchange_is_not_never_dispatched(change):
+    base = {'public_action_dispatched': False, 'network_observation': {'state': 'armed', 'request_count': 0},
+            'post_failure': {'stage': 'native_observation_refresh', 'error_type': 'BrowserHarnessError'}}
+    assert module.never_dispatched(base) is True and module.never_dispatched({**base, **change}) is False
 
 
 def test_expired_deadline_after_drain_never_clicks_and_remains_private(publisher, monkeypatch):

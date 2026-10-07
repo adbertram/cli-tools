@@ -341,6 +341,21 @@ def accepted_project(observed: dict, operation: dict) -> dict:
     return payload
 
 
+def never_dispatched(operation) -> bool:
+    """True when a Post attempt provably ended before its click.
+
+    Every check after the trusted callback and before the click runs at
+    failure stage native_observation_refresh. When one of them fails (the
+    browser was closed under the editor, a refresh could not be read) while the
+    Post observer is still armed with no exchange seen, and no click issue,
+    project acceptance or item was ever recorded, nothing was sent to TikTok.
+    """
+    return (isinstance(operation, dict) and operation.get('public_action_dispatched') is False
+            and (operation.get('post_failure') or {}).get('stage') == 'native_observation_refresh'
+            and operation.get('network_observation') == {'state': 'armed', 'request_count': 0}
+            and not any(operation.get(field) for field in ('post_project_id', 'item_id', 'post_action_issue')))
+
+
 class _PostNetworkObserver:
     """One native requestId/response pair, independent of renderer lifetime."""
     def __init__(self, page, operation, save):
@@ -914,6 +929,10 @@ class StudioPublisher:
             if existing[0] != request_id or record["binding"] != binding:
                 temporary.unlink()
                 raise StudioPublishError("Studio asset/policy is already bound to a different request, or this request has changed.")
+            if record["state"] == "outcome_unknown" and never_dispatched(record):
+                record["state"] = "prepared"
+                record["resume_requires_owned_draft"] = True
+                self._save(record)
             if record["state"] == "prepared":
                 temporary.unlink()
                 self._verify_asset(record)
@@ -1110,6 +1129,13 @@ class StudioPublisher:
         self._identity(page, policy)
         rows = self._drafts(page, policy)
         if not any(row["draft_id"] == operation["draft_id"] for row in rows):
+            if operation.get("resume_requires_owned_draft"):
+                # After a Post attempt, a missing draft may have been posted:
+                # never rebuild or re-upload it, only reconcile.
+                operation["state"] = "outcome_unknown"
+                operation["network_observation"] = {**(operation.get("network_observation") or {}), "state": "resume_draft_missing"}
+                self._save(operation)
+                raise StudioPublishError("Owned draft is gone after a Post attempt; reconcile only, never retry.", category="ambiguous_post_action")
             if rows:
                 raise StudioPublishError("Owned draft is missing while unknown drafts exist; preserve all drafts.")
             # Native normal-exit cleanup can remove a private temporary row.
@@ -1196,6 +1222,8 @@ class StudioPublisher:
             except Exception as exc:
                 self._restore_post_observer(page, key, operation)
                 raise StudioPublishError('Native Post observation could not be armed; no Post dispatched.') from exc
+            if 'post_failure' in operation:
+                operation.setdefault('post_failure_history', []).append(operation.pop('post_failure'))
             operation["state"] = "dispatch_pending"
             self._save(operation)
             try:
@@ -1266,6 +1294,11 @@ class StudioPublisher:
             except Exception as exc:
                 if operation["state"] != "prepared":operation["state"] = "outcome_unknown"
                 operation['post_failure'] = {'stage': failure_stage, 'error_type': type(exc).__name__}
+                if never_dispatched(operation):
+                    # Post was never clicked. The draft stays resumable, but only
+                    # while it is still an unposted draft (see _ready_editor).
+                    operation['state'] = 'prepared'
+                    operation['resume_requires_owned_draft'] = True
                 self._save(operation)
                 raise StudioPublishError("Studio Post refused before dispatch." if operation["state"] == "prepared" else "Studio Post outcome is unknown; reconcile only, never retry.", category="pre_action_abort" if operation["state"] == "prepared" else "ambiguous_post_action") from exc
             finally:
