@@ -29,6 +29,7 @@ from urllib.parse import parse_qsl, urlsplit, urlunsplit
 from .._debug_logging import get_debug_logger
 from . import BrowserHarnessError
 from ._elements import _ServiceLocator
+from .desktop_lease import wait_for_desktop_lease
 from .processes import (
     ProfileInUseError,
     ProcessCommand,
@@ -592,6 +593,8 @@ class BrowserHarnessService:
             )
         if headed and os.getenv("CLI_TOOL_TEST_NO_HEADED_BROWSER") == "1":
             headed = False
+        chrome = os.environ.get("CLI_TOOLS_CHROME_BINARY") or _chrome_binary()
+        wait_for_desktop_lease(chrome)
         try:
             requested_profile = resolve_user_data_dir(persistent_profile_dir)
             if self._opened and self._resolved_user_data_dir() != requested_profile:
@@ -613,7 +616,6 @@ class BrowserHarnessService:
             # Allocate port + spawn Chrome with the persistent user-data-dir.
             self._cdp_port = _find_free_port()
             user_data_dir = str(self._user_data_dir)
-            chrome = os.environ.get("CLI_TOOLS_CHROME_BINARY") or _chrome_binary()
 
             args = [
                 chrome,

@@ -22,6 +22,8 @@ Override the shared location with `CLI_TOOLS_SHARED_CHROME_PROFILE=/path/to/prof
 
 Chrome permits one live process per user-data-dir. Browser CLIs using the shared profile wait on one cross-backend lifecycle lock keyed by the resolved profile path, then run sequentially. A live Chrome process that did not take that lock is reported with its owner PID (and parent command when available) instead of being terminated. Use an isolated named profile or `CLI_TOOLS_ISOLATE_CHROME_PROFILE=1` when concurrent Chrome processes are required.
 
+On a demo host (one with `~/.tether/venv/bin/warden`), every engine launch of the real `/Applications/Google Chrome.app` first waits while `warden status --provider remote-bare` lists a UI lease in any state, because a demo on that desktop drives Chrome by app name and any Chrome from that bundle, headless included, can answer instead. It polls every 10 seconds and fails after 600 seconds naming the lease; a process inside that lease's own Tether session (`TETHER_SESSION`) is not held. See `cli_tools_shared/browser/desktop_lease.py`.
+
 ## Logout and reset
 
 A per-tool `auth login --force` / `clear_session()` must not delete the shared profile, because that would sign every CLI out of Google/SSO. It closes that CLI's browser and clears tool-local `browser-data/` only.

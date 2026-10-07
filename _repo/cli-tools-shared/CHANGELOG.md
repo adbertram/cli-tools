@@ -12,6 +12,16 @@
   moved onto it. Tests: `tests/test_auth.py`.
 
 ### Fixes
+- Every engine launch of the real Google Chrome app (CDP, Playwright,
+  Webwright local CDP, manual login) now waits while a Tether UI lease holds
+  the `remote-bare` demo desktop (`warden status --provider remote-bare`, any
+  state), polling every 10s and failing with the holding lease after 600s.
+  A Chrome from the same bundle, even headless, made Ronin prep's
+  by-name Chrome lookups hit the wrong process (agent-issues#1277). A process
+  inside the lease's own Tether session is not held; a host without
+  `~/.tether/venv/bin/warden` is never held; an unreadable ledger fails the
+  launch. `cli_tools_shared/browser/desktop_lease.py`, tests:
+  `tests/test_browser_desktop_lease.py`.
 - `data_cache.cached` no longer refuses to serve cached values for
   non-browser methods on a multi-credential CLI. `_cache_allowed_for_instance`
   gated EVERY cached method on a saved browser session whenever the tool

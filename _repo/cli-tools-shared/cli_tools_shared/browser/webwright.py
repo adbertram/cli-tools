@@ -19,6 +19,7 @@ from urllib.parse import parse_qsl, urlsplit, urlunsplit
 
 from . import BrowserHarnessError
 from ._elements import _ServiceElement, _ServiceLocator
+from .desktop_lease import wait_for_desktop_lease
 from .processes import (
     ProcessCommand,
     ProcessTableUnavailableError,
@@ -288,6 +289,7 @@ class WebwrightBrowserService:
         self._user_data_dir = profile_dir
 
         width_height = _parse_window_size(window_size)
+        wait_for_desktop_lease(self.local_cdp_executable)
         self._acquire_profile_lifecycle_lock()
         try:
             self._cleanup_stale_profile_locks()

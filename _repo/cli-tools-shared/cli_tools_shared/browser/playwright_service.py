@@ -18,6 +18,7 @@ from urllib.parse import parse_qsl, urlsplit, urlunsplit
 
 from . import BrowserHarnessError
 from ._elements import _ServiceElement, _ServiceLocator
+from .desktop_lease import wait_for_desktop_lease
 from .processes import (
     ProfileInUseError,
     ProcessCommand,
@@ -277,6 +278,8 @@ class PlaywrightBrowserService:
                 "Playwright is not installed in this CLI environment."
             ) from exc
 
+        executable = self.executable_path or os.getenv("CLI_TOOLS_CHROME_BINARY") or _chrome_binary()
+        wait_for_desktop_lease(executable)
         profile_dir = resolve_user_data_dir(persistent_profile_dir)
         profile_dir.mkdir(parents=True, exist_ok=True)
         self._user_data_dir = profile_dir
@@ -296,7 +299,7 @@ class PlaywrightBrowserService:
             width_height = _parse_window_size(window_size)
             kwargs: dict[str, Any] = {
                 "headless": not headed,
-                "executable_path": self.executable_path or os.getenv("CLI_TOOLS_CHROME_BINARY") or _chrome_binary(),
+                "executable_path": executable,
                 "args": launch_args,
                 # Playwright's defaults make Chrome encrypt cookies with a mock
                 # key. The CDP backend (plain Chrome) uses the real OS keychain
