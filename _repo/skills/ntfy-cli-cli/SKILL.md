@@ -15,7 +15,7 @@ Execute NtfyCli operations using the `ntfy-cli` CLI. All NtfyCli interactions sh
 Before acting on this skill, run:
 
 ```bash
-~/.agents/scripts/load-skill-overrides.sh ntfy-cli-cli
+~/.agents/skills/skill-expert/scripts/load-skill-overrides.sh ntfy-cli-cli
 ```
 
 Apply any printed instructions alongside this skill's own workflow: they extend it and

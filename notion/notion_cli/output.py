@@ -272,6 +272,15 @@ def extract_rich_text(rich_text_array: List[Dict]) -> str:
     import re
 
     result = []
+    annotation_order = ("strikethrough", "bold", "italic", "code")
+    annotation_markers = {
+        "strikethrough": "~~",
+        "bold": "**",
+        "italic": "*",
+        "code": "`",
+    }
+    active_annotations: List[str] = []
+
     for item in rich_text_array:
         text = item.get("plain_text", "")
 
@@ -280,17 +289,22 @@ def extract_rich_text(rich_text_array: List[Dict]) -> str:
         # Remove: all other control characters (0-8, 11-12, 14-31)
         text = re.sub(r'[\x00-\x08\x0B-\x0C\x0E-\x1F]', '', text)
 
-        annotations = item.get("annotations", {})
+        annotations = item.get("annotations") or {}
+        target_annotations = [
+            name for name in annotation_order if annotations.get(name)
+        ]
 
-        # Apply markdown formatting based on annotations
-        if annotations.get("code"):
-            text = f"`{text}`"
-        if annotations.get("bold"):
-            text = f"**{text}**"
-        if annotations.get("italic"):
-            text = f"*{text}*"
-        if annotations.get("strikethrough"):
-            text = f"~~{text}~~"
+        shared_count = 0
+        for active, target in zip(active_annotations, target_annotations):
+            if active != target:
+                break
+            shared_count += 1
+
+        for annotation in reversed(active_annotations[shared_count:]):
+            result.append(annotation_markers[annotation])
+        for annotation in target_annotations[shared_count:]:
+            result.append(annotation_markers[annotation])
+        active_annotations = target_annotations
 
         # Handle links
         href = item.get("href")
@@ -299,7 +313,26 @@ def extract_rich_text(rich_text_array: List[Dict]) -> str:
 
         result.append(text)
 
+    for annotation in reversed(active_annotations):
+        result.append(annotation_markers[annotation])
+
     return "".join(result)
+
+
+def _numbered_list_item_number(block: Dict, fallback: int) -> int:
+    """Return a numbered-list block's explicit start index or its sequence value."""
+    body = block.get("numbered_list_item", {})
+    start_index = body.get("list_start_index")
+    if isinstance(start_index, int) and not isinstance(start_index, bool):
+        return start_index
+    return fallback
+
+
+def _next_numbered_list_item_number(block: Dict, previous: int) -> int:
+    """Advance a numbered-list sequence, or reset it for another block type."""
+    if block.get("type") != "numbered_list_item":
+        return 0
+    return _numbered_list_item_number(block, previous + 1)
 
 
 def block_to_markdown(
@@ -354,7 +387,7 @@ def block_to_markdown(
 
     elif block_type == "numbered_list_item":
         text = extract_rich_text(block.get("numbered_list_item", {}).get("rich_text", []))
-        num = list_number if list_number > 0 else 1
+        num = _numbered_list_item_number(block, list_number if list_number > 0 else 1)
         lines.append(f"{indent}{num}. {text}")
 
     elif block_type == "to_do":
@@ -516,10 +549,9 @@ def block_to_markdown(
     if children:
         child_list_counter = 0
         for child, child_alignments in _pair_alignment_markers(children):
-            if child.get("type") == "numbered_list_item":
-                child_list_counter += 1
-            else:
-                child_list_counter = 0
+            child_list_counter = _next_numbered_list_item_number(
+                child, child_list_counter
+            )
             child_md = block_to_markdown(
                 child,
                 indent_level + 1,
@@ -546,10 +578,7 @@ def blocks_to_markdown(blocks: List[Dict]) -> str:
     lines = []
     list_counter = 0
     for block, alignments in _pair_alignment_markers(blocks):
-        if block.get("type") == "numbered_list_item":
-            list_counter += 1
-        else:
-            list_counter = 0
+        list_counter = _next_numbered_list_item_number(block, list_counter)
         md = block_to_markdown(
             block, list_number=list_counter, column_alignments=alignments
         )
@@ -651,16 +680,13 @@ def text_to_rich_text(text: str, inherited_annotations: Dict = None) -> List[Dic
             inner_items = process_inner(match.group(10), {"italic": True})
             rich_text.extend(inner_items)
         elif match.group(12):  # Code `text`
-            # Code blocks don't recurse - content is literal. A code run is
-            # emitted code-only and never inherits bold/italic: markdown has no
-            # syntax for a run that is BOTH code and bold/italic, so carrying an
-            # inherited annotation onto a code run round-trips as broken
-            # `**`code`**` -> `****` on export. The surrounding runs are still
-            # bold/italic (handled above), which preserves the author's intent.
+            # Code blocks don't recurse, but their parent annotations still
+            # apply. The exporter keeps those outer spans open across the code
+            # run, so ***text with `code`*** round-trips without split markup.
             item = {
                 "type": "text",
                 "text": {"content": match.group(12)},
-                "annotations": {"code": True},
+                "annotations": {**inherited_annotations, "code": True},
             }
             rich_text.append(item)
         elif match.group(14):  # Link [text](url)
@@ -850,6 +876,7 @@ def text_to_blocks(
                 "type": "numbered_list_item",
                 "numbered_list_item": {
                     "rich_text": text_to_rich_text(match.group(2)),
+                    "list_start_index": int(match.group(1)),
                 }
             }
 
@@ -1328,6 +1355,29 @@ def text_to_blocks(
         })
         i += 1
 
+    def keep_first_numbered_list_start(blocks_to_normalize: List[Dict]) -> None:
+        """Keep a list start index only on each numbered list's first item."""
+        previous_was_numbered = False
+        for block in blocks_to_normalize:
+            block_type = block.get("type")
+            body = block.get(block_type, {})
+            if block_type == "numbered_list_item":
+                start_index = body.pop("list_start_index", None)
+                if (
+                    not previous_was_numbered
+                    and start_index is not None
+                    and start_index != 1
+                ):
+                    body["list_start_index"] = start_index
+                previous_was_numbered = True
+            else:
+                previous_was_numbered = False
+
+            children = body.get("children") if isinstance(body, dict) else None
+            if isinstance(children, list):
+                keep_first_numbered_list_start(children)
+
+    keep_first_numbered_list_start(blocks)
     return blocks
 
 
