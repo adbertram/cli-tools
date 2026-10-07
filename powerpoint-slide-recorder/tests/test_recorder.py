@@ -3,6 +3,7 @@ import io
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -215,8 +216,17 @@ class RecordTests(unittest.TestCase):
         # narration gain stays a real computation over a known peak.
         self.audio_peak_patcher = mock.patch.object(record, "audio_peak_dbfs", return_value=-1.4)
         self.audio_peak = self.audio_peak_patcher.start()
+        # The screen-capture helper reports its first frame on stderr; FakeProcess has none.
+        # The first frame lands CAPTURE_OVERLAY_SETTLE_SECONDS before the narration starts.
+        self.first_frame_patcher = mock.patch.object(
+            record,
+            "wait_for_first_frame",
+            side_effect=lambda process: record.time.time() - record.CAPTURE_OVERLAY_SETTLE_SECONDS,
+        )
+        self.first_frame = self.first_frame_patcher.start()
 
     def tearDown(self):
+        self.first_frame_patcher.stop()
         self.audio_peak_patcher.stop()
         self.cue_count_check_patcher.stop()
         self.click_step_probe_patcher.stop()
@@ -1111,7 +1121,7 @@ Input #0, avfoundation, from '3':
 
         def fake_popen(command, **kwargs):
             events.append(command[0])
-            if command[0] == "ffmpeg":
+            if command[0] == "swift":
                 return ffmpeg_process
             if command[0] == "afplay":
                 return audio_process
@@ -1132,7 +1142,7 @@ Input #0, avfoundation, from '3':
         # PowerPoint state is captured before the live click-step probe opens the deck,
         # so the same cleanup path closes whatever the probe left behind.
         self.assertEqual(events[:4], ["demo_prep", "state", "prepare", "slideshow"])
-        self.assertEqual(events[4], "ffmpeg")
+        self.assertEqual(events[4], "swift")
 
     def test_record_forwards_configured_ronin_home_to_demo_environment_prep(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1145,7 +1155,7 @@ Input #0, avfoundation, from '3':
         audio_process = FakeProcess([None, 0], 0)
 
         def fake_popen(command, **kwargs):
-            if command[0] == "ffmpeg":
+            if command[0] == "swift":
                 return ffmpeg_process
             if command[0] == "afplay":
                 return audio_process
@@ -1207,7 +1217,7 @@ Input #0, avfoundation, from '3':
                 mock.patch.object(record, "close_slideshow_and_deck"), \
                 mock.patch.object(record, "press_space") as press_space, \
                 mock.patch.object(subprocess, "Popen", side_effect=[ffmpeg_process, audio_process]):
-            with self.assertRaisesRegex(RuntimeError, "ffmpeg screen recording exited with code 1"):
+            with self.assertRaisesRegex(RuntimeError, "screen recording exited with code 1"):
                 record.record(config)
 
         press_space.assert_not_called()
@@ -1648,9 +1658,10 @@ Input #0, avfoundation, from '3':
             record.record(config)
 
         mux_command = commands[0]
-        self.assertEqual(
-            mux_command[mux_command.index("-ss") + 1],
-            str(record.CAPTURE_OVERLAY_SETTLE_SECONDS),
+        self.assertAlmostEqual(
+            float(mux_command[mux_command.index("-ss") + 1]),
+            record.CAPTURE_OVERLAY_SETTLE_SECONDS,
+            delta=0.5,
         )
         self.assertLess(mux_command.index("-ss"), mux_command.index("-i"))
         self.assertIn("-vf", mux_command)
@@ -2190,3 +2201,39 @@ class LiveClickStepProbeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ScreenCaptureTests(unittest.TestCase):
+    """The capture records PowerPoint's windows only, through the bundled ScreenCaptureKit helper."""
+
+    def test_command_runs_the_bundled_helper_for_powerpoint(self):
+        command = record.screen_capture_command(Path("/tmp/raw.mp4"), 30, 1920, 1080)
+
+        self.assertEqual(command[:2], ["swift", "-suppress-warnings"])
+        self.assertTrue(Path(command[2]).is_file())
+        self.assertEqual(command[3:], ["/tmp/raw.mp4", "30", "1920", "1080", "com.microsoft.Powerpoint"])
+
+    def test_helper_captures_one_app_without_cursor(self):
+        source = record.SCREEN_CAPTURE_SCRIPT.read_text(encoding="utf-8")
+
+        self.assertIn("SCContentFilter(display: display, including: apps, exceptingWindows: [])", source)
+        self.assertIn("configuration.showsCursor = false", source)
+
+    def test_first_frame_time_is_read_from_helper_stderr(self):
+        process = subprocess.Popen(
+            [sys.executable, "-c", "import sys,time; sys.stderr.write('compiling\\nfirstFrameEpochMs=1791379152503\\n'); sys.stderr.flush(); time.sleep(5)"],
+            stderr=subprocess.PIPE,
+        )
+        try:
+            self.assertAlmostEqual(record.wait_for_first_frame(process, timeout_seconds=10), 1791379152.503)
+        finally:
+            process.kill()
+            process.wait()
+
+    def test_helper_exit_before_a_frame_fails(self):
+        process = subprocess.Popen(
+            [sys.executable, "-c", "import sys; sys.stderr.write('ScreenCaptureKit: start: denied\\n'); sys.exit(1)"],
+            stderr=subprocess.PIPE,
+        )
+        with self.assertRaisesRegex(RuntimeError, "screen recording exited with code 1"):
+            record.wait_for_first_frame(process, timeout_seconds=10)

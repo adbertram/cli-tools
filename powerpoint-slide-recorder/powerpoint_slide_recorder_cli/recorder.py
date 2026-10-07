@@ -124,6 +124,12 @@ DEFAULT_RECORDING_LEAD_SECONDS = 1.0
 DEFAULT_SLIDE_PAUSE_SECONDS = 0.25
 DEFAULT_SLIDESHOW_START_SECONDS = 2.0
 CAPTURE_OVERLAY_SETTLE_SECONDS = 2.0
+# The capture records only PowerPoint's windows (ScreenCaptureKit), so nothing another process
+# draws -- a system prompt, a notification, the Dock, the screen-recording indicator -- can reach
+# the recording. `swift` compiles the helper on launch, so the first frame can take a while.
+SCREEN_CAPTURE_SCRIPT = Path(__file__).with_name("screen_capture.swift")
+POWERPOINT_BUNDLE_ID = "com.microsoft.Powerpoint"
+FIRST_FRAME_TIMEOUT_SECONDS = 120.0
 DEFAULT_CUE_MARKER = "||"
 # Pluralsight's delivery window is -12..-6 dBFS peak. Target the midpoint so
 # normal encode jitter cannot push the muxed output across either edge.
@@ -2057,6 +2063,48 @@ def stop_audio_process(audio_process):
             audio_process.wait(timeout=10)
 
 
+def screen_capture_command(raw_video_path, framerate, width, height):
+    return [
+        "swift",
+        "-suppress-warnings",
+        str(SCREEN_CAPTURE_SCRIPT),
+        str(raw_video_path),
+        str(framerate),
+        str(width),
+        str(height),
+        POWERPOINT_BUNDLE_ID,
+    ]
+
+
+def wait_for_first_frame(capture_process, timeout_seconds=FIRST_FRAME_TIMEOUT_SECONDS):
+    """Return the wall-clock time (epoch seconds) of the capture's first frame.
+
+    The helper prints ``firstFrameEpochMs=<ms>`` on stderr once its first frame is written. A
+    thread keeps draining stderr to this process's stderr for the life of the capture, so the
+    pipe never fills.
+    """
+    first_frame = {}
+    seen = threading.Event()
+
+    def drain():
+        for raw_line in capture_process.stderr:
+            line = raw_line.decode(errors="replace") if isinstance(raw_line, bytes) else raw_line
+            match = re.match(r"firstFrameEpochMs=(\d+)", line.strip())
+            if match and not seen.is_set():
+                first_frame["epoch"] = int(match.group(1)) / 1000
+                seen.set()
+            elif line.strip():
+                sys.stderr.write(line if line.endswith("\n") else line + "\n")
+
+    threading.Thread(target=drain, name="screen-capture-stderr", daemon=True).start()
+    deadline = time.monotonic() + timeout_seconds
+    while not seen.wait(0.1):
+        ensure_process_running(capture_process, "screen recording")
+        if time.monotonic() >= deadline:
+            raise RuntimeError(f"screen recording wrote no frame within {timeout_seconds:.0f}s")
+    return first_frame["epoch"]
+
+
 def stop_ffmpeg_process(ffmpeg_process):
     if ffmpeg_process is None:
         return
@@ -2181,7 +2229,7 @@ def sleep_until(target_time, monitored_processes, presence_watcher=None):
 
 def wait_for_audio(audio_process, ffmpeg_process, presence_watcher=None):
     while True:
-        ensure_process_running(ffmpeg_process, "ffmpeg screen recording")
+        ensure_process_running(ffmpeg_process, "screen recording")
         if presence_watcher is not None:
             presence_watcher.raise_if_failed()
         audio_return_code = audio_process.poll()
@@ -2256,7 +2304,7 @@ def record(config):
         work_dir = Path(config["work_dir"])
         output_path = Path(config["output_path"])
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        raw_video_path = work_dir / "screen-recording.mov"
+        raw_video_path = work_dir / "screen-recording.mp4"
         narration_path = Path(plan["narration_audio"])
 
         start_slideshow(config)
@@ -2266,32 +2314,22 @@ def record(config):
             raw_video_path.unlink()
         if raw_video_path.exists() or raw_video_path.is_symlink():
             raise RuntimeError(f"Could not clear previous raw screen recording: {raw_video_path}")
-        ffmpeg_process = subprocess.Popen([
-            "ffmpeg",
-            "-y",
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-f",
-            "avfoundation",
-            "-framerate",
-            str(config["ffmpeg_framerate"]),
-            "-pixel_format",
-            "nv12",
-            "-i",
-            str(config["ffmpeg_video_input"]),
-            "-pix_fmt",
-            "yuv420p",
-            str(raw_video_path),
-        ], stdin=subprocess.PIPE)
-        ensure_process_running(ffmpeg_process, "ffmpeg screen recording")
+        ffmpeg_process = subprocess.Popen(
+            screen_capture_command(raw_video_path, config["ffmpeg_framerate"], source_width, source_height),
+            stdin=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        ensure_process_running(ffmpeg_process, "screen recording")
+        first_frame_epoch = wait_for_first_frame(ffmpeg_process)
         settle_capture_overlay()
 
         started_at = time.monotonic()
+        # The raw recording's t=0 is its first frame; the narration starts now.
+        capture_lead_seconds = max(0.0, time.time() - first_frame_epoch)
         audio_process = subprocess.Popen(["afplay", str(narration_path)])
         ensure_process_running(audio_process, "afplay")
         monitored_processes = [
-            (ffmpeg_process, "ffmpeg screen recording"),
+            (ffmpeg_process, "screen recording"),
             (audio_process, "afplay"),
         ]
 
@@ -2329,7 +2367,7 @@ def record(config):
             raise RuntimeError(f"afplay exited with code {audio_return_code}")
 
         if ffmpeg_return_code != 0:
-            raise RuntimeError(f"ffmpeg screen recording exited with code {ffmpeg_return_code}")
+            raise RuntimeError(f"screen recording exited with code {ffmpeg_return_code}")
 
         close_slideshow_and_deck(config, state)
         state = None
@@ -2369,7 +2407,7 @@ def record(config):
             "-loglevel",
             "error",
             "-ss",
-            str(CAPTURE_OVERLAY_SETTLE_SECONDS),
+            f"{capture_lead_seconds:.3f}",
             "-i",
             str(raw_video_path),
             "-i",

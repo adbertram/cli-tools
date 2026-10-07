@@ -11,6 +11,7 @@ Use it when you need scriptable, JSON-first access from agents, automation, or t
 - macOS
 - Microsoft PowerPoint
 - `ffmpeg` and `ffprobe`
+- `swift` (Xcode or the Command Line Tools) and the Screen Recording permission for the process that runs the recorder
 - `osascript`, `afplay`, and `open`
 
 List AVFoundation devices:
@@ -66,7 +67,9 @@ When none of the three finds the module the command fails before recording with 
 
 ## Resolution Guard
 
-The recorder probes the selected AVFoundation `--video-input` before launching PowerPoint. The capture source must have the same aspect ratio as the final MP4 resolution and must be at least as large as the requested output size. Matching larger sources are scaled down during the final mux. Mismatched or smaller sources fail before recording so the final MP4 is not letterboxed, cropped, or upscaled.
+The recording itself captures only PowerPoint's windows, through the bundled ScreenCaptureKit helper `powerpoint_slide_recorder_cli/screen_capture.swift` (run with `swift`; it needs the Screen Recording permission). Nothing another process draws can reach the video: a system prompt, a notification banner, the Dock, the menu bar, another app's window, or the macOS screen-recording indicator. The cursor is never captured. The helper writes `firstFrameEpochMs=<ms>` on stderr, and the final mux trims the raw video from that first frame to the moment the narration starts.
+
+The recorder probes the selected AVFoundation `--video-input` before launching PowerPoint, and the capture is recorded at that probed size. The capture source must have the same aspect ratio as the final MP4 resolution and must be at least as large as the requested output size. Matching larger sources are scaled down during the final mux. Mismatched or smaller sources fail before recording so the final MP4 is not letterboxed, cropped, or upscaled.
 
 The default `--resolution` is `1920x1080`. A high-resolution non-16:9 source such as `4112x2658` is still rejected because scaling it directly to 1920x1080 would keep or distort the bars from the full-screen PowerPoint capture. The source has to be 16:9, such as `1920x1080`, `2560x1440`, or `3840x2160`.
 
