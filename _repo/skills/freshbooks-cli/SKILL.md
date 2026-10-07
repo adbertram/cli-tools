@@ -22,6 +22,7 @@ freshbooks <command-group> <action> [arguments] [options]
 | List invoices | `freshbooks invoice list --table` |
 | List unpaid invoices | `freshbooks invoice list --unpaid --table` |
 | Create invoice | `freshbooks invoice create -c CUSTOMER_ID -d "Consulting" -a 500.00` |
+| Change line item prices | `freshbooks invoice update INVOICE_ID --line-amount LINEID=AMOUNT` (repeatable; line IDs from `invoice get`) |
 | Send invoice | `freshbooks invoice send INVOICE_ID` |
 | Download PDF | `freshbooks invoice download INVOICE_ID` |
 | Mark paid | `freshbooks invoice mark-paid INVOICE_ID -a 500.00` |

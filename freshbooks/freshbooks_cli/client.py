@@ -743,7 +743,8 @@ class FreshBooksClient:
         attachments: Optional[List[Dict]] = None,
         notes: Optional[str] = None,
         terms: Optional[str] = None,
-        po_number: Optional[str] = None
+        po_number: Optional[str] = None,
+        lines: Optional[List[Dict]] = None,
     ) -> Dict:
         """
         Update an existing invoice.
@@ -754,6 +755,7 @@ class FreshBooksClient:
             notes: Optional notes for the invoice
             terms: Optional payment terms
             po_number: Optional purchase order number
+            lines: Complete replacement lines array (the API replaces all lines)
 
         Returns:
             Updated invoice record
@@ -770,6 +772,8 @@ class FreshBooksClient:
             invoice_data["terms"] = terms
         if po_number is not None:
             invoice_data["po_number"] = po_number
+        if lines is not None:
+            invoice_data["lines"] = lines
 
         if not invoice_data:
             raise ClientError("No update fields provided")

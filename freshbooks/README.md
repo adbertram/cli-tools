@@ -154,7 +154,11 @@ freshbooks invoice delete <invoice-id> --force
 freshbooks invoice update <invoice-id> -f ./contract.pdf
 freshbooks invoice update <invoice-id> -n "Updated notes"
 freshbooks invoice update <invoice-id> -f ./receipt.pdf -n "Added receipt"
+freshbooks invoice update <invoice-id> --line-amount 1=750.00
+freshbooks invoice update <invoice-id> -l 1=750 -l 2=800.50
 ```
+
+`--line-amount LINEID=AMOUNT` sets that existing line's unit price (quantity unchanged). Get line IDs from `freshbooks invoice get <invoice-id>`. FreshBooks replaces the whole `lines` array on update, so the CLI fetches the invoice, resends every line, and changes only the named `unit_cost` values; unnamed lines keep their name, description, qty, unit_cost, and taxes. An unknown line ID, duplicate line ID, or non-numeric/non-positive amount exits non-zero with an error on stderr and nothing is sent. The output JSON includes a `lines` array with the stored lines.
 
 **Options:**
 | Option | Description |
@@ -162,6 +166,7 @@ freshbooks invoice update <invoice-id> -f ./receipt.pdf -n "Added receipt"
 | `-f, --attachment` | Path to file to attach (PDF or image) |
 | `-n, --notes` | Update invoice notes |
 | `-p, --po-number` | Update purchase order number/reference |
+| `-l, --line-amount` | `LINEID=AMOUNT`: set a line's unit price (repeatable) |
 
 ### Download Invoice PDF
 

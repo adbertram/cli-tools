@@ -1,7 +1,7 @@
 {
   "tool": "freshbooks",
   "description": "CLI interface for FreshBooks accounting API",
-  "discovered_at": "2026-08-18T18:46:08Z",
+  "discovered_at": "2026-10-07T16:22:51Z",
   "total_commands": 26,
   "global_options": [
     {
@@ -42,7 +42,8 @@
               "type": "bool",
               "required": false,
               "help": "Clear existing ephemeral auth state and re-authenticate",
-              "short": "-F"
+              "short": "-F",
+              "takes_value": false
             }
           ]
         },
@@ -96,7 +97,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -117,7 +119,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
@@ -131,7 +134,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -172,7 +176,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -197,14 +202,16 @@
                   "name": "--keep-old",
                   "type": "bool",
                   "required": false,
-                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
                 },
                 {
                   "name": "--force",
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -239,7 +246,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -260,7 +268,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -274,14 +283,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--verbose",
               "type": "bool",
               "required": false,
               "help": "Show detailed checks",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -416,7 +427,8 @@
               "type": "bool",
               "required": false,
               "help": "Display output as a formatted table instead of JSON",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -467,7 +479,8 @@
               "type": "bool",
               "required": false,
               "help": "Display output as a formatted table instead of JSON",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -625,7 +638,8 @@
               "name": "--no-terms",
               "type": "bool",
               "required": false,
-              "help": "Skip adding default payment terms"
+              "help": "Skip adding default payment terms",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -656,7 +670,8 @@
               "type": "bool",
               "required": false,
               "help": "Skip confirmation prompt",
-              "short": "-F"
+              "short": "-F",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -719,7 +734,8 @@
               "type": "bool",
               "required": false,
               "help": "Display output as a formatted table instead of JSON",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -763,7 +779,8 @@
               "type": "bool",
               "required": false,
               "help": "Filter to show only unpaid invoices (sent, viewed, overdue)",
-              "short": "-u"
+              "short": "-u",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -797,7 +814,8 @@
               "type": "bool",
               "required": false,
               "help": "Display output as a formatted table instead of JSON",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -874,7 +892,8 @@
               "type": "bool",
               "required": false,
               "help": "Skip confirmation prompt",
-              "short": "-F"
+              "short": "-F",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -885,13 +904,15 @@
           ]
         },
         "update": {
-          "help": "Update an existing invoice.",
+          "help": "Update an existing invoice. --line-amount LINEID=AMOUNT sets that line's unit_cost (quantity unchanged). Find line IDs with `freshbooks invoice get <id>`. FreshBooks replaces the whole lines array on update, so the invoice is fetched and every line is resent; lines not named are preserved. An unknown line ID or a non-numeric/non-positive amount fails with a non-zero exit and nothing is sent. With --line-amount the output JSON also includes the invoice lines.",
           "examples": [
             "freshbooks invoice update 1234567 -f ./contract.pdf",
             "freshbooks invoice update 1234567 -n \"Updated notes\"",
             "freshbooks invoice update 1234567 -f ./receipt.pdf -n \"Added receipt\"",
             "freshbooks invoice update 1234567 --terms-from-config",
-            "freshbooks invoice update 1234567 -t \"Net 30\""
+            "freshbooks invoice update 1234567 -t \"Net 30\"",
+            "freshbooks invoice update 1234567 --line-amount 1=750.00",
+            "freshbooks invoice update 1234567 -l 1=750 -l 2=800.50"
           ],
           "usage_instructions": "Use `freshbooks invoice update` with the documented arguments and options shown below.",
           "arguments": [
@@ -928,7 +949,8 @@
               "name": "--terms-from-config",
               "type": "bool",
               "required": false,
-              "help": "Set payment terms from DEFAULT_TERMS in .env"
+              "help": "Set payment terms from DEFAULT_TERMS in .env",
+              "takes_value": false
             },
             {
               "name": "--po-number",
@@ -936,6 +958,13 @@
               "required": false,
               "help": "Update purchase order number/reference",
               "short": "-p"
+            },
+            {
+              "name": "--line-amount",
+              "type": "TEXT",
+              "required": false,
+              "help": "Set an existing line's unit price as LINEID=AMOUNT, e.g. 2=750.00 (repeatable; quantity and all other lines are unchanged)",
+              "short": "-l"
             },
             {
               "name": "--profile",

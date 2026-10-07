@@ -11,6 +11,7 @@ from ..client import get_client
 from ..config import get_config
 from ..filter_map import INVOICE_FILTER_FIELDS
 from ..formatters import format_invoice_for_display
+from ..invoice_lines import parse_line_amounts, rebuild_lines
 from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 
 app = typer.Typer(help="Manage FreshBooks invoices")
@@ -572,9 +573,25 @@ def invoice_update(
         "-p",
         help="Update purchase order number/reference",
     ),
+    line_amount: Optional[List[str]] = typer.Option(
+        None,
+        "--line-amount",
+        "-l",
+        help=(
+            "Set an existing line's unit price as LINEID=AMOUNT, e.g. 2=750.00 "
+            "(repeatable; quantity and all other lines are unchanged)"
+        ),
+    ),
 ):
     """
     Update an existing invoice.
+
+    --line-amount LINEID=AMOUNT sets that line's unit_cost (quantity unchanged).
+    Find line IDs with `freshbooks invoice get <id>`. FreshBooks replaces the
+    whole lines array on update, so the invoice is fetched and every line is
+    resent; lines not named are preserved. An unknown line ID or a
+    non-numeric/non-positive amount fails with a non-zero exit and nothing is
+    sent. With --line-amount the output JSON also includes the invoice lines.
 
     Examples:
         freshbooks invoice update 1234567 -f ./contract.pdf
@@ -582,9 +599,14 @@ def invoice_update(
         freshbooks invoice update 1234567 -f ./receipt.pdf -n "Added receipt"
         freshbooks invoice update 1234567 --terms-from-config
         freshbooks invoice update 1234567 -t "Net 30"
+        freshbooks invoice update 1234567 --line-amount 1=750.00
+        freshbooks invoice update 1234567 -l 1=750 -l 2=800.50
     """
     client = get_client()
     config = get_config()
+
+    # Validate before any network call.
+    line_amounts = parse_line_amounts(line_amount) if line_amount else {}
 
     # Determine terms to use
     invoice_terms = None
@@ -597,9 +619,18 @@ def invoice_update(
         invoice_terms = terms
 
     # Check that at least one update option is provided
-    if not any([attachment, notes, invoice_terms, po_number]):
+    if not any([attachment, notes, invoice_terms, po_number, line_amounts]):
         typer.echo("No updates specified. Use --help to see available options.")
         raise typer.Exit(1)
+
+    # Build and validate the new lines before uploading anything.
+    lines = None
+    if line_amounts:
+        existing = client.get_invoice(invoice_id)
+        if not existing:
+            typer.echo(f"Invoice {invoice_id} not found.", err=True)
+            raise typer.Exit(1)
+        lines = rebuild_lines(existing.get("lines", []), line_amounts)
 
     # Handle file attachment if provided
     attachments = None
@@ -619,11 +650,25 @@ def invoice_update(
         attachments=attachments,
         notes=notes,
         terms=invoice_terms,
-        po_number=po_number
+        po_number=po_number,
+        lines=lines,
     )
 
     print_success(f"Invoice {invoice.get('invoice_number')} updated.")
-    print_json(format_invoice_for_display(invoice))
+    result = format_invoice_for_display(invoice)
+    if line_amounts:
+        # Re-read so the output shows the stored lines, not the request echo.
+        result["lines"] = [
+            {
+                "lineid": line["lineid"],
+                "name": line["name"],
+                "qty": line["qty"],
+                "unit_cost": line["unit_cost"],
+                "amount": line["amount"],
+            }
+            for line in client.get_invoice(invoice_id).get("lines", [])
+        ]
+    print_json(result)
 
 
 @app.command("download")
