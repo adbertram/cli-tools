@@ -124,9 +124,9 @@ DEFAULT_RECORDING_LEAD_SECONDS = 1.0
 DEFAULT_SLIDE_PAUSE_SECONDS = 0.25
 DEFAULT_SLIDESHOW_START_SECONDS = 2.0
 CAPTURE_OVERLAY_SETTLE_SECONDS = 2.0
-# The capture records only PowerPoint's windows (ScreenCaptureKit), so nothing another process
-# draws -- a system prompt, a notification, the Dock, the screen-recording indicator -- can reach
-# the recording. `swift` compiles the helper on launch, so the first frame can take a while.
+# The capture records the whole display through ScreenCaptureKit with no content filter (any
+# filter freezes build animations); the final mux paints out the screen-recording indicator the
+# helper reports. `swift` compiles the helper on launch, so the first frame can take a while.
 SCREEN_CAPTURE_SCRIPT = Path(__file__).with_name("screen_capture.swift")
 POWERPOINT_BUNDLE_ID = "com.microsoft.Powerpoint"
 FIRST_FRAME_TIMEOUT_SECONDS = 120.0
@@ -2076,12 +2076,13 @@ def screen_capture_command(raw_video_path, framerate, width, height):
     ]
 
 
-def wait_for_first_frame(capture_process, timeout_seconds=FIRST_FRAME_TIMEOUT_SECONDS):
+def wait_for_first_frame(capture_process, timeout_seconds=FIRST_FRAME_TIMEOUT_SECONDS, notes=None):
     """Return the wall-clock time (epoch seconds) of the capture's first frame.
 
-    The helper prints ``firstFrameEpochMs=<ms>`` on stderr once its first frame is written. A
-    thread keeps draining stderr to this process's stderr for the life of the capture, so the
-    pipe never fills.
+    The helper prints ``firstFrameEpochMs=<ms>`` on stderr once its first frame is written, and
+    ``indicatorRect=x,y,w,h`` once it finds the screen-recording indicator; that rectangle lands in
+    ``notes["indicator_rect"]``. A thread keeps draining stderr to this process's stderr for the
+    life of the capture, so the pipe never fills.
     """
     first_frame = {}
     seen = threading.Event()
@@ -2090,9 +2091,12 @@ def wait_for_first_frame(capture_process, timeout_seconds=FIRST_FRAME_TIMEOUT_SE
         for raw_line in capture_process.stderr:
             line = raw_line.decode(errors="replace") if isinstance(raw_line, bytes) else raw_line
             match = re.match(r"firstFrameEpochMs=(\d+)", line.strip())
+            indicator = re.fullmatch(r"indicatorRect=(\d+),(\d+),(\d+),(\d+)", line.strip())
             if match and not seen.is_set():
                 first_frame["epoch"] = int(match.group(1)) / 1000
                 seen.set()
+            elif indicator and notes is not None:
+                notes["indicator_rect"] = tuple(int(value) for value in indicator.groups())
             elif line.strip():
                 sys.stderr.write(line if line.endswith("\n") else line + "\n")
 
@@ -2320,7 +2324,8 @@ def record(config):
             stderr=subprocess.PIPE,
         )
         ensure_process_running(ffmpeg_process, "screen recording")
-        first_frame_epoch = wait_for_first_frame(ffmpeg_process)
+        capture_notes = {}
+        first_frame_epoch = wait_for_first_frame(ffmpeg_process, notes=capture_notes)
         settle_capture_overlay()
 
         started_at = time.monotonic()
@@ -2385,6 +2390,12 @@ def record(config):
                 f"{config['output_width']}x{config['output_height']}",
                 file=sys.stderr,
             )
+
+        # The capture is the whole display, so it carries the screen-recording indicator the capture
+        # itself causes; paint that rectangle out from its border before any crop or scale.
+        if "indicator_rect" in capture_notes:
+            x, y, w, h = capture_notes["indicator_rect"]
+            video_filter = f"delogo=x={x}:y={y}:w={w}:h={h},{video_filter}"
 
         # Pluralsight's delivery window is -12..-6 dBFS peak, and source narration arrives at
         # wildly different levels (hot generated takes measured -1.4 dBFS; other modules measured

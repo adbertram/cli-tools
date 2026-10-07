@@ -221,7 +221,7 @@ class RecordTests(unittest.TestCase):
         self.first_frame_patcher = mock.patch.object(
             record,
             "wait_for_first_frame",
-            side_effect=lambda process: record.time.time() - record.CAPTURE_OVERLAY_SETTLE_SECONDS,
+            side_effect=lambda process, notes=None: record.time.time() - record.CAPTURE_OVERLAY_SETTLE_SECONDS,
         )
         self.first_frame = self.first_frame_patcher.start()
 
@@ -2226,6 +2226,22 @@ class ScreenCaptureTests(unittest.TestCase):
         )
         try:
             self.assertAlmostEqual(record.wait_for_first_frame(process, timeout_seconds=10), 1791379152.503)
+        finally:
+            process.kill()
+            process.wait()
+
+    def test_indicator_rect_is_read_from_helper_stderr(self):
+        process = subprocess.Popen(
+            [sys.executable, "-c", "import sys,time; sys.stderr.write('firstFrameEpochMs=1791379152503\\nindicatorRect=1905,1,13,14\\n'); sys.stderr.flush(); time.sleep(5)"],
+            stderr=subprocess.PIPE,
+        )
+        notes = {}
+        try:
+            record.wait_for_first_frame(process, timeout_seconds=10, notes=notes)
+            deadline = time.monotonic() + 5
+            while "indicator_rect" not in notes and time.monotonic() < deadline:
+                time.sleep(0.05)
+            self.assertEqual(notes["indicator_rect"], (1905, 1, 13, 14))
         finally:
             process.kill()
             process.wait()

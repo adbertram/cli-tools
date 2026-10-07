@@ -8,8 +8,10 @@
 // 27.0 (2026-10-07): a 0.5 s fade-in delivered 30 complete frames and 286 idle ones in 10 s, so
 // each fade froze at its first frame until the next click and every build slide lost its last
 // item. Only the unfiltered display delivered the fades, every run. Anything else on screen is
-// the screen-intrusion gate's to catch. Frames are written at a constant FPS; when the screen is
-// idle the last image repeats.
+// the screen-intrusion gate's to catch, except the one element this capture itself causes: the
+// macOS screen-recording indicator (WindowServer windows titled StatusIndicator), whose pixel
+// rectangle is reported as `indicatorRect=x,y,w,h` so the final mux paints it out. Frames are
+// written at a constant FPS; when the screen is idle the last image repeats.
 //
 // stderr carries `firstFrameEpochMs=<ms>` once the first frame is written (the wall-clock time
 // of the recording's t=0) and `captureComplete` after the file is finalized. The recording
@@ -83,6 +85,28 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate {
         stream = SCStream(filter: filter, configuration: configuration, delegate: self)
         try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: queue)
         try await stream.startCapture()
+        Task { await self.reportIndicator(display: display) }
+    }
+
+    // The indicator appears only once the capture is running, so look for it for a few seconds.
+    // Excluding it through the content filter instead freezes build animations like any filter.
+    func reportIndicator(display: SCDisplay) async {
+        let scale = Double(width) / Double(display.width)
+        for _ in 0..<10 {
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true) else { continue }
+            let frames = content.windows.filter { $0.title == "StatusIndicator" && $0.frame.intersects(display.frame) }.map(\.frame)
+            guard let first = frames.first else { continue }
+            let union = frames.dropFirst().reduce(first) { $0.union($1) }
+            let margin = 3.0
+            let x0 = max(1, Int(((union.minX - display.frame.minX) * scale - margin).rounded(.down)))
+            let y0 = max(1, Int(((union.minY - display.frame.minY) * scale - margin).rounded(.down)))
+            let x1 = min(width - 2, Int(((union.maxX - display.frame.minX) * scale + margin).rounded(.up)))
+            let y1 = min(height - 2, Int(((union.maxY - display.frame.minY) * scale + margin).rounded(.up)))
+            guard x1 > x0, y1 > y0 else { return }
+            FileHandle.standardError.write(Data("indicatorRect=\(x0),\(y0),\(x1 - x0),\(y1 - y0)\n".utf8))
+            return
+        }
     }
 
     func append(_ buffer: CVPixelBuffer) {
