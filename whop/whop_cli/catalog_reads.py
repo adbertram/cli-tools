@@ -101,14 +101,22 @@ def clean(marker,config,browser,timeout=10):
  profile=str(config.get_persistent_profile_dir())
  binding=marker.get('binding',{})
  if binding!={'profile':config.get_active_profile_name(),'experience':config.rewards_url,'user_data_dir':profile,'expected_account_id':binding.get('expected_account_id')} or not isinstance(binding.get('expected_account_id'),str):raise failure('catalog_reader_binding_changed')
- if marker.get('phase') not in ('owned','closed'):raise failure('catalog_reader_ownership_unrecorded')
- owned=marker.get('owners')
- if type(owned) is not dict or set(owned)!={'chrome','daemon'} or type(owned['chrome']) is not list or not 1<=len(owned['chrome'])<=64 or type(owned['daemon']) is not list or len(owned['daemon'])!=1:raise failure('catalog_reader_owner_record_invalid')
  deadline=time.monotonic()+timeout
  def remaining():
   value=deadline-time.monotonic()
   if value<=0:raise failure('catalog_reader_cleanup_deadline_exceeded')
   return value
+ if marker.get('phase')=='launching' and marker.get('owners') is None:
+  # The worker (already proven ended by the caller) never recorded a browser.
+  # Nothing is signalled: the attempt closes only when the profile provably has
+  # no browser process and no live daemon left; anything else stays unknown.
+  rows=list_process_commands(timeout=min(2,remaining()))
+  pid=daemon_pid(browser)
+  if profile_process_pids(profile,processes=rows) or (pid is not None and identity(pid,min(2,remaining())) is not None):raise failure('catalog_reader_ownership_unrecorded')
+  return True
+ if marker.get('phase') not in ('owned','closed'):raise failure('catalog_reader_ownership_unrecorded')
+ owned=marker.get('owners')
+ if type(owned) is not dict or set(owned)!={'chrome','daemon'} or type(owned['chrome']) is not list or not 1<=len(owned['chrome'])<=64 or type(owned['daemon']) is not list or len(owned['daemon'])!=1:raise failure('catalog_reader_owner_record_invalid')
  def same(record,kind,budget):
   observed=identity(record['pid'],min(2,budget))
   if observed!=record:return False

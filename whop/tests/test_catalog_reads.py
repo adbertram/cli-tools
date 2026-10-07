@@ -42,13 +42,38 @@ def test_canonical_sdk_static_avoids_constructor_and_preserves_terminal_page(set
  assert not (directory/'catalog-read-owner.json').exists()
 
 
-def test_crash_before_owner_marker_holds_durable_recovery_barrier(setup,monkeypatch):
+def test_crash_before_owner_marker_with_live_profile_process_holds_durable_recovery_barrier(setup,monkeypatch):
  config,directory,_=setup
- def runner(*args,**kwargs):raise BoundedReadError('read_process_deadline_exceeded')
+ launched=[]
+ def runner(*args,**kwargs):launched.append(1);raise BoundedReadError('read_process_deadline_exceeded')
  monkeypatch.setattr(cr,'run_bounded_read',runner)
+ # An unrecorded browser outlived the killed worker.
+ monkeypatch.setattr(cr,'profile_process_pids',lambda *args,**kwargs:[303] if launched else [])
+ monkeypatch.setattr(cr,'terminate_process',lambda *args,**kwargs:pytest.fail('unknown-owner signal'))
  with pytest.raises(cr.CatalogReadError,match='catalog_reader_cleanup_unproven'):invoke(config)
  assert cr.private_read(directory/'catalog-read-owner.json')['phase']=='launching'
  with pytest.raises(cr.CatalogReadError,match='catalog_reader_recovery_required'):invoke(config)
+
+
+def test_crash_before_owner_marker_on_empty_profile_closes_and_keeps_the_read_error(setup,monkeypatch):
+ # Live 2026-10-07: a worker killed at its deadline before any browser opened left a
+ # 'launching' marker that neither the read nor explicit recovery could ever close.
+ config,directory,_=setup
+ def runner(*args,**kwargs):raise BoundedReadError('read_process_deadline_exceeded')
+ monkeypatch.setattr(cr,'run_bounded_read',runner)
+ monkeypatch.setattr(cr,'terminate_process',lambda *args,**kwargs:pytest.fail('nothing recorded to signal'))
+ with pytest.raises(BoundedReadError,match='read_process_deadline_exceeded'):invoke(config)
+ assert not (directory/'catalog-read-owner.json').exists()
+
+
+def test_explicit_recovery_closes_retained_unrecorded_attempt_only_on_empty_profile(setup,monkeypatch):
+ config,directory,_=setup;row=marker(config,'launching');row['owners']=None;path=directory/'catalog-read-owner.json';cr.write_marker(path,row)
+ monkeypatch.setattr(cr,'terminate_process',lambda *args,**kwargs:pytest.fail('nothing recorded to signal'))
+ monkeypatch.setattr(cr,'daemon_pid',lambda browser:202);monkeypatch.setattr(cr,'identity',lambda pid,budget:{'pid':pid,'start_identity':'live'})
+ with pytest.raises(cr.CatalogReadError,match='catalog_reader_ownership_unrecorded'):cr.recover(config,expected_account_id='user_TEST',attempt_id=row['attempt_id'])
+ assert path.exists()
+ monkeypatch.setattr(cr,'identity',lambda pid,budget:None)
+ assert cr.recover(config,expected_account_id='user_TEST',attempt_id=row['attempt_id'])['recovered'] and not path.exists()
 
 
 def test_concurrent_named_profile_lease_refuses_before_worker(setup,monkeypatch):

@@ -142,6 +142,8 @@ The child records exact Chrome/daemon PID and start identity, closes strictly an
 proves no profile browser or recorded daemon remains. Parent timeout recovery
 signals only that durable, freshly revalidated owner. Unknown/unmarked ownership
 retains the marker and blocks automatic takeover; there is no blanket profile kill.
+A worker that ended before recording any browser closes its attempt, signalling
+nothing, only when the profile has no browser process and no live daemon left.
 The requested timeout (minimum 14 seconds) covers preflight, child execution,
 kill/reap and exact browser cleanup under one monotonic deadline. Launch reserves
 10.75 seconds for cleanup and refuses insufficient remaining time. The child
