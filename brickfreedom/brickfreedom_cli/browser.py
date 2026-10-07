@@ -12,3 +12,10 @@ class BrickfreedomBrowser(PlaywrightBrowserAutomation):
     AUTH_URL_PATTERN = r"/login|/register"
     AUTH_SUCCESS_SELECTOR = 'h2.text-xl'
     PLAYWRIGHT_EXECUTABLE_PATH = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    # Non-interactive credential-fill login so an expired saved session
+    # self-heals without a human at a terminal.
+    AUTH_LOGIN_USERNAME_SELECTOR = 'input[name="email"]'
+    AUTH_LOGIN_PASSWORD_SELECTOR = 'input[name="password"]'
+    AUTH_LOGIN_SUBMIT_SELECTOR = 'button[type="submit"]'
+    AUTH_LOGIN_USERNAME_SECRET = "brickfreedom-legacy-username"
+    AUTH_LOGIN_PASSWORD_SECRET = "brickfreedom-legacy-password"
