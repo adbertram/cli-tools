@@ -387,11 +387,25 @@ if [[ ${#FORBIDDEN_ROOT_ENV_FILES[@]} -gt 0 ]]; then
     exit 1
 fi
 
+# Every `uv run --project "$SKILL_DIR"` below resolves the harness environment
+# (pytest, cli-tools-shared and its dependencies such as python-dotenv) from the
+# project file in $SKILL_DIR. When that project is missing or incomplete (for
+# example a partial copy of this skill on another host) uv silently runs a bare
+# interpreter, and the first cli_tools_shared import dies with
+# ModuleNotFoundError. Prove the environment up front and fail with a clear error.
+if ! HARNESS_ENV_ERROR="$(
+    UV_PROJECT_ENVIRONMENT="$SKILL_UV_ENV" \
+    uv run --project "$SKILL_DIR" python3 -c 'import cli_tools_shared, dotenv, pytest' 2>&1
+)"; then
+    json_error "cli-tool harness environment is unusable: $SKILL_DIR must hold the full skill project (pyproject.toml, uv.lock, pytest.ini, scripts/, tests/) so uv can install cli-tools-shared, python-dotenv and pytest. Deploy the whole _repo/skills/cli-tool directory from the cli-tools repo. uv output: $HARNESS_ENV_ERROR" >&2
+    exit 1
+fi
+
 if ! PLACEHOLDER_VALIDATION_ERROR="$(
     PYTHONPATH="$CLI_DIR:$REPO_ROOT/_repo/cli-tools-shared${PYTHONPATH:+:$PYTHONPATH}" \
     CLI_NAME="$CLI_NAME" \
     UV_PROJECT_ENVIRONMENT="$SKILL_UV_ENV" \
-    uv run --project "$SKILL_DIR" python3 - <<'PY'
+    uv run --project "$SKILL_DIR" python3 - 2>&1 <<'PY'
 import os
 
 from cli_tools_shared.config import validate_auth_profile_secret_placeholders
