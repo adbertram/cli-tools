@@ -21,7 +21,8 @@ def policy():
 @pytest.fixture
 def publisher(tmp_path):
     config = SimpleNamespace(get_profile_data_dir=lambda: tmp_path / "clipper",
-                             get_active_profile_name=lambda: "clipper")
+                             get_active_profile_name=lambda: "clipper",
+                             get_browser=lambda posting=False: SimpleNamespace(posting=posting, close=lambda: None))
     instance = StudioPublisher(config)
     yield instance
     instance.close()
@@ -1197,3 +1198,18 @@ def test_posting_browser_is_visible_chrome_and_reads_stay_headless():
     assert TiktokBrowser(config)._headless_enabled() is True
     assert type(Config.get_browser(config, posting=True)) is StudioPostingBrowser
     assert type(Config.get_browser(config)) is TiktokBrowser
+
+
+def test_standalone_reconcile_reads_headless_while_posting_opens_visible_chrome(publisher, monkeypatch):
+    value = prepared(publisher, state="project_accepted", public_action_dispatched=True, post_project_id="555666777")
+    pages = []
+    monkeypatch.setattr(publisher, "_page", lambda: pages.append(publisher.browser.posting) or SimpleNamespace())
+    monkeypatch.setattr(publisher, "_identity", lambda *args: value["actor"])
+    monkeypatch.setattr(publisher.client, "_fetch_json", lambda *args: {"status_code": 0, "project_status": 1, "task_list": [{"task_status": 1}]})
+    assert publisher.reconcile(value["request_id"])["state"] == "project_pending"
+    assert pages == [False]
+    opened = []
+    browser = SimpleNamespace(get_page=lambda url: opened.append(url) or "editor", close=lambda: None)
+    fresh = StudioPublisher(SimpleNamespace(**{**vars(publisher.config), "get_browser": lambda posting=False: opened.append(posting) or browser}))
+    assert fresh._page() == "editor" and opened == [True, module.UPLOAD_URL]
+    fresh.close()

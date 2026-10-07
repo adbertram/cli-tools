@@ -213,15 +213,19 @@ guard; it never renews authorization. Bounded CDP request/response capture
 survives renderer navigation and journals exact binding IDs, hashes, and the
 native Post response body (first 64 KiB) for diagnosis.
 
-Studio prepare, publish, reconcile, and `studio check` always run in visible
-(headed) Chrome, whatever `HEADLESS` says; other reads stay headless. Before
+Studio prepare, publish, and `studio check` always run in visible (headed)
+Chrome, whatever `HEADLESS` says; a standalone `reconcile` and other reads stay
+headless. Before
 Post, the publisher journals what the page can read about the browser
 (`browser_environment`: user agent, `navigator.webdriver`, screen size) and
 refuses Post, leaving the request prepared, when the user agent says headless or
 `navigator.webdriver` is true. Both posts made from headless Chrome
 (`HeadlessChrome/155`, 800x600 screen) were accepted with an item ID and then
 never existed, not even in the owner's Studio list (measured 2026-10-06).
-The host must have a logged-in desktop session for headed Chrome.
+The host must have a logged-in desktop session for headed Chrome, and the
+caller must run in that user's session: on macOS a LaunchDaemon (n8n on
+adam-server) cannot open it directly and must run the command through
+`ssh localhost`.
 
 A native request guard permits only the exact creation ID, uploaded video ID,
 and one batch-zero request. The response allocates a separate `post_project_id`.

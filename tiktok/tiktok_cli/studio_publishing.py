@@ -569,6 +569,12 @@ class StudioPublisher:
                     raise StudioPublishError('Recorded Continue journal changed; migration refused.')
             return operation
 
+    def _read_page(self):
+        """Reconcile only reads: reuse the posting browser if open, else a headless one."""
+        if self.browser is None:
+            self.browser = self.config.get_browser()
+        return self._page()
+
     def _page(self):
         if self.browser is None:
             self.browser = self.config.get_browser(posting=True)
@@ -1293,7 +1299,7 @@ class StudioPublisher:
                 return {**operation, "reconciliation": "inconclusive_no_exact_receipt_id"}
             if not positive_decimal_id(project):
                 raise StudioPublishError("Journaled Studio post project ID is invalid; reconcile only.", category="ambiguous_post_action")
-            page = self._page()
+            page = self._read_page()
             self._identity(page, operation["policy"])
             payload = self.client._fetch_json(page, PROJECT_STATUS_PATH + "?project_id=" + project)
             if not isinstance(payload, dict):
@@ -1311,7 +1317,7 @@ class StudioPublisher:
         policy = operation["policy"]
         # This read is the existing verified Studio path, not the public feed.
         if self.browser is None:
-            self.browser = self.config.get_browser(posting=True)
+            self.browser = self.config.get_browser()
         self.client._browser = self.browser
         record = self.client.get_studio_video(policy["username"], operation["item_id"], policy["account_id"])
         if record["caption"] != policy["caption"] or record["account_id"] != policy["account_id"] or record["visibility"] != 1:
