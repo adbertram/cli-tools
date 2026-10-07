@@ -144,3 +144,24 @@ def test_poll_time_counts_against_original_deadline():
  def poll(deadline):calls.append(deadline);time.sleep(.04)
  with pytest.raises(BoundedReadError,match='deadline_exceeded'):run('import time;time.sleep(30)',timeout_seconds=.1,on_poll=poll)
  assert len(set(calls))==1 and time.monotonic()-started<.3
+
+
+@pytest.mark.skipif(sys.platform != 'darwin', reason='the kqueue exit watch is the macOS fallback')
+def test_macos_without_waitid_uses_a_non_reaping_kqueue_exit_watch(monkeypatch):
+    """macOS has os.waitid only from Python 3.13; the package supports 3.11 and 3.12 too."""
+    from cli_tools_shared import bounded_read
+
+    monkeypatch.delattr(bounded_read.os, 'waitid', raising=False)
+    result=run("import os;os.write(1,b'ok');raise SystemExit(3)")
+    assert result.stdout==b'ok' and result.returncode==3
+    with pytest.raises(BoundedReadError,match='read_process_deadline_exceeded'):
+        run("import time;time.sleep(5)",timeout_seconds=.3)
+    # A child that is already a zombie when the watch registers has exited, and stays unreaped.
+    child=subprocess.Popen(['/usr/bin/true'])
+    time.sleep(.3)
+    watch=bounded_read._ExitWatch(child.pid)
+    try:
+        assert watch.poll() is True
+    finally:
+        watch.close()
+    assert child.wait(timeout=1)==0

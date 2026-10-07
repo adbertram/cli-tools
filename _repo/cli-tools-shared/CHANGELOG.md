@@ -12,6 +12,12 @@
   moved onto it. Tests: `tests/test_auth.py`.
 
 ### Fixes
+- `bounded_read.run_bounded_read` works on macOS under Python 3.11 and 3.12, the
+  versions the package declares: it called `os.waitid`, which macOS only has from
+  Python 3.13, so every bounded read raised `AttributeError` there. Where `os.waitid`
+  is missing it now watches the owned leader's exit through a kqueue
+  `EVFILT_PROC`/`NOTE_EXIT` event, which, like `WNOWAIT`, never reaps it, so the
+  PID/PGID stays reserved until cleanup. Tests: `tests/test_bounded_read.py`.
 - Every engine launch of the real Google Chrome app (CDP, Playwright,
   Webwright local CDP, manual login) now waits while a Tether UI lease holds
   the `remote-bare` demo desktop (`warden status --provider remote-bare`, any

@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 import math
 import os
+import select
 import selectors
 import signal
 import subprocess
@@ -46,6 +47,39 @@ def run_bounded_read(argv, *, timeout_seconds, max_stdout_bytes, max_stderr_byte
     return _run(argv, timeout_seconds, max_stdout_bytes, max_stderr_bytes, on_start=on_start, on_poll=on_poll)
 
 
+class _ExitWatch:
+    """Non-reaping check that the owned leader has exited, so its PID/PGID stay reserved.
+
+    os.waitid with WNOWAIT where the platform has it. macOS gained os.waitid only in
+    Python 3.13; before that a kqueue EVFILT_PROC NOTE_EXIT watch answers the same question
+    without reaping. Registering on our own unreaped child fails with ESRCH only once it is
+    already a zombie, which is an exit.
+    """
+
+    def __init__(self, pid):
+        self.pid = pid
+        self.exited = False
+        self.kqueue = None
+        if not hasattr(os, 'waitid'):
+            self.kqueue = select.kqueue()
+            try:
+                self.kqueue.control([select.kevent(pid, select.KQ_FILTER_PROC, select.KQ_EV_ADD, select.KQ_NOTE_EXIT)], 0, 0)
+            except ProcessLookupError:
+                self.exited = True
+
+    def poll(self):
+        if not self.exited:
+            if self.kqueue is None:
+                self.exited = os.waitid(os.P_PID, self.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT) is not None
+            else:
+                self.exited = bool(self.kqueue.control(None, 1, 0))
+        return self.exited
+
+    def close(self):
+        if self.kqueue is not None:
+            self.kqueue.close()
+
+
 def _group_has_no_live_members(pgid):
     # Existing browser inspection includes argv and lacks a deadline. This fixed
     # numeric-only system ps is independently bounded and never spawns children.
@@ -73,7 +107,9 @@ def _run(argv, timeout_seconds, max_stdout_bytes, max_stderr_bytes, *, numeric_i
     failure = None
     selector = None
     exited = None
+    watch = None
     try:
+        watch = _ExitWatch(process.pid)
         if on_start is not None:on_start(process.pid, deadline)
         selector = selectors.DefaultSelector()
         for stream, name in ((process.stdout, 'stdout'), (process.stderr, 'stderr')):
@@ -85,7 +121,7 @@ def _run(argv, timeout_seconds, max_stdout_bytes, max_stderr_bytes, *, numeric_i
             if remaining <= 0:
                 raise BoundedReadError('read_process_deadline_exceeded')
             # WNOWAIT prevents PID reuse before cleanup signals the owned group.
-            exited = os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+            exited = True if watch.poll() else None
             if not selector.get_map() and exited is not None:
                 break
             for key, _ in selector.select(min(remaining, 0.05)):
@@ -110,6 +146,7 @@ def _run(argv, timeout_seconds, max_stdout_bytes, max_stderr_bytes, *, numeric_i
     finally:
         cleanup_deadline=time.monotonic()+cleanup_seconds
         if selector is not None:selector.close()
+        if watch is not None:watch.close()
         process.stdout.close()
         process.stderr.close()
         cleanup_unconfirmed=False
