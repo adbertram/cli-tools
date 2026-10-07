@@ -1,0 +1,1414 @@
+{
+  "tool": "ata-blog",
+  "description": "CLI for managing ATA Blog (adamtheautomator.com)",
+  "discovered_at": "2026-10-07T23:03:00Z",
+  "total_commands": 37,
+  "global_options": [
+    {
+      "name": "--version",
+      "type": "bool",
+      "required": false,
+      "help": "Show version and exit",
+      "short": "-v"
+    },
+    {
+      "name": "--no-cache",
+      "type": "bool",
+      "required": false,
+      "help": "Bypass response cache"
+    }
+  ],
+  "commands": {
+    "auth": {
+      "help": "Manage ata-blog authentication",
+      "usage_instructions": "Use `ata-blog auth` to access this command group. Run `--help` on a subcommand for details.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "usage_instructions": "Use `ata-blog auth login` with the documented arguments and options shown below.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing ephemeral auth state and re-authenticate",
+              "short": "-F",
+              "takes_value": false
+            }
+          ]
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "usage_instructions": "Use `ata-blog auth logout` with the documented arguments and options shown below.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "usage_instructions": "Use `ata-blog auth profiles` to access this command group. Run `--help` on a subcommand for details.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "usage_instructions": "Use `ata-blog auth profiles create` with the documented arguments and options shown below.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "usage_instructions": "Use `ata-blog auth profiles delete` with the documented arguments and options shown below.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "usage_instructions": "Use `ata-blog auth profiles get` with the documented arguments and options shown below.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show their auth types and active state.",
+              "usage_instructions": "Use `ata-blog auth profiles list` with the documented arguments and options shown below.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "usage_instructions": "Use `ata-blog auth status` with the documented arguments and options shown below.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "usage_instructions": "Use `ata-blog auth test` with the documented arguments and options shown below.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "usage_instructions": "Use `ata-blog cache` to access this command group. Run `--help` on a subcommand for details.",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "usage_instructions": "Use `ata-blog cache clear` with the documented arguments and options shown below.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
+        }
+      }
+    },
+    "categories": {
+      "help": "Manage static site categories",
+      "usage_instructions": "Use `ata-blog categories` to access this command group. Run `--help` on a subcommand for details.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "create": {
+          "help": "Create a category in the static site's terms.json.",
+          "usage_instructions": "Use `ata-blog categories create` with the documented arguments and options shown below.",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Category name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get category details.",
+          "usage_instructions": "Use `ata-blog categories get` with the documented arguments and options shown below.",
+          "arguments": [
+            {
+              "name": "term_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Category ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List static site categories.",
+          "usage_instructions": "Use `ata-blog categories list` with the documented arguments and options shown below.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:DevOps, count:gt:10)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "earnings": {
+      "help": "Query ad earnings and revenue data",
+      "usage_instructions": "Use `ata-blog earnings` to access this command group. Run `--help` on a subcommand for details.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get earnings for a specific post by slug.",
+          "examples": [
+            "ata-blog earnings get my-post-slug",
+            "ata-blog earnings get my-post-slug --table",
+            "ata-blog earnings get my-post-slug --period last7d",
+            "ata-blog earnings get my-post-slug --exclude-sponsored"
+          ],
+          "usage_instructions": "Use `ata-blog earnings get` with the documented arguments and options shown below.",
+          "arguments": [
+            {
+              "name": "slug",
+              "type": "TEXT",
+              "required": true,
+              "help": "Post slug to get earnings for"
+            }
+          ],
+          "options": [
+            {
+              "name": "--period",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time period: yesterday, last7d, last30d, mtd, lastmonth",
+              "default": "last30d"
+            },
+            {
+              "name": "--start",
+              "type": "TEXT",
+              "required": false,
+              "help": "Start date (YYYY-MM-DD). Overrides --period",
+              "short": "-s"
+            },
+            {
+              "name": "--end",
+              "type": "TEXT",
+              "required": false,
+              "help": "End date (YYYY-MM-DD). Overrides --period",
+              "short": "-e"
+            },
+            {
+              "name": "--exclude-sponsored",
+              "type": "bool",
+              "required": false,
+              "help": "Skip sponsored posts",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List post earnings from Raptive ad data. Query ad revenue, pageviews, RPM, and impressions for your posts. Supports filtering by post title or numeric thresholds.",
+          "examples": [
+            "ata-blog earnings list --table",
+            "ata-blog earnings list --post-title \"PowerShell\"",
+            "ata-blog earnings list --filter \"earnings:gt:50\"",
+            "ata-blog earnings list --filter \"rpm:gt:20\" --period last7d",
+            "ata-blog earnings list --start 2025-01-01 --end 2025-12-31 --limit 50",
+            "ata-blog earnings list --exclude-sponsored"
+          ],
+          "usage_instructions": "Use `ata-blog earnings list` with the documented arguments and options shown below.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--post-title",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by post title (partial match)"
+            },
+            {
+              "name": "--period",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time period: yesterday, last7d, last30d, mtd, lastmonth",
+              "default": "last30d"
+            },
+            {
+              "name": "--start",
+              "type": "TEXT",
+              "required": false,
+              "help": "Start date (YYYY-MM-DD). Overrides --period",
+              "short": "-s"
+            },
+            {
+              "name": "--end",
+              "type": "TEXT",
+              "required": false,
+              "help": "End date (YYYY-MM-DD). Overrides --period",
+              "short": "-e"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--exclude-sponsored",
+              "type": "bool",
+              "required": false,
+              "help": "Exclude posts tagged as Sponsored",
+              "takes_value": false
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value). E.g., earnings:gt:50, rpm:gt:20",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "media": {
+      "help": "Upload media to the static site",
+      "usage_instructions": "Use `ata-blog media` to access this command group. Run `--help` on a subcommand for details.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "upload": {
+          "help": "Upload an image to the static site media bucket (Cloudflare R2). The object lands at a content-addressed wp-content/uploads/publisher/ key and the printed URL is publicly served by the site's media edge.",
+          "examples": [
+            "ata-blog media upload ./posts/<page_id>/images/diagram.webp"
+          ],
+          "usage_instructions": "Use `ata-blog media upload` with the documented arguments and options shown below.",
+          "arguments": [
+            {
+              "name": "file_path",
+              "type": "TEXT",
+              "required": true,
+              "help": "Path to the local image file"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "notion-page": {
+      "help": "Manage Notion pages",
+      "usage_instructions": "Use `ata-blog notion-page` to access this command group. Run `--help` on a subcommand for details.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "backfill-scheduled-images": {
+          "help": "Mirror local featured images to R2 for Scheduled pages that predate the recovery mirror. Scheduling started mirroring the resolved featured image to R2 so a due `publish --status publish` run can recover it on a different host. A page that was already `Scheduled` before that shipped has no R2 object to recover. Run this once, on every host that might hold the local image for an already-`Scheduled` page, to mirror it.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "comments": {
+          "help": "Manage comments on Notion pages",
+          "usage_instructions": "Use `ata-blog notion-page comments` to access this command group. Run `--help` on a subcommand for details.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "add": {
+              "help": "Add a comment to a Notion page. Posts a top-level comment to the specified page using the same Notion authentication as the rest of the `notion-page` subcommands.",
+              "examples": [
+                "ata-blog notion-page comments add PAGE_ID --body \"No affiliate match — needs human review\"",
+                "ata-blog notion-page comments add PAGE_ID -b \"Quick note from CLI\""
+              ],
+              "usage_instructions": "Use `ata-blog notion-page comments add` with the documented arguments and options shown below.",
+              "arguments": [
+                {
+                  "name": "page_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Notion page ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--body",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Comment body text",
+                  "short": "-b"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get a single Notion comment by ID.",
+              "examples": [
+                "ata-blog notion-page comments get COMMENT_ID",
+                "ata-blog notion-page comments get COMMENT_ID --table"
+              ],
+              "usage_instructions": "Use `ata-blog notion-page comments get` with the documented arguments and options shown below.",
+              "arguments": [
+                {
+                  "name": "comment_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Notion comment ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "List comments on a Notion page with context. Returns comments with the text they're attached to, useful for gathering human review feedback from Notion inline comments.",
+              "examples": [
+                "ata-blog notion-page comments list PAGE_ID",
+                "ata-blog notion-page comments list PAGE_ID --table",
+                "ata-blog notion-page comments list PAGE_ID --limit 10",
+                "ata-blog notion-page comments list PAGE_ID --filter \"text:contains:review\"",
+                "ata-blog notion-page comments list PAGE_ID --no-context"
+              ],
+              "usage_instructions": "Use `ata-blog notion-page comments list` with the documented arguments and options shown below.",
+              "arguments": [
+                {
+                  "name": "page_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Notion page ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum comments to return",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., text:contains:bug)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields to display",
+                  "short": "-P"
+                },
+                {
+                  "name": "--no-context",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Exclude parent block context",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        },
+        "content": {
+          "help": "Manage article content",
+          "usage_instructions": "Use `ata-blog notion-page content` to access this command group. Run `--help` on a subcommand for details.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "append": {
+              "help": "Append markdown content to article.",
+              "examples": [
+                "ata-blog notion-page content append PAGE_ID --file ./additions.md"
+              ],
+              "usage_instructions": "Use `ata-blog notion-page content append` with the documented arguments and options shown below.",
+              "arguments": [
+                {
+                  "name": "page_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Notion page ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--file",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Markdown file to append",
+                  "short": "-f"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get article content as markdown.",
+              "examples": [
+                "ata-blog notion-page content get PAGE_ID",
+                "ata-blog notion-page content get PAGE_ID --output ./post.md"
+              ],
+              "usage_instructions": "Use `ata-blog notion-page content get` with the documented arguments and options shown below.",
+              "arguments": [
+                {
+                  "name": "page_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Notion page ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--output",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Output file path (default: stdout)",
+                  "short": "-o"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "set": {
+              "help": "Replace article content with markdown from file. Local image references (paths that are not http/https URLs) are uploaded to the static site media bucket before the markdown is pushed to Notion, and the markdown is rewritten to point at the returned public URLs.",
+              "examples": [
+                "ata-blog notion-page content set PAGE_ID --file ./post.md"
+              ],
+              "usage_instructions": "Use `ata-blog notion-page content set` with the documented arguments and options shown below.",
+              "arguments": [
+                {
+                  "name": "page_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Notion page ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--file",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Markdown file to set as content",
+                  "short": "-f"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        },
+        "create": {
+          "help": "Create a new article idea in the Notion database. Creates a page using the Standard ATA Tutorial AI-Created Idea template with the provided title, excerpt, category, and optional keywords.",
+          "examples": [
+            "ata-blog notion-page create --title \"My Post\" --excerpt \"Desc\" --category \"IT Ops\"",
+            "ata-blog notion-page create --title \"My Post\" --excerpt \"Desc\" --category \"Cloud\" --keywords \"azure, cloud\" --status \"Good Idea\""
+          ],
+          "usage_instructions": "Use `ata-blog notion-page create` with the documented arguments and options shown below.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--title",
+              "type": "TEXT",
+              "required": true,
+              "help": "Article title"
+            },
+            {
+              "name": "--excerpt",
+              "type": "TEXT",
+              "required": true,
+              "help": "Article description/synopsis"
+            },
+            {
+              "name": "--category",
+              "type": "TEXT",
+              "required": true,
+              "help": "Category name from static-site/src/data/terms.json"
+            },
+            {
+              "name": "--keywords",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated SEO keywords"
+            },
+            {
+              "name": "--type",
+              "type": "TEXT",
+              "required": false,
+              "help": "Post type (default: Standard)",
+              "default": "Standard"
+            },
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Override default status (template sets 'Idea' by default)",
+              "short": "-s"
+            },
+            {
+              "name": "--template-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Notion template ID (defaults to Standard ATA Tutorial AI-Created Idea)"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get article details from Notion.",
+          "usage_instructions": "Use `ata-blog notion-page get` with the documented arguments and options shown below.",
+          "arguments": [
+            {
+              "name": "page_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Notion page ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List articles from Notion database.",
+          "examples": [
+            "ata-blog notion-page list --status \"Draft\"",
+            "ata-blog notion-page list --status \"Draft|Review\"",
+            "ata-blog notion-page list --filter \"Status:in:Good Idea|Human Review\"",
+            "ata-blog notion-page list --filter \"Title:contains:outsmarting\"",
+            "ata-blog notion-page list --filter \"Title:ilike:%azure%\"",
+            "ata-blog notion-page list --filter \"Publish Date:gte:2026-07-20\"",
+            "ata-blog notion-page list --filter \"Publish Date:past_week\"",
+            "ata-blog notion-page list --filter \"Publish Date:is_not_empty:true\""
+          ],
+          "usage_instructions": "Use `ata-blog notion-page list` with the documented arguments and options shown below.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by Status (single or pipe-separated)",
+              "short": "-s"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum articles",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-P"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "publish": {
+          "help": "Schedule a Notion article, deploy a non-publishing Cloudflare preview, or promote it to production.",
+          "usage_instructions": "Use `ata-blog notion-page publish` with the documented arguments and options shown below.",
+          "arguments": [
+            {
+              "name": "page_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Notion page ID to publish"
+            }
+          ],
+          "options": [
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Publish status (draft/preview/publish). preview deploys to Cloudflare Pages without mutating Notion; publish promotes to production",
+              "short": "-s",
+              "default": "draft"
+            },
+            {
+              "name": "--date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Schedule only, at this slot (ISO 8601 with UTC offset): sets Status=Scheduled and Publish Date; nothing is built or deployed",
+              "short": "-d"
+            },
+            {
+              "name": "--auto-schedule",
+              "type": "bool",
+              "required": false,
+              "help": "Schedule only, at the next available slot: sets Status=Scheduled and Publish Date; nothing is built or deployed",
+              "takes_value": false
+            },
+            {
+              "name": "--schedule-after",
+              "type": "TEXT",
+              "required": false,
+              "help": "Inclusive schedule bound (ISO 8601 with UTC offset; requires --schedule-before)"
+            },
+            {
+              "name": "--schedule-before",
+              "type": "TEXT",
+              "required": false,
+              "help": "Exclusive schedule bound (ISO 8601 with UTC offset; requires --schedule-after)"
+            },
+            {
+              "name": "--no-duplicate-check",
+              "type": "bool",
+              "required": false,
+              "help": "Skip duplicate slug check",
+              "takes_value": false
+            },
+            {
+              "name": "--featured-image",
+              "type": "TEXT",
+              "required": false,
+              "help": "Promotion and preview only: path to featured image file to upload and attach"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Force republish even if already published",
+              "short": "-F",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "schema": {
+          "help": "Manage Notion database schema (properties/columns)",
+          "usage_instructions": "Use `ata-blog notion-page schema` to access this command group. Run `--help` on a subcommand for details.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "add-property": {
+              "help": "Add a new property (column) to a Notion database schema. Delegates to the underlying `notion field add` CLI, which performs the PATCH https://api.notion.com/v1/databases/{database_id} call using the same Notion authentication path as every other ata-blog notion-page subcommand. On success, emits a JSON object to stdout: {\"database_id\": \"...\", \"property_name\": \"...\", \"type\": \"...\", \"created\": true}",
+              "examples": [
+                "ata-blog notion-page schema add-property DB_ID --name \"Affiliate Promotion\" --type rich_text",
+                "ata-blog notion-page schema add-property DB_ID --name \"Source URL\" --type url",
+                "ata-blog notion-page schema add-property DB_ID --name \"Reviewed\" --type checkbox"
+              ],
+              "usage_instructions": "Use `ata-blog notion-page schema add-property` with the documented arguments and options shown below.",
+              "arguments": [
+                {
+                  "name": "database_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Notion database ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Property (column) name to create",
+                  "short": "-n"
+                },
+                {
+                  "name": "--type",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Property type. Supported (empty-config types only): rich_text, url, checkbox, number, date, email, phone_number, files. (select/multi_select require options and are out of scope for this command.)",
+                  "short": "-t"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        },
+        "search": {
+          "help": "Search articles by title.",
+          "examples": [
+            "ata-blog notion-page search \"azure functions\"",
+            "ata-blog notion-page search \"azure\" --status \"Draft\"",
+            "ata-blog notion-page search \"powershell\" --table"
+          ],
+          "usage_instructions": "Use `ata-blog notion-page search` with the documented arguments and options shown below.",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Search query (searches title)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by status",
+              "short": "-s"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "statuses": {
+          "help": "List valid article status values.",
+          "examples": [
+            "ata-blog notion-page statuses",
+            "ata-blog notion-page statuses --json"
+          ],
+          "usage_instructions": "Use `ata-blog notion-page statuses` with the documented arguments and options shown below.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--json",
+              "type": "bool",
+              "required": false,
+              "help": "Output as JSON array",
+              "short": "-j",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "unpublish": {
+          "help": "Unpublish an article: take a published post off the site and back to draft, or unschedule a Scheduled post back to Ready to Publish. The inverse of `publish`. Resolves both the Notion page and the static site post from the identifier, removes the post from the static site source, rebuilds, deploys, and promotes the site without it, and resets the Notion page status plus its publication artifact fields (Published URL, X Post URL, LinkedIn Post URL, Publish Date -> cleared; Promoted -> false). Content, Keywords, Tags, Category, Schema Type, Stage Date, and Post Performance Snapshots are left intact. The removed post file is kept at the `backup_path` reported in the result. This is destructive: pass --yes to run non-interactively, or --dry-run to preview the resolved post and planned field changes without mutating. A Scheduled page has nothing on the site yet, so unscheduling only resets its Notion status and clears Publish Date.",
+          "examples": [
+            "ata-blog notion-page unpublish PAGE_ID --dry-run",
+            "ata-blog notion-page unpublish SCHEDULED_PAGE_ID --yes",
+            "ata-blog notion-page unpublish PAGE_ID --yes",
+            "ata-blog notion-page unpublish https://adamtheautomator.com/my-post/ --yes",
+            "ata-blog notion-page unpublish my-post-slug --yes"
+          ],
+          "arguments": [
+            {
+              "name": "identifier",
+              "type": "TEXT",
+              "required": true,
+              "help": "Notion page ID, post URL, or slug"
+            }
+          ],
+          "options": [
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Notion status to set (default: Ready to Publish for a Scheduled page, Draft otherwise)",
+              "short": "-s"
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Resolve and report planned changes without mutating",
+              "takes_value": false
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Skip the confirmation prompt (required non-interactively)",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "update": {
+          "help": "Update article properties in Notion. Property types are read from the live Notion database schema, so each value is sent with the correct typed payload. An empty value clears the property (url/email/number/select/date -> null, rich_text/multi_select/relation -> empty). Checkbox properties accept true/false/yes/no/1/0 (case-insensitive) and are rejected if ambiguous.",
+          "examples": [
+            "ata-blog notion-page update PAGE_ID --status \"Draft\"",
+            "ata-blog notion-page update PAGE_ID --status \"Developmental Review\"",
+            "ata-blog notion-page update PAGE_ID --property \"Keywords:azure, cloud\"",
+            "ata-blog notion-page update PAGE_ID -s \"Draft\" -p \"AI Search Iterations:2\"",
+            "ata-blog notion-page update PAGE_ID -p \"Promoted:true\"",
+            "ata-blog notion-page update PAGE_ID -p \"Published URL:\" -p \"Promoted:false\""
+          ],
+          "usage_instructions": "Property types are read from the live Notion database schema. Pass an empty value (e.g. -p \"Published URL:\") to clear a property: url/email/number/select/date become null and rich_text/multi_select/relation become empty. Checkbox properties accept true/false/yes/no/1/0 (case-insensitive) and are rejected if ambiguous.",
+          "arguments": [
+            {
+              "name": "page_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Notion page ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "New status value",
+              "short": "-s"
+            },
+            {
+              "name": "--property",
+              "type": "TEXT",
+              "required": false,
+              "help": "Property update (Name:value)",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "tags": {
+      "help": "Manage static site tags",
+      "usage_instructions": "Use `ata-blog tags` to access this command group. Run `--help` on a subcommand for details.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "create": {
+          "help": "Create a tag in the static site's terms.json.",
+          "usage_instructions": "Use `ata-blog tags create` with the documented arguments and options shown below.",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Tag name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get tag details.",
+          "usage_instructions": "Use `ata-blog tags get` with the documented arguments and options shown below.",
+          "arguments": [
+            {
+              "name": "term_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Tag ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List static site tags.",
+          "usage_instructions": "Use `ata-blog tags list` with the documented arguments and options shown below.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum results",
+              "short": "-l"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:DevOps, count:gt:10)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "usage_instructions": "Use `` with the documented arguments and options shown below."
+}

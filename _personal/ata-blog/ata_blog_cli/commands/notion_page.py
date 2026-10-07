@@ -152,7 +152,7 @@ def articles_get(
 def articles_create(
     title: str = typer.Option(..., "--title", help="Article title"),
     excerpt: str = typer.Option(..., "--excerpt", help="Article description/synopsis"),
-    category: str = typer.Option(..., "--category", help="Category: IT Ops|Home Ops|DevOps|Cloud|Information Security|Ebook"),
+    category: str = typer.Option(..., "--category", help="Category name from static-site/src/data/terms.json"),
     keywords: Optional[str] = typer.Option(None, "--keywords", help="Comma-separated SEO keywords"),
     post_type: str = typer.Option("Standard", "--type", help="Post type (default: Standard)"),
     status: Optional[str] = typer.Option(None, "--status", "-s", help="Override default status (template sets 'Idea' by default)"),

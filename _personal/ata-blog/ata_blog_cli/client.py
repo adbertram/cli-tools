@@ -853,8 +853,6 @@ class AtaBlogClient:
 
     DEFAULT_IDEA_TEMPLATE_ID = "2e05d9c8-5b2b-8065-8aca-e8da0e179b97"
 
-    VALID_CATEGORIES = ("IT Ops", "Home Ops", "DevOps", "Cloud", "Information Security", "Ebook")
-
     def create_article(
         self,
         title: str,
@@ -870,15 +868,27 @@ class AtaBlogClient:
         Args:
             title: Article title
             excerpt: Article description/synopsis
-            category: Category (must be one of VALID_CATEGORIES)
+            category: Category from the static site's terms.json
             keywords: Optional comma-separated SEO keywords
             post_type: Post type (default: Standard)
             status: Optional status (defaults to Idea)
             template_id: Optional template ID (defaults to Standard ATA Tutorial AI-Created Idea)
         """
-        if category not in self.VALID_CATEGORIES:
+        # Import here because corpus imports this module for its static-site root.
+        # The taxonomy must be read at creation time so this command follows the
+        # same source of truth as categories list and publishing validation.
+        from .corpus import list_terms
+
+        categories = list_terms("categories")
+        category_names = []
+        for term in categories:
+            name = term.get("name") if isinstance(term, dict) else None
+            if not isinstance(name, str) or not name:
+                raise ClientError("Static site categories contain a term with no valid name")
+            category_names.append(name)
+        if category not in category_names:
             raise ClientError(
-                f"Invalid category '{category}'. Must be one of: {', '.join(self.VALID_CATEGORIES)}"
+                f"Invalid category '{category}'. Must be one of: {', '.join(category_names)}"
             )
 
         # NOTE: When --from-template is used, --select flags for Category/Type are
