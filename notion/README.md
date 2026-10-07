@@ -17,6 +17,69 @@ The Notion CLI provides access to:
 - **Page files** - Download Notion-hosted or external file attachments
 - **Official skills** - Download Notion's published Skills for Claude ZIP files
 - **Comments** - Manage comments on pages and blocks
+- **Custom Agents** - Discover, run, and manage agents through Notion's public Agent API
+- **Enterprise agent administration** - Manage workspace agents with a separate organization token
+
+## Custom Agents
+
+These commands use Notion's [public Agent API](https://developers.notion.com/guides/notion-agent-apis/overview) at version `2026-03-11`. A personal access token can access agents visible to its user. A connection needs the **Interact with agents** capability and sees only agents shared with it. Existing page and database commands keep their configured API version.
+
+```bash
+notion agents list --query "Support" --table
+notion agents get AGENT_ID --verbose
+notion agents insights AGENT_ID
+notion agents status AGENT_ID disabled
+notion agents credit-limit AGENT_ID --limit 100
+notion agents credit-limit AGENT_ID  # clear limit
+notion agents delete AGENT_ID --yes
+notion agents sessions send "Summarize this week" --agent-id AGENT_ID
+notion agents sessions list --filter "agent_id:eq:AGENT_ID"
+notion agents sessions get SESSION_ID
+notion agents sessions events SESSION_ID
+notion agents sessions cancel SESSION_ID
+```
+
+Agent and session list commands accept `--filter`, `--limit`, `--properties`, and `--table`. `--body-file` supplies Notion's native JSON query filter/sort, batch operations, session attachments and metadata, or required-action decisions without losing API fields. For example:
+
+```json
+{"session_id":"SESSION_ID","actions":[{"action_id":"ACTION_ID","option_id":"approve"}]}
+```
+
+```bash
+notion agents sessions submit --body-file approval.json
+notion agents batch --body-file operations.json
+notion agents sessions stream --body-file message.json
+```
+
+`sessions stream` prints server-sent events. Its body may contain `continue_from` with `session_id` to replay an event.
+
+Notion's documented API does **not** provide Custom Agent creation or updates to name, instructions, model, tools, or triggers. `sessions send` creates a session, not a Custom Agent. `agents status` and `agents credit-limit` are the available public edits.
+
+### Enterprise Admin API
+
+An Enterprise organization admin token is required. Store it in the CLI-tools secret manager as `notion-admin-token`; the ordinary integration token is separate:
+
+```bash
+bash /Users/adam/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh set --tool notion --type admin-token
+```
+
+Admin calls use API version `2026-06-01` and support Notion's [documented Admin API agent operations](https://developers.notion.com/reference/admin/get-workflows-metadata-for-space):
+
+```bash
+notion admin-agents list SPACE_ID --table
+notion admin-agents get SPACE_ID AGENT_ID
+notion admin-agents usage SPACE_ID AGENT_ID
+notion admin-agents usage-list SPACE_ID
+notion admin-agents credit-limit SPACE_ID AGENT_ID --limit 100
+notion admin-agents permissions SPACE_ID AGENT_ID
+notion admin-agents update-permissions SPACE_ID AGENT_ID --body-file grants.json
+notion admin-agents status SPACE_ID AGENT_ID disabled
+notion admin-agents delete SPACE_ID AGENT_ID --yes
+notion admin-agents creation-policy SPACE_ID workspace_owners_only
+notion admin-agents workspace-credit-limit SPACE_ID --limit 500
+```
+
+Omit `--limit` on either credit-limit command to clear the cap. `update-permissions` accepts the official `set` and `remove` arrays as JSON.
 
 ## Authentication
 

@@ -39,6 +39,9 @@ notion <command-group> <action> [arguments] [options]
 | Notify a person in a comment | `notion comments create "text" -p PAGE_ID --mention someone@example.com` |
 | Add shell-sensitive comment text | `notion comments create --text-file comment.md --discussion-id DISCUSSION_ID` |
 | List workspace users | `notion users list --table` |
+| List accessible Custom Agents | `notion agents list --table` |
+| Run a Custom Agent | `notion agents sessions send "Your question" --agent-id AGENT_ID` |
+| List Enterprise workspace agents | `notion admin-agents list SPACE_ID --table` |
 | Find a user by email | `notion users list --filter "person.email:eq:someone@example.com"` |
 | Get one user | `notion users get USER_ID --table` |
 | Append markdown as toggle headings | `notion pages content append PAGE_ID -f outline.md --is-toggleable` |

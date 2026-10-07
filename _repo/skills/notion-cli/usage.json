@@ -1,8 +1,8 @@
 {
   "tool": "notion",
   "description": "CLI interface for Notion API with database query filtering",
-  "discovered_at": "2026-08-28T22:50:57Z",
-  "total_commands": 63,
+  "discovered_at": "2026-10-07T22:13:57Z",
+  "total_commands": 88,
   "global_options": [
     {
       "name": "--version",
@@ -19,6 +19,992 @@
     }
   ],
   "commands": {
+    "admin-agents": {
+      "help": "Manage Enterprise workspace agents",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "creation-policy": {
+          "help": "Set who may create agents in an Enterprise workspace.",
+          "arguments": [
+            {
+              "name": "space_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "policy",
+              "type": "TEXT",
+              "required": true,
+              "help": "all_workspace_members, workspace_owners_only, or disabled"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "credit-limit": {
+          "help": "Set or clear an agent's Enterprise credit limit.",
+          "arguments": [
+            {
+              "name": "space_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "agent_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Non-negative limit; omit to clear"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Delete a workspace Custom Agent.",
+          "arguments": [
+            {
+              "name": "space_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "agent_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Find one workspace agent by ID through the Admin API listing.",
+          "arguments": [
+            {
+              "name": "space_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "agent_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List all agents in an Enterprise workspace, including administrative metadata.",
+          "arguments": [
+            {
+              "name": "space_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--name",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            },
+            {
+              "name": "--query-file",
+              "type": "PATH",
+              "required": false,
+              "help": "JSON object of documented Admin API query parameters"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--limit",
+              "type": "bool",
+              "required": false,
+              "help": "<int>",
+              "short": "-l",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-p",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "permissions": {
+          "help": "Get Custom Agent sharing permissions.",
+          "arguments": [
+            {
+              "name": "space_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "agent_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--cursor",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "status": {
+          "help": "Disable or re-enable a workspace agent.",
+          "arguments": [
+            {
+              "name": "space_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "agent_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "status",
+              "type": "TEXT",
+              "required": true,
+              "help": "active or disabled"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "update-permissions": {
+          "help": "Grant, change, or revoke Custom Agent sharing permissions.",
+          "arguments": [
+            {
+              "name": "space_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "agent_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--body-file",
+              "type": "PATH",
+              "required": true,
+              "help": "JSON with set and/or remove grants"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "usage": {
+          "help": "Get credit usage for one workspace agent.",
+          "arguments": [
+            {
+              "name": "space_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "agent_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--start-cursor",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "usage-list": {
+          "help": "List credit usage for workspace agents.",
+          "arguments": [
+            {
+              "name": "space_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--query-file",
+              "type": "PATH",
+              "required": false,
+              "help": "JSON object of documented Admin API query parameters"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--limit",
+              "type": "bool",
+              "required": false,
+              "help": "<int>",
+              "short": "-l",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-p",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "workspace-credit-limit": {
+          "help": "Set or clear the default credit limit for future workspace agents.",
+          "arguments": [
+            {
+              "name": "space_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Non-negative default limit; omit to clear"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "agents": {
+      "help": "Manage Custom Agents and sessions",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "batch": {
+          "help": "Submit documented agent operations as an asynchronous batch.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--body-file",
+              "type": "PATH",
+              "required": true,
+              "help": "JSON body with operations array"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "credit-limit": {
+          "help": "Set or clear an agent's credit limit.",
+          "arguments": [
+            {
+              "name": "agent_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Non-negative credit limit; omit to clear"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Soft-delete a Custom Agent.",
+          "arguments": [
+            {
+              "name": "agent_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Confirm soft deletion",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Retrieve Custom Agent metadata.",
+          "arguments": [
+            {
+              "name": "agent_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "insights": {
+          "help": "Retrieve agent configuration and credit usage insights.",
+          "arguments": [
+            {
+              "name": "agent_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--start-time",
+              "type": "bool",
+              "required": false,
+              "help": "<int>",
+              "takes_value": false
+            },
+            {
+              "name": "--end-time",
+              "type": "bool",
+              "required": false,
+              "help": "<int>",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "Find accessible Custom Agents; query body supports Notion's full search schema.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--query",
+              "type": "TEXT",
+              "required": false,
+              "help": "Search name and description",
+              "short": "-q"
+            },
+            {
+              "name": "--body-file",
+              "type": "PATH",
+              "required": false,
+              "help": "Notion query body JSON, including native filters or sorts"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter returned fields: field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum agents to return",
+              "short": "-l"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Table output",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "sessions": {
+          "help": "Run and inspect agent sessions",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "cancel": {
+              "help": "Cancel an in-progress session turn.",
+              "arguments": [
+                {
+                  "name": "session_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                }
+              ],
+              "options": [
+                {
+                  "name": "--event-id",
+                  "type": "bool",
+                  "required": false,
+                  "help": "<str>",
+                  "takes_value": false
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "events": {
+              "help": "List session events, including agent messages and tool results.",
+              "arguments": [
+                {
+                  "name": "session_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                }
+              ],
+              "options": [
+                {
+                  "name": "--body-file",
+                  "type": "PATH",
+                  "required": false,
+                  "help": "Notion event query body JSON"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value",
+                  "short": "-f"
+                },
+                {
+                  "name": "--limit",
+                  "type": "bool",
+                  "required": false,
+                  "help": "<int>",
+                  "short": "-l",
+                  "takes_value": false
+                },
+                {
+                  "name": "--properties",
+                  "type": "bool",
+                  "required": false,
+                  "help": "<str>",
+                  "short": "-p",
+                  "takes_value": false
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "Retrieve a session and its required actions.",
+              "arguments": [
+                {
+                  "name": "session_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "Find accessible agent sessions.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--body-file",
+                  "type": "PATH",
+                  "required": false,
+                  "help": "Notion query body JSON"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value",
+                  "short": "-f"
+                },
+                {
+                  "name": "--limit",
+                  "type": "bool",
+                  "required": false,
+                  "help": "<int>",
+                  "short": "-l",
+                  "takes_value": false
+                },
+                {
+                  "name": "--properties",
+                  "type": "bool",
+                  "required": false,
+                  "help": "<str>",
+                  "short": "-p",
+                  "takes_value": false
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "send": {
+              "help": "Start a session or send another message.",
+              "arguments": [
+                {
+                  "name": "message",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                }
+              ],
+              "options": [
+                {
+                  "name": "--agent-id",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Agent ID for a new session"
+                },
+                {
+                  "name": "--session-id",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Existing session ID"
+                },
+                {
+                  "name": "--body-file",
+                  "type": "PATH",
+                  "required": false,
+                  "help": "Additional documented session fields as JSON"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "stream": {
+              "help": "Stream session events as server-sent events; continue_from replays an event.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--body-file",
+                  "type": "PATH",
+                  "required": true,
+                  "help": "Session message or continue_from JSON body"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "submit": {
+              "help": "Submit approvals or rejections requested by a session.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--body-file",
+                  "type": "PATH",
+                  "required": true,
+                  "help": "JSON with session_id and actions"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        },
+        "status": {
+          "help": "Enable or disable a Custom Agent.",
+          "arguments": [
+            {
+              "name": "agent_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "status",
+              "type": "TEXT",
+              "required": true,
+              "help": "active or disabled"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
     "auth": {
       "help": "Manage authentication",
       "usage_instructions": "Run `notion auth --help` for exact arguments and options.",

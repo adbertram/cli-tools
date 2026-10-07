@@ -70,11 +70,11 @@ def flatten_block_tree(blocks: List[Dict]) -> List[Dict]:
 class NotionClient:
     """Client for interacting with Notion API."""
 
-    def __init__(self, config=None):
+    def __init__(self, config=None, token: Optional[str] = None):
         """Initialize Notion client from configuration."""
         self.config = config or get_config()
 
-        if not self.config.api_token:
+        if not (token or self.config.api_token):
             missing = self.config.get_missing_credentials()
             raise ClientError(
                 f"Missing credentials: {', '.join(missing)}. "
@@ -83,7 +83,7 @@ class NotionClient:
 
         self.base_url = "https://api.notion.com/v1"
         self.headers = {
-            "Authorization": f"Bearer {self.config.api_token}",
+            "Authorization": f"Bearer {token or self.config.api_token}",
             "Content-Type": "application/json",
             "Notion-Version": self.config.api_version,
         }
@@ -136,6 +136,9 @@ class NotionClient:
         data: Optional[Dict] = None,
         params: Optional[Dict] = None,
         retry: bool = True,
+        version: Optional[str] = None,
+        base_url: Optional[str] = None,
+        token: Optional[str] = None,
     ) -> Dict:
         """
         Make an HTTP request to the Notion API with exponential retry.
@@ -153,7 +156,7 @@ class NotionClient:
         Raises:
             ClientError: If request fails after all retries
         """
-        url = f"{self.base_url}{endpoint}"
+        url = f"{base_url or self.base_url}{endpoint}"
         last_exception: Optional[Exception] = None
 
         max_attempts = self.max_retries + 1 if retry else 1
@@ -163,7 +166,11 @@ class NotionClient:
                 response = requests.request(
                     method=method,
                     url=url,
-                    headers=self.headers,
+                    headers={
+                        **self.headers,
+                        **({"Notion-Version": version} if version else {}),
+                        **({"Authorization": f"Bearer {token}"} if token else {}),
+                    },
                     json=data,
                     params=params,
                     timeout=30,
@@ -215,7 +222,7 @@ class NotionClient:
                         )
                     raise ClientError(f"API request failed: {response.status_code} - {error_msg}")
 
-                return response.json()
+                return response.json() if response.content else {}
 
             except (ConnectionError, Timeout) as e:
                 last_exception = e
