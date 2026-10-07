@@ -146,6 +146,10 @@ def test_recorded_continue_migration_refuses_unproven_or_changed_binding(publish
     assert 'editor_project_transitions' not in after
 
 
+# Headed Chrome on adam-server, read 2026-10-06; headless reports HeadlessChrome/155.
+HEADED_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36'
+
+
 class Page:
     def __init__(self, row):
         self.rows = [row];self.events = [];self.restored = False;self.clicked = 0
@@ -155,6 +159,7 @@ class Page:
         self.network_after_click_error = False
         self.observer_options = None
         self.network_sent = False
+        self.environment = {'user_agent': HEADED_UA, 'webdriver': False, 'screen': [1920, 1080]}
     def begin_network_observation(self, **kwargs):
         assert kwargs == {'method': 'POST', 'origin': 'https://www.tiktok.com', 'path': module.POST_PATH}
         return 'exact-session'
@@ -197,6 +202,7 @@ class Page:
         if script == module.OBSERVER_JS:self.observer_options = value;self.events.append("observe");return True
         if script == module.DEADLINE_JS:self.dispatch_deadline = value['deadline'];return True
         if script == module.RESTORE_JS:self.restored = True;return True
+        if script == module.BROWSER_ENV_JS:return self.environment
         raise AssertionError(script)
 
 
@@ -1155,3 +1161,39 @@ def test_native_local_resume_duplicate_key_rejects_other_or_batch_context(publis
     state.update(change)
     with pytest.raises(StudioPublishError):
         publisher._verify_editor(SimpleNamespace(evaluate=lambda script: state), value['draft'])
+
+
+@pytest.mark.parametrize("environment", [
+    {"user_agent": HEADED_UA.replace("Chrome/155", "HeadlessChrome/155"), "webdriver": False, "screen": [800, 600]},
+    {"user_agent": HEADED_UA, "webdriver": True, "screen": [1920, 1080]},
+    None,
+])
+def test_headless_or_automated_browser_never_posts_and_stays_prepared(publisher, monkeypatch, environment):
+    value = prepared(publisher);page = attach(publisher, value, monkeypatch)
+    page.environment = environment
+    with pytest.raises(StudioPublishError, match="headless or automated") as error:
+        publisher.publish(value["request_id"], before_public_action=lambda binding: pytest.fail("callback must not run"))
+    assert error.value.category == "pre_action_abort" and page.clicked == 0
+    after = publisher.status(value["request_id"])
+    assert after["state"] == "prepared" and after["public_action_dispatched"] is False
+    assert after["browser_environment"] == environment
+
+
+def test_headed_browser_environment_and_native_receipt_are_journaled(publisher, monkeypatch):
+    value = prepared(publisher);page = attach(publisher, value, monkeypatch)
+    monkeypatch.setattr(publisher, "_reconcile", lambda v: v)
+    publisher.publish(value["request_id"], before_public_action=lambda binding: None)
+    after = publisher.status(value["request_id"])
+    assert after["browser_environment"]["user_agent"] == HEADED_UA
+    assert json.loads(after["network_observation"]["response_body"]) == page.receipt
+    assert after["state"] == "receipt_observed" and page.clicked == 1
+
+
+def test_posting_browser_is_visible_chrome_and_reads_stay_headless():
+    from tiktok_cli.browser import StudioPostingBrowser, TiktokBrowser
+    from tiktok_cli.config import Config
+    config = SimpleNamespace(headless=True)
+    assert StudioPostingBrowser(config)._headless_enabled() is False
+    assert TiktokBrowser(config)._headless_enabled() is True
+    assert type(Config.get_browser(config, posting=True)) is StudioPostingBrowser
+    assert type(Config.get_browser(config)) is TiktokBrowser

@@ -35,6 +35,13 @@ DISCLOSURE_SELECTOR = '[data-e2e="disclose_content_container"] input[role="switc
 POST_SELECTOR = '[data-e2e="post_video_button"]'
 MAX_ASSET_BYTES = 30_000_000_000  # Studio's observed 30 GB upload limit.
 MIN_FREE_BYTES = 1 << 30  # Keep 1 GiB free after the private staging copy.
+MAX_JOURNALED_RESPONSE_CHARS = 65536  # Native Post receipts observed so far are under 1 KB.
+# What TikTok's web scripts can read about the posting browser. Both Studio
+# posts made from headless Chrome (navigator.userAgent "HeadlessChrome/155",
+# 800x600 screen) were accepted with a project and item ID and then never
+# existed, not even in the owner's own Studio list (measured 2026-10-06).
+BROWSER_ENV_JS = """() => ({user_agent: navigator.userAgent, webdriver: navigator.webdriver === true,
+ screen: [screen.width, screen.height]})"""
 MEDIA_BINDING_FIELDS = ("creation_id", "video_id", "file_key", "file_name", "file_size", "duration_ms")
 ORPHAN_BINDING_FIELDS = ("draft_id", "project_id") + MEDIA_BINDING_FIELDS
 
@@ -401,6 +408,10 @@ class _PostNetworkObserver:
                 request_id = next(iter(self.requests))
                 if request_id in self.responses and request_id in self.finished:
                     body = self.page.network_response_body(self.session, request_id, timeout=min(5, max(.1, deadline-time.monotonic())))
+                    if isinstance(body, str):
+                        # Keep TikTok's own words for diagnosis, before judging them.
+                        self.operation['network_observation']['response_body'] = body[:MAX_JOURNALED_RESPONSE_CHARS]
+                        self.save(self.operation)
                     observed = {**self.requests[request_id], 'receipt': {'status': self.responses[request_id], 'body': body}}
                     payload = accepted_project(observed, self.operation)
                     self.operation['network_observation'].update(state='accepted_response', response_sha256=hashlib.sha256(body.encode()).hexdigest())
@@ -560,7 +571,7 @@ class StudioPublisher:
 
     def _page(self):
         if self.browser is None:
-            self.browser = self.config.get_browser()
+            self.browser = self.config.get_browser(posting=True)
         if self.page is None:
             self.page = self.browser.get_page(UPLOAD_URL)
         return self.page
@@ -1145,6 +1156,16 @@ class StudioPublisher:
         self._save(operation)
         return operation, page
 
+    def _require_posting_browser(self, page, operation):
+        """Record what TikTok sees of this browser; refuse Post from a headless one."""
+        environment = page.evaluate(BROWSER_ENV_JS)
+        operation["browser_environment"] = environment
+        self._save(operation)
+        if (not isinstance(environment, dict) or not isinstance(environment.get("user_agent"), str)
+                or "headless" in environment["user_agent"].lower() or environment.get("webdriver") is not False):
+            raise StudioPublishError("Studio Post refused: the posting browser reports itself as headless or automated; "
+                                     "Post runs only in a normal visible Chrome.", category="pre_action_abort")
+
     def publish(self, request_id: str, *, before_public_action: Callable[[dict], dict | None]) -> dict:
         if not callable(before_public_action):
             raise StudioPublishError("Studio public action requires a trusted before_public_action callback.")
@@ -1159,6 +1180,7 @@ class StudioPublisher:
             operation, page = self._ready_editor(operation)
             draft = operation['draft']
             self._verify_editor(page, draft)
+            self._require_posting_browser(page, operation)
             key = "__studio_publish_" + request_id.replace("-", "")
             page.evaluate(OBSERVER_JS, {"key": key, "path": POST_PATH,
                                          "video_id": draft["video_id"], "creation_id": draft["creation_id"],
@@ -1289,7 +1311,7 @@ class StudioPublisher:
         policy = operation["policy"]
         # This read is the existing verified Studio path, not the public feed.
         if self.browser is None:
-            self.browser = self.config.get_browser()
+            self.browser = self.config.get_browser(posting=True)
         self.client._browser = self.browser
         record = self.client.get_studio_video(policy["username"], operation["item_id"], policy["account_id"])
         if record["caption"] != policy["caption"] or record["account_id"] != policy["account_id"] or record["visibility"] != 1:

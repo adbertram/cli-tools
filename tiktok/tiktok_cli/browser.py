@@ -214,6 +214,18 @@ class TiktokBrowser(BrowserAutomation):
     AUTH_LOGIN_HANDLER = staticmethod(_tiktok_login_handler)
 
 
+class StudioPostingBrowser(TiktokBrowser):
+    """The Studio publisher's browser: visible Chrome regardless of ``HEADLESS``.
+
+    Both posts made from headless Chrome (user agent ``HeadlessChrome/155``,
+    800x600 screen) were accepted by Studio and then never existed, not even in
+    the owner's own Studio list (measured 2026-10-06). Reads stay headless.
+    """
+
+    def _headless_enabled(self) -> bool:
+        return False
+
+
 class ManualTiktokBrowser(TiktokBrowser):
     """Opt-in plain Chrome login; shared code verifies and saves the session."""
 
