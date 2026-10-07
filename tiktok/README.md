@@ -213,6 +213,20 @@ guard; it never renews authorization. Bounded CDP request/response capture
 survives renderer navigation and journals exact binding IDs, hashes, and the
 native Post response body (first 64 KiB) for diagnosis.
 
+Before the trusted callback, `publish` waits up to 240 seconds for Studio's own
+Content check lite and music copyright check on the open editor (the same page
+state `studio check` reads) and journals the result as `studio_checks`. It
+refuses Post, leaving the request prepared, when the content check verdict is not
+`pass`, the music check reports a violation, or the checks have not finished.
+Clicking Post while Content check lite is still running opens TikTok's
+"Continue to post?" confirmation and sends nothing (measured 2026-10-07). If a
+click still sees no Post request, the publisher journals the page's dialogs as
+`post_click_dialogs`; when that confirmation was showing, the attempt is proven
+unsent (`post_confirmation_pending`) and stays resumable from its owned draft.
+A proven-unsent attempt whose owned draft is gone fails with category
+`unsent_draft_gone` and is never re-uploaded. On 2026-10-07 the next upload's
+editor removed the previous unsaved owned draft.
+
 Studio prepare, publish, and `studio check` always run in visible (headed)
 Chrome, whatever `HEADLESS` says; a standalone `reconcile` and other reads stay
 headless. Before

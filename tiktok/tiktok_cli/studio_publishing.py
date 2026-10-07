@@ -36,6 +36,12 @@ POST_SELECTOR = '[data-e2e="post_video_button"]'
 MAX_ASSET_BYTES = 30_000_000_000  # Studio's observed 30 GB upload limit.
 MIN_FREE_BYTES = 1 << 30  # Keep 1 GiB free after the private staging copy.
 MAX_JOURNALED_RESPONSE_CHARS = 65536  # Native Post receipts observed so far are under 1 KB.
+# While Studio's own Content check lite is still running, Post opens TikTok's
+# "Continue to post?" confirmation and sends nothing (measured on adam-server,
+# 2026-10-07). The check took 24-136 s on this account's recent uploads.
+STUDIO_CHECK_WAIT_SECONDS = 240
+POST_CONFIRMATION_TITLE = "Continue to post?"
+UNSENT_DRAFT_GONE = "Owned draft is gone after an unsent Post attempt; nothing was posted and it is never re-uploaded."
 # What TikTok's web scripts can read about the posting browser. Both Studio
 # posts made from headless Chrome (navigator.userAgent "HeadlessChrome/155",
 # 800x600 screen) were accepted with a project and item ID and then never
@@ -342,16 +348,27 @@ def accepted_project(observed: dict, operation: dict) -> dict:
 
 
 def never_dispatched(operation) -> bool:
-    """True when a Post attempt provably ended before its click.
+    """True when a Post attempt provably sent nothing to TikTok.
 
     Every check after the trusted callback and before the click runs at
     failure stage native_observation_refresh. When one of them fails (the
     browser was closed under the editor, a refresh could not be read) while the
     Post observer is still armed with no exchange seen, and no click issue,
     project acceptance or item was ever recorded, nothing was sent to TikTok.
+
+    After the click (stage post_receipt_read) the same holds only when the live
+    page also showed TikTok's own "Continue to post?" confirmation: Studio is
+    still asking whether to post, so the click itself sent nothing.
     """
-    return (isinstance(operation, dict) and operation.get('public_action_dispatched') is False
-            and (operation.get('post_failure') or {}).get('stage') == 'native_observation_refresh'
+    if not isinstance(operation, dict):
+        return False
+    stage = (operation.get('post_failure') or {}).get('stage')
+    confirmation = operation.get('post_confirmation_pending')
+    confirmed_unsent = (stage == 'post_receipt_read' and isinstance(confirmation, dict)
+                        and isinstance(confirmation.get('dialog'), str)
+                        and confirmation['dialog'].startswith(POST_CONFIRMATION_TITLE))
+    return (operation.get('public_action_dispatched') is False
+            and (stage == 'native_observation_refresh' or confirmed_unsent)
             and operation.get('network_observation') == {'state': 'armed', 'request_count': 0}
             and not any(operation.get(field) for field in ('post_project_id', 'item_id', 'post_action_issue')))
 
@@ -1130,12 +1147,14 @@ class StudioPublisher:
         rows = self._drafts(page, policy)
         if not any(row["draft_id"] == operation["draft_id"] for row in rows):
             if operation.get("resume_requires_owned_draft"):
-                # After a Post attempt, a missing draft may have been posted:
-                # never rebuild or re-upload it, only reconcile.
-                operation["state"] = "outcome_unknown"
-                operation["network_observation"] = {**(operation.get("network_observation") or {}), "state": "resume_draft_missing"}
+                # The earlier attempt provably sent nothing (never_dispatched set
+                # this flag), so nothing was posted. Without its own draft it
+                # cannot resume, and it is never rebuilt or re-uploaded either:
+                # it ends here. (Observed 2026-10-07: the next upload's editor
+                # removed the previous unsaved owned draft.)
+                operation["resume_draft_missing_at"] = datetime.now(timezone.utc).isoformat()
                 self._save(operation)
-                raise StudioPublishError("Owned draft is gone after a Post attempt; reconcile only, never retry.", category="ambiguous_post_action")
+                raise StudioPublishError(UNSENT_DRAFT_GONE, category="unsent_draft_gone")
             if rows:
                 raise StudioPublishError("Owned draft is missing while unknown drafts exist; preserve all drafts.")
             # Native normal-exit cleanup can remove a private temporary row.
@@ -1152,7 +1171,13 @@ class StudioPublisher:
         # The native Continue banner offers one local draft. Never click
         # it when another candidate could be resumed instead.
         if page.locator(CAPTION_SELECTOR).count() != 1:
-            if len(rows) == 1 and page.locator('[data-e2e="local_draft_container"]').count() == 1:
+            # The banner offers the one unlocked draft; locked rows (another or a
+            # crashed editor) are never offered (measured 2026-10-07: with one
+            # unlocked and one locked row, Continue reopened the unlocked one).
+            # _wait_owned_editor below still verifies the reopened binding.
+            offered = [row for row in rows if row.get("is_locked") is not True]
+            if (len(offered) == 1 and offered[0]["draft_id"] == operation["draft_id"]
+                    and page.locator('[data-e2e="local_draft_container"]').count() == 1):
                 page.get_by_role("button", name="Continue", exact=True).click()
                 self._wait(page, lambda: page.locator(CAPTION_SELECTOR).count() == 1, "Studio exact draft did not reopen.")
             elif current.get("is_locked") is True or current.get("is_temp") is True:
@@ -1212,6 +1237,7 @@ class StudioPublisher:
             operation, page = self._ready_editor(operation)
             draft = operation['draft']
             self._verify_editor(page, draft)
+            self._await_studio_checks(page, operation)
             self._require_posting_browser(page, operation)
             key = "__studio_publish_" + request_id.replace("-", "")
             page.evaluate(OBSERVER_JS, {"key": key, "path": POST_PATH,
@@ -1294,6 +1320,8 @@ class StudioPublisher:
             except Exception as exc:
                 if operation["state"] != "prepared":operation["state"] = "outcome_unknown"
                 operation['post_failure'] = {'stage': failure_stage, 'error_type': type(exc).__name__}
+                if failure_stage == 'post_receipt_read' and operation.get('network_observation') == {'state': 'armed', 'request_count': 0}:
+                    self._record_post_click_page(page, operation)
                 if never_dispatched(operation):
                     # Post was never clicked. The draft stays resumable, but only
                     # while it is still an unposted draft (see _ready_editor).
@@ -1304,6 +1332,60 @@ class StudioPublisher:
             finally:
                 self._restore_post_observer(page, key, operation)
             return self._reconcile(operation)
+
+    def _await_studio_checks(self, page, operation):
+        """Post only after Studio's own checks on this upload finished and passed.
+
+        Clicking Post while Content check lite is still running opens TikTok's
+        "Continue to post?" confirmation and sends nothing, so wait for the same
+        page state `tiktok studio check` reads. Nothing here clicks or posts.
+        """
+        from .studio_check import CHECK_STATE_JS, _not_offered, lite_finished, music_finished, normalize_check
+        deadline = time.monotonic() + STUDIO_CHECK_WAIT_SECONDS
+        started = time.monotonic()
+        while True:
+            state = page.evaluate(CHECK_STATE_JS)
+            if not isinstance(state, dict):
+                raise StudioPublishError("Studio check state is unreadable; no Post dispatched.")
+            if (lite_finished(state) or _not_offered(state)) and music_finished(state):
+                break
+            if time.monotonic() >= deadline:
+                operation['studio_checks'] = {**self._check_summary(normalize_check(state)), 'waited_seconds': round(time.monotonic() - started, 1)}
+                self._save(operation)
+                raise StudioPublishError(f"Studio's own checks did not finish within {STUDIO_CHECK_WAIT_SECONDS} s; no Post dispatched.")
+            page.wait_for_timeout(1000)
+        result = normalize_check(state)
+        operation['studio_checks'] = {**self._check_summary(result), 'waited_seconds': round(time.monotonic() - started, 1)}
+        self._save(operation)
+        if result['status'] == 'completed' and result['verdict'] != 'pass':
+            raise StudioPublishError(f"Studio's own content check did not pass (verdict {result['verdict']}); no Post dispatched.")
+        if result['music_copyright']['verdict'] == 'copyright_violated':
+            raise StudioPublishError("Studio's music copyright check found a violation; no Post dispatched.")
+
+    @staticmethod
+    def _check_summary(result):
+        return {'status': result['status'], 'verdict': result['verdict'],
+                'music_status': result['music_copyright']['status'], 'music_verdict': result['music_copyright']['verdict']}
+
+    def _record_post_click_page(self, page, operation):
+        """After a click with no Post request seen, keep what the page showed.
+
+        TikTok's "Continue to post?" confirmation means the click sent nothing.
+        """
+        try:
+            dialogs = page.evaluate(CONTROLS_JS).get('dialogs')
+        except Exception as exc:
+            operation['post_click_page_issue'] = {'error_type': type(exc).__name__}
+            return
+        if not isinstance(dialogs, list):
+            operation['post_click_page_issue'] = {'error_type': 'dialogs_unreadable'}
+            return
+        texts = [d[:400] for d in dialogs if isinstance(d, str)][:5]
+        operation['post_click_dialogs'] = texts
+        confirmations = [t for t in texts if t.startswith(POST_CONFIRMATION_TITLE)]
+        if confirmations:
+            operation['post_confirmation_pending'] = {'dialog': confirmations[0],
+                                                      'observed_at': datetime.now(timezone.utc).isoformat()}
 
     def _restore_post_observer(self, page, key, operation):
         try:

@@ -7,6 +7,7 @@ from uuid import uuid4
 
 import pytest
 
+from tiktok_cli import studio_check
 from tiktok_cli import studio_publishing as module
 from tiktok_cli.studio_publishing import StudioPublisher, StudioPublishError, validate_policy
 
@@ -147,6 +148,15 @@ def test_recorded_continue_migration_refuses_unproven_or_changed_binding(publish
     assert 'editor_project_transitions' not in after
 
 
+# Studio's own checks as they read once finished and passed (adam-server, 2026-10-07).
+CHECKS_PASSED = {'lite': {'checkStatus': 2, 'checkId': '1', 'videoId': None,
+                          'checkResult': [{'model_type': 0, 'model_check_result': 0}]},
+                 'lite_switch': True, 'music': {'code': 1}, 'music_status': studio_check.MUSIC_DONE,
+                 'music_switch': True, 'lite_ui': [], 'music_ui': []}
+CHECKS_RUNNING = {**CHECKS_PASSED, 'lite': {'checkStatus': 1}, 'music_status': 'SWITCH_ON_CHECKING'}
+CONFIRMATION = ("Continue to post?\n\nWe're still checking your video for potential issues. Do you want to "
+                "continue posting before the check is complete?\nCancel\nPost now")
+
 # Headed Chrome on adam-server, read 2026-10-06; headless reports HeadlessChrome/155.
 HEADED_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36'
 
@@ -161,6 +171,8 @@ class Page:
         self.observer_options = None
         self.network_sent = False
         self.environment = {'user_agent': HEADED_UA, 'webdriver': False, 'screen': [1920, 1080]}
+        self.checks = [CHECKS_PASSED]
+        self.confirmation_on_click = False
     def begin_network_observation(self, **kwargs):
         assert kwargs == {'method': 'POST', 'origin': 'https://www.tiktok.com', 'path': module.POST_PATH}
         return 'exact-session'
@@ -171,7 +183,7 @@ class Page:
                 'single_post_req_list': [{'video_id': opts['video_id'], 'batch_index': 0,
                     'single_post_feature_info': {'text': opts['caption'], 'text_extra': opts['caption_text_extra']}}]}
     def network_observations(self, session, **kwargs):
-        if not self.clicked:return []
+        if not self.clicked or self.confirmation_on_click:return []
         if self.click_error and not self.network_after_click_error:
             raise RuntimeError('network disconnected after click')
         if not self.clicked or self.network_sent:return []
@@ -198,7 +210,11 @@ class Page:
     def evaluate(self, script, value=None):
         if script == module.EDITOR_STATE_JS:return editor_state(self.rows[0])
         if script == module.CAPTION_TEXT_JS:return self.rows[0]['caption']
-        if script == module.CONTROLS_JS:return {"upload_complete": True, "post_enabled": True}
+        if script == module.CONTROLS_JS:
+            dialogs = [CONFIRMATION] if self.confirmation_on_click and self.clicked else []
+            return {"upload_complete": True, "post_enabled": True, "dialogs": dialogs}
+        if script == studio_check.CHECK_STATE_JS:
+            self.events.append("checks");return self.checks.pop(0) if len(self.checks) > 1 else self.checks[0]
         if script == module.DRAFTS_JS:return self.rows
         if script == module.OBSERVER_JS:self.observer_options = value;self.events.append("observe");return True
         if script == module.DEADLINE_JS:self.dispatch_deadline = value['deadline'];return True
@@ -1020,9 +1036,87 @@ def test_a_draft_gone_after_a_failed_pre_click_attempt_is_never_rebuilt(publishe
     page.rows.clear()
     with pytest.raises(StudioPublishError) as error:publisher._ready_editor(publisher.status(value['request_id']))
     saved = publisher.status(value['request_id'])
-    assert error.value.category == 'ambiguous_post_action' and page.clicked == 0
-    assert saved['state'] == 'outcome_unknown' and saved['network_observation']['state'] == 'resume_draft_missing'
-    assert module.never_dispatched(saved) is False
+    # Nothing was sent, so the attempt ends unposted; it is never rebuilt or re-uploaded.
+    assert error.value.category == 'unsent_draft_gone' and str(error.value) == module.UNSENT_DRAFT_GONE
+    assert page.clicked == 0 and saved['state'] == 'prepared' and saved['public_action_dispatched'] is False
+    assert saved['resume_draft_missing_at'] and not any(e in page.events for e in ('Continue', 'Post'))
+
+
+def test_post_waits_for_studio_checks_so_post_is_not_held_by_the_confirmation(publisher, monkeypatch):
+    """Measured on adam-server 2026-10-07: Post clicked while Content check lite
+    was running opened "Continue to post?" and sent nothing."""
+    value = prepared(publisher);page = attach(publisher, value, monkeypatch)
+    monkeypatch.setattr(publisher, "_reconcile", lambda v: v)
+    page.checks = [CHECKS_RUNNING, CHECKS_RUNNING, CHECKS_PASSED]
+    publisher.publish(value['request_id'], before_public_action=lambda binding: None)
+    saved = publisher.status(value['request_id'])
+    assert page.events.count('checks') == 3 and page.events.index('checks') < page.events.index('Post')
+    assert saved['studio_checks'] | {'waited_seconds': 0} == {'status': 'completed', 'verdict': 'pass', 'music_status': studio_check.MUSIC_DONE,
+                                                            'music_verdict': 'no_issue', 'waited_seconds': 0}
+
+
+@pytest.mark.parametrize('checks, message', [
+    ({**CHECKS_PASSED, 'lite': {'checkStatus': 2, 'checkResult': [{'model_type': 0, 'model_check_result': 1}]}}, 'did not pass'),
+    ({**CHECKS_PASSED, 'music': {'code': 2}}, 'music copyright'),
+])
+def test_studio_check_failure_never_posts(publisher, monkeypatch, checks, message):
+    value = prepared(publisher);page = attach(publisher, value, monkeypatch)
+    page.checks = [checks]
+    with pytest.raises(StudioPublishError, match=message) as error:
+        publisher.publish(value['request_id'], before_public_action=lambda binding: pytest.fail('callback must not run'))
+    assert error.value.category == 'pre_action_abort' and page.clicked == 0
+    assert publisher.status(value['request_id'])['state'] == 'prepared'
+
+
+def test_unfinished_studio_checks_never_post(publisher, monkeypatch):
+    value = prepared(publisher);page = attach(publisher, value, monkeypatch)
+    page.checks = [CHECKS_RUNNING]
+    monkeypatch.setattr(module, 'STUDIO_CHECK_WAIT_SECONDS', 0)
+    with pytest.raises(StudioPublishError, match='did not finish') as error:
+        publisher.publish(value['request_id'], before_public_action=lambda binding: pytest.fail('callback must not run'))
+    assert error.value.category == 'pre_action_abort' and page.clicked == 0
+    assert publisher.status(value['request_id'])['state'] == 'prepared'
+
+
+def test_click_held_by_studio_confirmation_is_proven_unsent_and_resumable(publisher, monkeypatch):
+    value = prepared(publisher);page = attach(publisher, value, monkeypatch)
+    page.confirmation_on_click = True
+    clock = [0.0];monkeypatch.setattr(module.time, 'monotonic', lambda: clock.__setitem__(0, clock[0] + 1) or clock[0])
+    monkeypatch.setattr(module.time, 'sleep', lambda seconds: None)
+    with pytest.raises(StudioPublishError) as error:
+        publisher.publish(value['request_id'], before_public_action=lambda binding: None)
+    saved = publisher.status(value['request_id'])
+    assert page.clicked == 1 and error.value.category == 'pre_action_abort'
+    assert saved['post_failure']['stage'] == 'post_receipt_read' and saved['post_click_dialogs'] == [CONFIRMATION]
+    assert saved['post_confirmation_pending']['dialog'] == CONFIRMATION and module.never_dispatched(saved)
+    assert saved['state'] == 'prepared' and saved['resume_requires_owned_draft'] is True
+
+
+def test_click_with_no_request_and_no_confirmation_stays_unknown(publisher, monkeypatch):
+    value = prepared(publisher);page = attach(publisher, value, monkeypatch)
+    page.network_observations = lambda *args, **kwargs: []
+    clock = [0.0];monkeypatch.setattr(module.time, 'monotonic', lambda: clock.__setitem__(0, clock[0] + 1) or clock[0])
+    monkeypatch.setattr(module.time, 'sleep', lambda seconds: None)
+    with pytest.raises(StudioPublishError) as error:
+        publisher.publish(value['request_id'], before_public_action=lambda binding: None)
+    saved = publisher.status(value['request_id'])
+    assert error.value.category == 'ambiguous_post_action' and saved['state'] == 'outcome_unknown'
+    assert saved['post_click_dialogs'] == [] and not module.never_dispatched(saved)
+
+
+def test_banner_continue_resumes_the_one_unlocked_owned_draft_beside_locked_rows(publisher, monkeypatch):
+    value = prepared(publisher);page = attach(publisher, value, monkeypatch)
+    page.rows.append(draft(value, draft_id='LOCKED', creation_id='LOCKED', file_key='old', video_id='old', is_locked=True))
+    caption = [0]
+    original = page.locator
+    def locator(selector):
+        if selector == module.CAPTION_SELECTOR:
+            return SimpleNamespace(count=lambda: caption[0])
+        return original(selector)
+    page.locator = locator
+    page.get_by_role = lambda role, **kwargs: SimpleNamespace(click=lambda: (page.events.append('Continue'), caption.__setitem__(0, 1)))
+    publisher._ready_editor(value)
+    assert 'Continue' in page.events
 
 
 def test_a_record_journalled_unknown_before_its_click_is_resumed_by_prepare(publisher, monkeypatch, tmp_path):
@@ -1035,6 +1129,9 @@ def test_a_record_journalled_unknown_before_its_click_is_resumed_by_prepare(publ
 
 
 @pytest.mark.parametrize('change', [{'network_observation': {'state': 'unexpected_pre_dispatch_exchange', 'request_count': 0}},
+                                    {'post_failure': {'stage': 'post_receipt_read', 'error_type': 'StudioPublishError'}},
+                                    {'post_failure': {'stage': 'post_receipt_read', 'error_type': 'StudioPublishError'},
+                                     'post_confirmation_pending': {'dialog': 'Discard this post?'}},
                                     {'post_failure': {'stage': 'native_post_action', 'error_type': 'RuntimeError'}},
                                     {'post_action_issue': {'error_type': 'RuntimeError', 'recoverable': True}},
                                     {'post_project_id': '555'}, {'public_action_dispatched': True}])
