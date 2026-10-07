@@ -1,11 +1,15 @@
-// Records only one application's windows on the main display, with no cursor, to an H.264 MP4.
+// Records the whole main display, with no cursor, to an H.264 MP4, once BUNDLE_ID is running.
 //
 // usage: swift screen_capture.swift OUTPUT FPS WIDTH HEIGHT BUNDLE_ID
 //
-// ScreenCaptureKit composites just the windows of BUNDLE_ID (PowerPoint), so nothing another
-// process draws -- a system prompt, a notification, the Dock, the menu bar, the screen-recording
-// indicator, another app's window -- can reach the recording. Frames are written at a constant
-// FPS; when the screen is idle the last image repeats.
+// The content filter excludes nothing. Any filter -- only BUNDLE_ID's windows, every other app
+// excluded, or only the screen-recording indicator's window excluded -- makes ScreenCaptureKit
+// report the slide show as idle while a build animation plays. Measured on adam-server, macOS
+// 27.0 (2026-10-07): a 0.5 s fade-in delivered 30 complete frames and 286 idle ones in 10 s, so
+// each fade froze at its first frame until the next click and every build slide lost its last
+// item. Only the unfiltered display delivered the fades, every run. Anything else on screen is
+// the screen-intrusion gate's to catch. Frames are written at a constant FPS; when the screen is
+// idle the last image repeats.
 //
 // stderr carries `firstFrameEpochMs=<ms>` once the first frame is written (the wall-clock time
 // of the recording's t=0) and `captureComplete` after the file is finalized. The recording
@@ -53,8 +57,7 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate {
     func start() async throws {
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
         guard let display = content.displays.first(where: { $0.displayID == CGMainDisplayID() }) else { fail("main display unavailable") }
-        let apps = content.applications.filter { $0.bundleIdentifier == bundleID }
-        guard !apps.isEmpty else { fail("\(bundleID) is not running") }
+        guard content.applications.contains(where: { $0.bundleIdentifier == bundleID }) else { fail("\(bundleID) is not running") }
         let configuration = SCStreamConfiguration()
         configuration.width = width
         configuration.height = height
@@ -76,7 +79,7 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate {
         adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: nil)
         guard writer.startWriting() else { fail("writer start: \(String(describing: writer.error))") }
         writer.startSession(atSourceTime: .zero)
-        let filter = SCContentFilter(display: display, including: apps, exceptingWindows: [])
+        let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
         stream = SCStream(filter: filter, configuration: configuration, delegate: self)
         try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: queue)
         try await stream.startCapture()

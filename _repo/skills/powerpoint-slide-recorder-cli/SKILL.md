@@ -51,7 +51,7 @@ After every `powerpoint-slide-recorder` command, inspect stdout. If it is JSON w
 </principle>
 
 <principle name="Command Groups">
-- `record` — Record narrated PowerPoint slides. Requires a PowerPoint deck, item manifest, output path, work directory, and ffmpeg AVFoundation video input (probed for the capture size; the recording captures only PowerPoint's windows through ScreenCaptureKit).
+- `record` — Record narrated PowerPoint slides. Requires a PowerPoint deck, item manifest, output path, work directory, and ffmpeg AVFoundation video input (probed for the capture size; the recording captures the whole main display through ScreenCaptureKit, unfiltered).
 </principle>
 </essential_principles>
 

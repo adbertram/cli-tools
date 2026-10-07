@@ -2204,7 +2204,7 @@ if __name__ == "__main__":
 
 
 class ScreenCaptureTests(unittest.TestCase):
-    """The capture records PowerPoint's windows only, through the bundled ScreenCaptureKit helper."""
+    """The capture records the unfiltered main display, through the bundled ScreenCaptureKit helper."""
 
     def test_command_runs_the_bundled_helper_for_powerpoint(self):
         command = record.screen_capture_command(Path("/tmp/raw.mp4"), 30, 1920, 1080)
@@ -2216,7 +2216,7 @@ class ScreenCaptureTests(unittest.TestCase):
     def test_helper_captures_one_app_without_cursor(self):
         source = record.SCREEN_CAPTURE_SCRIPT.read_text(encoding="utf-8")
 
-        self.assertIn("SCContentFilter(display: display, including: apps, exceptingWindows: [])", source)
+        self.assertIn("SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])", source)
         self.assertIn("configuration.showsCursor = false", source)
 
     def test_first_frame_time_is_read_from_helper_stderr(self):
