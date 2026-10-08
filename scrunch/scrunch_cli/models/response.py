@@ -1,5 +1,5 @@
 """Response models for Scrunch CLI."""
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from .base import CLIModel
 

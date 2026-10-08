@@ -1,12 +1,19 @@
 # Scrunch CLI
 
-A command-line interface for the [Scrunch AI API](https://scrunchai.com). Brand visibility, AI search analytics, competitors, personas, prompts, and agent traffic.
+## DESCRIPTION
+
+A command-line interface for the Scrunch AI API that manages brand visibility, AI search analytics, competitors, personas, prompts, page audits, and agent traffic.
+
+Use this CLI when you need scriptable, JSON-first access to Scrunch AI from agents, automation, or terminal workflows.
+
+## Docs
+
+- Service/API docs: https://api.scrunchai.com/v1
 
 ## Installation
 
 ```bash
-cd scrunch
-pip install -e .
+<cli-tools-root>/_repo/skills/cli-tool/scripts/install-cli-tool.sh --force-refresh scrunch
 ```
 
 After installation, the `scrunch` command will be available in your terminal.
@@ -14,8 +21,8 @@ After installation, the `scrunch` command will be available in your terminal.
 ## Quick Start
 
 ```bash
-# Authenticate with Scrunch
-scrunch auth login --api-key YOUR_API_KEY
+# Authenticate with Scrunch (prompts for the API key)
+scrunch auth login
 
 # Check authentication status
 scrunch auth status
@@ -34,7 +41,9 @@ scrunch
 ├── auth
 │   ├── login          # Authenticate with API key
 │   ├── status         # Check authentication status
-│   └── logout         # Clear stored credentials
+│   ├── test           # Test the API connection
+│   ├── logout         # Clear stored credentials
+│   └── profiles       # Manage auth profiles (list, get, create, select, rename, delete, remove)
 ├── brands
 │   ├── list           # List all brands
 │   ├── get            # Get brand details
@@ -68,12 +77,8 @@ scrunch
 │   └── create         # Create a page audit
 ├── agent-traffic
 │   └── get            # Get agent traffic data
-├── cache
-│   └── clear          # Clear cached data
-└── profiles
-    ├── list           # List profiles
-    ├── create         # Create a profile
-    └── switch         # Switch active profile
+└── cache
+    └── clear          # Clear cached data
 ```
 
 ## Commands
@@ -81,15 +86,29 @@ scrunch
 ### Authentication
 
 ```bash
-# Login with API key
+# Login with API key (interactive prompt)
 scrunch auth login
-scrunch auth login --api-key YOUR_API_KEY
+scrunch auth login --force
 
 # Check authentication status
 scrunch auth status
 
+# Test the API connection (read-only brands list)
+scrunch auth test
+
 # Clear stored credentials
 scrunch auth logout
+```
+
+### Profiles
+
+```bash
+scrunch auth profiles list
+scrunch auth profiles get default
+scrunch auth profiles create PROFILE_NAME
+scrunch auth profiles select PROFILE_NAME
+scrunch auth profiles rename OLD_NAME NEW_NAME
+scrunch auth profiles delete PROFILE_NAME
 ```
 
 ### Brands
@@ -229,6 +248,12 @@ scrunch agent-traffic get 123 789 --start-date 2025-01-01 --end-date 2025-03-31 
 scrunch agent-traffic get 123 789 --start-date 2025-01-01 --end-date 2025-03-31 --path "/blog"
 ```
 
+### Cache
+
+```bash
+scrunch cache clear
+```
+
 ## Output Formats
 
 All list/get commands support two output formats:
@@ -260,14 +285,17 @@ All list/get commands support two output formats:
 
 ## Configuration
 
-Credentials are stored in a `.env` file in the package directory:
+Non-authentication configuration is stored in `~/.local/share/cli-tools/scrunch/.env`. CLI-managed runtime auth state is stored in the active profile at `~/.local/share/cli-tools/scrunch/authentication_profiles/<profile>/.env`. The source repo only carries `.env.example`.
+
+Do not put reusable credentials in any `.env` file. Store and retrieve them through `<cli-tools-root>/_repo/_secret-manager/secrets.sh` and run `scrunch auth login` to save the API key to the active profile.
+
+Root config variables:
 
 ```bash
-# API Key
-API_KEY=your_api_key_here
-
-# Optional: API base URL
+# Optional non-authentication configuration
 BASE_URL=https://api.scrunchai.com/v1
+CACHE_ENABLED=true
+CACHE_TTL=3600
 ```
 
 ## Exit Codes
@@ -314,8 +342,9 @@ models/
 
 ## Requirements
 
-- Python 3.9+
+- Python 3.11+
 - Dependencies (installed automatically):
+  - cli-tools-shared (in-repo `_repo/cli-tools-shared`)
   - typer
   - python-dotenv
   - requests

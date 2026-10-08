@@ -1,17 +1,22 @@
 """Response commands for Scrunch CLI."""
+COMMAND_CREDENTIALS = {
+    "list": ["api_key"],
+}
+
 import typer
 from typing import Optional, List
 
 from ..client import get_client
-from .helpers import model_to_dict, extract_fields
-from cli_tools_common.output import print_json, print_table, handle_error
-from cli_tools_common.filters import apply_filters, apply_properties_filter
+from .helpers import model_to_dict
+from cli_tools_shared.output import command, print_json, print_table
+from cli_tools_shared.filters import apply_filters, apply_properties_filter
 
 
 app = typer.Typer(help="View AI responses", no_args_is_help=True)
 
 
 @app.command("list")
+@command
 def responses_list(
     brand_id: int = typer.Argument(..., help="Brand ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -35,39 +40,36 @@ def responses_list(
         scrunch responses list 123 --start-date 2025-01-01 --end-date 2025-03-31
         scrunch responses list 123 --stage Awareness --limit 50
     """
-    try:
-        client = get_client()
-        items = client.list_responses(
-            brand_id,
-            limit=limit,
-            offset=offset,
-            platform=platform,
-            prompt_id=prompt_id,
-            persona_id=persona_id,
-            stage=stage,
-            start_date=start_date,
-            end_date=end_date,
-            has_shopping_data=has_shopping_data,
-        )
-        items = [model_to_dict(i) for i in items]
+    client = get_client()
+    items = client.list_responses(
+        brand_id,
+        limit=limit,
+        offset=offset,
+        platform=platform,
+        prompt_id=prompt_id,
+        persona_id=persona_id,
+        stage=stage,
+        start_date=start_date,
+        end_date=end_date,
+        has_shopping_data=has_shopping_data,
+    )
+    items = [model_to_dict(i) for i in items]
 
-        if filter:
-            items = apply_filters(items, filter)
+    if filter:
+        items = apply_filters(items, filter)
+    if properties:
+        items = apply_properties_filter(items, properties)
+
+    if table:
         if properties:
-            items = apply_properties_filter(items, properties)
-
-        if table:
-            if properties:
-                cols = [f.strip() for f in properties.split(",")]
-                print_table(items, cols, cols)
-            else:
-                print_table(
-                    items,
-                    ["id", "platform", "stage", "brand_mentioned", "brand_position", "date"],
-                    ["ID", "Platform", "Stage", "Brand Mentioned", "Position", "Date"],
-                )
+            cols = [f.strip() for f in properties.split(",")]
+            print_table(items, cols, cols)
         else:
-            print_json(items)
+            print_table(
+                items,
+                ["id", "platform", "stage", "brand_mentioned", "brand_position", "date"],
+                ["ID", "Platform", "Stage", "Brand Mentioned", "Position", "Date"],
+            )
+    else:
+        print_json(items)
 
-    except Exception as e:
-        raise typer.Exit(handle_error(e))

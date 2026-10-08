@@ -4,9 +4,9 @@ from typing import Dict, List, Optional, Any
 import random
 import time
 import requests
+from cli_tools_shared.exceptions import ClientError
 
 from .config import get_config
-from cli_tools_common.filters import validate_filters, FilterValidationError
 from .models import (
     Brand, CreateBrand, UpdateBrand, create_brand,
     Competitor, CreateCompetitor, UpdateCompetitor, create_competitor,
@@ -15,7 +15,7 @@ from .models import (
     QueryResult, create_query_result,
     ResponseListing, create_response_listing,
     PageAuditRecord, CreatePageAudit, create_page_audit,
-    AgentTrafficRow, AgentTrafficResponse, create_agent_traffic_row,
+    AgentTrafficResponse,
 )
 
 
@@ -29,14 +29,13 @@ DEFAULT_JITTER = 0.1  # 10% jitter
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 
-from cli_tools_common.exceptions import ClientError
-
 
 class ScrunchClient:
     """Client for interacting with Scrunch API with automatic token management and retry."""
 
     def __init__(
         self,
+        config=None,
         max_retries: int = DEFAULT_MAX_RETRIES,
         base_delay: float = DEFAULT_BASE_DELAY,
         max_delay: float = DEFAULT_MAX_DELAY,
@@ -46,12 +45,13 @@ class ScrunchClient:
         Initialize Scrunch client from configuration.
 
         Args:
+            config: Config instance to use (default: the active profile's config)
             max_retries: Maximum number of retry attempts for transient errors (default: 3)
             base_delay: Base delay in seconds for exponential backoff (default: 1.0)
             max_delay: Maximum delay in seconds between retries (default: 30.0)
             jitter: Random jitter factor to prevent thundering herd (default: 0.1)
         """
-        self.config = get_config()
+        self.config = config or get_config()
 
         if not self.config.has_credentials():
             missing = self.config.get_missing_credentials()

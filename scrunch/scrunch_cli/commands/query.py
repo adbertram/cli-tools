@@ -1,17 +1,22 @@
 """Query commands for Scrunch CLI."""
+COMMAND_CREDENTIALS = {
+    "metrics": ["api_key"],
+}
+
 import typer
 from typing import Optional, List
 
 from ..client import get_client
-from .helpers import model_to_dict, extract_fields
-from cli_tools_common.output import print_json, print_table, handle_error
-from cli_tools_common.filters import apply_filters, apply_properties_filter
+from .helpers import model_to_dict
+from cli_tools_shared.output import command, print_json, print_table
+from cli_tools_shared.filters import apply_filters, apply_properties_filter
 
 
 app = typer.Typer(help="Query aggregated metrics", no_args_is_help=True)
 
 
 @app.command("metrics")
+@command
 def query_metrics(
     brand_id: int = typer.Argument(..., help="Brand ID"),
     start_date: Optional[str] = typer.Option(None, "--start-date", help="Start date (YYYY-MM-DD)"),
@@ -38,36 +43,33 @@ def query_metrics(
         scrunch query metrics 123 --fields "date,ai_platform,brand_presence_percentage" --table
         scrunch query metrics 123 --limit 500 --offset 0
     """
-    try:
-        client = get_client()
-        items = client.query_metrics(
-            brand_id,
-            start_date=start_date,
-            end_date=end_date,
-            limit=limit,
-            offset=offset,
-            fields=fields,
-        )
-        items = [model_to_dict(i) for i in items]
+    client = get_client()
+    items = client.query_metrics(
+        brand_id,
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit,
+        offset=offset,
+        fields=fields,
+    )
+    items = [model_to_dict(i) for i in items]
 
-        if filter:
-            items = apply_filters(items, filter)
+    if filter:
+        items = apply_filters(items, filter)
+    if properties:
+        items = apply_properties_filter(items, properties)
+
+    if table:
         if properties:
-            items = apply_properties_filter(items, properties)
-
-        if table:
-            if properties:
-                cols = [f.strip() for f in properties.split(",")]
+            cols = [f.strip() for f in properties.split(",")]
+            print_table(items, cols, cols)
+        else:
+            # Use field names from first item as columns if available
+            if items:
+                cols = [k for k in items[0].keys() if items[0][k] is not None]
                 print_table(items, cols, cols)
             else:
-                # Use field names from first item as columns if available
-                if items:
-                    cols = [k for k in items[0].keys() if items[0][k] is not None]
-                    print_table(items, cols, cols)
-                else:
-                    print_json(items)
-        else:
-            print_json(items)
+                print_json(items)
+    else:
+        print_json(items)
 
-    except Exception as e:
-        raise typer.Exit(handle_error(e))

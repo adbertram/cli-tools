@@ -1,4 +1,4 @@
-"""Base model re-exported from cli_tools_common."""
-from cli_tools_common.models import CLIModel
+"""Base model re-exported from cli_tools_shared."""
+from cli_tools_shared.models import CLIModel
 
 __all__ = ["CLIModel"]
