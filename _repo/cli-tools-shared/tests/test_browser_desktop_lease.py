@@ -95,6 +95,17 @@ def test_other_browsers_and_hosts_without_warden_are_not_held(warden, monkeypatc
     wait_for_desktop_lease(CHROME, timeout=0)
 
 
+def test_holding_leases_answers_once_without_waiting(warden, monkeypatch):
+    calls = warden(HELD)
+    monkeypatch.setattr(desktop_lease.time, "sleep", lambda seconds: pytest.fail("waited"))
+
+    assert [lease["lease"] for lease in desktop_lease.holding_leases(CHROME, timeout=3)] == ["lease-demo"]
+    assert calls.read_text().splitlines() == ["status --provider remote-bare"]
+    assert desktop_lease.holding_leases("/Applications/Chromium.app/Contents/MacOS/Chromium") == []
+    warden(FREE)
+    assert desktop_lease.holding_leases(CHROME) == []
+
+
 def test_cdp_engine_checks_the_lease_before_spawning_chrome(tmp_path, monkeypatch):
     checked = []
     monkeypatch.setattr(driver, "_chrome_binary", lambda: CHROME)

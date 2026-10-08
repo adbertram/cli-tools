@@ -21,6 +21,7 @@ def setup(tmp_path,monkeypatch):
  monkeypatch.setattr(cr,'daemon_pid',lambda browser:None)
  monkeypatch.setattr(cr,'identity',lambda pid,budget:None)
  monkeypatch.setattr(cr,'stop_worker',lambda *args:None)
+ monkeypatch.setattr(cr,'desktop_held',lambda timeout:False)
  return config,directory,browser
 
 def marker(config,phase='owned'):
@@ -83,6 +84,28 @@ def test_concurrent_named_profile_lease_refuses_before_worker(setup,monkeypatch)
  try:
   with pytest.raises(cr.CatalogReadError,match='catalog_reader_profile_leased'):invoke(config)
  finally:os.close(fd)
+
+
+def test_a_demo_lease_on_the_desktop_refuses_as_not_ready_before_any_worker(setup,monkeypatch):
+ # Live 2026-10-08: the engine's 600 s desktop-lease wait ran every bounded worker out
+ # of its deadline with no Chrome, recorded as read_process_deadline_exceeded.
+ config,directory,_=setup;asked=[]
+ monkeypatch.setattr(cr,'desktop_held',lambda timeout:asked.append(timeout) or True)
+ monkeypatch.setattr(cr,'run_bounded_read',lambda *args,**kwargs:pytest.fail('worker started under a desktop lease'))
+ with pytest.raises(cr.CatalogReadError,match='catalog_reader_desktop_leased') as caught:invoke(config)
+ assert caught.value.category=='not_ready' and 0<asked[0]<=5
+ assert not (directory/'catalog-read-owner.json').exists()
+
+
+def test_desktop_held_asks_the_engine_for_the_chrome_this_read_would_launch(monkeypatch):
+ import cli_tools_shared.browser.desktop_lease as desktop_lease
+ seen=[]
+ monkeypatch.setenv('CLI_TOOLS_CHROME_BINARY','/Applications/Google Chrome.app/Contents/MacOS/Google Chrome')
+ monkeypatch.setattr(desktop_lease,'holding_leases',lambda executable,*,timeout:seen.append((executable,timeout)) or [{'lease':'demo'}])
+ assert cr.desktop_held(3) is True and seen==[('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',3)]
+ from cli_tools_shared.browser import BrowserHarnessError
+ monkeypatch.setattr(desktop_lease,'holding_leases',lambda *args,**kwargs:(_ for _ in ()).throw(BrowserHarnessError('ledger unreadable')))
+ with pytest.raises(cr.CatalogReadError,match='catalog_reader_desktop_lease_unknown'):cr.desktop_held(3)
 
 
 def test_changed_pid_start_identity_refuses_without_signal(setup,monkeypatch):

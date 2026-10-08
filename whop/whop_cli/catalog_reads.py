@@ -141,6 +141,19 @@ def clean(marker,config,browser,timeout=10):
  if path.exists() and daemon_pid(browser)==owned['daemon'][0]['pid']:path.unlink();browser.cleanup_daemon_endpoint()
  return True
 
+def desktop_held(timeout):
+ """A demo's UI lease on the bare desktop would hold this read's Chrome launch.
+
+ The shared engine waits up to 600 s for such a lease before launching real
+ Chrome; inside a bounded worker that wait silently runs out the deadline
+ (live 2026-10-08: every read ended read_process_deadline_exceeded with no Chrome).
+ """
+ from cli_tools_shared.browser import BrowserHarnessError
+ from cli_tools_shared.browser.desktop_lease import holding_leases
+ from cli_tools_shared.browser.driver import _chrome_binary
+ try:return bool(holding_leases(os.environ.get('CLI_TOOLS_CHROME_BINARY') or _chrome_binary(),timeout=timeout))
+ except BrowserHarnessError:raise failure('catalog_reader_desktop_lease_unknown') from None
+
 def budget(deadline):
  value=deadline-time.monotonic()
  if value<=0:raise failure('catalog_reader_deadline_exceeded')
@@ -223,6 +236,7 @@ def read(config,operation,args,*,expected_account_id,timeout_seconds,max_bytes):
   if profile_process_pids(binding['user_data_dir'],processes=rows):raise failure('catalog_reader_profile_in_use','not_ready')
   daemon=daemon_pid(browser)
   if daemon is not None and identity(daemon,min(2,budget(work_deadline))) is not None:raise failure('catalog_reader_daemon_in_use','not_ready')
+  if desktop_held(min(5,budget(work_deadline))):raise failure('catalog_reader_desktop_leased','not_ready')
   marker={'version':1,'attempt_id':secrets.token_hex(16),'binding':binding,'operation':operation,'args':args,'phase':'launching','owners':None,'max_bytes':max_bytes,'worker':None,'worker_deadline':work_deadline}
   write_marker(marker_path,marker)
   def started(pid,child_deadline):

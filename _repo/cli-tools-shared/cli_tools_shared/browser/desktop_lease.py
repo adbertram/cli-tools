@@ -44,12 +44,12 @@ def is_real_chrome_app(executable: Optional[str]) -> bool:
     return sys.platform == "darwin" and bool(executable) and "/Google Chrome.app/" in executable
 
 
-def desktop_ui_leases(warden: Path) -> list[dict]:
+def desktop_ui_leases(warden: Path, *, timeout: float = 30) -> list[dict]:
     """UI leases on the bare desktop held by anyone other than this process's session."""
     command = [str(warden), "status", "--provider", DESKTOP_PROVIDER]
     try:
         result = subprocess.run(
-            command, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=30
+            command, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=timeout
         )
         status = json.loads(result.stdout)
     except (OSError, subprocess.TimeoutExpired, ValueError) as exc:
@@ -78,6 +78,20 @@ def _describe(leases: list[dict]) -> str:
         f"lease {lease.get('lease')} owner {lease.get('owner')} ({lease.get('state')})"
         for lease in leases
     )
+
+
+def holding_leases(executable: Optional[str], *, timeout: float = 30) -> list[dict]:
+    """The UI leases that would hold a launch of ``executable`` right now, without waiting.
+
+    For deadline-bounded callers that must report a held desktop instead of
+    sleeping through their own deadline inside ``wait_for_desktop_lease``.
+    """
+    if not is_real_chrome_app(executable):
+        return []
+    warden = warden_executable()
+    if not warden.is_file():
+        return []
+    return desktop_ui_leases(warden, timeout=timeout)
 
 
 def wait_for_desktop_lease(
