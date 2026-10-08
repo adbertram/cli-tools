@@ -5,6 +5,7 @@ credential management, and browser session persistence.
 """
 from typing import Optional
 
+from cli_tools_shared.browser.user_agent import derive_real_chrome_user_agent
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
 from cli_tools_shared.credentials import CredentialType
 
@@ -18,6 +19,9 @@ class Config(BaseConfig):
     DEFAULT_BASE_URL = "https://dashboard.raptive.com"
     ADDITIONAL_AUTH_FIELDS = ("USERNAME", "PASSWORD")
     ADDITIONAL_SENSITIVE_AUTH_FIELDS = ("USERNAME", "PASSWORD")
+    # A saved token alone is not proof: AWS WAF can still reject every API
+    # call, so `auth status` must pass the live publisher-API test.
+    BROWSER_SESSION_REQUIRES_API_TEST = True
 
     def __init__(self, profile=None):
         super().__init__(
@@ -39,6 +43,15 @@ class Config(BaseConfig):
     def headless(self) -> bool:
         """Get headless browser mode setting."""
         return (self._get("HEADLESS") or "true").lower() == "true"
+
+    @property
+    def browser_user_agent(self) -> str:
+        """Present the installed real-Chrome UA headed and headless.
+
+        The dashboard's AWS WAF check rejects the default HeadlessChrome UA
+        ("We couldn't verify your browser session").
+        """
+        return self._get("BROWSER_USER_AGENT") or derive_real_chrome_user_agent()
 
     @property
     def login_redirect_pattern(self) -> Optional[str]:

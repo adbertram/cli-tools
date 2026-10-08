@@ -1,13 +1,11 @@
-"""Raptive client using browser auth state and direct API calls.
+"""Raptive client making publisher-API calls from the dashboard page.
 
-This client uses browser login (Google SSO) to authenticate, then makes
-direct API calls to the Raptive Publisher API using saved browser state.
+The browser login persists the dashboard session. Every API call runs inside
+that dashboard page so it carries the AWS WAF token the page earned.
 """
 import json
 from typing import Dict, List, Optional, Any
-from urllib.parse import urlparse
 
-from cli_tools_shared.http_session import BrowserAuthState, BrowserAuthenticatedHttpClient
 from cli_tools_shared.data_cache import cached
 from cli_tools_shared.exceptions import ClientError
 
@@ -43,8 +41,6 @@ class RaptiveClient:
             config: Optional Config instance. If not provided, uses get_config().
         """
         self.config = config or get_config()
-        self._auth_state: Optional[BrowserAuthState] = None
-        self._api_client: Optional[BrowserAuthenticatedHttpClient] = None
         # Override with config values
         self.BASE_URL = self.config.base_url
         self.API_BASE_URL = self.config.api_base_url
@@ -59,112 +55,85 @@ class RaptiveClient:
             )
         return site_id
 
-    def close(self):
-        """Close session."""
-        self._api_client = None
-        self._auth_state = None
+    # ==================== API Helpers ====================
 
-    def test_auth(self) -> Dict[str, Any]:
-        """Test if saved browser session is authenticated.
+    # Runs inside the dashboard page. publisher-api sits behind AWS WAF: a
+    # request without a valid aws-waf-token gets a 202 challenge, so it must
+    # go through the dashboard's own AwsWafIntegration.fetch, which attaches
+    # the token minted by the page's silent WAF challenge. The Bearer token is
+    # the dashboard's localStorage `token`, exactly as the dashboard sends it.
+    _FETCH_JS = """async ([url, waitMs]) => {
+        const deadline = Date.now() + waitMs;
+        while (!window.AwsWafIntegration) {
+            if (Date.now() > deadline) {
+                return {error: 'AWS WAF integration never loaded on the dashboard page: '
+                    + (document.body ? document.body.innerText.slice(0, 200) : '')};
+            }
+            await new Promise(r => setTimeout(r, 250));
+        }
+        const token = localStorage.getItem('token');
+        if (!token) return {error: 'no_token'};
+        try {
+            const r = await window.AwsWafIntegration.fetch(url, {
+                headers: {Authorization: 'Bearer ' + token, Accept: 'application/json'},
+            });
+            return {status: r.status, body: await r.text()};
+        } catch (e) {
+            return {error: String(e)};
+        }
+    }"""
+    _WAF_WAIT_MS = 30000
 
-        Uses the browser's test_session() to verify the saved session
-        still works against a real browser.
+    _MAX_PAGE_SIZE = 500  # publisher-api rejects page[size] > 500 with HTTP 400
 
-        Returns:
-            Dict with authenticated, url, cookies, profile, created_at.
-        """
+    def _fetch(self, page, endpoint: str) -> Any:
+        """Run one publisher-API GET inside the dashboard page; return parsed JSON."""
+        url = f"{self.API_BASE_URL}{endpoint}"
+        result = page.evaluate(self._FETCH_JS, [url, self._WAF_WAIT_MS])
+        if not isinstance(result, dict):
+            raise ClientError(f"API request failed for {endpoint}: no result from dashboard page")
+        if result.get("error") == "no_token":
+            raise ClientError("No JWT token found in saved browser auth state. Run 'raptive auth login' again.")
+        if "error" in result:
+            raise ClientError(f"API request failed for {endpoint}: {result['error']}")
+        status = result["status"]
+        if status == 401:
+            raise ClientError("Session expired. Run 'raptive auth login' again.")
+        if status != 200:
+            raise ClientError(
+                f"API request failed for {endpoint}: HTTP {status} returned for {url}: {result['body'][:300]}"
+            )
+        try:
+            return json.loads(result["body"])
+        except json.JSONDecodeError as exc:
+            raise ClientError(f"API returned invalid JSON for {endpoint}.") from exc
+
+    def _api_call(self, endpoint: str) -> Any:
+        """Call one publisher-API endpoint from the authenticated dashboard page."""
         browser = self.config.get_browser()
         try:
-            return browser.test_session()
+            return self._fetch(browser.get_page(self.BASE_URL), endpoint)
         finally:
             browser.close()
 
-    # ==================== API Helpers ====================
+    def _api_pages(self, endpoint: str, limit: int) -> List[Dict[str, Any]]:
+        """Collect up to ``limit`` ``data`` records across page[number] pages.
 
-    def _get_auth_state(self) -> BrowserAuthState:
-        """Get the saved browser auth state."""
-        if self._auth_state is None:
-            self._auth_state = BrowserAuthState.from_config(self.config)
-        return self._auth_state
-
-    def _browser_origin(self) -> str:
-        """Get the origin used for dashboard localStorage."""
-        parsed = urlparse(self.BASE_URL)
-        if not parsed.scheme or not parsed.netloc:
-            raise ClientError(f"BASE_URL does not contain an origin: {self.BASE_URL}")
-        return f"{parsed.scheme}://{parsed.netloc}"
-
-    def _api_cookie_domain(self) -> str:
-        """Get the cookie domain shared by dashboard and publisher API hosts."""
-        parsed = urlparse(self.API_BASE_URL)
-        if not parsed.hostname:
-            raise ClientError(f"API_BASE_URL does not contain a hostname: {self.API_BASE_URL}")
-        if not parsed.hostname.endswith(".raptive.com"):
-            raise ClientError(f"Unsupported Raptive API host: {parsed.hostname}")
-        return "raptive.com"
-
-    def _get_jwt_token(self) -> str:
-        """Get the JWT token from the persisted browser profile.
-
-        Returns:
-            JWT token string.
-
-        Raises:
-            ClientError: If no token is found.
+        ``endpoint`` must already carry a query string.
         """
+        size = min(limit, self._MAX_PAGE_SIZE)
+        records: List[Dict[str, Any]] = []
+        number = 1
         browser = self.config.get_browser()
         try:
             page = browser.get_page(self.BASE_URL)
-            storage_items = page.localstorage_list()
+            while number is not None and len(records) < limit:
+                data = self._fetch(page, f"{endpoint}&page[size]={size}&page[number]={number}")
+                records.extend(data["data"])
+                number = data["meta"]["page"]["next"]
         finally:
             browser.close()
-
-        for item in storage_items:
-            if item.get("key") == "token" and item.get("value"):
-                return item["value"]
-
-        raise ClientError(
-            "No JWT token found in saved browser auth state. Run 'raptive auth login' again."
-        )
-
-    def _get_api_client(self) -> BrowserAuthenticatedHttpClient:
-        """Get a browser-authenticated HTTP client for Raptive API calls."""
-        if self._api_client is None:
-            self._api_client = BrowserAuthenticatedHttpClient(
-                auth_state=self._get_auth_state(),
-                allowed_domains=[self._api_cookie_domain()],
-                timeout=60,
-                headers={
-                    "Accept": "application/json",
-                    "Content-Type": "application/json",
-                },
-            )
-        return self._api_client
-
-    def _api_call(self, endpoint: str) -> Any:
-        """Make an authenticated API call using shared browser auth state.
-
-        Args:
-            endpoint: API endpoint path (e.g., /api/v2/sites/xxx/dashboard/summary/...)
-
-        Returns:
-            Parsed JSON response.
-
-        Raises:
-            ClientError: If API call fails.
-        """
-        url = f"{self.API_BASE_URL}{endpoint}"
-        headers = {"Authorization": f"Bearer {self._get_jwt_token()}"}
-        try:
-            body = self._get_api_client().get_text(url, headers=headers)
-        except ClientError as exc:
-            if "HTTP 401" in str(exc):
-                raise ClientError("Session expired. Run 'raptive auth login' again.") from exc
-            raise ClientError(f"API request failed for {endpoint}: {exc}") from exc
-        try:
-            return json.loads(body)
-        except json.JSONDecodeError as exc:
-            raise ClientError(f"API returned invalid JSON for {endpoint}.") from exc
+        return records[:limit]
 
     # ==================== Dashboard Methods ====================
 
@@ -193,11 +162,12 @@ class RaptiveClient:
         """Get the date bounds for available data."""
         endpoint = f"/api/v2/sites/{self.site_id}/dashboard/dateBounds"
         data = self._api_call(endpoint)
-
-        return DateBounds(
-            earliest_date=data.get("earliestDate", ""),
-            latest_date=data.get("latestDate", ""),
-        )
+        try:
+            # Analytics (pageview) bounds: the range every report can cover.
+            bounds = data["data"]["analyticsDateBounds"]["range"]
+            return DateBounds(earliest_date=bounds["startDate"], latest_date=bounds["endDate"])
+        except (KeyError, TypeError) as exc:
+            raise ClientError(f"Unexpected dateBounds response shape: missing {exc}") from exc
 
     # ==================== Earnings Methods ====================
 
@@ -303,7 +273,7 @@ class RaptiveClient:
         search: Optional[str] = None,
     ) -> List[PagePerformance]:
         """Get performance metrics by page."""
-        endpoint = f"/api/v2/sites/{self.site_id}/reports/rpmByPage/{start_date}/{end_date}?sort=-pageviews&page[size]={limit}"
+        endpoint = f"/api/v2/sites/{self.site_id}/reports/rpmByPage/{start_date}/{end_date}?sort=-pageviews"
 
         if min_pageviews is not None:
             endpoint += f"&filter[pageviews][min]={min_pageviews}"
@@ -315,10 +285,9 @@ class RaptiveClient:
             endpoint += f"&filter[rpm][max]={max_rpm}"
         if search:
             endpoint += f"&filter[pagePath]=~{search}"
-        data = self._api_call(endpoint)
 
         results = []
-        for item in data.get("data", []):
+        for item in self._api_pages(endpoint, limit):
             cpm = item.get("cpm", {})
             viewability = item.get("viewability", {})
             ipp = item.get("impressionsPerPageview", {})
@@ -434,14 +403,12 @@ class RaptiveClient:
         endpoint = (
             f"/api/v2/sites/{self.site_id}/brandSafetyByUrl?"
             f"{rating_filters}&filter[hasRating]=true&sort=-pageviews"
-            f"&page[number]=1&page[size]={limit}"
         )
-        data = self._api_call(endpoint)
 
         results = []
-        for item in data.get("data", []):
+        for item in self._api_pages(endpoint, limit):
             results.append(BrandSafetyPage(
-                pagepath=item.get("pagepath", ""),
+                pagepath=item.get("pagePath", ""),
                 date=item.get("date", ""),
                 pageviews=item.get("pageviews", 0),
                 rpm=item.get("rpm", 0),

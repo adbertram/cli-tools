@@ -3,9 +3,7 @@
 Subclasses BrowserAutomation from cli_tools_shared for CDP-based login,
 session persistence, and headless automation.
 """
-from typing import Any
-
-from cli_tools_shared.auth import BrowserAutomation, BrowserAutomationError
+from cli_tools_shared.auth import BrowserAutomation
 
 
 class RaptiveBrowser(BrowserAutomation):
@@ -18,21 +16,3 @@ class RaptiveBrowser(BrowserAutomation):
     AUTH_STORAGE_KEY = "token"
     AUTH_STORAGE_KEY_IS_JWT = True
     SESSION_NAME = "raptive"
-
-
-def _raptive_fetch_json(self, url: str) -> Any:
-    """Fetch JSON using page's session cookies."""
-    page = self.get_page()
-    return page.evaluate(
-        """async (url) => {
-            const r = await fetch(url, {credentials: 'include'});
-            return r.ok ? r.json() : {_error: true, status: r.status};
-        }""",
-        url,
-    )
-
-
-# Backward compatibility aliases
-RaptiveBrowser.fetch_json = _raptive_fetch_json
-BrowserService = RaptiveBrowser
-BrowserError = BrowserAutomationError

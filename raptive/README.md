@@ -9,12 +9,10 @@ Use it when you need repeatable access to raptive workflows that are only availa
 ## Installation
 
 ```bash
-cd raptive
-pip install -e .
-
-# Install Playwright browsers (required once)
-playwright install chromium
+~/Dropbox/GitRepos/cli-tools/_repo/skills/cli-tool/scripts/install-cli-tool.sh raptive
 ```
+
+Requires Google Chrome installed in `/Applications`.
 
 After installation, the `raptive` command will be available in your terminal.
 
@@ -153,21 +151,18 @@ All commands support two output formats:
 
 ## Configuration
 
-Configuration is stored in `.env` file:
+Non-secret configuration lives in `~/.local/share/cli-tools/raptive/.env` (see `.env.example`):
 
 ```bash
-# Login credentials (optional - for automated login if supported)
-RAPTIVE_USERNAME=your_username
-RAPTIVE_PASSWORD=your_password
-
-# Base URL
-RAPTIVE_BASE_URL=https://dashboard.raptive.com
-
-# Browser settings (true = invisible, false = visible browser)
-RAPTIVE_HEADLESS=true
+BASE_URL=https://dashboard.raptive.com
+API_BASE_URL=https://publisher-api.raptive.com
+SITE_ID=<id from dashboard.raptive.com/sites/{SITE_ID}/dashboard>
+HEADLESS=true
+# Optional: override the User-Agent (defaults to the installed real Chrome's UA)
+# BROWSER_USER_AGENT=
 ```
 
-Browser session data is stored in `.browser-data/` directory for persistence between commands.
+Sign in with `raptive auth login`; the browser session lives in the CLI's persistent Chrome profile. No credentials go in `.env`.
 
 ## Exit Codes
 
@@ -180,52 +175,30 @@ Browser session data is stored in `.browser-data/` directory for persistence bet
 
 ## Architecture
 
-This CLI uses the **BrowserAutomationService** - a generic browser automation layer that provides:
+The Raptive dashboard and its publisher API (`publisher-api.raptive.com`) sit behind
+AWS WAF bot verification, and the dashboard signs in through Keycloak. A plain HTTP
+client gets an empty `202` WAF challenge (or `403`) even with a valid Bearer token.
 
-- **Session Persistence**: Browser context persists between commands (cookies, localStorage)
-- **Interactive Login**: Opens browser for manual login, saves session automatically
-- **Form Automation**: Fill forms, click buttons, select dropdowns
-- **Data Extraction**: Extract tables, lists, and custom data from pages
-- **Pagination**: Handle "Load More" buttons and multi-page results
-- **Retry Logic**: Automatic retries with exponential backoff
+So every API call runs **inside the dashboard page** of the CLI's persistent real-Chrome
+profile, exactly as the dashboard itself makes it:
 
-### Customizing for Your Site
+1. Open `https://dashboard.raptive.com` headless with the installed real Chrome's
+   User-Agent (the default `HeadlessChrome` UA fails the WAF check with "We couldn't
+   verify your browser session").
+2. Wait for the page's `AwsWafIntegration` (it passes the silent WAF challenge itself).
+3. Call `AwsWafIntegration.fetch(url, {headers: {Authorization: 'Bearer ' + localStorage.token}})`,
+   which attaches the `x-aws-waf-token` header.
 
-1. **Update `client.py`**: Configure `BROWSER_CONFIG` with your site's URLs and selectors
-2. **Implement Methods**: Add domain-specific methods (search, list, etc.)
-3. **Add Commands**: Create new command files in `commands/` directory
+The API caps `page[size]` at 500, so `earnings by-page` and `earnings brand-safety`
+page through `page[number]` for larger `--limit` values.
 
-Example site configuration in `client.py`:
-
-```python
-BROWSER_CONFIG = BrowserConfig(
-    base_url="https://example.com",
-    login_url="/login",
-    login_check_url="/dashboard",
-    login_indicators=["/login", "/signin"],
-    logged_in_selector=".user-menu",
-    username_selector="input[name='email']",
-    password_selector="input[name='password']",
-    submit_selector="button[type='submit']",
-)
-```
-
-## Browser Automation Notes
-
-- **First run**: Run `playwright install chromium` after pip install
-- **Headless mode**: Set `RAPTIVE_HEADLESS=false` to see the browser (useful for debugging)
-- **Session persistence**: Login sessions are saved in `.browser-data/` and reused automatically
-- **Rate limiting**: Be respectful of the site's terms of service
+`auth status` / `auth test` run a live, uncached `dateBounds` API call and report
+`authenticated: false` whenever it fails, so a saved token alone never counts as signed in.
 
 ## Debugging
 
-To debug browser automation issues:
-
-```bash
-# Run with visible browser
-export RAPTIVE_HEADLESS=false
-raptive search query "test"
-```
+Set `HEADLESS=false` to watch the dashboard page while a command runs, and use
+`--no-cache` to force a live API call.
 
 ## Models
 

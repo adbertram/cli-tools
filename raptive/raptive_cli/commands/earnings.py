@@ -3,9 +3,11 @@ from typing import List, Optional
 
 import typer
 
-from ..client import get_client, ClientError
+from cli_tools_shared.output import command
+
+from ..client import get_client
 from ..dates import get_date_range
-from ..output import print_json, print_table, handle_error, apply_limit, apply_properties
+from ..output import print_json, print_table, apply_limit, apply_properties
 from cli_tools_shared.filters import apply_filters
 
 COMMAND_CREDENTIALS = {
@@ -39,6 +41,7 @@ app = typer.Typer(help="View earnings and revenue data")
 
 
 @app.command("overview")
+@command
 def earnings_overview(
     period: str = typer.Option(
         "last30d",
@@ -87,41 +90,33 @@ def earnings_overview(
         raptive earnings overview --filter earnings:gt:100
         raptive earnings overview --limit 7 --properties date,earnings
     """
-    try:
-        start_date, end_date = get_date_range(period, start, end)
+    start_date, end_date = get_date_range(period, start, end)
 
-        client = get_client()
-        earnings = client.get_earnings_overview(start_date, end_date)
-        client.close()
+    client = get_client()
+    earnings = client.get_earnings_overview(start_date, end_date)
 
-        # Convert to dicts and apply client-side filtering/limiting/properties
-        data = [e.to_dict() for e in earnings]
-        data = apply_filters(data, filter_)
-        data = apply_limit(data, limit)
-        data = apply_properties(data, properties)
+    # Convert to dicts and apply client-side filtering/limiting/properties
+    data = [e.to_dict() for e in earnings]
+    data = apply_filters(data, filter_)
+    data = apply_limit(data, limit)
+    data = apply_properties(data, properties)
 
-        if table:
-            rows = []
-            for e in data:
-                rows.append({
-                    "date": e.get("date", ""),
-                    "earnings": f"${e['earnings']:.2f}" if e.get("earnings") is not None else "N/A",
-                    "rpm": f"${e['rpm']:.2f}" if e.get("rpm") else "N/A",
-                    "sessions": f"{e['sessions']:,}" if e.get("sessions") else "N/A",
-                })
-            print_table(rows, ["date", "earnings", "rpm", "sessions"], ["Date", "Earnings", "RPM", "Sessions"])
-        else:
-            print_json(data)
-
-    except ValueError as e:
-        raise typer.Exit(handle_error(e))
-    except ClientError as e:
-        raise typer.Exit(handle_error(e))
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    if table:
+        rows = []
+        for e in data:
+            rows.append({
+                "date": e.get("date", ""),
+                "earnings": f"${e['earnings']:.2f}" if e.get("earnings") is not None else "N/A",
+                "rpm": f"${e['rpm']:.2f}" if e.get("rpm") else "N/A",
+                "sessions": f"{e['sessions']:,}" if e.get("sessions") else "N/A",
+            })
+        print_table(rows, ["date", "earnings", "rpm", "sessions"], ["Date", "Earnings", "RPM", "Sessions"])
+    else:
+        print_json(data)
 
 
 @app.command("by-device")
+@command
 def earnings_by_device(
     filter_: Optional[List[str]] = typer.Option(
         None,
@@ -154,40 +149,34 @@ def earnings_by_device(
         raptive earnings by-device --filter earnings:gt:50 --table
         raptive earnings by-device --properties device,earnings
     """
-    try:
-        client = get_client()
-        earnings = client.get_device_earnings()
-        client.close()
+    client = get_client()
+    earnings = client.get_device_earnings()
 
-        # Convert to dicts and apply client-side filtering/limiting/properties
-        data = [e.to_dict() for e in earnings]
-        data = apply_filters(data, filter_)
-        data = apply_limit(data, limit)
-        data = apply_properties(data, properties)
+    # Convert to dicts and apply client-side filtering/limiting/properties
+    data = [e.to_dict() for e in earnings]
+    data = apply_filters(data, filter_)
+    data = apply_limit(data, limit)
+    data = apply_properties(data, properties)
 
-        if table:
-            rows = []
-            for e in data:
-                device_val = e.get("device", "")
-                if hasattr(device_val, "value"):
-                    device_val = device_val.value
-                rows.append({
-                    "device": device_val,
-                    "earnings": f"${e['earnings']:.2f}" if e.get("earnings") is not None else "N/A",
-                    "rpm": f"${e['rpm']:.2f}" if e.get("rpm") else "N/A",
-                    "sessions": f"{e['sessions']:,}" if e.get("sessions") else "N/A",
-                })
-            print_table(rows, ["device", "earnings", "rpm", "sessions"], ["Device", "Earnings", "RPM", "Sessions"])
-        else:
-            print_json(data)
-
-    except ClientError as e:
-        raise typer.Exit(handle_error(e))
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    if table:
+        rows = []
+        for e in data:
+            device_val = e.get("device", "")
+            if hasattr(device_val, "value"):
+                device_val = device_val.value
+            rows.append({
+                "device": device_val,
+                "earnings": f"${e['earnings']:.2f}" if e.get("earnings") is not None else "N/A",
+                "rpm": f"${e['rpm']:.2f}" if e.get("rpm") else "N/A",
+                "sessions": f"{e['sessions']:,}" if e.get("sessions") else "N/A",
+            })
+        print_table(rows, ["device", "earnings", "rpm", "sessions"], ["Device", "Earnings", "RPM", "Sessions"])
+    else:
+        print_json(data)
 
 
 @app.command("by-page")
+@command
 def earnings_by_page(
     period: str = typer.Option(
         "last30d",
@@ -263,52 +252,44 @@ def earnings_by_page(
         raptive earnings by-page --filter earnings:gt:10
         raptive earnings by-page --properties page_url,earnings
     """
-    try:
-        start_date, end_date = get_date_range(period, start, end)
+    start_date, end_date = get_date_range(period, start, end)
 
-        client = get_client()
-        pages = client.get_page_performance(
-            start_date,
-            end_date,
-            limit,
-            min_pageviews=min_pageviews,
-            max_pageviews=max_pageviews,
-            min_rpm=min_rpm,
-            max_rpm=max_rpm,
-            search=search,
-        )
-        client.close()
+    client = get_client()
+    pages = client.get_page_performance(
+        start_date,
+        end_date,
+        limit,
+        min_pageviews=min_pageviews,
+        max_pageviews=max_pageviews,
+        min_rpm=min_rpm,
+        max_rpm=max_rpm,
+        search=search,
+    )
 
-        # Convert to dicts and apply client-side filtering/properties
-        data = [p.to_dict() for p in pages]
-        data = apply_filters(data, filter_)
-        data = apply_properties(data, properties)
+    # Convert to dicts and apply client-side filtering/properties
+    data = [p.to_dict() for p in pages]
+    data = apply_filters(data, filter_)
+    data = apply_properties(data, properties)
 
-        if table:
-            if data and "start_date" in data[0]:
-                typer.echo(f"Period: {data[0]['start_date']} to {data[0]['end_date']}\n")
-            rows = []
-            for p in data:
-                page_url = p.get("page_url") or ""
-                rows.append({
-                    "page_url": page_url[:50] + "..." if len(page_url) > 50 else page_url,
-                    "pageviews": f"{p['pageviews']:,}" if p.get("pageviews") else "N/A",
-                    "earnings": f"${p['earnings']:.2f}" if p.get("earnings") is not None else "N/A",
-                    "rpm": f"${p['rpm']:.2f}" if p.get("rpm") is not None else "N/A",
-                })
-            print_table(rows, ["page_url", "pageviews", "earnings", "rpm"], ["Page URL", "Pageviews", "Earnings", "RPM"])
-        else:
-            print_json(data)
-
-    except ValueError as e:
-        raise typer.Exit(handle_error(e))
-    except ClientError as e:
-        raise typer.Exit(handle_error(e))
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    if table:
+        if data and "start_date" in data[0]:
+            typer.echo(f"Period: {data[0]['start_date']} to {data[0]['end_date']}\n")
+        rows = []
+        for p in data:
+            page_url = p.get("page_url") or ""
+            rows.append({
+                "page_url": page_url[:50] + "..." if len(page_url) > 50 else page_url,
+                "pageviews": f"{p['pageviews']:,}" if p.get("pageviews") else "N/A",
+                "earnings": f"${p['earnings']:.2f}" if p.get("earnings") is not None else "N/A",
+                "rpm": f"${p['rpm']:.2f}" if p.get("rpm") is not None else "N/A",
+            })
+        print_table(rows, ["page_url", "pageviews", "earnings", "rpm"], ["Page URL", "Pageviews", "Earnings", "RPM"])
+    else:
+        print_json(data)
 
 
 @app.command("by-traffic-source")
+@command
 def earnings_by_traffic_source(
     period: str = typer.Option(
         "last30d",
@@ -356,44 +337,36 @@ def earnings_by_traffic_source(
         raptive earnings by-traffic-source --filter traffic_source:eq:google
         raptive earnings by-traffic-source --properties traffic_source,earnings
     """
-    try:
-        start_date, end_date = get_date_range(period, start, end)
+    start_date, end_date = get_date_range(period, start, end)
 
-        client = get_client()
-        sources = client.get_traffic_source_performance(start_date, end_date)
-        client.close()
+    client = get_client()
+    sources = client.get_traffic_source_performance(start_date, end_date)
 
-        # Convert to dicts and apply client-side filtering/limiting/properties
-        data = [s.to_dict() for s in sources]
-        data = apply_filters(data, filter_)
-        data = apply_limit(data, limit)
-        data = apply_properties(data, properties)
+    # Convert to dicts and apply client-side filtering/limiting/properties
+    data = [s.to_dict() for s in sources]
+    data = apply_filters(data, filter_)
+    data = apply_limit(data, limit)
+    data = apply_properties(data, properties)
 
-        if table:
-            if data and "start_date" in data[0]:
-                typer.echo(f"Period: {data[0]['start_date']} to {data[0]['end_date']}\n")
-            rows = []
-            for s in data:
-                rows.append({
-                    "source": s.get("traffic_source", ""),
-                    "sessions": f"{s['sessions']:,}" if s.get("sessions") else "N/A",
-                    "pageviews": f"{s['pageviews']:,}" if s.get("pageviews") else "N/A",
-                    "earnings": f"${s['earnings']:.2f}" if s.get("earnings") is not None else "N/A",
-                    "rpm": f"${s['rpm']:.2f}" if s.get("rpm") is not None else "N/A",
-                })
-            print_table(rows, ["source", "sessions", "pageviews", "earnings", "rpm"], ["Source", "Sessions", "Pageviews", "Earnings", "RPM"])
-        else:
-            print_json(data)
-
-    except ValueError as e:
-        raise typer.Exit(handle_error(e))
-    except ClientError as e:
-        raise typer.Exit(handle_error(e))
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    if table:
+        if data and "start_date" in data[0]:
+            typer.echo(f"Period: {data[0]['start_date']} to {data[0]['end_date']}\n")
+        rows = []
+        for s in data:
+            rows.append({
+                "source": s.get("traffic_source", ""),
+                "sessions": f"{s['sessions']:,}" if s.get("sessions") else "N/A",
+                "pageviews": f"{s['pageviews']:,}" if s.get("pageviews") else "N/A",
+                "earnings": f"${s['earnings']:.2f}" if s.get("earnings") is not None else "N/A",
+                "rpm": f"${s['rpm']:.2f}" if s.get("rpm") is not None else "N/A",
+            })
+        print_table(rows, ["source", "sessions", "pageviews", "earnings", "rpm"], ["Source", "Sessions", "Pageviews", "Earnings", "RPM"])
+    else:
+        print_json(data)
 
 
 @app.command("by-country")
+@command
 def earnings_by_country(
     period: str = typer.Option(
         "last30d",
@@ -441,48 +414,40 @@ def earnings_by_country(
         raptive earnings by-country --filter country:in:United States|Canada
         raptive earnings by-country --limit 10 --properties country,earnings
     """
-    try:
-        start_date, end_date = get_date_range(period, start, end)
+    start_date, end_date = get_date_range(period, start, end)
 
-        client = get_client()
-        countries = client.get_country_performance(start_date, end_date)
-        client.close()
+    client = get_client()
+    countries = client.get_country_performance(start_date, end_date)
 
-        # Filter out countries with no earnings and sort by earnings
-        countries = [c for c in countries if c.earnings > 0]
-        countries.sort(key=lambda x: x.earnings, reverse=True)
+    # Filter out countries with no earnings and sort by earnings
+    countries = [c for c in countries if c.earnings > 0]
+    countries.sort(key=lambda x: x.earnings, reverse=True)
 
-        # Convert to dicts and apply client-side filtering/limiting/properties
-        data = [c.to_dict() for c in countries]
-        data = apply_filters(data, filter_)
-        data = apply_limit(data, limit)
-        data = apply_properties(data, properties)
+    # Convert to dicts and apply client-side filtering/limiting/properties
+    data = [c.to_dict() for c in countries]
+    data = apply_filters(data, filter_)
+    data = apply_limit(data, limit)
+    data = apply_properties(data, properties)
 
-        if table:
-            if data and "start_date" in data[0]:
-                typer.echo(f"Period: {data[0]['start_date']} to {data[0]['end_date']}\n")
-            rows = []
-            for c in data:
-                rows.append({
-                    "country": c.get("country", ""),
-                    "sessions": f"{c['sessions']:,}" if c.get("sessions") else "N/A",
-                    "pageviews": f"{c['pageviews']:,}" if c.get("pageviews") else "N/A",
-                    "earnings": f"${c['earnings']:.2f}" if c.get("earnings") is not None else "N/A",
-                    "rpm": f"${c['rpm']:.2f}" if c.get("rpm") is not None else "N/A",
-                })
-            print_table(rows, ["country", "sessions", "pageviews", "earnings", "rpm"], ["Country", "Sessions", "Pageviews", "Earnings", "RPM"])
-        else:
-            print_json(data)
-
-    except ValueError as e:
-        raise typer.Exit(handle_error(e))
-    except ClientError as e:
-        raise typer.Exit(handle_error(e))
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    if table:
+        if data and "start_date" in data[0]:
+            typer.echo(f"Period: {data[0]['start_date']} to {data[0]['end_date']}\n")
+        rows = []
+        for c in data:
+            rows.append({
+                "country": c.get("country", ""),
+                "sessions": f"{c['sessions']:,}" if c.get("sessions") else "N/A",
+                "pageviews": f"{c['pageviews']:,}" if c.get("pageviews") else "N/A",
+                "earnings": f"${c['earnings']:.2f}" if c.get("earnings") is not None else "N/A",
+                "rpm": f"${c['rpm']:.2f}" if c.get("rpm") is not None else "N/A",
+            })
+        print_table(rows, ["country", "sessions", "pageviews", "earnings", "rpm"], ["Country", "Sessions", "Pageviews", "Earnings", "RPM"])
+    else:
+        print_json(data)
 
 
 @app.command("by-category")
+@command
 def earnings_by_category(
     period: str = typer.Option(
         "last30d",
@@ -530,47 +495,39 @@ def earnings_by_category(
         raptive earnings by-category --filter earnings:gt:100
         raptive earnings by-category --properties category,earnings
     """
-    try:
-        start_date, end_date = get_date_range(period, start, end)
+    start_date, end_date = get_date_range(period, start, end)
 
-        client = get_client()
-        categories = client.get_category_performance(start_date, end_date)
-        client.close()
+    client = get_client()
+    categories = client.get_category_performance(start_date, end_date)
 
-        # Sort by earnings
-        categories.sort(key=lambda x: x.earnings, reverse=True)
+    # Sort by earnings
+    categories.sort(key=lambda x: x.earnings, reverse=True)
 
-        # Convert to dicts and apply client-side filtering/limiting/properties
-        data = [c.to_dict() for c in categories]
-        data = apply_filters(data, filter_)
-        data = apply_limit(data, limit)
-        data = apply_properties(data, properties)
+    # Convert to dicts and apply client-side filtering/limiting/properties
+    data = [c.to_dict() for c in categories]
+    data = apply_filters(data, filter_)
+    data = apply_limit(data, limit)
+    data = apply_properties(data, properties)
 
-        if table:
-            if data and "start_date" in data[0]:
-                typer.echo(f"Period: {data[0]['start_date']} to {data[0]['end_date']}\n")
-            rows = []
-            for c in data:
-                rows.append({
-                    "category": c.get("category", ""),
-                    "posts": str(c.get("num_posts") or "N/A"),
-                    "pageviews": f"{c['pageviews']:,}" if c.get("pageviews") else "N/A",
-                    "earnings": f"${c['earnings']:.2f}" if c.get("earnings") is not None else "N/A",
-                    "rpm": f"${c['rpm']:.2f}" if c.get("rpm") is not None else "N/A",
-                })
-            print_table(rows, ["category", "posts", "pageviews", "earnings", "rpm"], ["Category", "Posts", "Pageviews", "Earnings", "RPM"])
-        else:
-            print_json(data)
-
-    except ValueError as e:
-        raise typer.Exit(handle_error(e))
-    except ClientError as e:
-        raise typer.Exit(handle_error(e))
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    if table:
+        if data and "start_date" in data[0]:
+            typer.echo(f"Period: {data[0]['start_date']} to {data[0]['end_date']}\n")
+        rows = []
+        for c in data:
+            rows.append({
+                "category": c.get("category", ""),
+                "posts": str(c.get("num_posts") or "N/A"),
+                "pageviews": f"{c['pageviews']:,}" if c.get("pageviews") else "N/A",
+                "earnings": f"${c['earnings']:.2f}" if c.get("earnings") is not None else "N/A",
+                "rpm": f"${c['rpm']:.2f}" if c.get("rpm") is not None else "N/A",
+            })
+        print_table(rows, ["category", "posts", "pageviews", "earnings", "rpm"], ["Category", "Posts", "Pageviews", "Earnings", "RPM"])
+    else:
+        print_json(data)
 
 
 @app.command("brand-safety")
+@command
 def earnings_brand_safety(
     limit: int = typer.Option(
         20,
@@ -604,50 +561,44 @@ def earnings_brand_safety(
         raptive earnings brand-safety --filter alc:ne:normal
         raptive earnings brand-safety --properties pagepath,pageviews,alc
     """
-    try:
-        client = get_client()
-        pages = client.get_brand_safety(limit)
-        client.close()
+    client = get_client()
+    pages = client.get_brand_safety(limit)
 
-        # Convert to dicts and apply client-side filtering/properties
-        data = [p.to_dict() for p in pages]
-        data = apply_filters(data, filter_)
-        data = apply_properties(data, properties)
+    # Convert to dicts and apply client-side filtering/properties
+    data = [p.to_dict() for p in pages]
+    data = apply_filters(data, filter_)
+    data = apply_properties(data, properties)
 
-        if table:
-            rows = []
-            for p in data:
-                # Show only non-normal ratings
-                issues = []
-                if p.get("alc") != "normal":
-                    issues.append(f"alc:{p.get('alc')}")
-                if p.get("adt") != "normal":
-                    issues.append(f"adt:{p.get('adt')}")
-                if p.get("vio") != "normal":
-                    issues.append(f"vio:{p.get('vio')}")
-                if p.get("hat") != "normal":
-                    issues.append(f"hat:{p.get('hat')}")
-                if p.get("drg") != "normal":
-                    issues.append(f"drg:{p.get('drg')}")
+    if table:
+        rows = []
+        for p in data:
+            # Show only non-normal ratings
+            issues = []
+            if p.get("alc") != "normal":
+                issues.append(f"alc:{p.get('alc')}")
+            if p.get("adt") != "normal":
+                issues.append(f"adt:{p.get('adt')}")
+            if p.get("vio") != "normal":
+                issues.append(f"vio:{p.get('vio')}")
+            if p.get("hat") != "normal":
+                issues.append(f"hat:{p.get('hat')}")
+            if p.get("drg") != "normal":
+                issues.append(f"drg:{p.get('drg')}")
 
-                pagepath = p.get("pagepath", "")
-                rows.append({
-                    "page": pagepath[:40] + "..." if len(pagepath) > 40 else pagepath,
-                    "pageviews": f"{p['pageviews']:,}" if p.get("pageviews") else "N/A",
-                    "rpm": f"${p['rpm']:.2f}" if p.get("rpm") is not None else "N/A",
-                    "issues": ", ".join(issues) if issues else "Clean",
-                })
-            print_table(rows, ["page", "pageviews", "rpm", "issues"], ["Page", "Pageviews", "RPM", "Issues"])
-        else:
-            print_json(data)
-
-    except ClientError as e:
-        raise typer.Exit(handle_error(e))
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+            pagepath = p.get("pagepath", "")
+            rows.append({
+                "page": pagepath[:40] + "..." if len(pagepath) > 40 else pagepath,
+                "pageviews": f"{p['pageviews']:,}" if p.get("pageviews") else "N/A",
+                "rpm": f"${p['rpm']:.2f}" if p.get("rpm") is not None else "N/A",
+                "issues": ", ".join(issues) if issues else "Clean",
+            })
+        print_table(rows, ["page", "pageviews", "rpm", "issues"], ["Page", "Pageviews", "RPM", "Issues"])
+    else:
+        print_json(data)
 
 
 @app.command("sources")
+@command
 def earnings_sources(
     filter_: Optional[List[str]] = typer.Option(
         None,
@@ -681,30 +632,23 @@ def earnings_sources(
         raptive earnings sources --filter earnings:gt:500
         raptive earnings sources --properties ad_network,earnings
     """
-    try:
-        client = get_client()
-        sources = client.get_ad_network_earnings()
-        client.close()
+    client = get_client()
+    sources = client.get_ad_network_earnings()
 
-        # Convert to dicts and apply client-side filtering/limiting/properties
-        data = [s.to_dict() for s in sources]
-        data = apply_filters(data, filter_)
-        data = apply_limit(data, limit)
-        data = apply_properties(data, properties)
+    # Convert to dicts and apply client-side filtering/limiting/properties
+    data = [s.to_dict() for s in sources]
+    data = apply_filters(data, filter_)
+    data = apply_limit(data, limit)
+    data = apply_properties(data, properties)
 
-        if table:
-            rows = []
-            for s in data:
-                rows.append({
-                    "network": s.get("ad_network", ""),
-                    "month": f"{s['year']}-{s['month']:02d}" if s.get("year") and s.get("month") else "N/A",
-                    "earnings": f"${s['earnings']:.2f}" if s.get("earnings") is not None else "N/A",
-                })
-            print_table(rows, ["network", "month", "earnings"], ["Ad Network", "Month", "Earnings"])
-        else:
-            print_json(data)
-
-    except ClientError as e:
-        raise typer.Exit(handle_error(e))
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
+    if table:
+        rows = []
+        for s in data:
+            rows.append({
+                "network": s.get("ad_network", ""),
+                "month": f"{s['year']}-{s['month']:02d}" if s.get("year") and s.get("month") else "N/A",
+                "earnings": f"${s['earnings']:.2f}" if s.get("earnings") is not None else "N/A",
+            })
+        print_table(rows, ["network", "month", "earnings"], ["Ad Network", "Month", "Earnings"])
+    else:
+        print_json(data)
