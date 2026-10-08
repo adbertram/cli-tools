@@ -41,7 +41,7 @@
 | `ebay` | The `ebay` CLI provides a command-line interface for eBay Fulfillment API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `elevenlabs` | The `elevenlabs` CLI provides a command-line interface for Elevenlabs API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `facebook` | The `facebook` CLI wraps playwright with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
-| `facebook-ads` | Meta Marketing API and complete pinned Business SDK resource operations |
+| `facebook-ads` | Wrapper for Meta's official Ads CLI, with complete native command passthrough and upstream-owned authentication |
 | `fedex` | The `fedex` CLI provides a command-line interface for Fedex API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `fitnesspal` | The `fitnesspal` CLI provides a command-line interface for Fitnesspal API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `freshbooks` | The `freshbooks` CLI provides a command-line interface for FreshBooks accounting API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
