@@ -1,2 +1,0 @@
-[console_scripts]
-scrunch = scrunch_cli.main:app
