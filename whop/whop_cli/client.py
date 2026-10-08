@@ -57,10 +57,16 @@ FETCH_JS = """async ({path, action, body}) => {
 }"""
 FETCH_JS = FETCH_JS.replace("MAX_BODY",str(MAX_BODY))
 
+# The app's own scripts: same origin, or its Next.js bundle served from an asset
+# prefix on another origin (live 2026-10-08: chunks moved to
+# https://contentrewards.com/c/_next/static/chunks/, leaving only analytics same-origin).
+APP_SCRIPT_JS = "(src=>{const u=new URL(src);return u.origin===location.origin||(u.protocol==='https:'&&u.pathname.includes('/_next/static/'));})"
+
 # Lazy route imports may add scripts during a scan. Rediscover complete fresh
 # snapshots only within one shared deadline/byte allowance; never retry actions.
 DISCOVER_ACTION_JS = r"""async (name) => {
-    const sourcesOf=()=>[...new Set([...document.scripts].map(s=>s.src).filter(s=>s&&new URL(s).origin===location.origin))];
+    const appScript=APP_SCRIPT_JS;
+    const sourcesOf=()=>[...new Set([...document.scripts].map(s=>s.src).filter(s=>s&&appScript(s)))];""".replace("APP_SCRIPT_JS",APP_SCRIPT_JS)+r"""
     const signal=AbortSignal.timeout(10000);let total=0;
     for(let attempt=1;attempt<=3;attempt++){
     const sources=sourcesOf();
@@ -226,7 +232,7 @@ class WhopClient:
         requested_url=origin+requested_path
         ready_js="""({origin,path}) => location.origin===origin && location.pathname===path
             && document.readyState!=='loading'
-            && [...document.scripts].some(s=>s.src && new URL(s.src).origin===origin)"""
+            && [...document.scripts].some(s=>s.src && """+APP_SCRIPT_JS+"""(s.src))"""
         deadline=time.monotonic()+10.0
         def remaining():
             budget=deadline-time.monotonic()

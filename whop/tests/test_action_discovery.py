@@ -13,7 +13,9 @@ let sources=['one'],calls=[],signals=[],attempt=0,cancels=0;
 const ref=id=>'createServerReference)("'+id.repeat(40)+'",0,"createSubmissionAction"';
 if(scenario==='limit')sources=Array.from({length:121},(_,i)=>'s'+i);
 if(scenario==='total')sources=['one','two','three','four'];
-global.document={get scripts(){return sources.map(s=>({src:origin+'/'+s}));}};
+// Live 2026-10-08: the app bundle moved to an asset-prefix origin; only analytics stayed same-origin.
+if(scenario==='asset_prefix')sources=['https://assets.example.com/c/_next/static/chunks/app.js','https://tracker.example.net/t.js','http://assets.example.com/_next/static/x.js'];
+global.document={get scripts(){return sources.map(s=>({src:s.startsWith('http')?s:origin+'/'+s}));}};
 const signal={aborted:false};global.AbortSignal={timeout(ms){signals.push(ms);return signal;}};
 global.fetch=async(url,opts)=>{
  calls.push({url,signal:opts.signal===signal,redirect:opts.redirect});
@@ -22,6 +24,7 @@ global.fetch=async(url,opts)=>{
  if(scenario==='growth_ambiguous'&&name==='one'&&!sources.includes('two'))sources.push('two');
  if(scenario==='growth_ambiguous'&&name==='two')text=ref('b');
  if(scenario==='unstable'&&name==='one')sources.push('added'+(++attempt));
+ if(scenario==='asset_prefix'&&!new URL(url).pathname.includes('/_next/static/'))text=ref('b');
  if(scenario==='failed')return {ok:false};
  if(scenario==='timeout')signal.aborted=true;
  if(scenario==='total'&&name==='one'&&!sources.includes('five'))sources.push('five');
@@ -43,7 +46,7 @@ def scan(scenario):
     ('stable','ready',1),('growth_missing','ready',2),('growth_ambiguous','ambiguous',2),
     ('unstable','scripts_changed',3),('failed','script_fetch_failed',1),
     ('timeout','script_fetch_failed',1),('oversize','script_fetch_failed',1),
-    ('total','script_fetch_failed',2),('limit','script_limit',None),
+    ('total','script_fetch_failed',2),('limit','script_limit',None),('asset_prefix','ready',1),
 ])
 def test_actual_scanner(scenario,reason,attempts):
     value=scan(scenario);result=value['result']
@@ -56,6 +59,7 @@ def test_actual_scanner(scenario,reason,attempts):
     if scenario in ('oversize','total'): assert value['cancels']==len(value['calls'])
     if scenario=='growth_missing': assert len(value['calls'])==3
     if scenario=='unstable': assert result['sources']==3 and result['afterSources']==4
+    if scenario=='asset_prefix': assert [c['url'] for c in value['calls']]==['https://assets.example.com/c/_next/static/chunks/app.js']
 
 def test_scanner_shared_with_submission_discovery():
     assert SUBMISSION_DISCOVERY_JS is DISCOVER_ACTION_JS
