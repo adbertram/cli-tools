@@ -756,6 +756,18 @@ def test_cli_bounded_policy_input_rejected_before_publisher(tmp_path, monkeypatc
     assert result.exit_code == 1 and message in result.output
 
 
+def test_private_recovery_beside_preserved_drafts_is_refused_for_good(publisher, monkeypatch):
+    """adam-server 2026-10-08, request ef6a6cc4: two preserved prior drafts beside
+    the owned one made every retry refuse recovery the same way."""
+    value = prepared(publisher, state="preparation_failed")
+    page = attach(publisher, value, monkeypatch)
+    page.rows.append(draft(value, draft_id="preserved-prior-draft"))
+    with pytest.raises(StudioPublishError, match="uniquely identify the native draft banner") as error:
+        publisher._recover_private_preparation(value)
+    assert error.value.category == "private_recovery_refused"
+    assert not page.events and page.clicked == 0
+
+
 def test_private_failed_recovery_refuses_changed_duration(publisher, monkeypatch):
     value = prepared(publisher, state="preparation_failed")
     page = attach(publisher, value, monkeypatch)
@@ -1064,7 +1076,8 @@ def test_studio_check_failure_never_posts(publisher, monkeypatch, checks, messag
     page.checks = [checks]
     with pytest.raises(StudioPublishError, match=message) as error:
         publisher.publish(value['request_id'], before_public_action=lambda binding: pytest.fail('callback must not run'))
-    assert error.value.category == 'pre_action_abort' and page.clicked == 0
+    # A flag on this exact file is final for it, unlike a check still running.
+    assert error.value.category == 'studio_check_refused' and page.clicked == 0
     assert publisher.status(value['request_id'])['state'] == 'prepared'
 
 

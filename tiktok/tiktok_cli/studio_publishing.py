@@ -1076,7 +1076,10 @@ class StudioPublisher:
         if (matches[0].get("is_locked") is True or matches[0].get("is_temp") is True) and page.locator(CAPTION_SELECTOR).count() == 0 and page.locator('[data-e2e="local_draft_container"]').count() == 0:
             return self._delete_owned_orphan(page, operation)
         if len(rows) != 1 or page.locator('[data-e2e="local_draft_container"]').count() != 1:
-            raise StudioPublishError("Private recovery cannot uniquely identify the native draft banner; preserve all drafts.")
+            # Other drafts are always preserved, so with more than one row this
+            # request's draft can never be discarded: no retry can recover it.
+            raise StudioPublishError("Private recovery cannot uniquely identify the native draft banner; preserve all drafts.",
+                                     category="private_recovery_refused" if len(rows) != 1 else "pre_action_abort")
         page.get_by_role("button", name="Discard", exact=True).click()
         page.wait_for_timeout(250)
         dialog = page.get_by_role("dialog")
@@ -1361,9 +1364,9 @@ class StudioPublisher:
         operation['studio_checks'] = {**self._check_summary(result), 'waited_seconds': round(time.monotonic() - started, 1)}
         self._save(operation)
         if result['status'] == 'completed' and result['verdict'] != 'pass':
-            raise StudioPublishError(f"Studio's own content check did not pass (verdict {result['verdict']}); no Post dispatched.")
+            raise StudioPublishError(f"Studio's own content check did not pass (verdict {result['verdict']}); no Post dispatched.", category="studio_check_refused")
         if result['music_copyright']['verdict'] == 'copyright_violated':
-            raise StudioPublishError("Studio's music copyright check found a violation; no Post dispatched.")
+            raise StudioPublishError("Studio's music copyright check found a violation; no Post dispatched.", category="studio_check_refused")
 
     @staticmethod
     def _check_summary(result):

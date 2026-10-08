@@ -218,6 +218,9 @@ Content check lite and music copyright check on the open editor (the same page
 state `studio check` reads) and journals the result as `studio_checks`. It
 refuses Post, leaving the request prepared, when the content check verdict is not
 `pass`, the music check reports a violation, or the checks have not finished.
+A flag on the file (verdict not `pass`, or a music violation) raises category
+`studio_check_refused`, since the same file is refused every time; unfinished
+checks stay `pre_action_abort`.
 Clicking Post while Content check lite is still running opens TikTok's
 "Continue to post?" confirmation and sends nothing (measured 2026-10-07). If a
 click still sees no Post request, the publisher journals the page's dialogs as
@@ -225,7 +228,10 @@ click still sees no Post request, the publisher journals the page's dialogs as
 unsent (`post_confirmation_pending`) and stays resumable from its owned draft.
 A proven-unsent attempt whose owned draft is gone fails with category
 `unsent_draft_gone` and is never re-uploaded. On 2026-10-07 the next upload's
-editor removed the previous unsaved owned draft.
+editor removed the previous unsaved owned draft. Private recovery of a failed
+preparation refuses with category `private_recovery_refused` when the account
+has any other draft beside the owned one: other drafts are always preserved, so
+no retry can recover it (adam-server 2026-10-08, request ef6a6cc4).
 
 Studio prepare, publish, and `studio check` always run in visible (headed)
 Chrome, whatever `HEADLESS` says; a standalone `reconcile` and other reads stay
