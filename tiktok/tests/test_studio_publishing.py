@@ -576,10 +576,10 @@ def test_orphan_atomic_transaction_refuses_changed_row_and_active_heartbeat():
     script = """
     global.localStorage={getItem:k=>k.startsWith('web_creation_heartbeats_')?JSON.stringify(beats):times[k]??null};
     const expected={draft_id:'OWNED',creation_id:'OWNED',project_id:'PROJECT',video_id:'VIDEO',file_key:'FILE',file_name:'UUID.mp4',file_size:42,duration_ms:1000};
-    let beats=[],times={},deletes=0,changed=false;
+    let beats=[],times={},deletes=0,changed=false,locked=true;
     global.indexedDB={open(){const request={};setTimeout(()=>{request.result={objectStoreNames:{contains:n=>n==='local_draft_123'},close(){},transaction(){
       const tx={abort(){setTimeout(()=>tx.onabort())},objectStore(){return {get(key){const get={};setTimeout(()=>{
-        get.result={key,isLocked:true,data:{basic_info:{creation_id:'OWNED',project_id:'PROJECT',media_draft_info:{vid:changed?'FOREIGN':'VIDEO',video_duration_ms:1000,video_file_desc:JSON.stringify({fileKey:'FILE',rawFile:{name:'UUID.mp4',size:42}})}}}};
+        get.result={key,isLocked:locked,data:{basic_info:{creation_id:'OWNED',project_id:'PROJECT',media_draft_info:{vid:changed?'FOREIGN':'VIDEO',video_duration_ms:1000,video_file_desc:JSON.stringify({fileKey:'FILE',rawFile:{name:'UUID.mp4',size:42}})}}}};
         get.onsuccess();if(!changed)setTimeout(()=>tx.oncomplete())});return get},delete(key){if(key!=='OWNED')throw Error('wrong key');deletes++}}}};return tx}};request.onsuccess()});return request}};
     const remove=DELETE;
     (async()=>{
@@ -589,6 +589,10 @@ def test_orphan_atomic_transaction_refuses_changed_row_and_active_heartbeat():
       beats=[];changed=true;try{await remove({owner:'123',expected});throw Error('change accepted')}catch(e){if(e.message!=='ORPHAN_BINDING_REJECTED')throw e}
       if(deletes!==0)throw Error('changed delete');
       changed=false;const result=await remove({owner:'123',expected});if(!result.deleted||deletes!==1)throw Error('exact delete failed');
+      locked=false;try{await remove({owner:'123',expected});throw Error('unlocked accepted')}catch(e){if(e.message!=='ORPHAN_BINDING_REJECTED')throw e}
+      if(deletes!==1)throw Error('unlocked delete');
+      changed=true;try{await remove({owner:'123',expected,allow_unlocked:true});throw Error('unlocked change accepted')}catch(e){if(e.message!=='ORPHAN_BINDING_REJECTED')throw e}
+      changed=false;const unlocked=await remove({owner:'123',expected,allow_unlocked:true});if(!unlocked.deleted||deletes!==2)throw Error('unlocked exact delete failed');
       console.log('ATOMIC_CHANGED_AND_ACTIVE_REFUSED_ONLY_EXACT_DELETED');
     })().catch(e=>{console.error(e);process.exitCode=1});
     """.replace('const remove=DELETE;', 'const remove=(' + module.DELETE_ORPHAN_JS + ');')
@@ -756,16 +760,76 @@ def test_cli_bounded_policy_input_rejected_before_publisher(tmp_path, monkeypatc
     assert result.exit_code == 1 and message in result.output
 
 
-def test_private_recovery_beside_preserved_drafts_is_refused_for_good(publisher, monkeypatch):
-    """adam-server 2026-10-08, request ef6a6cc4: two preserved prior drafts beside
-    the owned one made every retry refuse recovery the same way."""
+def beside_others(publisher, monkeypatch, *, owned_locked=False):
+    """adam-server 2026-10-08, request ef6a6cc4: the owned draft is the one unlocked
+    row, beside two locked drafts, with the Continue/Discard banner showing."""
+    value = prepared(publisher, state="preparation_failed")
+    value["draft"]["is_locked"] = owned_locked;publisher._save(value)
+    page = attach(publisher, value, monkeypatch)
+    page.rows[0] = dict(value["draft"])
+    page.rows += [draft(value, draft_id=name, creation_id=name, file_key=name, video_id=name, is_locked=True) for name in ("OTHER_A", "OTHER_B")]
+    original = page.locator
+    page.locator = lambda selector: SimpleNamespace(count=lambda: 0) if selector == module.CAPTION_SELECTOR else original(selector)
+    page.deletes = []
+    base = page.evaluate
+    def evaluate(script, argument=None):
+        if script == module.DELETE_ORPHAN_JS:
+            page.deletes.append(argument)
+            page.rows = [row for row in page.rows if row["draft_id"] != argument["expected"]["draft_id"]]
+            return {"deleted": True, "draft_id": argument["expected"]["draft_id"]}
+        return base(script, argument)
+    page.evaluate = evaluate
+    publisher.browser = SimpleNamespace(get_page=lambda url: page, close=lambda: None)
+    return value, page
+
+
+@pytest.mark.parametrize("owned_locked", [False, True])
+def test_private_recovery_beside_other_drafts_deletes_only_the_owned_row(publisher, monkeypatch, owned_locked):
+    value, page = beside_others(publisher, monkeypatch, owned_locked=owned_locked)
+    publisher._recover_private_preparation(value)
+    assert len(page.deletes) == 1 and page.deletes[0]["allow_unlocked"] is True
+    assert page.deletes[0]["expected"] == {key: value["draft"][key] for key in module.ORPHAN_BINDING_FIELDS}
+    assert [row["draft_id"] for row in page.rows] == ["OTHER_A", "OTHER_B"]
+    assert not page.events and page.clicked == 0
+    assert publisher.status(value["request_id"])["orphan_recovery"][-1]["state"] == "deleted"
+
+
+def test_private_recovery_beside_other_drafts_refuses_a_changed_owned_binding(publisher, monkeypatch):
+    value, page = beside_others(publisher, monkeypatch)
+    page.rows[0]["video_id"] = "FOREIGN"
+    with pytest.raises(StudioPublishError, match="media binding changed"):
+        publisher._recover_private_preparation(value)
+    assert not page.deletes and len(page.rows) == 3
+
+
+def test_private_recovery_beside_other_drafts_refuses_an_open_editor(publisher, monkeypatch):
+    value, page = beside_others(publisher, monkeypatch)
+    page.locator = lambda selector: SimpleNamespace(count=lambda: 1)
+    with pytest.raises(StudioPublishError, match="active editor"):
+        publisher._recover_private_preparation(value)
+    assert not page.deletes and len(page.rows) == 3
+
+
+def test_private_recovery_beside_other_drafts_fails_if_another_draft_changes(publisher, monkeypatch):
+    value, page = beside_others(publisher, monkeypatch)
+    delete = page.evaluate
+    def evaluate(script, argument=None):
+        result = delete(script, argument)
+        if script == module.DELETE_ORPHAN_JS:page.rows[0] = {**page.rows[0], "is_locked": False}
+        return result
+    page.evaluate = evaluate
+    with pytest.raises(StudioPublishError, match="other than the owned orphan changed"):
+        publisher._recover_private_preparation(value)
+
+
+def test_private_recovery_never_discards_without_exactly_one_banner(publisher, monkeypatch):
     value = prepared(publisher, state="preparation_failed")
     page = attach(publisher, value, monkeypatch)
-    page.rows.append(draft(value, draft_id="preserved-prior-draft"))
+    original = page.locator
+    page.locator = lambda selector: SimpleNamespace(count=lambda: 0) if selector == '[data-e2e="local_draft_container"]' else original(selector)
     with pytest.raises(StudioPublishError, match="uniquely identify the native draft banner") as error:
         publisher._recover_private_preparation(value)
-    assert error.value.category == "private_recovery_refused"
-    assert not page.events and page.clicked == 0
+    assert error.value.category == "pre_action_abort" and not page.events and page.clicked == 0
 
 
 def test_private_failed_recovery_refuses_changed_duration(publisher, monkeypatch):

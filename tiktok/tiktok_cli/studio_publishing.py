@@ -117,7 +117,8 @@ HEARTBEAT_JS = r"""(owner) => {
  }
  return true
 }"""
-# Shared exact-binding removal: one locked or temporary row, or nothing.
+# Shared exact-binding removal: one locked or temporary row, or nothing. An
+# unlocked row goes only when the caller sets opts.allow_unlocked.
 DELETE_BOUND_DRAFT_JS = r"""
  return await new Promise((resolve,reject)=>{
   const r=indexedDB.open('web_creation_draft');r.onerror=()=>reject(Error('DRAFT_READ_FAILED'));
@@ -127,7 +128,7 @@ DELETE_BOUND_DRAFT_JS = r"""
    let deleted=false;
    tx.onabort=()=>{db.close();reject(Error('ORPHAN_BINDING_REJECTED'))};
    tx.onerror=()=>{};tx.oncomplete=()=>{db.close();resolve({deleted,draft_id:opts.expected.draft_id})};
-   get.onsuccess=()=>{try{const v=get.result;if(!v||v.isLocked!==true&&v.isTemp!==true)throw Error('NOT_LOCKED_ORPHAN');
+   get.onsuccess=()=>{try{const v=get.result;if(!v||!opts.allow_unlocked&&v.isLocked!==true&&v.isTemp!==true)throw Error('NOT_LOCKED_ORPHAN');
     const basic=v.data.basic_info,media=basic.media_draft_info,desc=media.video_file_desc?JSON.parse(media.video_file_desc):{};
     const actual={draft_id:v.key,creation_id:basic.creation_id,project_id:basic.project_id,
      video_id:media.vid,file_key:desc.fileKey,file_name:desc.rawFile.name,
@@ -1075,26 +1076,35 @@ class StudioPublisher:
             raise StudioPublishError("Private recovery media binding changed; no draft removed.")
         if (matches[0].get("is_locked") is True or matches[0].get("is_temp") is True) and page.locator(CAPTION_SELECTOR).count() == 0 and page.locator('[data-e2e="local_draft_container"]').count() == 0:
             return self._delete_owned_orphan(page, operation)
-        if len(rows) != 1 or page.locator('[data-e2e="local_draft_container"]').count() != 1:
-            # Other drafts are always preserved, so with more than one row this
-            # request's draft can never be discarded: no retry can recover it.
-            raise StudioPublishError("Private recovery cannot uniquely identify the native draft banner; preserve all drafts.",
-                                     category="private_recovery_refused" if len(rows) != 1 else "pre_action_abort")
-        page.get_by_role("button", name="Discard", exact=True).click()
-        page.wait_for_timeout(250)
-        dialog = page.get_by_role("dialog")
-        if dialog.count() != 1 or "Discard" not in dialog.inner_text():
-            raise StudioPublishError("Native private-draft discard confirmation was not verified.")
-        dialog.get_by_role("button", name="Discard", exact=True).click()
-        self._wait(page, lambda: not any(r["draft_id"] == operation["draft_id"] for r in self._drafts(page, policy)), "Owned private draft did not disappear after native discard.", seconds=10)
+        if len(rows) > 1:
+            # The native banner never names a draft: it offers the one unlocked
+            # row (measured on adam-server 2026-10-08 with one unlocked and two
+            # locked rows), so its Discard cannot be aimed at the owned draft
+            # beside others. Delete only the owned row by key, bound to its
+            # exact journaled media, and leave every other draft untouched.
+            self._delete_owned_orphan(page, operation, allow_unlocked=True)
+        else:
+            if page.locator('[data-e2e="local_draft_container"]').count() != 1:
+                raise StudioPublishError("Private recovery cannot uniquely identify the native draft banner; preserve all drafts.")
+            page.get_by_role("button", name="Discard", exact=True).click()
+            page.wait_for_timeout(250)
+            dialog = page.get_by_role("dialog")
+            if dialog.count() != 1 or "Discard" not in dialog.inner_text():
+                raise StudioPublishError("Native private-draft discard confirmation was not verified.")
+            dialog.get_by_role("button", name="Discard", exact=True).click()
+            self._wait(page, lambda: not any(r["draft_id"] == operation["draft_id"] for r in self._drafts(page, policy)), "Owned private draft did not disappear after native discard.", seconds=10)
         self.page = self.browser.get_page(UPLOAD_URL)
         page = self.page
         page.wait_for_timeout(1000)
         if any(r["draft_id"] == operation["draft_id"] for r in self._drafts(page, policy)):
             raise StudioPublishError("Owned private draft reappeared after discard; reprepare refused.")
 
-    def _delete_owned_orphan(self, page, operation):
-        """Delete one exact journal-owned private orphan, retaining recovery audit."""
+    def _delete_owned_orphan(self, page, operation, *, allow_unlocked=False):
+        """Delete one exact journal-owned private orphan, retaining recovery audit.
+
+        ``allow_unlocked`` also lets the exact owned row go when Studio no longer
+        holds it locked (the Continue banner's draft); no other row is touched.
+        """
         if operation["state"] not in {"preparing", "preparation_failed", "prepared"} or operation.get("public_action_dispatched") is not False:
             raise StudioPublishError("Orphan recovery is forbidden after any public-action boundary.")
         self._verify_asset(operation)
@@ -1108,17 +1118,21 @@ class StudioPublisher:
         expected = {key: operation["draft"][key] for key in fields}
         if expected["draft_id"] != operation["draft_id"] or expected["file_name"] != operation["staged_name"] or expected["file_size"] != operation["asset_bytes"]:
             raise StudioPublishError("Orphan recovery media identity does not match the journal.")
+        others = {row["draft_id"]: digest(row) for row in self._drafts(page, policy) if row["draft_id"] != operation["draft_id"]}
         audit = {"draft_id": operation["draft_id"], "binding": expected,
                  "asset_sha256": operation["asset_sha256"], "state": "delete_pending",
                  "requested_at": datetime.now(timezone.utc).isoformat()}
         operation.setdefault("orphan_recovery", []).append(audit)
         operation["state"] = "preparation_failed"
         self._save(operation)
-        result = page.evaluate(DELETE_ORPHAN_JS, {"owner": policy["account_id"], "expected": expected})
+        result = page.evaluate(DELETE_ORPHAN_JS, {"owner": policy["account_id"], "expected": expected, "allow_unlocked": allow_unlocked})
         if result != {"deleted": True, "draft_id": operation["draft_id"]}:
             raise StudioPublishError("Exact orphan transaction did not confirm removal.")
-        if any(row["draft_id"] == operation["draft_id"] for row in self._drafts(page, policy)):
+        remaining = self._drafts(page, policy)
+        if any(row["draft_id"] == operation["draft_id"] for row in remaining):
             raise StudioPublishError("Exact orphan still exists after private recovery.")
+        if {row["draft_id"]: digest(row) for row in remaining} != others:
+            raise StudioPublishError("Studio drafts other than the owned orphan changed during private recovery.")
         audit.update(state="deleted", removed_at=datetime.now(timezone.utc).isoformat())
         self._save(operation)
 

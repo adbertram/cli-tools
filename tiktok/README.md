@@ -229,9 +229,11 @@ unsent (`post_confirmation_pending`) and stays resumable from its owned draft.
 A proven-unsent attempt whose owned draft is gone fails with category
 `unsent_draft_gone` and is never re-uploaded. On 2026-10-07 the next upload's
 editor removed the previous unsaved owned draft. Private recovery of a failed
-preparation refuses with category `private_recovery_refused` when the account
-has any other draft beside the owned one: other drafts are always preserved, so
-no retry can recover it (adam-server 2026-10-08, request ef6a6cc4).
+preparation beside other drafts deletes only the journal-owned row, by key and
+exact media binding, and refuses if any other draft changes: the native
+Continue/Discard banner names no draft, it offers the one unlocked row, so its
+Discard cannot be aimed at the owned draft (adam-server 2026-10-08, request
+ef6a6cc4).
 
 Studio prepare, publish, and `studio check` always run in visible (headed)
 Chrome, whatever `HEADLESS` says; a standalone `reconcile` and other reads stay
