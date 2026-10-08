@@ -33,6 +33,7 @@
 | `crowdgen` | CrowdGen by Appen worker portal (browser automation, worker side) |
 | `cryptocom` | The `cryptocom` CLI provides command-line access to Crypto.com Exchange API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `cvs` | The `cvs` CLI is a command-line interface for CVS Health pharmacy — prescriptions, orders, and refill eligibility across all linked family members. Use it for scriptable, JSON-first access from agents, automation, or terminal workflows. Authentication is a real browser login that the CLI then reuses for read-only commands. |
+| `dataforseo` | DataForSEO API client for keyword research: search volume, keyword difficulty, related keyword ideas, and account balance |
 | `deepseek-sessions` | The `deepseek-sessions` CLI queries DeepSeek Harness (`dsh`) session transcripts in `~/.dsh`. Use it to audit what a `dsh` run did — sessions, turns, tool calls, subagents, retries, approvals, goals, and token cost — with the same command shape as `claude-code-sessions` and `codex-sessions`. |
 | `depop` | Depop resale marketplace - search listings via the internal presentation search API (Cloudflare-cleared browser session) |
 | `dev_to` | The `dev_to` CLI provides a command-line interface for the DEV Community API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
