@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "google-ads-cli"
+version = "0.1.0"
+description = "CLI interface for GoogleAds API"
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.9.0",
+    "google-ads==33.0.0",
+    "google-auth>=2.40.0",
+    "protobuf>=6.31.1",
+    "proto-plus>=1.26.1",
+    "google-api-core>=2.25.0",
+    "cli-tools-shared",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+]
+
+[project.scripts]
+"google-ads" = "google_ads_cli.main:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["google_ads_cli*"]
+
+[tool.uv.sources]
+cli-tools-shared = { path = "../_repo/cli-tools-shared", editable = true }

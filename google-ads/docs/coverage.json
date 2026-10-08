@@ -1,0 +1,1748 @@
+{
+  "sdk_version": "33.0.0",
+  "api_version": "v25",
+  "service_count": 111,
+  "rpc_count": 174,
+  "rpcs": [
+    {
+      "service": "AccountBudgetProposalService",
+      "method": "mutate_account_budget_proposal",
+      "request_type": "google.ads.googleads.v25.services.MutateAccountBudgetProposalRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateAccountBudgetProposalResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "AccountLinkService",
+      "method": "create_account_link",
+      "request_type": "google.ads.googleads.v25.services.CreateAccountLinkRequest",
+      "response_type": "google.ads.googleads.v25.services.CreateAccountLinkResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "AccountLinkService",
+      "method": "mutate_account_link",
+      "request_type": "google.ads.googleads.v25.services.MutateAccountLinkRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateAccountLinkResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "AdGroupAdLabelService",
+      "method": "mutate_ad_group_ad_labels",
+      "request_type": "google.ads.googleads.v25.services.MutateAdGroupAdLabelsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateAdGroupAdLabelsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "AdGroupAdService",
+      "method": "mutate_ad_group_ads",
+      "request_type": "google.ads.googleads.v25.services.MutateAdGroupAdsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateAdGroupAdsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "AdGroupAdService",
+      "method": "remove_automatically_created_assets",
+      "request_type": "google.ads.googleads.v25.services.RemoveAutomaticallyCreatedAssetsRequest",
+      "response_type": "google.protobuf.Empty",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "AdGroupAssetService",
+      "method": "mutate_ad_group_assets",
+      "request_type": "google.ads.googleads.v25.services.MutateAdGroupAssetsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateAdGroupAssetsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "AdGroupAssetSetService",
+      "method": "mutate_ad_group_asset_sets",
+      "request_type": "google.ads.googleads.v25.services.MutateAdGroupAssetSetsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateAdGroupAssetSetsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "AdGroupBidModifierService",
+      "method": "mutate_ad_group_bid_modifiers",
+      "request_type": "google.ads.googleads.v25.services.MutateAdGroupBidModifiersRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateAdGroupBidModifiersResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "AdGroupCriterionCustomizerService",
+      "method": "mutate_ad_group_criterion_customizers",
+      "request_type": "google.ads.googleads.v25.services.MutateAdGroupCriterionCustomizersRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateAdGroupCriterionCustomizersResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "AdGroupCriterionLabelService",
+      "method": "mutate_ad_group_criterion_labels",
+      "request_type": "google.ads.googleads.v25.services.MutateAdGroupCriterionLabelsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateAdGroupCriterionLabelsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "AdGroupCriterionService",
+      "method": "mutate_ad_group_criteria",
+      "request_type": "google.ads.googleads.v25.services.MutateAdGroupCriteriaRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateAdGroupCriteriaResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "AdGroupCustomizerService",
+      "method": "mutate_ad_group_customizers",
+      "request_type": "google.ads.googleads.v25.services.MutateAdGroupCustomizersRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateAdGroupCustomizersResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "AdGroupLabelService",
+      "method": "mutate_ad_group_labels",
+      "request_type": "google.ads.googleads.v25.services.MutateAdGroupLabelsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateAdGroupLabelsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "AdGroupService",
+      "method": "mutate_ad_groups",
+      "request_type": "google.ads.googleads.v25.services.MutateAdGroupsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateAdGroupsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "AdParameterService",
+      "method": "mutate_ad_parameters",
+      "request_type": "google.ads.googleads.v25.services.MutateAdParametersRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateAdParametersResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "AdService",
+      "method": "mutate_ads",
+      "request_type": "google.ads.googleads.v25.services.MutateAdsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateAdsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "AssetGenerationService",
+      "method": "generate_images",
+      "request_type": "google.ads.googleads.v25.services.GenerateImagesRequest",
+      "response_type": "google.ads.googleads.v25.services.GenerateImagesResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "AssetGenerationService",
+      "method": "generate_text",
+      "request_type": "google.ads.googleads.v25.services.GenerateTextRequest",
+      "response_type": "google.ads.googleads.v25.services.GenerateTextResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "AssetGroupAssetService",
+      "method": "mutate_asset_group_assets",
+      "request_type": "google.ads.googleads.v25.services.MutateAssetGroupAssetsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateAssetGroupAssetsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "AssetGroupListingGroupFilterService",
+      "method": "mutate_asset_group_listing_group_filters",
+      "request_type": "google.ads.googleads.v25.services.MutateAssetGroupListingGroupFiltersRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateAssetGroupListingGroupFiltersResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "AssetGroupService",
+      "method": "mutate_asset_groups",
+      "request_type": "google.ads.googleads.v25.services.MutateAssetGroupsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateAssetGroupsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "AssetGroupSignalService",
+      "method": "mutate_asset_group_signals",
+      "request_type": "google.ads.googleads.v25.services.MutateAssetGroupSignalsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateAssetGroupSignalsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "AssetService",
+      "method": "mutate_assets",
+      "request_type": "google.ads.googleads.v25.services.MutateAssetsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateAssetsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "AssetSetAssetService",
+      "method": "mutate_asset_set_assets",
+      "request_type": "google.ads.googleads.v25.services.MutateAssetSetAssetsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateAssetSetAssetsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "AssetSetService",
+      "method": "mutate_asset_sets",
+      "request_type": "google.ads.googleads.v25.services.MutateAssetSetsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateAssetSetsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "AudienceInsightsService",
+      "method": "generate_audience_composition_insights",
+      "request_type": "google.ads.googleads.v25.services.GenerateAudienceCompositionInsightsRequest",
+      "response_type": "google.ads.googleads.v25.services.GenerateAudienceCompositionInsightsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "AudienceInsightsService",
+      "method": "generate_audience_definition",
+      "request_type": "google.ads.googleads.v25.services.GenerateAudienceDefinitionRequest",
+      "response_type": "google.ads.googleads.v25.services.GenerateAudienceDefinitionResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "AudienceInsightsService",
+      "method": "generate_audience_overlap_insights",
+      "request_type": "google.ads.googleads.v25.services.GenerateAudienceOverlapInsightsRequest",
+      "response_type": "google.ads.googleads.v25.services.GenerateAudienceOverlapInsightsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "AudienceInsightsService",
+      "method": "generate_insights_finder_report",
+      "request_type": "google.ads.googleads.v25.services.GenerateInsightsFinderReportRequest",
+      "response_type": "google.ads.googleads.v25.services.GenerateInsightsFinderReportResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "AudienceInsightsService",
+      "method": "generate_suggested_targeting_insights",
+      "request_type": "google.ads.googleads.v25.services.GenerateSuggestedTargetingInsightsRequest",
+      "response_type": "google.ads.googleads.v25.services.GenerateSuggestedTargetingInsightsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "AudienceInsightsService",
+      "method": "generate_targeting_suggestion_metrics",
+      "request_type": "google.ads.googleads.v25.services.GenerateTargetingSuggestionMetricsRequest",
+      "response_type": "google.ads.googleads.v25.services.GenerateTargetingSuggestionMetricsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "AudienceInsightsService",
+      "method": "list_audience_insights_attributes",
+      "request_type": "google.ads.googleads.v25.services.ListAudienceInsightsAttributesRequest",
+      "response_type": "google.ads.googleads.v25.services.ListAudienceInsightsAttributesResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": true,
+      "validate_only_supported": false
+    },
+    {
+      "service": "AudienceInsightsService",
+      "method": "list_insights_eligible_dates",
+      "request_type": "google.ads.googleads.v25.services.ListInsightsEligibleDatesRequest",
+      "response_type": "google.ads.googleads.v25.services.ListInsightsEligibleDatesResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": true,
+      "validate_only_supported": false
+    },
+    {
+      "service": "AudienceService",
+      "method": "mutate_audiences",
+      "request_type": "google.ads.googleads.v25.services.MutateAudiencesRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateAudiencesResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "AutomaticallyCreatedAssetRemovalService",
+      "method": "remove_campaign_automatically_created_asset",
+      "request_type": "google.ads.googleads.v25.services.RemoveCampaignAutomaticallyCreatedAssetRequest",
+      "response_type": "google.ads.googleads.v25.services.RemoveCampaignAutomaticallyCreatedAssetResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "BatchJobService",
+      "method": "add_batch_job_operations",
+      "request_type": "google.ads.googleads.v25.services.AddBatchJobOperationsRequest",
+      "response_type": "google.ads.googleads.v25.services.AddBatchJobOperationsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "BatchJobService",
+      "method": "list_batch_job_results",
+      "request_type": "google.ads.googleads.v25.services.ListBatchJobResultsRequest",
+      "response_type": "google.ads.googleads.v25.services.ListBatchJobResultsResponse",
+      "server_streaming": false,
+      "paginated": true,
+      "read_only": true,
+      "validate_only_supported": false
+    },
+    {
+      "service": "BatchJobService",
+      "method": "mutate_batch_job",
+      "request_type": "google.ads.googleads.v25.services.MutateBatchJobRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateBatchJobResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "BatchJobService",
+      "method": "run_batch_job",
+      "request_type": "google.ads.googleads.v25.services.RunBatchJobRequest",
+      "response_type": "google.longrunning.Operation",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "BenchmarksService",
+      "method": "generate_benchmarks_metrics",
+      "request_type": "google.ads.googleads.v25.services.GenerateBenchmarksMetricsRequest",
+      "response_type": "google.ads.googleads.v25.services.GenerateBenchmarksMetricsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "BenchmarksService",
+      "method": "list_benchmarks_available_dates",
+      "request_type": "google.ads.googleads.v25.services.ListBenchmarksAvailableDatesRequest",
+      "response_type": "google.ads.googleads.v25.services.ListBenchmarksAvailableDatesResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": true,
+      "validate_only_supported": false
+    },
+    {
+      "service": "BenchmarksService",
+      "method": "list_benchmarks_locations",
+      "request_type": "google.ads.googleads.v25.services.ListBenchmarksLocationsRequest",
+      "response_type": "google.ads.googleads.v25.services.ListBenchmarksLocationsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": true,
+      "validate_only_supported": false
+    },
+    {
+      "service": "BenchmarksService",
+      "method": "list_benchmarks_products",
+      "request_type": "google.ads.googleads.v25.services.ListBenchmarksProductsRequest",
+      "response_type": "google.ads.googleads.v25.services.ListBenchmarksProductsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": true,
+      "validate_only_supported": false
+    },
+    {
+      "service": "BenchmarksService",
+      "method": "list_benchmarks_sources",
+      "request_type": "google.ads.googleads.v25.services.ListBenchmarksSourcesRequest",
+      "response_type": "google.ads.googleads.v25.services.ListBenchmarksSourcesResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": true,
+      "validate_only_supported": false
+    },
+    {
+      "service": "BiddingDataExclusionService",
+      "method": "mutate_bidding_data_exclusions",
+      "request_type": "google.ads.googleads.v25.services.MutateBiddingDataExclusionsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateBiddingDataExclusionsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "BiddingSeasonalityAdjustmentService",
+      "method": "mutate_bidding_seasonality_adjustments",
+      "request_type": "google.ads.googleads.v25.services.MutateBiddingSeasonalityAdjustmentsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateBiddingSeasonalityAdjustmentsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "BiddingStrategyService",
+      "method": "mutate_bidding_strategies",
+      "request_type": "google.ads.googleads.v25.services.MutateBiddingStrategiesRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateBiddingStrategiesResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "BillingSetupService",
+      "method": "mutate_billing_setup",
+      "request_type": "google.ads.googleads.v25.services.MutateBillingSetupRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateBillingSetupResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "BrandSuggestionService",
+      "method": "suggest_brands",
+      "request_type": "google.ads.googleads.v25.services.SuggestBrandsRequest",
+      "response_type": "google.ads.googleads.v25.services.SuggestBrandsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "CampaignAssetService",
+      "method": "mutate_campaign_assets",
+      "request_type": "google.ads.googleads.v25.services.MutateCampaignAssetsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateCampaignAssetsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "CampaignAssetSetService",
+      "method": "mutate_campaign_asset_sets",
+      "request_type": "google.ads.googleads.v25.services.MutateCampaignAssetSetsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateCampaignAssetSetsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "CampaignBidModifierService",
+      "method": "mutate_campaign_bid_modifiers",
+      "request_type": "google.ads.googleads.v25.services.MutateCampaignBidModifiersRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateCampaignBidModifiersResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "CampaignBudgetService",
+      "method": "mutate_campaign_budgets",
+      "request_type": "google.ads.googleads.v25.services.MutateCampaignBudgetsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateCampaignBudgetsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "CampaignConversionGoalService",
+      "method": "mutate_campaign_conversion_goals",
+      "request_type": "google.ads.googleads.v25.services.MutateCampaignConversionGoalsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateCampaignConversionGoalsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "CampaignCriterionService",
+      "method": "mutate_campaign_criteria",
+      "request_type": "google.ads.googleads.v25.services.MutateCampaignCriteriaRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateCampaignCriteriaResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "CampaignCustomizerService",
+      "method": "mutate_campaign_customizers",
+      "request_type": "google.ads.googleads.v25.services.MutateCampaignCustomizersRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateCampaignCustomizersResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "CampaignDraftService",
+      "method": "list_campaign_draft_async_errors",
+      "request_type": "google.ads.googleads.v25.services.ListCampaignDraftAsyncErrorsRequest",
+      "response_type": "google.ads.googleads.v25.services.ListCampaignDraftAsyncErrorsResponse",
+      "server_streaming": false,
+      "paginated": true,
+      "read_only": true,
+      "validate_only_supported": false
+    },
+    {
+      "service": "CampaignDraftService",
+      "method": "mutate_campaign_drafts",
+      "request_type": "google.ads.googleads.v25.services.MutateCampaignDraftsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateCampaignDraftsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "CampaignDraftService",
+      "method": "promote_campaign_draft",
+      "request_type": "google.ads.googleads.v25.services.PromoteCampaignDraftRequest",
+      "response_type": "google.longrunning.Operation",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "CampaignGoalConfigService",
+      "method": "mutate_campaign_goal_configs",
+      "request_type": "google.ads.googleads.v25.services.MutateCampaignGoalConfigsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateCampaignGoalConfigsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "CampaignGroupService",
+      "method": "mutate_campaign_groups",
+      "request_type": "google.ads.googleads.v25.services.MutateCampaignGroupsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateCampaignGroupsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "CampaignLabelService",
+      "method": "mutate_campaign_labels",
+      "request_type": "google.ads.googleads.v25.services.MutateCampaignLabelsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateCampaignLabelsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "CampaignService",
+      "method": "enable_p_max_brand_guidelines",
+      "request_type": "google.ads.googleads.v25.services.EnablePMaxBrandGuidelinesRequest",
+      "response_type": "google.ads.googleads.v25.services.EnablePMaxBrandGuidelinesResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "CampaignService",
+      "method": "mutate_campaigns",
+      "request_type": "google.ads.googleads.v25.services.MutateCampaignsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateCampaignsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "CampaignSharedSetService",
+      "method": "mutate_campaign_shared_sets",
+      "request_type": "google.ads.googleads.v25.services.MutateCampaignSharedSetsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateCampaignSharedSetsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "ContentCreatorInsightsService",
+      "method": "generate_creator_insights",
+      "request_type": "google.ads.googleads.v25.services.GenerateCreatorInsightsRequest",
+      "response_type": "google.ads.googleads.v25.services.GenerateCreatorInsightsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "ContentCreatorInsightsService",
+      "method": "generate_trending_insights",
+      "request_type": "google.ads.googleads.v25.services.GenerateTrendingInsightsRequest",
+      "response_type": "google.ads.googleads.v25.services.GenerateTrendingInsightsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "ConversionActionService",
+      "method": "mutate_conversion_actions",
+      "request_type": "google.ads.googleads.v25.services.MutateConversionActionsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateConversionActionsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "ConversionAdjustmentUploadService",
+      "method": "upload_conversion_adjustments",
+      "request_type": "google.ads.googleads.v25.services.UploadConversionAdjustmentsRequest",
+      "response_type": "google.ads.googleads.v25.services.UploadConversionAdjustmentsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "ConversionCustomVariableService",
+      "method": "mutate_conversion_custom_variables",
+      "request_type": "google.ads.googleads.v25.services.MutateConversionCustomVariablesRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateConversionCustomVariablesResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "ConversionGoalCampaignConfigService",
+      "method": "mutate_conversion_goal_campaign_configs",
+      "request_type": "google.ads.googleads.v25.services.MutateConversionGoalCampaignConfigsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateConversionGoalCampaignConfigsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "ConversionUploadService",
+      "method": "upload_call_conversions",
+      "request_type": "google.ads.googleads.v25.services.UploadCallConversionsRequest",
+      "response_type": "google.ads.googleads.v25.services.UploadCallConversionsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "ConversionUploadService",
+      "method": "upload_click_conversions",
+      "request_type": "google.ads.googleads.v25.services.UploadClickConversionsRequest",
+      "response_type": "google.ads.googleads.v25.services.UploadClickConversionsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "ConversionValueRuleService",
+      "method": "mutate_conversion_value_rules",
+      "request_type": "google.ads.googleads.v25.services.MutateConversionValueRulesRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateConversionValueRulesResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "ConversionValueRuleSetService",
+      "method": "mutate_conversion_value_rule_sets",
+      "request_type": "google.ads.googleads.v25.services.MutateConversionValueRuleSetsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateConversionValueRuleSetsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "CustomAudienceService",
+      "method": "mutate_custom_audiences",
+      "request_type": "google.ads.googleads.v25.services.MutateCustomAudiencesRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateCustomAudiencesResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "CustomConversionGoalService",
+      "method": "mutate_custom_conversion_goals",
+      "request_type": "google.ads.googleads.v25.services.MutateCustomConversionGoalsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateCustomConversionGoalsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "CustomInterestService",
+      "method": "mutate_custom_interests",
+      "request_type": "google.ads.googleads.v25.services.MutateCustomInterestsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateCustomInterestsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "CustomerAssetService",
+      "method": "mutate_customer_assets",
+      "request_type": "google.ads.googleads.v25.services.MutateCustomerAssetsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateCustomerAssetsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "CustomerAssetSetService",
+      "method": "mutate_customer_asset_sets",
+      "request_type": "google.ads.googleads.v25.services.MutateCustomerAssetSetsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateCustomerAssetSetsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "CustomerClientLinkService",
+      "method": "mutate_customer_client_link",
+      "request_type": "google.ads.googleads.v25.services.MutateCustomerClientLinkRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateCustomerClientLinkResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "CustomerConversionGoalService",
+      "method": "mutate_customer_conversion_goals",
+      "request_type": "google.ads.googleads.v25.services.MutateCustomerConversionGoalsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateCustomerConversionGoalsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "CustomerCustomizerService",
+      "method": "mutate_customer_customizers",
+      "request_type": "google.ads.googleads.v25.services.MutateCustomerCustomizersRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateCustomerCustomizersResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "CustomerLabelService",
+      "method": "mutate_customer_labels",
+      "request_type": "google.ads.googleads.v25.services.MutateCustomerLabelsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateCustomerLabelsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "CustomerManagerLinkService",
+      "method": "move_manager_link",
+      "request_type": "google.ads.googleads.v25.services.MoveManagerLinkRequest",
+      "response_type": "google.ads.googleads.v25.services.MoveManagerLinkResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "CustomerManagerLinkService",
+      "method": "mutate_customer_manager_link",
+      "request_type": "google.ads.googleads.v25.services.MutateCustomerManagerLinkRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateCustomerManagerLinkResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "CustomerNegativeCriterionService",
+      "method": "mutate_customer_negative_criteria",
+      "request_type": "google.ads.googleads.v25.services.MutateCustomerNegativeCriteriaRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateCustomerNegativeCriteriaResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "CustomerService",
+      "method": "create_customer_client",
+      "request_type": "google.ads.googleads.v25.services.CreateCustomerClientRequest",
+      "response_type": "google.ads.googleads.v25.services.CreateCustomerClientResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "CustomerService",
+      "method": "list_accessible_customers",
+      "request_type": "google.ads.googleads.v25.services.ListAccessibleCustomersRequest",
+      "response_type": "google.ads.googleads.v25.services.ListAccessibleCustomersResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": true,
+      "validate_only_supported": false
+    },
+    {
+      "service": "CustomerService",
+      "method": "mutate_customer",
+      "request_type": "google.ads.googleads.v25.services.MutateCustomerRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateCustomerResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "CustomerSkAdNetworkConversionValueSchemaService",
+      "method": "mutate_customer_sk_ad_network_conversion_value_schema",
+      "request_type": "google.ads.googleads.v25.services.MutateCustomerSkAdNetworkConversionValueSchemaRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateCustomerSkAdNetworkConversionValueSchemaResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "CustomerUserAccessInvitationService",
+      "method": "mutate_customer_user_access_invitation",
+      "request_type": "google.ads.googleads.v25.services.MutateCustomerUserAccessInvitationRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateCustomerUserAccessInvitationResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "CustomerUserAccessService",
+      "method": "mutate_customer_user_access",
+      "request_type": "google.ads.googleads.v25.services.MutateCustomerUserAccessRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateCustomerUserAccessResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "CustomizerAttributeService",
+      "method": "mutate_customizer_attributes",
+      "request_type": "google.ads.googleads.v25.services.MutateCustomizerAttributesRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateCustomizerAttributesResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "DataLinkService",
+      "method": "create_data_link",
+      "request_type": "google.ads.googleads.v25.services.CreateDataLinkRequest",
+      "response_type": "google.ads.googleads.v25.services.CreateDataLinkResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "DataLinkService",
+      "method": "remove_data_link",
+      "request_type": "google.ads.googleads.v25.services.RemoveDataLinkRequest",
+      "response_type": "google.ads.googleads.v25.services.RemoveDataLinkResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "DataLinkService",
+      "method": "update_data_link",
+      "request_type": "google.ads.googleads.v25.services.UpdateDataLinkRequest",
+      "response_type": "google.ads.googleads.v25.services.UpdateDataLinkResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "ExperimentArmService",
+      "method": "mutate_experiment_arms",
+      "request_type": "google.ads.googleads.v25.services.MutateExperimentArmsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateExperimentArmsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "ExperimentService",
+      "method": "end_experiment",
+      "request_type": "google.ads.googleads.v25.services.EndExperimentRequest",
+      "response_type": "google.protobuf.Empty",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "ExperimentService",
+      "method": "graduate_experiment",
+      "request_type": "google.ads.googleads.v25.services.GraduateExperimentRequest",
+      "response_type": "google.protobuf.Empty",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "ExperimentService",
+      "method": "list_experiment_async_errors",
+      "request_type": "google.ads.googleads.v25.services.ListExperimentAsyncErrorsRequest",
+      "response_type": "google.ads.googleads.v25.services.ListExperimentAsyncErrorsResponse",
+      "server_streaming": false,
+      "paginated": true,
+      "read_only": true,
+      "validate_only_supported": false
+    },
+    {
+      "service": "ExperimentService",
+      "method": "mutate_experiments",
+      "request_type": "google.ads.googleads.v25.services.MutateExperimentsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateExperimentsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "ExperimentService",
+      "method": "promote_experiment",
+      "request_type": "google.ads.googleads.v25.services.PromoteExperimentRequest",
+      "response_type": "google.longrunning.Operation",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "ExperimentService",
+      "method": "schedule_experiment",
+      "request_type": "google.ads.googleads.v25.services.ScheduleExperimentRequest",
+      "response_type": "google.longrunning.Operation",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "GeoTargetConstantService",
+      "method": "suggest_geo_target_constants",
+      "request_type": "google.ads.googleads.v25.services.SuggestGeoTargetConstantsRequest",
+      "response_type": "google.ads.googleads.v25.services.SuggestGeoTargetConstantsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "GoalService",
+      "method": "mutate_goals",
+      "request_type": "google.ads.googleads.v25.services.MutateGoalsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateGoalsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "GoogleAdsFieldService",
+      "method": "get_google_ads_field",
+      "request_type": "google.ads.googleads.v25.services.GetGoogleAdsFieldRequest",
+      "response_type": "google.ads.googleads.v25.resources.GoogleAdsField",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": true,
+      "validate_only_supported": false
+    },
+    {
+      "service": "GoogleAdsFieldService",
+      "method": "search_google_ads_fields",
+      "request_type": "google.ads.googleads.v25.services.SearchGoogleAdsFieldsRequest",
+      "response_type": "google.ads.googleads.v25.services.SearchGoogleAdsFieldsResponse",
+      "server_streaming": false,
+      "paginated": true,
+      "read_only": true,
+      "validate_only_supported": false
+    },
+    {
+      "service": "GoogleAdsService",
+      "method": "mutate",
+      "request_type": "google.ads.googleads.v25.services.MutateGoogleAdsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateGoogleAdsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "GoogleAdsService",
+      "method": "search",
+      "request_type": "google.ads.googleads.v25.services.SearchGoogleAdsRequest",
+      "response_type": "google.ads.googleads.v25.services.SearchGoogleAdsResponse",
+      "server_streaming": false,
+      "paginated": true,
+      "read_only": true,
+      "validate_only_supported": true
+    },
+    {
+      "service": "GoogleAdsService",
+      "method": "search_stream",
+      "request_type": "google.ads.googleads.v25.services.SearchGoogleAdsStreamRequest",
+      "response_type": "google.ads.googleads.v25.services.SearchGoogleAdsStreamResponse",
+      "server_streaming": true,
+      "paginated": false,
+      "read_only": true,
+      "validate_only_supported": false
+    },
+    {
+      "service": "IdentityVerificationService",
+      "method": "get_identity_verification",
+      "request_type": "google.ads.googleads.v25.services.GetIdentityVerificationRequest",
+      "response_type": "google.ads.googleads.v25.services.GetIdentityVerificationResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": true,
+      "validate_only_supported": false
+    },
+    {
+      "service": "IdentityVerificationService",
+      "method": "start_identity_verification",
+      "request_type": "google.ads.googleads.v25.services.StartIdentityVerificationRequest",
+      "response_type": "google.protobuf.Empty",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "IncentiveService",
+      "method": "apply_incentive",
+      "request_type": "google.ads.googleads.v25.services.ApplyIncentiveRequest",
+      "response_type": "google.ads.googleads.v25.services.ApplyIncentiveResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "IncentiveService",
+      "method": "fetch_incentive",
+      "request_type": "google.ads.googleads.v25.services.FetchIncentiveRequest",
+      "response_type": "google.ads.googleads.v25.services.FetchIncentiveResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "InvoiceService",
+      "method": "list_invoices",
+      "request_type": "google.ads.googleads.v25.services.ListInvoicesRequest",
+      "response_type": "google.ads.googleads.v25.services.ListInvoicesResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": true,
+      "validate_only_supported": false
+    },
+    {
+      "service": "KeywordPlanAdGroupKeywordService",
+      "method": "mutate_keyword_plan_ad_group_keywords",
+      "request_type": "google.ads.googleads.v25.services.MutateKeywordPlanAdGroupKeywordsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateKeywordPlanAdGroupKeywordsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "KeywordPlanAdGroupService",
+      "method": "mutate_keyword_plan_ad_groups",
+      "request_type": "google.ads.googleads.v25.services.MutateKeywordPlanAdGroupsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateKeywordPlanAdGroupsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "KeywordPlanCampaignKeywordService",
+      "method": "mutate_keyword_plan_campaign_keywords",
+      "request_type": "google.ads.googleads.v25.services.MutateKeywordPlanCampaignKeywordsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateKeywordPlanCampaignKeywordsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "KeywordPlanCampaignService",
+      "method": "mutate_keyword_plan_campaigns",
+      "request_type": "google.ads.googleads.v25.services.MutateKeywordPlanCampaignsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateKeywordPlanCampaignsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "KeywordPlanIdeaService",
+      "method": "generate_ad_group_themes",
+      "request_type": "google.ads.googleads.v25.services.GenerateAdGroupThemesRequest",
+      "response_type": "google.ads.googleads.v25.services.GenerateAdGroupThemesResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "KeywordPlanIdeaService",
+      "method": "generate_keyword_forecast_metrics",
+      "request_type": "google.ads.googleads.v25.services.GenerateKeywordForecastMetricsRequest",
+      "response_type": "google.ads.googleads.v25.services.GenerateKeywordForecastMetricsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "KeywordPlanIdeaService",
+      "method": "generate_keyword_historical_metrics",
+      "request_type": "google.ads.googleads.v25.services.GenerateKeywordHistoricalMetricsRequest",
+      "response_type": "google.ads.googleads.v25.services.GenerateKeywordHistoricalMetricsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "KeywordPlanIdeaService",
+      "method": "generate_keyword_ideas",
+      "request_type": "google.ads.googleads.v25.services.GenerateKeywordIdeasRequest",
+      "response_type": "google.ads.googleads.v25.services.GenerateKeywordIdeaResponse",
+      "server_streaming": false,
+      "paginated": true,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "KeywordPlanService",
+      "method": "mutate_keyword_plans",
+      "request_type": "google.ads.googleads.v25.services.MutateKeywordPlansRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateKeywordPlansResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "KeywordThemeConstantService",
+      "method": "suggest_keyword_theme_constants",
+      "request_type": "google.ads.googleads.v25.services.SuggestKeywordThemeConstantsRequest",
+      "response_type": "google.ads.googleads.v25.services.SuggestKeywordThemeConstantsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "LabelService",
+      "method": "mutate_labels",
+      "request_type": "google.ads.googleads.v25.services.MutateLabelsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateLabelsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "LocalServicesLeadService",
+      "method": "append_lead_conversation",
+      "request_type": "google.ads.googleads.v25.services.AppendLeadConversationRequest",
+      "response_type": "google.ads.googleads.v25.services.AppendLeadConversationResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "LocalServicesLeadService",
+      "method": "provide_lead_feedback",
+      "request_type": "google.ads.googleads.v25.services.ProvideLeadFeedbackRequest",
+      "response_type": "google.ads.googleads.v25.services.ProvideLeadFeedbackResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "MultiPartyAuthReviewService",
+      "method": "resolve_multi_party_auth_review",
+      "request_type": "google.ads.googleads.v25.services.ResolveMultiPartyAuthReviewRequest",
+      "response_type": "google.ads.googleads.v25.services.ResolveMultiPartyAuthReviewResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "OfflineUserDataJobService",
+      "method": "add_offline_user_data_job_operations",
+      "request_type": "google.ads.googleads.v25.services.AddOfflineUserDataJobOperationsRequest",
+      "response_type": "google.ads.googleads.v25.services.AddOfflineUserDataJobOperationsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "OfflineUserDataJobService",
+      "method": "create_offline_user_data_job",
+      "request_type": "google.ads.googleads.v25.services.CreateOfflineUserDataJobRequest",
+      "response_type": "google.ads.googleads.v25.services.CreateOfflineUserDataJobResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "OfflineUserDataJobService",
+      "method": "run_offline_user_data_job",
+      "request_type": "google.ads.googleads.v25.services.RunOfflineUserDataJobRequest",
+      "response_type": "google.longrunning.Operation",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "PaymentsAccountService",
+      "method": "list_payments_accounts",
+      "request_type": "google.ads.googleads.v25.services.ListPaymentsAccountsRequest",
+      "response_type": "google.ads.googleads.v25.services.ListPaymentsAccountsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": true,
+      "validate_only_supported": false
+    },
+    {
+      "service": "ProductLinkInvitationService",
+      "method": "create_product_link_invitation",
+      "request_type": "google.ads.googleads.v25.services.CreateProductLinkInvitationRequest",
+      "response_type": "google.ads.googleads.v25.services.CreateProductLinkInvitationResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "ProductLinkInvitationService",
+      "method": "remove_product_link_invitation",
+      "request_type": "google.ads.googleads.v25.services.RemoveProductLinkInvitationRequest",
+      "response_type": "google.ads.googleads.v25.services.RemoveProductLinkInvitationResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "ProductLinkInvitationService",
+      "method": "update_product_link_invitation",
+      "request_type": "google.ads.googleads.v25.services.UpdateProductLinkInvitationRequest",
+      "response_type": "google.ads.googleads.v25.services.UpdateProductLinkInvitationResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "ProductLinkService",
+      "method": "create_product_link",
+      "request_type": "google.ads.googleads.v25.services.CreateProductLinkRequest",
+      "response_type": "google.ads.googleads.v25.services.CreateProductLinkResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "ProductLinkService",
+      "method": "remove_product_link",
+      "request_type": "google.ads.googleads.v25.services.RemoveProductLinkRequest",
+      "response_type": "google.ads.googleads.v25.services.RemoveProductLinkResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "ReachPlanService",
+      "method": "generate_conversion_rates",
+      "request_type": "google.ads.googleads.v25.services.GenerateConversionRatesRequest",
+      "response_type": "google.ads.googleads.v25.services.GenerateConversionRatesResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "ReachPlanService",
+      "method": "generate_reach_forecast",
+      "request_type": "google.ads.googleads.v25.services.GenerateReachForecastRequest",
+      "response_type": "google.ads.googleads.v25.services.GenerateReachForecastResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "ReachPlanService",
+      "method": "list_plannable_locations",
+      "request_type": "google.ads.googleads.v25.services.ListPlannableLocationsRequest",
+      "response_type": "google.ads.googleads.v25.services.ListPlannableLocationsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": true,
+      "validate_only_supported": false
+    },
+    {
+      "service": "ReachPlanService",
+      "method": "list_plannable_products",
+      "request_type": "google.ads.googleads.v25.services.ListPlannableProductsRequest",
+      "response_type": "google.ads.googleads.v25.services.ListPlannableProductsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": true,
+      "validate_only_supported": false
+    },
+    {
+      "service": "ReachPlanService",
+      "method": "list_plannable_user_interests",
+      "request_type": "google.ads.googleads.v25.services.ListPlannableUserInterestsRequest",
+      "response_type": "google.ads.googleads.v25.services.ListPlannableUserInterestsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": true,
+      "validate_only_supported": false
+    },
+    {
+      "service": "ReachPlanService",
+      "method": "list_plannable_user_lists",
+      "request_type": "google.ads.googleads.v25.services.ListPlannableUserListsRequest",
+      "response_type": "google.ads.googleads.v25.services.ListPlannableUserListsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": true,
+      "validate_only_supported": false
+    },
+    {
+      "service": "RecommendationService",
+      "method": "apply_recommendation",
+      "request_type": "google.ads.googleads.v25.services.ApplyRecommendationRequest",
+      "response_type": "google.ads.googleads.v25.services.ApplyRecommendationResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "RecommendationService",
+      "method": "dismiss_recommendation",
+      "request_type": "google.ads.googleads.v25.services.DismissRecommendationRequest",
+      "response_type": "google.ads.googleads.v25.services.DismissRecommendationResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "RecommendationService",
+      "method": "generate_recommendations",
+      "request_type": "google.ads.googleads.v25.services.GenerateRecommendationsRequest",
+      "response_type": "google.ads.googleads.v25.services.GenerateRecommendationsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "RecommendationSubscriptionService",
+      "method": "mutate_recommendation_subscription",
+      "request_type": "google.ads.googleads.v25.services.MutateRecommendationSubscriptionRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateRecommendationSubscriptionResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "RemarketingActionService",
+      "method": "mutate_remarketing_actions",
+      "request_type": "google.ads.googleads.v25.services.MutateRemarketingActionsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateRemarketingActionsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "ReservationService",
+      "method": "book_campaigns",
+      "request_type": "google.ads.googleads.v25.services.BookCampaignsRequest",
+      "response_type": "google.ads.googleads.v25.services.BookCampaignsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "ReservationService",
+      "method": "quote_campaigns",
+      "request_type": "google.ads.googleads.v25.services.QuoteCampaignsRequest",
+      "response_type": "google.ads.googleads.v25.services.QuoteCampaignsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "ShareablePreviewService",
+      "method": "generate_shareable_previews",
+      "request_type": "google.ads.googleads.v25.services.GenerateShareablePreviewsRequest",
+      "response_type": "google.ads.googleads.v25.services.GenerateShareablePreviewsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "SharedCriterionService",
+      "method": "mutate_shared_criteria",
+      "request_type": "google.ads.googleads.v25.services.MutateSharedCriteriaRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateSharedCriteriaResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "SharedSetService",
+      "method": "mutate_shared_sets",
+      "request_type": "google.ads.googleads.v25.services.MutateSharedSetsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateSharedSetsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "SmartCampaignSettingService",
+      "method": "generate_p_max_draft_campaign",
+      "request_type": "google.ads.googleads.v25.services.GeneratePMaxDraftCampaignRequest",
+      "response_type": "google.ads.googleads.v25.services.GeneratePMaxDraftCampaignResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "SmartCampaignSettingService",
+      "method": "get_smart_campaign_status",
+      "request_type": "google.ads.googleads.v25.services.GetSmartCampaignStatusRequest",
+      "response_type": "google.ads.googleads.v25.services.GetSmartCampaignStatusResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": true,
+      "validate_only_supported": false
+    },
+    {
+      "service": "SmartCampaignSettingService",
+      "method": "mutate_smart_campaign_settings",
+      "request_type": "google.ads.googleads.v25.services.MutateSmartCampaignSettingsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateSmartCampaignSettingsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "SmartCampaignSuggestService",
+      "method": "suggest_keyword_themes",
+      "request_type": "google.ads.googleads.v25.services.SuggestKeywordThemesRequest",
+      "response_type": "google.ads.googleads.v25.services.SuggestKeywordThemesResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "SmartCampaignSuggestService",
+      "method": "suggest_smart_campaign_ad",
+      "request_type": "google.ads.googleads.v25.services.SuggestSmartCampaignAdRequest",
+      "response_type": "google.ads.googleads.v25.services.SuggestSmartCampaignAdResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "SmartCampaignSuggestService",
+      "method": "suggest_smart_campaign_budget_options",
+      "request_type": "google.ads.googleads.v25.services.SuggestSmartCampaignBudgetOptionsRequest",
+      "response_type": "google.ads.googleads.v25.services.SuggestSmartCampaignBudgetOptionsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "ThirdPartyAppAnalyticsLinkService",
+      "method": "regenerate_shareable_link_id",
+      "request_type": "google.ads.googleads.v25.services.RegenerateShareableLinkIdRequest",
+      "response_type": "google.ads.googleads.v25.services.RegenerateShareableLinkIdResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "TravelAssetSuggestionService",
+      "method": "suggest_travel_assets",
+      "request_type": "google.ads.googleads.v25.services.SuggestTravelAssetsRequest",
+      "response_type": "google.ads.googleads.v25.services.SuggestTravelAssetsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "UserDataService",
+      "method": "upload_user_data",
+      "request_type": "google.ads.googleads.v25.services.UploadUserDataRequest",
+      "response_type": "google.ads.googleads.v25.services.UploadUserDataResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "UserListCustomerTypeService",
+      "method": "mutate_user_list_customer_types",
+      "request_type": "google.ads.googleads.v25.services.MutateUserListCustomerTypesRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateUserListCustomerTypesResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "UserListService",
+      "method": "mutate_user_lists",
+      "request_type": "google.ads.googleads.v25.services.MutateUserListsRequest",
+      "response_type": "google.ads.googleads.v25.services.MutateUserListsResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": true
+    },
+    {
+      "service": "YouTubeVideoUploadService",
+      "method": "create_you_tube_video_upload",
+      "request_type": "google.ads.googleads.v25.services.CreateYouTubeVideoUploadRequest",
+      "response_type": "google.ads.googleads.v25.services.CreateYouTubeVideoUploadResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "YouTubeVideoUploadService",
+      "method": "remove_you_tube_video_upload",
+      "request_type": "google.ads.googleads.v25.services.RemoveYouTubeVideoUploadRequest",
+      "response_type": "google.ads.googleads.v25.services.RemoveYouTubeVideoUploadResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "YouTubeVideoUploadService",
+      "method": "update_you_tube_video_upload",
+      "request_type": "google.ads.googleads.v25.services.UpdateYouTubeVideoUploadRequest",
+      "response_type": "google.ads.googleads.v25.services.UpdateYouTubeVideoUploadResponse",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "OperationsService",
+      "method": "list_operations",
+      "request_type": "google.longrunning.ListOperationsRequest",
+      "response_type": "google.longrunning.ListOperationsResponse",
+      "server_streaming": false,
+      "paginated": true,
+      "read_only": true,
+      "validate_only_supported": false
+    },
+    {
+      "service": "OperationsService",
+      "method": "get_operation",
+      "request_type": "google.longrunning.GetOperationRequest",
+      "response_type": "google.longrunning.Operation",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": true,
+      "validate_only_supported": false
+    },
+    {
+      "service": "OperationsService",
+      "method": "delete_operation",
+      "request_type": "google.longrunning.DeleteOperationRequest",
+      "response_type": "google.protobuf.Empty",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    },
+    {
+      "service": "OperationsService",
+      "method": "cancel_operation",
+      "request_type": "google.longrunning.CancelOperationRequest",
+      "response_type": "google.protobuf.Empty",
+      "server_streaming": false,
+      "paginated": false,
+      "read_only": false,
+      "validate_only_supported": false
+    }
+  ]
+}

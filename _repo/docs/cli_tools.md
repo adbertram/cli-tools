@@ -41,6 +41,7 @@
 | `ebay` | The `ebay` CLI provides a command-line interface for eBay Fulfillment API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `elevenlabs` | The `elevenlabs` CLI provides a command-line interface for Elevenlabs API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `facebook` | The `facebook` CLI wraps playwright with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
+| `facebook-ads` | Meta Marketing API and complete pinned Business SDK resource operations |
 | `fedex` | The `fedex` CLI provides a command-line interface for Fedex API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `fitnesspal` | The `fitnesspal` CLI provides a command-line interface for Fitnesspal API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `freshbooks` | The `freshbooks` CLI provides a command-line interface for FreshBooks accounting API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
@@ -49,6 +50,7 @@
 | `gemini` | The `gemini` CLI provides a command-line interface for Gemini API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `globiflow` | The `globiflow` CLI provides a command-line interface for Globiflow (browser automation). Use it when you need repeatable access to globiflow workflows that are only available through a signed-in website. |
 | `google` | The `google` CLI provides a command-line interface for Google Workspace APIs (Docs, Drive, Sheets, Gmail, Calendar). Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `google-ads` | Full versioned Google Ads API access through official SDK service and request schemas |
 | `google-lighthouse` | The `google-lighthouse` CLI wraps lighthouse with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
 | `grammarly` | The `grammarly` CLI provides a command-line interface for Grammarly API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `grokbot-sessions` | The `grokbot-sessions` CLI reads Grok Bot (Grokbot) session transcripts over the live Cursor-hosted `aiserver.v1.GrokBotService` Connect RPC API, adopting the desktop app's signed-in session. Use it to list agents, page transcripts, group turns, and inspect approvals, tool-card calls, subagent surfaces, and automations with the same command shape as `claude-code-sessions`, `codex-sessions`, and `deepseek-sessions`. |
