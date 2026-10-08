@@ -1,8 +1,8 @@
 {
   "tool": "x",
   "description": "CLI interface for X API",
-  "discovered_at": "2026-09-27T00:02:31Z",
-  "total_commands": 18,
+  "discovered_at": "2026-10-08T00:20:17Z",
+  "total_commands": 35,
   "global_options": [
     {
       "name": "--version",
@@ -19,12 +19,863 @@
     }
   ],
   "commands": {
+    "analytics": {
+      "help": "Read post, audience, media, API usage and Ads analytics",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "ads-accounts": {
+          "help": "Discover accessible Ads account IDs and timezones; one page with next_cursor.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[1<=x<=1000]  Accounts per page",
+              "short": "-l",
+              "default": "200"
+            },
+            {
+              "name": "--cursor",
+              "type": "TEXT",
+              "required": false,
+              "help": "next_cursor from previous report"
+            },
+            {
+              "name": "--query",
+              "type": "TEXT",
+              "required": false,
+              "help": "Case-insensitive account name prefix"
+            },
+            {
+              "name": "--account-ids",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated account IDs"
+            },
+            {
+              "name": "--with-deleted",
+              "type": "bool",
+              "required": false,
+              "help": "Include deleted accounts",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved X auth profile"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display report fields as a table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "ads-active": {
+          "help": "Find entities with changed metrics (up to 90 days) and reporting windows for each placement.",
+          "arguments": [
+            {
+              "name": "account_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Ads account ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--entity",
+              "type": "TEXT",
+              "required": true,
+              "help": "CAMPAIGN,FUNDING_INSTRUMENT,LINE_ITEM,PROMOTED_ACCOUNT,PROMOTED_TWEET"
+            },
+            {
+              "name": "--start-time",
+              "type": "TEXT",
+              "required": true,
+              "help": "Inclusive ISO 8601 timestamp with timezone"
+            },
+            {
+              "name": "--end-time",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exclusive ISO 8601 timestamp with timezone"
+            },
+            {
+              "name": "--campaign-ids",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            },
+            {
+              "name": "--funding-instrument-ids",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            },
+            {
+              "name": "--line-item-ids",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved X auth profile"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display report fields as a table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "ads-download": {
+          "help": "Check job, download completed gzip report securely, emit decompressed JSON.",
+          "arguments": [
+            {
+              "name": "account_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Ads account ID"
+            },
+            {
+              "name": "job_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Completed report job ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved X auth profile"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display report fields as a table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "ads-job-create": {
+          "help": "Create analytics report job (no ad purchase). Maximum 90 days, or 45 segmented. Check via ads-jobs.",
+          "arguments": [
+            {
+              "name": "account_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Ads account ID"
+            },
+            {
+              "name": "entity_ids",
+              "type": "TEXT",
+              "required": true,
+              "help": "Comma-separated entity IDs (1-20)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--entity",
+              "type": "TEXT",
+              "required": true,
+              "help": "ACCOUNT,CAMPAIGN,FUNDING_INSTRUMENT,LINE_ITEM,PROMOTED_ACCOUNT,PROMOTED_TWEET"
+            },
+            {
+              "name": "--start-time",
+              "type": "TEXT",
+              "required": true,
+              "help": "Inclusive ISO 8601 timestamp with timezone"
+            },
+            {
+              "name": "--end-time",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exclusive ISO 8601 timestamp with timezone"
+            },
+            {
+              "name": "--granularity",
+              "type": "TEXT",
+              "required": false,
+              "help": "Aggregation interval; see command help",
+              "default": "TOTAL"
+            },
+            {
+              "name": "--metric-groups",
+              "type": "TEXT",
+              "required": false,
+              "help": "BILLING,ENGAGEMENT,LIFE_TIME_VALUE_MOBILE_CONVERSION,MOBILE_CONVERSION,VIDEO,WEB_CONVERSION",
+              "default": "ENGAGEMENT"
+            },
+            {
+              "name": "--placement",
+              "type": "TEXT",
+              "required": false,
+              "help": "ALL_ON_TWITTER,SPOTLIGHT,TREND",
+              "default": "ALL_ON_TWITTER"
+            },
+            {
+              "name": "--segmentation",
+              "type": "TEXT",
+              "required": false,
+              "help": "AGE,GENDER,METROS,REGIONS,PLATFORMS,CONVERSION_TAGS"
+            },
+            {
+              "name": "--country",
+              "type": "TEXT",
+              "required": false,
+              "help": "Ads country targeting ID for geographic segmentation"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved X auth profile"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display report fields as a table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "ads-jobs": {
+          "help": "Check analytics report jobs; SUCCESS contains download URL and expiration.",
+          "arguments": [
+            {
+              "name": "account_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Ads account ID"
+            },
+            {
+              "name": "job_ids",
+              "type": "TEXT",
+              "required": true,
+              "help": "Comma-separated report job IDs (1-200)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved X auth profile"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display report fields as a table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "ads-reach": {
+          "help": "Read unique audience reach and average frequency for campaigns or funding instruments.",
+          "arguments": [
+            {
+              "name": "account_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Ads account ID"
+            },
+            {
+              "name": "entity_ids",
+              "type": "TEXT",
+              "required": true,
+              "help": "Comma-separated campaign or funding instrument IDs (1-20)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--start-time",
+              "type": "TEXT",
+              "required": true,
+              "help": "Inclusive ISO 8601 timestamp with timezone"
+            },
+            {
+              "name": "--end-time",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exclusive ISO 8601 timestamp with timezone"
+            },
+            {
+              "name": "--funding-instruments",
+              "type": "bool",
+              "required": false,
+              "help": "Query funding instruments instead of campaigns",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved X auth profile"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display report fields as a table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "ads-stats": {
+          "help": "Read synchronous Ads performance, up to seven days. DAY boundaries must be account-local midnight.",
+          "arguments": [
+            {
+              "name": "account_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Ads account ID"
+            },
+            {
+              "name": "entity_ids",
+              "type": "TEXT",
+              "required": true,
+              "help": "Comma-separated entity IDs (1-20)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--entity",
+              "type": "TEXT",
+              "required": true,
+              "help": "ACCOUNT,CAMPAIGN,FUNDING_INSTRUMENT,LINE_ITEM,PROMOTED_ACCOUNT,PROMOTED_TWEET"
+            },
+            {
+              "name": "--start-time",
+              "type": "TEXT",
+              "required": true,
+              "help": "Inclusive ISO 8601 timestamp with timezone"
+            },
+            {
+              "name": "--end-time",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exclusive ISO 8601 timestamp with timezone"
+            },
+            {
+              "name": "--granularity",
+              "type": "TEXT",
+              "required": false,
+              "help": "Aggregation interval; see command help",
+              "default": "TOTAL"
+            },
+            {
+              "name": "--metric-groups",
+              "type": "TEXT",
+              "required": false,
+              "help": "BILLING,ENGAGEMENT,LIFE_TIME_VALUE_MOBILE_CONVERSION,MOBILE_CONVERSION,VIDEO,WEB_CONVERSION",
+              "default": "ENGAGEMENT"
+            },
+            {
+              "name": "--placement",
+              "type": "TEXT",
+              "required": false,
+              "help": "ALL_ON_TWITTER,SPOTLIGHT,TREND",
+              "default": "ALL_ON_TWITTER"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved X auth profile"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display report fields as a table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "counts": {
+          "help": "Count matching posts per minute/hour/day. App bearer token required; returns one page.",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "X search query"
+            }
+          ],
+          "options": [
+            {
+              "name": "--archive",
+              "type": "bool",
+              "required": false,
+              "help": "Use full archive instead of recent seven days; requires endpoint access",
+              "takes_value": false
+            },
+            {
+              "name": "--start-time",
+              "type": "TEXT",
+              "required": false,
+              "help": "Inclusive ISO 8601 timestamp with timezone"
+            },
+            {
+              "name": "--end-time",
+              "type": "TEXT",
+              "required": false,
+              "help": "Exclusive ISO 8601 timestamp with timezone"
+            },
+            {
+              "name": "--granularity",
+              "type": "TEXT",
+              "required": false,
+              "help": "Aggregation interval; see command help",
+              "default": "hour"
+            },
+            {
+              "name": "--next-token",
+              "type": "TEXT",
+              "required": false,
+              "help": "meta.next_token from previous report"
+            },
+            {
+              "name": "--since-id",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            },
+            {
+              "name": "--until-id",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved X auth profile"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display report fields as a table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "credits": {
+          "help": "Read API credit usage with app bearer token. Does not buy credits.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved X auth profile"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display report fields as a table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "media": {
+          "help": "Read media metric groups by key, preserving video view and playback fields.",
+          "arguments": [
+            {
+              "name": "media_keys",
+              "type": "TEXT",
+              "required": true,
+              "help": "Comma-separated media keys (1-100)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--metrics",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated public_metrics,non_public_metrics,organic_metrics,promoted_metrics",
+              "default": "public_metrics"
+            },
+            {
+              "name": "--auth-mode",
+              "type": "TEXT",
+              "required": false,
+              "help": "oauth1 (user) or bearer (app-only; public metrics only)",
+              "default": "oauth1"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved X auth profile"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display report fields as a table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "media-series": {
+          "help": "Read Enterprise video analytics: hourly/daily/total, watch time, playback and CTA clicks.",
+          "arguments": [
+            {
+              "name": "media_keys",
+              "type": "TEXT",
+              "required": true,
+              "help": "Comma-separated media keys (1-100)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--start-time",
+              "type": "TEXT",
+              "required": true,
+              "help": "Inclusive ISO 8601 timestamp with timezone"
+            },
+            {
+              "name": "--end-time",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exclusive ISO 8601 timestamp with timezone"
+            },
+            {
+              "name": "--granularity",
+              "type": "TEXT",
+              "required": false,
+              "help": "Aggregation interval; see command help",
+              "default": "daily"
+            },
+            {
+              "name": "--fields",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated API analytics fields; default requests all supported fields"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved X auth profile"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display report fields as a table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "post-series": {
+          "help": "Read Enterprise post analytics: hourly/daily/weekly/total. Requires user auth and endpoint access.",
+          "arguments": [
+            {
+              "name": "ids",
+              "type": "TEXT",
+              "required": true,
+              "help": "Comma-separated post IDs (1-100)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--start-time",
+              "type": "TEXT",
+              "required": true,
+              "help": "Inclusive ISO 8601 timestamp with timezone"
+            },
+            {
+              "name": "--end-time",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exclusive ISO 8601 timestamp with timezone"
+            },
+            {
+              "name": "--granularity",
+              "type": "TEXT",
+              "required": false,
+              "help": "Aggregation interval; see command help",
+              "default": "total"
+            },
+            {
+              "name": "--fields",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated API analytics fields; default requests all supported fields"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved X auth profile"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display report fields as a table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "posts": {
+          "help": "Read post metrics plus attached media and author metrics. Private metrics: owned posts within 30 days.",
+          "arguments": [
+            {
+              "name": "ids",
+              "type": "TEXT",
+              "required": true,
+              "help": "Comma-separated post IDs (1-100)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--metrics",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated public_metrics,non_public_metrics,organic_metrics,promoted_metrics",
+              "default": "public_metrics"
+            },
+            {
+              "name": "--auth-mode",
+              "type": "TEXT",
+              "required": false,
+              "help": "oauth1 (user) or bearer (app-only; public metrics only)",
+              "default": "oauth1"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved X auth profile"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display report fields as a table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "timeline": {
+          "help": "Read one page of timeline metrics. Continue with meta.next_token; no hidden extra requests.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--user-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "User ID; default is authenticated user"
+            },
+            {
+              "name": "--metrics",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated public_metrics,non_public_metrics,organic_metrics,promoted_metrics",
+              "default": "public_metrics"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[5<=x<=100]  Posts per API page",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--start-time",
+              "type": "TEXT",
+              "required": false,
+              "help": "Inclusive ISO 8601 timestamp with timezone"
+            },
+            {
+              "name": "--end-time",
+              "type": "TEXT",
+              "required": false,
+              "help": "Exclusive ISO 8601 timestamp with timezone"
+            },
+            {
+              "name": "--pagination-token",
+              "type": "TEXT",
+              "required": false,
+              "help": "meta.next_token from previous report"
+            },
+            {
+              "name": "--exclude",
+              "type": "TEXT",
+              "required": false,
+              "help": "replies,retweets or both"
+            },
+            {
+              "name": "--auth-mode",
+              "type": "TEXT",
+              "required": false,
+              "help": "oauth1 (user) or bearer (app-only; public metrics only)",
+              "default": "oauth1"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved X auth profile"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display report fields as a table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "usage": {
+          "help": "Read app/project post consumption and daily usage with app bearer token.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--days",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[1<=x<=90]  Usage history days",
+              "default": "7"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved X auth profile"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display report fields as a table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "user": {
+          "help": "Read follower, following, post, list and other returned public user metrics.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--user-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "User ID; omit both selectors for current user"
+            },
+            {
+              "name": "--username",
+              "type": "TEXT",
+              "required": false,
+              "help": "X username"
+            },
+            {
+              "name": "--auth-mode",
+              "type": "TEXT",
+              "required": false,
+              "help": "oauth1 (user) or bearer (app-only; public metrics only)",
+              "default": "oauth1"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved X auth profile"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display report fields as a table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        }
+      }
+    },
     "auth": {
       "help": "Manage X API authentication",
       "usage_instructions": "OAuth 1.0a authentication for the X API. Requires consumer key/secret and access token/secret from the X Developer Portal. Use login to configure, status to verify, and logout to clear.",
       "arguments": [],
       "options": [],
       "commands": {
+        "bearer-token": {
+          "help": "Save app bearer token in the secret manager for analytics usage/counts.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "API auth profile; defaults to active API profile"
+            },
+            {
+              "name": "--stdin",
+              "type": "bool",
+              "required": false,
+              "help": "Required: read bearer token from piped stdin",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display saved credential metadata as table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
           "arguments": [],

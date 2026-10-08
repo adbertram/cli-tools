@@ -2,6 +2,7 @@
 from typing import Dict, Optional
 import random
 import time
+from email.utils import parsedate_to_datetime
 import requests
 from requests_oauthlib import OAuth1
 
@@ -24,6 +25,17 @@ class ClientError(Exception):
     pass
 
 
+class _BearerAuth(requests.auth.AuthBase):
+    """Explicit auth prevents Requests from replacing bearer headers with netrc auth."""
+
+    def __init__(self, token):
+        self.token = token
+
+    def __call__(self, request):
+        request.headers["Authorization"] = f"Bearer {self.token}"
+        return request
+
+
 class XClient:
     """Client for interacting with X API v2 using OAuth 1.0a authentication.
 
@@ -38,6 +50,7 @@ class XClient:
         max_delay: float = DEFAULT_MAX_DELAY,
         jitter: float = DEFAULT_JITTER,
         config=None,
+        auth_mode: str = "oauth1",
     ):
         """
         Initialize X client from configuration.
@@ -50,7 +63,13 @@ class XClient:
         """
         self.config = config or get_config()
 
-        if not self.config.has_api_credentials():
+        if auth_mode not in {"oauth1", "bearer"}:
+            raise ClientError("auth_mode must be oauth1 or bearer")
+        self.auth_mode = auth_mode
+        if auth_mode == "bearer" and not self.config.bearer_token:
+            raise ClientError("Missing X_BEARER_TOKEN. Store the app bearer token through the CLI-tools secret manager.")
+
+        if auth_mode == "oauth1" and not self.config.has_api_credentials():
             missing = self.config.get_missing_api_credentials()
             raise ClientError(
                 f"Missing credentials: {', '.join(missing)}. "
@@ -60,7 +79,7 @@ class XClient:
         self.base_url = self.config.base_url
 
         # Set up OAuth 1.0a authentication
-        self.oauth = OAuth1(
+        self.oauth = None if auth_mode == "bearer" else OAuth1(
             client_key=self.config.consumer_key,
             client_secret=self.config.consumer_secret,
             resource_owner_key=self.config.access_token,
@@ -86,7 +105,7 @@ class XClient:
         """
         # Honor Retry-After header if present
         if retry_after is not None:
-            return min(retry_after, self.max_delay)
+            return max(0.0, retry_after)
 
         # Exponential backoff: base_delay * 2^attempt
         delay = self.base_delay * (2 ** attempt)
@@ -133,14 +152,22 @@ class XClient:
         Returns:
             Retry delay in seconds, or None if not present
         """
+        delays = []
         retry_after = response.headers.get("Retry-After")
-        if retry_after is None:
-            return None
-
-        try:
-            return float(retry_after)
-        except ValueError:
-            return None
+        if retry_after:
+            try:
+                delays.append(float(retry_after))
+            except ValueError:
+                try:
+                    delays.append(parsedate_to_datetime(retry_after).timestamp() - time.time())
+                except (ValueError, TypeError, OverflowError):
+                    pass
+        if response.status_code == 429:
+            try:
+                delays.append(float(response.headers["x-rate-limit-reset"]) - time.time())
+            except (KeyError, ValueError):
+                pass
+        return max(0.0, *delays) if delays else None
 
     def _make_request(
         self,
@@ -149,6 +176,7 @@ class XClient:
         data: Optional[Dict] = None,
         params: Optional[Dict] = None,
         retry: bool = True,
+        ads: bool = False,
     ) -> Dict:
         """
         Make an HTTP request to the X API v2 with OAuth 1.0a and exponential retry.
@@ -166,12 +194,20 @@ class XClient:
         Raises:
             ClientError: If request fails after all retries
         """
-        url = f"{self.base_url}{endpoint}"
+        if self.auth_mode == "bearer" and method != "GET":
+            raise ClientError("Bearer mode is read-only; mutations require OAuth 1.0a")
+        if ads and self.auth_mode != "oauth1":
+            raise ClientError("X Ads API requires OAuth 1.0a user credentials")
+        origin = "https://ads-api.x.com" if ads else self.base_url
+        url = f"{origin}{endpoint}"
 
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
+
+        if self.auth_mode == "bearer":
+            headers["Authorization"] = f"Bearer {self.config.bearer_token}"
 
         last_exception: Optional[Exception] = None
         last_response: Optional[requests.Response] = None
@@ -187,14 +223,19 @@ class XClient:
                     headers=headers,
                     json=data,
                     params=params,
-                    auth=self.oauth,
+                    auth=self.oauth if self.auth_mode == "oauth1" else _BearerAuth(self.config.bearer_token),
+                    timeout=60,
+                    allow_redirects=False,
                 )
                 last_response = response
+                last_exception = None
 
                 # Check if we should retry this response
                 if retry and self._is_retryable(response, None) and attempt < self.max_retries:
                     retry_after = self._get_retry_after(response)
                     delay = self._calculate_retry_delay(attempt, retry_after)
+                    if delay > self.max_delay:
+                        raise ClientError(f"API retry deferred: retry after {delay:.0f} seconds (server rate limit)")
                     time.sleep(delay)
                     continue
 
@@ -203,6 +244,7 @@ class XClient:
 
             except requests.exceptions.RequestException as e:
                 last_exception = e
+                last_response = None
                 # Check if we should retry this exception
                 if retry and self._is_retryable(None, e) and attempt < self.max_retries:
                     delay = self._calculate_retry_delay(attempt)
@@ -218,7 +260,7 @@ class XClient:
         if last_response is None:
             raise ClientError("Request failed: no response received")
 
-        if not last_response.ok:
+        if not 200 <= last_response.status_code < 300:
             # Try to get error details from response
             try:
                 error_data = last_response.json()

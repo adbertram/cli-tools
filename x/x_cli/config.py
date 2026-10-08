@@ -110,6 +110,13 @@ class Config(BaseConfig):
             profile=profile,
             profile_auth_type=profile_auth_type,
         )
+        # The class advertises both supported login flows. An individual profile
+        # must verify only its own flow, never label browser state as API auth.
+        self.CREDENTIAL_TYPES = [
+            CredentialType.BROWSER_SESSION
+            if self.auth_type == BROWSER_AUTH_TYPE
+            else CredentialType.CUSTOM
+        ]
 
     @property
     def auth_type(self) -> Optional[str]:
@@ -119,6 +126,8 @@ class Config(BaseConfig):
     def CUSTOM_REQUIRED_FIELDS(self) -> list[str]:
         if self.auth_type == BROWSER_AUTH_TYPE:
             return ["AUTH_TYPE"]
+        if self.has_bearer_token() and not self.has_api_credentials():
+            return ["AUTH_TYPE", "X_BEARER_TOKEN"]
         return ["AUTH_TYPE", *X_API_REQUIRED_FIELDS]
 
     @property
@@ -210,13 +219,13 @@ class Config(BaseConfig):
         """Check credentials for the active X auth profile type."""
         if self.auth_type == BROWSER_AUTH_TYPE:
             return self.has_saved_session()
-        return self.has_api_credentials()
+        return self.has_api_credentials() or self.has_bearer_token()
 
     def get_missing_credentials(self) -> list[str]:
         """Return missing credentials for the active X auth profile type."""
         if self.auth_type == BROWSER_AUTH_TYPE:
             return [] if self.has_saved_session() else ["browser_session"]
-        return self.get_missing_api_credentials()
+        return [] if self.has_bearer_token() else self.get_missing_api_credentials()
 
     def get_browser(self):
         """Return browser automation for X Developer Console actions."""
@@ -232,6 +241,14 @@ class Config(BaseConfig):
         from .client import ClientError, XClient
 
         try:
+            if not self.has_api_credentials() and self.has_bearer_token():
+                client = XClient(config=self, auth_mode="bearer")
+                report = client._make_request("GET", "/2/usage/credits")
+                if report.get("errors"):
+                    return {"api_test": f"failed: {report['errors']}"}
+                if "data" not in report:
+                    return {"api_test": "failed: API returned no credit usage data"}
+                return {"api_test": "passed", "auth_method": "bearer"}
             client = XClient(config=self)
             user = client.get_me()
             return {
@@ -253,3 +270,11 @@ def get_config(profile=None, profile_auth_type=None) -> Config:
     if key not in _configs:
         _configs[key] = Config(profile=profile, profile_auth_type=profile_auth_type)
     return _configs[key]
+
+
+def get_cache_config(profile=None) -> Config:
+    """Default cache operations to the API profile; honor an explicit profile."""
+    return get_config(
+        profile=profile,
+        profile_auth_type=API_AUTH_TYPE if profile is None else None,
+    )
