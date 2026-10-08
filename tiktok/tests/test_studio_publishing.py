@@ -1329,6 +1329,7 @@ def test_headed_browser_environment_and_native_receipt_are_journaled(publisher, 
     after = publisher.status(value["request_id"])
     assert after["browser_environment"]["user_agent"] == HEADED_UA
     assert json.loads(after["network_observation"]["response_body"]) == page.receipt
+    assert json.loads(after["network_observation"]["request_body"]) == page.native_request()
     assert after["state"] == "receipt_observed" and page.clicked == 1
 
 

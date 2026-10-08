@@ -421,7 +421,10 @@ class _PostNetworkObserver:
                     self.operation['public_action_dispatched'] = True
                     self.operation['network_observation'] = {'state': 'request_observed', 'request_count': 1,
                         'request_id': request_id, 'creation_id': common['creation_id'], 'video_id': item['video_id'],
-                        'request_sha256': hashlib.sha256(event['body'].encode()).hexdigest()}
+                        'request_sha256': hashlib.sha256(event['body'].encode()).hexdigest(),
+                        # Studio's own Post body (no headers or cookies): the only record of every
+                        # field TikTok received, for comparing a vanished post with a surviving one.
+                        'request_body': event['body'][:MAX_JOURNALED_RESPONSE_CHARS]}
                     self.save(self.operation)
                 elif request_id not in self.requests:
                     raise StudioPublishError('Native Post response has no exact request.', category='ambiguous_post_action')
