@@ -207,3 +207,141 @@ def test_delete_many_requires_at_least_one_record_id(cli):
 
     assert result.exit_code == 2
     assert cli.calls == []
+
+
+# ---------- failures that are not an HTTP error status ----------
+
+
+class _NonJsonResponse(_Response):
+    """A 200 whose body is not JSON (e.g. an HTML proxy page)."""
+
+    def __init__(self):
+        super().__init__(200, {})
+        self.text = "<html>gateway</html>"
+
+    def json(self):
+        raise requests.exceptions.JSONDecodeError("Expecting value", self.text, 0)
+
+
+def _chunked_encoding_error(kwargs):
+    raise requests.exceptions.ChunkedEncodingError("Connection broken: IncompleteRead")
+
+
+def _non_json_body(kwargs):
+    return _NonJsonResponse()
+
+
+def _missing_records_key(kwargs):
+    return _Response(200, {"unexpected": True})
+
+
+SECOND_CHUNK_FAILURES = {
+    "chunked-encoding": (_chunked_encoding_error, "Request failed: ChunkedEncodingError: Connection broken"),
+    "non-json-200": (_non_json_body, "API returned a non-JSON body (200)"),
+    "missing-records-key": (_missing_records_key, "KeyError: 'records'"),
+}
+
+
+@pytest.fixture
+def second_chunk_fails(monkeypatch):
+    """Answer like Airtable, except call 2 runs the failure under test."""
+
+    def install(failure):
+        calls = []
+
+        def fake(**kwargs):
+            calls.append(kwargs)
+            if len(calls) == 2:
+                return failure(kwargs)
+            ids = kwargs["params"]["records[]"]
+            return _Response(200, {"records": [{"id": rid, "deleted": True} for rid in ids]})
+
+        monkeypatch.setattr(requests, "request", fake)
+        monkeypatch.setattr(records, "resolve_base_id", lambda base_id: base_id)
+        monkeypatch.setattr(records, "get_client", _client)
+        return calls
+
+    return install
+
+
+@pytest.mark.parametrize("name", sorted(SECOND_CHUNK_FAILURES))
+def test_delete_records_any_chunk_exception_becomes_partial_delete_error(second_chunk_fails, name):
+    failure, reason = SECOND_CHUNK_FAILURES[name]
+    calls = second_chunk_fails(failure)
+    ids = _ids(25)
+
+    with pytest.raises(PartialDeleteError) as excinfo:
+        _client().delete_records("appBase", "Tasks", ids)
+
+    assert len(calls) == 2  # chunk 3 never sent, failed chunk not retried
+    err = excinfo.value
+    assert err.deleted == [{"id": rid, "deleted": True} for rid in ids[:10]]
+    message = str(err)
+    assert message.startswith("Chunk 2 of 3 failed for " + ", ".join(ids[10:20]) + ": ")
+    assert reason in message
+    assert "Deleted in completed chunks (10): " + ", ".join(ids[:10]) in message
+    assert "Not attempted (5): " + ", ".join(ids[20:25]) in message
+
+
+@pytest.mark.parametrize("name", sorted(SECOND_CHUNK_FAILURES))
+def test_delete_many_any_chunk_exception_prints_deleted_rows_and_exits_1(second_chunk_fails, name):
+    failure, reason = SECOND_CHUNK_FAILURES[name]
+    calls = second_chunk_fails(failure)
+    ids = _ids(25)
+
+    result = runner.invoke(records.app, ["delete-many", "Tasks", *ids, "--base", "appBase", "--yes"])
+
+    assert result.exit_code == 1
+    assert not isinstance(result.exception, (requests.RequestException, ValueError, KeyError))
+    assert json.loads(result.stdout) == [{"id": rid, "deleted": True} for rid in ids[:10]]
+    assert result.stderr.startswith("Error: Chunk 2 of 3 failed for ")
+    assert reason in result.stderr
+    assert "Not attempted (5): " + ", ".join(ids[20:25]) in result.stderr
+    assert len(calls) == 2
+
+
+class _RetryAfterDateResponse(_Response):
+    def __init__(self, retry_after):
+        super().__init__(429, {"error": {"type": "RATE_LIMIT", "message": "Too many requests"}})
+        self.headers = {"Retry-After": retry_after}
+
+
+def test_delete_many_http_date_retry_after_waits_and_retries(monkeypatch):
+    """An HTTP-date Retry-After is honored instead of crashing int() mid-batch."""
+    calls, sleeps = [], []
+
+    def fake(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 2:
+            return _RetryAfterDateResponse("Wed, 21 Oct 2015 07:28:00 GMT")
+        ids = kwargs["params"]["records[]"]
+        return _Response(200, {"records": [{"id": rid, "deleted": True} for rid in ids]})
+
+    monkeypatch.setattr(requests, "request", fake)
+    monkeypatch.setattr("airtable_cli.client.time.sleep", sleeps.append)
+    monkeypatch.setattr(records, "resolve_base_id", lambda base_id: base_id)
+    monkeypatch.setattr(records, "get_client", _client)
+    ids = _ids(25)
+
+    result = runner.invoke(records.app, ["delete-many", "Tasks", *ids, "--base", "appBase", "--yes"])
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(result.stdout) == [{"id": rid, "deleted": True} for rid in ids]
+    assert sleeps == [0.0]  # a past date means retry now
+    assert [c["params"]["records[]"] for c in calls] == [ids[0:10], ids[10:20], ids[10:20], ids[20:25]]
+
+
+def test_retry_after_seconds_parses_both_rfc_forms():
+    from datetime import datetime, timedelta, timezone
+    from email.utils import format_datetime
+
+    from airtable_cli.client import _retry_after_seconds
+
+    assert _retry_after_seconds(None) is None
+    assert _retry_after_seconds("7") == 7.0
+    assert _retry_after_seconds(" 0 ") == 0.0
+    assert _retry_after_seconds("Wed, 21 Oct 2015 07:28:00 GMT") == 0.0
+    future = format_datetime(datetime.now(timezone.utc) + timedelta(seconds=120), usegmt=True)
+    assert 100 < _retry_after_seconds(future) <= 120
+    assert _retry_after_seconds("soon") is None
+    assert _retry_after_seconds("-5") is None

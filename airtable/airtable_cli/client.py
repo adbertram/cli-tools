@@ -5,7 +5,8 @@ import os
 import random
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Dict, List, Optional, Any
 from urllib.parse import quote
 
@@ -103,6 +104,27 @@ def _validate_record_id(record_id: str) -> str:
             "Record IDs must match 'rec' followed by alphanumeric characters."
         )
     return record_id
+
+
+def _retry_after_seconds(value: Optional[str]) -> Optional[float]:
+    """Seconds to wait from a Retry-After header, or None when it is absent or invalid.
+
+    RFC 9110 allows delay-seconds ("120") or an HTTP-date; a date in the past
+    means retry now. A value that is neither is an invalid field, which HTTP
+    recipients ignore, so the caller uses its own backoff.
+    """
+    if value is None:
+        return None
+    value = value.strip()
+    if value.isdigit():
+        return float(value)
+    try:
+        when = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    return max(0.0, (when - datetime.now(timezone.utc)).total_seconds())
 
 
 class PartialDeleteError(ClientError):
@@ -207,10 +229,8 @@ class AirtableClient:
                 # Check for retryable status codes
                 if retry and response.status_code in self.RETRYABLE_STATUS_CODES:
                     if attempt < max_attempts - 1:
-                        # Honor Retry-After header if present
-                        if "Retry-After" in response.headers:
-                            delay = int(response.headers["Retry-After"])
-                        else:
+                        delay = _retry_after_seconds(response.headers.get("Retry-After"))
+                        if delay is None:
                             delay = min(
                                 self.BASE_DELAY * (2 ** attempt) + random.uniform(0, self.JITTER),
                                 self.MAX_DELAY,
@@ -235,7 +255,12 @@ class AirtableClient:
                 if response.status_code == 204:
                     return {}
 
-                return response.json()
+                try:
+                    return response.json()
+                except ValueError as e:
+                    raise ClientError(
+                        f"API returned a non-JSON body ({response.status_code}): {e}"
+                    ) from e
 
             except (requests.ConnectionError, requests.Timeout) as e:
                 if attempt < max_attempts - 1:
@@ -245,7 +270,11 @@ class AirtableClient:
                     )
                     time.sleep(delay)
                     continue
-                raise ClientError(f"Connection error: {e}")
+                raise ClientError(f"Connection error: {e}") from e
+            except requests.RequestException as e:
+                # Not retried: the server may already have acted on the request
+                # (e.g. a body cut off mid-stream after a DELETE succeeded).
+                raise ClientError(f"Request failed: {type(e).__name__}: {e}") from e
 
         raise ClientError("Max retries exceeded")
 
@@ -488,19 +517,23 @@ class AirtableClient:
         deleted: List[Dict[str, Any]] = []
 
         for index, chunk in enumerate(chunks, start=1):
+            # Any exception, not only ClientError: once an earlier chunk has
+            # deleted records, the caller must still learn which ones.
             try:
                 result = self._make_request("DELETE", endpoint, params={"records[]": chunk})
-            except ClientError as exc:
+                rows = result["records"]
+            except Exception as exc:
+                reason = str(exc) if isinstance(exc, ClientError) else f"{type(exc).__name__}: {exc}"
                 done = [row["id"] for row in deleted]
                 not_attempted = [rid for later in chunks[index:] for rid in later]
                 raise PartialDeleteError(
                     f"Chunk {index} of {len(chunks)} failed for "
-                    f"{', '.join(chunk)}: {exc}. "
+                    f"{', '.join(chunk)}: {reason}. "
                     f"Deleted in completed chunks ({len(done)}): {', '.join(done) or 'none'}. "
                     f"Not attempted ({len(not_attempted)}): {', '.join(not_attempted) or 'none'}.",
                     deleted,
                 ) from exc
-            deleted.extend(result.get("records", []))
+            deleted.extend(rows)
 
         return deleted
 
