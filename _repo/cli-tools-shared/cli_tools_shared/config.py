@@ -89,6 +89,23 @@ def get_runtime_profile_resolution() -> tuple[Optional[str], Optional[str]]:
     return _RUNTIME_PROFILE_NAME.get(), _RUNTIME_PROFILE_AUTH_TYPE.get()
 
 
+def config_for(config_cls, profile: Optional[str], cache: dict):
+    """Return the one ``config_cls`` instance for the resolved profile.
+
+    A CLI's ``get_config(profile=None)`` delegates here with its module-level
+    ``_configs`` dict. The key is the resolved profile: the explicit name, else
+    the runtime profile the command registry set for this command, else
+    ``"_default"``. The registry builds the config with the resolved profile
+    name for its credential check and the API client then asks with no
+    profile; both calls land on the same instance, so one invocation builds
+    one config and reads each profile secret once.
+    """
+    key = profile or get_runtime_profile_resolution()[0] or "_default"
+    if key not in cache:
+        cache[key] = config_cls(profile=profile)
+    return cache[key]
+
+
 def read_profile_active(env_path: Path) -> Optional[bool]:
     """Read ACTIVE from an env file without loading into os.environ."""
     try:

@@ -422,7 +422,7 @@ This is the most involved migration because Kick's Config doesn't extend BaseCon
 **config.py (full rewrite):**
 ```python
 from pathlib import Path
-from cli_tools_shared.config import BaseConfig
+from cli_tools_shared.config import BaseConfig, config_for
 from cli_tools_shared.credentials import CredentialType
 
 class Config(BaseConfig):
@@ -447,10 +447,7 @@ class Config(BaseConfig):
 _configs = {}
 
 def get_config(profile=None):
-    key = profile or "_default"
-    if key not in _configs:
-        _configs[key] = Config(profile=profile)
-    return _configs[key]
+    return config_for(Config, profile, _configs)
 ```
 
 **Env var rename (.env file):**

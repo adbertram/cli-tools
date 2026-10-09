@@ -1,5 +1,5 @@
 """Configuration management for Scrunch CLI."""
-from cli_tools_shared.config import BaseConfig, resolve_tool_dir
+from cli_tools_shared.config import BaseConfig, resolve_tool_dir, config_for
 from cli_tools_shared.credentials import CredentialType
 from cli_tools_shared.exceptions import ClientError
 
@@ -30,7 +30,4 @@ _configs = {}
 
 
 def get_config(profile=None):
-    key = profile or "_default"
-    if key not in _configs:
-        _configs[key] = Config(profile=profile)
-    return _configs[key]
+    return config_for(Config, profile, _configs)

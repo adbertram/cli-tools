@@ -10,6 +10,16 @@
   that link and waits for the username control before submitting, so
   subclasses no longer need to override the method for this. Globiflow
   moved onto it. Tests: `tests/test_auth.py`.
+- `config.config_for(config_cls, profile, cache)`: the one `get_config` body for
+  CLIs. It keys the CLI's `_configs` cache on the resolved profile (explicit
+  name, else the runtime profile the command registry set, else `"_default"`),
+  so the registry's credential check (`get_config(profile="default")`) and the
+  API client (`get_config()`) share one config and one invocation reads each
+  profile secret once. Airtable and the 78 CLIs that used the
+  `profile or "_default"` key moved onto it, as did the api and browser
+  scaffold templates. The per-process secret memo below stays for the CLIs whose
+  `get_config` still builds twice per invocation. Tests:
+  `tests/test_config_for.py`.
 
 ### Fixes
 - A CLI invocation now runs the secret manager once per profile secret instead
