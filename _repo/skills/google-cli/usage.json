@@ -1,7 +1,7 @@
 {
   "tool": "google",
   "description": "CLI interface for Google Workspace APIs",
-  "discovered_at": "2026-10-07T14:09:30Z",
+  "discovered_at": "2026-10-09T20:28:19Z",
   "total_commands": 110,
   "global_options": [
     {
@@ -2056,6 +2056,13 @@
               "required": false,
               "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
               "short": "-f"
+            },
+            {
+              "name": "--folder",
+              "type": "TEXT",
+              "required": false,
+              "help": "Only list direct children of this Google Drive folder ID",
+              "short": "-F"
             },
             {
               "name": "--properties",

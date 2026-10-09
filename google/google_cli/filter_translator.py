@@ -15,6 +15,14 @@ OPERATOR_ALIASES = {
 ALL_OPERATORS = OPERATORS | set(OPERATOR_ALIASES.keys())
 
 
+class UnsupportedDriveFilterError(ValueError):
+    """Raised when a filter cannot be expressed as a Google Drive query.
+
+    A filter that cannot be translated must never be dropped silently: an
+    ignored filter makes a query look narrowed when it is not.
+    """
+
+
 def parse_filter_with_aliases(filter_string: str) -> List[Tuple[str, str, Optional[str]]]:
     """Parse filter string supporting both standard operators and aliases.
 
@@ -139,6 +147,10 @@ def translate_drive_filters(filters: Optional[List[str]]) -> str:
 
     Returns:
         Drive query string
+
+    Raises:
+        UnsupportedDriveFilterError: When any condition has no Drive query
+            equivalent. Unsupported conditions are never dropped silently.
     """
     if not filters:
         return ""
@@ -148,18 +160,21 @@ def translate_drive_filters(filters: Optional[List[str]]) -> str:
     for filter_str in filters:
         conditions = parse_filter_with_aliases(filter_str)
         for field, op, value in conditions:
-            drive_query = _translate_drive_condition(field, op, value)
-            if drive_query:
-                query_parts.append(drive_query)
+            query_parts.append(_translate_drive_condition(field, op, value))
 
     return " and ".join(query_parts)
 
 
 def _translate_drive_condition(field: str, op: str, value: Optional[str]) -> str:
-    """Translate a single condition to Drive query syntax."""
+    """Translate a single condition to Drive query syntax.
+
+    Raises:
+        UnsupportedDriveFilterError: When the field or operator has no Drive
+            query equivalent, so an ignored filter can never look applied.
+    """
     field_lower = field.lower()
 
-    if field_lower in ['folder', 'parent', 'parentid']:
+    if field_lower in ['folder', 'parent', 'parentid', 'parents']:
         if op == 'eq':
             return f"'{value}' in parents"
         elif op == 'ne':
@@ -184,7 +199,10 @@ def _translate_drive_condition(field: str, op: str, value: Optional[str]) -> str
         if op == 'eq':
             return f"trashed={value.lower()}"
 
-    return ""
+    raise UnsupportedDriveFilterError(
+        f"Unsupported Drive filter '{field}:{op}:{value}'. Supported fields: "
+        f"name, mimeType, parents (aliases: folder, parent, parentid), trashed."
+    )
 
 
 def translate_calendar_filters(filters: Optional[List[str]]) -> dict:
