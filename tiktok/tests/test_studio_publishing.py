@@ -962,6 +962,81 @@ def test_near_miss_handle_is_refused_and_named(publisher, monkeypatch):
         publisher._set_caption(caption_page(LYRICAL_ROWS), policy() | {'caption': '@lyricallemonade #CHLOEexplains test'})
 
 
+class CaptionEntityPage:
+    """Caption editor whose visible suggestion rows are re-read for every token."""
+    def __init__(self, rows, accepted, caption='@boxabl'):
+        self.caption = caption;self.text = '';self.rows = rows;self.accepted = accepted
+        self.armed = [];self.clicks = [];self.receipt = None
+    def evaluate(self, script, value=None):
+        if script == module.CAPTION_TEXT_JS:return self.text
+        if script == module.CAPTION_READY_JS:return True
+        if script == module.CAPTION_OPTIONS_JS:return self.rows()
+        if script == module.CAPTION_SELECTION_JS:
+            self.armed.append(value['id'])
+            return value['name'] == self.caption[1:] and value['prefix'] == self.text
+        if script == module.CAPTION_SELECTION_DONE_JS:return self.receipt
+        raise AssertionError(script)
+    def fill_framework_input(self, selector, text):self.text = text
+    def type_text(self, text):self.text += text
+    def get_by_role(self, role, name, exact):return SimpleNamespace(count=lambda: 1, click=lambda: self.type_text(self.caption[0]))
+    def click_native(self, selector):
+        self.clicks.append(selector)
+        # Only the native guard's receipt decides: a row replaced under the
+        # pointer reports a blocked gesture and selects no entity.
+        self.receipt = {'pressed': True, 'released': True, 'blocked': selector[1:] not in self.accepted, 'expired': False}
+        if self.receipt['blocked'] is False:self.text = self.caption
+
+
+def caption_entity_page(publisher, rows, accepted, monkeypatch):
+    saved = draft({'policy': policy() | {'caption': '@boxabl'}, 'staged_name': 'exact.mp4', 'asset_bytes': 0})
+    page = CaptionEntityPage(rows, accepted)
+    monkeypatch.setattr(publisher, '_wait', once)
+    monkeypatch.setattr(publisher, '_verify_editor', lambda *args: {'exact': True})
+    monkeypatch.setattr(publisher, '_drafts', lambda *args: [saved])
+    return page, saved
+
+
+def test_caption_entity_selection_accepts_the_stable_exact_option(publisher, monkeypatch):
+    rows = [{'id': 'mention-option-abc-0', 'label': 'Boxabl', 'name': 'boxabl'}]
+    page, saved = caption_entity_page(publisher, lambda: rows, {'mention-option-abc-0'}, monkeypatch)
+    publisher._set_caption(page, policy() | {'caption': '@boxabl'}, saved)
+    assert page.armed == ['mention-option-abc-0'] and page.clicks == ['#mention-option-abc-0']
+    assert page.text == '@boxabl' and module.caption_entities(saved, '@boxabl')
+
+
+def test_caption_entity_selection_retries_a_replaced_option_by_exact_name(publisher, monkeypatch):
+    reads = [[{'id': 'mention-option-abc-0', 'label': 'Boxabl', 'name': 'boxabl'}],
+             [{'id': 'mention-option-abc-1', 'label': 'Boxabl', 'name': 'boxabl'}]]
+    page, saved = caption_entity_page(publisher, lambda: reads.pop(0) if len(reads) > 1 else reads[0], {'mention-option-abc-1'}, monkeypatch)
+    publisher._set_caption(page, policy() | {'caption': '@boxabl'}, saved)
+    assert page.armed == ['mention-option-abc-0', 'mention-option-abc-1']
+    assert page.clicks == ['#mention-option-abc-0', '#mention-option-abc-1']
+    assert page.text == '@boxabl' and module.caption_entities(saved, '@boxabl')
+
+
+def test_caption_entity_selection_refuses_a_list_without_the_exact_name(publisher, monkeypatch):
+    reads = [[{'id': 'mention-option-abc-0', 'label': 'Boxabl', 'name': 'boxabl'}],
+             [{'id': 'mention-option-abc-1', 'label': 'Boxabl US', 'name': 'boxabl_us'}]]
+    page, saved = caption_entity_page(publisher, lambda: reads.pop(0) if len(reads) > 1 else reads[0], set(), monkeypatch)
+    with pytest.raises(StudioPublishError, match=r'suggestion is unavailable\. Studio offered no native mention named @boxabl\.'):
+        publisher._set_caption(page, policy() | {'caption': '@boxabl'}, saved)
+    assert page.armed == ['mention-option-abc-0'] and page.clicks == ['#mention-option-abc-0']
+    assert publisher._caption_semantic_rollback_unverified is True
+
+
+def test_caption_entity_selection_stops_after_the_bounded_attempts(publisher, monkeypatch):
+    reads = []
+    def rows():
+        reads.append({'id': f'mention-option-abc-{len(reads)}', 'label': 'Boxabl', 'name': 'boxabl'})
+        return [reads[-1]]
+    page, saved = caption_entity_page(publisher, rows, set(), monkeypatch)
+    with pytest.raises(StudioPublishError, match='changed before native selection'):
+        publisher._set_caption(page, policy() | {'caption': '@boxabl'}, saved)
+    assert page.armed == ['mention-option-abc-0', 'mention-option-abc-1', 'mention-option-abc-2']
+    assert page.clicks == ['#mention-option-abc-0', '#mention-option-abc-1', '#mention-option-abc-2']
+    assert len(page.clicks) == module.CAPTION_SELECTION_ATTEMPTS
+
+
 def test_navigation_context_loss_still_persists_exact_native_acceptance(publisher, monkeypatch):
     value = prepared(publisher);page = attach(publisher, value, monkeypatch)
     page.click_error = True;page.network_after_click_error = True

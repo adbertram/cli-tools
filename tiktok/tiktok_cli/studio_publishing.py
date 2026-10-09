@@ -231,6 +231,7 @@ CAPTION_SELECTION_JS = "(opts)=>{const native=()=> (" + EDITOR_STATE_JS + ")();"
 CAPTION_SELECTION_DONE_JS = r"""(key)=>{const value=window[key];if(!value)return null;
  value.dispose();delete window[key];return value.state;}"""
 CAPTION_TOKEN_RE = re.compile(r'(?<![\w.@])(@[A-Za-z0-9._]+|#\w+)', re.UNICODE)
+CAPTION_SELECTION_ATTEMPTS = 3
 
 
 class StudioPublishError(ClientError):
@@ -771,7 +772,9 @@ class StudioPublisher:
             except Exception:
                 raise StudioPublishError('Studio caption selection guard cleanup is unverified.') from None
         if selection != {'pressed': True, 'released': True, 'blocked': False, 'expired': False}:
-            raise StudioPublishError('Studio caption suggestion changed before native selection; no entity accepted.')
+            # The menu re-rendered under the pointer, so the row that carries the
+            # exact entity must be located again before another native click.
+            raise StudioPublishError('Studio caption suggestion changed before native selection; no entity accepted.', category='caption_suggestion_changed')
 
     def _set_caption(self, page, policy, saved=None):
         self._caption_semantic_rollback_unverified = False
@@ -815,10 +818,18 @@ class StudioPublisher:
                     if len(matches) > 1 and (kind == 'mention' or not isinstance(matches[0].get('label'), str) or any(x.get('label') != matches[0]['label'] for x in matches)):
                         raise StudioPublishError('Studio exact caption suggestion is ambiguous.')
                     return matches[0] if matches else None
-                option = self._wait(page, exact_option, f'Studio exact caption suggestion is unavailable. Studio offered no native {kind} named {text}.', seconds=10)
-                if not isinstance(option.get('id'), str) or not re.fullmatch(r'mention-option-[A-Za-z0-9_-]+', option['id']):
-                    raise StudioPublishError('Studio caption suggestion target is unverified.')
-                self._select_caption_option(page, saved, option, kind, text, caption[:token.end()])
+                unavailable = f'Studio exact caption suggestion is unavailable. Studio offered no native {kind} named {text}.'
+                for attempt in range(1, CAPTION_SELECTION_ATTEMPTS + 1):
+                    option = self._wait(page, exact_option, unavailable, seconds=10)
+                    if not isinstance(option.get('id'), str) or not re.fullmatch(r'mention-option-[A-Za-z0-9_-]+', option['id']):
+                        raise StudioPublishError('Studio caption suggestion target is unverified.')
+                    try:
+                        self._select_caption_option(page, saved, option, kind, text, caption[:token.end()])
+                    except StudioPublishError as error:
+                        # The list re-renders while the menu is open, so the exact
+                        # name is located again and the fresh row is clicked natively.
+                        if error.category != 'caption_suggestion_changed' or attempt == CAPTION_SELECTION_ATTEMPTS:raise
+                    else:break
                 expected = caption[:token.end()]
                 actual = self._wait(page, lambda: (value if (value := page.evaluate(CAPTION_TEXT_JS, CAPTION_SELECTOR)) in (expected, expected + ' ') else None), 'Studio selected entity did not update the caption.', seconds=3)
                 if actual == expected + ' ':
