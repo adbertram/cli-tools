@@ -345,3 +345,134 @@ def test_retry_after_seconds_parses_both_rfc_forms():
     assert 100 < _retry_after_seconds(future) <= 120
     assert _retry_after_seconds("soon") is None
     assert _retry_after_seconds("-5") is None
+
+
+# ---------- interruption and no re-send of a possibly-applied DELETE ----------
+
+
+def _delete_ids(count=25):
+    return _ids(count)
+
+
+def test_delete_many_ctrl_c_between_chunks_still_reports_deleted_rows(monkeypatch):
+    calls = []
+
+    def fake(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 2:
+            raise KeyboardInterrupt
+        ids = kwargs["params"]["records[]"]
+        return _Response(200, {"records": [{"id": rid, "deleted": True} for rid in ids]})
+
+    monkeypatch.setattr(requests, "request", fake)
+    monkeypatch.setattr(records, "resolve_base_id", lambda base_id: base_id)
+    monkeypatch.setattr(records, "get_client", _client)
+    ids = _delete_ids()
+
+    result = runner.invoke(records.app, ["delete-many", "Tasks", *ids, "--base", "appBase", "--yes"])
+
+    assert result.exit_code == 1
+    assert json.loads(result.stdout) == [{"id": rid, "deleted": True} for rid in ids[:10]]
+    assert "Chunk 2 of 3 failed for " + ", ".join(ids[10:20]) in result.stderr
+    assert "KeyboardInterrupt" in result.stderr
+    assert "Deleted in completed chunks (10): " + ", ".join(ids[:10]) in result.stderr
+    assert "Not attempted (5): " + ", ".join(ids[20:25]) in result.stderr
+    assert len(calls) == 2
+
+
+def test_client_ctrl_c_carries_deleted_rows_and_chains_the_interrupt(monkeypatch):
+    calls = []
+
+    def fake(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 2:
+            raise KeyboardInterrupt
+        ids = kwargs["params"]["records[]"]
+        return _Response(200, {"records": [{"id": rid, "deleted": True} for rid in ids]})
+
+    monkeypatch.setattr(requests, "request", fake)
+    ids = _delete_ids()
+
+    with pytest.raises(PartialDeleteError) as excinfo:
+        _client().delete_records("appBase", "Tasks", ids)
+
+    assert excinfo.value.deleted == [{"id": rid, "deleted": True} for rid in ids[:10]]
+    assert isinstance(excinfo.value.__cause__, KeyboardInterrupt)
+
+
+@pytest.fixture
+def retries_on(monkeypatch):
+    """Real retry settings with the sleep removed; no real request is possible."""
+    monkeypatch.setattr(AirtableClient, "MAX_RETRIES", 3)
+    sleeps = []
+    monkeypatch.setattr("airtable_cli.client.time.sleep", sleeps.append)
+    return sleeps
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        pytest.param(lambda: requests.Timeout("read timed out"), id="timeout"),
+        pytest.param(lambda: requests.ConnectionError("connection reset"), id="connection-lost"),
+        pytest.param(lambda: _Response(504, {"error": "gateway timeout"}), id="504"),
+        pytest.param(lambda: _Response(502, {"error": "bad gateway"}), id="502"),
+        pytest.param(lambda: _Response(500, {"error": "server error"}), id="500"),
+    ],
+)
+def test_delete_is_not_re_sent_after_a_failure_the_server_may_have_applied(monkeypatch, retries_on, failure):
+    calls = []
+
+    def fake(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            outcome = failure()
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+        # What a re-sent chunk would get if the first attempt had applied.
+        return _Response(404, {"error": {"message": "Could not find record"}})
+
+    monkeypatch.setattr(requests, "request", fake)
+
+    with pytest.raises(PartialDeleteError) as excinfo:
+        _client().delete_records("appBase", "Tasks", _ids(3))
+
+    assert len(calls) == 1
+    assert retries_on == []
+    assert excinfo.value.deleted == []
+    assert "404" not in str(excinfo.value)
+
+
+def test_delete_is_still_retried_after_429_which_airtable_rejects_before_processing(monkeypatch, retries_on):
+    calls = []
+
+    def fake(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            return _Response(429, {"error": "rate limited"})
+        ids = kwargs["params"]["records[]"]
+        return _Response(200, {"records": [{"id": rid, "deleted": True} for rid in ids]})
+
+    monkeypatch.setattr(requests, "request", fake)
+
+    result = _client().delete_records("appBase", "Tasks", _ids(3))
+
+    assert len(calls) == 2
+    assert result == [{"id": rid, "deleted": True} for rid in _ids(3)]
+
+
+def test_get_requests_are_still_retried_on_timeout_and_5xx(monkeypatch, retries_on):
+    calls = []
+
+    def fake(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            raise requests.Timeout("read timed out")
+        if len(calls) == 2:
+            return _Response(503, {"error": "unavailable"})
+        return _Response(200, {"ok": True})
+
+    monkeypatch.setattr(requests, "request", fake)
+
+    assert _client()._make_request("GET", "/appBase/Tasks") == {"ok": True}
+    assert len(calls) == 3

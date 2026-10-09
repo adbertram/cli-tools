@@ -214,6 +214,12 @@ class AirtableClient:
         """
         url = f"{self.base_url}{endpoint}"
         max_attempts = self.MAX_RETRIES if retry else 1
+        # A DELETE the server may already have applied (5xx, timeout, lost
+        # connection) is never re-sent: the repeat would answer 404 and hide
+        # that the delete succeeded. Only 429, which Airtable rejects before
+        # processing, is retried for DELETE.
+        may_have_applied = method.upper() == "DELETE"
+        retryable_statuses = {429} if may_have_applied else self.RETRYABLE_STATUS_CODES
 
         for attempt in range(max_attempts):
             try:
@@ -227,7 +233,7 @@ class AirtableClient:
                 )
 
                 # Check for retryable status codes
-                if retry and response.status_code in self.RETRYABLE_STATUS_CODES:
+                if retry and response.status_code in retryable_statuses:
                     if attempt < max_attempts - 1:
                         delay = _retry_after_seconds(response.headers.get("Retry-After"))
                         if delay is None:
@@ -263,7 +269,7 @@ class AirtableClient:
                     ) from e
 
             except (requests.ConnectionError, requests.Timeout) as e:
-                if attempt < max_attempts - 1:
+                if not may_have_applied and attempt < max_attempts - 1:
                     delay = min(
                         self.BASE_DELAY * (2 ** attempt) + random.uniform(0, self.JITTER),
                         self.MAX_DELAY,
@@ -504,9 +510,10 @@ class AirtableClient:
 
         Uses DELETE /{baseId}/{tableIdOrName}?records[]=recA&records[]=recB and
         returns the combined ``{"id", "deleted"}`` rows from every chunk. Every
-        ID is validated before any request is sent. If a chunk fails, no later
-        chunk is attempted and ``PartialDeleteError`` carries the rows already
-        deleted by earlier chunks.
+        ID is validated before any request is sent. If a chunk fails or the run
+        is interrupted, no later chunk is attempted and ``PartialDeleteError``
+        carries the rows already deleted by earlier chunks. A chunk is never
+        re-sent after a 5xx, timeout, or lost connection (see ``_make_request``).
         """
         for record_id in record_ids:
             _validate_record_id(record_id)
@@ -517,12 +524,13 @@ class AirtableClient:
         deleted: List[Dict[str, Any]] = []
 
         for index, chunk in enumerate(chunks, start=1):
-            # Any exception, not only ClientError: once an earlier chunk has
-            # deleted records, the caller must still learn which ones.
+            # Any exception, including Ctrl-C and SIGTERM-driven exits: once an
+            # earlier chunk has deleted records, the caller must still learn
+            # which ones.
             try:
                 result = self._make_request("DELETE", endpoint, params={"records[]": chunk})
                 rows = result["records"]
-            except Exception as exc:
+            except BaseException as exc:
                 reason = str(exc) if isinstance(exc, ClientError) else f"{type(exc).__name__}: {exc}"
                 done = [row["id"] for row in deleted]
                 not_attempted = [rid for later in chunks[index:] for rid in later]
