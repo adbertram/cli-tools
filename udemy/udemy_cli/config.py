@@ -1,6 +1,6 @@
 """Configuration management for Udemy CLI."""
 from pathlib import Path
-from cli_tools_shared.config import BaseConfig, resolve_tool_dir
+from cli_tools_shared.config import BaseConfig, config_for, resolve_tool_dir
 from cli_tools_shared.credentials import CredentialType
 from cli_tools_shared.activity_log import get_activity_logger
 from .browser import UDEMY_BROWSER_SESSION, UdemyBrowser
@@ -23,6 +23,7 @@ class Config(BaseConfig):
     )
 
     def __init__(self, profile=None):
+        activity.info("Loading config profile=%s", profile or "default")
         super().__init__(
             tool_dir=resolve_tool_dir(self.DIST_NAME),
             profile=profile,
@@ -56,8 +57,4 @@ _configs = {}
 
 
 def get_config(profile=None):
-    key = profile or "_default"
-    if key not in _configs:
-        activity.info("Loading config profile=%s", profile or "default")
-        _configs[key] = Config(profile=profile)
-    return _configs[key]
+    return config_for(Config, profile, _configs)

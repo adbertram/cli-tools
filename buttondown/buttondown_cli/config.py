@@ -2,7 +2,7 @@
 from pathlib import Path
 import requests
 
-from cli_tools_shared.config import BaseConfig, resolve_tool_dir
+from cli_tools_shared.config import BaseConfig, config_for, resolve_tool_dir
 from cli_tools_shared.credentials import CredentialType
 
 
@@ -41,10 +41,7 @@ _global_profile = None
 
 def get_config(profile=None):
     effective_profile = profile if profile is not None else _global_profile
-    key = effective_profile or "_default"
-    if key not in _configs:
-        _configs[key] = Config(profile=effective_profile)
-    return _configs[key]
+    return config_for(Config, effective_profile, _configs)
 
 
 def set_global_profile(profile=None):
