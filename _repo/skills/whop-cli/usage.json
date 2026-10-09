@@ -1,8 +1,8 @@
 {
   "tool": "whop",
   "description": "CLI interface for whop",
-  "discovered_at": "2026-10-04T17:52:47Z",
-  "total_commands": 33,
+  "discovered_at": "2026-10-09T20:21:08Z",
+  "total_commands": 34,
   "global_options": [],
   "commands": {
     "account": {
@@ -460,6 +460,46 @@
             }
           ],
           "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "join": {
+          "help": "Join a campaign by clicking its own Join Campaign control; --confirm is required and the result reports whether the account was already a member.",
+          "arguments": [
+            {
+              "name": "campaign_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "--confirm",
+              "type": "bool",
+              "required": false,
+              "help": "Explicitly authorize joining this campaign",
+              "takes_value": false
+            },
             {
               "name": "--table",
               "type": "bool",

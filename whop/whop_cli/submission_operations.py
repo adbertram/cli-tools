@@ -44,6 +44,45 @@ OPEN_SUBMISSION_FORM_JS = """() => {
     actionable[0].click(); return true;
 }"""
 
+# Membership is a precondition of submission. These exact visible enabled
+# controls describe whether the account must first join the campaign.
+JOIN_CONTROLS_JS = """() => {
+    const visible=b=>{const r=b.getBoundingClientRect(),s=getComputedStyle(b);
+        return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden';};
+    const exact=t=>[...document.querySelectorAll('button')].filter(b=>b.innerText.trim()===t&&!b.disabled&&visible(b));
+    const count=n=>Math.min(n,100);
+    return {join_controls:count(exact('Join Campaign').length),submit_controls:count(exact('Submit clip').length)};
+}"""
+
+# Join exactly the way a human does: wait for the campaign's own Join Campaign
+# control, click it, then observe the page's own control transition as evidence.
+JOIN_CAMPAIGN_JS = """async () => {
+    const visible=b=>{const r=b.getBoundingClientRect(),s=getComputedStyle(b);
+        return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden';};
+    const exact=t=>[...document.querySelectorAll('button')].filter(b=>b.innerText.trim()===t&&!b.disabled&&visible(b));
+    const count=n=>Math.min(n,100);
+    const deadline=Date.now()+40000;
+    while(Date.now()<deadline&&exact('Join Campaign').length===0){
+        if(exact('Submit clip').length>0)return {joined:false,already:true,join_controls:0,submit_controls:count(exact('Submit clip').length)};
+        await new Promise(r=>setTimeout(r,500));}
+    const targets=exact('Join Campaign');
+    if(targets.length===0)return {joined:false,already:false,join_controls:0,submit_controls:count(exact('Submit clip').length)};
+    if(targets.length>8)return {joined:false,already:false,join_controls:count(targets.length),submit_controls:0,too_many:true};
+    targets[0].click();
+    const settle=Date.now()+25000;
+    while(Date.now()<settle){
+        if(exact('Join Campaign').length===0)return {joined:true,already:false,join_controls:0,submit_controls:count(exact('Submit clip').length)};
+        await new Promise(r=>setTimeout(r,500));}
+    return {joined:false,already:false,join_controls:count(exact('Join Campaign').length),submit_controls:0,timeout:true};
+}"""
+
+def join_controls(document):
+    """Only one bounded integer may decide that the account must join first."""
+    value=document.evaluate(JOIN_CONTROLS_JS,request_timeout=2.0)
+    if type(value) is dict and type(value.get('join_controls')) is int and 0<=value['join_controls']<=100:
+        return value['join_controls']
+    return None
+
 def form_failure(value, origin, expected_path):
     """Only a guarded exact route and bounded numeric DOM facts leave the SDK."""
     raw=value.get('diagnostics') if type(value) is dict and value.get('opened') is False else None
@@ -186,13 +225,20 @@ def readiness(client,campaign_id,*,expected_account_id,expected_tiktok_account_i
     except ClientError as error:
         if not str(error).startswith('read_action_discovery_missing:'): raise
         opened=document.evaluate(OPEN_SUBMISSION_FORM_JS,request_timeout=2.0)
-        if opened is not True: raise form_failure(opened,origin,path+suffix) from None
+        if opened is not True:
+            controls=join_controls(document)
+            if controls is not None and controls>=1: raise WhopError('submission_join_required',category='not_ready')
+            raise form_failure(opened,origin,path+suffix) from None
         # The observed form is dynamically imported. Wait for its mounted dialog,
         # not an arbitrary sleep or a hard-coded build/action reference.
         mounted=document.evaluate("""async () => {const end=Date.now()+10000;
             while(Date.now()<end){if(document.querySelector('[role=dialog]'))return true;await new Promise(r=>setTimeout(r,50));}return false;}""",request_timeout=12.0)
         if mounted is not True: raise ClientError('submission_form_not_ready') from None
         action=client._discover_action(document,'createSubmissionAction',suffix,fresh=True,discovery_js=SUBMISSION_DISCOVERY_JS,request_timeout=12.0)
+    # A discoverable action hash is not proof of membership: a not-joined
+    # account cannot submit, so the exact join control must be absent.
+    controls=join_controls(document)
+    if controls is not None and controls>=1: raise WhopError('submission_join_required',category='not_ready')
     # A later actor read would navigate away from this exact action context.
     client._submission_context=(document,action,path+suffix)
     return {'ready':True,'actor':{'account_id':actor['id'],'username':actor['username'],'profile':actor['profile']},
@@ -200,6 +246,31 @@ def readiness(client,campaign_id,*,expected_account_id,expected_tiktok_account_i
             'campaign_id':campaign_id,'requirements':requirements,'requirements_digest':requirements_digest,
             'funding_remaining_cents':funding['remaining_cents'],'funding':funding,'intake':'open','readback':{'kind':'participant_campaign_action','first_page_count':len(participant_rows),'has_more':participant_cursor is not None},
             'action':{'name':'createSubmissionAction','reference':action},'observed_at':datetime.now(timezone.utc).isoformat()}
+
+def join_campaign(client,campaign_id,*,expected_account_id,confirm):
+    """Join a campaign by clicking its own control; never a package or API guess."""
+    identifier(campaign_id);identifier(expected_account_id)
+    if not expected_account_id.startswith('user_'): raise ClientError('invalid_expected_whop_actor')
+    if confirm is not True: raise ClientError('campaign_join_confirmation_required')
+    actor=client.account()
+    if actor['id']!=expected_account_id: raise ClientError('submission_whop_actor_changed')
+    campaign=client.campaign(campaign_id)
+    if not isinstance(campaign,dict) or campaign.get('id')!=campaign_id: raise ClientError('submission_campaign_binding_changed')
+    if campaign.get('status')!='active' or campaign.get('private') is not False: raise ClientError('submission_campaign_not_active_public')
+    origin,path=client._location()
+    suffix='/campaigns/'+campaign_id
+    document=client._action_document(suffix)
+    result=document.evaluate(JOIN_CAMPAIGN_JS,request_timeout=60.0)
+    if not isinstance(result,dict) or any(type(result.get(k)) is not bool for k in ('joined','already')):
+        raise ClientError('campaign_join_observation_schema_changed')
+    if any(type(result.get(k)) is not int or not 0<=result[k]<=100 for k in ('join_controls','submit_controls')):
+        raise ClientError('campaign_join_observation_schema_changed')
+    if result['joined'] is not True and result['already'] is not True:
+        observed={'joined':result['joined'],'already':result['already'],'join_controls':result['join_controls'],
+                  'submit_controls':result['submit_controls'],'too_many':result.get('too_many') is True,'timeout':result.get('timeout') is True}
+        raise ClientError('campaign_join_not_observed:'+json.dumps(observed,separators=(',',':')))
+    return {'campaign_id':campaign_id,'actor':{'account_id':actor['id'],'username':actor['username']},
+            'joined':True,'already_joined':bool(result['already']),'submit_controls':int(result['submit_controls'])}
 
 def private_regular(path,*,create=False):
     flags=os.O_RDWR|os.O_NOFOLLOW|os.O_NONBLOCK

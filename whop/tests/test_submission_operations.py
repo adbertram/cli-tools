@@ -45,6 +45,10 @@ def send(c,receipt,request=REQUEST,**kwargs):
 def remote(receipt,id='submission_TEST'):
     return {'id':id,'campaignId':CAMPAIGN,'status':'pending','socialMediaPost':{'platform':'tiktok','postId':receipt['publication_id']}}
 
+def evaluations(document):
+    """Document evaluations other than the readiness membership probe."""
+    return [call for call in document.evaluate.call_args_list if not (call.args and call.args[0] is op.JOIN_CONTROLS_JS)]
+
 def test_ready_binds_actual_brief_and_excludes_mutable_spend(client):
     first=ready(client)
     client.campaign.return_value['payouts'][0]['spentCents']=100
@@ -131,11 +135,12 @@ def test_malformed_optional_platform_intake_refuses(client,value):
 
 def test_dynamic_form_chunk_loaded_only_after_missing_action(client):
     client._discover_action.side_effect=[ClientError('read_action_discovery_missing: sources=60, matches=0, failures=0'),'b'*40]
-    document=client._action_document.return_value;document.evaluate.side_effect=[True,True]
+    document=client._action_document.return_value;document.evaluate.side_effect=[True,True,{'join_controls':0}]
     assert ready(client)['action']['reference']=='b'*40
     assert client._discover_action.call_count==2
     assert document.evaluate.call_args_list[0].kwargs['request_timeout']==2
     assert document.evaluate.call_args_list[1].kwargs['request_timeout']==12
+    assert document.evaluate.call_args_list[2].args[0] is op.JOIN_CONTROLS_JS
 
 def test_failed_form_predicate_survives_close_with_typed_safe_diagnostics(client):
     client._discover_action.side_effect=ClientError('read_action_discovery_missing: sources=60, matches=0, failures=0')
@@ -151,7 +156,7 @@ def test_failed_form_predicate_survives_close_with_typed_safe_diagnostics(client
     assert error.diagnostics=={'kind':'submission_form_predicate','available':True,'context_origin':'expected_app','route_match':True,
         **{k:v for k,v in facts.items() if k!='private_body'}}
     assert 'SECRET' not in json.dumps(error.diagnostics)
-    assert document.evaluate.call_count==1
+    assert len(evaluations(document))==1
     assert not hasattr(client,'_submission_context')
 
 @pytest.mark.parametrize('change',[{'origin':'https://whop.com'}, {'path':'/auth/SECRET?token=SECRET'},
@@ -208,27 +213,27 @@ def test_actual_js_atomic_form_predicate_counts_and_unique_visible_click(buttons
 def test_discovery_failure_does_not_open_form(client,code):
     client._discover_action.side_effect=ClientError('read_action_discovery_'+code+': diagnostic')
     with pytest.raises(ClientError):ready(client)
-    client._action_document.return_value.evaluate.assert_not_called()
+    assert not evaluations(client._action_document.return_value)
 
 @pytest.mark.parametrize('key,value',[('publication_id','0'),('account_id','123'),('publication_url','https://evil.test/video/123'),('handle','ata_clipper?'),('published_at','2026-10-04'),('published_at','2026-10-04T00:00:00+01:00'),('provenance','{}')])
 def test_receipt_strict_binding(client,receipt,key,value):
     receipt[key]=value
     with pytest.raises(ClientError):send(client,receipt)
-    client._action_document.return_value.evaluate.assert_not_called()
+    assert not evaluations(client._action_document.return_value)
 
 @pytest.mark.parametrize('age',[-10,1801])
 def test_publication_age_checked_after_callback(client,receipt,age):
     receipt['published_at']=(datetime.now(timezone.utc)-timedelta(seconds=age)).replace(microsecond=0).isoformat()
     callback=Mock(return_value=True)
     with pytest.raises(ClientError,match='30_minute'):send(client,receipt,confirm=callback)
-    callback.assert_called_once();client._action_document.return_value.evaluate.assert_not_called()
+    callback.assert_called_once();assert not evaluations(client._action_document.return_value)
 
 def test_callback_pause_retains_reserved_without_dispatch(client,receipt):
     callback=Mock(return_value=False)
     with pytest.raises(ClientError,match='confirmation_required'):send(client,receipt,confirm=callback)
     row=stored(client)
     assert row['state']=='reserved' and row['public_action_dispatched'] is False
-    client._action_document.return_value.evaluate.assert_not_called()
+    assert not evaluations(client._action_document.return_value)
 
 @pytest.mark.parametrize('response',[{'status':429,'text':'private'},{'status':500,'text':'private'},{'status':0,'errorClass':'TimeoutError'}, {'status':200,'text':'garbage'}])
 def test_uncertain_write_never_replayed(client,receipt,response,monkeypatch):
@@ -236,14 +241,14 @@ def test_uncertain_write_never_replayed(client,receipt,response,monkeypatch):
     first=send(client,receipt)
     assert first['state']=='uncertain' and first['public_action_dispatched'] is True
     second=send(client,receipt)
-    assert second['state']=='uncertain' and document.evaluate.call_count==1
+    assert second['state']=='uncertain' and len(evaluations(document))==1
     assert 'private' not in op.canonical(second)
     monkeypatch.setattr(op.time,'time',lambda:10**12)
     row=remote(receipt);client._action.return_value={'success':True,'data':[row],'nextCursor':None}
     result=client.reconcile_submission(REQUEST)
     assert result['state']=='submitted_verified' and result['submission']['status']=='pending'
     assert result['submission']['totalEarnedCents'] is None
-    assert document.evaluate.call_count==1
+    assert len(evaluations(document))==1
 
 def test_changed_request_or_second_uuid_cannot_write(client,receipt):
     client._action_document.return_value.evaluate.return_value={'status':0}
@@ -251,7 +256,7 @@ def test_changed_request_or_second_uuid_cannot_write(client,receipt):
     changed=dict(receipt,publication_id='123',publication_url='https://www.tiktok.com/@ata_clipper/video/123')
     with pytest.raises(ClientError,match='binding_changed'):send(client,changed)
     with pytest.raises(ClientError,match='already_reserved'):send(client,receipt,request=str(uuid4()))
-    assert client._action_document.return_value.evaluate.call_count==1
+    assert len(evaluations(client._action_document.return_value))==1
 
 def test_success_needs_exact_readback_and_id(client,receipt):
     document=client._action_document.return_value
@@ -260,7 +265,7 @@ def test_success_needs_exact_readback_and_id(client,receipt):
     client._action.side_effect=replies
     result=send(client,receipt)
     assert result['state']=='submitted_verified' and result['submission_id']=='submission_TEST'
-    assert document.evaluate.call_count==1
+    assert len(evaluations(document))==1
     assert document.evaluate.call_args.kwargs['request_timeout']==22
     body=document.evaluate.call_args.args[1]['body']
     assert body==[{'campaignId':CAMPAIGN,'url':receipt['publication_url']}]
@@ -268,7 +273,7 @@ def test_success_needs_exact_readback_and_id(client,receipt):
 def test_duplicate_remote_rows_rejected(client,receipt):
     client._action.return_value={'data':[remote(receipt),remote(receipt,'submission_OTHER')],'nextCursor':None}
     with pytest.raises(ClientError,match='duplicate_remote'):send(client,receipt)
-    assert client._action_document.return_value.evaluate.call_count==1
+    assert len(evaluations(client._action_document.return_value))==1
 
 def test_reconciliation_exact_post_and_campaign_only(client,receipt):
     client._action_document.return_value.evaluate.return_value={'status':0}
@@ -280,12 +285,16 @@ def test_reconciliation_exact_post_and_campaign_only(client,receipt):
     with pytest.raises(ClientError,match='actor_changed'):client.reconcile_submission(REQUEST)
 
 def test_crash_after_durable_dispatch_cannot_resend(client,receipt):
-    client._action_document.return_value.evaluate.side_effect=KeyboardInterrupt()
+    document=client._action_document.return_value
+    def evaluate(script,*args,**kwargs):
+        if script is op.FETCH_JS: raise KeyboardInterrupt()
+        return {'join_controls':0}
+    document.evaluate.side_effect=evaluate
     with pytest.raises(KeyboardInterrupt):send(client,receipt)
     assert stored(client)['state']=='dispatching'
-    client._action_document.return_value.evaluate.reset_mock()
+    document.evaluate.reset_mock()
     assert send(client,receipt)['state']=='uncertain'
-    client._action_document.return_value.evaluate.assert_not_called()
+    assert not evaluations(client._action_document.return_value)
 
 def test_private_journal_rejects_symlink_and_foreign_mode(client,receipt,tmp_path):
     root=tmp_path/'submission-operations';root.mkdir(mode=0o700)
@@ -317,7 +326,7 @@ def test_bounded_campaign_recovery_continues_without_a_history_cap(client,receip
     count=len(calls);second=client.reconcile_submission(REQUEST)
     assert calls[count].get('cursor') is None and calls[count+1]['cursor']==cursor
     assert second['reconciliation']['cursor']!=cursor
-    assert client._action_document.return_value.evaluate.call_count==1
+    assert len(evaluations(client._action_document.return_value))==1
 
 def test_cursor_cycle_and_oversized_page_fail_closed(client,receipt):
     client._action.return_value={'data':[{}],'nextCursor':'same'}
@@ -325,14 +334,14 @@ def test_cursor_cycle_and_oversized_page_fail_closed(client,receipt):
     with pytest.raises(ClientError,match='cursor_cycle'):send(client,receipt)
     client._action.return_value={'data':[{}]*51,'nextCursor':None}
     with pytest.raises(ClientError,match='schema_changed'):send(client,receipt)
-    assert client._action_document.return_value.evaluate.call_count==1
+    assert len(evaluations(client._action_document.return_value))==1
 
 def test_rejected_provider_response_never_resends(client,receipt):
     document=client._action_document.return_value
     document.evaluate.return_value={'status':200,'text':'0:{"a":"$@1"}\n1:{"success":false,"code":"SUBMISSIONS_ON_HOLD","error":"private"}'}
     row=send(client,receipt)
     assert row['state']=='rejected' and row['failure_code']=='SUBMISSIONS_ON_HOLD'
-    assert send(client,receipt)['state']=='rejected' and document.evaluate.call_count==1
+    assert send(client,receipt)['state']=='rejected' and len(evaluations(document))==1
     assert 'private' not in op.canonical(row)
 
 def test_crash_before_dispatch_leaves_reservation_retryable(client,receipt,monkeypatch):
@@ -342,7 +351,7 @@ def test_crash_before_dispatch_leaves_reservation_retryable(client,receipt,monke
         return original(root,row)
     monkeypatch.setattr(op,'save',fail)
     with pytest.raises(OSError):send(client,receipt)
-    client._action_document.return_value.evaluate.assert_not_called()
+    assert not evaluations(client._action_document.return_value)
     assert stored(client)['state']=='reserved'
 
 def test_lock_is_exclusive_and_readiness_does_not_create_journal(client,receipt):
@@ -380,7 +389,7 @@ def test_existing_uuid_rejects_changed_explicit_binding(client,receipt,field,val
     bound=dict(row['binding']);bound[field]=value
     with pytest.raises(ClientError,match='binding_changed'):
         client.create_submission(REQUEST,bound['campaign_id'],receipt,expected_account_id=bound['account_id'],expected_tiktok_account_id=TIKTOK,accepted_requirements_digest=bound['requirements_digest'],confirm=True)
-    assert client._action_document.return_value.evaluate.call_count==1
+    assert len(evaluations(client._action_document.return_value))==1
 
 def test_unknown_provenance_rejected_but_known_close_issue_preserved(receipt):
     provenance=json.loads(receipt['provenance']);provenance['cleanup_issue']={'kind':'studio_browser_close_failed','error_type':'TimeoutError','recoverable':True}
@@ -425,7 +434,7 @@ def test_callback_cannot_replace_captured_action_context(client,receipt):
         return True
     result=send(client,receipt,confirm=callback)
     assert result['state']=='uncertain'
-    first.evaluate.assert_called_once();other.evaluate.assert_not_called()
+    assert len(evaluations(first))==1;assert not evaluations(other)
 
 @pytest.mark.parametrize('raw,expected',[('172801',172801),('900000',900000),('bad',None),('-1',None),('1.5',None)])
 def test_retry_after_preserves_provider_minimum(raw,expected):
@@ -447,7 +456,7 @@ def test_uncertain_receipt_keeps_retry_after_without_retry(client,receipt):
     row=send(client,receipt)
     assert row['failure']=={'code':'http_429','category':'rate_limit','status':429,'retry_after_seconds':172801}
     assert stored(client)['failure']==row['failure']
-    assert document.evaluate.call_count==1
+    assert len(evaluations(document))==1
 
 def test_response_stream_is_cancelled_at_byte_limit():
     import subprocess
@@ -476,7 +485,7 @@ def test_unknown_recovery_paginates_beyond_1000_with_fresh_head(client,receipt):
     third=client.reconcile_submission(REQUEST)
     assert third['state']=='submitted_verified' and third['submission_id']=='submission_TEST'
     assert all(q.get('campaignId')==CAMPAIGN and 'status' not in q and 'isDeleted' not in q for q in calls)
-    assert client._action_document.return_value.evaluate.call_count==1
+    assert len(evaluations(client._action_document.return_value))==1
 
 def test_visibility_after_complete_pass_restarts_at_head(client,receipt):
     client._action_document.return_value.evaluate.return_value={'status':0}
@@ -484,7 +493,7 @@ def test_visibility_after_complete_pass_restarts_at_head(client,receipt):
     assert first['state']=='uncertain' and first['reconciliation']['completed_scans']==1
     client._action.return_value={'data':[remote(receipt)],'nextCursor':None}
     assert client.reconcile_submission(REQUEST)['state']=='submitted_verified'
-    assert client._action_document.return_value.evaluate.call_count==1
+    assert len(evaluations(client._action_document.return_value))==1
 
 def test_known_id_verifies_head_without_full_campaign_scan(client,receipt):
     document=client._action_document.return_value
@@ -510,7 +519,7 @@ def test_cursor_progress_survives_interruption(client,receipt):
     client._action.side_effect=resume
     result=client.reconcile_submission(REQUEST)
     assert seen==[None,'2'] and result['state']=='submitted_verified'
-    assert document.evaluate.call_count==1
+    assert len(evaluations(document))==1
 
 def test_rate_limit_cooldown_persists_before_any_new_read(client,receipt,monkeypatch):
     monkeypatch.setattr(op.time,'time',lambda:1000)
@@ -523,7 +532,7 @@ def test_rate_limit_cooldown_persists_before_any_new_read(client,receipt,monkeyp
     monkeypatch.setattr(op.time,'time',lambda:173801)
     client._action.return_value={'data':[remote(receipt)],'nextCursor':None}
     assert client.reconcile_submission(REQUEST)['state']=='submitted_verified'
-    assert document.evaluate.call_count==1
+    assert len(evaluations(document))==1
 
 def test_non_head_rate_limit_does_not_poison_resume_cursor(client,receipt,monkeypatch):
     from whop_cli.client import WhopError
@@ -543,7 +552,7 @@ def test_non_head_rate_limit_does_not_poison_resume_cursor(client,receipt,monkey
         return {'data':[],'nextCursor':None} if cursor is None else {'data':[remote(receipt)],'nextCursor':None}
     client._action.side_effect=resume
     assert client.reconcile_submission(REQUEST)['state']=='submitted_verified'
-    assert seen==[None,'2'] and document.evaluate.call_count==1
+    assert seen==[None,'2'] and len(evaluations(document))==1
 
 def test_known_match_page_is_revisited_and_absence_does_not_fake_freshness(client,receipt):
     document=client._action_document.return_value
@@ -563,3 +572,56 @@ def test_known_match_page_is_revisited_and_absence_does_not_fake_freshness(clien
     result=client.reconcile_submission(REQUEST)
     assert result['state']=='submitted_verified' and result['readback_fresh'] is False
     assert result['observed_at']==before
+
+def test_unopened_form_with_join_control_requires_join(client):
+    client._discover_action.side_effect=ClientError('read_action_discovery_missing: sources=60, matches=0, failures=0')
+    document=client._action_document.return_value
+    document.evaluate.side_effect=[{'opened':False,'diagnostics':{}},{'join_controls':1,'submit_controls':0}]
+    with pytest.raises(ClientError,match='submission_join_required'):ready(client)
+    assert not hasattr(client,'_submission_context')
+
+def test_unopened_form_without_join_control_remains_form_unavailable(client):
+    client._discover_action.side_effect=ClientError('read_action_discovery_missing: sources=60, matches=0, failures=0')
+    document=client._action_document.return_value
+    document.evaluate.side_effect=[{'opened':False,'diagnostics':{}},{'join_controls':0,'submit_controls':0}]
+    with pytest.raises(ClientError,match='submission_form_unavailable'):ready(client)
+    assert not hasattr(client,'_submission_context')
+
+def test_discovered_action_still_requires_membership(client):
+    document=client._action_document.return_value
+    document.evaluate.return_value={'join_controls':2,'submit_controls':0}
+    with pytest.raises(ClientError,match='submission_join_required'):ready(client)
+    assert document.evaluate.call_count==1 and document.evaluate.call_args.args[0] is op.JOIN_CONTROLS_JS
+    assert not hasattr(client,'_submission_context')
+
+def test_join_campaign_requires_explicit_confirmation(client):
+    with pytest.raises(ClientError,match='campaign_join_confirmation_required'):
+        client.join_campaign(CAMPAIGN,expected_account_id=ACTOR,confirm=False)
+    client.account.assert_not_called();client._action_document.assert_not_called()
+
+@pytest.mark.parametrize('observation,already',[
+    ({'joined':True,'already':False,'join_controls':0,'submit_controls':1},False),
+    ({'joined':False,'already':True,'join_controls':0,'submit_controls':1},True)])
+def test_join_campaign_returns_observed_membership(client,observation,already):
+    document=client._action_document.return_value;document.evaluate.return_value=observation
+    result=client.join_campaign(CAMPAIGN,expected_account_id=ACTOR,confirm=True)
+    assert result=={'campaign_id':CAMPAIGN,'actor':{'account_id':ACTOR,'username':'whopuser'},'joined':True,'already_joined':already,'submit_controls':1}
+    assert document.evaluate.call_args.kwargs['request_timeout']==60
+
+def test_join_campaign_unobserved_click_fails(client):
+    document=client._action_document.return_value
+    document.evaluate.return_value={'joined':False,'already':False,'join_controls':1,'submit_controls':0,'timeout':True}
+    with pytest.raises(ClientError,match='campaign_join_not_observed'):
+        client.join_campaign(CAMPAIGN,expected_account_id=ACTOR,confirm=True)
+
+@pytest.mark.parametrize('observation',[
+    None,{}, {'joined':True,'already':False,'join_controls':0},
+    {'joined':'yes','already':False,'join_controls':0,'submit_controls':1},
+    {'joined':True,'already':None,'join_controls':0,'submit_controls':1},
+    {'joined':True,'already':False,'join_controls':True,'submit_controls':1},
+    {'joined':True,'already':False,'join_controls':-1,'submit_controls':1},
+    {'joined':True,'already':False,'join_controls':0,'submit_controls':101}])
+def test_join_campaign_malformed_observation_refuses(client,observation):
+    client._action_document.return_value.evaluate.return_value=observation
+    with pytest.raises(ClientError,match='campaign_join_observation_schema_changed'):
+        client.join_campaign(CAMPAIGN,expected_account_id=ACTOR,confirm=True)

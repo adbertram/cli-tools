@@ -362,12 +362,14 @@ class WhopClient:
         except ClientError as error:
             code=str(error).split(':',1)[0]
             if not re.fullmatch(r'[A-Za-z0-9_]{1,100}',code): code='submission_read_failed'
-            category='auth' if code in ('submission_whop_actor_changed','account_identity_missing') else 'policy_changed' if code=='submission_requirements_changed' else 'not_ready' if code in ('submission_linked_tiktok_missing_or_ambiguous','submission_campaign_not_active_public','submission_application_required_or_unknown','submission_campaign_not_tiktok','submission_campaign_not_funded','submission_intake_not_open','submission_form_unavailable','submission_form_not_ready') else 'invalid_request'
+            category='auth' if code in ('submission_whop_actor_changed','account_identity_missing') else 'policy_changed' if code=='submission_requirements_changed' else 'invalid_request' if code=='campaign_join_confirmation_required' else 'not_ready' if code in ('submission_linked_tiktok_missing_or_ambiguous','submission_campaign_not_active_public','submission_application_required_or_unknown','submission_campaign_not_tiktok','submission_campaign_not_funded','submission_intake_not_open','submission_form_unavailable','submission_form_not_ready','submission_join_required','campaign_join_not_observed') else 'invalid_request'
             raise WhopError(code,category=category) from None
     def submission_readiness(self,campaign_id,*,expected_account_id,expected_tiktok_account_id,expected_requirements_digest=None):
         return self._submission_operation('readiness',campaign_id,expected_account_id=expected_account_id,expected_tiktok_account_id=expected_tiktok_account_id,expected_requirements_digest=expected_requirements_digest)
     def create_submission(self,request_id,campaign_id,publication,*,expected_account_id,expected_tiktok_account_id,accepted_requirements_digest,confirm):
         return self._submission_operation('create',request_id,campaign_id,publication,expected_account_id=expected_account_id,expected_tiktok_account_id=expected_tiktok_account_id,accepted_requirements_digest=accepted_requirements_digest,confirm=confirm)
+    def join_campaign(self,campaign_id,*,expected_account_id,confirm):
+        return self._submission_operation('join_campaign',campaign_id,expected_account_id=expected_account_id,confirm=confirm)
     def reconcile_submission(self,request_id):
         return self._submission_operation('reconcile',request_id)
     def sync_submission_revenue(self,*,restart_pass=False):

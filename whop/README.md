@@ -6,7 +6,7 @@ Read Whop participant accounts and Content Rewards linked accounts, campaigns, s
 
 ## Scope
 
-The CLI uses observed participant endpoints through the shared browser engine. Reads remain separate from the explicit journaled submission operation. The CLI cannot connect accounts, apply to campaigns, withdraw funds, or change settings.
+The CLI uses observed participant endpoints through the shared browser engine. Reads remain separate from the explicit journaled submission operation and the explicitly confirmed campaign join. The CLI cannot connect accounts, apply to campaigns, withdraw funds, or change settings except by clicking the campaign page's own `Join Campaign` control.
 
 ## Authentication
 
@@ -69,6 +69,14 @@ The receipt is the owning Studio SDK runtime bridge object: `publication_id`, ex
 `create` requires `--confirm`. SDK `create_submission` accepts either explicit `True` authority or a confirmation callback called after fresh readiness immediately before dispatch. A private profile-owned SQLite journal binds UUID, actor, campaign, post, receipt and accepted brief before any mutation. Indexed request lookup and a unique actor/experience/campaign/post constraint have no operation-count cutoff. FULL synchronous commits precede dispatch. A request can dispatch at most once, with no read-transport retry loop. Repeated identical UUIDs reconcile existing state; changed bindings and another UUID for the same owned publication are refused. The states `dispatching`, `uncertain`, and `created_unverified` never authorize another write. A timeout, 429/5xx, malformed response or missing readback keeps recoverable uncertainty. Reconcile uses the observed unfiltered campaign-only participant action. A known create-response ID can verify on its exact ID/campaign/platform/post row without scanning all history. Unknown-ID recovery retains a bounded cursor/match, refreshes the head on each pass, continues across calls, and restarts after provider end-of-list. A pass reads at most eleven pages of fifty rows; no fixed total-history cutoff exists. An empty or partial inspection never authorizes another write. The denied generic submission REST-detail route is not used. Remote duplicates fail explicitly. `submitted_verified` retains an exact participant readback, while `submission.status` keeps moderation separate. Later read misses or errors may preserve this historical state with `readback_fresh:false` and the original `observed_at`; `inspection_observed_at` records the later attempt. Never use a historical result as a new earnings/moderation measurement. Missing individual earnings remain null. SDK errors expose sanitized `code`, `category`, `status`, and `retry_after_seconds` (`retry_after` alias). Uncertain/rejected operation receipts retain these in `failure`; valid Retry-After seconds or HTTP dates are preserved even beyond 24 hours. A persisted `retry_not_before` prevents immediate reconciliation reads during a provider cooldown.
 
 No real nonempty create response or submission record has yet been observed; the first valid published clip must verify this boundary before end-to-end completion is claimed.
+
+## Campaign membership
+
+```bash
+whop campaigns join CAMPAIGN_ID --profile rewards --expected-account-id EXPECTED_WHOP_ID --confirm
+```
+
+Joining a campaign is a mutation and requires `--confirm`. It clicks the campaign page's own visible enabled `Join Campaign` control, waiting up to 40 seconds for that control to render, then observes the page's own control transition as evidence; an account that already renders the submit control is reported as `already_joined:true` without a click. Readiness raises typed `submission_join_required` (`category='not_ready'`) when the page's own join control is present, including when the create action hash is discoverable, instead of reporting the form unavailable. `campaign_join_not_observed` reports a click that did not produce the expected control change.
 
 ## Individual submission revenue
 
