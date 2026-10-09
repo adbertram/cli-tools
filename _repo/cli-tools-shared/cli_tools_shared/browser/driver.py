@@ -39,11 +39,13 @@ from .processes import (
     format_profile_in_use_message,
     list_process_commands,
     pid_is_running,
+    profile_owner_is_orphaned,
     profile_process_owner,
     profile_process_pids,
     remove_stale_profile_artifacts,
     release_profile_lifecycle_lock,
     resolve_user_data_dir,
+    terminate_profile_processes,
 )
 
 logger = get_debug_logger("cli_tools.browser_service")
@@ -51,6 +53,10 @@ logger = get_debug_logger("cli_tools.browser_service")
 # macOS AF_UNIX paths are limited to 104 bytes.  Browser-harness writes its
 # socket under BH_RUNTIME_DIR; keep this short to stay within budget.
 _BH_RUNTIME_ROOT = Path("/tmp/cli-tools-bh")
+
+# Reclaim-and-retry budget for a profile whose owner is provably orphaned.  A
+# live concurrent CLI owner is never retried against, so this stays bounded.
+_ORPHANED_OWNER_RECOVERY_ATTEMPTS = 1
 
 
 def _ensure_runtime_dir(session: str) -> Path:
@@ -336,6 +342,29 @@ class BrowserHarnessService:
         finally:
             self._chrome_proc = None
 
+    def _wait_for_profile_release(self, timeout: float = 15.0) -> None:
+        """Block until no Chrome process still holds this profile.
+
+        ``_chrome_proc`` is only the launcher, so ``Browser.close`` returns
+        before the real Chrome has exited. A caller that reopens the profile
+        right after ``close()`` (e.g. ``BrowserAuthState.from_config`` followed
+        by ``is_authenticated``) would otherwise see the dying Chrome as a
+        foreign owner and fail with "profile already in use".
+        """
+        try:
+            pids = self._session_process_pids()
+        except (BrowserHarnessError, ProcessTableUnavailableError):
+            return
+        deadline = time.monotonic() + timeout
+        while pids and time.monotonic() < deadline:
+            time.sleep(0.2)
+            try:
+                pids = self._session_process_pids()
+            except (BrowserHarnessError, ProcessTableUnavailableError):
+                return
+        if pids:
+            logger.debug("_wait_for_profile_release: still held by %s after %.0fs", pids, timeout)
+
     def _prepare_chrome_stderr(self) -> Path:
         """Return an empty bounded diagnostic file for this launch only."""
         path = self._runtime_dir / "chrome.stderr"
@@ -523,6 +552,66 @@ class BrowserHarnessService:
                 f"Failed to remove stale browser lock file for {ud}: {exc}"
             ) from exc
 
+    def _reclaim_orphaned_profile_owner(self) -> bool:
+        """Terminate a profile owner whose parent proves its CLI is gone.
+
+        Returns True only after the sanctioned profile-termination helper ran,
+        so the caller may retry once.  ``_cleanup_stale_session`` only runs
+        while this service holds the profile's lifecycle lock, so a live CLI
+        cannot be inside its own launch window here — which is what keeps the
+        macOS case safe, where ``open`` reparents every CLI-launched Chrome to
+        launchd (PID 1) for the whole life of that CLI.
+        """
+        user_data_dir = self._resolved_user_data_dir()
+        if user_data_dir is None or self._lifecycle_lock_profile != user_data_dir:
+            return False
+        try:
+            rows = self._list_process_table()
+        except (BrowserHarnessError, ProcessTableUnavailableError):
+            return False
+        owner = profile_process_owner(user_data_dir, processes=rows)
+        if owner is None or not profile_owner_is_orphaned(owner, processes=rows):
+            return False
+        logger.warning(
+            "browser_open: terminating orphaned Chrome profile owner PID %s "
+            "(parent PID %s) for %s",
+            owner.pid,
+            owner.parent_pid,
+            user_data_dir,
+        )
+        try:
+            terminate_profile_processes(user_data_dir)
+        except (OSError, RuntimeError) as exc:
+            # Keep the documented refusal (with the owner detail) as the error
+            # callers see; the failed termination is still reported here.
+            logger.warning(
+                "browser_open: could not terminate orphaned Chrome profile "
+                "owner PID %s: %s",
+                owner.pid,
+                exc,
+            )
+            return False
+        return True
+
+    def _cleanup_profile_artifacts_with_recovery(self) -> None:
+        """Remove stale artifacts, reclaiming an orphaned owner with one retry.
+
+        A CLI that exits or is killed leaves its Chrome behind; Chrome then
+        hands any new launch off to that orphan instead of opening its own CDP
+        port, so every retry would refuse and orphan another Chrome.  Reclaim
+        that owner once and retry, but keep the existing refusal — unchanged,
+        with the same owner detail — for a live concurrent CLI.
+        """
+        for attempt in range(_ORPHANED_OWNER_RECOVERY_ATTEMPTS + 1):
+            try:
+                self._cleanup_session_lock_files()
+                return
+            except BrowserHarnessError:
+                if attempt >= _ORPHANED_OWNER_RECOVERY_ATTEMPTS:
+                    raise
+                if not self._reclaim_orphaned_profile_owner():
+                    raise
+
     def _cleanup_stale_session(self) -> None:
         """Restart this daemon and remove profile artifacts proven stale."""
         from browser_harness.admin import restart_daemon
@@ -530,7 +619,7 @@ class BrowserHarnessService:
         logger.debug("_cleanup_stale_session: session=%s", self.session)
         with self._bh.bound():
             restart_daemon(name=self.session)
-            self._cleanup_session_lock_files()
+            self._cleanup_profile_artifacts_with_recovery()
 
     def _acquire_lifecycle_lock(self) -> None:
         """Acquire this resolved profile's cross-backend lock until close/delete."""
@@ -561,6 +650,7 @@ class BrowserHarnessService:
         self._request_browser_close()
         self._stop_daemon()
         self._terminate_chrome()
+        self._wait_for_profile_release()
         self._opened = False
         self._native_network_capture = None
         self._cdp_port = None

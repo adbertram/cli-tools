@@ -9,7 +9,12 @@ from cli_tools_shared.browser import BrowserHarnessError
 from cli_tools_shared.browser.driver import BrowserHarnessService
 from cli_tools_shared.browser._elements import _ServiceElement, _ServiceLocator, _scoped_css_js
 from cli_tools_shared.browser._js_fragments import _check_js, _fill_js
-from cli_tools_shared.browser.processes import ProcessCommand, ProcessTableUnavailableError
+from cli_tools_shared.browser.processes import (
+    ProfileProcessOwner,
+    ProcessCommand,
+    ProcessTableUnavailableError,
+    format_profile_in_use_message,
+)
 import browser_harness.helpers as bh_helpers
 import cli_tools_shared.browser.driver as driver
 
@@ -381,6 +386,245 @@ def test_cleanup_session_lock_files_reports_live_profile_lock_without_process_ta
         service._cleanup_session_lock_files()
 
     assert checked == [12345]
+
+
+# ---------------------------------------------------------------------------
+# Orphaned profile owner recovery: an owning Chrome whose parent is launchd
+# (or gone) belongs to a CLI that exited or was killed, so the launch must
+# reclaim it instead of refusing and orphaning another Chrome every attempt.
+# ---------------------------------------------------------------------------
+
+
+def _orphaned_owner_rows(profile: Path) -> list[ProcessCommand]:
+    return [
+        ProcessCommand(1, 0, "S", "/sbin/launchd"),
+        ProcessCommand(
+            67564,
+            1,
+            "S",
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome "
+            f"--user-data-dir={profile}",
+        ),
+        ProcessCommand(
+            67565,
+            67564,
+            "S",
+            f"/Applications/Google Chrome Helper --user-data-dir={profile}",
+        ),
+    ]
+
+
+def _write_profile_lock_artifacts(profile: Path) -> list[Path]:
+    artifacts = [
+        profile / name
+        for name in ("SingletonCookie", "SingletonLock", "SingletonSocket", "DevToolsActivePort")
+    ]
+    for path in artifacts:
+        path.write_text("orphaned")
+    return artifacts
+
+
+def _prepare_recovery_launch(service, monkeypatch, events: list[str]) -> None:
+    """Bind the service to fake daemon/Chrome helpers, like _prepare_open_success."""
+    from contextlib import nullcontext
+
+    monkeypatch.setattr("browser_harness.admin.restart_daemon", lambda name=None: events.append("restart"))
+    monkeypatch.setattr(driver, "_find_free_port", lambda: 51312)
+    monkeypatch.setattr(
+        driver,
+        "_wait_for_cdp",
+        lambda port, timeout: events.append("cdp")
+        or "ws://127.0.0.1:51312/devtools/browser/test",
+    )
+    monkeypatch.setattr(
+        driver,
+        "_chrome_binary",
+        lambda: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    )
+    monkeypatch.setattr(
+        driver.subprocess,
+        "Popen",
+        lambda *args, **kwargs: events.append("popen") or _Proc(4242),
+    )
+    monkeypatch.setattr(service, "_start_daemon", lambda: events.append("daemon"))
+    monkeypatch.setattr(
+        service,
+        "_page_info",
+        lambda: {"url": "", "title": "", "console_errors": 0, "console_warnings": 0},
+    )
+    monkeypatch.setattr(service, "_request_browser_close", lambda: events.append("graceful-close"))
+    monkeypatch.setattr(service, "_stop_daemon", lambda: events.append("stop"))
+    monkeypatch.setattr(service, "_terminate_chrome", lambda: events.append("terminate"))
+    monkeypatch.setattr(service, "_session_process_pids", lambda: [])
+
+    class _Helpers:
+        def cdp(self, *_args, **_kwargs):
+            return {}
+
+        def goto_url(self, _url):
+            return None
+
+        def wait_for_load(self, timeout):
+            return None
+
+    service._bh = type(
+        "_BH",
+        (),
+        {"h": _Helpers(), "bound": lambda self: nullcontext(self.h)},
+    )()
+
+
+def test_browser_open_terminates_orphaned_profile_owner_and_retries_launch(tmp_path, monkeypatch):
+    service = BrowserHarnessService("whop-rewards")
+    profile = tmp_path / "chromium-profile"
+    profile.mkdir(parents=True)
+    artifacts = _write_profile_lock_artifacts(profile)
+    rows = _orphaned_owner_rows(profile)
+    events: list[str] = []
+    reclaimed: list[Path] = []
+
+    def reclaim(owner_profile: Path) -> None:
+        reclaimed.append(owner_profile)
+        rows[:] = [row for row in rows if row.pid == 1]
+
+    _prepare_recovery_launch(service, monkeypatch, events)
+    monkeypatch.setattr(service, "_list_process_table", lambda: list(rows))
+    monkeypatch.setattr(driver, "terminate_profile_processes", reclaim)
+    monkeypatch.setattr(
+        driver.os,
+        "kill",
+        lambda *args: pytest.fail("recovery must terminate through terminate_profile_processes"),
+    )
+
+    service.browser_open(persistent_profile_dir=profile)
+    service.browser_close()
+
+    assert reclaimed == [profile.resolve()]
+    assert events == ["restart", "popen", "cdp", "daemon", "graceful-close", "stop", "terminate"]
+    assert all(not path.exists() for path in artifacts)
+
+
+def test_browser_open_keeps_refusing_live_concurrent_profile_owner(tmp_path, monkeypatch):
+    service = BrowserHarnessService("whop-rewards")
+    profile = tmp_path / "chromium-profile"
+    profile.mkdir(parents=True)
+    artifacts = _write_profile_lock_artifacts(profile)
+    events: list[str] = []
+    rows = [
+        ProcessCommand(700, 1, "S", "python whop_cli/main.py campaigns list"),
+        ProcessCommand(
+            701,
+            700,
+            "S",
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome "
+            f"--user-data-dir={profile}",
+        ),
+    ]
+
+    _prepare_recovery_launch(service, monkeypatch, events)
+    monkeypatch.setattr(service, "_list_process_table", lambda: list(rows))
+    monkeypatch.setattr(
+        driver,
+        "terminate_profile_processes",
+        lambda *args, **kwargs: pytest.fail("a live concurrent CLI owner must never be terminated"),
+    )
+    monkeypatch.setattr(
+        driver.subprocess,
+        "Popen",
+        lambda *args, **kwargs: pytest.fail("Chrome must not be spawned while a live CLI owns the profile"),
+    )
+
+    with pytest.raises(BrowserHarnessError) as excinfo:
+        service.browser_open(persistent_profile_dir=profile)
+
+    assert str(excinfo.value) == format_profile_in_use_message(
+        profile.resolve(),
+        ProfileProcessOwner(701, 700, "python whop_cli/main.py campaigns list"),
+    )
+    assert events == ["restart"]
+    assert all(path.exists() for path in artifacts)
+    assert service._lifecycle_lock_file is None
+
+
+def test_browser_open_orphan_recovery_is_bounded_and_raises_existing_error(tmp_path, monkeypatch):
+    service = BrowserHarnessService("whop-rewards")
+    profile = tmp_path / "chromium-profile"
+    profile.mkdir(parents=True)
+    artifacts = _write_profile_lock_artifacts(profile)
+    rows = _orphaned_owner_rows(profile)
+    events: list[str] = []
+    cleanup_calls: list[str] = []
+    terminated: list[Path] = []
+
+    _prepare_recovery_launch(service, monkeypatch, events)
+    monkeypatch.setattr(service, "_list_process_table", lambda: list(rows))
+    monkeypatch.setattr(
+        driver,
+        "terminate_profile_processes",
+        lambda owner_profile: terminated.append(owner_profile),
+    )
+    monkeypatch.setattr(
+        driver.subprocess,
+        "Popen",
+        lambda *args, **kwargs: pytest.fail("Chrome must not be spawned while the profile is refused"),
+    )
+    monkeypatch.setattr(
+        driver.os,
+        "kill",
+        lambda *args: pytest.fail("recovery must terminate through terminate_profile_processes"),
+    )
+    original_cleanup = service._cleanup_session_lock_files
+
+    def counting_cleanup() -> None:
+        cleanup_calls.append("cleanup")
+        original_cleanup()
+
+    monkeypatch.setattr(service, "_cleanup_session_lock_files", counting_cleanup)
+
+    with pytest.raises(BrowserHarnessError) as excinfo:
+        service.browser_open(persistent_profile_dir=profile)
+
+    assert cleanup_calls == ["cleanup"] * (1 + driver._ORPHANED_OWNER_RECOVERY_ATTEMPTS)
+    assert terminated == [profile.resolve()]
+    assert str(excinfo.value) == format_profile_in_use_message(
+        profile.resolve(),
+        ProfileProcessOwner(67564, 1, "/sbin/launchd"),
+    )
+    assert all(path.exists() for path in artifacts)
+
+
+def test_browser_open_still_refuses_when_orphan_cannot_be_terminated(tmp_path, monkeypatch):
+    """A failed reclaim surfaces today's refusal, not the termination error."""
+    service = BrowserHarnessService("whop-rewards")
+    profile = tmp_path / "chromium-profile"
+    profile.mkdir(parents=True)
+    artifacts = _write_profile_lock_artifacts(profile)
+    rows = _orphaned_owner_rows(profile)
+    events: list[str] = []
+
+    _prepare_recovery_launch(service, monkeypatch, events)
+    monkeypatch.setattr(service, "_list_process_table", lambda: list(rows))
+    monkeypatch.setattr(
+        driver,
+        "terminate_profile_processes",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            RuntimeError("Browser process 67564 did not exit")
+        ),
+    )
+    monkeypatch.setattr(
+        driver.subprocess,
+        "Popen",
+        lambda *args, **kwargs: pytest.fail("Chrome must not be spawned while the profile is refused"),
+    )
+
+    with pytest.raises(BrowserHarnessError) as excinfo:
+        service.browser_open(persistent_profile_dir=profile)
+
+    assert str(excinfo.value) == format_profile_in_use_message(
+        profile.resolve(),
+        ProfileProcessOwner(67564, 1, "/sbin/launchd"),
+    )
+    assert all(path.exists() for path in artifacts)
 
 
 def test_browser_open_surfaces_stale_cleanup_failure(tmp_path, monkeypatch):

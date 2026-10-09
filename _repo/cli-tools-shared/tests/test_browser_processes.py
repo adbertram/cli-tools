@@ -5,10 +5,12 @@ import sys
 import types
 
 from cli_tools_shared.browser.processes import (
+    ProfileProcessOwner,
     ProcessCommand,
     command_user_data_dir,
     is_chromium_process_command,
     profile_lifecycle_lock_path,
+    profile_owner_is_orphaned,
     profile_process_owner,
     profile_process_pids,
     protected_process_ids,
@@ -226,6 +228,32 @@ def test_profile_owner_matches_equivalent_user_data_dir_path(tmp_path):
 
     assert owner is not None
     assert owner.pid == 701
+
+
+def test_profile_owner_is_orphaned_when_parent_is_init_missing_or_zombie():
+    """launchd/init, a gone parent, and a zombie parent all prove the CLI is gone."""
+    rows = [
+        ProcessCommand(1, 0, "S", "/sbin/launchd"),
+        ProcessCommand(4242, 1, "Z", "python whop_cli/main.py campaigns list"),
+    ]
+
+    assert profile_owner_is_orphaned(
+        ProfileProcessOwner(67564, 1, "/sbin/launchd"), processes=rows
+    )
+    assert profile_owner_is_orphaned(ProfileProcessOwner(67564, 0, None), processes=rows)
+    assert profile_owner_is_orphaned(ProfileProcessOwner(67564, 40000, None), processes=rows)
+    assert profile_owner_is_orphaned(
+        ProfileProcessOwner(67564, 4242, "python whop_cli/main.py campaigns list"), processes=rows
+    )
+
+
+def test_profile_owner_is_not_orphaned_while_owning_cli_parent_is_running():
+    """A running non-init parent is a live concurrent CLI and stays protected."""
+    rows = [ProcessCommand(700, 1, "S", "python whop_cli/main.py campaigns list")]
+
+    assert not profile_owner_is_orphaned(
+        ProfileProcessOwner(701, 700, "python whop_cli/main.py campaigns list"), processes=rows
+    )
 
 
 def test_terminate_profile_processes_stops_only_profile_owned_pids(tmp_path, monkeypatch):

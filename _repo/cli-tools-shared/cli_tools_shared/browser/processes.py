@@ -386,6 +386,28 @@ def profile_process_owner(
     )
 
 
+def profile_owner_is_orphaned(
+    owner: ProfileProcessOwner,
+    *,
+    processes: Iterable[ProcessCommand],
+) -> bool:
+    """Return whether ``owner``'s parent proves the owning CLI is gone.
+
+    Chrome is reparented to launchd/init (PID 1) when the CLI that launched it
+    exits or is killed, and a parent that never got reaped shows up as a
+    zombie. Neither can still be running the CLI that owns the profile, so the
+    owner is an orphan that may be terminated. A parent that is a running,
+    non-init process is a live concurrent CLI and stays protected.
+    """
+    rows = list(processes)
+    if owner.parent_pid <= 1:
+        return True
+    parent = next((proc for proc in rows if proc.pid == owner.parent_pid), None)
+    if parent is None:
+        return True
+    return parent.stat.startswith("Z")
+
+
 def _pid_running(pid: int, *, timeout: float | None = None) -> bool:
     for process in list_process_commands(**({"timeout": timeout} if timeout is not None else {})):
         if process.pid == pid:
