@@ -1,5 +1,5 @@
 """Whop browser profiles and explicit Content Rewards location."""
-from cli_tools_shared.config import BaseConfig, resolve_tool_dir
+from cli_tools_shared.config import BaseConfig, config_for, resolve_tool_dir
 from cli_tools_shared.credentials import CredentialType
 from cli_tools_shared.exceptions import ClientError
 from urllib.parse import urlsplit
@@ -53,5 +53,8 @@ class Config(BaseConfig):
         finally:
             client.close()
 
+_configs = {}
+
+
 def get_config(profile=None):
-    return Config(profile=profile)
+    return config_for(Config, profile, _configs)

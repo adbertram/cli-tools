@@ -1,7 +1,7 @@
 """Configuration management for Fedex CLI."""
 from pathlib import Path
 from typing import Optional
-from cli_tools_shared.config import BaseConfig, resolve_tool_dir
+from cli_tools_shared.config import BaseConfig, config_for, resolve_tool_dir
 from cli_tools_shared.credentials import CredentialType
 
 
@@ -93,6 +93,9 @@ class Config(BaseConfig):
         return self._get("DEFAULT_PACKAGE_LOCATION")
 
 
+_configs = {}
+
+
 def get_config(profile=None) -> Config:
     """Get a Config instance for the given profile."""
-    return Config(profile=profile)
+    return config_for(Config, profile, _configs)
