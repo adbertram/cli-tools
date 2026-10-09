@@ -8,7 +8,7 @@
 | **Per-authentication-profile `.env` file required** | CLI-managed auth runtime state and auth-specific config are stored in `authentication_profiles/<profile>/.env` |
 | **`.env.example` file** | Template documenting all required variables (committed to git) |
 | **`Config` inherits `BaseConfig`** | Use `cli_tools_shared.config.BaseConfig` for canonical user-data path resolution |
-| **Singleton pattern** | Use `get_config()` to access configuration |
+| **One config per invocation** | Build `get_config()` with `config_getter(Config)` (or `config_for`, below); never `return Config(profile=profile)` and never a hand-written cache keyed on `profile or "_default"` |
 | **Token persistence** | OAuth tokens must be saved back to `.env` after refresh |
 | **Secret manager for reusable CLI secrets** | Follow `references/secrets.md` |
 
@@ -110,6 +110,37 @@ class Config(BaseConfig):
 `BaseConfig.__init__` sets `self.config_env_file_path` to the tool-level config `.env`, sets `self.env_file_path` to the resolved authentication profile `.env`, and loads both via dotenv. Tools should never compute paths from `Path(__file__).resolve().parent.parent` — that pattern resolves to the source repo, which is wrong under the user profile layout.
 
 For tools that manage their own custom field set (instead of declaring `CREDENTIAL_TYPES`), set `CREDENTIAL_TYPES: list = []` and override `has_credentials` / `save_*` / `clear_credentials`. The path resolution still inherits from `BaseConfig`.
+
+## One Config Per Invocation: `config_getter` and `config_for`
+
+The command registry builds the config with the resolved profile name for its credential check, then the API client calls `get_config()` with no profile. Both calls must return the same instance, or every invocation builds two configs and resolves each profile secret twice. `cli_tools_shared.config` provides the one cache-key rule (explicit profile, else the runtime profile the registry set, else `"_default"`):
+
+```python
+from cli_tools_shared.config import BaseConfig, config_getter
+
+class Config(BaseConfig):
+    ...
+
+get_config = config_getter(Config)
+```
+
+`config_getter(Config)` returns a `get_config(profile=None)` that builds one `Config` per resolved profile. It exposes `get_config.config_cls` (the shared auth, profile, and registry commands read the class from it) and `get_config.cache_clear()` (tests use it instead of reaching into a module dict). Use it for every new CLI and for any CLI you touch whose `get_config` is not already in the wrapper form below.
+
+`config_for(Config, profile, cache)` is the lower-level helper behind it. The API and browser scaffold templates, `oauth-migration.md`, and most existing CLIs still use the older wrapper form, which is an accepted legacy shape; do not rewrite it only for style:
+
+```python
+from cli_tools_shared.config import config_for
+
+_configs = {}
+
+
+def get_config(profile=None) -> Config:
+    return config_for(Config, profile, _configs)
+```
+
+A CLI that must default the profile from its own state (for example `set_global_profile`) keeps the wrapper and passes the effective profile: `config_for(Config, profile if profile is not None else _global_profile, _configs)`. The shared command layers find the class behind a wrapper through `config_class_of`, which reads `config_cls` first and otherwise probes the wrapper's return annotation, module-level `Config`, and closure.
+
+A `get_config` that builds a fresh `Config` per call, or caches under its own key, is a defect: it makes each invocation build the config twice. CLIs whose config genuinely varies per call (profile auth type, environment variables in the key, or an explicit "never cache across profile switches") are the only exceptions and must say why in a comment.
 
 ## Direct Python Probes
 
