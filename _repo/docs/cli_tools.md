@@ -102,6 +102,7 @@
 | `reminders` | The `reminders` CLI provides a command-line interface for macOS Reminders. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `ring` | The `ring` CLI provides a command-line interface for Ring devices via python-ring-doorbell. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `roomba` | The `roomba` CLI provides a command-line interface for Roomba API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `scrunch` | The `scrunch` CLI provides a command-line interface for the Scrunch AI API (brand visibility, AI search analytics, competitors, personas, prompts, page audits, and agent traffic). Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `shippo` | The `shippo` CLI provides a command-line interface for Shippo API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `shopgoodwill` | The `shopgoodwill` CLI provides a command-line interface for ShopGoodwill. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `shopsalvationarmy` | The `shopsalvationarmy` CLI provides a command-line interface for Shop The Salvation Army auction site. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
