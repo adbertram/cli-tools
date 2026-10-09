@@ -47,4 +47,5 @@ def isolated_user_data_and_in_memory_secret_manager(tmp_path, monkeypatch):
         raise AssertionError(f"Unsupported secret-manager command in test: {command}")
 
     monkeypatch.setattr(config_module, "_run_secret_manager", fake_run)
+    monkeypatch.setattr(config_module, "_resolved_secret_cache", {})
     return secrets

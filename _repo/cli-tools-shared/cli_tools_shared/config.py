@@ -323,16 +323,35 @@ def read_cli_tool_secret(secret_name: str) -> Optional[str]:
     )
 
 
+# Per-process memo of resolved profile secrets, keyed by
+# (secret_name, str(profile_path)). One CLI invocation builds its config more
+# than once (the command credential check, then the API client), and each build
+# would otherwise spawn the secret manager again for the same value. Only
+# successful reads are stored; a missing secret raises on every lookup. Writes
+# and deletes through this module evict every entry for that secret name.
+_resolved_secret_cache: dict[tuple[str, str], str] = {}
+
+
+def _forget_secret_value(secret_name: str) -> None:
+    for key in [key for key in _resolved_secret_cache if key[0] == secret_name]:
+        del _resolved_secret_cache[key]
+
+
 def _get_secret_value(secret_name: str, profile_path: Path) -> str:
+    key = (secret_name, str(profile_path))
+    if key in _resolved_secret_cache:
+        return _resolved_secret_cache[key]
     value = read_cli_tool_secret(secret_name)
     if value is None:
         raise ConfigError(
             f"Missing secret '{secret_name}' referenced by {profile_path}."
         )
+    _resolved_secret_cache[key] = value
     return value
 
 
 def _set_secret_value(secret_name: str, value: str, profile_path: Path) -> None:
+    _forget_secret_value(secret_name)
     result = _run_secret_manager("set", secret_name, secret_value=value)
     if result.returncode != 0:
         raise ConfigError(
@@ -341,6 +360,7 @@ def _set_secret_value(secret_name: str, value: str, profile_path: Path) -> None:
 
 
 def _delete_secret_value(secret_name: str, profile_path: Path) -> None:
+    _forget_secret_value(secret_name)
     result = _run_secret_manager("delete", secret_name)
     if result.returncode != 0:
         raise ConfigError(

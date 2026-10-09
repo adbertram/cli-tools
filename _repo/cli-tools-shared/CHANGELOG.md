@@ -12,6 +12,15 @@
   moved onto it. Tests: `tests/test_auth.py`.
 
 ### Fixes
+- A CLI invocation now runs the secret manager once per profile secret instead
+  of once per config build. The command credential check and the API client
+  each built a `BaseConfig`, so every call spawned `secrets.sh get` twice for
+  the same token (airtable: ~0.1s of each call). `_get_secret_value` memoizes
+  successful reads per process, keyed by secret name and profile path; a missing
+  secret or a secret-manager error is never stored and fails on every lookup,
+  and `_set_secret_value` / `_delete_secret_value` (auth login, `_clear`,
+  profile rename) evict that secret name first. Tests:
+  `tests/test_secret_resolution_cache.py`.
 - `bounded_read.run_bounded_read` works on macOS under Python 3.11 and 3.12, the
   versions the package declares: it called `os.waitid`, which macOS only has from
   Python 3.13, so every bounded read raised `AttributeError` there. Where `os.waitid`
