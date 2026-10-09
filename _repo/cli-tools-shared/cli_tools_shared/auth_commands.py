@@ -16,6 +16,7 @@ from .credentials import (
 from .exceptions import ConfigError
 from .config import (
     BaseConfig,
+    config_class_of,
     get_profile_auth_settings,
     resolve_tool_dir,
     root_config_field_names_for,
@@ -798,7 +799,7 @@ def _resolve_profile_names(get_config_fn, requested_profile: Optional[str], tool
 
     from .profiles import list_profiles
 
-    config_cls = _get_config_class(get_config_fn)
+    config_cls = config_class_of(get_config_fn)
     configured_credential_types = list(
         getattr(config_cls, "CREDENTIAL_TYPES", None)
         or []
@@ -808,22 +809,6 @@ def _resolve_profile_names(get_config_fn, requested_profile: Optional[str], tool
     if not profile_entries:
         return [None]
     return [entry["name"] for entry in profile_entries]
-
-
-def _get_config_class(get_config_fn):
-    get_config_fn = getattr(get_config_fn, "__wrapped__", get_config_fn)
-    annotations = getattr(get_config_fn, "__annotations__", {}) or {}
-    config_cls = annotations.get("return")
-    if config_cls is not None:
-        return config_cls
-    config_cls = getattr(get_config_fn, "__globals__", {}).get("Config")
-    if config_cls is not None:
-        return config_cls
-    for cell in getattr(get_config_fn, "__closure__", ()) or ():
-        value = cell.cell_contents
-        if isinstance(value, type) and hasattr(value, "CREDENTIAL_TYPES"):
-            return value
-    return None
 
 
 def _tool_dir_from_closure(get_config_fn):
@@ -893,7 +878,7 @@ def _collect_profile_statuses(
 
     profile_names = _resolve_profile_names(get_config_fn, profile, tool_name)
 
-    config_cls = _get_config_class(get_config_fn)
+    config_cls = config_class_of(get_config_fn)
     profile_store = _get_profile_store_for_auth(get_config_fn, config_cls, tool_name)
     profile_map = {
         entry["name"]: entry
@@ -1012,7 +997,7 @@ def _bootstrap_profile_if_missing(get_config_fn, requested_profile: Optional[str
     """
     from .profiles import create_profile, list_profiles
 
-    config_cls = _get_config_class(get_config_fn)
+    config_cls = config_class_of(get_config_fn)
     profile_store = _get_profile_store_for_auth(get_config_fn, config_cls, tool_name)
     existing = list_profiles(profile_store)
     existing_names = {entry["name"] for entry in existing}
@@ -1039,7 +1024,7 @@ def _require_profile_for_multi_auth_login(
 ) -> None:
     if requested_profile:
         return
-    config_cls = _get_config_class(get_config_fn)
+    config_cls = config_class_of(get_config_fn)
     profile_auth_settings = get_profile_auth_settings(config_cls) if config_cls is not None else None
     if profile_auth_settings is None:
         return
@@ -1108,7 +1093,7 @@ def create_auth_app(
         + profiles, + test if test_handler provided).
     """
     app = typer.Typer(help=f"Manage {tool_name} authentication", no_args_is_help=True)
-    config_cls = _get_config_class(get_config_fn)
+    config_cls = config_class_of(get_config_fn)
     probe_config = None
     if config_cls is None:
         try:

@@ -107,6 +107,50 @@ def config_for(config_cls, profile: Optional[str], cache: dict):
     return cache[key]
 
 
+def config_getter(config_cls):
+    """Return a ``get_config(profile=None)`` for ``config_cls``.
+
+    The CLI's ``config.py`` ends with ``get_config = config_getter(Config)``.
+    The result builds one config per resolved profile (see ``config_for``) and
+    carries ``config_cls`` so the shared command layers can read the class
+    directly, plus ``cache_clear()`` to drop the built configs.
+    """
+    cache: dict = {}
+
+    def get_config(profile: Optional[str] = None):
+        return config_for(config_cls, profile, cache)
+
+    get_config.config_cls = config_cls
+    get_config.cache_clear = cache.clear
+    return get_config
+
+
+def config_class_of(get_config_fn):
+    """Return the Config class behind a CLI's ``get_config`` function.
+
+    A ``config_getter`` result exposes it as ``config_cls``. Older CLIs wrote
+    ``get_config`` by hand around ``config_for``; for those the class is found
+    on the function's ``__wrapped__``/return annotation, its module-level
+    ``Config``, or its closure. Returns ``None`` when none applies.
+    """
+    config_cls = getattr(get_config_fn, "config_cls", None)
+    if config_cls is not None:
+        return config_cls
+    get_config_fn = getattr(get_config_fn, "__wrapped__", get_config_fn)
+    annotations = getattr(get_config_fn, "__annotations__", {}) or {}
+    config_cls = annotations.get("return")
+    if config_cls is not None:
+        return config_cls
+    config_cls = getattr(get_config_fn, "__globals__", {}).get("Config")
+    if config_cls is not None:
+        return config_cls
+    for cell in getattr(get_config_fn, "__closure__", ()) or ():
+        value = cell.cell_contents
+        if isinstance(value, type) and hasattr(value, "CREDENTIAL_TYPES"):
+            return value
+    return None
+
+
 def read_profile_active(env_path: Path) -> Optional[bool]:
     """Read ACTIVE from an env file without loading into os.environ."""
     try:
