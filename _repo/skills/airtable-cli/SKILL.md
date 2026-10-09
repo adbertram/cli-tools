@@ -26,6 +26,7 @@ airtable <command-group> <action> [arguments] [options]
 | Create a record | `airtable records create "Table" "Field=Value"` |
 | Update a record | `airtable records update "Table" recXXX "Field=Value"` |
 | Delete a record | `airtable records delete "Table" recXXX` |
+| Delete several records (10 per request) | `airtable records delete-many "Table" recA recB --yes` |
 | List tables in a base | `airtable tables list --base appXXX` |
 | Create a table | `airtable tables create "Table Name" --base appXXX` |
 | Update a table | `airtable tables update tblXXX --name "New Name"` |
@@ -56,7 +57,7 @@ For named-base work, resolve the base ID in the same sequential shell flow that 
 - **bases** -- Discover the bases the active Personal Access Token can access (list, get). `bases list` follows the Metadata API `offset` pagination to return every accessible base; `bases get <id-or-name>` resolves one base to its id/name/permissionLevel. Airtable exposes no single-base detail endpoint, so `get` resolves from the full listing.
 - **tables** -- Airtable table schema operations (list, create, update). Note: Airtable's public Meta API does not expose a delete-table endpoint.
 - **fields** -- Airtable field schema operations (list, create, update). Airtable's public Web/Meta API does not support deleting fields.
-- **records** -- CRUD operations on Airtable records (list, get, create, update, delete)
+- **records** -- CRUD operations on Airtable records (list, get, create, update, delete, delete-many). `delete-many` sends one request per 10 IDs; on a failed request it stops, prints the already-deleted rows to stdout, names the failed, deleted, and not-attempted IDs on stderr, and exits 1.
 </principle>
 
 <principle name="Confirmation In Non-Interactive Contexts">
@@ -64,7 +65,7 @@ For named-base work, resolve the base ID in the same sequential shell flow that 
 Bash tools, pipes, CI). Without a TTY they cannot show an interactive
 confirmation prompt, so they fail fast with a clear refusal
 (`Refusing to delete ... Re-run with --yes in non-interactive contexts.`) and a
-non-zero exit instead of hanging. Always pass `--yes` for `records delete` (and
+non-zero exit instead of hanging. Always pass `--yes` for `records delete` and `records delete-many` (and
 `auth profiles delete` uses `--force`/`-F`) from any agent or script.
 
 ```bash

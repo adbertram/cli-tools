@@ -105,6 +105,19 @@ def _validate_record_id(record_id: str) -> str:
     return record_id
 
 
+class PartialDeleteError(ClientError):
+    """A batch delete stopped at a failed chunk.
+
+    ``deleted`` holds the ``{"id", "deleted"}`` rows Airtable confirmed for the
+    chunks that completed before the failure, so callers can report exactly
+    which records are already gone.
+    """
+
+    def __init__(self, message: str, deleted: List[Dict[str, Any]]):
+        super().__init__(message)
+        self.deleted = deleted
+
+
 class AirtableClient:
     """Client for interacting with Airtable API."""
 
@@ -117,6 +130,10 @@ class AirtableClient:
 
     # Retryable HTTP status codes
     RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+
+    # Airtable batch write endpoints (including delete-multiple-records) accept
+    # at most 10 records per request.
+    DELETE_BATCH_SIZE = 10
 
     # Attachment uploads use a separate content host, not the standard API host.
     CONTENT_BASE_URL = "https://content.airtable.com/v0"
@@ -450,6 +467,42 @@ class AirtableClient:
         _validate_record_id(record_id)
         endpoint = f"/{base_id}/{table_id}/{quote(record_id, safe='')}"
         return self._make_request("DELETE", endpoint)
+
+    def delete_records(
+        self, base_id: str, table_id: str, record_ids: List[str]
+    ) -> List[Dict[str, Any]]:
+        """Delete records in chunks of 10, one DELETE request per chunk.
+
+        Uses DELETE /{baseId}/{tableIdOrName}?records[]=recA&records[]=recB and
+        returns the combined ``{"id", "deleted"}`` rows from every chunk. Every
+        ID is validated before any request is sent. If a chunk fails, no later
+        chunk is attempted and ``PartialDeleteError`` carries the rows already
+        deleted by earlier chunks.
+        """
+        for record_id in record_ids:
+            _validate_record_id(record_id)
+
+        endpoint = f"/{base_id}/{table_id}"
+        size = self.DELETE_BATCH_SIZE
+        chunks = [record_ids[i:i + size] for i in range(0, len(record_ids), size)]
+        deleted: List[Dict[str, Any]] = []
+
+        for index, chunk in enumerate(chunks, start=1):
+            try:
+                result = self._make_request("DELETE", endpoint, params={"records[]": chunk})
+            except ClientError as exc:
+                done = [row["id"] for row in deleted]
+                not_attempted = [rid for later in chunks[index:] for rid in later]
+                raise PartialDeleteError(
+                    f"Chunk {index} of {len(chunks)} failed for "
+                    f"{', '.join(chunk)}: {exc}. "
+                    f"Deleted in completed chunks ({len(done)}): {', '.join(done) or 'none'}. "
+                    f"Not attempted ({len(not_attempted)}): {', '.join(not_attempted) or 'none'}.",
+                    deleted,
+                ) from exc
+            deleted.extend(result.get("records", []))
+
+        return deleted
 
     def upload_attachment(
         self,

@@ -6,6 +6,9 @@ COMMAND_CREDENTIALS = {
     "delete": [
         "personal_access_token"
     ],
+    "delete-many": [
+        "personal_access_token"
+    ],
     "get": [
         "personal_access_token"
     ],
@@ -24,7 +27,7 @@ import json
 import typer
 from typing import Optional, List
 
-from ..client import get_client
+from ..client import PartialDeleteError, get_client
 from ..config import get_config
 from cli_tools_shared.output import print_json, print_table, print_success, print_info, print_error, confirm_destructive_action, command
 from cli_tools_shared.filters import FilterValidationError, apply_filters, validate_filters
@@ -394,6 +397,44 @@ def records_delete(
     result = client.delete_record(resolved_base_id, table_id, record_id)
     print_success(f"Record {record_id} deleted successfully")
     print_json(result)
+
+
+@app.command("delete-many")
+@command
+def records_delete_many(
+    table_id: str = typer.Argument(..., help="The table ID or name"),
+    record_ids: List[str] = typer.Argument(..., help="One or more record IDs to delete"),
+    base_id: Optional[str] = typer.Option(None, "--base", "-b", help="The base ID (defaults to AIRTABLE_BASE_ID)"),
+    confirm: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+):
+    """
+    Delete several records, sending up to 10 IDs per Airtable request.
+
+    Prints the combined [{"id", "deleted"}] rows. If a request fails, later
+    requests are not sent, stdout holds the rows already deleted, and stderr
+    names the failed chunk, the IDs deleted before it, and the IDs not attempted.
+
+    Examples:
+        airtable records delete-many "Tasks" recAAA recBBB
+        airtable records delete-many "Tasks" recAAA recBBB recCCC --base appXXX --yes
+    """
+    resolved_base_id = resolve_base_id(base_id)
+    count = len(record_ids)
+
+    confirm_destructive_action(
+        f"Are you sure you want to delete {count} record(s): {', '.join(record_ids)}?",
+        assume_yes=confirm,
+        action_description=f"delete {count} record(s)",
+    )
+
+    client = get_client()
+    try:
+        deleted = client.delete_records(resolved_base_id, table_id, record_ids)
+    except PartialDeleteError as exc:
+        print_json(exc.deleted)
+        raise
+    print_success(f"Deleted {len(deleted)} record(s)")
+    print_json(deleted)
 
 
 @app.command("upload-attachment")

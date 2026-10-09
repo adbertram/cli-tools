@@ -2,8 +2,8 @@
   "tool": "airtable",
   "description": "CLI interface for Airtable API",
   "usage_instructions": "Use `airtable auth login` first to configure credentials for the default or named profile, then use `tables list`, `tables get`, `fields list`, `fields get`, and `records list` against the configured base. Base ID defaults to `AIRTABLE_BASE_ID`; override with `--base/-b` when the target base matters. Table-name arguments are Airtable table names inside the selected base, not project CLI resource names such as CourseCraft `modules`.",
-  "discovered_at": "2026-09-22T14:28:50Z",
-  "total_commands": 29,
+  "discovered_at": "2026-10-09T17:42:35Z",
+  "total_commands": 30,
   "global_options": [
     {
       "name": "--version",
@@ -795,6 +795,50 @@
             }
           ]
         },
+        "delete-many": {
+          "help": "Delete several records, sending up to 10 IDs per Airtable request. Prints the combined [{\"id\", \"deleted\"}] rows. If a request fails, later requests are not sent, stdout holds the rows already deleted, and stderr names the failed chunk, the IDs deleted before it, and the IDs not attempted.",
+          "examples": [
+            "airtable records delete-many \"Tasks\" recAAA recBBB",
+            "airtable records delete-many \"Tasks\" recAAA recBBB recCCC --base appXXX --yes"
+          ],
+          "arguments": [
+            {
+              "name": "table_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The table ID or name"
+            },
+            {
+              "name": "record_ids",
+              "type": "TEXT",
+              "required": true,
+              "help": "One or more record IDs to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--base",
+              "type": "TEXT",
+              "required": false,
+              "help": "The base ID (defaults to AIRTABLE_BASE_ID)",
+              "short": "-b"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation prompt",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "get": {
           "help": "Get a specific record by ID.",
           "examples": [
@@ -948,7 +992,7 @@
           ]
         },
         "update": {
-          "help": "{field_values}... Update a record's fields. Use PATCH (default) to update only specified fields, or --replace for PUT to clear unspecified fields.",
+          "help": "Update a record's fields. Use PATCH (default) to update only specified fields, or --replace for PUT to clear unspecified fields.",
           "examples": [
             "airtable records update \"Tasks\" recXXX \"Status=Complete\" \"Priority=High\"",
             "airtable records update \"Tasks\" recXXX \"Name=New Task\" --replace",
@@ -1006,7 +1050,7 @@
           ]
         },
         "upload-attachment": {
-          "help": "{file_path} Upload a local file to a record's attachment field. Uses Airtable's content-upload endpoint, which requires an existing record and caps the base64 payload at 5 MB. For larger files, host the file and attach it by URL via `records update <table> <record> 'Field=[{\"url\":\"...\"}]'`.",
+          "help": "Upload a local file to a record's attachment field. Uses Airtable's content-upload endpoint, which requires an existing record and caps the base64 payload at 5 MB. For larger files, host the file and attach it by URL via `records update <table> <record> 'Field=[{\"url\":\"...\"}]'`.",
           "examples": [
             "airtable records upload-attachment recXXX \"Image\" ./diagram.png --base appXXX",
             "airtable records upload-attachment recXXX \"Image\" ./file.bin --content-type image/png --base appXXX"

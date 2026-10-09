@@ -234,6 +234,18 @@ airtable records delete "Tasks" recXXX
 airtable records delete "Tasks" recXXX --yes
 ```
 
+#### Delete Many Records
+
+Sends one Airtable request per 10 IDs and prints the combined `[{"id": "rec...", "deleted": true}]` rows. If a request fails, later requests are not sent, stdout holds the rows already deleted, stderr names the failed chunk plus the deleted and not-attempted IDs, and the exit code is 1.
+
+```bash
+# Delete several records (with confirmation prompt)
+airtable records delete-many "Tasks" recAAA recBBB recCCC
+
+# Delete without confirmation
+airtable records delete-many "Tasks" recAAA recBBB recCCC --base appXXX --yes
+```
+
 ### Fields
 
 Field schema write endpoints require Airtable table IDs beginning with `tbl`, and the CLI resolves table names to IDs before calling those endpoints.
