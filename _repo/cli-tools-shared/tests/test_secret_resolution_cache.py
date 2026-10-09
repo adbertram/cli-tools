@@ -11,6 +11,7 @@ in-memory store and resets the memo for each test.
 
 from pathlib import Path
 import subprocess
+import threading
 
 import pytest
 
@@ -150,3 +151,62 @@ def test_profile_rename_evicts_old_secret_name(tmp_path, store):
     with pytest.raises(ConfigError, match="Missing secret 'exampletool-staging-api-key'"):
         config_module._get_secret_value("exampletool-staging-api-key", old_env)
     assert ApiKeyConfig(tool_dir=tool_dir, profile="production").api_key == "staging-key"
+
+
+def test_failed_set_keeps_the_memoized_value(tmp_path, store, monkeypatch):
+    secrets, calls = store
+    secrets["exampletool-api-key"] = "old-key"
+    tool_dir = _profile(tmp_path, "ACTIVE=true\nAPI_KEY=secret://exampletool-api-key\n")
+    env = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
+    assert ApiKeyConfig(tool_dir=tool_dir).api_key == "old-key"
+
+    monkeypatch.setattr(
+        config_module,
+        "_run_secret_manager",
+        lambda command, secret_name, *, secret_value=None: subprocess.CompletedProcess([], 1, stdout="", stderr="locked"),
+    )
+    with pytest.raises(ConfigError, match="Failed to store secret 'exampletool-api-key'"):
+        config_module._set_secret_value("exampletool-api-key", "new-key", env)
+
+    # Still served from the memo: the failed write changed nothing.
+    assert config_module._get_secret_value("exampletool-api-key", env) == "old-key"
+
+
+def test_read_in_flight_during_set_cannot_memoize_the_old_value_after_the_write(tmp_path, store, monkeypatch):
+    """A read already talking to the secret manager when a rotation starts.
+
+    The read returns the old value; the rotation must not finish (and evict)
+    until that read has memoized it, otherwise the old value would be stored
+    after the eviction and served for the rest of the process.
+    """
+    secrets, _calls = store
+    secrets["exampletool-api-key"] = "OLD"
+    profile_path = tmp_path / "profile" / ".env"
+    real_run = config_module._run_secret_manager
+    read_started = threading.Event()
+    release_read = threading.Event()
+
+    def slow_get(command, secret_name, *, secret_value=None):
+        result = real_run(command, secret_name, secret_value=secret_value)
+        if command == "get":
+            read_started.set()
+            assert release_read.wait(5)
+        return result
+
+    monkeypatch.setattr(config_module, "_run_secret_manager", slow_get)
+    reader = threading.Thread(
+        target=config_module._get_secret_value, args=("exampletool-api-key", profile_path)
+    )
+    writer = threading.Thread(
+        target=config_module._set_secret_value, args=("exampletool-api-key", "NEW", profile_path)
+    )
+    reader.start()
+    assert read_started.wait(5)
+    writer.start()
+    writer.join(0.3)  # without the lock the write and its eviction finish here
+    release_read.set()
+    reader.join(5)
+    writer.join(5)
+
+    monkeypatch.setattr(config_module, "_run_secret_manager", real_run)
+    assert config_module._get_secret_value("exampletool-api-key", profile_path) == "NEW"

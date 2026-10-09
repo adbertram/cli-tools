@@ -5,6 +5,7 @@ import os
 import subprocess
 import shutil
 import sys
+import threading
 import time
 from contextvars import ContextVar
 from pathlib import Path
@@ -345,8 +346,12 @@ def read_cli_tool_secret(secret_name: str) -> Optional[str]:
 # than once (the command credential check, then the API client), and each build
 # would otherwise spawn the secret manager again for the same value. Only
 # successful reads are stored; a missing secret raises on every lookup. Writes
-# and deletes through this module evict every entry for that secret name.
+# and deletes through this module evict every entry for that secret name once
+# the secret manager has changed it. `_secret_memo_lock` is held across a read
+# and its memoization and across a write and its eviction, so a read that
+# overlaps a write can never memoize the pre-write value after the eviction.
 _resolved_secret_cache: dict[tuple[str, str], str] = {}
+_secret_memo_lock = threading.Lock()
 
 
 def _forget_secret_value(secret_name: str) -> None:
@@ -356,33 +361,36 @@ def _forget_secret_value(secret_name: str) -> None:
 
 def _get_secret_value(secret_name: str, profile_path: Path) -> str:
     key = (secret_name, str(profile_path))
-    if key in _resolved_secret_cache:
-        return _resolved_secret_cache[key]
-    value = read_cli_tool_secret(secret_name)
-    if value is None:
-        raise ConfigError(
-            f"Missing secret '{secret_name}' referenced by {profile_path}."
-        )
-    _resolved_secret_cache[key] = value
-    return value
+    with _secret_memo_lock:
+        if key in _resolved_secret_cache:
+            return _resolved_secret_cache[key]
+        value = read_cli_tool_secret(secret_name)
+        if value is None:
+            raise ConfigError(
+                f"Missing secret '{secret_name}' referenced by {profile_path}."
+            )
+        _resolved_secret_cache[key] = value
+        return value
 
 
 def _set_secret_value(secret_name: str, value: str, profile_path: Path) -> None:
-    _forget_secret_value(secret_name)
-    result = _run_secret_manager("set", secret_name, secret_value=value)
-    if result.returncode != 0:
-        raise ConfigError(
-            f"Failed to store secret '{secret_name}' for {profile_path}."
-        )
+    with _secret_memo_lock:
+        result = _run_secret_manager("set", secret_name, secret_value=value)
+        if result.returncode != 0:
+            raise ConfigError(
+                f"Failed to store secret '{secret_name}' for {profile_path}."
+            )
+        _forget_secret_value(secret_name)
 
 
 def _delete_secret_value(secret_name: str, profile_path: Path) -> None:
-    _forget_secret_value(secret_name)
-    result = _run_secret_manager("delete", secret_name)
-    if result.returncode != 0:
-        raise ConfigError(
-            f"Failed to delete secret '{secret_name}' for {profile_path}."
-        )
+    with _secret_memo_lock:
+        result = _run_secret_manager("delete", secret_name)
+        if result.returncode != 0:
+            raise ConfigError(
+                f"Failed to delete secret '{secret_name}' for {profile_path}."
+            )
+        _forget_secret_value(secret_name)
 
 
 def _secret_exists(secret_name: str) -> bool:
