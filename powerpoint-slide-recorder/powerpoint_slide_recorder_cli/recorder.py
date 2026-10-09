@@ -1118,19 +1118,30 @@ def click_steps_from_slide_index_walk(slide_numbers, observed_indexes):
 
 
 def terminal_next_click_after_effect_in_xml(part_xml):
-    """Return whether the part's final click effect owns a next-click after-effect."""
+    """Return whether the main sequence's final click effect owns a next-click after-effect.
+
+    Only the animation that plays counts: ``<p:timing>/<p:tnLst>``. The sibling
+    ``<p:bldLst>`` build templates also carry click effects but never play.
+    """
     root = ElementTree.fromstring(part_xml)
-    click_effect_tag = f"{{{PRESENTATIONML_NAMESPACE}}}cTn"
+    timing_tag = f"{{{PRESENTATIONML_NAMESPACE}}}timing"
+    timeline_tag = f"{{{PRESENTATIONML_NAMESPACE}}}tnLst"
+    time_node_tag = f"{{{PRESENTATIONML_NAMESPACE}}}cTn"
+    timeline = root.find(f"{timing_tag}/{timeline_tag}")
+    if timeline is None:
+        return False
     click_effects = [
         node
-        for node in root.iter(click_effect_tag)
+        for main_sequence in timeline.iter(time_node_tag)
+        if main_sequence.get("nodeType") == "mainSeq"
+        for node in main_sequence.iter(time_node_tag)
         if node.get("nodeType") == "clickEffect"
     ]
     if not click_effects:
         return False
     return any(
         node.get("masterRel") == "nextClick" and node.get("afterEffect") == "1"
-        for node in click_effects[-1].iter(click_effect_tag)
+        for node in click_effects[-1].iter(time_node_tag)
     )
 
 

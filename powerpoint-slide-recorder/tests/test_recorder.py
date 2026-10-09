@@ -2150,18 +2150,43 @@ class LiveClickStepProbeTests(unittest.TestCase):
         self.assertEqual(counts, {26: 5})
         self.assertEqual(terminal_after_effects, {26: 1})
 
-    def test_terminal_next_click_after_effect_in_xml_checks_only_the_final_click_effect(self):
-        nonterminal_only = f'''<p:sld xmlns:p="{TEST_PRESENTATIONML_NAMESPACE}">
-          <p:cTn nodeType="clickEffect"><p:cTn masterRel="nextClick" afterEffect="1"/></p:cTn>
-          <p:cTn nodeType="clickEffect"/>
-        </p:sld>'''.encode()
-        terminal = f'''<p:sld xmlns:p="{TEST_PRESENTATIONML_NAMESPACE}">
-          <p:cTn nodeType="clickEffect"><p:cTn masterRel="nextClick" afterEffect="1"/></p:cTn>
-          <p:cTn nodeType="clickEffect"><p:cTn masterRel="nextClick" afterEffect="1"/></p:cTn>
-        </p:sld>'''.encode()
+    @staticmethod
+    def _timing_part(main_sequence_steps, build_templates=""):
+        namespace = TEST_PRESENTATIONML_NAMESPACE
+        return f'''<p:sldLayout xmlns:p="{namespace}"><p:timing>
+          <p:tnLst><p:par><p:cTn nodeType="tmRoot"><p:childTnLst>
+            <p:seq><p:cTn nodeType="mainSeq"><p:childTnLst>{main_sequence_steps}</p:childTnLst></p:cTn></p:seq>
+          </p:childTnLst></p:cTn></p:par></p:tnLst>
+          <p:bldLst>{build_templates}</p:bldLst>
+        </p:timing></p:sldLayout>'''.encode()
 
-        self.assertFalse(record.terminal_next_click_after_effect_in_xml(nonterminal_only))
-        self.assertTrue(record.terminal_next_click_after_effect_in_xml(terminal))
+    AFTER_EFFECT_STEP = (
+        '<p:par><p:cTn nodeType="clickEffect"><p:cTn masterRel="nextClick" afterEffect="1"/></p:cTn></p:par>'
+    )
+    PLAIN_STEP = '<p:par><p:cTn nodeType="clickEffect"/></p:par>'
+    BUILD_TEMPLATES = (
+        '<p:bldP><p:tmplLst><p:tmpl><p:tnLst><p:par>'
+        '<p:cTn nodeType="clickEffect"><p:cTn masterRel="nextClick" afterEffect="1"/></p:cTn>'
+        '</p:par></p:tnLst></p:tmpl></p:tmplLst></p:bldP>'
+    )
+
+    def test_terminal_next_click_after_effect_in_xml_true_when_last_main_sequence_step_has_it(self):
+        part = self._timing_part(self.PLAIN_STEP + self.AFTER_EFFECT_STEP)
+
+        self.assertTrue(record.terminal_next_click_after_effect_in_xml(part))
+
+    def test_terminal_next_click_after_effect_in_xml_ignores_earlier_steps_and_build_templates(self):
+        part = self._timing_part(
+            self.AFTER_EFFECT_STEP + self.PLAIN_STEP,
+            build_templates=self.BUILD_TEMPLATES,
+        )
+
+        self.assertFalse(record.terminal_next_click_after_effect_in_xml(part))
+
+    def test_terminal_next_click_after_effect_in_xml_false_without_main_sequence_click_effects(self):
+        part = self._timing_part("", build_templates=self.BUILD_TEMPLATES)
+
+        self.assertFalse(record.terminal_next_click_after_effect_in_xml(part))
 
     def test_slide_layout_member_resolves_the_relationship_target(self):
         relationships = b'''<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
