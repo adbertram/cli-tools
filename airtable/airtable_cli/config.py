@@ -4,7 +4,7 @@ from typing import Optional
 
 import requests
 
-from cli_tools_shared.config import BaseConfig, resolve_tool_dir
+from cli_tools_shared.config import BaseConfig, get_runtime_profile_resolution, resolve_tool_dir
 from cli_tools_shared.credentials import CredentialType
 
 
@@ -46,8 +46,13 @@ _configs = {}
 
 
 def get_config(profile=None):
-    """Get or create a Config instance for the given profile."""
-    key = profile or "_default"
+    """Get or create a Config instance for the given profile.
+
+    The cache key is the resolved profile: the command registry builds the
+    config with the resolved profile name and then the client asks again with
+    no profile, so both calls must land on the same instance.
+    """
+    key = profile or get_runtime_profile_resolution()[0] or "_default"
     if key not in _configs:
         _configs[key] = Config(profile=profile)
     return _configs[key]
