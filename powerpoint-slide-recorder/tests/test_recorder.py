@@ -1843,6 +1843,8 @@ Input #0, avfoundation, from '3':
                 mock.patch.object(record, "run_osascript") as run_osascript, \
                 mock.patch.object(record, "execute_ui_actions"), \
                 mock.patch.object(record, "force_slideshow_fullscreen"), \
+                mock.patch.object(record, "set_slideshow_pointer_automatic"), \
+                mock.patch.object(record, "park_slideshow_cursor"), \
                 mock.patch.object(record.time, "sleep"):
             config["slideshow_start_seconds"] = 0
             record.start_slideshow(config)
