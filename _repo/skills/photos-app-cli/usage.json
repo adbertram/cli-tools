@@ -1,8 +1,8 @@
 {
   "tool": "photos-app",
   "description": "Query and export photos from macOS Photos library",
-  "discovered_at": "2026-06-20T19:52:50Z",
-  "total_commands": 23,
+  "discovered_at": "2026-10-11T18:07:06Z",
+  "total_commands": 24,
   "global_options": [
     {
       "name": "--version",
@@ -109,7 +109,8 @@
               "type": "bool",
               "required": false,
               "help": "Skip confirmation prompt",
-              "short": "-y"
+              "short": "-y",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -157,7 +158,8 @@
               "type": "bool",
               "required": false,
               "help": "Skip confirmation",
-              "short": "-y"
+              "short": "-y",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -188,7 +190,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -217,14 +220,16 @@
               "type": "bool",
               "required": false,
               "help": "Include system albums",
-              "short": "-s"
+              "short": "-s",
+              "takes_value": false
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -290,7 +295,8 @@
               "type": "bool",
               "required": false,
               "help": "Skip confirmation prompt",
-              "short": "-y"
+              "short": "-y",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -326,7 +332,6 @@
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
-          "usage_instructions": "Use to configure authentication credentials. Use --profile/-p for a specific profile. Use --force/-F to re-authenticate. Use --credential-type/-c to authenticate a specific credential type.",
           "arguments": [],
           "options": [
             {
@@ -340,8 +345,9 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
-              "short": "-F"
+              "help": "Clear existing ephemeral auth state and re-authenticate",
+              "short": "-F",
+              "takes_value": false
             }
           ]
         },
@@ -395,7 +401,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -416,12 +423,13 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "Use to list all profiles and see which is the default. Use --table/-t for formatted output.",
               "arguments": [],
               "options": [
@@ -430,7 +438,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -471,7 +480,42 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -506,7 +550,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -520,14 +565,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--verbose",
               "type": "bool",
               "required": false,
               "help": "Show detailed checks",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -550,7 +597,14 @@
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "usage_instructions": "Run `photos-app cache clear --help` for exact arguments and options.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
@@ -631,7 +685,8 @@
               "type": "bool",
               "required": false,
               "help": "Include videos",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -662,7 +717,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -718,19 +774,22 @@
               "type": "bool",
               "required": false,
               "help": "Include videos",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--hidden",
               "type": "bool",
               "required": false,
-              "help": "Include hidden photos"
+              "help": "Include hidden photos",
+              "takes_value": false
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
-              "help": "Display as table"
+              "help": "Display as table",
+              "takes_value": false
             },
             {
               "name": "--filter",

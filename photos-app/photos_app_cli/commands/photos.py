@@ -6,7 +6,7 @@ from typing import Optional, List
 import typer
 
 from ..client import get_client, ClientError
-from cli_tools_shared.output import print_json, print_error, print_success, print_info, print_table
+from cli_tools_shared.output import command, print_json, print_error, print_success, print_info, print_table
 from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 
 COMMAND_CREDENTIALS = {
@@ -38,6 +38,7 @@ def parse_date(date_str: Optional[str]) -> Optional[datetime]:
 
 
 @app.command("list")
+@command
 def list_photos(
     from_date: Optional[str] = typer.Option(
         None, "--from", help="Start date (YYYY-MM-DD)"
@@ -136,6 +137,7 @@ def list_photos(
 
 
 @app.command("get")
+@command
 def get_photo(
     uuid: str = typer.Argument(..., help="Photo UUID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -171,6 +173,7 @@ def get_photo(
 
 
 @app.command("download")
+@command
 def download_photos(
     destination: str = typer.Argument(..., help="Destination folder"),
     album: Optional[str] = typer.Option(
@@ -238,6 +241,7 @@ def download_photos(
 
 
 @app.command("count")
+@command
 def count_photos():
     """Show total number of photos in the library."""
     try:

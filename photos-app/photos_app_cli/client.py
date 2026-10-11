@@ -1,4 +1,5 @@
 """Photos library client using SQLite for queries and AppleScript for exports."""
+import re
 import sqlite3
 import subprocess
 from datetime import datetime, timedelta
@@ -35,6 +36,7 @@ class PhotosClient:
         """
         self.library_path = library_path or DEFAULT_PHOTOS_LIBRARY
         self.db_path = self.library_path / "database/Photos.sqlite"
+        self._album_join: Optional[tuple] = None
 
         if not self.db_path.exists():
             raise ClientError(
@@ -59,6 +61,53 @@ class PhotosClient:
         conn = sqlite3.connect(uri, uri=True)
         conn.row_factory = sqlite3.Row
         return conn
+
+    def _album_asset_join(self) -> tuple:
+        """Discover the album-asset join table and its column names.
+
+        Core Data entity numbers (``Z_34ASSETS``, ``Z_34ALBUMS``, ``Z_3ASSETS``)
+        change between macOS releases, so they are read from the schema: the
+        table named ``Z_<n>ASSETS`` whose columns include ``Z_<n>ALBUMS`` and a
+        ``Z_<m>ASSETS`` asset foreign key. The result is cached on the client.
+
+        Returns:
+            Tuple of (table, album_column, asset_column).
+
+        Raises:
+            ClientError: If no matching table, or more than one, is found.
+        """
+        if self._album_join is not None:
+            return self._album_join
+
+        found = []
+        with self._connect() as conn:
+            tables = [
+                r["name"]
+                for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+            ]
+            for table in tables:
+                m = re.fullmatch(r"Z_(\d+)ASSETS", table)
+                if not m:
+                    continue
+                cols = [r["name"] for r in conn.execute(f'PRAGMA table_info("{table}")')]
+                album_col = f"Z_{m.group(1)}ALBUMS"
+                asset_cols = [c for c in cols if re.fullmatch(r"Z_\d+ASSETS", c)]
+                if album_col in cols and len(asset_cols) == 1:
+                    found.append((table, album_col, asset_cols[0]))
+
+        if not found:
+            raise ClientError(
+                "Photos album-asset join table not found in "
+                f"{self.db_path}: expected a table named Z_<n>ASSETS with a "
+                "Z_<n>ALBUMS column and a Z_<m>ASSETS column."
+            )
+        if len(found) > 1:
+            raise ClientError(
+                "Photos album-asset join table is ambiguous in "
+                f"{self.db_path}: found {[f[0] for f in found]}."
+            )
+        self._album_join = found[0]
+        return self._album_join
 
     def is_available(self) -> bool:
         """Check if Photos library is accessible."""
@@ -208,8 +257,9 @@ class PhotosClient:
             album_pk = self._get_album_pk(album)
             if album_pk is None:
                 return []  # Album not found, return empty list
-            join_clause = "INNER JOIN Z_30ASSETS j ON a.Z_PK = j.Z_3ASSETS"
-            conditions.append("j.Z_30ALBUMS = ?")
+            join_table, album_col, asset_col = self._album_asset_join()
+            join_clause = f"INNER JOIN {join_table} j ON a.Z_PK = j.{asset_col}"
+            conditions.append(f"j.{album_col} = ?")
             params.append(album_pk)
 
         if from_date:
