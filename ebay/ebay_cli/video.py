@@ -13,8 +13,11 @@ import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
+
+from cli_tools_shared.output import print_warning
 
 # Extensions treated as listing videos (never as listing images). This is the
 # suffix filter for --video-folder; it is deliberately distinct from the ffprobe
@@ -44,6 +47,19 @@ _FFPROBE_ARGS = (
     "stream=codec_name",
     "-show_entries",
     "format=format_name",
+    "-of",
+    "json",
+)
+
+# Every stream, so the audio choice can be made against the file's real layout
+# (iPhone .mov files carry hevc video, an apple_apac spatial-audio track, an AAC
+# track and data tracks).
+_FFPROBE_STREAMS_ARGS = (
+    "ffprobe",
+    "-v",
+    "error",
+    "-show_entries",
+    "stream=index,codec_type,codec_name",
     "-of",
     "json",
 )
@@ -162,6 +178,57 @@ def probe_video(path: str) -> tuple[str, str]:
     return codec, format_name
 
 
+def probe_streams(path: str) -> list[dict]:
+    """Return ffprobe's stream records (index, codec_type, codec_name) for a file."""
+    result = subprocess.run(
+        [*_FFPROBE_STREAMS_ARGS, path],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        raise VideoError(f"ffprobe could not read streams of '{path}': {detail}")
+    try:
+        return json.loads(result.stdout or "{}").get("streams") or []
+    except json.JSONDecodeError as exc:
+        raise VideoError(f"ffprobe returned unreadable stream output for '{path}': {exc}")
+
+
+@lru_cache(maxsize=1)
+def decodable_codecs() -> frozenset[str]:
+    """Codec names the installed ffmpeg can decode (the ``D`` flag of ``-codecs``)."""
+    result = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-codecs"],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        raise VideoError(f"ffmpeg could not list its codecs: {detail}")
+    names = set()
+    for line in result.stdout.splitlines():
+        parts = line.split()
+        # Rows look like " DEA.L. aac  AAC (Advanced Audio Coding)"; the legend
+        # rows above the "-------" separator have "=" as their second field.
+        if len(parts) >= 2 and len(parts[0]) == 6 and parts[0][0] == "D" and parts[1] != "=":
+            names.add(parts[1])
+    return frozenset(names)
+
+
+def select_audio_stream(streams: list[dict], decodable: frozenset[str]) -> Optional[int]:
+    """Return the index of the first audio stream ffmpeg can decode, else None.
+
+    iPhone recordings list an ``apple_apac`` spatial-audio track ahead of the
+    plain AAC track; ffmpeg has no decoder for it, so it must be skipped.
+    """
+    for stream in streams:
+        if stream.get("codec_type") == "audio" and stream.get("codec_name") in decodable:
+            return stream["index"]
+    return None
+
+
 def _is_upload_compatible(codec: str, format_name: str) -> bool:
     containers = {part.strip() for part in format_name.split(",")}
     return codec == TARGET_CODEC and bool(containers & _SUPPORTED_CONTAINERS)
@@ -205,12 +272,25 @@ def prepare_video_for_upload(path: str) -> PreparedVideo:
 
 
 def _transcode_to_h264_mp4(source: Path, source_codec: str) -> PreparedVideo:
+    audio_index = select_audio_stream(probe_streams(str(source)), decodable_codecs())
+    if audio_index is None:
+        print_warning(
+            f"No audio track in '{source}' can be decoded by ffmpeg; "
+            "the transcoded video will have no audio."
+        )
+        audio_args = ["-an"]
+    else:
+        audio_args = ["-map", f"0:{audio_index}", "-c:a", "aac", "-b:a", "128k"]
+
     temp_dir = tempfile.mkdtemp(prefix="ebay_video_")
     output = Path(temp_dir) / f"{source.stem}.mp4"
 
     command = [
         *_FFMPEG_ARGS,
         str(source),
+        "-map",
+        "0:v:0",
+        *audio_args,
         "-vf",
         _EVEN_DIMENSIONS_FILTER,
         "-c:v",
@@ -221,10 +301,6 @@ def _transcode_to_h264_mp4(source: Path, source_codec: str) -> PreparedVideo:
         "20",
         "-pix_fmt",
         "yuv420p",
-        "-c:a",
-        "aac",
-        "-b:a",
-        "128k",
         "-movflags",
         "+faststart",
         str(output),

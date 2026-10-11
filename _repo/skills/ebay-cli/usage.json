@@ -1,7 +1,7 @@
 {
   "tool": "ebay",
   "description": "eBay CLI — seller tools, marketplace categories, and account management",
-  "discovered_at": "2026-09-26T23:56:43Z",
+  "discovered_at": "2026-10-11T18:11:17Z",
   "total_commands": 79,
   "global_options": [
     {
@@ -1366,7 +1366,7 @@
                   "name": "--weight",
                   "type": "FLOAT",
                   "required": false,
-                  "help": "Package weight in pounds",
+                  "help": "Package weight in pounds; also sets the Unit Quantity aspect when the aspects include Unit Type",
                   "short": "-w"
                 },
                 {

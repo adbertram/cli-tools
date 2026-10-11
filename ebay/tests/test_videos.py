@@ -21,6 +21,20 @@ from ebay_cli.video import (
 
 MP4_CONTAINER = "mov,mp4,m4a,3gp,3g2,mj2"
 
+# ffprobe stream layout of a real iPhone .mov (agent-issues #1381): hevc video,
+# apple_apac spatial audio, AAC audio, then a data track.
+IPHONE_STREAMS = [
+    {"index": 0, "codec_name": "hevc", "codec_type": "video"},
+    {"index": 1, "codec_name": "apple_apac", "codec_type": "audio"},
+    {"index": 2, "codec_name": "aac", "codec_type": "audio"},
+    {"index": 3, "codec_type": "data"},
+]
+DECODABLE = frozenset({"hevc", "h264", "aac", "pcm_s16le"})
+
+
+def _maps(command: list[str]) -> list[str]:
+    return [command[i + 1] for i, arg in enumerate(command) if arg == "-map"]
+
 
 def _prepared(tmp_path: Path, *, transcoded: bool = True) -> PreparedVideo:
     """A PreparedVideo backed by a real temp file so cleanup is observable."""
@@ -274,6 +288,8 @@ def test_prepare_video_transcodes_hevc_mov_to_h264_mp4(tmp_path, monkeypatch):
         "probe_video",
         lambda path: ("h264", MP4_CONTAINER) if path.endswith(".mp4") else ("hevc", MP4_CONTAINER),
     )
+    monkeypatch.setattr(video_mod, "probe_streams", lambda path: IPHONE_STREAMS)
+    monkeypatch.setattr(video_mod, "decodable_codecs", lambda: DECODABLE)
     commands: list[list[str]] = []
 
     def fake_run(command, **kwargs):
@@ -293,6 +309,8 @@ def test_prepare_video_transcodes_hevc_mov_to_h264_mp4(tmp_path, monkeypatch):
     assert source.read_bytes() == b"h" * 64, "the source file must never be modified"
     assert commands[0][0] == "ffmpeg"
     assert "libx264" in commands[0]
+    assert _maps(commands[0]) == ["0:v:0", "0:2"], "map the video and the AAC track only"
+    assert "-an" not in commands[0]
 
     temp_dir = prepared.temp_dir
     prepared.cleanup()
@@ -323,6 +341,129 @@ def test_prepare_video_rejects_output_over_media_api_limit(tmp_path, monkeypatch
     message = str(excinfo.value)
     assert "10-byte" in message
     assert f"({MAX_VIDEO_MB} MB) limit" in message
+
+
+def test_select_audio_stream_skips_apple_apac_for_the_aac_track():
+    assert video_mod.select_audio_stream(IPHONE_STREAMS, DECODABLE) == 2
+
+
+def test_select_audio_stream_returns_none_when_no_audio_is_decodable():
+    streams = [s for s in IPHONE_STREAMS if s.get("codec_name") != "aac"]
+    assert video_mod.select_audio_stream(streams, DECODABLE) is None
+    assert video_mod.select_audio_stream(IPHONE_STREAMS[:1], DECODABLE) is None
+
+
+def test_decodable_codecs_reads_the_decode_flag_from_ffmpeg_codecs(monkeypatch):
+    listing = "\n".join([
+        "Codecs:",
+        " D..... = Decoding supported",
+        " .E.... = Encoding supported",
+        " -------",
+        " DEV.LS hevc                 H.265 / HEVC",
+        " DEA.L. aac                  AAC (Advanced Audio Coding)",
+        " ..A.L. apple_apac           Apple Positional Audio Codec",
+        " .EA.L. encode_only          Encoder without decoder",
+    ])
+    monkeypatch.setattr(
+        video_mod.subprocess,
+        "run",
+        lambda *a, **k: SimpleNamespace(returncode=0, stdout=listing, stderr=""),
+    )
+    video_mod.decodable_codecs.cache_clear()
+    try:
+        assert video_mod.decodable_codecs() == frozenset({"hevc", "aac"})
+    finally:
+        video_mod.decodable_codecs.cache_clear()
+
+
+def test_transcode_drops_audio_with_warning_when_none_is_decodable(
+    tmp_path, monkeypatch, capsys
+):
+    source = tmp_path / "IMG_0200.mov"
+    source.write_bytes(b"h" * 64)
+    monkeypatch.setattr(video_mod.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(
+        video_mod,
+        "probe_video",
+        lambda path: ("h264", MP4_CONTAINER) if path.endswith(".mp4") else ("hevc", MP4_CONTAINER),
+    )
+    monkeypatch.setattr(
+        video_mod,
+        "probe_streams",
+        lambda path: [s for s in IPHONE_STREAMS if s.get("codec_name") != "aac"],
+    )
+    monkeypatch.setattr(video_mod, "decodable_codecs", lambda: DECODABLE)
+    commands: list[list[str]] = []
+
+    def fake_run(command, **kwargs):
+        commands.append(list(command))
+        Path(command[-1]).write_bytes(b"o" * 16)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(video_mod.subprocess, "run", fake_run)
+
+    prepared = prepare_video_for_upload(str(source))
+    prepared.cleanup()
+
+    assert _maps(commands[0]) == ["0:v:0"]
+    assert "-an" in commands[0]
+    assert "-c:a" not in commands[0]
+    assert "no audio" in capsys.readouterr().err
+
+
+def _synthesize_iphone_mov(path: Path) -> None:
+    """Build a .mov with the iPhone stream layout and a real apple_apac track.
+
+    No ffmpeg build encodes apple_apac, so a PCM track (fourcc ``sowt``) is
+    written and its sample-entry fourcc patched to ``apac``; ffmpeg then reads
+    it as apple_apac and has no decoder for it, exactly like an iPhone file.
+    """
+    import subprocess
+
+    base = path.with_name("base.mov")
+    subprocess.run(
+        [
+            "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+            "-f", "lavfi", "-i", "testsrc=size=64x64:rate=10:duration=1",
+            "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
+            "-f", "lavfi", "-i", "sine=frequency=880:duration=1",
+            "-map", "0:v", "-map", "1:a", "-map", "2:a",
+            "-c:v", "libx265", "-c:a:0", "pcm_s16le", "-c:a:1", "aac",
+            "-timecode", "00:00:00:00", "-f", "mov", str(base),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    data = base.read_bytes()
+    assert data.count(b"sowt") == 1
+    path.write_bytes(data.replace(b"sowt", b"apac"))
+
+
+@pytest.mark.skipif(
+    not (video_mod.shutil.which("ffmpeg") and video_mod.shutil.which("ffprobe")),
+    reason="needs local ffmpeg and ffprobe",
+)
+def test_real_ffmpeg_transcodes_iphone_mov_with_undecodable_apple_apac(tmp_path):
+    source = tmp_path / "IMG_0300.mov"
+    try:
+        _synthesize_iphone_mov(source)
+    except Exception as exc:  # e.g. an ffmpeg build without libx265
+        pytest.skip(f"cannot synthesize the iPhone-style fixture: {exc}")
+    streams = video_mod.probe_streams(str(source))
+    if [s.get("codec_name") for s in streams[:3]] != ["hevc", "apple_apac", "aac"]:
+        pytest.skip(f"this ffmpeg build does not report apple_apac: {streams}")
+    assert "apple_apac" not in video_mod.decodable_codecs()
+
+    prepared = prepare_video_for_upload(str(source))
+    try:
+        output_streams = video_mod.probe_streams(prepared.path)
+        assert prepared.output_codec == "h264"
+        assert [(s["codec_type"], s.get("codec_name")) for s in output_streams][:2] == [
+            ("video", "h264"),
+            ("audio", "aac"),
+        ]
+    finally:
+        prepared.cleanup()
 
 
 def test_media_api_video_limit_is_the_documented_150_mb():

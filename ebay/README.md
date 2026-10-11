@@ -452,7 +452,7 @@ The CLI validates that all required eBay fields are provided (via CLI options or
 | Location | `--location` | Merchant location key |
 | Title | `--title` | Listing title |
 | Description | `--description` or `--description-file` | Item description (HTML supported) |
-| Weight | `--weight` | Package weight in pounds |
+| Weight | `--weight` | Package weight in pounds; also sets the `Unit Quantity` aspect only when the aspects (template or `--aspects`) include `Unit Type` |
 | Dimensions | `--dimensions` | Package dimensions as LxWxH in inches |
 | Price | `--price` | Listing price |
 
@@ -542,6 +542,9 @@ The command returns an error when multiple current offers use the same SKU.
 - Maximum 24 images per ordinary listing (eBay limit; variations allow 12 per variation)
 - Images are uploaded to eBay and associated with the listing
 - Upload failures produce warnings but don't stop listing creation
+- Each failed image upload is retried once; if any image still fails (or a
+  `--image` file is missing), `listings create` exits 1 naming each failed file
+  before any offer is created or published
 - Uploaded images are stored locally in `~/.ebay/images.json`
 - Photos album feature requires the `photos-app` CLI to be installed
 
@@ -553,6 +556,9 @@ The command returns an error when multiple current offers use the same SKU.
   files, which are accepted only when their stream reports `mov`/`mp4`) are
   transcoded to a temporary H.264 MP4 with `ffmpeg` before upload; the original
   file is never modified
+- The transcode keeps the first video stream and the first audio track `ffmpeg`
+  can decode (iPhone `apple_apac` spatial audio is skipped in favour of the AAC
+  track); with no decodable audio track it warns and uploads the video silent
 - `ffprobe` and `ffmpeg` are required for any `--video`/`--video-folder` listing,
   and for `ebay seller videos create`
 - The upload's title defaults to the file name, cleaned of separators and
@@ -874,7 +880,7 @@ Order ID         Status        Buyer        Total   Created
 | `--properties` | `-p` | Comma-separated list of fields to include in output |
 | `--status` | `-s` | Filter by fulfillment status |
 | `--order-ids` | | Comma-separated list of order IDs |
-| `--weight` | `-w` | Package weight in pounds (required for listings) |
+| `--weight` | `-w` | Package weight in pounds (required for listings); also sets `Unit Quantity` when the aspects include `Unit Type` |
 | `--dimensions` | | Package dimensions as LxWxH in inches, e.g., 12x10x8 (required for listings) |
 | `--video` | | Local video file to attach to a listing (`.mov`, `.mp4`, `.m4v`) |
 | `--video-folder` | | Folder to scan for the first video file to attach |

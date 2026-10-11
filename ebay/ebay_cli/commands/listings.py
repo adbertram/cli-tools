@@ -105,6 +105,8 @@ TRADING_LISTING_FORMATS = {
     "FixedPriceItem": ListingFormat.FIXED_PRICE,
 }
 FEED_WAIT_TIMEOUT_SECONDS = 300.0
+# Each listing image upload is tried this many times before the create aborts.
+IMAGE_UPLOAD_ATTEMPTS = 2
 
 # Supported image extensions for --image-folder scanning. A video extension is
 # never part of this set: album exports put photos and videos in one folder.
@@ -369,29 +371,34 @@ def _upload_images_for_listing(
         sources = sources[:MAX_IMAGES_PER_LISTING]
 
     for source_value, source_type in sources:
-        try:
-            if source_type == "file":
-                if not Path(source_value).exists():
-                    errors.append({"source": source_value, "error": "File not found"})
-                    print_warning(f"Image file not found: {source_value}")
-                    continue
-                result = client.upload_image_from_file(source_value)
-            else:
-                result = client.upload_image_from_url(source_value)
+        if source_type == "file" and not Path(source_value).exists():
+            errors.append({"source": source_value, "error": "File not found"})
+            print_warning(f"Image file not found: {source_value}")
+            continue
+        upload = client.upload_image_from_file if source_type == "file" else client.upload_image_from_url
+        # One retry: a single Media API write timeout must not drop an image.
+        for attempt in range(1, IMAGE_UPLOAD_ATTEMPTS + 1):
+            try:
+                result = upload(source_value)
+                break
+            except Exception as e:
+                print_warning(
+                    f"Failed to upload {source_value} (attempt {attempt}/{IMAGE_UPLOAD_ATTEMPTS}): {e}"
+                )
+                last_error = e
+        else:
+            errors.append({"source": source_value, "error": str(last_error)})
+            continue
 
-            storage.add_image(
-                image_id=result["image_id"],
-                image_url=result["imageUrl"],
-                expiration_date=result["expirationDate"],
-                source=source_type,
-                original=source_value
-            )
-            uploaded_urls.append(result["imageUrl"])
-            print_info(f"Uploaded image: {source_value}")
-
-        except Exception as e:
-            errors.append({"source": source_value, "error": str(e)})
-            print_warning(f"Failed to upload {source_value}: {e}")
+        storage.add_image(
+            image_id=result["image_id"],
+            image_url=result["imageUrl"],
+            expiration_date=result["expirationDate"],
+            source=source_type,
+            original=source_value
+        )
+        uploaded_urls.append(result["imageUrl"])
+        print_info(f"Uploaded image: {source_value}")
 
     if uploaded_urls:
         try:
@@ -1501,7 +1508,7 @@ def listings_create(
     condition_description: Optional[str] = typer.Option(None, "--condition-description", help="Condition description text (overrides template default)"),
     condition_descriptors: Optional[str] = typer.Option(None, "--condition-descriptors", help="Condition descriptors JSON for trading cards (e.g., '[{\"name\":\"40001\",\"values\":[\"400010\"]}]')"),
     format_type: Optional[str] = typer.Option(None, "--format", "-f", help="FIXED_PRICE or AUCTION"),
-    weight: Optional[float] = typer.Option(None, "--weight", "-w", help="Package weight in pounds"),
+    weight: Optional[float] = typer.Option(None, "--weight", "-w", help="Package weight in pounds; also sets the Unit Quantity aspect when the aspects include Unit Type"),
     dimensions: Optional[str] = typer.Option(None, "--dimensions", help="Package dimensions as LxWxH in inches (e.g., 12x10x8)"),
     image: Optional[str] = typer.Option(None, "--image", "-i", help="Local image file path(s), comma-separated"),
     image_folder: Optional[str] = typer.Option(None, "--image-folder", help="Folder to scan for images"),
@@ -1862,8 +1869,10 @@ def listings_create(
                 print_info('Example: --aspects \'{"Sport": ["Football"], "Card Condition": ["Ungraded"]}\'')
                 raise typer.Exit(1)
 
-        # Add weight to Unit Quantity item specific if provided
-        if weight is not None and "aspects" in product:
+        # Unit Quantity = --weight only for listings sold by weight, i.e. when the
+        # aspects (template or --aspects) opt in with a Unit Type. Package weight
+        # is meaningless as a unit count for anything else (cards, sleeves, sets).
+        if weight is not None and "Unit Type" in product.get("aspects", {}):
             weight_str = str(int(weight)) if weight == int(weight) else str(weight)
             product["aspects"]["Unit Quantity"] = [weight_str]
 
@@ -1980,7 +1989,13 @@ def listings_create(
             if uploaded_urls:
                 print_success(f"Uploaded {len(uploaded_urls)} image(s).")
             if image_errors:
-                print_warning(f"{len(image_errors)} image(s) failed to upload.")
+                # Never create or publish an offer with a missing image.
+                print_error(
+                    f"{len(image_errors)} image(s) failed to upload; no offer was created or published:"
+                )
+                for image_error in image_errors:
+                    print_error(f"  - {image_error['source']}: {image_error['error']}")
+                raise typer.Exit(1)
 
         # Build offer payload
         if from_json:
