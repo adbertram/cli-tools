@@ -37,6 +37,10 @@ except ImportError:
     pass
 
 
+from .commands import export
+register_commands(app, get_config, export, name="export", help="Archive FreshBooks data")
+
+
 def main():
     """Main entry point for the CLI application."""
     run_app(app)

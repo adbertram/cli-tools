@@ -195,7 +195,9 @@ class FreshBooksClient:
         data: Optional[Dict] = None,
         params: Optional[Dict] = None,
         retry: bool = True,
-    ) -> Dict:
+        raw_response: bool = False,
+        extra_headers: Optional[Dict] = None,
+    ) -> Dict | requests.Response:
         """
         Make an HTTP request to the FreshBooks API with retry support.
 
@@ -205,9 +207,11 @@ class FreshBooksClient:
             data: Request body data
             params: Query parameters
             retry: Whether to retry on transient errors (default: True)
+            raw_response: Return the HTTP response unchanged for archival use.
+            extra_headers: Additional endpoint-specific request headers.
 
         Returns:
-            Response JSON data
+            Response JSON data, or the HTTP response when raw_response is true.
 
         Raises:
             ClientError: If request fails
@@ -230,9 +234,10 @@ class FreshBooksClient:
                 response = requests.request(
                     method=method,
                     url=url,
-                    headers=self.headers,
+                    headers={**{k: v for k, v in self.headers.items() if method != "GET" or k != "Content-Type"}, **(extra_headers or {})},
                     json=data,
-                    params=params
+                    params=params,
+                    timeout=60,
                 )
                 last_response = response
 
@@ -243,9 +248,10 @@ class FreshBooksClient:
                         response = requests.request(
                             method=method,
                             url=url,
-                            headers=self.headers,
+                            headers={**{k: v for k, v in self.headers.items() if method != "GET" or k != "Content-Type"}, **(extra_headers or {})},
                             json=data,
-                            params=params
+                            params=params,
+                            timeout=60,
                         )
                         last_response = response
                     except Exception as e:
@@ -281,7 +287,7 @@ class FreshBooksClient:
         if not last_response.ok:
             raise ClientError(f"API request failed: {last_response.status_code} - {last_response.text}")
 
-        return last_response.json()
+        return last_response if raw_response else last_response.json()
 
     def _paginated_records(
         self,

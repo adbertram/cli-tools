@@ -1,8 +1,8 @@
 {
   "tool": "freshbooks",
   "description": "CLI interface for FreshBooks accounting API",
-  "discovered_at": "2026-10-07T16:22:51Z",
-  "total_commands": 26,
+  "discovered_at": "2026-10-11T13:27:32Z",
+  "total_commands": 27,
   "global_options": [
     {
       "name": "--version",
@@ -533,6 +533,46 @@
               "required": false,
               "help": "New organization name",
               "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "export": {
+      "help": "Archive FreshBooks data",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "run": {
+          "help": "Archive raw pages, details, PDFs and a coverage manifest for every business. Unsupported resources and failed reads are recorded in manifest.json. Partial exports exit 2 after writing their summary. No invoices are sent.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--output",
+              "type": "PATH",
+              "required": true,
+              "help": "Private export directory; must be new unless --resume is set",
+              "short": "-o"
+            },
+            {
+              "name": "--resume",
+              "type": "bool",
+              "required": false,
+              "help": "Verify and reuse saved response files, then retry missing reads",
+              "takes_value": false
             },
             {
               "name": "--profile",

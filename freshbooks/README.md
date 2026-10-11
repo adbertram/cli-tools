@@ -257,3 +257,19 @@ freshbooks customer update <customer-id> -o "New Org Name"
 freshbooks cache status
 freshbooks cache clear
 ```
+
+### Export a private archive
+
+```bash
+freshbooks export run --output ./freshbooks-export
+```
+
+Exports the businesses accessible to the current OAuth identity. The destination must be new. Directories use mode 0700 and files use 0600. `manifest.json` records resource counts, page totals, file hashes, and every failed or unsupported read. A partial export exits 2 after saving its summary; inspect the manifest before using it as a migration source.
+
+Raw JSON response files preserve source bytes. `records.json` arrays preserve all source fields, with exact non-integer JSON numbers represented as decimal strings. Account resources include clients, invoices and their details/lines/history, payments, credits, expenses, estimates, recurring invoice profiles, items, taxes, categories, bills/vendors/payments, other income, staff, tasks, gateways, and system settings. Active, deleted, and archived accounting records are requested separately. Business resources include projects, time entries, services, and team members. Invoice PDFs and available expense/invoice attachments are downloaded without sending invoices or changing source records.
+
+This is a documented-API archive, not a database backup. Missing OAuth scopes, unavailable endpoints, nonpublic application data, and attachment download restrictions are explicit manifest gaps. FreshBooks can change while an export runs; changing pagination totals fail the affected collection rather than silently reporting completeness.
+
+To continue an interrupted export or retry missing reads, use `freshbooks export run --output ./freshbooks-export --resume`. Resume verifies every recorded file hash and reuses only responses whose endpoint and query match. It preserves the existing snapshot instead of fetching a new point-in-time dataset; use a new output directory for a fresh export. Identity is refreshed and a different signed-in user is rejected.
+
+The archive also includes secondary client contacts, service rates, adjustment journal entries, and report snapshots (source currencies over the observed data lifetime). Report date coverage is recorded separately in the manifest.
