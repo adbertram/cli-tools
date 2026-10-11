@@ -1,19 +1,10 @@
-"""Rebuild an invoice's ``lines`` array with changed unit prices.
-
-The FreshBooks Accounting API replaces the whole ``lines`` array on a PUT:
-"the request payload must contain all the lines of the invoice that you wish
-to remain" (https://www.freshbooks.com/api/invoices). Changing one price
-therefore means resending every line, so each fetched line is reduced to its
-writable fields (type, expenseid, qty, unit_cost, description, name,
-modern_project_id, modern_time_entries, taxName1/2, taxAmount1/2). Computed
-fields (amount, updated) and server bookkeeping are dropped.
-"""
+"""Preserve writable invoice line data while changing selected unit prices."""
 from decimal import Decimal, InvalidOperation
 from typing import Dict, List
 
 from cli_tools_shared.exceptions import ClientError
 
-_COPIED_FIELDS = ("name", "description", "qty", "type", "expenseid")
+_COPIED_FIELDS = ("name", "description", "qty", "type", "expenseid", "compounded_tax", "article_url")
 
 
 def parse_line_amounts(specs: List[str]) -> Dict[str, str]:
@@ -55,7 +46,7 @@ def rebuild_lines(existing: List[Dict], amounts: Dict[str, str]) -> List[Dict]:
     if unknown:
         raise ClientError(
             f"Unknown line ID(s): {', '.join(unknown)}. "
-            f"Invoice has lines: {', '.join(sorted(known, key=int))}"
+            f"Invoice has lines: {', '.join(sorted(known))}"
         )
 
     rebuilt = []

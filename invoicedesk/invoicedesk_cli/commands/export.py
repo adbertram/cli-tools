@@ -1,12 +1,12 @@
-"""FreshBooks archive command."""
+"""InvoiceDesk archive command."""
 from pathlib import Path
 import typer
 from cli_tools_shared.output import command, print_json
 from ..client import get_client
 from ..exporter import Exporter
 
-app = typer.Typer(help="Export accessible FreshBooks data without changing source records")
-COMMAND_CREDENTIALS = {"run": ["oauth"]}
+app = typer.Typer(help="Export accessible InvoiceDesk data without changing source records")
+COMMAND_CREDENTIALS = {"run": ["api_key"]}
 
 
 @app.command("run")

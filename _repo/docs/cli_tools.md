@@ -45,7 +45,6 @@
 | `facebook-ads` | Wrapper for Meta's official Ads CLI, with complete native command passthrough and upstream-owned authentication |
 | `fedex` | The `fedex` CLI provides a command-line interface for Fedex API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `fitnesspal` | The `fitnesspal` CLI provides a command-line interface for Fitnesspal API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
-| `freshbooks` | The `freshbooks` CLI provides a command-line interface for FreshBooks accounting API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `g2` | The `g2` CLI provides a command-line interface for G2 API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `garrul` | Moderate and operate a self-hosted Garrul comment system |
 | `gemini` | The `gemini` CLI provides a command-line interface for Gemini API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
@@ -62,6 +61,7 @@
 | `imessage` | The `imessage` CLI provides command-line access for iMessage on macOS. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `impact` | The `impact` CLI provides command-line access to Impact.com Publisher API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `instacart` | The `instacart` CLI provides a command-line interface for Instacart API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `invoicedesk` | InvoiceDesk customers, invoices, payments, attachments and archive exports |
 | `jira` | The `jira` CLI provides a command-line interface for Jira API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `keywords` | The `keywords` CLI provides a command-line interface for Keywords API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `kick` | The `kick` CLI provides a command-line interface for Kick API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |

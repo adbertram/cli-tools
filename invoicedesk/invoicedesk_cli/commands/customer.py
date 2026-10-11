@@ -1,4 +1,4 @@
-"""Customer commands for FreshBooks CLI."""
+"""Customer commands for InvoiceDesk CLI."""
 import typer
 from typing import Optional, List
 
@@ -9,7 +9,7 @@ from ..filter_map import CUSTOMER_FILTER_FIELDS, CUSTOMER_FILTER_MAP
 from ..formatters import format_client_for_display
 from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 
-app = typer.Typer(help="Manage FreshBooks customers/clients")
+app = typer.Typer(help="Manage InvoiceDesk customers/clients")
 
 
 @app.command("list")
@@ -29,6 +29,7 @@ def customer_list(
         100,
         "--limit",
         "-l",
+        min=1,
         help="Maximum number of customers to return (default: 100)",
     ),
     properties: Optional[str] = typer.Option(
@@ -47,20 +48,20 @@ def customer_list(
     """
     List all customers/clients.
 
-    Shows all customers in your FreshBooks account.
+    Shows all customers in your InvoiceDesk account.
 
     Filterable fields: id, organization, name, email. Substring searches use
     'contains', or 'like' with explicit SQL wildcards ('%acme%'). A bare
     'like:acme' is an anchored, case-insensitive exact match.
 
     Examples:
-        freshbooks customer list
-        freshbooks customer list --table
-        freshbooks customer list --filter organization:contains:acme --table
-        freshbooks customer list --filter organization:like:%acme% --table
-        freshbooks customer list --filter email:eq:john@acme.com
-        freshbooks customer list --limit 10
-        freshbooks customer list --properties id,organization,email
+        invoicedesk customer list
+        invoicedesk customer list --table
+        invoicedesk customer list --filter organization:contains:acme --table
+        invoicedesk customer list --filter organization:like:%acme% --table
+        invoicedesk customer list --filter email:eq:john@acme.com
+        invoicedesk customer list --limit 10
+        invoicedesk customer list --properties id,organization,email
     """
     # Validate filters first. Declaring the filterable fields turns a filter
     # on an unknown field into a loud error instead of an empty result that
@@ -155,14 +156,14 @@ def customer_get(
     Get details for a specific customer.
 
     Examples:
-        freshbooks customer get 12345
-        freshbooks customer get 12345 --table
+        invoicedesk customer get 12345
+        invoicedesk customer get 12345 --table
     """
     client = get_client()
     customer = client.get_client(customer_id)
 
     if not customer:
-        typer.echo(f"Customer {customer_id} not found.")
+        typer.echo(f"Customer {customer_id} not found.", err=True)
         raise typer.Exit(1)
 
     if table:
@@ -188,13 +189,13 @@ def customer_find(
     Find a customer by email address.
 
     Examples:
-        freshbooks customer find client@example.com
+        invoicedesk customer find client@example.com
     """
     client = get_client()
     customer = client.get_client_by_email(email)
 
     if not customer:
-        typer.echo(f"No customer found with email: {email}")
+        typer.echo(f"No customer found with email: {email}", err=True)
         raise typer.Exit(1)
 
     print_json(customer)
@@ -232,14 +233,14 @@ def customer_create(
     Create a new customer.
 
     Examples:
-        freshbooks customer create -e john@acme.com -f John -l Doe -o "Acme Corp"
+        invoicedesk customer create -e john@acme.com -f John -l Doe -o "Acme Corp"
     """
     client = get_client()
 
     # Check if customer already exists
     existing = client.get_client_by_email(email)
     if existing:
-        typer.echo(f"Customer with email {email} already exists (ID: {existing.get('id')})")
+        typer.echo(f"Customer with email {email} already exists (ID: {existing.get('id')})", err=True)
         raise typer.Exit(1)
 
     customer = client.create_client(
@@ -289,8 +290,8 @@ def customer_update(
     Update an existing customer.
 
     Examples:
-        freshbooks customer update 12345 --email newemail@acme.com
-        freshbooks customer update 12345 -o "New Company Name"
+        invoicedesk customer update 12345 --email newemail@acme.com
+        invoicedesk customer update 12345 -o "New Company Name"
     """
     client = get_client()
 
@@ -306,7 +307,7 @@ def customer_update(
         update_data["organization"] = organization
 
     if not update_data:
-        typer.echo("No updates specified. Use --help to see available options.")
+        typer.echo("No updates specified. Use --help to see available options.", err=True)
         raise typer.Exit(1)
 
     customer = client.update_client(customer_id, **update_data)
@@ -317,18 +318,18 @@ def customer_update(
 
 COMMAND_CREDENTIALS = {
     "create": [
-        "oauth"
+        "api_key"
     ],
     "find": [
-        "oauth"
+        "api_key"
     ],
     "get": [
-        "oauth"
+        "api_key"
     ],
     "list": [
-        "oauth"
+        "api_key"
     ],
     "update": [
-        "oauth"
+        "api_key"
     ]
 }

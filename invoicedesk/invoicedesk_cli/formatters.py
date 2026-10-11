@@ -1,4 +1,4 @@
-"""Display formatters for FreshBooks data objects."""
+"""Display formatters for InvoiceDesk data objects."""
 from typing import Dict
 
 

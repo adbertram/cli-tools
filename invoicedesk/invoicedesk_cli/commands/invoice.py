@@ -1,9 +1,10 @@
-"""Invoice commands for FreshBooks CLI."""
+"""Invoice commands for InvoiceDesk CLI."""
 from datetime import date
 from pathlib import Path
 from typing import Optional, List
 
 import typer
+from cli_tools_shared.exceptions import ClientError
 
 from cli_tools_shared.output import command, print_json, print_table, print_success
 
@@ -14,7 +15,16 @@ from ..formatters import format_invoice_for_display
 from ..invoice_lines import parse_line_amounts, rebuild_lines
 from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 
-app = typer.Typer(help="Manage FreshBooks invoices")
+app = typer.Typer(help="Manage InvoiceDesk invoices")
+
+
+def _upload_attachment(client, path):
+    if not path:
+        return None
+    typer.echo(f"Uploading attachment: {path}", err=True)
+    result = client.upload_attachment(path)
+    typer.echo("Attachment uploaded successfully.", err=True)
+    return [{"jwt": result["jwt"], "media_type": result["media_type"]}]
 
 
 @app.command("list")
@@ -35,18 +45,19 @@ def invoice_list(
         None,
         "--status",
         "-s",
-        help="Filter by status (draft, sent, viewed, paid, overdue)",
+        help="Filter by status (draft, sent, viewed, partial, paid, overdue)",
     ),
     unpaid: bool = typer.Option(
         False,
         "--unpaid",
         "-u",
-        help="Filter to show only unpaid invoices (sent, viewed, overdue)",
+        help="Filter to show only active unpaid issued invoices, including partial payments",
     ),
     limit: int = typer.Option(
         100,
         "--limit",
         "-l",
+        min=1,
         help="Maximum number of invoices to return (default: 100)",
     ),
     date_from: Optional[str] = typer.Option(
@@ -75,7 +86,7 @@ def invoice_list(
     """
     List all invoices.
 
-    Shows all invoices in your FreshBooks account with optional status filtering.
+    Shows all invoices in your InvoiceDesk account with optional status filtering.
 
     Filterable fields: id, number, client, status, amount, outstanding, created,
     due_date. Substring searches use 'contains', or 'like' with explicit SQL
@@ -83,14 +94,14 @@ def invoice_list(
     exact match.
 
     Examples:
-        freshbooks invoice list
-        freshbooks invoice list --table
-        freshbooks invoice list --status sent --table
-        freshbooks invoice list --unpaid --table
-        freshbooks invoice list --filter client:contains:acme
-        freshbooks invoice list --filter client:like:%acme%
-        freshbooks invoice list --limit 10
-        freshbooks invoice list --from 2024-01-01 --to 2024-12-31
+        invoicedesk invoice list
+        invoicedesk invoice list --table
+        invoicedesk invoice list --status sent --table
+        invoicedesk invoice list --unpaid --table
+        invoicedesk invoice list --filter client:contains:acme
+        invoicedesk invoice list --filter client:like:%acme%
+        invoicedesk invoice list --limit 10
+        invoicedesk invoice list --from 2024-01-01 --to 2024-12-31
     """
     # Validate filters first. Declaring the filterable fields turns a filter
     # on an unknown field into a loud error instead of an empty result that
@@ -113,19 +124,15 @@ def invoice_list(
     # Determine status filter
     if unpaid:
         if status:
-            typer.echo("Warning: --unpaid overrides --status")
-        # For unpaid, fetch sent and viewed invoices
-        # (overdue is not a real API status - it's a client-side calculation)
-        status_filter = ["sent", "viewed"]
+            typer.echo("Warning: --unpaid overrides --status", err=True)
+        status_filter = ["sent", "viewed", "overdue", "partial", "partially paid", "disputed", "retry", "failed"]
         filter_unpaid_client_side = True
     elif status == "overdue":
-        # "overdue" is not a real FreshBooks API status
-        # Fetch unpaid invoices (sent, viewed) and filter client-side
-        status_filter = ["sent", "viewed"]
+        status_filter = ["sent", "viewed", "overdue", "partial", "partially paid", "disputed", "retry", "failed"]
         filter_overdue_client_side = True
     else:
         status_filter = [status] if status else None
-    # FreshBooks has no server-side search for the display fields exposed by
+    # InvoiceDesk has no server-side search for the display fields exposed by
     # --filter, and --unpaid/--status overdue are computed here too. Whenever
     # rows are dropped after the fetch, every page has to be considered
     # before --limit is applied; --limit caps the results returned, not the
@@ -235,14 +242,14 @@ def invoice_get(
     Get details for a specific invoice.
 
     Examples:
-        freshbooks invoice get 1234567
-        freshbooks invoice get 1234567 --table
+        invoicedesk invoice get 1234567
+        invoicedesk invoice get 1234567 --table
     """
     client = get_client()
     invoice = client.get_invoice(invoice_id)
 
     if not invoice:
-        typer.echo(f"Invoice {invoice_id} not found.")
+        typer.echo(f"Invoice {invoice_id} not found.", err=True)
         raise typer.Exit(1)
 
     if table:
@@ -325,33 +332,20 @@ def invoice_create(
     paired with the corresponding -a by position. Use -q to set quantity
     per line item (defaults to 1).
 
-    Payment terms are automatically added from DEFAULT_TERMS in .env
+    Payment terms are automatically added from InvoiceDesk Settings
     unless --no-terms is specified or --terms provides custom terms.
 
     Examples:
-        freshbooks invoice create -c 12345 -d "Consulting Services" -a 500.00
-        freshbooks invoice create -c 12345 -d "Article Writing" -a 750.00 -n "Thank you!" -p "REF-001"
-        freshbooks invoice create -c 12345 -d "Contract Work" -a 1000.00 -f ./contract.pdf
-        freshbooks invoice create -c 12345 -d "Consulting" -a 500.00 --due-days 60
-        freshbooks invoice create -c 12345 -d "Consulting" -a 500.00 --no-terms
-        freshbooks invoice create -c 12345 -d "Line 1" -a 500 -d "Line 2" -a 1000
-        freshbooks invoice create -c 12345 -d "Item A" -a 500 -q 2 -d "Item B" -a 300 -q 1
+        invoicedesk invoice create -c 12345 -d "Consulting Services" -a 500.00
+        invoicedesk invoice create -c 12345 -d "Article Writing" -a 750.00 -n "Thank you!" -p "REF-001"
+        invoicedesk invoice create -c 12345 -d "Contract Work" -a 1000.00 -f ./contract.pdf
+        invoicedesk invoice create -c 12345 -d "Consulting" -a 500.00 --due-days 60
+        invoicedesk invoice create -c 12345 -d "Consulting" -a 500.00 --no-terms
+        invoicedesk invoice create -c 12345 -d "Line 1" -a 500 -d "Line 2" -a 1000
+        invoicedesk invoice create -c 12345 -d "Item A" -a 500 -q 2 -d "Item B" -a 300 -q 1
     """
     client = get_client()
     config = get_config()
-
-    # Handle file attachment if provided
-    attachments = None
-    if attachment:
-        typer.echo(f"Uploading attachment: {attachment}")
-        upload_result = client.upload_attachment(attachment)
-        attachments = [
-            {
-                "jwt": upload_result["jwt"],
-                "media_type": upload_result["media_type"]
-            }
-        ]
-        typer.echo("Attachment uploaded successfully.")
 
     # Validate that descriptions and amounts pair up
     if len(description) != len(amount):
@@ -373,12 +367,21 @@ def invoice_create(
         raise typer.Exit(1)
 
     # Determine payment terms: explicit > default > none
-    invoice_terms = None
+    invoice_terms = ""
     if not no_terms:
         if terms:
             invoice_terms = terms
-        elif config.default_terms:
+        else:
             invoice_terms = config.default_terms
+
+    from decimal import Decimal, InvalidOperation
+    for value in [*amount, *(quantity or [])]:
+        try:
+            parsed = Decimal(value)
+        except InvalidOperation:
+            raise ClientError("Amounts and quantities must be positive decimal numbers")
+        if not parsed.is_finite() or parsed <= 0:
+            raise ClientError("Amounts and quantities must be positive decimal numbers")
 
     items = []
     for i, (desc, amt) in enumerate(zip(description, amount)):
@@ -395,6 +398,8 @@ def invoice_create(
             }
         )
 
+    attachments = _upload_attachment(client, attachment)
+
     invoice = client.create_invoice(
         customer_id=customer_id,
         items=items,
@@ -409,54 +414,24 @@ def invoice_create(
     print_json(format_invoice_for_display(invoice))
 
 
-@app.command("send")
+@app.command("mark-sent")
 @command
-def invoice_send(
-    invoice_id: str = typer.Argument(
-        ...,
-        help="The invoice ID to send",
-    ),
-    email: Optional[str] = typer.Option(
-        None,
-        "--email",
-        "-e",
-        help="Override recipient email address",
-    ),
-    force: bool = typer.Option(
-        False,
-        "--force",
-        "-F",
-        help="Skip confirmation prompt",
-    ),
+def invoice_mark_sent(
+    invoice_id: str = typer.Argument(..., help="Invoice ID already delivered externally"),
+    force: bool = typer.Option(False, "--force", "-F", help="Skip confirmation prompt"),
 ):
-    """
-    Send an invoice via email.
+    """Record external invoice delivery. Download PDF first; caller sends it.
 
     Examples:
-        freshbooks invoice send 1234567
-        freshbooks invoice send 1234567 --email client@example.com
-        freshbooks invoice send 1234567 -F
+        invoicedesk invoice download 1234567 -o invoice.pdf
+        invoicedesk invoice mark-sent 1234567 -F
     """
     client = get_client()
-
-    # Get invoice details first
     invoice = client.get_invoice(invoice_id)
-    if not invoice:
-        typer.echo(f"Invoice {invoice_id} not found.")
-        raise typer.Exit(1)
-
-    # Confirm before sending
-    if not force:
-        typer.echo(f"Invoice #{invoice.get('invoice_number')}")
-        typer.echo(f"Amount: ${invoice.get('amount', {}).get('amount', '0.00')}")
-        if not typer.confirm("Send this invoice?"):
-            typer.echo("Aborted.")
-            raise typer.Exit(0)
-
-    recipients = [email] if email else None
-    result = client.send_invoice(invoice_id, email_recipients=recipients)
-
-    print_success(f"Invoice {invoice.get('invoice_number')} sent successfully!")
+    if not force and not typer.confirm("Confirm invoice was delivered externally?", err=True):
+        raise typer.Exit(0)
+    client.mark_invoice_sent(invoice_id)
+    print_success(f"Invoice {invoice.get('invoice_number')} marked sent.")
 
 
 @app.command("delete")
@@ -477,23 +452,23 @@ def invoice_delete(
     Delete/void an invoice.
 
     Examples:
-        freshbooks invoice delete 1234567
-        freshbooks invoice delete 1234567 -F
+        invoicedesk invoice delete 1234567
+        invoicedesk invoice delete 1234567 -F
     """
     client = get_client()
 
     # Get invoice details first
     invoice = client.get_invoice(invoice_id)
     if not invoice:
-        typer.echo(f"Invoice {invoice_id} not found.")
+        typer.echo(f"Invoice {invoice_id} not found.", err=True)
         raise typer.Exit(1)
 
     # Confirm before deleting
     if not force:
-        typer.echo(f"Invoice #{invoice.get('invoice_number')}")
-        typer.echo(f"Amount: ${invoice.get('amount', {}).get('amount', '0.00')}")
-        if not typer.confirm("Delete this invoice?", default=False):
-            typer.echo("Aborted.")
+        typer.echo(f"Invoice #{invoice.get('invoice_number')}", err=True)
+        typer.echo(f"Amount: ${invoice.get('amount', {}).get('amount', '0.00')}", err=True)
+        if not typer.confirm("Delete this invoice?", default=False, err=True):
+            typer.echo("Aborted.", err=True)
             raise typer.Exit(0)
 
     client.delete_invoice(invoice_id)
@@ -524,8 +499,8 @@ def invoice_mark_paid(
     Mark an invoice as paid.
 
     Examples:
-        freshbooks invoice mark-paid 1234567 -a 500.00
-        freshbooks invoice mark-paid 1234567 -a 500.00 -d 2024-01-15
+        invoicedesk invoice mark-paid 1234567 -a 500.00
+        invoicedesk invoice mark-paid 1234567 -a 500.00 -d 2024-01-15
     """
     from datetime import datetime
 
@@ -565,7 +540,7 @@ def invoice_update(
     terms_from_config: bool = typer.Option(
         False,
         "--terms-from-config",
-        help="Set payment terms from DEFAULT_TERMS in .env",
+        help="Set payment terms from InvoiceDesk Settings",
     ),
     po_number: Optional[str] = typer.Option(
         None,
@@ -587,20 +562,20 @@ def invoice_update(
     Update an existing invoice.
 
     --line-amount LINEID=AMOUNT sets that line's unit_cost (quantity unchanged).
-    Find line IDs with `freshbooks invoice get <id>`. FreshBooks replaces the
+    Find line IDs with `invoicedesk invoice get <id>`. InvoiceDesk replaces the
     whole lines array on update, so the invoice is fetched and every line is
     resent; lines not named are preserved. An unknown line ID or a
     non-numeric/non-positive amount fails with a non-zero exit and nothing is
     sent. With --line-amount the output JSON also includes the invoice lines.
 
     Examples:
-        freshbooks invoice update 1234567 -f ./contract.pdf
-        freshbooks invoice update 1234567 -n "Updated notes"
-        freshbooks invoice update 1234567 -f ./receipt.pdf -n "Added receipt"
-        freshbooks invoice update 1234567 --terms-from-config
-        freshbooks invoice update 1234567 -t "Net 30"
-        freshbooks invoice update 1234567 --line-amount 1=750.00
-        freshbooks invoice update 1234567 -l 1=750 -l 2=800.50
+        invoicedesk invoice update 1234567 -f ./contract.pdf
+        invoicedesk invoice update 1234567 -n "Updated notes"
+        invoicedesk invoice update 1234567 -f ./receipt.pdf -n "Added receipt"
+        invoicedesk invoice update 1234567 --terms-from-config
+        invoicedesk invoice update 1234567 -t "Net 30"
+        invoicedesk invoice update 1234567 --line-amount 1=750.00
+        invoicedesk invoice update 1234567 -l 1=750 -l 2=800.50
     """
     client = get_client()
     config = get_config()
@@ -612,7 +587,7 @@ def invoice_update(
     invoice_terms = None
     if terms_from_config:
         if not config.default_terms:
-            typer.echo("Error: DEFAULT_TERMS not set in .env")
+            typer.echo("Error: No payment instructions set in InvoiceDesk Settings", err=True)
             raise typer.Exit(1)
         invoice_terms = config.default_terms
     elif terms:
@@ -620,7 +595,7 @@ def invoice_update(
 
     # Check that at least one update option is provided
     if not any([attachment, notes, invoice_terms, po_number, line_amounts]):
-        typer.echo("No updates specified. Use --help to see available options.")
+        typer.echo("No updates specified. Use --help to see available options.", err=True)
         raise typer.Exit(1)
 
     # Build and validate the new lines before uploading anything.
@@ -632,18 +607,7 @@ def invoice_update(
             raise typer.Exit(1)
         lines = rebuild_lines(existing.get("lines", []), line_amounts)
 
-    # Handle file attachment if provided
-    attachments = None
-    if attachment:
-        typer.echo(f"Uploading attachment: {attachment}")
-        upload_result = client.upload_attachment(attachment)
-        attachments = [
-            {
-                "jwt": upload_result["jwt"],
-                "media_type": upload_result["media_type"]
-            }
-        ]
-        typer.echo("Attachment uploaded successfully.")
+    attachments = _upload_attachment(client, attachment)
 
     invoice = client.update_invoice(
         invoice_id=invoice_id,
@@ -689,16 +653,16 @@ def invoice_download(
     Download an invoice as a PDF.
 
     Examples:
-        freshbooks invoice download 1234567
-        freshbooks invoice download 1234567 -o ~/Downloads/invoice.pdf
-        freshbooks invoice download 1234567 --output ./my-invoice.pdf
+        invoicedesk invoice download 1234567
+        invoicedesk invoice download 1234567 -o ~/Downloads/invoice.pdf
+        invoicedesk invoice download 1234567 --output ./my-invoice.pdf
     """
     client = get_client()
 
     # Get invoice details for the filename
     invoice = client.get_invoice(invoice_id)
     if not invoice:
-        typer.echo(f"Invoice {invoice_id} not found.")
+        typer.echo(f"Invoice {invoice_id} not found.", err=True)
         raise typer.Exit(1)
 
     invoice_number = invoice.get("invoice_number", invoice_id)
@@ -710,7 +674,7 @@ def invoice_download(
         output_path = Path(f"invoice_{invoice_number}.pdf")
 
     # Download the PDF
-    typer.echo(f"Downloading invoice #{invoice_number}...")
+    typer.echo(f"Downloading invoice #{invoice_number}...", err=True)
     pdf_content = client.download_invoice_pdf(invoice_id)
 
     # Ensure parent directory exists
@@ -725,27 +689,27 @@ def invoice_download(
 
 COMMAND_CREDENTIALS = {
     "create": [
-        "oauth"
+        "api_key"
     ],
     "delete": [
-        "oauth"
+        "api_key"
     ],
     "download": [
-        "oauth"
+        "api_key"
     ],
     "get": [
-        "oauth"
+        "api_key"
     ],
     "list": [
-        "oauth"
+        "api_key"
     ],
     "mark-paid": [
-        "oauth"
+        "api_key"
     ],
-    "send": [
-        "oauth"
+    "mark-sent": [
+        "api_key"
     ],
     "update": [
-        "oauth"
+        "api_key"
     ]
 }

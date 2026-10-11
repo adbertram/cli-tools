@@ -1,6 +1,6 @@
-"""Regression tests for --filter on the FreshBooks list commands.
+"""Regression tests for --filter on the InvoiceDesk list commands.
 
-Covers the defect where ``freshbooks customer list --filter organization:like:n8n``
+Covers the defect where ``invoicedesk customer list --filter organization:like:n8n``
 returned ``[]`` and exited 0 for a customer that provably exists, so a caller
 read the empty result as "no such customer" instead of as a wrong answer.
 
@@ -19,8 +19,8 @@ import json
 import pytest
 from typer.testing import CliRunner
 
-from freshbooks_cli.commands import customer as customer_commands
-from freshbooks_cli.filter_map import search_literal
+from invoicedesk_cli.commands import customer as customer_commands
+from invoicedesk_cli.filter_map import search_literal
 
 runner = CliRunner()
 
@@ -48,7 +48,7 @@ SAAS_GROUP = {
 
 
 class FakeClient:
-    """Stands in for FreshBooksClient and records how it was called."""
+    """Stands in for InvoicedeskClient and records how it was called."""
 
     def __init__(self, records):
         self.records = records

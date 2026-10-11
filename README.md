@@ -437,7 +437,7 @@ repo itself, currently `cli-tool` and `cli-tool-secrets`.
 | --- | --- | --- |
 | [`cloudflare`](cloudflare/) | `cloudflare` | A command-line interface for the [Cloudflare API](https://developers.cloudflare.com/api/). Manage Cloudflare zones and cache. |
 | [`cryptocom`](cryptocom/) | `cryptocom` | Command-line access to the Crypto.com Exchange REST API for public market data and authenticated account data. |
-| [`freshbooks`](freshbooks/) | `freshbooks` | Complete reference for the `freshbooks` command-line interface for managing FreshBooks accounting data. |
+| [`invoicedesk`](invoicedesk/) | `invoicedesk` | Manage InvoiceDesk customers, invoices, payments, PDF exports and resumable archives. |
 | [`n8n`](n8n/) | `n8n` | Manage n8n server - nodes, executions, credentials, data tables, and logs. |
 
 ### Consumer Services & Devices

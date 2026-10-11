@@ -1,33 +1,17 @@
 {
-  "tool": "freshbooks",
-  "description": "CLI interface for FreshBooks accounting API",
-  "discovered_at": "2026-10-11T13:27:32Z",
-  "total_commands": 27,
-  "global_options": [
-    {
-      "name": "--version",
-      "type": "bool",
-      "required": false,
-      "help": "Show version and exit",
-      "short": "-v"
-    },
-    {
-      "name": "--no-cache",
-      "type": "bool",
-      "required": false,
-      "help": "Bypass response cache"
-    }
-  ],
+  "tool": "invoicedesk",
+  "description": "CLI interface for invoicedesk",
+  "discovered_at": "2026-10-11T14:47:31Z",
+  "total_commands": 26,
+  "global_options": [],
   "commands": {
     "auth": {
       "help": "Manage authentication",
-      "usage_instructions": "Use `freshbooks auth` to access this command group. Run `--help` on a subcommand for details.",
       "arguments": [],
       "options": [],
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
-          "usage_instructions": "Use `freshbooks auth login` with the documented arguments and options shown below.",
           "arguments": [],
           "options": [
             {
@@ -49,7 +33,6 @@
         },
         "logout": {
           "help": "Clear stored credentials.",
-          "usage_instructions": "Use `freshbooks auth logout` with the documented arguments and options shown below.",
           "arguments": [],
           "options": [
             {
@@ -63,13 +46,11 @@
         },
         "profiles": {
           "help": "Manage authentication profiles",
-          "usage_instructions": "Use `freshbooks auth profiles` to access this command group. Run `--help` on a subcommand for details.",
           "arguments": [],
           "options": [],
           "commands": {
             "create": {
               "help": "Create a new profile from .env.example template.",
-              "usage_instructions": "Use `freshbooks auth profiles create` with the documented arguments and options shown below.",
               "arguments": [
                 {
                   "name": "name",
@@ -82,7 +63,6 @@
             },
             "delete": {
               "help": "Delete a profile and its data.",
-              "usage_instructions": "Use `freshbooks auth profiles delete` with the documented arguments and options shown below.",
               "arguments": [
                 {
                   "name": "name",
@@ -104,7 +84,6 @@
             },
             "get": {
               "help": "Get details for a specific profile.",
-              "usage_instructions": "Use `freshbooks auth profiles get` with the documented arguments and options shown below.",
               "arguments": [
                 {
                   "name": "name",
@@ -126,7 +105,6 @@
             },
             "list": {
               "help": "List all profiles and show their auth types and active state.",
-              "usage_instructions": "Use `freshbooks auth profiles list` with the documented arguments and options shown below.",
               "arguments": [],
               "options": [
                 {
@@ -229,31 +207,8 @@
             }
           }
         },
-        "refresh": {
-          "help": "Refresh OAuth access token using stored refresh token.",
-          "usage_instructions": "Use `freshbooks auth refresh` with the documented arguments and options shown below.",
-          "arguments": [],
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Profile name",
-              "short": "-p"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t",
-              "takes_value": false
-            }
-          ]
-        },
         "status": {
           "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
-          "usage_instructions": "Use `freshbooks auth status` with the documented arguments and options shown below.",
           "arguments": [],
           "options": [
             {
@@ -275,7 +230,6 @@
         },
         "test": {
           "help": "Test authentication by verifying credentials work across profiles.",
-          "usage_instructions": "Use `freshbooks auth test` with the documented arguments and options shown below.",
           "arguments": [],
           "options": [
             {
@@ -307,13 +261,11 @@
     },
     "cache": {
       "help": "Manage CLI cache",
-      "usage_instructions": "Use `freshbooks cache` to access this command group. Run `--help` on a subcommand for details.",
       "arguments": [],
       "options": [],
       "commands": {
         "clear": {
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
-          "usage_instructions": "Use `freshbooks cache clear` with the documented arguments and options shown below.",
           "arguments": [],
           "options": [
             {
@@ -328,7 +280,6 @@
     },
     "customer": {
       "help": "Manage customers/clients",
-      "usage_instructions": "Use `freshbooks customer` to access this command group. Run `--help` on a subcommand for details.",
       "arguments": [],
       "options": [
         {
@@ -342,9 +293,8 @@
         "create": {
           "help": "Create a new customer.",
           "examples": [
-            "freshbooks customer create -e john@acme.com -f John -l Doe -o \"Acme Corp\""
+            "invoicedesk customer create -e john@acme.com -f John -l Doe -o \"Acme Corp\""
           ],
-          "usage_instructions": "Use `freshbooks customer create` with the documented arguments and options shown below.",
           "arguments": [],
           "options": [
             {
@@ -386,9 +336,8 @@
         "find": {
           "help": "Find a customer by email address.",
           "examples": [
-            "freshbooks customer find client@example.com"
+            "invoicedesk customer find client@example.com"
           ],
-          "usage_instructions": "Use `freshbooks customer find` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "email",
@@ -409,10 +358,9 @@
         "get": {
           "help": "Get details for a specific customer.",
           "examples": [
-            "freshbooks customer get 12345",
-            "freshbooks customer get 12345 --table"
+            "invoicedesk customer get 12345",
+            "invoicedesk customer get 12345 --table"
           ],
-          "usage_instructions": "Use `freshbooks customer get` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "customer_id",
@@ -439,17 +387,16 @@
           ]
         },
         "list": {
-          "help": "List all customers/clients. Shows all customers in your FreshBooks account. Filterable fields: id, organization, name, email. Substring searches use 'contains', or 'like' with explicit SQL wildcards ('%acme%'). A bare 'like:acme' is an anchored, case-insensitive exact match.",
+          "help": "List all customers/clients. Shows all customers in your InvoiceDesk account. Filterable fields: id, organization, name, email. Substring searches use 'contains', or 'like' with explicit SQL wildcards ('%acme%'). A bare 'like:acme' is an anchored, case-insensitive exact match.",
           "examples": [
-            "freshbooks customer list",
-            "freshbooks customer list --table",
-            "freshbooks customer list --filter organization:contains:acme --table",
-            "freshbooks customer list --filter organization:like:%acme% --table",
-            "freshbooks customer list --filter email:eq:john@acme.com",
-            "freshbooks customer list --limit 10",
-            "freshbooks customer list --properties id,organization,email"
+            "invoicedesk customer list",
+            "invoicedesk customer list --table",
+            "invoicedesk customer list --filter organization:contains:acme --table",
+            "invoicedesk customer list --filter organization:like:%acme% --table",
+            "invoicedesk customer list --filter email:eq:john@acme.com",
+            "invoicedesk customer list --limit 10",
+            "invoicedesk customer list --properties id,organization,email"
           ],
-          "usage_instructions": "Use `freshbooks customer list` with the documented arguments and options shown below.",
           "arguments": [],
           "options": [
             {
@@ -463,7 +410,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "Maximum number of customers to return (default: 100)",
+              "help": "[x>=1]  Maximum number of customers to return (default: 100)",
               "short": "-l",
               "default": "100"
             },
@@ -493,10 +440,9 @@
         "update": {
           "help": "Update an existing customer.",
           "examples": [
-            "freshbooks customer update 12345 --email newemail@acme.com",
-            "freshbooks customer update 12345 -o \"New Company Name\""
+            "invoicedesk customer update 12345 --email newemail@acme.com",
+            "invoicedesk customer update 12345 -o \"New Company Name\""
           ],
-          "usage_instructions": "Use `freshbooks customer update` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "customer_id",
@@ -545,7 +491,7 @@
       }
     },
     "export": {
-      "help": "Archive FreshBooks data",
+      "help": "Archive InvoiceDesk data",
       "arguments": [],
       "options": [
         {
@@ -586,7 +532,6 @@
     },
     "invoice": {
       "help": "Manage invoices",
-      "usage_instructions": "Use `freshbooks invoice` to access this command group. Run `--help` on a subcommand for details.",
       "arguments": [],
       "options": [
         {
@@ -598,17 +543,16 @@
       ],
       "commands": {
         "create": {
-          "help": "Create a new invoice. Supports multiple line items by repeating -d and -a flags. Each -d is paired with the corresponding -a by position. Use -q to set quantity per line item (defaults to 1). Payment terms are automatically added from DEFAULT_TERMS in .env unless --no-terms is specified or --terms provides custom terms.",
+          "help": "Create a new invoice. Supports multiple line items by repeating -d and -a flags. Each -d is paired with the corresponding -a by position. Use -q to set quantity per line item (defaults to 1). Payment terms are automatically added from InvoiceDesk Settings unless --no-terms is specified or --terms provides custom terms.",
           "examples": [
-            "freshbooks invoice create -c 12345 -d \"Consulting Services\" -a 500.00",
-            "freshbooks invoice create -c 12345 -d \"Article Writing\" -a 750.00 -n \"Thank you!\" -p \"REF-001\"",
-            "freshbooks invoice create -c 12345 -d \"Contract Work\" -a 1000.00 -f ./contract.pdf",
-            "freshbooks invoice create -c 12345 -d \"Consulting\" -a 500.00 --due-days 60",
-            "freshbooks invoice create -c 12345 -d \"Consulting\" -a 500.00 --no-terms",
-            "freshbooks invoice create -c 12345 -d \"Line 1\" -a 500 -d \"Line 2\" -a 1000",
-            "freshbooks invoice create -c 12345 -d \"Item A\" -a 500 -q 2 -d \"Item B\" -a 300 -q 1"
+            "invoicedesk invoice create -c 12345 -d \"Consulting Services\" -a 500.00",
+            "invoicedesk invoice create -c 12345 -d \"Article Writing\" -a 750.00 -n \"Thank you!\" -p \"REF-001\"",
+            "invoicedesk invoice create -c 12345 -d \"Contract Work\" -a 1000.00 -f ./contract.pdf",
+            "invoicedesk invoice create -c 12345 -d \"Consulting\" -a 500.00 --due-days 60",
+            "invoicedesk invoice create -c 12345 -d \"Consulting\" -a 500.00 --no-terms",
+            "invoicedesk invoice create -c 12345 -d \"Line 1\" -a 500 -d \"Line 2\" -a 1000",
+            "invoicedesk invoice create -c 12345 -d \"Item A\" -a 500 -q 2 -d \"Item B\" -a 300 -q 1"
           ],
-          "usage_instructions": "Use `freshbooks invoice create` with the documented arguments and options shown below.",
           "arguments": [],
           "options": [
             {
@@ -692,10 +636,9 @@
         "delete": {
           "help": "Delete/void an invoice.",
           "examples": [
-            "freshbooks invoice delete 1234567",
-            "freshbooks invoice delete 1234567 -F"
+            "invoicedesk invoice delete 1234567",
+            "invoicedesk invoice delete 1234567 -F"
           ],
-          "usage_instructions": "Use `freshbooks invoice delete` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "invoice_id",
@@ -724,11 +667,10 @@
         "download": {
           "help": "Download an invoice as a PDF.",
           "examples": [
-            "freshbooks invoice download 1234567",
-            "freshbooks invoice download 1234567 -o ~/Downloads/invoice.pdf",
-            "freshbooks invoice download 1234567 --output ./my-invoice.pdf"
+            "invoicedesk invoice download 1234567",
+            "invoicedesk invoice download 1234567 -o ~/Downloads/invoice.pdf",
+            "invoicedesk invoice download 1234567 --output ./my-invoice.pdf"
           ],
-          "usage_instructions": "Use `freshbooks invoice download` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "invoice_id",
@@ -756,10 +698,9 @@
         "get": {
           "help": "Get details for a specific invoice.",
           "examples": [
-            "freshbooks invoice get 1234567",
-            "freshbooks invoice get 1234567 --table"
+            "invoicedesk invoice get 1234567",
+            "invoicedesk invoice get 1234567 --table"
           ],
-          "usage_instructions": "Use `freshbooks invoice get` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "invoice_id",
@@ -786,18 +727,17 @@
           ]
         },
         "list": {
-          "help": "List all invoices. Shows all invoices in your FreshBooks account with optional status filtering. Filterable fields: id, number, client, status, amount, outstanding, created, due_date. Substring searches use 'contains', or 'like' with explicit SQL wildcards ('%acme%'). A bare 'like:acme' is an anchored, case-insensitive exact match.",
+          "help": "List all invoices. Shows all invoices in your InvoiceDesk account with optional status filtering. Filterable fields: id, number, client, status, amount, outstanding, created, due_date. Substring searches use 'contains', or 'like' with explicit SQL wildcards ('%acme%'). A bare 'like:acme' is an anchored, case-insensitive exact match.",
           "examples": [
-            "freshbooks invoice list",
-            "freshbooks invoice list --table",
-            "freshbooks invoice list --status sent --table",
-            "freshbooks invoice list --unpaid --table",
-            "freshbooks invoice list --filter client:contains:acme",
-            "freshbooks invoice list --filter client:like:%acme%",
-            "freshbooks invoice list --limit 10",
-            "freshbooks invoice list --from 2024-01-01 --to 2024-12-31"
+            "invoicedesk invoice list",
+            "invoicedesk invoice list --table",
+            "invoicedesk invoice list --status sent --table",
+            "invoicedesk invoice list --unpaid --table",
+            "invoicedesk invoice list --filter client:contains:acme",
+            "invoicedesk invoice list --filter client:like:%acme%",
+            "invoicedesk invoice list --limit 10",
+            "invoicedesk invoice list --from 2024-01-01 --to 2024-12-31"
           ],
-          "usage_instructions": "Use `freshbooks invoice list` with the documented arguments and options shown below.",
           "arguments": [],
           "options": [
             {
@@ -811,14 +751,14 @@
               "name": "--status",
               "type": "TEXT",
               "required": false,
-              "help": "Filter by status (draft, sent, viewed, paid, overdue)",
+              "help": "Filter by status (draft, sent, viewed, partial, paid, overdue)",
               "short": "-s"
             },
             {
               "name": "--unpaid",
               "type": "bool",
               "required": false,
-              "help": "Filter to show only unpaid invoices (sent, viewed, overdue)",
+              "help": "Filter to show only active unpaid issued invoices, including partial payments",
               "short": "-u",
               "takes_value": false
             },
@@ -826,7 +766,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "Maximum number of invoices to return (default: 100)",
+              "help": "[x>=1]  Maximum number of invoices to return (default: 100)",
               "short": "-l",
               "default": "100"
             },
@@ -868,10 +808,9 @@
         "mark-paid": {
           "help": "Mark an invoice as paid.",
           "examples": [
-            "freshbooks invoice mark-paid 1234567 -a 500.00",
-            "freshbooks invoice mark-paid 1234567 -a 500.00 -d 2024-01-15"
+            "invoicedesk invoice mark-paid 1234567 -a 500.00",
+            "invoicedesk invoice mark-paid 1234567 -a 500.00 -d 2024-01-15"
           ],
-          "usage_instructions": "Use `freshbooks invoice mark-paid` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "invoice_id",
@@ -903,30 +842,20 @@
             }
           ]
         },
-        "send": {
-          "help": "Send an invoice via email.",
+        "mark-sent": {
+          "help": "Record external invoice delivery. Download PDF first; caller sends it.",
           "examples": [
-            "freshbooks invoice send 1234567",
-            "freshbooks invoice send 1234567 --email client@example.com",
-            "freshbooks invoice send 1234567 -F"
+            "invoicedesk invoice mark-sent 1234567 -F"
           ],
-          "usage_instructions": "Use `freshbooks invoice send` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "invoice_id",
               "type": "TEXT",
               "required": true,
-              "help": "The invoice ID to send"
+              "help": "Invoice ID already delivered externally"
             }
           ],
           "options": [
-            {
-              "name": "--email",
-              "type": "TEXT",
-              "required": false,
-              "help": "Override recipient email address",
-              "short": "-e"
-            },
             {
               "name": "--force",
               "type": "bool",
@@ -944,17 +873,16 @@
           ]
         },
         "update": {
-          "help": "Update an existing invoice. --line-amount LINEID=AMOUNT sets that line's unit_cost (quantity unchanged). Find line IDs with `freshbooks invoice get <id>`. FreshBooks replaces the whole lines array on update, so the invoice is fetched and every line is resent; lines not named are preserved. An unknown line ID or a non-numeric/non-positive amount fails with a non-zero exit and nothing is sent. With --line-amount the output JSON also includes the invoice lines.",
+          "help": "Update an existing invoice. --line-amount LINEID=AMOUNT sets that line's unit_cost (quantity unchanged). Find line IDs with `invoicedesk invoice get <id>`. InvoiceDesk replaces the whole lines array on update, so the invoice is fetched and every line is resent; lines not named are preserved. An unknown line ID or a non-numeric/non-positive amount fails with a non-zero exit and nothing is sent. With --line-amount the output JSON also includes the invoice lines.",
           "examples": [
-            "freshbooks invoice update 1234567 -f ./contract.pdf",
-            "freshbooks invoice update 1234567 -n \"Updated notes\"",
-            "freshbooks invoice update 1234567 -f ./receipt.pdf -n \"Added receipt\"",
-            "freshbooks invoice update 1234567 --terms-from-config",
-            "freshbooks invoice update 1234567 -t \"Net 30\"",
-            "freshbooks invoice update 1234567 --line-amount 1=750.00",
-            "freshbooks invoice update 1234567 -l 1=750 -l 2=800.50"
+            "invoicedesk invoice update 1234567 -f ./contract.pdf",
+            "invoicedesk invoice update 1234567 -n \"Updated notes\"",
+            "invoicedesk invoice update 1234567 -f ./receipt.pdf -n \"Added receipt\"",
+            "invoicedesk invoice update 1234567 --terms-from-config",
+            "invoicedesk invoice update 1234567 -t \"Net 30\"",
+            "invoicedesk invoice update 1234567 --line-amount 1=750.00",
+            "invoicedesk invoice update 1234567 -l 1=750 -l 2=800.50"
           ],
-          "usage_instructions": "Use `freshbooks invoice update` with the documented arguments and options shown below.",
           "arguments": [
             {
               "name": "invoice_id",
@@ -989,7 +917,7 @@
               "name": "--terms-from-config",
               "type": "bool",
               "required": false,
-              "help": "Set payment terms from DEFAULT_TERMS in .env",
+              "help": "Set payment terms from InvoiceDesk Settings",
               "takes_value": false
             },
             {
@@ -1017,5 +945,5 @@
       }
     }
   },
-  "usage_instructions": "Use `freshbooks` to access this CLI. Run `--help` on a command for details."
+  "usage_instructions": "Use the `invoicedesk` CLI. Run `invoicedesk --help` to discover command groups and `--help` on any subcommand for its options."
 }

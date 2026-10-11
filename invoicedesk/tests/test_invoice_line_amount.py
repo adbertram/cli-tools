@@ -1,6 +1,6 @@
-"""Tests for ``freshbooks invoice update --line-amount LINEID=AMOUNT`` (mocked HTTP).
+"""Tests for ``invoicedesk invoice update --line-amount LINEID=AMOUNT`` (mocked HTTP).
 
-FreshBooks replaces the whole ``lines`` array on an invoice PUT, so the command
+InvoiceDesk replaces the whole ``lines`` array on an invoice PUT, so the command
 must fetch the invoice, rebuild every line with only the named unit_cost
 changed, and PUT the full list.
 """
@@ -10,10 +10,10 @@ import json
 import pytest
 from typer.testing import CliRunner
 
-from freshbooks_cli import client as client_module
-from freshbooks_cli.client import FreshBooksClient
-from freshbooks_cli.commands import invoice as invoice_commands
-from freshbooks_cli.invoice_lines import parse_line_amounts, rebuild_lines
+from invoicedesk_cli import client as client_module
+from invoicedesk_cli.client import InvoicedeskClient
+from invoicedesk_cli.commands import invoice as invoice_commands
+from invoicedesk_cli.invoice_lines import parse_line_amounts, rebuild_lines
 from cli_tools_shared.exceptions import ClientError
 
 runner = CliRunner()
@@ -156,7 +156,8 @@ def test_rebuild_lines_keeps_project_fields_when_set():
 
 def test_client_update_invoice_puts_full_lines_payload(monkeypatch):
     class Cfg:
-        access_token = "t"
+        api_key = "t"
+        base_url = "https://example.invalid"
         account_id = "acct"
         client_id = "c"
         client_secret = "s"
@@ -185,7 +186,25 @@ def test_client_update_invoice_puts_full_lines_payload(monkeypatch):
 
     monkeypatch.setattr(client_module.requests, "request", fake_request)
     lines = rebuild_lines(copy.deepcopy(EXISTING), {"1": "750"})
-    FreshBooksClient().update_invoice("1463865", lines=lines)
+    InvoicedeskClient().update_invoice("1463865", lines=lines)
     assert seen["method"] == "PUT"
-    assert seen["url"].endswith("/accounting/account/acct/invoices/invoices/1463865")
+    assert seen["url"].endswith("/api/compat/invoices/1463865")
     assert seen["json"] == {"invoice": {"lines": lines}}
+
+def test_preserves_compounded_taxes_and_article_url():
+    existing = _line('line:abc', 'Taxed article', '100', taxed=True)
+    existing.update(compounded_tax=True, article_url='https://example.com/article',taxName2='Local',taxAmount2='10')
+    rebuilt = rebuild_lines([existing], {'line:abc':'100'})
+    assert rebuilt[0]['compounded_tax'] is True
+    assert rebuilt[0]['article_url']=='https://example.com/article'
+    assert rebuilt[0]['taxName2']=='Local'
+
+def test_unknown_id_with_string_line_ids_is_client_error():
+    with pytest.raises(ClientError,match='Unknown line ID'):
+        rebuild_lines([_line('line:abc','Article','100')], {'unknown':'20'})
+
+def test_rebuilt_lines_only_send_server_accepted_writable_fields():
+    existing=_line(1,'Article','100')
+    existing.update(discount='10',discount_value='10',discount_type='percent')
+    rebuilt=rebuild_lines([existing],{'1':'125'})[0]
+    assert not {'discount','discount_value','discount_type'} & rebuilt.keys()

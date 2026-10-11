@@ -1,4 +1,4 @@
-"""Main entry point for FreshBooks CLI."""
+"""Main entry point for InvoiceDesk CLI."""
 from . import __version__
 from cli_tools_shared import create_app, run_app
 from cli_tools_shared.exceptions import ClientError
@@ -9,16 +9,16 @@ from cli_tools_shared.cache_commands import create_cache_app
 
 # Create main Typer app
 app = create_app(
-    name="freshbooks",
-    help="CLI interface for FreshBooks accounting API",
+    name="invoicedesk",
+    help="CLI interface for InvoiceDesk accounting API",
     version=__version__,
 )
 
 
 # Import and register command modules
 try:
-    from .commands import auth
-    app.add_typer(auth.app, name="auth", help="Manage authentication")
+    from cli_tools_shared.auth_commands import create_auth_app
+    app.add_typer(create_auth_app(get_config, tool_name="invoicedesk"), name="auth", help="Manage authentication")
 except ImportError:
     pass
 
@@ -38,7 +38,7 @@ except ImportError:
 
 
 from .commands import export
-register_commands(app, get_config, export, name="export", help="Archive FreshBooks data")
+register_commands(app, get_config, export, name="export", help="Archive InvoiceDesk data")
 
 
 def main():
