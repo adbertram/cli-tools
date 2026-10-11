@@ -13,7 +13,7 @@ COMMAND_CREDENTIALS = {"run": ["api_key"]}
 @command
 def export_run(
     output: Path = typer.Option(..., "--output", "-o", help="Private export directory; must be new unless --resume is set"),
-    resume: bool = typer.Option(False, "--resume", help="Verify and reuse saved response files, then retry missing reads"),
+    resume: bool = typer.Option(False, "--resume", help="Verify source identity and original checksums, refresh PDFs, retry missing reads"),
 ):
     """Archive raw pages, details, PDFs and a coverage manifest for every business.
 

@@ -1,4 +1,6 @@
 """Invoice commands for InvoiceDesk CLI."""
+import os
+import tempfile
 from datetime import date
 from pathlib import Path
 from typing import Optional, List
@@ -667,11 +669,18 @@ def invoice_download(
 
     invoice_number = invoice.get("invoice_number", invoice_id)
 
-    # Determine output path
+    # Imported invoice numbers are untrusted filename components.
     if output:
         output_path = Path(output).expanduser()
     else:
-        output_path = Path(f"invoice_{invoice_number}.pdf")
+        number = str(invoice_number)
+        if not number or number in {".", ".."} or any(c in number for c in "/\\") or any(ord(c) < 32 or ord(c) == 127 for c in number):
+            raise ClientError("Unsafe invoice number for default PDF filename; use --output")
+        output_path = Path(f"invoice_{number}.pdf")
+    if output_path.is_symlink():
+        raise ClientError("PDF destination cannot be a symbolic link")
+    if not output and output_path.exists():
+        raise ClientError("Default PDF destination already exists; choose an explicit --output path")
 
     # Download the PDF
     typer.echo(f"Downloading invoice #{invoice_number}...", err=True)
@@ -680,9 +689,23 @@ def invoice_download(
     # Ensure parent directory exists
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Write the PDF
-    with open(output_path, "wb") as f:
-        f.write(pdf_content)
+    # Publish only a completed PDF; explicit output paths authorize replacement.
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=output_path.parent, prefix=".invoice-", delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(pdf_content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        if output:
+            os.replace(temporary, output_path)
+        else:
+            os.link(temporary, output_path)
+    except OSError as exc:
+        raise ClientError(f"Cannot save PDF: {exc}") from exc
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
     print_success(f"Invoice saved to {output_path}")
 

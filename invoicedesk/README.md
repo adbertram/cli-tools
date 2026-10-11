@@ -24,7 +24,7 @@ Default URL: https://invoice-desk.adamtheautomator.workers.dev. Set non-secret `
 
 ## Delivery
 
-InvoiceDesk exports PDFs; the caller emails them. Download with `invoicedesk invoice download ID -o invoice.pdf`, deliver externally, then record delivery with `invoicedesk invoice mark-sent ID -F`. No command sends email. Download and mutation status messages go to stderr. JSON and tables go to stdout.
+InvoiceDesk exports PDFs; the caller emails them. Download with `invoicedesk invoice download ID -o invoice.pdf`, deliver externally, then record delivery with `invoicedesk invoice mark-sent ID -F`. No command sends email. PDF downloads reject unsafe invoice numbers in default filenames and never overwrite an existing default destination. Explicit `--output` paths authorize replacement; symbolic-link destinations are rejected. Downloads publish only after the full PDF has been written. Download and mutation status messages go to stderr. JSON and tables go to stdout.
 
 ## Data and identifiers
 
@@ -391,7 +391,7 @@ invoicedesk invoice update 1234567 -f ./contract.pdf
 
 ## Export
 
-`export run` creates a private directory containing current raw data, every original imported archive file, native attachments, invoice PDFs and a SHA-256 manifest. `--resume` verifies every saved checksum before fetching missing files. Failed reads produce a partial manifest and exit 2. No source records change.
+`export run` creates a private directory containing current raw data, every original imported archive file, native attachments, invoice PDFs and a SHA-256 manifest. `--resume` verifies the source database identity before changing any archive file, checks saved checksums against the current original-file inventory, and refreshes invoice PDFs. Archives from another database or older archives without source identity cannot resume; create a new export directory. Failed reads produce a partial manifest and exit 2. No source records change.
 
 ## Exit codes
 

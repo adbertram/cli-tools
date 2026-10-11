@@ -1,7 +1,7 @@
 {
   "tool": "invoicedesk",
   "description": "CLI interface for invoicedesk",
-  "discovered_at": "2026-10-11T14:47:31Z",
+  "discovered_at": "2026-10-11T16:19:01Z",
   "total_commands": 26,
   "global_options": [],
   "commands": {
@@ -517,7 +517,7 @@
               "name": "--resume",
               "type": "bool",
               "required": false,
-              "help": "Verify and reuse saved response files, then retry missing reads",
+              "help": "Verify source identity and original checksums, refresh PDFs, retry missing reads",
               "takes_value": false
             },
             {

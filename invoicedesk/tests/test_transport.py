@@ -64,7 +64,7 @@ def test_export_resume_refreshes_mutable_pdf(tmp_path):
         version=1
         def _make_request(self,method,path,**kwargs):
             if path=='/api/compat/export':
-                return {'archive_files':[],'invoices':[{'id':'native:1','notes':str(self.version)}]}
+                return {'source_identity':'fixture-identity','archive_files':[],'invoices':[{'id':'native:1','notes':str(self.version)}]}
             return response(content=f'%PDF-{self.version}'.encode())
     api=API()
     output=tmp_path/'export'

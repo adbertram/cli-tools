@@ -106,3 +106,173 @@ def test_unpaid_and_overdue_include_source_statuses_exclude_inactive(service,mon
         result=runner.invoke(invoice.app,['list',*args])
         assert result.exit_code==0,result.output
         assert {int(row['id']) for row in json.loads(result.stdout)}==expected
+
+
+def import_original(client, data):
+    import base64
+    import hashlib
+    client._make_request('POST', '/api/import/freshbooks-file', data={
+        'path': 'fixture/document.txt', 'mime': 'text/plain',
+        'sha256': hashlib.sha256(data).hexdigest(), 'total_parts': 1,
+        'part': 0, 'data': base64.b64encode(data).decode(),
+    })
+
+
+@pytest.mark.parametrize('number', ['folder/../../victim', r'folder\..\victim', 'unsafe\x01number', 'unsafe\x7fnumber'])
+def test_download_rejects_unsafe_default_filename(service, monkeypatch, tmp_path, number):
+    client, _ = service
+    customer_row = client.create_client('fixture@example.com', 'Fixture', 'Buyer', 'Fixture')
+    created = client.create_invoice(customer_row['id'], [{'name': 'Fixture', 'qty': '1', 'unit_cost': {'amount': '20.00', 'code': 'USD'}}])
+    raw = client.get_invoice(created['id'])
+    imported_customer = {'id':77, 'userid':77, 'fname':'Fixture', 'lname':'Buyer', 'email':'legacy@example.com', 'currency_code':'USD'}
+    client._make_request('POST', '/api/import/freshbooks', data={'account_id':'fixture', 'kind':'clients', 'records':[{'source_id':'77', 'record': imported_customer}]})
+    raw.update(id=88, invoiceid=88, customerid=77, invoice_number=number)
+    client._make_request('POST', '/api/import/freshbooks', data={'account_id': 'fixture', 'kind': 'invoices', 'records': [{'source_id': '88', 'record': raw}]})
+    downloads = tmp_path / 'downloads'
+    downloads.mkdir()
+    victim = tmp_path / 'victim.pdf'
+    victim.write_bytes(b'KEEP THIS FILE')
+    monkeypatch.chdir(downloads)
+    monkeypatch.setattr(invoice, 'get_client', lambda: client)
+    result = CliRunner().invoke(invoice.app, ['download', '88'])
+    assert result.exit_code == 1, result.output
+    assert 'Unsafe invoice number' in result.output
+    assert victim.read_bytes() == b'KEEP THIS FILE'
+    assert list(downloads.iterdir()) == []
+
+
+def test_download_explicit_output_replaces_completed_pdf(service, monkeypatch, tmp_path):
+    client, _ = service
+    customer_row = client.create_client('fixture@example.com', 'Fixture', 'Buyer', 'Fixture')
+    created = client.create_invoice(customer_row['id'], [{'name': 'Fixture', 'qty': '1', 'unit_cost': {'amount': '20.00', 'code': 'USD'}}])
+    monkeypatch.setattr(invoice, 'get_client', lambda: client)
+    destination = tmp_path / 'invoice.pdf'
+    runner = CliRunner()
+    result = runner.invoke(invoice.app, ['download', created['id'], '-o', str(destination)])
+    assert result.exit_code == 0, result.output
+    saved = destination.read_bytes()
+    assert saved.startswith(b'%PDF')
+    client.update_invoice(created['id'], notes='Changed before replacement')
+    result = runner.invoke(invoice.app, ['download', created['id'], '-o', str(destination)])
+    assert result.exit_code == 0, result.output
+    assert destination.read_bytes().startswith(b'%PDF')
+    assert destination.read_bytes() != saved
+    assert list(tmp_path.iterdir()) == [destination]
+
+
+def test_resume_rejects_other_deployment_without_changing_archive(service, tmp_path):
+    from invoicedesk_cli.exporter import Exporter
+    from cli_tools_shared.exceptions import ClientError
+    first, _ = service
+    import_original(first, b'Service A document')
+    output = tmp_path / 'archive'
+    assert Exporter(first, output).run()['status'] == 'complete'
+    before = {p.relative_to(output): p.read_bytes() for p in output.rglob('*') if p.is_file()}
+    # Reuse the same fixture implementation to start a second real HTTP server.
+    second_fixture = service_fixture_factory()
+    try:
+        second, _ = next(second_fixture)
+        import_original(second, b'Service B document')
+        with pytest.raises(ClientError, match='source identity'):
+            Exporter(second, output, resume=True)
+    finally:
+        second_fixture.close()
+    assert {p.relative_to(output): p.read_bytes() for p in output.rglob('*') if p.is_file()} == before
+
+
+def service_fixture_factory():
+    return service.__wrapped__()
+
+
+def test_resume_rejects_legacy_manifest_without_changing_archive(service, tmp_path):
+    from invoicedesk_cli.exporter import Exporter
+    from cli_tools_shared.exceptions import ClientError
+    client, _ = service
+    output = tmp_path / 'archive'
+    Exporter(client, output).run()
+    manifest_path = output / 'manifest.json'
+    manifest = json.loads(manifest_path.read_text())
+    del manifest['source_identity']
+    manifest_path.write_text(json.dumps(manifest))
+    before = {p.relative_to(output): p.read_bytes() for p in output.rglob('*') if p.is_file()}
+    with pytest.raises(ClientError, match='source identity'):
+        Exporter(client, output, resume=True)
+    assert {p.relative_to(output): p.read_bytes() for p in output.rglob('*') if p.is_file()} == before
+
+
+def test_resume_checks_cached_original_against_current_source_inventory(service, tmp_path):
+    import hashlib
+    from invoicedesk_cli.exporter import Exporter
+    client, _ = service
+    import_original(client, b'Service A document')
+    output = tmp_path / 'archive'
+    assert Exporter(client, output).run()['status'] == 'complete'
+    original = output / 'originals/fixture/document.txt'
+    original.write_bytes(b'Service B document')
+    manifest_path = output / 'manifest.json'
+    manifest = json.loads(manifest_path.read_text())
+    manifest['files']['originals/fixture/document.txt']['sha256'] = hashlib.sha256(original.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest))
+    assert Exporter(client, output, resume=True).run()['status'] == 'complete'
+    assert original.read_bytes() == b'Service A document'
+
+
+@pytest.mark.parametrize('failure_method', ['replace', 'fsync'])
+def test_download_default_existing_symlink_and_failed_explicit_write(service, monkeypatch, tmp_path, failure_method):
+    client, _ = service
+    customer_row = client.create_client('fixture@example.com', 'Fixture', 'Buyer', 'Fixture')
+    created = client.create_invoice(customer_row['id'], [{'name': 'Fixture', 'qty': '1', 'unit_cost': {'amount': '20.00', 'code': 'USD'}}])
+    monkeypatch.setattr(invoice, 'get_client', lambda: client)
+    monkeypatch.chdir(tmp_path)
+    default = tmp_path / f"invoice_{client.get_invoice(created['id'])['invoice_number']}.pdf"
+    default.write_bytes(b'KEEP DEFAULT')
+    runner = CliRunner()
+    result = runner.invoke(invoice.app, ['download', created['id']])
+    assert result.exit_code == 1 and 'already exists' in result.output
+    assert default.read_bytes() == b'KEEP DEFAULT'
+    destination = tmp_path / 'explicit.pdf'
+    destination.write_bytes(b'KEEP EXPLICIT')
+    symlink = tmp_path / 'symlink.pdf'
+    symlink.symlink_to(destination)
+    result = runner.invoke(invoice.app, ['download', created['id'], '-o', str(symlink)])
+    assert result.exit_code == 1 and 'symbolic link' in result.output
+    assert destination.read_bytes() == b'KEEP EXPLICIT'
+    def fail_publish(*args):
+        raise OSError('Fixture publication failure')
+    monkeypatch.setattr(invoice.os, failure_method, fail_publish)
+    result = runner.invoke(invoice.app, ['download', created['id'], '-o', str(destination)])
+    assert result.exit_code == 1 and 'Fixture publication failure' in result.output
+    assert destination.read_bytes() == b'KEEP EXPLICIT'
+    assert not list(tmp_path.glob('.invoice-*'))
+
+
+@pytest.mark.parametrize('bad_manifest', [[], {'files': []}, {'files': {'invoicedesk.json': []}}, {'files': {'invoicedesk.json': {'bytes': '10', 'sha256': 'x'}}}])
+def test_resume_malformed_manifest_preserves_archive(service, tmp_path, bad_manifest):
+    from invoicedesk_cli.exporter import Exporter
+    from cli_tools_shared.exceptions import ClientError
+    client, _ = service
+    output = tmp_path / 'archive'
+    Exporter(client, output).run()
+    path = output / 'manifest.json'
+    if isinstance(bad_manifest, dict):
+        manifest = json.loads(path.read_text())
+        manifest.update(bad_manifest)
+    else:
+        manifest = bad_manifest
+    path.write_text(json.dumps(manifest))
+    before = {p.relative_to(output): p.read_bytes() for p in output.rglob('*') if p.is_file()}
+    with pytest.raises(ClientError, match='Invalid archive manifest'):
+        Exporter(client, output, resume=True)
+    assert {p.relative_to(output): p.read_bytes() for p in output.rglob('*') if p.is_file()} == before
+
+
+def test_export_malformed_snapshot_does_not_create_archive(tmp_path):
+    from invoicedesk_cli.exporter import Exporter
+    from cli_tools_shared.exceptions import ClientError
+    class InvalidSource:
+        def _make_request(self, *args):
+            return []
+    output = tmp_path / 'archive'
+    with pytest.raises(ClientError, match='Invalid export response'):
+        Exporter(InvalidSource(), output)
+    assert not output.exists()
