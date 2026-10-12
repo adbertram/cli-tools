@@ -641,3 +641,27 @@ metadata without passport response bodies and refuses an internal retry when
 the provider minimum exceeds its local delay bound. Before any browser read,
 manifest validation reserves enough space for every found ID and the complete
 actor binding, so a request that cannot fit a 64 KiB continuation fails upfront.
+
+
+### Read watch time and retention
+
+```bash
+tiktok studio watch 7695809227801087246 --profile clipper --username ata_clipper --account-id 7692213003349443597
+```
+
+This read-only command verifies the exact session owner and post owner, then reads
+Studio's native insight API. `metrics` contains `average_watch_time_seconds`,
+`total_watch_time_seconds`, `completion_rate` (0–1), and `retention`, a list of
+`{time_seconds, retention_rate}` points (rates 0–1). It preserves measured zeros;
+processing, delayed, missing, or malformed measurements remain null with an
+`unavailable` reason and `watch_metrics_error`. Never infer a curve from average
+watch time. `observed_at`, `server_timestamp_ms`, and `provenance` identify the read.
+The insight request is bounded to 15 seconds and 2 MiB. Authentication and page
+navigation use the existing CLI browser timeouts. `--table` displays scalars and
+the number of retention points.
+
+The equivalent Python entry point is
+`TikTokWebClient.get_studio_watch_metrics(username, video_id, expected_account_id=account_id)`.
+It reuses the client's browser, including an existing Studio publishing client.
+Observed on October 12, 2026: post 7695809227801087246 returned 57 retention points,
+3.33 seconds average watch time, 340 seconds total watch time, and 0.0098 completion.

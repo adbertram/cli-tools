@@ -13,7 +13,8 @@ MAX_POLICY_BYTES = 64 * 1024  # Fixed schema plus a 4000-character escaped capti
 app = typer.Typer(help="Prepare, check, publish, and reconcile owned Studio drafts", no_args_is_help=True)
 COMMAND_CREDENTIALS = {"prepare": ["browser_session"], "publish": ["browser_session"],
                        "reconcile": ["browser_session"], "status": ["no_auth"],
-                       "inventory": ["browser_session"], "check": ["browser_session"]}
+                       "inventory": ["browser_session"], "check": ["browser_session"],
+                       "watch": ["browser_session"]}
 
 
 def _print_operation(result, table):
@@ -184,5 +185,32 @@ def studio_inventory(
     if table:
         columns = ["id", "url", "observed_at", "server_timestamp_ms"]
         print_table(result["records"], columns, columns)
+    else:
+        print_json(result)
+
+
+@app.command("watch")
+@command
+def studio_watch(
+    video_id: str = typer.Argument(..., help="Exact owned post ID"),
+    username: str = typer.Option(..., "--username", help="Exact session owner handle"),
+    account_id: str = typer.Option(..., "--account-id", help="Exact numeric session owner ID"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display watch metrics as table"),
+):
+    """Read watch time in seconds, completion fraction, and timed retention fractions.
+
+    Read-only. Provider delays, processing, and absent measurements remain null.
+    Uses one bounded insight request and verifies both post and account identity.
+    """
+    from ..client import TikTokWebClient
+    client = TikTokWebClient(config=get_config())
+    try:
+        result = client.get_studio_watch_metrics(username, video_id, expected_account_id=account_id)
+    finally:
+        client.close()
+    if table:
+        row = {"id": result["id"], **{k: v for k, v in result["metrics"].items() if k != "retention"},
+               "retention_points": len(result["metrics"]["retention"] or []), "unavailable": result["watch_metrics_error"]}
+        print_table([row], list(row), list(row))
     else:
         print_json(result)

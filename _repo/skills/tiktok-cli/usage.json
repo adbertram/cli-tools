@@ -1,8 +1,8 @@
 {
   "tool": "tiktok",
   "description": "TikTok transcript downloader using yt-dlp",
-  "discovered_at": "2026-10-06T22:54:33Z",
-  "total_commands": 32,
+  "discovered_at": "2026-10-12T20:16:45Z",
+  "total_commands": 33,
   "global_options": [
     {
       "name": "--version",
@@ -808,6 +808,45 @@
               "type": "bool",
               "required": false,
               "help": "Display operation as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "watch": {
+          "help": "Read watch time in seconds, completion fraction, and timed retention fractions. Read-only. Provider delays, processing, and absent measurements remain null. Uses one bounded insight request and verifies both post and account identity.",
+          "arguments": [
+            {
+              "name": "video_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact owned post ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--username",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact session owner handle"
+            },
+            {
+              "name": "--account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact numeric session owner ID"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display watch metrics as table",
               "short": "-t",
               "takes_value": false
             },

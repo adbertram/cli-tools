@@ -665,6 +665,11 @@ class TikTokWebClient:
     def list_studio_videos(self, username: str, limit: int = 100, expected_account_id: Optional[str] = None) -> List[Dict]:
         return self._studio_read(username, limit=limit, expected_account_id=expected_account_id)
 
+    def get_studio_watch_metrics(self, username: str, video_id: str, *, expected_account_id: str) -> Dict:
+        """Read exact owned-post watch time and retention; missing data remains null."""
+        from .studio_watch import read
+        return read(self, username, video_id, expected_account_id)
+
     def get_studio_video(self, username: str, video_id: str, expected_account_id: Optional[str] = None) -> Dict:
         from .studio import MAX_STUDIO_ITEMS
         return self._studio_read(username, limit=MAX_STUDIO_ITEMS, video_id=video_id, expected_account_id=expected_account_id)[0]

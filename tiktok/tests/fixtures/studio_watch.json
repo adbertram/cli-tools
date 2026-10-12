@@ -1,0 +1,291 @@
+{
+  "status_code": 0,
+  "extra": {
+    "fatal_item_ids": [],
+    "now": 1791836095000
+  },
+  "video_info": {
+    "aweme_id": "7695809227801087246",
+    "author": {
+      "uid": "7692213003349443597",
+      "unique_id": "ata_clipper"
+    },
+    "video": {
+      "duration": 56979
+    }
+  },
+  "video_retention_rate_realtime": {
+    "is_after_7d": false,
+    "is_data_delay": false,
+    "value": {
+      "list": [
+        {
+          "timestamp": "0",
+          "value": 1
+        },
+        {
+          "timestamp": "1000",
+          "value": 0.57
+        },
+        {
+          "timestamp": "2000",
+          "value": 0.25
+        },
+        {
+          "timestamp": "3000",
+          "value": 0.19
+        },
+        {
+          "timestamp": "4000",
+          "value": 0.14
+        },
+        {
+          "timestamp": "5000",
+          "value": 0.1
+        },
+        {
+          "timestamp": "6000",
+          "value": 0.08
+        },
+        {
+          "timestamp": "7000",
+          "value": 0.08
+        },
+        {
+          "timestamp": "8000",
+          "value": 0.07
+        },
+        {
+          "timestamp": "9000",
+          "value": 0.06
+        },
+        {
+          "timestamp": "10000",
+          "value": 0.06
+        },
+        {
+          "timestamp": "11000",
+          "value": 0.05
+        },
+        {
+          "timestamp": "12000",
+          "value": 0.05
+        },
+        {
+          "timestamp": "13000",
+          "value": 0.04
+        },
+        {
+          "timestamp": "14000",
+          "value": 0.04
+        },
+        {
+          "timestamp": "15000",
+          "value": 0.03
+        },
+        {
+          "timestamp": "16000",
+          "value": 0.03
+        },
+        {
+          "timestamp": "17000",
+          "value": 0.03
+        },
+        {
+          "timestamp": "18000",
+          "value": 0.03
+        },
+        {
+          "timestamp": "19000",
+          "value": 0.03
+        },
+        {
+          "timestamp": "20000",
+          "value": 0.03
+        },
+        {
+          "timestamp": "21000",
+          "value": 0.03
+        },
+        {
+          "timestamp": "22000",
+          "value": 0.03
+        },
+        {
+          "timestamp": "23000",
+          "value": 0.03
+        },
+        {
+          "timestamp": "24000",
+          "value": 0.03
+        },
+        {
+          "timestamp": "25000",
+          "value": 0.03
+        },
+        {
+          "timestamp": "26000",
+          "value": 0.03
+        },
+        {
+          "timestamp": "27000",
+          "value": 0.03
+        },
+        {
+          "timestamp": "28000",
+          "value": 0.03
+        },
+        {
+          "timestamp": "29000",
+          "value": 0.03
+        },
+        {
+          "timestamp": "30000",
+          "value": 0.03
+        },
+        {
+          "timestamp": "31000",
+          "value": 0.03
+        },
+        {
+          "timestamp": "32000",
+          "value": 0.03
+        },
+        {
+          "timestamp": "33000",
+          "value": 0.03
+        },
+        {
+          "timestamp": "34000",
+          "value": 0.03
+        },
+        {
+          "timestamp": "35000",
+          "value": 0.03
+        },
+        {
+          "timestamp": "36000",
+          "value": 0.03
+        },
+        {
+          "timestamp": "37000",
+          "value": 0.03
+        },
+        {
+          "timestamp": "38000",
+          "value": 0.02
+        },
+        {
+          "timestamp": "39000",
+          "value": 0.02
+        },
+        {
+          "timestamp": "40000",
+          "value": 0.02
+        },
+        {
+          "timestamp": "41000",
+          "value": 0.02
+        },
+        {
+          "timestamp": "42000",
+          "value": 0.02
+        },
+        {
+          "timestamp": "43000",
+          "value": 0.02
+        },
+        {
+          "timestamp": "44000",
+          "value": 0.02
+        },
+        {
+          "timestamp": "45000",
+          "value": 0.02
+        },
+        {
+          "timestamp": "46000",
+          "value": 0.02
+        },
+        {
+          "timestamp": "47000",
+          "value": 0.02
+        },
+        {
+          "timestamp": "48000",
+          "value": 0.02
+        },
+        {
+          "timestamp": "49000",
+          "value": 0.02
+        },
+        {
+          "timestamp": "50000",
+          "value": 0.01
+        },
+        {
+          "timestamp": "51000",
+          "value": 0.01
+        },
+        {
+          "timestamp": "52000",
+          "value": 0.01
+        },
+        {
+          "timestamp": "53000",
+          "value": 0.01
+        },
+        {
+          "timestamp": "54000",
+          "value": 0.01
+        },
+        {
+          "timestamp": "55000",
+          "value": 0.01
+        },
+        {
+          "timestamp": "56000",
+          "value": 0.01
+        }
+      ],
+      "peak_value": 1000,
+      "status": 0
+    }
+  },
+  "video_per_duration_realtime": {
+    "is_after_7d": false,
+    "is_data_delay": false,
+    "value": {
+      "status": 0,
+      "value": 3.33
+    },
+    "value_compare_previous_day": {
+      "status": 0,
+      "value": 3.33
+    }
+  },
+  "video_total_duration_realtime": {
+    "is_after_7d": false,
+    "is_data_delay": false,
+    "value": {
+      "status": 0,
+      "value": 340
+    },
+    "value_compare_previous_day": {
+      "status": 0,
+      "value": 340
+    }
+  },
+  "video_finish_rate_realtime": {
+    "is_after_7d": false,
+    "is_data_delay": false,
+    "value": {
+      "status": 0,
+      "value": 0.0098
+    },
+    "value_compare_previous_day": {
+      "status": 0,
+      "value": 0.0098
+    }
+  }
+}
