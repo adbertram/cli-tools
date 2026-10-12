@@ -773,6 +773,8 @@ class StudioPublisher:
                 or url.netloc != 'www.tiktok.com' or url.path != '/tiktokstudio/upload'):
             raise StudioPublishError('Studio native input target is not the owned upload page.')
         helpers.switch_tab(target)
+        # Tab activation does not focus the outermost WebContents.
+        helpers.cdp('Page.bringToFront')
         if helpers.current_tab().get('targetId') != target['targetId']:
             raise StudioPublishError('Studio native input target changed during activation.')
         self._wait(page, lambda: page.evaluate("()=>document.visibilityState==='visible' && document.hasFocus()") is True,

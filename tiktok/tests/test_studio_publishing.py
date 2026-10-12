@@ -1596,7 +1596,7 @@ def test_absent_banner_recovers_only_exact_owned_unlocked_draft(publisher,monkey
 def test_native_caption_activation_requires_visible_exact_owned_target(publisher,monkeypatch,visible):
     target={'targetId':'OWNED','url':module.UPLOAD_URL}
     switched=[]
-    helpers=SimpleNamespace(current_tab=lambda:target,switch_tab=lambda value:switched.append(value))
+    helpers=SimpleNamespace(current_tab=lambda:target,switch_tab=lambda value:switched.append(value),cdp=lambda method:None)
     page=SimpleNamespace(_bh=SimpleNamespace(h=helpers),evaluate=lambda *args:visible)
     monkeypatch.setattr(publisher,'_verify_editor',lambda *args:{})
     monkeypatch.setattr(publisher,'_wait',once)
@@ -1613,3 +1613,17 @@ def test_native_caption_activation_never_switches_unrelated_tab(publisher,monkey
     monkeypatch.setattr(publisher,'_verify_editor',lambda *args:{})
     with pytest.raises(StudioPublishError,match='not the owned upload page'):
         module.StudioPublisher._activate_caption_target(publisher,page,{})
+
+
+
+def test_native_caption_activation_brings_owned_page_to_front_for_real_focus(publisher,monkeypatch):
+    target={'targetId':'OWNED','url':module.UPLOAD_URL};state={'focused':False};calls=[]
+    def switch(value):calls.append(('switch',value));assert not state['focused']
+    def cdp(method):
+        calls.append(('cdp',method));assert method=='Page.bringToFront';state['focused']=True
+    helpers=SimpleNamespace(current_tab=lambda:target,switch_tab=switch,cdp=cdp)
+    page=SimpleNamespace(_bh=SimpleNamespace(h=helpers),evaluate=lambda *args:state['focused'])
+    monkeypatch.setattr(publisher,'_verify_editor',lambda *args:{})
+    monkeypatch.setattr(publisher,'_wait',once)
+    module.StudioPublisher._activate_caption_target(publisher,page,{})
+    assert calls==[('switch',target),('cdp','Page.bringToFront')]
