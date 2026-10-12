@@ -13,6 +13,7 @@ Tests validate:
 7. browser_harness module is importable in the CLI's uv tool venv
 8. shared Chromium profile resolution stays owned by cli_tools_shared (no per-CLI override)
 """
+import ast
 import re
 import subprocess
 import tomllib
@@ -336,9 +337,26 @@ def test_browser_cli_no_custom_auth_check(cli_name, cli_dir, test_config, comman
 _DIRECT_BROWSER_PATTERNS = [
     (r"""subprocess\.\w+\(.*["']playwright-cli["']""", "Direct subprocess call to playwright-cli"),
     (r"""Popen\(.*["']playwright-cli["']""", "Direct Popen call to playwright-cli"),
-    (r"""from cli_tools_shared\.browser\.driver import""", "Direct BrowserHarnessService import (use BrowserAutomation instead)"),
-    (r"""from cli_tools_shared\.browser import.*BrowserHarnessService""", "Direct BrowserHarnessService import (use BrowserAutomation instead)"),
 ]
+
+
+def _direct_browser_service_imports(source):
+    """Inspect imported symbols, including aliases and multiline imports."""
+    return [node.lineno for node in ast.walk(ast.parse(source))
+            if isinstance(node, ast.ImportFrom)
+            and node.module in ('cli_tools_shared.browser', 'cli_tools_shared.browser.driver')
+            and any(alias.name in ('BrowserHarnessService', '*') for alias in node.names)]
+
+
+@pytest.mark.parametrize('source,blocked', [
+    ('from cli_tools_shared.browser.driver import _chrome_binary', False),
+    ('from cli_tools_shared.browser.driver import BrowserHarnessService', True),
+    ('from cli_tools_shared.browser import BrowserHarnessService as Service', True),
+    ('from cli_tools_shared.browser.driver import (\n _chrome_binary,\n BrowserHarnessService as Service,\n)', True),
+    ('from cli_tools_shared.browser.driver import *', True),
+])
+def test_direct_browser_service_import_detection(source, blocked):
+    assert bool(_direct_browser_service_imports(source)) is blocked
 
 
 def test_browser_cli_uses_browser_harness_via_browser_automation(
@@ -366,8 +384,11 @@ def test_browser_cli_uses_browser_harness_via_browser_automation(
         if "__pycache__" in py_file.parts:
             continue
 
-        lines = py_file.read_text().splitlines()
+        source = py_file.read_text()
+        lines = source.splitlines()
         rel_path = py_file.relative_to(cli_dir)
+        violations.extend((str(rel_path), line, "Direct BrowserHarnessService import (use BrowserAutomation instead)")
+                          for line in _direct_browser_service_imports(source))
 
         for line_num, line in enumerate(lines, start=1):
             stripped = line.lstrip()
