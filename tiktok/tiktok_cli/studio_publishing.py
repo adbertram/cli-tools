@@ -21,6 +21,7 @@ import stat
 import time
 from typing import Callable
 from uuid import UUID, uuid4
+from urllib.parse import urlsplit
 
 from .client import (ACCOUNT_INFO_PATH, ClientError, TikTokWebClient,
                      normalize_account_identity)
@@ -760,7 +761,29 @@ class StudioPublisher:
         # separate unchecked music checkbox fails verification before Post.
         return self._verify_controls(page, policy)
 
+    def _activate_caption_target(self, page, saved, *, require_caret=False):
+        """Activate only this verified uploader before sending native input."""
+        if saved is None:
+            raise StudioPublishError('Studio caption editing requires exact draft ownership.')
+        self._verify_editor(page, saved)
+        helpers = page._bh.h
+        target = helpers.current_tab()
+        url = urlsplit(target.get('url', ''))
+        if (not target.get('targetId') or url.scheme != 'https'
+                or url.netloc != 'www.tiktok.com' or url.path != '/tiktokstudio/upload'):
+            raise StudioPublishError('Studio native input target is not the owned upload page.')
+        helpers.switch_tab(target)
+        if helpers.current_tab().get('targetId') != target['targetId']:
+            raise StudioPublishError('Studio native input target changed during activation.')
+        self._wait(page, lambda: page.evaluate("()=>document.visibilityState==='visible' && document.hasFocus()") is True,
+                   'Studio upload tab is not visible and focused; native input refused.', seconds=3)
+        self._verify_editor(page, saved)
+        if require_caret:
+            self._wait(page, lambda: page.evaluate(CAPTION_READY_JS, CAPTION_SELECTOR) is True,
+                       'Studio caption focus/caret is unverified.', seconds=3)
+
     def _select_caption_option(self, page, saved, option, kind, text, prefix):
+        self._activate_caption_target(page, saved)
         if page.evaluate(CAPTION_OPTION_VISIBLE_JS, option["id"]) is not True:
             raise StudioPublishError("Studio exact caption suggestion is not visible or hit-tested.", category="caption_suggestion_changed")
         editor = self._verify_editor(page, saved)
@@ -800,6 +823,7 @@ class StudioPublisher:
         previous = page.evaluate(CAPTION_TEXT_JS, CAPTION_SELECTOR)
         if not isinstance(previous, str):
             raise StudioPublishError('Studio caption editor text is unavailable.')
+        self._activate_caption_target(page, saved)
         page.fill_framework_input(CAPTION_SELECTOR, '')
         if page.evaluate(CAPTION_TEXT_JS, CAPTION_SELECTOR) != '':
             raise StudioPublishError('Studio native caption clear did not update the editor.')
@@ -808,15 +832,18 @@ class StudioPublisher:
             for token in caption_tokens(caption):
                 self._wait(page, lambda: page.evaluate(CAPTION_READY_JS, CAPTION_SELECTOR), 'Studio caption focus/caret is unverified.', seconds=3)
                 if caption[cursor:token.start()]:
+                    self._activate_caption_target(page, saved, require_caret=True)
                     page.type_text(caption[cursor:token.start()])
                 self._wait(page, lambda: page.evaluate(CAPTION_TEXT_JS, CAPTION_SELECTOR) == caption[:token.start()], 'Studio caption prefix did not update.', seconds=3)
                 text = token.group();kind = 'mention' if text.startswith('@') else 'hashtag'
                 trigger = page.get_by_role('button', name='Mention' if kind == 'mention' else 'Hashtag', exact=True)
                 if trigger.count() != 1:
                     raise StudioPublishError('Studio caption entity trigger is unavailable or ambiguous.')
+                self._activate_caption_target(page, saved, require_caret=True)
                 trigger.click()
                 self._wait(page, lambda: page.evaluate(CAPTION_TEXT_JS, CAPTION_SELECTOR) == caption[:token.start()] + text[0], 'Studio caption entity trigger did not update.', seconds=3)
                 self._wait(page, lambda: page.evaluate(CAPTION_READY_JS, CAPTION_SELECTOR), 'Studio caption entity trigger did not restore focus/caret.', seconds=3)
+                self._activate_caption_target(page, saved, require_caret=True)
                 page.type_text(text[1:])
                 self._wait(page, lambda: page.evaluate(CAPTION_TEXT_JS, CAPTION_SELECTOR) == caption[:token.end()], 'Studio caption query did not update.', seconds=3)
                 def exact_option():
@@ -844,6 +871,7 @@ class StudioPublisher:
                 expected = caption[:token.end()]
                 actual = self._wait(page, lambda: (value if (value := page.evaluate(CAPTION_TEXT_JS, CAPTION_SELECTOR)) in (expected, expected + ' ') else None), 'Studio selected entity did not update the caption.', seconds=3)
                 if actual == expected + ' ':
+                    self._activate_caption_target(page, saved, require_caret=True)
                     page.keyboard_press('Backspace')
                 self._wait(page, lambda: page.evaluate(CAPTION_TEXT_JS, CAPTION_SELECTOR) == expected, 'Studio selected entity changed the exact caption.', seconds=3)
                 last_entity_row = None
@@ -879,12 +907,16 @@ class StudioPublisher:
                     self._caption_entity_failure = evidence
                     raise
                 cursor = token.end()
-            if caption[cursor:]:page.type_text(caption[cursor:])
+            if caption[cursor:]:
+                self._activate_caption_target(page, saved, require_caret=True)
+                page.type_text(caption[cursor:])
             if page.evaluate(CAPTION_TEXT_JS, CAPTION_SELECTOR) != caption:
                 raise StudioPublishError('Studio native caption does not match the exact policy.')
         except Exception:
             self._caption_semantic_rollback_unverified = True
+            self._activate_caption_target(page, saved)
             page.fill_framework_input(CAPTION_SELECTOR, '')
+            self._activate_caption_target(page, saved, require_caret=True)
             page.type_text(previous)
             raise
 

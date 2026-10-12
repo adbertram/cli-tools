@@ -25,6 +25,7 @@ def publisher(tmp_path):
                              get_active_profile_name=lambda: "clipper",
                              get_browser=lambda posting=False: SimpleNamespace(posting=posting, close=lambda: None))
     instance = StudioPublisher(config)
+    instance._activate_caption_target = lambda *args, **kwargs: None
     yield instance
     instance.close()
 
@@ -1589,3 +1590,26 @@ def test_absent_banner_recovers_only_exact_owned_unlocked_draft(publisher,monkey
     publisher._recover_private_preparation(value)
     assert len(page.deletes)==1 and page.deletes[0]['allow_unlocked'] is True
     assert page.rows==[] and not page.events and page.clicked==0
+
+
+@pytest.mark.parametrize('visible',[False,True])
+def test_native_caption_activation_requires_visible_exact_owned_target(publisher,monkeypatch,visible):
+    target={'targetId':'OWNED','url':module.UPLOAD_URL}
+    switched=[]
+    helpers=SimpleNamespace(current_tab=lambda:target,switch_tab=lambda value:switched.append(value))
+    page=SimpleNamespace(_bh=SimpleNamespace(h=helpers),evaluate=lambda *args:visible)
+    monkeypatch.setattr(publisher,'_verify_editor',lambda *args:{})
+    monkeypatch.setattr(publisher,'_wait',once)
+    if visible:module.StudioPublisher._activate_caption_target(publisher,page,{})
+    else:
+        with pytest.raises(StudioPublishError,match='not visible and focused'):
+            module.StudioPublisher._activate_caption_target(publisher,page,{})
+    assert switched==[target]
+
+
+def test_native_caption_activation_never_switches_unrelated_tab(publisher,monkeypatch):
+    helpers=SimpleNamespace(current_tab=lambda:{'targetId':'FOREIGN','url':'https://whop.com/'},switch_tab=lambda *a:pytest.fail('must not activate foreign tab'))
+    page=SimpleNamespace(_bh=SimpleNamespace(h=helpers))
+    monkeypatch.setattr(publisher,'_verify_editor',lambda *args:{})
+    with pytest.raises(StudioPublishError,match='not the owned upload page'):
+        module.StudioPublisher._activate_caption_target(publisher,page,{})
