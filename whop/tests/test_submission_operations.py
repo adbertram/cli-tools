@@ -625,3 +625,51 @@ def test_join_campaign_malformed_observation_refuses(client,observation):
     client._action_document.return_value.evaluate.return_value=observation
     with pytest.raises(ClientError,match='campaign_join_observation_schema_changed'):
         client.join_campaign(CAMPAIGN,expected_account_id=ACTOR,confirm=True)
+
+
+def test_current_rest_contract_binds_endpoint_without_dispatch(client):
+    missing=ClientError('read_action_discovery_missing: sources=90, matches=0, failures=0')
+    client._discover_action.side_effect=[missing,missing,'a'*40]
+    document=client._action_document.return_value
+    document.evaluate.side_effect=[True,True,{'join_controls':0}]
+    result=ready(client)
+    assert result['action']=={'name':'createSubmission','reference':op.REST_SUBMISSION_PATH,'transport':'rest_json'}
+    assert client._submission_context==(document,'rest_json',op.REST_SUBMISSION_PATH)
+    assert client._discover_action.call_args.kwargs['discovery_js'] is op.REST_SUBMISSION_DISCOVERY_JS
+
+
+def test_rest_success_preserves_exact_readback_and_at_most_once(client,receipt,monkeypatch):
+    document=client._action_document.return_value
+    requirements=ready(client)['requirements_digest']
+    ready_value=ready(client)
+    def rest_ready(*args,**kwargs):
+        client._submission_context=(document,'rest_json',op.REST_SUBMISSION_PATH)
+        return ready_value
+    monkeypatch.setattr(op,'readiness',rest_ready)
+    document.evaluate.return_value={'status':201,'text':json.dumps({'success':True,'data':{'id':'submission_TEST'}})}
+    client._action.return_value={'success':True,'data':[remote(receipt)],'nextCursor':None}
+    result=client.create_submission(REQUEST,CAMPAIGN,receipt,expected_account_id=ACTOR,expected_tiktok_account_id=TIKTOK,accepted_requirements_digest=requirements,confirm=True)
+    assert result['state']=='submitted_verified'
+    call=document.evaluate.call_args
+    assert call.args[0] is op.REST_SUBMISSION_FETCH_JS
+    assert call.args[1]['body']=={'campaignId':CAMPAIGN,'url':receipt['publication_url']}
+    client.create_submission(REQUEST,CAMPAIGN,receipt,expected_account_id=ACTOR,expected_tiktok_account_id=TIKTOK,accepted_requirements_digest=requirements,confirm=True)
+    assert len(evaluations(document))==1
+
+
+@pytest.mark.parametrize('response',[{'status':429,'text':'private'},{'status':500,'text':'private'},{'status':0,'errorClass':'TimeoutError'},{'status':200,'text':'garbage'}])
+def test_rest_uncertain_response_never_replays(client,receipt,monkeypatch,response):
+    document=client._action_document.return_value
+    ready_value=ready(client)
+    def rest_ready(*args,**kwargs):
+        client._submission_context=(document,'rest_json',op.REST_SUBMISSION_PATH)
+        return ready_value
+    monkeypatch.setattr(op,'readiness',rest_ready)
+    document.evaluate.return_value=response
+    arguments={'expected_account_id':ACTOR,'expected_tiktok_account_id':TIKTOK,'accepted_requirements_digest':ready_value['requirements_digest'],'confirm':True}
+    first=client.create_submission(REQUEST,CAMPAIGN,receipt,**arguments)
+    second=client.create_submission(REQUEST,CAMPAIGN,receipt,**arguments)
+    assert first['state']==second['state']=='uncertain'
+    assert len(evaluations(document))==1
+    assert first['public_action_dispatched'] is True
+    assert 'private' not in op.canonical(second)

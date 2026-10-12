@@ -266,7 +266,7 @@ class WhopClient:
                 raise ClientError("read_action_document_scope_changed")
             return result['value']
         return SimpleNamespace(evaluate=scoped_evaluate)
-    def _discover_action(self,document,name,suffix,*,fresh=False,discovery_js=DISCOVER_ACTION_JS,request_timeout=None):
+    def _discover_action(self,document,name,suffix,*,fresh=False,discovery_js=DISCOVER_ACTION_JS,request_timeout=None,reference_pattern=r'[a-f0-9]{40,64}'):
         key=(suffix,name)
         if fresh: self._actions.pop(key,None)
         if key not in self._actions:
@@ -282,7 +282,7 @@ class WhopClient:
             action=value.get('action')
             if reason!='ready':
                 raise WhopError(f"read_action_discovery_{reason}: sources={counts[0]}, matches={counts[1]}, failures={counts[2]}",category="transient" if reason in ("scripts_changed","script_fetch_failed") else "invalid_request")
-            if counts[1]!=1 or counts[2]!=0 or not isinstance(action,str) or not re.fullmatch(r'[a-f0-9]{40,64}',action):
+            if counts[1]!=1 or counts[2]!=0 or not isinstance(action,str) or not re.fullmatch(reference_pattern,action):
                 raise ClientError("invalid_action_discovery_response")
             self._actions[key]=action
         return self._actions[key]

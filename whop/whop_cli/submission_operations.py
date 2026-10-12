@@ -25,6 +25,19 @@ STUDIO_READBACK = 'https://www.tiktok.com/tiktok/creator/manage/item_list/v1/'
 # Read and create-action discovery share the same bounded, stable-snapshot scanner.
 SUBMISSION_DISCOVERY_JS = DISCOVER_ACTION_JS
 
+REST_SUBMISSION_PATH = '/api/submission/submissions'
+
+# The current participant form uses the app's same-origin JSON SDK rather than
+# a Next action. Prove the exact observed SDK contract from current scripts.
+REST_SUBMISSION_DISCOVERY_JS = DISCOVER_ACTION_JS.replace(
+    'for(const text of texts){const re=',
+    "for(const text of texts){if(text.includes('baseUrl:(0,A.apiBase)(\"submission\")') && text.includes('createSubmission:(e,r)=>{var a;return a=j(r),m(t.submissions.$post({json:e},a))}') && text.includes('return`/api/${e}`'))matches.add("+json.dumps(REST_SUBMISSION_PATH)+");const re="
+)
+REST_SUBMISSION_FETCH_JS = FETCH_JS.replace(
+    "const headers = action ? {'Next-Action':action,'Content-Type':'text/plain;charset=UTF-8','Accept':'text/x-component'} : {'Accept':'application/json'};",
+    "const headers = {'Content-Type':'application/json','Accept':'application/json'};"
+).replace("method:action?'POST':'GET'", "method:'POST'").replace("body:action?JSON.stringify(body):undefined", "body:JSON.stringify(body)")
+
 # Select the unique visible enabled exact control and capture failed counts in
 # the same evaluation, before the caller closes the browser.
 OPEN_SUBMISSION_FORM_JS = """() => {
@@ -234,18 +247,23 @@ def readiness(client,campaign_id,*,expected_account_id,expected_tiktok_account_i
         mounted=document.evaluate("""async () => {const end=Date.now()+10000;
             while(Date.now()<end){if(document.querySelector('[role=dialog]'))return true;await new Promise(r=>setTimeout(r,50));}return false;}""",request_timeout=12.0)
         if mounted is not True: raise ClientError('submission_form_not_ready') from None
-        action=client._discover_action(document,'createSubmissionAction',suffix,fresh=True,discovery_js=SUBMISSION_DISCOVERY_JS,request_timeout=12.0)
+        try:
+            action=client._discover_action(document,'createSubmissionAction',suffix,fresh=True,discovery_js=SUBMISSION_DISCOVERY_JS,request_timeout=12.0)
+        except ClientError as error:
+            if not str(error).startswith('read_action_discovery_missing:'): raise
+            client._discover_action(document,'currentRestSubmissionContract',suffix,fresh=True,discovery_js=REST_SUBMISSION_DISCOVERY_JS,request_timeout=12.0,reference_pattern=re.escape(REST_SUBMISSION_PATH))
+            action='rest_json'
     # A discoverable action hash is not proof of membership: a not-joined
     # account cannot submit, so the exact join control must be absent.
     controls=join_controls(document)
     if controls is not None and controls>=1: raise WhopError('submission_join_required',category='not_ready')
     # A later actor read would navigate away from this exact action context.
-    client._submission_context=(document,action,path+suffix)
+    client._submission_context=(document,action,REST_SUBMISSION_PATH if action=='rest_json' else path+suffix)
     return {'ready':True,'actor':{'account_id':actor['id'],'username':actor['username'],'profile':actor['profile']},
             'linked_account':{'account_id':expected_tiktok_account_id,'username':linked['username'],'id':linked.get('id')},
             'campaign_id':campaign_id,'requirements':requirements,'requirements_digest':requirements_digest,
             'funding_remaining_cents':funding['remaining_cents'],'funding':funding,'intake':'open','readback':{'kind':'participant_campaign_action','first_page_count':len(participant_rows),'has_more':participant_cursor is not None},
-            'action':{'name':'createSubmissionAction','reference':action},'observed_at':datetime.now(timezone.utc).isoformat()}
+            'action':{'name':'createSubmission' if action=='rest_json' else 'createSubmissionAction','reference':REST_SUBMISSION_PATH if action=='rest_json' else action,'transport':'rest_json' if action=='rest_json' else 'next_action'},'observed_at':datetime.now(timezone.utc).isoformat()}
 
 def join_campaign(client,campaign_id,*,expected_account_id,confirm):
     """Join a campaign by clicking its own control; never a package or API guess."""
@@ -518,14 +536,15 @@ def create(client,request_id,campaign_id,receipt,*,expected_account_id,expected_
         save(root,row)
         try:
             # Exactly one fetch; never enter the read transport retry loop.
-            response=document.evaluate(FETCH_JS,{'path':path,'action':action,'body':[{'campaignId':campaign_id,'url':bound['publication']['publication_url']}]},request_timeout=22.0)
+            payload={'campaignId':campaign_id,'url':bound['publication']['publication_url']}
+            response=document.evaluate(REST_SUBMISSION_FETCH_JS if action=='rest_json' else FETCH_JS,{'path':path,'action':action,'body':payload if action=='rest_json' else [payload]},request_timeout=22.0)
             if not isinstance(response,dict) or type(response.get('status')) is not int: raise ClientError('submission_transport_invalid')
-            if response['status']!=200:
+            if response['status'] not in ((200,201) if action=='rest_json' else (200,)):
                 code=response['status'];row.update(state='uncertain',failure_code=f'http_{code}' if 0<=code<=599 else 'invalid_transport',failure={'code':f'http_{code}' if 0<=code<=599 else 'invalid_transport','category':'rate_limit' if code==429 else 'auth' if code in (401,403) else 'transient' if code==0 or 500<=code<=599 else 'upstream','status':code if 0<=code<=599 else None,'retry_after_seconds':retry_after_seconds(response.get('retryAfter'))})
             else:
-                result=decode_action(response.get('text'))
+                result=strict_json(response.get('text')) if action=='rest_json' else decode_action(response.get('text'))
                 if result.get('success') is False:
-                    code=result.get('code');safe=code if isinstance(code,str) and re.fullmatch('[A-Z_]{1,64}',code) else 'upstream_rejected';row.update(state='rejected',failure_code=safe,failure={'code':safe,'category':'upstream','status':200,'retry_after_seconds':retry_after_seconds(response.get('retryAfter'))})
+                    code=(result.get('error') or {}).get('code') if action=='rest_json' and isinstance(result.get('error'),dict) else result.get('code');safe=code if isinstance(code,str) and re.fullmatch('[A-Z_]{1,64}',code) else 'upstream_rejected';row.update(state='rejected',failure_code=safe,failure={'code':safe,'category':'upstream','status':200,'retry_after_seconds':retry_after_seconds(response.get('retryAfter'))})
                 elif result.get('success') is True and isinstance(result.get('data'),dict):
                     row.update(state='created_unverified',submission_id=identifier(result['data'].get('id')))
                 else: raise ClientError('submission_response_schema_changed')

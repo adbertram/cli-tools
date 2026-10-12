@@ -4,7 +4,7 @@ import subprocess
 from unittest.mock import Mock
 import pytest
 from whop_cli.client import DISCOVER_ACTION_JS, WhopClient, WhopError
-from whop_cli.submission_operations import SUBMISSION_DISCOVERY_JS
+from whop_cli.submission_operations import SUBMISSION_DISCOVERY_JS, REST_SUBMISSION_DISCOVERY_JS, REST_SUBMISSION_PATH
 
 HARNESS = r"""
 const {script,scenario}=JSON.parse(require('fs').readFileSync(0,'utf8'));
@@ -25,6 +25,8 @@ global.fetch=async(url,opts)=>{
  if(scenario==='growth_ambiguous'&&name==='two')text=ref('b');
  if(scenario==='unstable'&&name==='one')sources.push('added'+(++attempt));
  if(scenario==='asset_prefix'&&!new URL(url).pathname.includes('/_next/static/'))text=ref('b');
+ if(scenario==='rest_contract')text='baseUrl:(0,A.apiBase)("submission") createSubmission:(e,r)=>{var a;return a=j(r),m(t.submissions.$post({json:e},a))} return`/api/${e}`';
+ if(scenario==='rest_incomplete')text='createSubmission:(e,r)=>{var a;return a=j(r),m(t.submissions.$post({json:e},a))}';
  if(scenario==='failed')return {ok:false};
  if(scenario==='timeout')signal.aborted=true;
  if(scenario==='total'&&name==='one'&&!sources.includes('five'))sources.push('five');
@@ -79,3 +81,11 @@ def test_only_stable_ready_result_is_cached():
     assert c._discover_action(document,'listSocialMediaAccounts','/settings')=='a'*40
     assert c._discover_action(document,'listSocialMediaAccounts','/settings')=='a'*40
     assert document.evaluate.call_count==1
+
+
+@pytest.mark.parametrize('scenario,reason',[('rest_contract','ready'),('rest_incomplete','missing')])
+def test_rest_contract_scanner_requires_observed_base_and_post(scenario,reason):
+    run=subprocess.run(['node','-e',HARNESS],input=json.dumps({'script':REST_SUBMISSION_DISCOVERY_JS,'scenario':scenario}),text=True,capture_output=True,timeout=15,check=True)
+    result=json.loads(run.stdout)['result']
+    assert result['reason']==reason
+    assert result['action']==(REST_SUBMISSION_PATH if reason=='ready' else None)
