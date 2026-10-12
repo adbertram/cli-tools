@@ -205,6 +205,14 @@ CAPTION_READY_JS = r"""(selector)=>{const e=document.querySelector(selector),s=w
  const r=document.createRange();r.selectNodeContents(e);r.setStart(s.focusNode,s.focusOffset);return r.toString()===''}"""
 CAPTION_OPTIONS_JS = r"""(kind)=>[...document.querySelectorAll(kind==='mention'?'[role=option].mention-suggestion-item':'[role=option].hashtag-suggestion-item')]
  .filter(x=>x.getClientRects().length).map(x=>({id:x.id,label:x.innerText,name:kind==='mention'?x.querySelector('.user-id')?.innerText.split(' · ')[0]:x.querySelector('.hash-tag-topic')?.innerText}))"""
+CAPTION_OPTION_VISIBLE_JS = r"""async (id)=>{
+ const el=document.getElementById(id);if(!el)return false;
+ el.scrollIntoView({block:'center',inline:'center',behavior:'instant'});
+ await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+ const r=el.getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height/2;
+ const hit=document.elementFromPoint(x,y);
+ return el.isConnected&&r.width>0&&r.height>0&&x>=0&&y>=0&&x<innerWidth&&y<innerHeight&&!!hit&&el.contains(hit);
+}"""
 CAPTION_SELECTION_JS = "(opts)=>{const native=()=> (" + EDITOR_STATE_JS + ")();" + r"""
  const name=el=>opts.kind==='mention'?el.querySelector('.user-id')?.innerText.split(' · ')[0]:el.querySelector('.hash-tag-topic')?.innerText;
  const equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
@@ -753,6 +761,8 @@ class StudioPublisher:
         return self._verify_controls(page, policy)
 
     def _select_caption_option(self, page, saved, option, kind, text, prefix):
+        if page.evaluate(CAPTION_OPTION_VISIBLE_JS, option["id"]) is not True:
+            raise StudioPublishError("Studio exact caption suggestion is not visible or hit-tested.", category="caption_suggestion_changed")
         editor = self._verify_editor(page, saved)
         key = '__studio_caption_' + uuid4().hex
         selection = None

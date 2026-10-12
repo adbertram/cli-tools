@@ -887,7 +887,7 @@ def test_failed_exact_selection_restores_text_and_marks_semantics_unverified(pub
         text = 'Original text'
         def evaluate(self, script, argument=None):
             if script == module.CAPTION_TEXT_JS:return self.text
-            if script == module.CAPTION_READY_JS:return True
+            if script in (module.CAPTION_READY_JS, module.CAPTION_OPTION_VISIBLE_JS):return True
             if script == module.CAPTION_OPTIONS_JS:return options
             raise AssertionError(script)
         def fill_framework_input(self, selector, text):self.text = text
@@ -917,7 +917,7 @@ def caption_page(options):
         text = ''
         def evaluate(self, script, argument=None):
             if script == module.CAPTION_TEXT_JS:return self.text
-            if script == module.CAPTION_READY_JS:return True
+            if script in (module.CAPTION_READY_JS, module.CAPTION_OPTION_VISIBLE_JS):return True
             if script == module.CAPTION_OPTIONS_JS:return options
             raise AssertionError(script)
         def fill_framework_input(self, selector, text):self.text = text
@@ -969,7 +969,7 @@ class CaptionEntityPage:
         self.armed = [];self.clicks = [];self.receipt = None
     def evaluate(self, script, value=None):
         if script == module.CAPTION_TEXT_JS:return self.text
-        if script == module.CAPTION_READY_JS:return True
+        if script in (module.CAPTION_READY_JS, module.CAPTION_OPTION_VISIBLE_JS):return True
         if script == module.CAPTION_OPTIONS_JS:return self.rows()
         if script == module.CAPTION_SELECTION_JS:
             self.armed.append(value['id'])
@@ -1378,7 +1378,7 @@ def test_caption_gesture_requires_exact_complete_guard_receipt(publisher, monkey
     calls = []
     def evaluate(script, value):
         calls.append(script)
-        return True if script == module.CAPTION_SELECTION_JS else state
+        return True if script in (module.CAPTION_SELECTION_JS, module.CAPTION_OPTION_VISIBLE_JS) else state
     page = SimpleNamespace(evaluate=evaluate, click_native=lambda selector: calls.append(selector))
     with pytest.raises(StudioPublishError, match='changed before native'):
         publisher._select_caption_option(page, {}, {'id': 'mention-option-x-0'}, 'hashtag', '#ad', '#ad')
@@ -1390,7 +1390,7 @@ def test_caption_gesture_cleanup_preserves_primary_click_failure(publisher, monk
     calls = []
     def evaluate(script, value):
         calls.append(script)
-        if script == module.CAPTION_SELECTION_JS:return True
+        if script in (module.CAPTION_SELECTION_JS, module.CAPTION_OPTION_VISIBLE_JS):return True
         raise RuntimeError('cleanup')
     page = SimpleNamespace(evaluate=evaluate, click_native=lambda *a: (_ for _ in ()).throw(ValueError('primary')))
     with pytest.raises(ValueError, match='primary'):
@@ -1401,7 +1401,7 @@ def test_caption_gesture_cleanup_preserves_primary_click_failure(publisher, monk
 def test_caption_gesture_cleanup_failure_denies_success(publisher, monkeypatch):
     monkeypatch.setattr(publisher, '_verify_editor', lambda *a: {})
     def evaluate(script, value):
-        if script == module.CAPTION_SELECTION_JS:return True
+        if script in (module.CAPTION_SELECTION_JS, module.CAPTION_OPTION_VISIBLE_JS):return True
         raise RuntimeError('cleanup')
     page = SimpleNamespace(evaluate=evaluate, click_native=lambda *a: None)
     with pytest.raises(StudioPublishError, match='cleanup is unverified'):
@@ -1508,3 +1508,13 @@ def test_standalone_reconcile_reads_headless_while_posting_opens_visible_chrome(
     fresh = StudioPublisher(SimpleNamespace(**{**vars(publisher.config), "get_browser": lambda posting=False: opened.append(posting) or browser}))
     assert fresh._page() == "editor" and opened == [True, module.UPLOAD_URL]
     fresh.close()
+
+
+@pytest.mark.parametrize('visible',[False,None,{},'true'])
+def test_caption_option_must_be_visible_before_guard_and_native_click(publisher,monkeypatch,visible):
+    calls=[]
+    page=SimpleNamespace(evaluate=lambda script,value:calls.append(script) or visible,click_native=lambda selector:pytest.fail('must not click hidden option'))
+    monkeypatch.setattr(publisher,'_verify_editor',lambda *a:pytest.fail('must not arm hidden option'))
+    with pytest.raises(StudioPublishError,match='not visible or hit-tested'):
+        publisher._select_caption_option(page,{}, {'id':'mention-option-x-0'},'mention','@boxabl','@boxabl')
+    assert calls==[module.CAPTION_OPTION_VISIBLE_JS]
