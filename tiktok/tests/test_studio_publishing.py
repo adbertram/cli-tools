@@ -1539,3 +1539,53 @@ Promise.resolve((PROBE)('mention-option-test-0')).then(result=>console.log(JSON.
     result=json.loads(run.stdout)
     assert result['result'] is expected and result['frames']==0
     if scenario!='missing':assert result['scroll']=={'block':'center','inline':'center','behavior':'instant'}
+
+
+
+def test_native_caption_waits_for_entities_after_exact_saved_text(publisher,monkeypatch):
+    rows=[{'id':'mention-option-abc-0','label':'Boxabl','name':'boxabl'}]
+    page,saved=caption_entity_page(publisher,lambda:rows,{'mention-option-abc-0'},monkeypatch)
+    pending=dict(saved);raw=json.loads(saved['caption_markup']);raw['entityMap']={}
+    for block in raw['blocks']:block['entityRanges']=[]
+    pending['caption_markup']=json.dumps(raw)
+    reads=[]
+    def drafts(*args):
+        reads.append(1)
+        return [pending if len(reads)<3 else saved]
+    monkeypatch.setattr(publisher,'_drafts',drafts)
+    def settle(page,predicate,message,**kwargs):
+        for _ in range(3):
+            result=predicate()
+            if result:return result
+        raise StudioPublishError(message)
+    monkeypatch.setattr(publisher,'_wait',settle)
+    publisher._set_caption(page,policy()|{'caption':'@boxabl'},saved)
+    assert len(reads)==3 and publisher._caption_entity_failure is None
+    assert len(page.clicks)==1 and page.text=='@boxabl'
+
+
+def test_caption_entity_failure_evidence_survives_rollback(publisher,monkeypatch):
+    rows=[{'id':'mention-option-abc-0','label':'Boxabl','name':'boxabl'}]
+    page,saved=caption_entity_page(publisher,lambda:rows,{'mention-option-abc-0'},monkeypatch)
+    page.text='prior caption'
+    pending=dict(saved);raw=json.loads(saved['caption_markup']);raw['entityMap']={}
+    for block in raw['blocks']:block['entityRanges']=[]
+    pending['caption_markup']=json.dumps(raw)
+    monkeypatch.setattr(publisher,'_drafts',lambda *args:[pending])
+    with pytest.raises(StudioPublishError,match='native entity did not persist'):
+        publisher._set_caption(page,policy()|{'caption':'@boxabl'},saved)
+    assert page.text=='prior caption'
+    evidence=publisher._caption_entity_failure
+    assert evidence['caption']=='@boxabl' and evidence['expected_caption']=='@boxabl'
+    assert json.loads(evidence['caption_markup'])['entityMap']=={}
+    assert evidence['draft_id']==saved['draft_id']
+
+
+def test_absent_banner_recovers_only_exact_owned_unlocked_draft(publisher,monkeypatch):
+    value,page=beside_others(publisher,monkeypatch)
+    page.rows=page.rows[:1]
+    page.rows[0]['is_locked']=False;page.rows[0]['is_temp']=False
+    page.locator=lambda selector:SimpleNamespace(count=lambda:0)
+    publisher._recover_private_preparation(value)
+    assert len(page.deletes)==1 and page.deletes[0]['allow_unlocked'] is True
+    assert page.rows==[] and not page.events and page.clicked==0

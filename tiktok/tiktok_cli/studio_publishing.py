@@ -788,6 +788,7 @@ class StudioPublisher:
 
     def _set_caption(self, page, policy, saved=None):
         self._caption_semantic_rollback_unverified = False
+        self._caption_entity_failure = None
         caption = policy['caption']
         if saved is not None:
             try:
@@ -845,16 +846,38 @@ class StudioPublisher:
                 if actual == expected + ' ':
                     page.keyboard_press('Backspace')
                 self._wait(page, lambda: page.evaluate(CAPTION_TEXT_JS, CAPTION_SELECTOR) == expected, 'Studio selected entity changed the exact caption.', seconds=3)
+                last_entity_row = None
                 def entity_saved():
+                    nonlocal last_entity_row
                     if saved is None:raise StudioPublishError('Studio caption editing requires exact draft ownership.')
                     rows = [r for r in self._drafts(page, policy) if r['draft_id'] == saved['draft_id']]
                     if len(rows) != 1 or any(rows[0].get(k) != saved.get(k) for k in MEDIA_BINDING_FIELDS):
                         raise StudioPublishError('Studio caption draft ownership changed.')
+                    last_entity_row = rows[0]
                     if rows[0]['caption'] != expected:return False
                     try:caption_entities(rows[0], expected)
                     except StudioPublishError:return False
                     return True
-                self._wait(page, entity_saved, 'Studio selected native entity did not persist.', seconds=10)
+                try:
+                    self._wait(page, entity_saved, 'Studio selected native entity did not persist.', seconds=10)
+                except StudioPublishError:
+                    # Capture the owned saved state before rollback removes the evidence.
+                    evidence = {'expected_caption': expected, 'draft_id': saved['draft_id']}
+                    if last_entity_row is not None:
+                        for field in ('caption', 'caption_markup', 'caption_text_extra'):
+                            value = last_entity_row.get(field)
+                            if len(canonical(value).encode()) <= 65536:
+                                evidence[field] = value
+                            else:
+                                evidence[field + '_oversize'] = True
+                    try:
+                        evidence['native_caret_ready'] = page.evaluate(CAPTION_READY_JS, CAPTION_SELECTOR) is True
+                        visibility = page.evaluate('()=>document.visibilityState')
+                        evidence['visibility'] = visibility if visibility in ('visible', 'hidden') else 'unknown'
+                    except Exception as diagnostic_error:
+                        evidence['context_error_type'] = type(diagnostic_error).__name__
+                    self._caption_entity_failure = evidence
+                    raise
                 cursor = token.end()
             if caption[cursor:]:page.type_text(caption[cursor:])
             if page.evaluate(CAPTION_TEXT_JS, CAPTION_SELECTOR) != caption:
@@ -1064,6 +1087,9 @@ class StudioPublisher:
             operation["state"] = "preparation_failed"
             if getattr(self, '_caption_semantic_rollback_unverified', False):
                 operation['caption_repair'] = {'state': 'failed', 'semantic_rollback_verified': False}
+                if (getattr(self, '_caption_entity_failure', None) is not None
+                        and self._caption_entity_failure['draft_id'] == operation.get('draft_id')):
+                    operation['caption_repair']['entity_failure'] = self._caption_entity_failure
             self._save(operation)
             raise
 
@@ -1097,7 +1123,10 @@ class StudioPublisher:
             raise StudioPublishError("Private recovery media binding changed; no draft removed.")
         if (matches[0].get("is_locked") is True or matches[0].get("is_temp") is True) and page.locator(CAPTION_SELECTOR).count() == 0 and page.locator('[data-e2e="local_draft_container"]').count() == 0:
             return self._delete_owned_orphan(page, operation)
-        if len(rows) > 1:
+        if len(rows) > 1 or (page.locator(CAPTION_SELECTOR).count() == 0
+                            and page.locator('[data-e2e="local_draft_container"]').count() == 0):
+            # No banner cannot identify an unlocked orphan, but the journal and
+            # atomic media binding can. An active editor still refuses deletion.
             # The native banner never names a draft: it offers the one unlocked
             # row (measured on adam-server 2026-10-08 with one unlocked and two
             # locked rows), so its Discard cannot be aimed at the owned draft
@@ -1240,6 +1269,9 @@ class StudioPublisher:
         except Exception:
             operation['state'] = 'preparation_failed'
             operation['caption_repair'] = {'state': 'failed', 'semantic_rollback_verified': False}
+            if (getattr(self, '_caption_entity_failure', None) is not None
+                    and self._caption_entity_failure['draft_id'] == operation.get('draft_id')):
+                operation['caption_repair']['entity_failure'] = self._caption_entity_failure
             self._save(operation)
             raise
         self._verify_controls(page, policy)
