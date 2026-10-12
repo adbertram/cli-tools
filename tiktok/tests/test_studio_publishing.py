@@ -1518,3 +1518,24 @@ def test_caption_option_must_be_visible_before_guard_and_native_click(publisher,
     with pytest.raises(StudioPublishError,match='not visible or hit-tested'):
         publisher._select_caption_option(page,{}, {'id':'mention-option-x-0'},'mention','@boxabl','@boxabl')
     assert calls==[module.CAPTION_OPTION_VISIBLE_JS]
+
+
+@pytest.mark.parametrize('scenario,expected',[('visible',True),('missing',False),('disconnected',False),('occluded',False),('offscreen',False)])
+def test_caption_visibility_probe_does_not_wait_for_animation_frames(scenario,expected):
+    import subprocess
+    script="""
+const scenario=SCENARIO;let frames=0,scroll=null;
+global.innerWidth=800;global.innerHeight=457;
+global.requestAnimationFrame=()=>{frames++;};
+const el={isConnected:scenario!=='disconnected',
+ scrollIntoView:opts=>{scroll=opts;},
+ getBoundingClientRect:()=>({left:10,top:scenario==='offscreen'?900:10,width:100,height:30}),
+ contains:hit=>hit===el};
+global.document={getElementById:()=>scenario==='missing'?null:el,
+ elementFromPoint:()=>scenario==='occluded'?{}:el};
+Promise.resolve((PROBE)('mention-option-test-0')).then(result=>console.log(JSON.stringify({result,frames,scroll})));
+""".replace('SCENARIO',json.dumps(scenario)).replace('PROBE',module.CAPTION_OPTION_VISIBLE_JS)
+    run=subprocess.run(['node','-e',script],capture_output=True,text=True,timeout=3,check=True)
+    result=json.loads(run.stdout)
+    assert result['result'] is expected and result['frames']==0
+    if scenario!='missing':assert result['scroll']=={'block':'center','inline':'center','behavior':'instant'}
