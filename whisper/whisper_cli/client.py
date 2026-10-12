@@ -16,7 +16,7 @@ from typing import List, Optional
 from cli_tools_shared.exceptions import ClientError
 
 from .config import get_config
-from .parsers import parse_whisper_cpp_json
+from .parsers import parse_whisper_cpp_json, parse_whisper_cpp_words
 
 FFMPEG_COMMAND = "ffmpeg"
 
@@ -146,8 +146,8 @@ class WhisperClient:
                 out_stem,
             ]
             if word_timestamps:
-                # -ml 1 splits the transcription into per-word entries.
-                cmd.extend(["-ml", "1"])
+                # Full JSON retains normal segments and native subword timing metadata.
+                cmd.extend(["-ojf"])
             if prompt:
                 # Initial prompt biases whisper.cpp toward the listed
                 # vocabulary/spellings (max n_text_ctx/2 tokens).
@@ -172,7 +172,7 @@ class WhisperClient:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
         segments = parse_whisper_cpp_json(data)
-        text = " ".join(segment["text"] for segment in segments).strip()
+        text = "".join(entry.get("text", "") for entry in data["transcription"]).strip()
 
         transcript = {
             "text": text,
@@ -180,8 +180,8 @@ class WhisperClient:
             "segments": segments,
         }
         if word_timestamps:
-            # With -ml 1 the parsed entries are per-word; expose them as words.
-            transcript["words"] = segments
+            # Merge native speech tokens without changing text or timing bounds.
+            transcript["words"] = parse_whisper_cpp_words(data)
         return transcript
 
     # ==================== Models ====================
