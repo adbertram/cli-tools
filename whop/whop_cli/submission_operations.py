@@ -31,8 +31,13 @@ REST_SUBMISSION_PATH = '/api/submission/submissions'
 # a Next action. Prove the exact observed SDK contract from current scripts.
 REST_SUBMISSION_DISCOVERY_JS = DISCOVER_ACTION_JS.replace(
     'for(const text of texts){const re=',
-    "for(const text of texts){if(text.includes('baseUrl:(0,A.apiBase)(\"submission\")') && text.includes('createSubmission:(e,r)=>{var a;return a=j(r),m(t.submissions.$post({json:e},a))}') && text.includes('return`/api/${e}`'))matches.add("+json.dumps(REST_SUBMISSION_PATH)+");const re="
+    r"""for(const text of texts){
+        const base=/baseUrl:\(0,[A-Za-z_$][\w$]*\.apiBase\)\("submission"\)/;
+        const create=/createSubmission:\(([A-Za-z_$][\w$]*),([A-Za-z_$][\w$]*)\)=>\{var ([A-Za-z_$][\w$]*);return \3=[A-Za-z_$][\w$]*\(\2\),[A-Za-z_$][\w$]*\([A-Za-z_$][\w$]*\.submissions\.\$post\(\{json:\1\},\3\)\)\}/;
+        const route=/function\(([A-Za-z_$][\w$]*)\)\{return`\/api\/\$\{\1\}`\}/;
+        if(base.test(text)&&create.test(text)&&route.test(text))matches.add("""+json.dumps(REST_SUBMISSION_PATH)+r""");const re="""
 )
+
 REST_SUBMISSION_FETCH_JS = FETCH_JS.replace(
     "const headers = action ? {'Next-Action':action,'Content-Type':'text/plain;charset=UTF-8','Accept':'text/x-component'} : {'Accept':'application/json'};",
     "const headers = {'Content-Type':'application/json','Accept':'application/json'};"

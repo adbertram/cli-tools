@@ -25,7 +25,9 @@ global.fetch=async(url,opts)=>{
  if(scenario==='growth_ambiguous'&&name==='two')text=ref('b');
  if(scenario==='unstable'&&name==='one')sources.push('added'+(++attempt));
  if(scenario==='asset_prefix'&&!new URL(url).pathname.includes('/_next/static/'))text=ref('b');
- if(scenario==='rest_contract')text='baseUrl:(0,A.apiBase)("submission") createSubmission:(e,r)=>{var a;return a=j(r),m(t.submissions.$post({json:e},a))} return`/api/${e}`';
+ if(scenario==='rest_contract')text='baseUrl:(0,A.apiBase)("submission") createSubmission:(e,r)=>{var a;return a=j(r),m(t.submissions.$post({json:e},a))} function(e){return`/api/${e}`}';
+ if(scenario==='rest_renamed')text='baseUrl:(0,Z.apiBase)("submission") createSubmission:(body,options)=>{var request;return request=k(options),decode(client.submissions.$post({json:body},request))} function(name){return`/api/${name}`}';
+ if(scenario==='rest_wrong_body')text='baseUrl:(0,Z.apiBase)("submission") createSubmission:(body,options)=>{var request;return request=k(options),decode(client.submissions.$post({json:options},request))} function(name){return`/api/${name}`}';
  if(scenario==='rest_incomplete')text='createSubmission:(e,r)=>{var a;return a=j(r),m(t.submissions.$post({json:e},a))}';
  if(scenario==='failed')return {ok:false};
  if(scenario==='timeout')signal.aborted=true;
@@ -83,7 +85,7 @@ def test_only_stable_ready_result_is_cached():
     assert document.evaluate.call_count==1
 
 
-@pytest.mark.parametrize('scenario,reason',[('rest_contract','ready'),('rest_incomplete','missing')])
+@pytest.mark.parametrize('scenario,reason',[('rest_contract','ready'),('rest_renamed','ready'),('rest_wrong_body','missing'),('rest_incomplete','missing')])
 def test_rest_contract_scanner_requires_observed_base_and_post(scenario,reason):
     run=subprocess.run(['node','-e',HARNESS],input=json.dumps({'script':REST_SUBMISSION_DISCOVERY_JS,'scenario':scenario}),text=True,capture_output=True,timeout=15,check=True)
     result=json.loads(run.stdout)['result']
