@@ -494,19 +494,25 @@ class TikTokWebClient:
                 raise ClientError(
                     f"TikTok web request {path} returned an empty response. "
                     "This endpoint only returns data for the logged-in account. "
-                    + _LOGIN_HINT
+                    + _LOGIN_HINT,
+                    code="tiktok_empty_response", category="provider", status=status
                 )
             try:
                 payload = json.loads(body)
             except (ValueError, TypeError) as exc:
                 raise ClientError(
-                    f"TikTok web request {path} returned a non-JSON body: {exc}"
+                    f"TikTok web request {path} returned a non-JSON body: {exc}",
+                    code="tiktok_non_json_response", category="provider", status=status
                 ) from exc
+            if not isinstance(payload, dict):
+                raise ClientError("TikTok web response is not a JSON object.", code="tiktok_malformed_response", category="provider", status=status)
             status_code = payload.get("statusCode", payload.get("status_code"))
             if check_status and status_code not in (0, None):
                 raise ClientError(
                     f"TikTok web request {path} returned status code {status_code}: "
-                    f"{payload.get('statusMsg') or payload.get('status_msg')}"
+                    f"{payload.get('statusMsg') or payload.get('status_msg')}",
+                    code=f"tiktok_provider_{status_code}" if type(status_code) is int else "tiktok_provider_status",
+                    category="provider", status=status
                 )
             return payload
 
@@ -734,6 +740,11 @@ class TikTokWebClient:
             "observed_at": datetime.now(timezone.utc).isoformat(),
             "provenance": ACCOUNT_INFO_ORIGIN + ACCOUNT_INFO_PATH,
         }
+
+    def search_hashtag_videos(self, hashtag: str, *, limit: int = 30, max_pages: int = 2) -> List[Dict]:
+        """Read a bounded public-video sample matching one exact hashtag."""
+        from .search import search_hashtag_videos
+        return search_hashtag_videos(self, hashtag, limit=limit, max_pages=max_pages)
 
     def list_favorites(self, limit: int = 100) -> List[Dict]:
         """List the logged-in account's saved (favorited) TikTok videos."""

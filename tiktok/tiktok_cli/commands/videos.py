@@ -18,6 +18,7 @@ from ..posting import TikTokPostingClient
 app = typer.Typer(help="Publish, inspect, list, and delete TikTok videos")
 
 COMMAND_CREDENTIALS = {
+    "search": ["browser_session"],
     "publish": ["custom"],
     "status": ["custom"],
     "list": ["browser_session"],
@@ -203,3 +204,31 @@ def videos_delete(
         print_json(client.delete_video(video_id))
     finally:
         client.close()
+
+
+@app.command("search")
+@command
+def videos_search(
+    hashtag: str = typer.Argument(..., help="One exact hashtag, with or without #"),
+    limit: int = typer.Option(30, "--limit", "-l", min=1, max=300, help="Maximum matching videos"),
+    max_pages: int = typer.Option(2, "--max-pages", min=1, max=20, help="Maximum native search pages"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display results as table"),
+    filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to display"),
+):
+    """Search public videos with an exact hashtag; absent measurements remain null."""
+    try:
+        validate_filters(filter, allowed_fields=["id", "url", "caption", "author", "created_at", "views", "duration", "likes", "comments", "shares", "saves", "matched_hashtags", "observed_at", "provenance"])
+    except FilterValidationError as exc:
+        raise ClientError(str(exc)) from exc
+    client = get_web_client()
+    try:
+        rows = client.search_hashtag_videos(hashtag, limit=limit, max_pages=max_pages)
+    finally:
+        client.close()
+    rows = apply_properties_filter(apply_filters(rows, filter), properties)
+    if table:
+        columns = list(rows[0]) if rows else ["id", "author", "views", "caption"]
+        print_table(rows, columns, [name.replace("_", " ").title() for name in columns])
+    else:
+        print_json(rows)

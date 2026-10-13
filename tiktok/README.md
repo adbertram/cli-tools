@@ -670,3 +670,31 @@ The equivalent Python entry point is
 It reuses the client's browser, including an existing Studio publishing client.
 Observed on October 12, 2026: post 7695809227801087246 returned 57 retention points,
 3.33 seconds average watch time, 340 seconds total watch time, and 0.0098 completion.
+
+### Search public videos by exact hashtag
+
+```bash
+tiktok videos search boxabl --profile clipper --limit 30 --max-pages 2
+tiktok videos search '#powershell' --profile clipper --filter 'views:gte:1000' --properties id,url,views,likes
+```
+
+Search uses the saved browser session and TikTok's native ranked search endpoint,
+then keeps only exact hashtags from native hashtag metadata or the caption.
+Results contain `id`, `url`, `caption`, `author` (handle), `created_at` (Unix seconds),
+`views`, `duration` (seconds), `likes`, `comments`, `shares`, and `saves`.
+Each row includes `matched_hashtags`, `observed_at` (UTC), and the `provenance` endpoint.
+Missing measurements remain null; measured zero stays zero. Views come from
+`stats.playCount`, never likes. Search is a bounded sample, not a complete hashtag
+inventory: `--limit` accepts 1–300, `--max-pages` accepts 1–20. Filters apply to the
+sample. `--table`, `--filter`, and `--properties` control output. Malformed data,
+non-advancing cursors, unavailable search, and provider errors fail explicitly.
+
+Python callers use
+`TikTokWebClient(config=Config(profile='clipper')).search_hashtag_videos(hashtag, limit=30, max_pages=2)`
+and close the client in `finally`. No publishing or account changes occur.
+The observed `/api/search/general/full/` continuation carries the first response's
+`extra.logid` as `search_id`; TikTok's page signs each in-page request.
+The initial native GET response is captured once through the shared bounded
+network observer; only later pages issue signed in-page fetches.
+Live verification on October 13, 2026 returned 19 exact `#boxabl` videos across
+two pages, including post 7696124366349782305 with 633 views and 26 likes.
