@@ -80,3 +80,197 @@ def test_malformed_pagination_is_client_error(meta, method):
     c, _ = client([{'data': [], 'meta': meta}])
     with pytest.raises(ClientError, match='pagination'):
         getattr(c, method)()
+
+
+def test_requirements_digest_changes_for_rules_but_not_live_budget():
+    from vyro_cli.client import requirements_digest
+    row = {'id':'campaign', 'requirements':{'text':{'hashtags':['#one']}},
+           'targeting':{'platforms':['tiktok']}, 'payoutModel':{'model':'CPM','payRate':2},
+           'budget':{'remaining':100}, 'media':{'links':[{'url':'https://example.com/a'}]}}
+    original = requirements_digest(row)
+    row['budget']['remaining'] = 99
+    assert requirements_digest(row) == original
+    row['requirements']['text']['hashtags'] = ['#two']
+    assert requirements_digest(row) != original
+
+
+@pytest.mark.parametrize('url', ['https://evil.com/@ata_clipper/video/123',
+    'https://www.tiktok.com/@someone/video/123', 'https://www.tiktok.com/@ata_clipper/video/not-id',
+    'http://www.tiktok.com/@ata_clipper/video/123', 'https://www.tiktok.com@evil.com/@ata_clipper/video/123'])
+def test_submission_url_refuses_unbound_post(url):
+    from vyro_cli.client import tiktok_post
+    with pytest.raises(ClientError):
+        tiktok_post(url, 'ata_clipper')
+
+
+def test_submission_url_canonicalizes_tracking_query():
+    from vyro_cli.client import tiktok_post
+    assert tiktok_post('https://www.tiktok.com/@ata_clipper/video/123?x=tracking', '@ata_clipper') == ('https://www.tiktok.com/@ata_clipper/video/123', '123')
+
+
+def test_actor_requires_exact_vyro_id_social_id_and_username():
+    c, _ = client([])
+    c.account = lambda: {'id':'actor'}
+    row = {'id':'social','platform':'tiktok','platformUsername':'ata_clipper','status':{'id':'active'}, 'platformUserId':'opaque'}
+    c.social_accounts = lambda: [row]
+    assert c.actor('actor','social','@ata_clipper') == row
+    for args in [('wrong','social','ata_clipper'),('actor','wrong','ata_clipper'),('actor','social','someone')]:
+        with pytest.raises(ClientError): c.actor(*args)
+    row['status']['id']='disabled'
+    with pytest.raises(ClientError): c.actor('actor','social','ata_clipper')
+
+
+@pytest.mark.parametrize('reply', [{'status':503}, {'error':'vyro_request_failed'}])
+def test_write_never_retries_ambiguous_failure(reply):
+    calls=[]
+    def evaluate(*args):
+        calls.append(args)
+        return reply
+    browser=SimpleNamespace(get_page=lambda _: SimpleNamespace(evaluate=evaluate))
+    c=VyroClient(config=SimpleNamespace(), browser=browser)
+    with pytest.raises(ClientError): c._request('/clips/v2', 'POST', {}, 'actor')
+    assert len(calls)==1
+    assert calls[0][1]['expectedAccountId']=='actor'
+
+
+def test_write_browser_exception_marks_outcome_unknown():
+    def evaluate(*args): raise RuntimeError('private implementation details')
+    browser=SimpleNamespace(get_page=lambda _: SimpleNamespace(evaluate=evaluate))
+    c=VyroClient(config=SimpleNamespace(), browser=browser)
+    with pytest.raises(ClientError, match='outcome_unknown_reconcile'):
+        c._request('/clips/v2','POST',{},'actor')
+
+
+def submission_client(tmp_path):
+    c,_=client([])
+    c.config=SimpleNamespace(get_profile_data_dir=lambda:tmp_path)
+    social={'id':'social','platform':'tiktok','platformUserId':'opaque','platformUsername':'ata_clipper','status':{'id':'active'}}
+    campaign={'id':'a'*24,'enrolled':True,'isLocked':False,'status':{'id':'active'},'targeting':{'platforms':['tiktok']},'budget':{'remaining':1},'requirements':{},'type':'clipping','startDate':'2020-01-01T00:00:00Z','endDate':'2099-01-01T00:00:00Z'}
+    c.actor=lambda *args:social
+    c.campaign=lambda slug:campaign
+    c.eligibility=lambda slug:{'inviteMode':'open','eligibleAccounts':[]}
+    c._get=lambda path:{'isBlocked':False} if 'throttle' in path else {'currentCount':0,'limit':5}
+    return c,campaign,social
+
+
+def test_readiness_distinguishes_join_from_restrictions(tmp_path):
+    c,campaign,_=submission_client(tmp_path)
+    assert c.readiness('slug','actor','social','ata_clipper')['ready']
+    campaign['enrolled']=False
+    assert c.readiness('slug','actor','social','ata_clipper')['reason']=='campaign_not_joined'
+    campaign['budget']['remaining']=0
+    assert c.readiness('slug','actor','social','ata_clipper')['reason']=='campaign_budget_unavailable'
+
+
+def test_reconcile_requires_exact_campaign_and_opaque_account(tmp_path):
+    c,campaign,social=submission_client(tmp_path)
+    url='https://www.tiktok.com/@ata_clipper/video/123'
+    receipt={'id':'r','campaignId':campaign['id'],'platform':'tiktok','platformUserId':'opaque','videoUrl':url}
+    c.submissions=lambda *a,**kw:[receipt]
+    assert c.reconcile('slug',url,'actor','social','ata_clipper')['status']=='existing'
+    receipt['platformUserId']='wrong'
+    with pytest.raises(ClientError,match='identity_mismatch'):c.reconcile('slug',url,'actor','social','ata_clipper')
+
+
+def test_submission_marker_survives_failure_and_prevents_repeat(tmp_path):
+    from vyro_cli.client import requirements_digest
+    c,campaign,_=submission_client(tmp_path)
+    c.reconcile=lambda *a:{'status':'not_found','submission':None}
+    writes=[]
+    def request(path,*args):
+        if path.endswith('pre-check'):return {}
+        writes.append(path)
+        raise ClientError('timeout')
+    c._request=request
+    args=('slug','https://www.tiktok.com/@ata_clipper/video/123',requirements_digest(campaign),'actor','social','ata_clipper',True)
+    assert c.create_submission(*args)['status']=='uncertain'
+    assert c.create_submission(*args)['status']=='uncertain'
+    assert writes==['/clips/v2']
+    assert len(list((tmp_path/'vyro-submissions').glob('*.json')))==1
+
+
+def test_submission_requires_rules_digest_before_any_dispatch(tmp_path):
+    c,_,_=submission_client(tmp_path)
+    c.reconcile=lambda *a:{'status':'not_found','submission':None}
+    c._request=lambda *a:pytest.fail('must not dispatch')
+    with pytest.raises(ClientError,match='digest_changed'):
+        c.create_submission('slug','https://www.tiktok.com/@ata_clipper/video/123','wrong','actor','social','ata_clipper',True)
+
+
+def test_precheck_required_fields_fail_closed():
+    from vyro_cli.client import validate_precheck
+    campaign={'requirements':{'video':{'minLength':20}}}
+    with pytest.raises(ClientError,match='videoLength'):validate_precheck({},campaign)
+    with pytest.raises(ClientError,match='videoLength'):validate_precheck({'videoLength':{'applicable':True,'pass':False}},campaign)
+    validate_precheck({'videoLength':{'applicable':True,'pass':True}},campaign)
+
+
+def test_concurrent_create_dispatches_at_most_once(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    from vyro_cli.client import requirements_digest
+    barrier=Barrier(2)
+    writes=[]
+    def run():
+        c,campaign,_=submission_client(tmp_path)
+        c.reconcile=lambda *a:{'status':'not_found','submission':None}
+        def request(path,*args):
+            if path.endswith('pre-check'):
+                barrier.wait(timeout=3)
+                return {}
+            writes.append(path)
+            raise ClientError('timeout')
+        c._request=request
+        return c.create_submission('slug','https://www.tiktok.com/@ata_clipper/video/123',requirements_digest(campaign),'actor','social','ATA_CLIPPER',True)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures=[pool.submit(run) for _ in range(2)]
+        results=[f.result() for f in futures]
+    assert writes==['/clips/v2']
+    assert all(r['status']=='uncertain' for r in results)
+
+
+def test_receipt_reconciliation_prevents_dispatch_even_without_local_marker(tmp_path):
+    c,_,_=submission_client(tmp_path)
+    c.reconcile=lambda *a:{'status':'existing','submission':{'id':'receipt'}}
+    c._request=lambda *a:pytest.fail('duplicate must not dispatch')
+    assert c.create_submission('slug','https://www.tiktok.com/@ata_clipper/video/123','old-digest','actor','social','ata_clipper',True)['status']=='existing'
+
+
+def test_changed_rules_after_precheck_prevent_dispatch(tmp_path):
+    from vyro_cli.client import requirements_digest
+    c,campaign,_=submission_client(tmp_path)
+    c.reconcile=lambda *a:{'status':'not_found','submission':None}
+    digest=requirements_digest(campaign)
+    def request(path,*args):
+        assert path.endswith('pre-check')
+        campaign['requirements']={'text':{'hashtags':['#new']}}
+        return {'hashtags':{'applicable':True,'pass':True}}
+    c._request=request
+    with pytest.raises(ClientError,match='digest_changed'):
+        c.create_submission('slug','https://www.tiktok.com/@ata_clipper/video/123',digest,'actor','social','ata_clipper',True)
+    assert not (tmp_path/'vyro-submissions').exists()
+
+
+@pytest.mark.parametrize('value', [None, '', '   ', 123])
+def test_actor_requires_native_platform_identity(value):
+    c,_=client([])
+    c.account=lambda:{'id':'actor'}
+    c.social_accounts=lambda:[{'id':'social','platform':'tiktok','platformUsername':'ata_clipper','platformUserId':value,'status':{'id':'active'}}]
+    with pytest.raises(ClientError,match='missing_linked_platform_user_id'):
+        c.actor('actor','social','ata_clipper')
+
+
+def test_max_length_only_requires_precheck():
+    from vyro_cli.client import validate_precheck
+    with pytest.raises(ClientError,match='videoLength'):
+        validate_precheck({}, {'requirements':{'video':{'maxLength':40}}})
+
+
+@pytest.mark.parametrize('missing', ['campaignId','platform','platformUserId','videoUrl'])
+def test_reconcile_cannot_claim_absence_from_incomplete_rows(tmp_path,missing):
+    c,campaign,_=submission_client(tmp_path)
+    row={'id':'receipt','campaignId':campaign['id'],'platform':'tiktok','platformUserId':'opaque','videoUrl':'https://www.tiktok.com/@ata_clipper/video/123'}
+    del row[missing]
+    c.submissions=lambda *a,**kw:[row]
+    with pytest.raises(ClientError,match='incomplete_submission_receipt'):
+        c.reconcile('slug','https://www.tiktok.com/@ata_clipper/video/123','actor','social','ata_clipper')

@@ -3,7 +3,7 @@ name: vyro-cli
 description: >-
   Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
   MANDATORY: Execute Vyro operations using the `vyro` CLI tool.
-  Read-only Vyro clipping campaign, linked-account, and eligibility API operations.
+  Vyro clipping campaigns, linked accounts, and guarded post submissions.
   Triggers: vyro, vyro cli
 ---
 
@@ -52,6 +52,7 @@ vyro <command-group> <action> [arguments] [options]
 | Read every native campaign field, including requirements and media links | `vyro campaigns get <SLUG>` |
 | List newest campaigns | `vyro campaigns list` |
 | List linked accounts; limit and filters are local for this endpoint | `vyro social-accounts list` |
+Mutation commands require exact `--expected-account-id`, `--expected-social-account-id`, and `--expected-username` bindings plus `--yes`. `submissions readiness SLUG` returns the current `requirements_digest`; pass it to `submissions create SLUG --url URL --requirements-digest DIGEST`. `submissions reconcile SLUG --url URL` only reads. Create returns status `created`, `existing`, or `uncertain`; reconcile returns `existing` or `not_found`. Never retry an uncertain dispatch blindly. A durable per-profile marker prevents duplicate dispatch for the same actor/campaign/post. `--yes` affirms the post follows the full campaign rules.
 </quick_start>
 
 <essential_principles>
@@ -67,7 +68,7 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
 - **social-accounts** -- Connected social accounts (subcommands: list)
 </principle>
 <principle name="Read-only scope and native contract">
-This CLI cannot join campaigns, connect social accounts, publish videos, or submit posts.
+This CLI supports guarded campaign enrollment and submission of existing owned TikTok posts. It cannot connect social accounts or publish videos.
 `campaigns get` and `campaigns eligibility` take the exact campaign slug, not its ID.
 List output is an array of full native objects. Campaign rules live in `requirements`,
 platforms in `targeting.platforms`, source links in `media.links`, and dollar amounts in

@@ -1,4 +1,4 @@
-"""Native Vyro account and campaign reads; no publication mutations."""
+"""Native Vyro reads and guarded campaign submission operations."""
 from typing import List, Optional
 import typer
 from cli_tools_shared import create_app, run_app
@@ -95,6 +95,102 @@ def social_list(limit: int = typer.Option(100, '--limit', '-l', min=1, max=1000)
     render(apply_filters(rows, filter) if filter else rows, table, properties)
 
 
+submissions_app = typer.Typer(help='Guarded native post submissions', no_args_is_help=True)
+
+@campaigns_app.command('join')
+@command
+def campaigns_join(
+    slug: str = typer.Argument(..., help='Exact campaign slug'),
+    expected_account_id: str = typer.Option(..., '--expected-account-id', help='Exact Vyro account ID'),
+    expected_social_account_id: str = typer.Option(..., '--expected-social-account-id', help='Exact linked Vyro social account ID'),
+    expected_username: str = typer.Option(..., '--expected-username', help='Expected TikTok handle'),
+    yes: bool = typer.Option(False, '--yes', help='Authorize campaign enrollment'),
+    table: bool = typer.Option(False, '--table', '-t'),
+    properties: Optional[str] = typer.Option(None, '--properties', '-p', help='Comma-separated output fields'),
+    profile: Optional[str] = typer.Option(None, '--profile', help='Saved authentication profile name'),
+):
+    """Join after exact actor and campaign checks."""
+    render(read('join', profile, slug, expected_account_id, expected_social_account_id, expected_username, yes), table, properties)
+
+
+@submissions_app.command('readiness')
+@command
+def submissions_readiness(
+    slug: str = typer.Argument(..., help='Exact campaign slug'),
+    expected_account_id: str = typer.Option(..., '--expected-account-id', help='Exact Vyro account ID'),
+    expected_social_account_id: str = typer.Option(..., '--expected-social-account-id', help='Exact linked Vyro social account ID'),
+    expected_username: str = typer.Option(..., '--expected-username', help='Expected TikTok handle'),
+    table: bool = typer.Option(False, '--table', '-t'),
+    properties: Optional[str] = typer.Option(None, '--properties', '-p', help='Comma-separated output fields'),
+    profile: Optional[str] = typer.Option(None, '--profile', help='Saved authentication profile name'),
+):
+    """Read campaign, account, rate and throttle readiness."""
+    render(read('readiness', profile, slug, expected_account_id, expected_social_account_id, expected_username), table, properties)
+
+
+@submissions_app.command('reconcile')
+@command
+def submissions_reconcile(
+    slug: str = typer.Argument(..., help='Exact campaign slug'),
+    expected_account_id: str = typer.Option(..., '--expected-account-id', help='Exact Vyro account ID'),
+    expected_social_account_id: str = typer.Option(..., '--expected-social-account-id', help='Exact linked Vyro social account ID'),
+    expected_username: str = typer.Option(..., '--expected-username', help='Expected TikTok handle'),
+    url: str = typer.Option(..., '--url', help='Canonical owned TikTok post URL'),
+    table: bool = typer.Option(False, '--table', '-t'),
+    properties: Optional[str] = typer.Option(None, '--properties', '-p', help='Comma-separated output fields'),
+    profile: Optional[str] = typer.Option(None, '--profile', help='Saved authentication profile name'),
+):
+    """Find an exact native receipt without creating one."""
+    render(read('reconcile', profile, slug, url, expected_account_id, expected_social_account_id, expected_username), table, properties)
+
+
+@submissions_app.command('create')
+@command
+def submissions_create(
+    slug: str = typer.Argument(..., help='Exact campaign slug'),
+    expected_account_id: str = typer.Option(..., '--expected-account-id', help='Exact Vyro account ID'),
+    expected_social_account_id: str = typer.Option(..., '--expected-social-account-id', help='Exact linked Vyro social account ID'),
+    expected_username: str = typer.Option(..., '--expected-username', help='Expected TikTok handle'),
+    url: str = typer.Option(..., '--url', help='Canonical owned TikTok post URL'),
+    requirements_digest: str = typer.Option(..., '--requirements-digest', help='Digest returned by readiness'),
+    yes: bool = typer.Option(False, '--yes', help='Affirm campaign rules and authorize submission'),
+    table: bool = typer.Option(False, '--table', '-t'),
+    properties: Optional[str] = typer.Option(None, '--properties', '-p', help='Comma-separated output fields'),
+    profile: Optional[str] = typer.Option(None, '--profile', help='Saved authentication profile name'),
+):
+    """Submit once after rules, identity, duplicate and pre-check verification."""
+    render(read('create_submission', profile, slug, url, requirements_digest, expected_account_id, expected_social_account_id, expected_username, yes), table, properties)
+
+
+@submissions_app.command('list')
+@command
+def submissions_list(
+    campaign_slug: Optional[str] = typer.Option(None, '--campaign-slug', help='Restrict to exact campaign slug'),
+    limit: int = typer.Option(100, '--limit', '-l', min=1, max=1000),
+    filter: Optional[List[str]] = typer.Option(None, '--filter', '-f', help='Filter field:op:value (applied locally)'),
+    table: bool = typer.Option(False, '--table', '-t'),
+    properties: Optional[str] = typer.Option(None, '--properties', '-p', help='Comma-separated output fields'),
+    profile: Optional[str] = typer.Option(None, '--profile', help='Saved authentication profile name'),
+):
+    """List native receipts for the authenticated campaign member."""
+    if filter: validate_filters(filter)
+    rows=read('submissions',profile,campaign_slug,limit)
+    render(apply_filters(rows,filter) if filter else rows,table,properties)
+
+
+@submissions_app.command('get')
+@command
+def submissions_get(
+    identity: str = typer.Argument(..., help='Exact native submission ID'),
+    table: bool = typer.Option(False, '--table', '-t'),
+    properties: Optional[str] = typer.Option(None, '--properties', '-p', help='Comma-separated output fields'),
+    profile: Optional[str] = typer.Option(None, '--profile', help='Saved authentication profile name'),
+):
+    """Read a native submission receipt."""
+    render(read('submission',profile,identity),table,properties)
+
+
+app.add_typer(submissions_app, name='submissions')
 app.add_typer(account_app, name='account')
 app.add_typer(campaigns_app, name='campaigns')
 app.add_typer(social_app, name='social-accounts')

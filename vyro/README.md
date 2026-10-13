@@ -2,7 +2,7 @@
 
 ## DESCRIPTION
 
-Use this CLI to read Vyro clipping campaigns, account details, linked social accounts, and campaign eligibility through Vyro's authenticated web API. This adapter is read-only: it does not enroll in campaigns, link accounts, publish videos, or submit posts.
+Use this CLI to read Vyro clipping campaigns, account details, linked social accounts, and campaign eligibility through Vyro's authenticated web API. It can enroll in campaigns and submit already published, owned TikTok posts using explicit account bindings and campaign-rule approval. It does not link accounts or publish videos.
 
 ## Authentication
 
@@ -51,7 +51,7 @@ All data commands return JSON by default and support `--table/-t`, `--properties
 
 `social-accounts list` returns native linked-account records, including `platform`, `platformUserId`, `platformUsername`, `status`, and `requiresScopeUpgrade` when present.
 
-A successful read is not permission to submit a post. No TikTok link, campaign enrollment, or publication readiness is inferred. In October 2026 the UI described a YouTube audience-insights upgrade while explicitly saying its current connection would continue to work; `requiresScopeUpgrade` alone is not treated as a universal submission blocker.
+A successful read is not permission to submit a post. Readiness verifies the linked TikTok record, campaign dates/platform/budget/enrollment, eligibility, rate limits and throttle state. It cannot verify an unpublished video; submission additionally requires the native pre-check and campaign rules approval. In October 2026 the UI described a YouTube audience-insights upgrade while explicitly saying its current connection would continue to work; `requiresScopeUpgrade` alone is not treated as a universal submission blocker.
 
 ## API scope and failures
 
@@ -66,3 +66,22 @@ uv run --project vyro pytest vyro/tests
 _repo/skills/cli-tool/scripts/validate-cli-tool.sh vyro
 _repo/skills/cli-tool/scripts/test-cli-tool.sh --cli-name vyro --profile adam
 ```
+
+## Guarded submissions
+
+```bash
+vyro submissions readiness CAMPAIGN_SLUG --expected-account-id VYRO_ACCOUNT_ID --expected-social-account-id VYRO_SOCIAL_ID --expected-username TIKTOK_HANDLE --profile adam
+vyro campaigns join CAMPAIGN_SLUG --expected-account-id VYRO_ACCOUNT_ID --expected-social-account-id VYRO_SOCIAL_ID --expected-username TIKTOK_HANDLE --yes --profile adam
+vyro submissions create CAMPAIGN_SLUG --url https://www.tiktok.com/@HANDLE/video/POST_ID --requirements-digest DIGEST_FROM_READINESS --expected-account-id VYRO_ACCOUNT_ID --expected-social-account-id VYRO_SOCIAL_ID --expected-username TIKTOK_HANDLE --yes --profile adam
+vyro submissions reconcile CAMPAIGN_SLUG --url https://www.tiktok.com/@HANDLE/video/POST_ID --expected-account-id VYRO_ACCOUNT_ID --expected-social-account-id VYRO_SOCIAL_ID --expected-username TIKTOK_HANDLE --profile adam
+vyro submissions list --campaign-slug CAMPAIGN_SLUG --limit 100
+vyro submissions get NATIVE_RECEIPT_ID
+```
+
+Vyro social-account IDs and `platformUserId` values are not TikTok Studio numeric account IDs. Bind the exact Vyro account, social record and handle. `--yes` explicitly authorizes the operation and affirms the full campaign rules. The requirements digest covers native rules, sources, platform targeting, dates, creator preferences and payout terms; live spend is excluded. Missing required checks fail explicitly.
+
+Create sends the observed `{videoUrl, socialAccountId, campaignId}` payload to `/clips/pre-check` and then `/clips/v2`. It checks current rules again after pre-check, does not retry writes, and returns `created`, `existing` or `uncertain` with the native receipt in `submission` when verified. Reconcile returns `existing` or `not_found` after an exhaustive bounded read of `/clips/me`, matching campaign, canonical URL and the linked account's opaque platform ID. More than 1,000 receipts fails explicitly rather than claiming absence.
+
+Before dispatch, a private, fsynced, exclusive-create marker persists under the authentication profile's `vyro-submissions` directory. Concurrent or repeated create calls for that same actor/campaign/post cannot dispatch twice. An ambiguous failure keeps the marker; reconcile may find a receipt later. `not_found` after an uncertain write does not authorize retry, and there is intentionally no automatic marker reset. A first legitimate submission is still required to validate a live success receipt; smoke tests never submit unrelated posts.
+
+Native receipt UI fields verified from the service client include `id`, `campaignId`, `platform`, `platformUserId`, `videoUrl`, `videoRawUrl`, `status.id`, `earnings.totalEarnings`, `earnings.cpm` (dollars), and `metrics.totalViews`. No zero earnings or receipt is fabricated when fields are absent.

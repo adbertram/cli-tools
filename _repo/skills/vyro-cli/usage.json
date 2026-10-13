@@ -1,8 +1,8 @@
 {
   "tool": "vyro",
   "description": "CLI interface for vyro",
-  "discovered_at": "2026-10-13T20:15:20Z",
-  "total_commands": 20,
+  "discovered_at": "2026-10-13T20:33:56Z",
+  "total_commands": 26,
   "global_options": [],
   "commands": {
     "account": {
@@ -471,6 +471,65 @@
             }
           ]
         },
+        "join": {
+          "help": "Join after exact actor and campaign checks.",
+          "arguments": [
+            {
+              "name": "slug",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact campaign slug"
+            }
+          ],
+          "options": [
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact Vyro account ID"
+            },
+            {
+              "name": "--expected-social-account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact linked Vyro social account ID"
+            },
+            {
+              "name": "--expected-username",
+              "type": "TEXT",
+              "required": true,
+              "help": "Expected TikTok handle"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Authorize campaign enrollment",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved authentication profile name"
+            }
+          ]
+        },
         "list": {
           "help": "List newest campaigns. Filters run locally after the API limit.",
           "arguments": [],
@@ -538,6 +597,276 @@
               "required": false,
               "help": "Filter field:op:value (applied locally)",
               "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved authentication profile name"
+            }
+          ]
+        }
+      }
+    },
+    "submissions": {
+      "help": "Guarded native post submissions",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "create": {
+          "help": "Submit once after rules, identity, duplicate and pre-check verification.",
+          "arguments": [
+            {
+              "name": "slug",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact campaign slug"
+            }
+          ],
+          "options": [
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact Vyro account ID"
+            },
+            {
+              "name": "--expected-social-account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact linked Vyro social account ID"
+            },
+            {
+              "name": "--expected-username",
+              "type": "TEXT",
+              "required": true,
+              "help": "Expected TikTok handle"
+            },
+            {
+              "name": "--url",
+              "type": "TEXT",
+              "required": true,
+              "help": "Canonical owned TikTok post URL"
+            },
+            {
+              "name": "--requirements-digest",
+              "type": "TEXT",
+              "required": true,
+              "help": "Digest returned by readiness"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Affirm campaign rules and authorize submission",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved authentication profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Read a native submission receipt.",
+          "arguments": [
+            {
+              "name": "identity",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact native submission ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved authentication profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List native receipts for the authenticated campaign member.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--campaign-slug",
+              "type": "TEXT",
+              "required": false,
+              "help": "Restrict to exact campaign slug"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[1<=x<=1000]",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter field:op:value (applied locally)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved authentication profile name"
+            }
+          ]
+        },
+        "readiness": {
+          "help": "Read campaign, account, rate and throttle readiness.",
+          "arguments": [
+            {
+              "name": "slug",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact campaign slug"
+            }
+          ],
+          "options": [
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact Vyro account ID"
+            },
+            {
+              "name": "--expected-social-account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact linked Vyro social account ID"
+            },
+            {
+              "name": "--expected-username",
+              "type": "TEXT",
+              "required": true,
+              "help": "Expected TikTok handle"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved authentication profile name"
+            }
+          ]
+        },
+        "reconcile": {
+          "help": "Find an exact native receipt without creating one.",
+          "arguments": [
+            {
+              "name": "slug",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact campaign slug"
+            }
+          ],
+          "options": [
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact Vyro account ID"
+            },
+            {
+              "name": "--expected-social-account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact linked Vyro social account ID"
+            },
+            {
+              "name": "--expected-username",
+              "type": "TEXT",
+              "required": true,
+              "help": "Expected TikTok handle"
+            },
+            {
+              "name": "--url",
+              "type": "TEXT",
+              "required": true,
+              "help": "Canonical owned TikTok post URL"
             },
             {
               "name": "--table",
