@@ -211,3 +211,16 @@ def test_liveness_timeout_cancels_only_its_owned_pending_request(monkeypatch):
         assert daemon.cdp.pending_requests=={999:unrelated} and not unrelated.done()
         unrelated.cancel()
     asyncio.run(run())
+
+
+def test_get_capture_accepts_no_body_preserves_route_and_response_bounds():
+    capture = NetworkCapture(SCOPE | {'method':'GET'})
+    request(capture, 'wrong-route', method='GET', url='https://other.test/post/')
+    request(capture, method='GET', postData=None, hasPostData=False)
+    response(capture)
+    capture.record('Network.loadingFinished', {'requestId':'exact','encodedDataLength':99}, 'owned')
+    result = capture.drain()
+    assert result['loss'] is None and capture.requests == {'exact'}
+    assert 'postData' not in str(result) and 'NEVER_CAPTURE' not in str(result)
+    capture.record('Network.loadingFinished', {'requestId':'exact','encodedDataLength':10001}, 'owned')
+    assert capture.drain()['loss'] == 'response_size_inconclusive'

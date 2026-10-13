@@ -11,7 +11,7 @@ MAX_REQUESTS = 100
 
 def route_scope(session_id, method, origin, path, max_bytes):
     if (not isinstance(session_id, str) or not 1 <= len(session_id) <= 128
-            or method not in ("POST", "PUT", "PATCH")
+            or method not in ("GET", "POST", "PUT", "PATCH")
             or not isinstance(origin, str) or not 1 <= len(origin) <= 2048
             or not isinstance(path, str) or not 1 <= len(path) <= 4096
             or type(max_bytes) is not int or not 1 <= max_bytes <= 1_000_000):
@@ -81,7 +81,7 @@ class NetworkCapture:
                 bounded_body = isinstance(body, str) and body and len(body.encode()) < self.scope["max_bytes"]
             except UnicodeError:
                 bounded_body = False
-            if not bounded_body or request.get("hasPostData") is False:
+            if self.scope["method"] != "GET" and (not bounded_body or request.get("hasPostData") is False):
                 self.loss = "request_body_unavailable_or_at_limit"
                 return
             if request_id not in self.requests and len(self.requests) >= MAX_REQUESTS:
@@ -89,7 +89,9 @@ class NetworkCapture:
                 return
             self.requests.add(request_id)
             selected = {"requestId": request_id, "request": {"method": self.scope["method"],
-                "url": self.scope["origin"] + self.scope["path"], "postData": body}}
+                "url": self.scope["origin"] + self.scope["path"]}}
+            if self.scope["method"] != "GET":
+                selected["request"]["postData"] = body
         elif method == "Network.responseReceived":
             response = params.get("response", {})
             if not known_request:

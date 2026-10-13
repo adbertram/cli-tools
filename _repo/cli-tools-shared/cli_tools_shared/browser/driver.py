@@ -1361,7 +1361,7 @@ class BrowserHarnessService:
                              request_ids=(), max_bytes: int = 1_000_000, timeout: float = 5) -> List[Dict[str, Any]]:
         """Return matching requests and their events, omitting every header."""
         self._require_open()
-        if type(max_bytes) is not int or not 1 <= max_bytes <= 1_000_000 or not isinstance(session_id, str) or not session_id or method not in ('POST', 'PUT', 'PATCH') or not isinstance(origin, str) or not isinstance(path, str) or not path.startswith('/') or not isinstance(request_ids, (tuple, list)) or len(request_ids) > 100 or any(not isinstance(value, str) or not 1 <= len(value) <= 128 for value in request_ids) or type(timeout) not in (int, float) or not 0 < timeout <= 5:
+        if type(max_bytes) is not int or not 1 <= max_bytes <= 1_000_000 or not isinstance(session_id, str) or not session_id or method not in ('GET', 'POST', 'PUT', 'PATCH') or not isinstance(origin, str) or not isinstance(path, str) or not path.startswith('/') or not isinstance(request_ids, (tuple, list)) or len(request_ids) > 100 or any(not isinstance(value, str) or not 1 <= len(value) <= 128 for value in request_ids) or type(timeout) not in (int, float) or not 0 < timeout <= 5:
             raise BrowserHarnessError('network_observation_arguments_invalid')
         capture = self._native_network_capture
         if capture is not None:
@@ -1393,10 +1393,10 @@ class BrowserHarnessService:
                 if request.get('method') != method or url.scheme+'://'+url.netloc != origin or url.path != path:
                     continue
                 body = request.get('postData')
-                if not isinstance(body, str) or len(body.encode()) > max_bytes:
+                if method != 'GET' and (not isinstance(body, str) or len(body.encode()) > max_bytes):
                     raise BrowserHarnessError('network_observation_request_body_unavailable')
                 matched.add(request_id)
-                result.append({'kind': 'request', 'request_id': request_id, 'body': body})
+                result.append({'kind': 'request', 'request_id': request_id, 'body': None if method == 'GET' else body})
             elif request_id in matched:
                 if event.get('method') == 'Network.responseReceived':
                     response = params.get('response', {});url = urlsplit(response.get('url', ''))

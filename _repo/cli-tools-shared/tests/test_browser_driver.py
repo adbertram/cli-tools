@@ -2364,3 +2364,16 @@ def test_network_response_invalid_deadline_never_queries(monkeypatch, timeout):
     service, calls = network_service(monkeypatch)
     with pytest.raises(BrowserHarnessError):service.network_response_body('owner', 'exact', timeout=timeout)
     assert calls == []
+
+
+def test_get_network_filter_needs_no_request_body_and_exports_no_secrets(monkeypatch):
+    def event(method, **params):
+        return {'session_id':'owner', 'method':'Network.'+method, 'params':params}
+    events = [event('requestWillBeSent', requestId='foreign', request={'method':'GET','url':'https://other.test/search'}),
+              event('requestWillBeSent', requestId='exact', request={'method':'GET','url':'https://exact.test/search?token=SECRET','headers':{'Cookie':'SECRET'}}),
+              event('responseReceived',requestId='exact',response={'url':'https://exact.test/search?token=SECRET','status':200}),
+              event('loadingFinished',requestId='exact',encodedDataLength=12)]
+    service, _ = network_service(monkeypatch, events=events)
+    rows = service.network_observations('owner',method='GET',origin='https://exact.test',path='/search')
+    assert rows == [{'kind':'request','request_id':'exact','body':None},{'kind':'response','request_id':'exact','status':200,'route_matches':True},{'kind':'finished','request_id':'exact','encoded_bytes':12}]
+    assert 'SECRET' not in str(rows)
