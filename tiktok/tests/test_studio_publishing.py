@@ -1627,3 +1627,66 @@ def test_native_caption_activation_brings_owned_page_to_front_for_real_focus(pub
     monkeypatch.setattr(publisher,'_wait',once)
     module.StudioPublisher._activate_caption_target(publisher,page,{})
     assert calls==[('switch',target),('cdp','Page.bringToFront')]
+
+
+def check_ui(kind):
+    return [{"state": name, "shown": studio_check.UI_STATES[index] == kind,
+             "text": "You've reached your check limit for today" if kind == 'limit_reached' else kind}
+            for index, name in enumerate(studio_check.UI_CLASSES)]
+
+
+@pytest.mark.parametrize('changes, status, category', [
+    ({'lite': {}, 'lite_ui': check_ui('limit_reached')}, 'limit_reached', 'studio_check_limit_reached'),
+    ({'lite': {}, 'lite_ui': check_ui('limit_reached'), 'music_status': 'SWITCH_ON_CHECKING'}, 'limit_reached', 'studio_check_limit_reached'),
+    ({'lite': {}, 'lite_ui': check_ui('unavailable')}, 'unavailable', 'pre_action_abort'),
+    ({'lite': {'checkStatus': 3}}, 'check_failed', 'pre_action_abort'),
+    ({'lite_switch': False}, 'switch_off', 'pre_action_abort'),
+    ({'lite_switch': None, 'lite_ui': []}, 'not_offered', 'pre_action_abort'),
+    ({'lite': {'checkStatus': 2, 'checkResult': []}}, 'completed', 'pre_action_abort'),
+    ({'music': {'code': 99}}, 'completed', 'pre_action_abort'),
+    ({'music_status': 'DEFAULT', 'music_switch': False}, 'completed', 'pre_action_abort'),
+])
+def test_only_explicit_pass_allows_dispatch_and_retry_rechecks(publisher, monkeypatch, changes, status, category):
+    value = prepared(publisher);page = attach(publisher, value, monkeypatch)
+    page.checks = [{**CHECKS_PASSED, **changes}]
+    # No quota wait, observer, callback, or public action is allowed.
+    if status == 'limit_reached':
+        monkeypatch.setattr(page, 'wait_for_timeout', lambda ms: pytest.fail('quota must abort immediately') if ms == 1000 else None)
+    for _ in range(2):
+        with pytest.raises(StudioPublishError) as error:
+            publisher.publish(value['request_id'], before_public_action=lambda _: pytest.fail('callback ran'))
+        saved = publisher.status(value['request_id'])
+        assert error.value.category == category
+        assert saved['state'] == 'prepared' and saved['public_action_dispatched'] is False
+        assert saved['studio_checks']['status'] == status
+        assert page.clicked == 0 and page.observer_options is None
+    # Resume the same exact journal only when newly measured checks pass.
+    page.checks = [CHECKS_PASSED]
+    monkeypatch.setattr(publisher, '_reconcile', lambda value: value)
+    calls = []
+    publisher.publish(value['request_id'], before_public_action=lambda binding: calls.append(binding))
+    assert len(calls) == 1 and page.clicked == 1
+    assert publisher.status(value['request_id'])['studio_checks']['verdict'] == 'pass'
+
+
+@pytest.mark.parametrize('read_error', [False, True])
+def test_unreadable_checks_clear_stale_pass_and_never_dispatch(publisher, monkeypatch, read_error):
+    value = prepared(publisher);page = attach(publisher, value, monkeypatch)
+    value['studio_checks'] = {'status': 'completed', 'verdict': 'pass', 'music_verdict': 'no_issue'}
+    publisher._save(value)
+    evaluate = page.evaluate
+    def unreadable(script, *args):
+        if script == studio_check.CHECK_STATE_JS:
+            if read_error:
+                raise RuntimeError('closed page')
+            return None
+        return evaluate(script, *args)
+    monkeypatch.setattr(page, 'evaluate', unreadable)
+    with pytest.raises(StudioPublishError, match='unreadable') as error:
+        publisher.publish(value['request_id'], before_public_action=lambda _: pytest.fail('callback ran'))
+    saved = publisher.status(value['request_id'])
+    assert error.value.category == 'pre_action_abort'
+    assert saved['studio_checks']['status'] == 'unreadable'
+    assert saved['studio_checks']['verdict'] is None and saved['studio_checks']['music_verdict'] is None
+    assert saved['state'] == 'prepared' and saved['public_action_dispatched'] is False
+    assert page.clicked == 0 and page.observer_options is None

@@ -1451,23 +1451,33 @@ class StudioPublisher:
         deadline = time.monotonic() + STUDIO_CHECK_WAIT_SECONDS
         started = time.monotonic()
         while True:
-            state = page.evaluate(CHECK_STATE_JS)
+            try:
+                state = page.evaluate(CHECK_STATE_JS)
+            except Exception:
+                state = None
             if not isinstance(state, dict):
+                operation['studio_checks'] = {'status': 'unreadable', 'verdict': None,
+                    'music_status': None, 'music_verdict': None,
+                    'waited_seconds': round(time.monotonic() - started, 1)}
+                self._save(operation)
                 raise StudioPublishError("Studio check state is unreadable; no Post dispatched.")
-            if (lite_finished(state) or _not_offered(state)) and music_finished(state):
+            result = normalize_check(state)
+            if result['status'] == 'limit_reached' or ((lite_finished(state) or _not_offered(state)) and music_finished(state)):
                 break
             if time.monotonic() >= deadline:
-                operation['studio_checks'] = {**self._check_summary(normalize_check(state)), 'waited_seconds': round(time.monotonic() - started, 1)}
+                operation['studio_checks'] = {**self._check_summary(result), 'waited_seconds': round(time.monotonic() - started, 1)}
                 self._save(operation)
                 raise StudioPublishError(f"Studio's own checks did not finish within {STUDIO_CHECK_WAIT_SECONDS} s; no Post dispatched.")
             page.wait_for_timeout(1000)
-        result = normalize_check(state)
         operation['studio_checks'] = {**self._check_summary(result), 'waited_seconds': round(time.monotonic() - started, 1)}
         self._save(operation)
-        if result['status'] == 'completed' and result['verdict'] != 'pass':
-            raise StudioPublishError(f"Studio's own content check did not pass (verdict {result['verdict']}); no Post dispatched.", category="studio_check_refused")
-        if result['music_copyright']['verdict'] == 'copyright_violated':
-            raise StudioPublishError("Studio's music copyright check found a violation; no Post dispatched.", category="studio_check_refused")
+        if result['status'] != 'completed' or result['verdict'] != 'pass':
+            category = ('studio_check_limit_reached' if result['status'] == 'limit_reached' else
+                        'studio_check_refused' if result['verdict'] == 'restricted' else 'pre_action_abort')
+            raise StudioPublishError(f"Studio's own content check did not pass (status {result['status']}, verdict {result['verdict']}); no Post dispatched.", category=category)
+        if result['music_copyright']['verdict'] != 'no_issue':
+            category = 'studio_check_refused' if result['music_copyright']['verdict'] == 'copyright_violated' else 'pre_action_abort'
+            raise StudioPublishError("Studio's music copyright check did not pass; no Post dispatched.", category=category)
 
     @staticmethod
     def _check_summary(result):

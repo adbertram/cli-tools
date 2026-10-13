@@ -216,11 +216,14 @@ native Post response body (first 64 KiB) for diagnosis.
 Before the trusted callback, `publish` waits up to 240 seconds for Studio's own
 Content check lite and music copyright check on the open editor (the same page
 state `studio check` reads) and journals the result as `studio_checks`. It
-refuses Post, leaving the request prepared, when the content check verdict is not
-`pass`, the music check reports a violation, or the checks have not finished.
-A flag on the file (verdict not `pass`, or a music violation) raises category
-`studio_check_refused`, since the same file is refused every time; unfinished
-checks stay `pre_action_abort`.
+requires content status `completed` with verdict `pass` and music verdict
+`no_issue` before any callback or Post action. Every other result leaves the
+request prepared and undispatched. A daily quota result immediately raises
+`studio_check_limit_reached`, even while music is pending; `studio_checks.status`
+retains `limit_reached` for coordinators. Confirmed restricted content or a music
+violation raises `studio_check_refused`. Unavailable, missing, disabled, failed,
+or unfinished checks raise `pre_action_abort`. Retrying a prepared request
+reads fresh checks; a previous pass never authorizes a later attempt.
 Clicking Post while Content check lite is still running opens TikTok's
 "Continue to post?" confirmation and sends nothing (measured 2026-10-07). If a
 click still sees no Post request, the publisher journals the page's dialogs as
