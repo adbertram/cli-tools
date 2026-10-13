@@ -28,7 +28,6 @@ linkedin <surface-or-group> <command-group> <action> [arguments] [options]
 | Create a page post | `linkedin page posts create "Hello LinkedIn" --page <page_urn>` |
 | Create a page video post | `linkedin page posts create "Text" --page <page_urn> --video clip.mp4 --video-title "T" --captions clip.srt` |
 | Create a member video post | `linkedin user posts create "Text" --video clip.mp4 --captions clip.srt` |
-| Comment on a post as the page | `linkedin page posts comment <post_urn> "Text" --page <page_urn>` |
 | Resolve a company page URN from its vanity name | `linkedin page lookup --vanity atalearning` |
 | Use non-default app profile | `linkedin page posts list --profile affiliate-magic-page --limit 10` |
 | List auth profiles | `linkedin auth profiles list` |
@@ -50,7 +49,7 @@ After every `linkedin` command, inspect stdout. If it is JSON with `type: "ai_in
 - **user** -- authenticated-member resources; `linkedin user posts list|get|search|create|update|delete` use LinkedIn's official Posts API with OAuth tokens only. Member writes require `w_member_social`; member reads require `r_member_social`.
 - **page** -- LinkedIn page resources; `linkedin page posts list|get|search|create|update|delete` use LinkedIn's official Posts API with OAuth tokens only. Page writes require `w_organization_social`; page reads require `r_organization_social`.
 - `linkedin page lookup --vanity NAME` resolves `linkedin.com/company/NAME` to its organization URN.
-- `create` with `--video` runs the Videos API upload (init, part PUTs, captions/thumbnail, finalize, poll until AVAILABLE) and then posts; output includes `id`, `url`, `video`.
+- `create` with `--video` runs the Videos API upload (init, part PUTs, captions/thumbnail, finalize, poll every 2 s until AVAILABLE) and then posts; output includes `id`, `url`, `video`.
 - Post commands accept `--profile` to select a non-default LinkedIn profile.
 - **auth** -- OAuth login, status, test, readiness, logout, refresh, and nested `auth profiles` management. Missing restricted scopes fail through the API permission path with the exact scope LinkedIn denied.
 - **cache** -- Remove cached LinkedIn API responses

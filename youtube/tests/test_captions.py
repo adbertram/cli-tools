@@ -45,6 +45,11 @@ class FakeService:
         return self
 
 
+class _ThumbnailFailure:
+    def set(self, **kwargs):
+        raise ConnectionResetError("reset by peer")
+
+
 class FakeClient:
     def __init__(self, service):
         self.service = service
@@ -66,47 +71,20 @@ def _files(tmp_path):
     return video, srt
 
 
-def test_shorts_upload_inserts_caption_and_reports_caption_id(monkeypatch, tmp_path):
+def test_upload_commands_have_no_caption_flags(monkeypatch, tmp_path):
     service = FakeService()
     _setup(monkeypatch, service)
     video, srt = _files(tmp_path)
 
-    result = runner.invoke(
-        app,
-        ["shorts", "upload", str(video), "--title", "T", "--caption-file", str(srt)],
-    )
+    for group in (["shorts", "upload"], ["channel", "videos", "upload"]):
+        result = runner.invoke(app, [*group, str(video), "--title", "T", "--caption-file", str(srt)])
+        assert result.exit_code == 2
+        assert "No such option" in result.output
 
-    assert result.exit_code == 0, result.stderr
-    payload = json.loads(result.stdout)
-    assert payload["id"] == "VID1"
-    assert payload["caption_id"] == "CAP1"
-    assert payload["caption_error"] is None
-    assert service.caption_calls[0]["part"] == "snippet"
-    assert service.caption_calls[0]["body"] == {
-        "snippet": {"videoId": "VID1", "language": "en", "name": "", "isDraft": False}
-    }
+    assert service.video_calls == []
 
 
-def test_channel_videos_upload_passes_caption_language_and_name(monkeypatch, tmp_path):
-    service = FakeService()
-    _setup(monkeypatch, service)
-    video, srt = _files(tmp_path)
-
-    result = runner.invoke(
-        app,
-        [
-            "channel", "videos", "upload", str(video), "--title", "T",
-            "--caption-file", str(srt), "--caption-language", "es", "--caption-name", "Spanish",
-        ],
-    )
-
-    assert result.exit_code == 0, result.stderr
-    assert service.caption_calls[0]["body"]["snippet"] == {
-        "videoId": "VID1", "language": "es", "name": "Spanish", "isDraft": False
-    }
-
-
-def test_upload_without_caption_file_does_not_call_captions_api(monkeypatch, tmp_path):
+def test_upload_prints_result_without_caption_fields(monkeypatch, tmp_path):
     service = FakeService()
     _setup(monkeypatch, service)
     video, _ = _files(tmp_path)
@@ -114,27 +92,30 @@ def test_upload_without_caption_file_does_not_call_captions_api(monkeypatch, tmp
     result = runner.invoke(app, ["shorts", "upload", str(video), "--title", "T"])
 
     assert result.exit_code == 0, result.stderr
-    assert json.loads(result.stdout)["caption_id"] is None
+    payload = json.loads(result.stdout)
+    assert payload["id"] == "VID1"
+    assert "caption_id" not in payload
+    assert "caption_error" not in payload
     assert service.caption_calls == []
 
 
-def test_caption_failure_exits_nonzero_but_reports_uploaded_video(monkeypatch, tmp_path):
-    error = HttpError(Response({"status": "400"}), b"invalidMetadata")
-    service = FakeService(caption_error=error)
+def test_thumbnail_failure_still_prints_uploaded_video_id(monkeypatch, tmp_path):
+    service = FakeService()
+    service.thumbnails = lambda: _ThumbnailFailure()
     _setup(monkeypatch, service)
-    video, srt = _files(tmp_path)
+    video, _ = _files(tmp_path)
+    thumb = tmp_path / "t.jpg"
+    thumb.write_bytes(b"jpg")
 
     result = runner.invoke(
-        app,
-        ["shorts", "upload", str(video), "--title", "T", "--caption-file", str(srt)],
+        app, ["shorts", "upload", str(video), "--title", "T", "--thumbnail", str(thumb)]
     )
 
     assert result.exit_code == 1
     payload = json.loads(result.stdout)
     assert payload["id"] == "VID1"
-    assert payload["caption_id"] is None
-    assert "invalidMetadata" in payload["caption_error"]
-    assert f"youtube channel videos captions add VID1 {srt}" in result.stderr
+    assert payload["thumbnail_uploaded"] is False
+    assert "thumbnail upload failed" in result.stderr
 
 
 def test_captions_add_inserts_track_on_existing_video(monkeypatch, tmp_path):

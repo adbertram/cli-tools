@@ -109,9 +109,6 @@ linkedin user posts list --profile default --limit 20
 linkedin user posts list --filter "visibility:eq:PUBLIC" --table
 linkedin user posts list --properties "id,commentary,published_at"
 
-# Comment on a post as the member
-linkedin user posts comment urn:li:share:1234567890123456789 "Thanks for reading" --person urn:li:person:8675309
-
 # Create a member video post (see "Video Posts" below)
 linkedin user posts create "Watch this" --video clip.mp4 --video-title "Clip" --captions clip.srt
 
@@ -141,9 +138,6 @@ linkedin page posts create "Organization update" --page urn:li:organization:1234
 # Create a page video post (see "Video Posts" below)
 linkedin page posts create "Watch this" --page urn:li:organization:123456 \
   --video clip.mp4 --video-title "Clip" --captions clip.srt
-
-# Comment on a post as the page (Comments API, socialActions)
-linkedin page posts comment urn:li:share:1234567890123456789 "Read more: https://example.com" --page urn:li:organization:123456
 
 # Resolve a company page vanity name (linkedin.com/company/<vanity>) to its URN
 linkedin page lookup --vanity atalearning
@@ -189,7 +183,7 @@ linkedin page posts search "launch*" --page urn:li:organization:123456 --limit 2
 
 The command runs the Videos API sequence: `initializeUpload` (owner is the post
 author URN), `PUT` each part collecting ETags, upload captions/thumbnail,
-`finalizeUpload`, then polls `GET /rest/videos/{urn}` until `AVAILABLE`. It exits
+`finalizeUpload`, then polls `GET /rest/videos/{urn}` every 2 seconds until `AVAILABLE`. It exits
 non-zero on `PROCESSING_FAILED` or when the timeout elapses, before any post
 is created. Only then does it create the post with `content.media`.
 
@@ -204,14 +198,19 @@ Output includes `id` (post URN), `url`
 linkedin cache clear
 ```
 
+## Request Behavior
+
+- Every HTTP request has a finite timeout (60 seconds; 300 seconds for video part,
+  thumbnail, and caption uploads).
+- Only idempotent requests are retried (GET and PUT, up to 3 retries with
+  backoff on 429/5xx and connection errors). POST requests, including
+  `POST /rest/posts`, are sent once and fail with the error, so a transient
+  failure never publishes a duplicate post.
+
 ## Output Notes
 
 - `create` returns the new post URN plus the requested author and content values.
   Video posts also return `url`, `video`, and `captions_attached`.
-- `comment` returns `id` (comment URN), `comment_id`, `post`, `actor`, and `text`.
-  LinkedIn's Comments API documents `w_organization_social_feed` /
-  `w_member_social_feed` for comment writes; a token with only
-  `w_organization_social` is denied (`partnerApiSocialActions.CREATE`).
 - `page lookup` returns `urn`, `id`, `vanity_name`, `name`, and `website`. It calls
   the `/v2/organizations?q=vanityName` finder, which works with
   `w_organization_social`/`r_organization_social`; the `/rest/organizations`

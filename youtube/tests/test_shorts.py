@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from youtube_cli.commands import shorts
 from youtube_cli.models import PrivacyStatus
 
@@ -25,9 +23,6 @@ def test_shorts_upload_delegates_to_existing_channel_uploader(monkeypatch, tmp_p
         publish_at=None,
         made_for_kids=False,
         thumbnail=None,
-        caption_file=Path("short.srt"),
-        caption_language="en",
-        caption_name="",
         profile="ata",
     )
 
@@ -36,8 +31,6 @@ def test_shorts_upload_delegates_to_existing_channel_uploader(monkeypatch, tmp_p
     assert captured["title"] == "Short title"
     assert captured["tags"] == ["one", "two"]
     assert captured["privacy"] == PrivacyStatus.PRIVATE
-    assert captured["caption_file"] == Path("short.srt")
-    assert captured["caption_language"] == "en"
-    assert captured["caption_name"] == ""
+    assert not any(key.startswith("caption") for key in captured)
     assert captured["include_recommended_chapters"] is False
     assert captured["profile"] == "ata"

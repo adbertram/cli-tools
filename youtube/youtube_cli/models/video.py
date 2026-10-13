@@ -71,8 +71,6 @@ class UploadResult(CLIModel):
     publish_at: Optional[str] = None
     url: str
     thumbnail_uploaded: bool = False
-    caption_id: Optional[str] = None
-    caption_error: Optional[str] = None
 
 
 class UpdateResult(CLIModel):

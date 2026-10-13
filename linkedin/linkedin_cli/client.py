@@ -28,7 +28,10 @@ ORGANIZATIONS_URL = "https://api.linkedin.com/v2/organizations"
 POST_URL_TEMPLATE = "https://www.linkedin.com/feed/update/{urn}/"
 UPLOAD_TIMEOUT_SECONDS = 300
 VIDEO_PROCESSING_TIMEOUT_SECONDS = 600
-VIDEO_POLL_INTERVAL_SECONDS = 5.0
+VIDEO_POLL_INTERVAL_SECONDS = 2.0
+REQUEST_TIMEOUT_SECONDS = 60
+# Only these methods are safe to repeat; POST (create post, finalize, update) is never retried.
+IDEMPOTENT_METHODS = {"GET", "PUT"}
 # Captions metadata shape comes from the Videos API "Upload Captions" section.
 CAPTIONS_METADATA = {
     "format": "SRT",
@@ -287,7 +290,6 @@ class LinkedInClient:
         params: Optional[Dict[str, Any]] = None,
         permission_author: Optional[str] = None,
         extra_headers: Optional[Dict[str, str]] = None,
-        retry: bool = True,
         headers_override: Optional[Dict[str, str]] = None,
         body: Optional[bytes] = None,
         form: Optional[Dict[str, str]] = None,
@@ -303,6 +305,7 @@ class LinkedInClient:
 
         last_exception: Optional[Exception] = None
         last_response: Optional[requests.Response] = None
+        retry = method in IDEMPOTENT_METHODS
         max_attempts = (self.max_retries + 1) if retry else 1
 
         for attempt in range(max_attempts):
@@ -315,7 +318,7 @@ class LinkedInClient:
                     params=params,
                     data=body if body is not None else form,
                     files=files,
-                    timeout=timeout,
+                    timeout=REQUEST_TIMEOUT_SECONDS if timeout is None else timeout,
                 )
                 last_response = response
                 if retry and self._is_retryable(response, None) and attempt < self.max_retries:
@@ -359,7 +362,6 @@ class LinkedInClient:
         params: Optional[Dict[str, Any]] = None,
         permission_author: Optional[str] = None,
         extra_headers: Optional[Dict[str, str]] = None,
-        retry: bool = True,
     ) -> requests.Response:
         url = f"{self.base_url}{endpoint}"
         return self._request(
@@ -370,7 +372,6 @@ class LinkedInClient:
             params=params,
             permission_author=permission_author,
             extra_headers=extra_headers,
-            retry=retry,
         )
 
     def _invalidate_post_read_caches(self) -> None:
@@ -683,27 +684,6 @@ class LinkedInClient:
             "content_type": "media",
             "captions_attached": bool(video.get("captions")),
             "is_reshare_disabled_by_author": disable_reshare,
-            "created": True,
-        }
-
-    def create_comment(self, *, post_urn: str, actor: str, text: str) -> dict:
-        """Comment on a post as `actor` (a person or organization URN) via socialActions."""
-        response = self._request_api(
-            "POST",
-            f"/socialActions/{quote(post_urn, safe='')}/comments",
-            data={"actor": actor, "object": post_urn, "message": {"text": text}},
-            permission_author=actor,
-        )
-        comment_id = response.headers.get("x-restli-id") or response.headers.get("X-RestLi-Id")
-        if not comment_id:
-            raise ClientError("LinkedIn comment response did not include x-restli-id.")
-        body = response.json() if response.content else {}
-        return {
-            "id": body.get("commentUrn"),
-            "comment_id": comment_id,
-            "post": post_urn,
-            "actor": actor,
-            "text": text,
             "created": True,
         }
 

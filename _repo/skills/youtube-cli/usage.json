@@ -1,7 +1,7 @@
 {
   "tool": "youtube",
   "description": "YouTube transcript and video downloader (yt-dlp), channel management (Data API v3), and browser-session community posting",
-  "discovered_at": "2026-10-13T18:35:32Z",
+  "discovered_at": "2026-10-13T19:49:16Z",
   "total_commands": 30,
   "global_options": [
     {
@@ -471,7 +471,47 @@
             "captions": {
               "help": "Manage caption tracks on videos you own",
               "arguments": [],
-              "options": []
+              "options": [],
+              "commands": {
+                "add": {
+                  "help": "Insert a caption track on an existing video you own.",
+                  "arguments": [
+                    {
+                      "name": "video_id",
+                      "type": "TEXT",
+                      "required": true,
+                      "help": "YouTube video ID (must be owned by the profile's channel)"
+                    },
+                    {
+                      "name": "file",
+                      "type": "file",
+                      "required": true,
+                      "help": "Caption file (for example .srt)"
+                    }
+                  ],
+                  "options": [
+                    {
+                      "name": "--language",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "BCP-47 language of the caption track",
+                      "default": "en"
+                    },
+                    {
+                      "name": "--name",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Caption track name (default empty)"
+                    },
+                    {
+                      "name": "--profile",
+                      "type": "TEXT",
+                      "required": false,
+                      "help": "Profile name"
+                    }
+                  ]
+                }
+              }
             },
             "delete": {
               "help": "Delete a video by ID. Requires confirmation unless --yes is passed.",
@@ -694,25 +734,6 @@
                   "type": "file",
                   "required": false,
                   "help": "Path to thumbnail image (jpg/png) to set after upload"
-                },
-                {
-                  "name": "--caption-file",
-                  "type": "file",
-                  "required": false,
-                  "help": "Caption file (for example .srt) to insert as a caption track after upload"
-                },
-                {
-                  "name": "--caption-language",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "BCP-47 language of the caption track",
-                  "default": "en"
-                },
-                {
-                  "name": "--caption-name",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Caption track name (default empty)"
                 },
                 {
                   "name": "--include-recommended-chapters",
@@ -950,25 +971,6 @@
               "type": "file",
               "required": false,
               "help": "Optional thumbnail image"
-            },
-            {
-              "name": "--caption-file",
-              "type": "file",
-              "required": false,
-              "help": "Caption file (for example .srt) to insert as a caption track after upload"
-            },
-            {
-              "name": "--caption-language",
-              "type": "TEXT",
-              "required": false,
-              "help": "BCP-47 language of the caption track",
-              "default": "en"
-            },
-            {
-              "name": "--caption-name",
-              "type": "TEXT",
-              "required": false,
-              "help": "Caption track name (default empty)"
             },
             {
               "name": "--profile",

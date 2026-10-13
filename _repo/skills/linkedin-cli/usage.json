@@ -1,8 +1,8 @@
 {
   "tool": "linkedin",
   "description": "Create and manage LinkedIn member and page posts",
-  "discovered_at": "2026-10-13T18:58:51Z",
-  "total_commands": 29,
+  "discovered_at": "2026-10-13T19:49:31Z",
+  "total_commands": 27,
   "global_options": [
     {
       "name": "--version",
@@ -384,45 +384,6 @@
           "arguments": [],
           "options": [],
           "commands": {
-            "comment": {
-              "help": "Comment on a post as the page.",
-              "arguments": [
-                {
-                  "name": "post_urn",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "LinkedIn post URN to comment on"
-                },
-                {
-                  "name": "text",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Comment text"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--profile",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Auth profile name. Defaults to the active profile"
-                },
-                {
-                  "name": "--page",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Page actor URN. Defaults to LINKEDIN_PAGE_URN when set"
-                },
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t",
-                  "takes_value": false
-                }
-              ]
-            },
             "create": {
               "help": "Create a LinkedIn page post: text-only, or a video post with --video.",
               "usage_instructions": "Create a text-only organization or showcase-page post from `COMMENTARY` through LinkedIn's official Posts API. Pass `--page` or configure `LINKEDIN_PAGE_URN` to choose the page author. Use `--visibility`, `--feed-distribution`, and `--disable-reshare` to control delivery. Use `--profile` to select a non-default LinkedIn auth profile.",
@@ -765,45 +726,6 @@
           "arguments": [],
           "options": [],
           "commands": {
-            "comment": {
-              "help": "Comment on a post as the member.",
-              "arguments": [
-                {
-                  "name": "post_urn",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "LinkedIn post URN to comment on"
-                },
-                {
-                  "name": "text",
-                  "type": "TEXT",
-                  "required": true,
-                  "help": "Comment text"
-                }
-              ],
-              "options": [
-                {
-                  "name": "--profile",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Auth profile name. Defaults to the active profile"
-                },
-                {
-                  "name": "--person",
-                  "type": "TEXT",
-                  "required": false,
-                  "help": "Member actor URN. Defaults to LINKEDIN_PERSON_URN, then the authenticated member when identity lookup is available"
-                },
-                {
-                  "name": "--table",
-                  "type": "bool",
-                  "required": false,
-                  "help": "Display as table",
-                  "short": "-t",
-                  "takes_value": false
-                }
-              ]
-            },
             "create": {
               "help": "Create a LinkedIn member post: text-only, or a video post with --video.",
               "usage_instructions": "Create a text-only member post from `COMMENTARY` through LinkedIn's official Posts API. Omit `--person` to use `LINKEDIN_PERSON_URN`, then authenticated-member identity lookup through `/v2/me` and `/v2/userinfo` when available. Use `--visibility`, `--feed-distribution`, and `--disable-reshare` to control delivery. Use `--profile` to select a non-default LinkedIn auth profile.",

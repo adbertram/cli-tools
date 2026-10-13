@@ -53,10 +53,6 @@ class FakeClient:
             "author": kwargs["author"],
         }
 
-    def create_comment(self, **kwargs):
-        self.calls.append(("create_comment", kwargs))
-        return {"id": "urn:li:comment:(urn:li:activity:1,2)", "comment_id": "2", "actor": kwargs["actor"]}
-
     def lookup_organization(self, vanity_name):
         self.calls.append(("lookup_organization", vanity_name))
         return {"urn": "urn:li:organization:1", "id": 1, "vanity_name": vanity_name}
@@ -517,31 +513,3 @@ def test_page_lookup_resolves_vanity(monkeypatch):
     assert result.exit_code == 0, result.output
     assert client.calls == [("lookup_organization", "atalearning")]
     assert json.loads(result.stdout)["urn"] == "urn:li:organization:1"
-
-
-def test_page_posts_comment_uses_page_actor(monkeypatch):
-    client = FakeClient(linkedin_page_urn="urn:li:organization:555")
-    monkeypatch.setattr("linkedin_cli.main.get_client", lambda profile=None: client)
-
-    result = runner.invoke(app, ["page", "posts", "comment", "urn:li:share:9", "Read more: https://x.test"])
-
-    assert result.exit_code == 0, result.output
-    assert client.calls == [
-        (
-            "create_comment",
-            {"post_urn": "urn:li:share:9", "actor": "urn:li:organization:555", "text": "Read more: https://x.test"},
-        )
-    ]
-    assert json.loads(result.stdout)["comment_id"] == "2"
-
-
-def test_user_posts_comment_uses_member_actor(monkeypatch):
-    client = FakeClient()
-    monkeypatch.setattr("linkedin_cli.main.get_client", lambda profile=None: client)
-
-    result = runner.invoke(
-        app, ["user", "posts", "comment", "urn:li:share:9", "Nice", "--person", "urn:li:person:abc"]
-    )
-
-    assert result.exit_code == 0, result.output
-    assert client.calls[0][1]["actor"] == "urn:li:person:abc"

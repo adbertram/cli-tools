@@ -46,8 +46,6 @@ COMMAND_CREDENTIALS = {
     "page posts update": ["oauth_authorization_code"],
     "page posts delete": ["oauth_authorization_code"],
     "page posts search": ["oauth_authorization_code"],
-    "page posts comment": ["oauth_authorization_code"],
-    "user posts comment": ["oauth_authorization_code"],
     "page lookup": ["oauth_authorization_code"],
 }
 
@@ -881,66 +879,6 @@ def search_page_posts(
         filters=filter,
         table=table,
         properties=properties,
-    )
-
-
-@user_posts_app.command("comment")
-@command
-def comment_user_post(
-    post_urn: str = typer.Argument(..., help="LinkedIn post URN to comment on"),
-    text: str = typer.Argument(..., help="Comment text"),
-    profile: Optional[str] = typer.Option(
-        None,
-        "--profile",
-        help="Auth profile name. Defaults to the active profile.",
-    ),
-    person: Optional[str] = typer.Option(
-        None,
-        "--person",
-        help="Member actor URN. Defaults to LINKEDIN_PERSON_URN, then the authenticated member when identity lookup is available.",
-    ),
-    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
-):
-    """Comment on a post as the member."""
-    client = get_client(profile=profile)
-    _render_single(
-        client.create_comment(
-            post_urn=post_urn,
-            actor=_resolve_user_author(client, person),
-            text=text,
-        ),
-        table,
-        None,
-    )
-
-
-@page_posts_app.command("comment")
-@command
-def comment_page_post(
-    post_urn: str = typer.Argument(..., help="LinkedIn post URN to comment on"),
-    text: str = typer.Argument(..., help="Comment text"),
-    profile: Optional[str] = typer.Option(
-        None,
-        "--profile",
-        help="Auth profile name. Defaults to the active profile.",
-    ),
-    page: Optional[str] = typer.Option(
-        None,
-        "--page",
-        help="Page actor URN. Defaults to LINKEDIN_PAGE_URN when set.",
-    ),
-    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
-):
-    """Comment on a post as the page."""
-    client = get_client(profile=profile)
-    _render_single(
-        client.create_comment(
-            post_urn=post_urn,
-            actor=_resolve_page_author(client, page),
-            text=text,
-        ),
-        table,
-        None,
     )
 
 

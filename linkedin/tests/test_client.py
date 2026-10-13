@@ -5,8 +5,10 @@ from tempfile import mkdtemp
 from types import SimpleNamespace
 
 import pytest
+import requests
 from cli_tools_shared.exceptions import ClientError
 
+import linkedin_cli.client as client_module
 from linkedin_cli.client import CURRENT_MEMBER_PROFILE_URL, CURRENT_MEMBER_USERINFO_URL, LinkedInClient
 from linkedin_cli.config import Config, TOKEN_INTROSPECTION_URL
 
@@ -531,7 +533,6 @@ def test_upload_video_runs_initialize_parts_captions_finalize_and_poll(tmp_path,
     )
     client = LinkedInClient(config=config(), session=session)
 
-    import linkedin_cli.client as client_module
 
     sleeps = []
     monkeypatch.setattr(client_module.time, "sleep", sleeps.append)
@@ -619,7 +620,6 @@ def test_wait_for_video_raises_on_processing_failure():
 
 
 def test_wait_for_video_times_out(monkeypatch):
-    import linkedin_cli.client as client_module
 
     monkeypatch.setattr(client_module.time, "sleep", lambda seconds: None)
     session = FakeSession([FakeResponse({"status": "PROCESSING"})])
@@ -704,39 +704,76 @@ def test_lookup_organization_rejects_no_match():
         client.lookup_organization("nope")
 
 
-def test_create_comment_posts_to_social_actions_and_returns_ids():
+def test_video_poll_interval_is_two_seconds():
+    assert client_module.VIDEO_POLL_INTERVAL_SECONDS == 2.0
+
+
+def test_post_is_never_retried_on_5xx(monkeypatch):
+    monkeypatch.setattr(client_module.time, "sleep", lambda seconds: None)
+    session = FakeSession([FakeResponse({"message": "Gateway Timeout"}, status_code=504)])
+    client = LinkedInClient(config=config(), session=session)
+
+    with pytest.raises(ClientError, match="HTTP 504"):
+        client.create_post(commentary="hi", author=OWNER)
+
+    assert [c["method"] for c in session.calls] == ["POST"]
+
+
+def test_post_is_never_retried_on_connection_error(monkeypatch):
+    monkeypatch.setattr(client_module.time, "sleep", lambda seconds: None)
+
+    class ResettingSession:
+        calls = 0
+
+        def request(self, method, url, **kwargs):
+            self.calls += 1
+            raise requests.exceptions.ConnectionError("RemoteDisconnected")
+
+    session = ResettingSession()
+    client = LinkedInClient(config=config(), session=session)
+
+    with pytest.raises(ClientError, match="after 1 attempts"):
+        client.create_post(commentary="hi", author=OWNER)
+
+    assert session.calls == 1
+
+
+def test_get_is_retried_on_5xx(monkeypatch):
+    monkeypatch.setattr(client_module.time, "sleep", lambda seconds: None)
+    session = FakeSession(
+        [FakeResponse({"message": "Bad Gateway"}, status_code=502), FakeResponse({"id": "urn:li:video:V", "status": "AVAILABLE"})]
+    )
+    client = LinkedInClient(config=config(), session=session)
+
+    assert client.get_video("urn:li:video:V")["status"] == "AVAILABLE"
+    assert [c["method"] for c in session.calls] == ["GET", "GET"]
+
+
+def test_part_upload_put_is_retried_on_5xx(monkeypatch):
+    monkeypatch.setattr(client_module.time, "sleep", lambda seconds: None)
+    session = FakeSession([FakeResponse({}, status_code=503), FakeResponse({}, headers={"ETag": '"e1"'})])
+    client = LinkedInClient(config=config(), session=session)
+
+    client._upload_part("https://upload.example/1", b"abcd", {})
+
+    assert [c["method"] for c in session.calls] == ["PUT", "PUT"]
+
+
+def test_every_request_has_a_finite_timeout(monkeypatch):
+    monkeypatch.setattr(client_module.time, "sleep", lambda seconds: None)
     session = FakeSession(
         [
-            FakeResponse(
-                {"commentUrn": "urn:li:comment:(urn:li:activity:1,2)", "id": "2"},
-                status_code=201,
-                headers={"x-restli-id": "2"},
-            )
+            FakeResponse({"id": "urn:li:video:V", "status": "AVAILABLE"}),
+            FakeResponse({}, status_code=201, headers={"x-restli-id": "urn:li:share:1"}),
+            FakeResponse({}, headers={"ETag": '"e1"'}),
         ]
     )
     client = LinkedInClient(config=config(), session=session)
 
-    result = client.create_comment(
-        post_urn="urn:li:share:77", actor=OWNER, text="Read more: https://example.com"
-    )
+    client.get_video("urn:li:video:V")
+    client.create_post(commentary="hi", author=OWNER)
+    client._upload_part("https://upload.example/1", b"abcd", {})
 
-    call = session.calls[0]
-    assert call["method"] == "POST"
-    assert call["url"] == "https://api.linkedin.com/rest/socialActions/urn%3Ali%3Ashare%3A77/comments"
-    assert call["json"] == {
-        "actor": OWNER,
-        "object": "urn:li:share:77",
-        "message": {"text": "Read more: https://example.com"},
-    }
-    assert call["headers"]["Linkedin-Version"] == "202604"
-    assert result["id"] == "urn:li:comment:(urn:li:activity:1,2)"
-    assert result["comment_id"] == "2"
-    assert result["actor"] == OWNER
-
-
-def test_create_comment_requires_restli_id():
-    session = FakeSession([FakeResponse({"commentUrn": "x"}, status_code=201)])
-    client = LinkedInClient(config=config(), session=session)
-
-    with pytest.raises(ClientError, match="x-restli-id"):
-        client.create_comment(post_urn="urn:li:share:77", actor=OWNER, text="hi")
+    timeouts = [c["timeout"] for c in session.calls]
+    assert all(t is not None and t > 0 for t in timeouts)
+    assert timeouts[2] == client_module.UPLOAD_TIMEOUT_SECONDS

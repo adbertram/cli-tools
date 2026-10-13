@@ -393,19 +393,6 @@ def videos_upload(
         exists=True,
         dir_okay=False,
     ),
-    caption_file: Optional[Path] = typer.Option(
-        None,
-        "--caption-file",
-        help="Caption file (for example .srt) to insert as a caption track after upload",
-        exists=True,
-        dir_okay=False,
-    ),
-    caption_language: str = typer.Option(
-        "en", "--caption-language", help="BCP-47 language of the caption track"
-    ),
-    caption_name: str = typer.Option(
-        "", "--caption-name", help="Caption track name (default empty)"
-    ),
     include_recommended_chapters: bool = typer.Option(
         False,
         "--include-recommended-chapters",
@@ -433,9 +420,6 @@ def videos_upload(
                     "publish_at": publish_at,
                     "made_for_kids": made_for_kids,
                     "thumbnail": str(thumbnail) if thumbnail else None,
-                    "caption_file": str(caption_file) if caption_file else None,
-                    "caption_language": caption_language,
-                    "caption_name": caption_name,
                     "profile": profile,
                 },
             )
@@ -476,53 +460,27 @@ def videos_upload(
 
         video_id = response["id"]
 
-        thumbnail_uploaded = False
-        if thumbnail:
-            print_info(f"Uploading thumbnail {thumbnail}...")
-            service.thumbnails().set(
-                videoId=video_id, media_body=MediaFileUpload(str(thumbnail))
-            ).execute()
-            thumbnail_uploaded = True
-
         url = f"https://www.youtube.com/watch?v={video_id}"
-        caption_id = None
-        if caption_file:
-            print_info(f"Inserting caption track {caption_file}...")
-            try:
-                caption_id = _insert_caption(
-                    service,
-                    video_id=video_id,
-                    file=caption_file,
-                    language=caption_language,
-                    name=caption_name,
-                )
-            except HttpError as e:
-                print_json(
-                    UploadResult(
-                        id=video_id,
-                        title=title,
-                        privacy_status=privacy,
-                        publish_at=publish_at,
-                        url=url,
-                        thumbnail_uploaded=thumbnail_uploaded,
-                        caption_error=str(e),
-                    )
-                )
-                print_error(
-                    f"Uploaded {url} but caption insert failed: {e}. Retry with: "
-                    f"youtube channel videos captions add {video_id} {caption_file}"
-                )
-                raise typer.Exit(1)
-
         result = UploadResult(
             id=video_id,
             title=title,
             privacy_status=privacy,
             publish_at=publish_at,
             url=url,
-            thumbnail_uploaded=thumbnail_uploaded,
-            caption_id=caption_id,
         )
+        if thumbnail:
+            print_info(f"Uploading thumbnail {thumbnail}...")
+            try:
+                service.thumbnails().set(
+                    videoId=video_id, media_body=MediaFileUpload(str(thumbnail))
+                ).execute()
+            except Exception as e:
+                # The video exists: always print its id so callers never re-upload it.
+                print_json(result)
+                print_error(f"Uploaded {url} but thumbnail upload failed: {e}")
+                raise typer.Exit(1)
+            result.thumbnail_uploaded = True
+
         print_success(f"Uploaded: {result.url}")
         print_json(result)
 

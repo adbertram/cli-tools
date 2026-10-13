@@ -54,19 +54,6 @@ def shorts_upload(
         dir_okay=False,
         help="Optional thumbnail image",
     ),
-    caption_file: Optional[Path] = typer.Option(
-        None,
-        "--caption-file",
-        exists=True,
-        dir_okay=False,
-        help="Caption file (for example .srt) to insert as a caption track after upload",
-    ),
-    caption_language: str = typer.Option(
-        "en", "--caption-language", help="BCP-47 language of the caption track"
-    ),
-    caption_name: str = typer.Option(
-        "", "--caption-name", help="Caption track name (default empty)"
-    ),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
 ):
     """Upload a video intended to be classified by YouTube as a Short."""
@@ -80,9 +67,6 @@ def shorts_upload(
         publish_at=publish_at,
         made_for_kids=made_for_kids,
         thumbnail=thumbnail,
-        caption_file=caption_file,
-        caption_language=caption_language,
-        caption_name=caption_name,
         include_recommended_chapters=False,
         profile=profile,
     )
