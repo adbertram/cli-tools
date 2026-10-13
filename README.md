@@ -421,7 +421,6 @@ repo itself, currently `cli-tool` and `cli-tool-secrets`.
 | [`grammarly`](grammarly/) | `grammarly` | Command-line interface for the Grammarly Plagiarism Detection API. |
 | [`imessage`](imessage/) | `imessage` | CLI tool for interacting with iMessage on macOS. Uses SQLite for fast reads from the Messages database and AppleScript for sending messages. |
 | [`lastpass`](lastpass/) | `lastpass` | A standardized command-line wrapper for [lpass](https://github.com/lastpass/lastpass-cli) (LastPass CLI). |
-| [`manus`](manus/) | `manus` | Complete reference for the `manus` command-line interface for interacting with Manus AI services. |
 | [`mindmeister`](mindmeister/) | `mindmeister` | A command-line interface for the [MindMeister API](https://developers.mindmeister.com/docs) - manage mind maps from the terminal. |
 | [`msword`](msword/) | `msword` | Read Word documents, convert to Markdown, and extract comments with context. |
 | [`notifier`](notifier/) | `notifier` | A command-line wrapper for [terminal-notifier](https://github.com/julienXX/terminal-notifier) to send macOS desktop notifications. |

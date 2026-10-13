@@ -70,7 +70,6 @@
 | `linkedin` | The `linkedin` CLI lets you create and manage LinkedIn personal and page posts. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `macspeech` | Transcribe local audio on-device via Apple SFSpeechRecognizer with contextual-string vocabulary biasing |
 | `mailchimp` | The `mailchimp` CLI provides a command-line interface for Mailchimp API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
-| `manus` | The `manus` CLI provides a command-line interface for Manus AI API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `medium` | The `medium` CLI lets you create Medium drafts through Medium's web composer. Use it when you need repeatable access to medium workflows that are only available through a signed-in website. |
 | `mercari` | The `mercari` CLI provides read-only access to Mercari US listings by driving the authenticated web app and capturing its internal GraphQL responses. Use it to search other sellers' public listings (`listings search`), read your own listings (`listings list`), and get full item detail (`listings get`). |
 | `mercor` | Mercor AI talent marketplace - browse available roles/projects from the worker app |
