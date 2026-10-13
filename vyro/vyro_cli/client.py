@@ -15,7 +15,11 @@ READ_JS = r"""async ({path, method = 'GET', body, expectedAccountId}) => {
     const base = 'https://api.vyro.com';
     const signal = AbortSignal.timeout(20000);
     async function read(response) {
-        if (!response.ok) return {status:response.status};
+        if (!response.ok) {
+            let data; try {data=await response.json()} catch (_) {}
+            const code=data?.errorCode || data?.errors?.[0];
+            return {status:response.status,code:typeof code==='string'&&/^[A-Z][A-Z0-9_]{1,120}$/.test(code)?code:null};
+        }
         const text = await response.text();
         if (text.length > 8000000) return {error:'response_too_large'};
         try {return {status:response.status,data:JSON.parse(text)};}
@@ -42,8 +46,14 @@ READ_JS = r"""async ({path, method = 'GET', body, expectedAccountId}) => {
         headers['ap-workspace']=candidates[0].id;
         const options = {method,headers,credentials:'include',signal};
         if (method !== 'GET') {
-            headers['content-type']='application/json';
-            options.body=JSON.stringify(body);
+            // Vyro SDK wire format: CBOR text containing base64 UTF-8 JSON.
+            const jsonBytes=new TextEncoder().encode(JSON.stringify(body));
+            const encoded=btoa(Array.from(jsonBytes,b=>String.fromCharCode(b)).join(''));
+            const bytes=new TextEncoder().encode(encoded), n=bytes.length;
+            if(n>65535) return {error:'vyro_write_payload_too_large'};
+            const prefix=n<24?[0x60+n]:n<256?[0x78,n]:[0x79,n>>8,n&255];
+            options.body=new Uint8Array([...prefix,...bytes]);
+            headers['content-type']='application/octet-stream';
         }
         return await read(await fetch(base+path,options));
     } catch (_) {return {error:'vyro_request_failed'};}
@@ -141,7 +151,7 @@ class VyroClient:
             if method == "GET" and status in (429, 500, 502, 503, 504) and attempt < 2:
                 time.sleep(2 ** attempt)
                 continue
-            raise ClientError(f"vyro_http_{status}")
+            raise ClientError(f"vyro_http_{status}" + (":" + result["code"] if result.get("code") else ""))
 
     def account(self):
         row = self._get("/auth/me")

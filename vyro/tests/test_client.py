@@ -274,3 +274,33 @@ def test_reconcile_cannot_claim_absence_from_incomplete_rows(tmp_path,missing):
     c.submissions=lambda *a,**kw:[row]
     with pytest.raises(ClientError,match='incomplete_submission_receipt'):
         c.reconcile('slug','https://www.tiktok.com/@ata_clipper/video/123','actor','social','ata_clipper')
+
+
+@pytest.mark.parametrize('payload', [{}, {'videoUrl':'https://www.tiktok.com/@ata_clipper/video/123','socialAccountId':'social','campaignId':'campaign'}, {'label':'café 🎬'}, {'label':'a'*400}])
+def test_mutation_wire_matches_sdk_cbor_base64_json(payload):
+    import base64,json,shutil,subprocess
+    from vyro_cli.client import READ_JS
+    node=shutil.which('node')
+    assert node, 'Node is required to validate the browser wire encoder'
+    script='''let sent;
+    global.fetch=async(url,options)=>{
+      if(url.endsWith('/auth/refresh'))return {ok:true,status:200,text:async()=>JSON.stringify({accessToken:'test'})};
+      if(url.endsWith('/auth/me'))return {ok:true,status:200,text:async()=>JSON.stringify({id:'actor',workspaces:[{id:'workspace',type:'clipper',access:'member'}]})};
+      sent={type:options.headers['content-type'],bytes:Array.from(options.body)};
+      return {ok:true,status:200,text:async()=>JSON.stringify({id:'receipt'})};
+    };
+    const run=('''+READ_JS+''');
+    run({path:'/clips/v2',method:'POST',expectedAccountId:'actor',body:'''+json.dumps(payload)+'''}).then(()=>console.log(JSON.stringify(sent)));'''
+    result=json.loads(subprocess.run([node],input=script,text=True,capture_output=True,check=True).stdout)
+    encoded=base64.b64encode(json.dumps(payload,ensure_ascii=False,separators=(',',':')).encode())
+    n=len(encoded)
+    prefix=bytes([0x60+n]) if n<24 else bytes([0x78,n]) if n<256 else bytes([0x79,n>>8,n&255])
+    assert result['type']=='application/octet-stream'
+    assert bytes(result['bytes'])==prefix+encoded
+
+
+def test_transport_preserves_safe_native_machine_error():
+    browser=SimpleNamespace(get_page=lambda _:SimpleNamespace(evaluate=lambda *a:{'status':403,'code':'CLIP_SOCIAL_ACCOUNT_NOT_ELIGIBLE'}))
+    c=VyroClient(config=SimpleNamespace(),browser=browser)
+    with pytest.raises(ClientError,match='vyro_http_403:CLIP_SOCIAL_ACCOUNT_NOT_ELIGIBLE'):
+        c._request('/clips/pre-check','POST',{},'actor')
