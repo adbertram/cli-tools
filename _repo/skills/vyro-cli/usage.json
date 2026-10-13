@@ -1,0 +1,569 @@
+{
+  "tool": "vyro",
+  "description": "CLI interface for vyro",
+  "discovered_at": "2026-10-13T20:15:20Z",
+  "total_commands": 20,
+  "global_options": [],
+  "commands": {
+    "account": {
+      "help": "Current Vyro account",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "get": {
+          "help": "Read the current account, including workspace and verification fields.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved authentication profile name"
+            }
+          ]
+        }
+      }
+    },
+    "auth": {
+      "help": "Manage vyro authentication",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing ephemeral auth state and re-authenticate",
+              "short": "-F",
+              "takes_value": false
+            }
+          ]
+        },
+        "logout": {
+          "help": "Clear stored credentials and browser sessions.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show their auth types and active state.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
+        },
+        "seed-shared-chromium-profile": {
+          "help": "Seed an empty shared Chromium profile from this CLI's default profile.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Default profile with the known-good legacy browser session",
+              "short": "-p"
+            }
+          ]
+        },
+        "session-export": {
+          "help": "Export scoped cookies/localStorage after live exact-account checks.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": true,
+              "help": "Explicit named browser-session profile"
+            },
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact expected service account ID"
+            },
+            {
+              "name": "--expected-username",
+              "type": "TEXT",
+              "required": false,
+              "help": "Expected service username"
+            },
+            {
+              "name": "--output",
+              "type": "PATH",
+              "required": true,
+              "help": "New private CLI runtime bundle file"
+            }
+          ]
+        },
+        "session-import": {
+          "help": "Restore, verify, close, and exclusively publish an absent profile.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": true,
+              "help": "New inactive named browser-session profile"
+            },
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact expected service account ID"
+            },
+            {
+              "name": "--expected-username",
+              "type": "TEXT",
+              "required": false,
+              "help": "Expected service username"
+            },
+            {
+              "name": "--stdin",
+              "type": "bool",
+              "required": false,
+              "help": "Read a private bounded session bundle from stdin",
+              "takes_value": false
+            }
+          ]
+        },
+        "session-import-recover": {
+          "help": "Recover owned closed transfer state or finalize it after exact actor proof.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": true,
+              "help": "Explicit named profile with an unfinished transfer journal"
+            },
+            {
+              "name": "--finalize",
+              "type": "bool",
+              "required": false,
+              "help": "Verify and publish already restored inactive owned state",
+              "takes_value": false
+            },
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Required exact actor for finalization"
+            },
+            {
+              "name": "--expected-username",
+              "type": "TEXT",
+              "required": false,
+              "help": "Expected service username for finalization"
+            }
+          ]
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "campaigns": {
+      "help": "Native campaign catalog and eligibility",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "eligibility": {
+          "help": "Read native eligibleAccounts and inviteMode without enrolling.",
+          "arguments": [
+            {
+              "name": "slug",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved authentication profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Read every native campaign field, including requirements and media links.",
+          "arguments": [
+            {
+              "name": "slug",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact campaign slug from campaigns list"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved authentication profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List newest campaigns. Filters run locally after the API limit.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[1<=x<=1000]",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter field:op:value (applied locally)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved authentication profile name"
+            }
+          ]
+        }
+      }
+    },
+    "social-accounts": {
+      "help": "Connected social accounts",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "list": {
+          "help": "List linked accounts; limit and filters are local for this endpoint.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[1<=x<=1000]",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter field:op:value (applied locally)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved authentication profile name"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "usage_instructions": "Use the `vyro` CLI. Run `vyro --help` to discover command groups and `--help` on any subcommand for its options."
+}
