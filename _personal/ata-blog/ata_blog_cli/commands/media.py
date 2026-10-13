@@ -13,21 +13,24 @@ COMMAND_CREDENTIALS = {
     "upload": ["custom"],
 }
 
-app = typer.Typer(help="Upload media to the static site (Cloudflare R2)")
+app = typer.Typer(help="Upload media files (image, video, or caption file) to the static site (Cloudflare R2)")
 
 
 @app.command("upload")
 @command
 def media_upload(
-    file_path: str = typer.Argument(..., help="Path to the local image file"),
+    file_path: str = typer.Argument(..., help="Path to the local media file (image, video, or caption file)"),
 ):
-    """Upload an image to the static site media bucket (Cloudflare R2).
+    """Upload a media file (image, video, or caption file) to the static site media bucket (Cloudflare R2).
 
+    Any file with a guessable MIME type works, for example .webp, .mp4, or .srt.
     The object lands at a content-addressed wp-content/uploads/publisher/ key
     and the printed URL is publicly served by the site's media edge.
 
     Examples:
         ata-blog media upload ./posts/<page_id>/images/diagram.webp
+        ata-blog media upload ./shorts/<post-slug>/short.mp4
+        ata-blog media upload ./shorts/<post-slug>/short.srt
     """
     path = Path(file_path)
     if not path.is_file():

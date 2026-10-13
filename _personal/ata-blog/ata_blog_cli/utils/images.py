@@ -113,7 +113,7 @@ def _existing_static_media_object(key: str) -> Optional[Dict[str, Any]]:
 
 
 def upload_to_static_media(image_path: Path) -> Dict[str, Any]:
-    """Upload one local image into the static site's R2 media bucket.
+    """Upload one local media file (image, video, or caption file) into the static site's R2 media bucket.
 
     The object lands at a content-addressed `wp-content/uploads/publisher/` key in
     the canonical media bucket, which the site's media edge serves directly, so

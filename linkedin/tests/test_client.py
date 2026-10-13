@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import mkdtemp
@@ -16,6 +17,7 @@ class FakeResponse:
         self.status_code = status_code
         self.headers = headers or {}
         self.text = str(payload)
+        self.content = str(payload).encode() if payload else b""
         self.ok = 200 <= status_code < 300
 
     def json(self):
@@ -484,3 +486,257 @@ def test_get_current_member_urn_raises_clear_error_when_both_identity_endpoints_
         match="Pass --person urn:li:person:<id>, set LINKEDIN_PERSON_URN, enable the LinkedIn OpenID Connect product",
     ):
         client.get_current_member_urn()
+
+
+VIDEO_URN = "urn:li:video:D5610AQFYNmb9_sKaEw"
+OWNER = "urn:li:organization:123456"
+
+
+def init_value(*, parts, captions=False, thumbnail=False):
+    value = {
+        "video": VIDEO_URN,
+        "uploadToken": "token-abc",
+        "uploadUrlsExpireAt": 1,
+        "uploadInstructions": [
+            {"firstByte": first, "lastByte": last, "uploadUrl": f"https://upload.example/part{i}"}
+            for i, (first, last) in enumerate(parts)
+        ],
+    }
+    if captions:
+        value["captionsUploadUrl"] = "https://upload.example/captions"
+    if thumbnail:
+        value["thumbnailUploadUrl"] = "https://upload.example/thumb"
+    return {"value": value}
+
+
+def available_video(**extra):
+    return {"id": VIDEO_URN, "status": "AVAILABLE", **extra}
+
+
+def test_upload_video_runs_initialize_parts_captions_finalize_and_poll(tmp_path, monkeypatch):
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"0123456789")
+    captions = tmp_path / "clip.srt"
+    captions.write_text("1\n00:00:00,000 --> 00:00:01,000\nHi\n")
+    session = FakeSession(
+        [
+            FakeResponse(init_value(parts=[(0, 5), (6, 9)], captions=True)),
+            FakeResponse({}, headers={"ETag": '"etag-one"'}),
+            FakeResponse({}, headers={"etag": "etag-two"}),
+            FakeResponse({}, status_code=201),
+            FakeResponse({}),
+            FakeResponse({"id": VIDEO_URN, "status": "PROCESSING"}),
+            FakeResponse(available_video(captions="https://dms.example/captions")),
+        ]
+    )
+    client = LinkedInClient(config=config(), session=session)
+
+    import linkedin_cli.client as client_module
+
+    sleeps = []
+    monkeypatch.setattr(client_module.time, "sleep", sleeps.append)
+    video_record = client.upload_video(owner=OWNER, video_path=video, captions_path=captions)
+
+    assert video_record["status"] == "AVAILABLE"
+    calls = session.calls
+    assert calls[0]["url"].endswith("/videos?action=initializeUpload")
+    assert calls[0]["json"] == {
+        "initializeUploadRequest": {
+            "owner": OWNER,
+            "fileSizeBytes": 10,
+            "uploadCaptions": True,
+            "uploadThumbnail": False,
+        }
+    }
+    assert calls[0]["headers"]["Linkedin-Version"] == "202604"
+    assert (calls[1]["method"], calls[1]["url"], calls[1]["data"]) == (
+        "PUT",
+        "https://upload.example/part0",
+        b"012345",
+    )
+    assert (calls[2]["url"], calls[2]["data"]) == ("https://upload.example/part1", b"6789")
+    assert "Authorization" not in calls[1]["headers"]
+    assert calls[1]["headers"] == {"Content-Type": "application/octet-stream"}
+    assert calls[3]["url"] == "https://upload.example/captions"
+    assert json.loads(calls[3]["data"]["metadata"])["format"] == "SRT"
+    assert json.loads(calls[3]["data"]["metadata"])["transcriptType"] == "CLOSED_CAPTION"
+    assert calls[3]["files"]["file"][0] == "clip.srt"
+    assert "Authorization" not in calls[3]["headers"]
+    assert calls[4]["url"].endswith("/videos?action=finalizeUpload")
+    assert calls[4]["json"] == {
+        "finalizeUploadRequest": {
+            "video": VIDEO_URN,
+            "uploadToken": "token-abc",
+            "uploadedPartIds": ["etag-one", "etag-two"],
+        }
+    }
+    assert calls[5]["url"].endswith("/videos/urn%3Ali%3Avideo%3AD5610AQFYNmb9_sKaEw")
+    assert sleeps == [client_module.VIDEO_POLL_INTERVAL_SECONDS]
+
+
+def test_upload_video_sends_thumbnail_with_still_image_header(tmp_path):
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"abcd")
+    thumb = tmp_path / "thumb.jpg"
+    thumb.write_bytes(b"jpg-bytes")
+    session = FakeSession(
+        [
+            FakeResponse(init_value(parts=[(0, 3)], thumbnail=True)),
+            FakeResponse({}, headers={"ETag": "e1"}),
+            FakeResponse({}, status_code=201),
+            FakeResponse({}),
+            FakeResponse(available_video()),
+        ]
+    )
+    client = LinkedInClient(config=config(), session=session)
+
+    client.upload_video(owner=OWNER, video_path=video, thumbnail_path=thumb)
+
+    assert session.calls[0]["json"]["initializeUploadRequest"]["uploadThumbnail"] is True
+    assert session.calls[2]["url"] == "https://upload.example/thumb"
+    assert session.calls[2]["data"] == b"jpg-bytes"
+    assert session.calls[2]["headers"]["media-type-family"] == "STILLIMAGE"
+
+
+def test_upload_video_fails_when_part_upload_returns_no_etag(tmp_path):
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"abcd")
+    session = FakeSession([FakeResponse(init_value(parts=[(0, 3)])), FakeResponse({})])
+    client = LinkedInClient(config=config(), session=session)
+
+    with pytest.raises(ClientError, match="did not return an ETag"):
+        client.upload_video(owner=OWNER, video_path=video)
+
+
+def test_wait_for_video_raises_on_processing_failure():
+    session = FakeSession(
+        [FakeResponse({"status": "PROCESSING_FAILED", "processingFailureReason": "bad codec"})]
+    )
+    client = LinkedInClient(config=config(), session=session)
+
+    with pytest.raises(ClientError, match="failed processing: bad codec"):
+        client.wait_for_video(VIDEO_URN, timeout=30)
+
+
+def test_wait_for_video_times_out(monkeypatch):
+    import linkedin_cli.client as client_module
+
+    monkeypatch.setattr(client_module.time, "sleep", lambda seconds: None)
+    session = FakeSession([FakeResponse({"status": "PROCESSING"})])
+    client = LinkedInClient(config=config(), session=session)
+
+    with pytest.raises(ClientError, match="still PROCESSING after 0 seconds"):
+        client.wait_for_video(VIDEO_URN, timeout=0)
+
+
+def test_create_video_post_publishes_media_content_and_returns_url(tmp_path):
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"abcd")
+    session = FakeSession(
+        [
+            FakeResponse(init_value(parts=[(0, 3)])),
+            FakeResponse({}, headers={"ETag": "e1"}),
+            FakeResponse({}),
+            FakeResponse(available_video()),
+            FakeResponse({}, status_code=201, headers={"x-restli-id": "urn:li:share:77"}),
+        ]
+    )
+    client = LinkedInClient(config=config(), session=session)
+
+    result = client.create_video_post(
+        commentary="Watch this",
+        author=OWNER,
+        video_path=video,
+        title="Short title",
+    )
+
+    post_call = session.calls[-1]
+    assert post_call["url"].endswith("/posts")
+    assert post_call["json"]["content"] == {
+        "media": {"id": VIDEO_URN, "title": "Short title"}
+    }
+    assert post_call["json"]["author"] == OWNER
+    assert post_call["json"]["lifecycleState"] == "PUBLISHED"
+    assert result["id"] == "urn:li:share:77"
+    assert result["url"] == "https://www.linkedin.com/feed/update/urn:li:share:77/"
+    assert result["video"] == VIDEO_URN
+    assert result["captions_attached"] is False
+
+
+def test_lookup_organization_resolves_vanity_name():
+    session = FakeSession(
+        [
+            FakeResponse(
+                {
+                    "elements": [
+                        {
+                            "id": 27025192,
+                            "vanityName": "atalearning",
+                            "localizedName": "ATA Learning",
+                            "localizedWebsite": "https://adamtheautomator.com",
+                        }
+                    ]
+                }
+            )
+        ]
+    )
+    client = LinkedInClient(config=config(), session=session)
+
+    result = client.lookup_organization("atalearning")
+
+    assert result == {
+        "urn": "urn:li:organization:27025192",
+        "id": 27025192,
+        "vanity_name": "atalearning",
+        "name": "ATA Learning",
+        "website": "https://adamtheautomator.com",
+    }
+    assert session.calls[0]["url"] == "https://api.linkedin.com/v2/organizations"
+    assert session.calls[0]["params"] == {"q": "vanityName", "vanityName": "atalearning"}
+    assert session.calls[0]["headers"]["Linkedin-Version"] == "202604"
+
+
+def test_lookup_organization_rejects_no_match():
+    session = FakeSession([FakeResponse({"elements": []})])
+    client = LinkedInClient(config=config(), session=session)
+
+    with pytest.raises(ClientError, match="got 0"):
+        client.lookup_organization("nope")
+
+
+def test_create_comment_posts_to_social_actions_and_returns_ids():
+    session = FakeSession(
+        [
+            FakeResponse(
+                {"commentUrn": "urn:li:comment:(urn:li:activity:1,2)", "id": "2"},
+                status_code=201,
+                headers={"x-restli-id": "2"},
+            )
+        ]
+    )
+    client = LinkedInClient(config=config(), session=session)
+
+    result = client.create_comment(
+        post_urn="urn:li:share:77", actor=OWNER, text="Read more: https://example.com"
+    )
+
+    call = session.calls[0]
+    assert call["method"] == "POST"
+    assert call["url"] == "https://api.linkedin.com/rest/socialActions/urn%3Ali%3Ashare%3A77/comments"
+    assert call["json"] == {
+        "actor": OWNER,
+        "object": "urn:li:share:77",
+        "message": {"text": "Read more: https://example.com"},
+    }
+    assert call["headers"]["Linkedin-Version"] == "202604"
+    assert result["id"] == "urn:li:comment:(urn:li:activity:1,2)"
+    assert result["comment_id"] == "2"
+    assert result["actor"] == OWNER
+
+
+def test_create_comment_requires_restli_id():
+    session = FakeSession([FakeResponse({"commentUrn": "x"}, status_code=201)])
+    client = LinkedInClient(config=config(), session=session)
+
+    with pytest.raises(ClientError, match="x-restli-id"):
+        client.create_comment(post_urn="urn:li:share:77", actor=OWNER, text="hi")

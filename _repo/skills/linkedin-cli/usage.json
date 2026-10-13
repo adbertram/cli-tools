@@ -1,8 +1,8 @@
 {
   "tool": "linkedin",
   "description": "Create and manage LinkedIn member and page posts",
-  "discovered_at": "2026-06-22T14:34:19Z",
-  "total_commands": 25,
+  "discovered_at": "2026-10-13T18:58:51Z",
+  "total_commands": 29,
   "global_options": [
     {
       "name": "--version",
@@ -27,7 +27,6 @@
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
-          "usage_instructions": "Run the LinkedIn OAuth authorization-code login flow. Use `--credential-type oauth_authorization_code` to target the OAuth credential explicitly, `--force/-F` to clear active token state before re-authenticating, and `--profile/-p` for a named profile.",
           "arguments": [],
           "options": [
             {
@@ -42,7 +41,8 @@
               "type": "bool",
               "required": false,
               "help": "Clear existing ephemeral auth state and re-authenticate",
-              "short": "-F"
+              "short": "-F",
+              "takes_value": false
             }
           ]
         },
@@ -96,7 +96,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -117,12 +118,13 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "List all configured LinkedIn auth profiles and show which one is the default. Use --limit/-l, --filter/-f, --table/-t, and --properties/-p to shape the result.",
               "arguments": [],
               "options": [
@@ -131,7 +133,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -172,7 +175,42 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -207,7 +245,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -228,7 +267,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -249,7 +289,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -263,14 +304,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--verbose",
               "type": "bool",
               "required": false,
               "help": "Show detailed checks",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -293,7 +336,14 @@
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "usage_instructions": "Remove every cached LinkedIn API response for the active profile. Use when you need fresh server results instead of cached reads.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
@@ -303,14 +353,78 @@
       "arguments": [],
       "options": [],
       "commands": {
+        "lookup": {
+          "help": "Resolve a company page vanity name to its organization URN.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--vanity",
+              "type": "TEXT",
+              "required": true,
+              "help": "Company page vanity name, the last segment of linkedin.com/company/<vanity>"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name. Defaults to the active profile"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
         "posts": {
           "help": "Manage LinkedIn page posts",
-          "usage_instructions": "Page-post operations through LinkedIn's official Posts API: list, get, create, update, delete, and client-side search. Page writes require `w_organization_social`; page reads require `r_organization_social`. Use `--page` or `LINKEDIN_PAGE_URN` to select the organization or showcase-page author.",
           "arguments": [],
           "options": [],
           "commands": {
+            "comment": {
+              "help": "Comment on a post as the page.",
+              "arguments": [
+                {
+                  "name": "post_urn",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "LinkedIn post URN to comment on"
+                },
+                {
+                  "name": "text",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Comment text"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name. Defaults to the active profile"
+                },
+                {
+                  "name": "--page",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Page actor URN. Defaults to LINKEDIN_PAGE_URN when set"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                }
+              ]
+            },
             "create": {
-              "help": "Create a text-only LinkedIn page post.",
+              "help": "Create a LinkedIn page post: text-only, or a video post with --video.",
               "usage_instructions": "Create a text-only organization or showcase-page post from `COMMENTARY` through LinkedIn's official Posts API. Pass `--page` or configure `LINKEDIN_PAGE_URN` to choose the page author. Use `--visibility`, `--feed-distribution`, and `--disable-reshare` to control delivery. Use `--profile` to select a non-default LinkedIn auth profile.",
               "arguments": [
                 {
@@ -351,14 +465,47 @@
                   "name": "--disable-reshare",
                   "type": "bool",
                   "required": false,
-                  "help": "Prevent resharing the post"
+                  "help": "Prevent resharing the post",
+                  "takes_value": false
+                },
+                {
+                  "name": "--video",
+                  "type": "file",
+                  "required": false,
+                  "help": "MP4 video file to upload and attach. Creates a video post"
+                },
+                {
+                  "name": "--video-title",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Video title (requires --video)"
+                },
+                {
+                  "name": "--captions",
+                  "type": "file",
+                  "required": false,
+                  "help": "SRT captions file for the video (requires --video)"
+                },
+                {
+                  "name": "--thumbnail",
+                  "type": "file",
+                  "required": false,
+                  "help": "Custom thumbnail image for the video (requires --video)"
+                },
+                {
+                  "name": "--video-timeout",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "[x>=1]  Seconds to wait for LinkedIn to finish processing the uploaded video",
+                  "default": "600"
                 },
                 {
                   "name": "--table",
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
@@ -391,7 +538,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
@@ -431,7 +579,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--properties",
@@ -493,7 +642,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--properties",
@@ -548,7 +698,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--properties",
@@ -594,7 +745,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             }
@@ -610,12 +762,50 @@
       "commands": {
         "posts": {
           "help": "Manage LinkedIn member posts",
-          "usage_instructions": "Member-post operations through LinkedIn's official Posts API: list, get, create, update, delete, and client-side search. Member writes require `w_member_social`; member reads require `r_member_social`. Use `--person` or `LINKEDIN_PERSON_URN` when authenticated-member identity lookup is unavailable.",
           "arguments": [],
           "options": [],
           "commands": {
+            "comment": {
+              "help": "Comment on a post as the member.",
+              "arguments": [
+                {
+                  "name": "post_urn",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "LinkedIn post URN to comment on"
+                },
+                {
+                  "name": "text",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Comment text"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name. Defaults to the active profile"
+                },
+                {
+                  "name": "--person",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Member actor URN. Defaults to LINKEDIN_PERSON_URN, then the authenticated member when identity lookup is available"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                }
+              ]
+            },
             "create": {
-              "help": "Create a text-only LinkedIn member post.",
+              "help": "Create a LinkedIn member post: text-only, or a video post with --video.",
               "usage_instructions": "Create a text-only member post from `COMMENTARY` through LinkedIn's official Posts API. Omit `--person` to use `LINKEDIN_PERSON_URN`, then authenticated-member identity lookup through `/v2/me` and `/v2/userinfo` when available. Use `--visibility`, `--feed-distribution`, and `--disable-reshare` to control delivery. Use `--profile` to select a non-default LinkedIn auth profile.",
               "arguments": [
                 {
@@ -656,14 +846,47 @@
                   "name": "--disable-reshare",
                   "type": "bool",
                   "required": false,
-                  "help": "Prevent resharing the post"
+                  "help": "Prevent resharing the post",
+                  "takes_value": false
+                },
+                {
+                  "name": "--video",
+                  "type": "file",
+                  "required": false,
+                  "help": "MP4 video file to upload and attach. Creates a video post"
+                },
+                {
+                  "name": "--video-title",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Video title (requires --video)"
+                },
+                {
+                  "name": "--captions",
+                  "type": "file",
+                  "required": false,
+                  "help": "SRT captions file for the video (requires --video)"
+                },
+                {
+                  "name": "--thumbnail",
+                  "type": "file",
+                  "required": false,
+                  "help": "Custom thumbnail image for the video (requires --video)"
+                },
+                {
+                  "name": "--video-timeout",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "[x>=1]  Seconds to wait for LinkedIn to finish processing the uploaded video",
+                  "default": "600"
                 },
                 {
                   "name": "--table",
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
@@ -696,7 +919,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
@@ -736,7 +960,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--properties",
@@ -798,7 +1023,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--properties",
@@ -853,7 +1079,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--properties",
@@ -899,7 +1126,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             }

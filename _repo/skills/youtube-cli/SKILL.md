@@ -27,6 +27,8 @@ youtube <group> <action> [args] [options]
 | Validate video chapters | `youtube videos chapters validate --description $'00:00 Intro\n00:12 Setup\n02:05 Demo'` |
 | Upload a video | `youtube channel videos upload PATH --title "T" --privacy private` |
 | Ask AI to add chapters before upload | `youtube channel videos upload PATH --title "T" --description "D" --include-recommended-chapters` |
+| Upload a Short with captions | `youtube shorts upload PATH --title "T" --privacy public --caption-file C.srt --profile P` |
+| Add captions to an owned video | `youtube channel videos captions add VIDEO_ID C.srt --language en --profile P` |
 | Schedule a video | `youtube channel videos upload PATH --title "T" --privacy private --publish-at 2026-06-01T15:00:00Z` |
 | Update a video | `youtube channel videos update VIDEO_ID --title "New" --privacy public` |
 | Delete a video | `youtube channel videos delete VIDEO_ID --yes` |

@@ -221,6 +221,16 @@ youtube channel videos upload ./my-video.mp4 \
     --privacy private \
     --thumbnail ./thumb.png
 
+# Upload and insert a caption track (captions.insert) after the upload succeeds.
+# Output JSON includes caption_id. If the caption insert fails the video stays
+# uploaded, the JSON reports caption_error, and the command exits 1.
+youtube channel videos upload ./my-video.mp4 \
+    --title "My new video" \
+    --caption-file ./my-video.srt --caption-language en --caption-name ""
+
+# Attach a caption track to an existing video you own
+youtube channel videos captions add VIDEO_ID ./my-video.srt --language en --name "" --profile CHANNEL_PROFILE
+
 # Ask the calling AI agent to add recommended Video Chapters before upload
 youtube channel videos upload ./my-video.mp4 \
     --title "My new video" \
@@ -420,7 +430,13 @@ metadata and OAuth behavior stay in one implementation.
 
 ```bash
 youtube shorts upload short.mp4 --title "Title" --description "Description" --privacy public --profile CHANNEL_PROFILE
+
+# Also insert a caption track (output JSON gains caption_id)
+youtube shorts upload short.mp4 --title "Title" --caption-file short.srt --caption-language en --profile CHANNEL_PROFILE
 ```
+
+`captions.insert` requires `snippet.name` to be present (an empty string is valid),
+so `--caption-name` defaults to an empty string rather than being omitted.
 
 ## Bounded source metadata SDK
 

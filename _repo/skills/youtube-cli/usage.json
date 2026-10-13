@@ -1,8 +1,8 @@
 {
   "tool": "youtube",
   "description": "YouTube transcript and video downloader (yt-dlp), channel management (Data API v3), and browser-session community posting",
-  "discovered_at": "2026-10-04T23:54:24Z",
-  "total_commands": 29,
+  "discovered_at": "2026-10-13T18:35:32Z",
+  "total_commands": 30,
   "global_options": [
     {
       "name": "--version",
@@ -468,6 +468,11 @@
           "arguments": [],
           "options": [],
           "commands": {
+            "captions": {
+              "help": "Manage caption tracks on videos you own",
+              "arguments": [],
+              "options": []
+            },
             "delete": {
               "help": "Delete a video by ID. Requires confirmation unless --yes is passed.",
               "arguments": [
@@ -689,6 +694,25 @@
                   "type": "file",
                   "required": false,
                   "help": "Path to thumbnail image (jpg/png) to set after upload"
+                },
+                {
+                  "name": "--caption-file",
+                  "type": "file",
+                  "required": false,
+                  "help": "Caption file (for example .srt) to insert as a caption track after upload"
+                },
+                {
+                  "name": "--caption-language",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "BCP-47 language of the caption track",
+                  "default": "en"
+                },
+                {
+                  "name": "--caption-name",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Caption track name (default empty)"
                 },
                 {
                   "name": "--include-recommended-chapters",
@@ -926,6 +950,25 @@
               "type": "file",
               "required": false,
               "help": "Optional thumbnail image"
+            },
+            {
+              "name": "--caption-file",
+              "type": "file",
+              "required": false,
+              "help": "Caption file (for example .srt) to insert as a caption track after upload"
+            },
+            {
+              "name": "--caption-language",
+              "type": "TEXT",
+              "required": false,
+              "help": "BCP-47 language of the caption track",
+              "default": "en"
+            },
+            {
+              "name": "--caption-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Caption track name (default empty)"
             },
             {
               "name": "--profile",

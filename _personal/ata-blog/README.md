@@ -36,7 +36,7 @@ ata-blog notion-page backfill-scheduled-images   # one-time: mirror already-Sche
 ata-blog notion-page unpublish PAGE_ID --dry-run
 ata-blog notion-page unpublish SCHEDULED_PAGE_ID --yes   # unschedule: back to Ready to Publish
 ata-blog notion-page unpublish my-post-slug --yes
-ata-blog media upload image.png   # uploads to the static site's R2 media bucket
+ata-blog media upload image.png   # uploads a media file (image, video, or caption file) to the static site's R2 media bucket
 ata-blog categories list --table
 ata-blog categories get 5401
 ata-blog categories create "Platform Engineering"

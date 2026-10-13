@@ -1,7 +1,7 @@
 {
   "tool": "ata-blog",
   "description": "CLI for managing ATA Blog (adamtheautomator.com)",
-  "discovered_at": "2026-10-07T23:03:00Z",
+  "discovered_at": "2026-10-13T18:38:02Z",
   "total_commands": 37,
   "global_options": [
     {
@@ -585,9 +585,11 @@
       ],
       "commands": {
         "upload": {
-          "help": "Upload an image to the static site media bucket (Cloudflare R2). The object lands at a content-addressed wp-content/uploads/publisher/ key and the printed URL is publicly served by the site's media edge.",
+          "help": "Upload a media file (image, video, or caption file) to the static site media bucket (Cloudflare R2). Any file with a guessable MIME type works, for example .webp, .mp4, or .srt. The object lands at a content-addressed wp-content/uploads/publisher/ key and the printed URL is publicly served by the site's media edge.",
           "examples": [
-            "ata-blog media upload ./posts/<page_id>/images/diagram.webp"
+            "ata-blog media upload ./posts/<page_id>/images/diagram.webp",
+            "ata-blog media upload ./shorts/<post-slug>/short.mp4",
+            "ata-blog media upload ./shorts/<post-slug>/short.srt"
           ],
           "usage_instructions": "Use `ata-blog media upload` with the documented arguments and options shown below.",
           "arguments": [
@@ -595,7 +597,7 @@
               "name": "file_path",
               "type": "TEXT",
               "required": true,
-              "help": "Path to the local image file"
+              "help": "Path to the local media file (image, video, or caption file)"
             }
           ],
           "options": [

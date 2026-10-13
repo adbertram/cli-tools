@@ -51,6 +51,8 @@ from ..models import (
 app = typer.Typer(help="Manage the authenticated user's YouTube channel")
 videos_app = typer.Typer(help="Manage videos on the authenticated user's channel")
 posts_app = typer.Typer(help="Post messages to a YouTube channel")
+captions_app = typer.Typer(help="Manage caption tracks on videos you own")
+videos_app.add_typer(captions_app, name="captions")
 app.add_typer(videos_app, name="videos")
 app.add_typer(posts_app, name="posts")
 
@@ -94,6 +96,18 @@ def _create_text_post(browser, channel_url: str, message: str, dry_run: bool = F
         message,
         dry_run=dry_run,
     )
+
+
+def _insert_caption(service, *, video_id: str, file: Path, language: str, name: str) -> str:
+    """Insert one published caption track for a video the caller owns; return its caption ID."""
+    # YouTube rejects captions.insert as invalidMetadata when snippet.name is absent; empty is valid.
+    snippet = {"videoId": video_id, "language": language, "name": name, "isDraft": False}
+    response = service.captions().insert(
+        part="snippet",
+        body={"snippet": snippet},
+        media_body=MediaFileUpload(str(file), mimetype="application/octet-stream"),
+    ).execute()
+    return response["id"]
 
 
 def _require_description_for_recommended_chapters(description: Optional[str]) -> str:
@@ -379,6 +393,19 @@ def videos_upload(
         exists=True,
         dir_okay=False,
     ),
+    caption_file: Optional[Path] = typer.Option(
+        None,
+        "--caption-file",
+        help="Caption file (for example .srt) to insert as a caption track after upload",
+        exists=True,
+        dir_okay=False,
+    ),
+    caption_language: str = typer.Option(
+        "en", "--caption-language", help="BCP-47 language of the caption track"
+    ),
+    caption_name: str = typer.Option(
+        "", "--caption-name", help="Caption track name (default empty)"
+    ),
     include_recommended_chapters: bool = typer.Option(
         False,
         "--include-recommended-chapters",
@@ -406,6 +433,9 @@ def videos_upload(
                     "publish_at": publish_at,
                     "made_for_kids": made_for_kids,
                     "thumbnail": str(thumbnail) if thumbnail else None,
+                    "caption_file": str(caption_file) if caption_file else None,
+                    "caption_language": caption_language,
+                    "caption_name": caption_name,
                     "profile": profile,
                 },
             )
@@ -454,16 +484,77 @@ def videos_upload(
             ).execute()
             thumbnail_uploaded = True
 
+        url = f"https://www.youtube.com/watch?v={video_id}"
+        caption_id = None
+        if caption_file:
+            print_info(f"Inserting caption track {caption_file}...")
+            try:
+                caption_id = _insert_caption(
+                    service,
+                    video_id=video_id,
+                    file=caption_file,
+                    language=caption_language,
+                    name=caption_name,
+                )
+            except HttpError as e:
+                print_json(
+                    UploadResult(
+                        id=video_id,
+                        title=title,
+                        privacy_status=privacy,
+                        publish_at=publish_at,
+                        url=url,
+                        thumbnail_uploaded=thumbnail_uploaded,
+                        caption_error=str(e),
+                    )
+                )
+                print_error(
+                    f"Uploaded {url} but caption insert failed: {e}. Retry with: "
+                    f"youtube channel videos captions add {video_id} {caption_file}"
+                )
+                raise typer.Exit(1)
+
         result = UploadResult(
             id=video_id,
             title=title,
             privacy_status=privacy,
             publish_at=publish_at,
-            url=f"https://www.youtube.com/watch?v={video_id}",
+            url=url,
             thumbnail_uploaded=thumbnail_uploaded,
+            caption_id=caption_id,
         )
         print_success(f"Uploaded: {result.url}")
         print_json(result)
+
+    except HttpError as e:
+        print_error(f"HTTP error: {e}")
+        raise typer.Exit(1)
+    except typer.Exit:
+        raise
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+@captions_app.command("add")
+@command
+def captions_add(
+    video_id: str = typer.Argument(..., help="YouTube video ID (must be owned by the profile's channel)"),
+    file: Path = typer.Argument(..., help="Caption file (for example .srt)", exists=True, dir_okay=False),
+    language: str = typer.Option("en", "--language", help="BCP-47 language of the caption track"),
+    name: str = typer.Option("", "--name", help="Caption track name (default empty)"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+):
+    """Insert a caption track on an existing video you own."""
+    try:
+        client = get_api_client(profile=profile)
+        service = client.get_youtube_service()
+        caption_id = _insert_caption(
+            service, video_id=video_id, file=file, language=language, name=name
+        )
+        print_success(f"Inserted caption {caption_id} on {video_id}")
+        print_json(
+            {"video_id": video_id, "caption_id": caption_id, "language": language, "name": name}
+        )
 
     except HttpError as e:
         print_error(f"HTTP error: {e}")

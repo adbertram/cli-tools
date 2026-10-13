@@ -1,6 +1,7 @@
 """LinkedIn API client."""
 
 import fnmatch
+import json
 import random
 import time
 from datetime import UTC, datetime
@@ -23,6 +24,20 @@ CURRENT_MEMBER_PROFILE_URL = "https://api.linkedin.com/v2/me"
 CURRENT_MEMBER_USERINFO_URL = "https://api.linkedin.com/v2/userinfo"
 PERSON_URN_PREFIX = "urn:li:person:"
 ORGANIZATION_URN_PREFIXES = ("urn:li:organization:", "urn:li:organizationBrand:")
+ORGANIZATIONS_URL = "https://api.linkedin.com/v2/organizations"
+POST_URL_TEMPLATE = "https://www.linkedin.com/feed/update/{urn}/"
+UPLOAD_TIMEOUT_SECONDS = 300
+VIDEO_PROCESSING_TIMEOUT_SECONDS = 600
+VIDEO_POLL_INTERVAL_SECONDS = 5.0
+# Captions metadata shape comes from the Videos API "Upload Captions" section.
+CAPTIONS_METADATA = {
+    "format": "SRT",
+    "formattedForEasyReader": True,
+    "largeText": True,
+    "source": "USER_PROVIDED",
+    "locale": {"variant": "AMERICAN", "country": "US", "language": "EN"},
+    "transcriptType": "CLOSED_CAPTION",
+}
 
 
 def _timestamp_ms_to_iso(timestamp_ms: Optional[int]) -> Optional[str]:
@@ -273,8 +288,16 @@ class LinkedInClient:
         permission_author: Optional[str] = None,
         extra_headers: Optional[Dict[str, str]] = None,
         retry: bool = True,
+        headers_override: Optional[Dict[str, str]] = None,
+        body: Optional[bytes] = None,
+        form: Optional[Dict[str, str]] = None,
+        files: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
     ) -> requests.Response:
-        headers = self._headers(versioned=versioned)
+        if headers_override is not None:
+            headers = dict(headers_override)
+        else:
+            headers = self._headers(versioned=versioned)
         if extra_headers:
             headers.update(extra_headers)
 
@@ -290,6 +313,9 @@ class LinkedInClient:
                     headers=headers,
                     json=data,
                     params=params,
+                    data=body if body is not None else form,
+                    files=files,
+                    timeout=timeout,
                 )
                 last_response = response
                 if retry and self._is_retryable(response, None) and attempt < self.max_retries:
@@ -418,16 +444,24 @@ class LinkedInClient:
                 results.append(post)
         return results[:limit]
 
-    def create_post(
-        self,
+    def _publish_post(self, payload: dict) -> str:
+        response = self._request_api("POST", "/posts", data=payload)
+        post_urn = response.headers.get("x-restli-id") or response.headers.get("X-RestLi-Id")
+        if not post_urn:
+            raise ClientError("LinkedIn create response did not include x-restli-id.")
+        self._invalidate_post_read_caches()
+        return post_urn
+
+    @staticmethod
+    def _post_payload(
         *,
         commentary: str,
         author: str,
-        visibility: str = "PUBLIC",
-        feed_distribution: str = "MAIN_FEED",
-        disable_reshare: bool = False,
+        visibility: str,
+        feed_distribution: str,
+        disable_reshare: bool,
     ) -> dict:
-        payload = {
+        return {
             "author": author,
             "commentary": commentary,
             "visibility": visibility,
@@ -439,11 +473,25 @@ class LinkedInClient:
             "lifecycleState": "PUBLISHED",
             "isReshareDisabledByAuthor": disable_reshare,
         }
-        response = self._request_api("POST", "/posts", data=payload)
-        post_urn = response.headers.get("x-restli-id") or response.headers.get("X-RestLi-Id")
-        if not post_urn:
-            raise ClientError("LinkedIn create response did not include x-restli-id.")
-        self._invalidate_post_read_caches()
+
+    def create_post(
+        self,
+        *,
+        commentary: str,
+        author: str,
+        visibility: str = "PUBLIC",
+        feed_distribution: str = "MAIN_FEED",
+        disable_reshare: bool = False,
+    ) -> dict:
+        post_urn = self._publish_post(
+            self._post_payload(
+                commentary=commentary,
+                author=author,
+                visibility=visibility,
+                feed_distribution=feed_distribution,
+                disable_reshare=disable_reshare,
+            )
+        )
         return {
             "id": post_urn,
             "author": author,
@@ -454,6 +502,237 @@ class LinkedInClient:
             "content_type": "text",
             "is_reshare_disabled_by_author": disable_reshare,
             "created": True,
+        }
+
+    def _upload_part(self, url: str, data: bytes, headers: Dict[str, str]) -> requests.Response:
+        return self._request(
+            "PUT",
+            url,
+            versioned=False,
+            headers_override=headers,
+            body=data,
+            timeout=UPLOAD_TIMEOUT_SECONDS,
+        )
+
+    def initialize_video_upload(
+        self,
+        *,
+        owner: str,
+        file_size: int,
+        upload_captions: bool,
+        upload_thumbnail: bool,
+    ) -> dict:
+        """Register a video upload and return LinkedIn's initializeUpload `value`."""
+        response = self._request_api(
+            "POST",
+            "/videos?action=initializeUpload",
+            data={
+                "initializeUploadRequest": {
+                    "owner": owner,
+                    "fileSizeBytes": file_size,
+                    "uploadCaptions": upload_captions,
+                    "uploadThumbnail": upload_thumbnail,
+                }
+            },
+            permission_author=owner,
+        )
+        value = response.json().get("value")
+        if not isinstance(value, dict):
+            raise ClientError("LinkedIn initializeUpload response did not include 'value'.")
+        for key in ("video", "uploadToken", "uploadInstructions"):
+            if key not in value:
+                raise ClientError(f"LinkedIn initializeUpload response did not include '{key}'.")
+        if upload_captions and not value.get("captionsUploadUrl"):
+            raise ClientError("LinkedIn initializeUpload response did not include captionsUploadUrl.")
+        if upload_thumbnail and not value.get("thumbnailUploadUrl"):
+            raise ClientError("LinkedIn initializeUpload response did not include thumbnailUploadUrl.")
+        return value
+
+    def _upload_video_parts(self, video_path: Path, instructions: List[dict]) -> List[str]:
+        part_ids = []
+        with video_path.open("rb") as handle:
+            for part in instructions:
+                handle.seek(part["firstByte"])
+                chunk = handle.read(part["lastByte"] - part["firstByte"] + 1)
+                response = self._upload_part(
+                    part["uploadUrl"],
+                    chunk,
+                    {"Content-Type": "application/octet-stream"},
+                )
+                etag = response.headers.get("ETag") or response.headers.get("etag")
+                if not etag:
+                    raise ClientError("LinkedIn video part upload did not return an ETag header.")
+                part_ids.append(etag.strip('"'))
+        return part_ids
+
+    def _upload_captions(self, url: str, captions_path: Path) -> None:
+        self._request(
+            "POST",
+            url,
+            versioned=False,
+            headers_override={},
+            form={"metadata": json.dumps(CAPTIONS_METADATA)},
+            files={"file": (captions_path.name, captions_path.read_bytes(), "text/plain")},
+            timeout=UPLOAD_TIMEOUT_SECONDS,
+        )
+
+    def _upload_thumbnail(self, url: str, thumbnail_path: Path) -> None:
+        self._upload_part(
+            url,
+            thumbnail_path.read_bytes(),
+            {"media-type-family": "STILLIMAGE", "Content-Type": "application/octet-stream"},
+        )
+
+    def get_video(self, video_urn: str) -> dict:
+        return self._request_api("GET", f"/videos/{quote(video_urn, safe='')}").json()
+
+    def wait_for_video(self, video_urn: str, *, timeout: float) -> dict:
+        """Poll until the video is AVAILABLE; fail on PROCESSING_FAILED or timeout."""
+        deadline = time.monotonic() + timeout
+        while True:
+            video = self.get_video(video_urn)
+            status = video.get("status")
+            if status == "AVAILABLE":
+                return video
+            if status == "PROCESSING_FAILED":
+                reason = video.get("processingFailureReason", "no reason given")
+                raise ClientError(f"LinkedIn video {video_urn} failed processing: {reason}")
+            if time.monotonic() >= deadline:
+                raise ClientError(
+                    f"LinkedIn video {video_urn} still {status} after {timeout:g} seconds."
+                )
+            time.sleep(VIDEO_POLL_INTERVAL_SECONDS)
+
+    def upload_video(
+        self,
+        *,
+        owner: str,
+        video_path: Path,
+        captions_path: Optional[Path] = None,
+        thumbnail_path: Optional[Path] = None,
+        processing_timeout: float = VIDEO_PROCESSING_TIMEOUT_SECONDS,
+    ) -> dict:
+        """Upload a video (and optional captions/thumbnail); return the AVAILABLE video record."""
+        init = self.initialize_video_upload(
+            owner=owner,
+            file_size=video_path.stat().st_size,
+            upload_captions=captions_path is not None,
+            upload_thumbnail=thumbnail_path is not None,
+        )
+        part_ids = self._upload_video_parts(video_path, init["uploadInstructions"])
+        if captions_path is not None:
+            self._upload_captions(init["captionsUploadUrl"], captions_path)
+        if thumbnail_path is not None:
+            self._upload_thumbnail(init["thumbnailUploadUrl"], thumbnail_path)
+        self._request_api(
+            "POST",
+            "/videos?action=finalizeUpload",
+            data={
+                "finalizeUploadRequest": {
+                    "video": init["video"],
+                    "uploadToken": init["uploadToken"],
+                    "uploadedPartIds": part_ids,
+                }
+            },
+            permission_author=owner,
+        )
+        return self.wait_for_video(init["video"], timeout=processing_timeout)
+
+    def create_video_post(
+        self,
+        *,
+        commentary: str,
+        author: str,
+        video_path: Path,
+        title: Optional[str] = None,
+        captions_path: Optional[Path] = None,
+        thumbnail_path: Optional[Path] = None,
+        visibility: str = "PUBLIC",
+        feed_distribution: str = "MAIN_FEED",
+        disable_reshare: bool = False,
+        processing_timeout: float = VIDEO_PROCESSING_TIMEOUT_SECONDS,
+    ) -> dict:
+        video = self.upload_video(
+            owner=author,
+            video_path=video_path,
+            captions_path=captions_path,
+            thumbnail_path=thumbnail_path,
+            processing_timeout=processing_timeout,
+        )
+        media = {"id": video["id"]}
+        if title:
+            media["title"] = title
+        payload = self._post_payload(
+            commentary=commentary,
+            author=author,
+            visibility=visibility,
+            feed_distribution=feed_distribution,
+            disable_reshare=disable_reshare,
+        )
+        payload["content"] = {"media": media}
+        post_urn = self._publish_post(payload)
+        return {
+            "id": post_urn,
+            "url": POST_URL_TEMPLATE.format(urn=post_urn),
+            "video": video["id"],
+            "author": author,
+            "commentary": commentary,
+            "visibility": visibility,
+            "lifecycle_state": "PUBLISHED",
+            "feed_distribution": feed_distribution,
+            "content_type": "media",
+            "captions_attached": bool(video.get("captions")),
+            "is_reshare_disabled_by_author": disable_reshare,
+            "created": True,
+        }
+
+    def create_comment(self, *, post_urn: str, actor: str, text: str) -> dict:
+        """Comment on a post as `actor` (a person or organization URN) via socialActions."""
+        response = self._request_api(
+            "POST",
+            f"/socialActions/{quote(post_urn, safe='')}/comments",
+            data={"actor": actor, "object": post_urn, "message": {"text": text}},
+            permission_author=actor,
+        )
+        comment_id = response.headers.get("x-restli-id") or response.headers.get("X-RestLi-Id")
+        if not comment_id:
+            raise ClientError("LinkedIn comment response did not include x-restli-id.")
+        body = response.json() if response.content else {}
+        return {
+            "id": body.get("commentUrn"),
+            "comment_id": comment_id,
+            "post": post_urn,
+            "actor": actor,
+            "text": text,
+            "created": True,
+        }
+
+    def lookup_organization(self, vanity_name: str) -> dict:
+        """Resolve a company page vanity name to its organization URN.
+
+        The versioned /rest/organizations vanityName finder needs rw_organization_admin;
+        the /v2 finder answers with the member scopes this CLI requests.
+        """
+        response = self._request(
+            "GET",
+            ORGANIZATIONS_URL,
+            versioned=True,
+            params={"q": "vanityName", "vanityName": vanity_name},
+        )
+        elements = response.json().get("elements")
+        if not isinstance(elements, list):
+            raise ClientError("Expected 'elements' to be a list.")
+        if len(elements) != 1:
+            raise ClientError(
+                f"Expected exactly one organization for vanity name '{vanity_name}', got {len(elements)}."
+            )
+        org = elements[0]
+        return {
+            "urn": f"urn:li:organization:{org['id']}",
+            "id": org["id"],
+            "vanity_name": org["vanityName"],
+            "name": org["localizedName"],
+            "website": org.get("localizedWebsite"),
         }
 
     def _member_urn_from_identity_response(self, *, url: str, key: str) -> str:
