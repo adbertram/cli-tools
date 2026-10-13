@@ -1204,7 +1204,36 @@ def test_post_waits_for_studio_checks_so_post_is_not_held_by_the_confirmation(pu
     saved = publisher.status(value['request_id'])
     assert page.events.count('checks') == 3 and page.events.index('checks') < page.events.index('Post')
     assert saved['studio_checks'] | {'waited_seconds': 0} == {'status': 'completed', 'verdict': 'pass', 'music_status': studio_check.MUSIC_DONE,
-                                                            'music_verdict': 'no_issue', 'waited_seconds': 0}
+                                                            'music_verdict': 'no_issue', 'waited_seconds': 0,
+                                                            'content_check': studio_check.normalize_check(CHECKS_PASSED)['content_check']}
+
+
+@pytest.mark.parametrize('finishes', [True, False])
+def test_publish_uses_full_native_check_window_without_bypassing_checks(publisher, monkeypatch, finishes):
+    value = prepared(publisher);page = attach(publisher, value, monkeypatch)
+    monkeypatch.setattr(publisher, "_reconcile", lambda v: v)
+    clock = [0.0]
+    monkeypatch.setattr(module.time, 'monotonic', lambda: clock[0])
+    monkeypatch.setattr(page, 'wait_for_timeout', lambda ms: clock.__setitem__(0, clock[0] + 300) if ms == 1000 else None)
+    page.checks = [CHECKS_RUNNING, CHECKS_RUNNING, CHECKS_PASSED] if finishes else [CHECKS_RUNNING]
+    callbacks = []
+    if finishes:
+        publisher.publish(value['request_id'], before_public_action=lambda binding: callbacks.append(binding))
+        assert page.clicked == 1 and len(callbacks) == 1
+    else:
+        with pytest.raises(StudioPublishError, match='within 900 s'):
+            publisher.publish(value['request_id'], before_public_action=lambda binding: callbacks.append(binding))
+        assert page.clicked == 0 and callbacks == []
+    saved = publisher.status(value['request_id'])
+    assert saved['request_id'] == value['request_id']
+    assert saved['draft']['video_id'] == value['draft']['video_id'] and saved['draft_id'] == value['draft_id']
+    assert saved['studio_checks']['waited_seconds'] == (600 if finishes else 900)
+    assert saved['studio_checks']['status'] == ('completed' if finishes else 'not_finished')
+    content = saved['studio_checks']['content_check']
+    assert content['check_status'] == (2 if finishes else 1)
+    assert content['check_status_name'] == ('success' if finishes else 'checking')
+    if not finishes:
+        assert saved['state'] == 'prepared' and saved['public_action_dispatched'] is False
 
 
 @pytest.mark.parametrize('checks, message', [
@@ -1690,3 +1719,17 @@ def test_unreadable_checks_clear_stale_pass_and_never_dispatch(publisher, monkey
     assert saved['studio_checks']['verdict'] is None and saved['studio_checks']['music_verdict'] is None
     assert saved['state'] == 'prepared' and saved['public_action_dispatched'] is False
     assert page.clicked == 0 and page.observer_options is None
+
+
+@pytest.mark.parametrize('native_code, expected_name', [(0, 'init'), (1, 'checking'), (None, None)])
+def test_unfinished_check_journal_preserves_native_diagnosis(publisher, monkeypatch, native_code, expected_name):
+    value = prepared(publisher);page = attach(publisher, value, monkeypatch)
+    page.checks = [{**CHECKS_RUNNING, 'lite': {'checkStatus': native_code, 'checkId': 'native-check-id'}}]
+    monkeypatch.setattr(module, 'STUDIO_CHECK_WAIT_SECONDS', 0)
+    with pytest.raises(StudioPublishError, match='did not finish'):
+        publisher.publish(value['request_id'], before_public_action=lambda binding: pytest.fail('must not authorize'))
+    saved = publisher.status(value['request_id'])
+    assert saved['studio_checks']['content_check']['check_status_name'] == expected_name
+    assert saved['studio_checks']['content_check']['check_id'] == 'native-check-id'
+    assert saved['studio_checks']['status'] == 'not_finished' and page.clicked == 0
+    assert saved['public_action_dispatched'] is False

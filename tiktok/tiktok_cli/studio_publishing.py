@@ -39,8 +39,9 @@ MIN_FREE_BYTES = 1 << 30  # Keep 1 GiB free after the private staging copy.
 MAX_JOURNALED_RESPONSE_CHARS = 65536  # Native Post receipts observed so far are under 1 KB.
 # While Studio's own Content check lite is still running, Post opens TikTok's
 # "Continue to post?" confirmation and sends nothing (measured on adam-server,
-# 2026-10-07). The check took 24-136 s on this account's recent uploads.
-STUDIO_CHECK_WAIT_SECONDS = 240
+# 2026-10-07). Allow Studio's full native 15-minute polling window, as in
+# studio_check.check; legitimate checks can remain unfinished after 240 seconds.
+STUDIO_CHECK_WAIT_SECONDS = 900
 POST_CONFIRMATION_TITLE = "Continue to post?"
 UNSENT_DRAFT_GONE = "Owned draft is gone after an unsent Post attempt; nothing was posted and it is never re-uploaded."
 # What TikTok's web scripts can read about the posting browser. Both Studio
@@ -1482,6 +1483,7 @@ class StudioPublisher:
     @staticmethod
     def _check_summary(result):
         return {'status': result['status'], 'verdict': result['verdict'],
+                'content_check': result['content_check'],
                 'music_status': result['music_copyright']['status'], 'music_verdict': result['music_copyright']['verdict']}
 
     def _record_post_click_page(self, page, operation):

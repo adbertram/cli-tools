@@ -213,9 +213,11 @@ guard; it never renews authorization. Bounded CDP request/response capture
 survives renderer navigation and journals exact binding IDs, hashes, and the
 native Post response body (first 64 KiB) for diagnosis.
 
-Before the trusted callback, `publish` waits up to 240 seconds for Studio's own
-Content check lite and music copyright check on the open editor (the same page
-state `studio check` reads) and journals the result as `studio_checks`. It
+Before the trusted callback, `publish` waits up to 900 seconds (Studio's native
+15-minute polling window) for Studio's own Content check lite and music copyright check on the open editor (the same page
+state `studio check` reads) and journals the result as `studio_checks`, including
+native content-check status, ID and UI diagnostics to distinguish an unstarted
+check from one still running. It
 requires content status `completed` with verdict `pass` and music verdict
 `no_issue` before any callback or Post action. Every other result leaves the
 request prepared and undispatched. A daily quota result immediately raises
