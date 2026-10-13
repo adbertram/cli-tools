@@ -106,7 +106,7 @@ Use `<cli-tools-root>/_repo/scripts/find-cli-tools.sh` to enumerate available
 CLI tools, match the exact `name` from its JSON output, and derive the source
 directory from the matching record's `readme` parent. You may pass the exact
 tool name as a positional filter, for example
-`<cli-tools-root>/_repo/scripts/find-cli-tools.sh --json upwork`; the output is
+`<cli-tools-root>/_repo/scripts/find-cli-tools.sh --json notion`; the output is
 still a JSON array. If `readme` is relative, resolve it against
 `<cli-tools-root>` first; do not resolve it against the current shell working
 directory. Then prove that directory exists and contains `pyproject.toml` before

@@ -59,7 +59,7 @@ relative to `<cli-tools-root>` unless it is already absolute; resolve it against
 that root before deriving the tool directory or checking files. The default mode is
 JSON, and `--json` is accepted as an explicit alias for that default. To inspect
 one CLI, pass the exact tool name as a positional filter, for example
-`<cli-tools-root>/_repo/scripts/find-cli-tools.sh --json upwork`; the output is
+`<cli-tools-root>/_repo/scripts/find-cli-tools.sh --json notion`; the output is
 still a JSON array. When filtering the saved output with `jq`, iterate the array
 explicitly, for example `jq -e '.[] | select(.name == "google")' <file>`. Do not
 treat the output as JSONL records. When parsing the saved JSON with Python, do not wrap a quoted

@@ -50,6 +50,8 @@ def read_tool_metadata(root: Path) -> dict[str, dict[str, str]]:
         folder = pyproject.parent.name
         if folder.startswith("_") or folder in EXCLUDED_PACKAGE_DIRS:
             continue
+        if (pyproject.parent / "DISABLED").exists():
+            continue
 
         data = tomllib.loads(pyproject.read_text())
         project = data["project"]

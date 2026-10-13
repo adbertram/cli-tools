@@ -22,6 +22,8 @@ Print the available CLI tools with their README DESCRIPTION text.
                tool; omit it to get full detail, normally after already
                filtering to one or a few tool names.
   tool-name    Optional exact tool name filter. May be passed more than once.
+
+Tools whose folder contains a DISABLED marker file are skipped.
 EOF
 }
 
@@ -80,6 +82,8 @@ if personal_root.is_dir():
 
 for pyproject_path in sorted(pyproject_paths):
     tool_dir = pyproject_path.parent
+    if (tool_dir / "DISABLED").exists():
+        continue
     readme_path = tool_dir / "README.md"
     if not readme_path.exists():
         continue

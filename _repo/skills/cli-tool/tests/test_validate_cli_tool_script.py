@@ -578,7 +578,7 @@ def test_find_cli_tools_accepts_exact_tool_name_filter():
     script = REPO_ROOT / "_repo/scripts/find-cli-tools.sh"
 
     result = subprocess.run(
-        [str(script), "--json", "upwork"],
+        [str(script), "--json", "notion"],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -587,14 +587,14 @@ def test_find_cli_tools_accepts_exact_tool_name_filter():
 
     assert result.returncode == 0, result.stderr
     records = json.loads(result.stdout)
-    assert [record["name"] for record in records] == ["upwork"]
+    assert [record["name"] for record in records] == ["notion"]
 
 
 def test_find_cli_tools_compatibility_wrapper_for_old_tools_path():
     script = REPO_ROOT / "_repo/tools/find-cli-tools.sh"
 
     result = subprocess.run(
-        [str(script), "--json", "upwork"],
+        [str(script), "--json", "notion"],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -603,4 +603,4 @@ def test_find_cli_tools_compatibility_wrapper_for_old_tools_path():
 
     assert result.returncode == 0, result.stderr
     records = json.loads(result.stdout)
-    assert [record["name"] for record in records] == ["upwork"]
+    assert [record["name"] for record in records] == ["notion"]

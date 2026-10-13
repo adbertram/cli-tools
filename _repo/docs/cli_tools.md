@@ -118,7 +118,6 @@
 | `twelvelabs` | The `twelvelabs` CLI provides a command-line interface for Twelvelabs API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `udemy` | The `udemy` CLI provides a command-line interface for Udemy API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `ups` | UPS Pickup API - schedule package pickups |
-| `upwork` | Upwork CLI: search marketplace job postings via the official GraphQL API (`upwork jobs`, OAuth2) and read/update freelancer profile attributes (browser session). |
 | `usps` | The `usps` CLI provides a command-line interface for Usps API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `venmo` | The `venmo` CLI provides a command-line interface for Venmo API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `vinted` | Search Vinted marketplace listings through the site's internal catalog API |
@@ -128,3 +127,11 @@
 | `whop` | Read Whop participant accounts and Content Rewards campaigns, submissions, and earnings |
 | `x` | The `x` CLI provides a command-line interface for X API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `youtube` | The `youtube` CLI provides a command-line interface for Youtube API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+
+## Disabled Tools
+
+A tool is disabled by adding a `DISABLED` marker file to its folder (skipped by `_repo/scripts/find-cli-tools.sh` and `_repo/_scripts/refresh_readme.py`), moving its service skill to `_repo/skills/_disabled/<tool>-cli/`, and running `uv tool uninstall <tool>-cli`. Source, tests, and `~/.local/share/cli-tools/<tool>` data are kept. Re-enable steps are in each tool's README under "Disabled".
+
+| CLI | Reason |
+|---|---|
+| `upwork` | Upwork will not issue Adam an API key (account fails the $25K lifetime earnings / 90% Job Success Score eligibility) and live profile commands are blocked by Cloudflare. Re-enable steps: `upwork/README.md`. |

@@ -159,7 +159,7 @@ def test_skill_documents_find_cli_tools_json_array_contract():
     text_words = _words(text)
 
     assert "one JSON array of records" in text_words
-    assert "`<cli-tools-root>/_repo/scripts/find-cli-tools.sh --json upwork`" in text
+    assert "`<cli-tools-root>/_repo/scripts/find-cli-tools.sh --json notion`" in text
     assert "the output is still a JSON array" in text_words
     assert 'jq -e \'.[] | select(.name == "google")\' <file>' in text
     assert "Do not treat the output as JSONL records" in text_words
@@ -172,7 +172,7 @@ def test_update_workflow_discovers_source_directory_before_reads():
     assert "Resolve and Navigate to CLI Source Directory" in text
     assert "Do not assume `<cli-tools-root>/<name>` exists" in text
     assert "Use `<cli-tools-root>/_repo/scripts/find-cli-tools.sh`" in text
-    assert "`<cli-tools-root>/_repo/scripts/find-cli-tools.sh --json upwork`" in text
+    assert "`<cli-tools-root>/_repo/scripts/find-cli-tools.sh --json notion`" in text
     assert "derive the source directory from the matching record's `readme` parent" in text_words
     assert "Only after the source directory is proven" in text_words
 
