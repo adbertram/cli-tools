@@ -290,6 +290,7 @@ GET_IDENTIFIER_FIELDS = {
     ("facebook", "groups"): "group_id",
     ("progress-servicenow", "ticket template"): "key",
     ("venmo", "transactions"): "payment_id",
+    ("vyro", "campaigns"): "slug",
 }
 
 

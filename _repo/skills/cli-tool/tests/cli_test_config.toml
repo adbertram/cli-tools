@@ -373,3 +373,8 @@ excluded_from_list_required = ["account"]
 [cli_specific.whop]
 # Current participant and date-bounded creator analytics are singletons without resource-ID discovery.
 excluded_from_list_required = ["account", "earnings"]
+
+[cli_specific.vyro]
+# Current account is a singleton; observed social API exposes only a collection.
+excluded_from_list_required = ["account"]
+excluded_from_get_required = ["social-accounts"]
