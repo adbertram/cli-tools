@@ -1,4 +1,5 @@
 """Prepare, check, and inspect journaled Studio operations; publish or post only with --yes."""
+from contextlib import contextmanager
 from pathlib import Path
 
 import typer
@@ -42,6 +43,16 @@ def _require_yes(yes):
         raise StudioPublishError("Refusing Studio public Post without --yes.")
 
 
+@contextmanager
+def _publisher():
+    """One StudioPublisher for one command, closed however the command ends."""
+    publisher = StudioPublisher(get_config())
+    try:
+        yield publisher
+    finally:
+        publisher.close()
+
+
 @app.command("prepare")
 @command
 def studio_prepare(
@@ -57,11 +68,8 @@ def studio_prepare(
     music_rights_confirmed=true. Caption is used verbatim.
     """
     checked = _read_policy(policy)
-    publisher = StudioPublisher(get_config())
-    try:
+    with _publisher() as publisher:
         result = publisher.prepare(file, checked, request_id)
-    finally:
-        publisher.close()
     _print_operation(result, table)
 
 
@@ -82,11 +90,8 @@ def studio_check(
     `pass`, `restricted`, or null when Studio gave none; see `status`.
     """
     from ..studio_check import check
-    publisher = StudioPublisher(get_config())
-    try:
+    with _publisher() as publisher:
         result = check(publisher, file, username=username, account_id=account_id, timeout=timeout)
-    finally:
-        publisher.close()
     if table:
         row = {"status": result["status"], "verdict": result["verdict"],
                "issues": "; ".join(issue["text"] or f"code {issue['code']}" for issue in result["issues"]),
@@ -105,11 +110,8 @@ def studio_publish(
 ):
     """Reverify and publish one exact owned draft; never retry unknown outcomes."""
     _require_yes(yes)
-    publisher = StudioPublisher(get_config())
-    try:
+    with _publisher() as publisher:
         result = publisher.publish(request_id, before_public_action=lambda _binding: _require_yes(yes))
-    finally:
-        publisher.close()
     _print_operation(result, table)
 
 
@@ -165,11 +167,8 @@ def studio_status(
     table: bool = typer.Option(False, "--table", "-t", help="Display operation as table"),
 ):
     """Read the profile's operation journal without remote browser actions."""
-    publisher = StudioPublisher(get_config())
-    try:
+    with _publisher() as publisher:
         result = publisher.status(request_id)
-    finally:
-        publisher.close()
     _print_operation(result, table)
 
 
@@ -180,11 +179,8 @@ def studio_reconcile(
     table: bool = typer.Option(False, "--table", "-t", help="Display operation as table"),
 ):
     """Read exact receipt post ID in verified Studio; never guess by caption."""
-    publisher = StudioPublisher(get_config())
-    try:
+    with _publisher() as publisher:
         result = publisher.reconcile(request_id)
-    finally:
-        publisher.close()
     _print_operation(result, table)
 
 
