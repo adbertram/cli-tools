@@ -40,7 +40,7 @@ FETCH_JS = """async ({path, action, body}) => {
     let reader;
     try {
         const headers = action ? {'Next-Action':action,'Content-Type':'text/plain;charset=UTF-8','Accept':'text/x-component'} : {'Accept':'application/json'};
-        const r = await fetch(path, {method:action?'POST':'GET',headers,body:action?JSON.stringify(body):undefined,credentials:'include',signal:AbortSignal.timeout(20000),redirect:'error'});
+        const r = await fetch(path, {method:action?'POST':'GET',headers,body:action?JSON.stringify(body):undefined,credentials:'include',cache:'no-store',signal:AbortSignal.timeout(20000),redirect:'error'});
         const retryAfter=r.headers.get('Retry-After');
         if(!r.body)return {status:r.status,text:null,retryAfter};
         reader=r.body.getReader();const chunks=[];let size=0;
@@ -57,10 +57,10 @@ FETCH_JS = """async ({path, action, body}) => {
 }"""
 FETCH_JS = FETCH_JS.replace("MAX_BODY",str(MAX_BODY))
 
-# The app's own scripts: same origin, or its Next.js bundle served from an asset
-# prefix on another origin (live 2026-10-08: chunks moved to
-# https://contentrewards.com/c/_next/static/chunks/, leaving only analytics same-origin).
-APP_SCRIPT_JS = "(src=>{const u=new URL(src);return u.origin===location.origin||(u.protocol==='https:'&&u.pathname.includes('/_next/static/'));})"
+# Action references live in the app's HTTPS Next.js chunks, including its
+# external asset prefix. Same-origin telemetry loads more telemetry scripts
+# during scanning and must not count as an app-contract change.
+APP_SCRIPT_JS = "(src=>{const u=new URL(src);return u.protocol==='https:'&&u.pathname.includes('/_next/static/');})"
 
 # Lazy route imports may add scripts during a scan. Rediscover complete fresh
 # snapshots only within one shared deadline/byte allowance; never retry actions.
@@ -355,6 +355,40 @@ class WhopClient:
                 for row in self.submissions(MAX_LIMIT,status,retainer):
                     if row.get('id')==submission_id: return row
         raise ClientError("submission_not_found_in_bounded_inspection")
+    def analytics(self, limit=100, status='all', retainer=False):
+        bounds(limit)
+        if status not in ('all', 'approved', 'pending', 'history'):
+            raise ClientError('invalid_submission_status')
+        rows, seen = [], set()
+        for current in ('pending', 'approved', 'history') if status == 'all' else (status,):
+            if len(rows) >= limit:
+                break
+            for row in self.submissions(limit-len(rows), current, retainer):
+                if row.get('id') not in seen:
+                    seen.add(row.get('id'))
+                    rows.append(self._analytics_record(row))
+        return rows
+
+    def analytics_submission(self, submission_id):
+        return self._analytics_record(self.submission(submission_id))
+
+    def _analytics_record(self, row):
+        post = row.get('socialMediaPost')
+        if post is None:
+            post = {}
+        if not isinstance(post, dict) or not isinstance(row.get('id'), str):
+            raise ClientError('invalid_clip_analytics_record')
+        return {
+            'id': row['id'], 'campaign_id': row.get('campaignId'),
+            'post_id': post.get('postId'), 'post_url': post.get('postUrl'),
+            'platform': post.get('platform'), 'status': row.get('status'),
+            'views': post.get('views'), 'likes': post.get('likes'),
+            'comments': post.get('comments'), 'shares': post.get('shares'),
+            'metrics_updated_at': None, 'provider_updated_at': post.get('updatedAt'),
+            'observed_at': datetime.now(timezone.utc).isoformat(),
+            'profile': self.config.get_active_profile_name(), 'native': row,
+        }
+
     def _submission_operation(self,name,*args,**kwargs):
         from . import submission_operations
         try: return getattr(submission_operations,name)(self,*args,**kwargs)

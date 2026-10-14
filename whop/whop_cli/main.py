@@ -6,10 +6,10 @@ from cli_tools_shared.command_registry import register_commands
 from . import __version__
 from .config import get_config
 from .commands import config as config_commands
-from .commands import account, linked_accounts, campaigns, submissions, earnings
+from .commands import account, linked_accounts, campaigns, submissions, earnings, analytics
 
 app=create_app(name="whop",help="Read Whop Content Rewards data and explicitly submit verified clips",version=__version__)
-for name,module in [('account',account),('linked-accounts',linked_accounts),('campaigns',campaigns),('submissions',submissions),('earnings',earnings)]:
+for name,module in [('account',account),('linked-accounts',linked_accounts),('campaigns',campaigns),('submissions',submissions),('earnings',earnings),('analytics',analytics)]:
     register_commands(app,get_config,module,name=name,help="Read and submit participant clips" if name=="submissions" else f"Read {name.replace('-', ' ')}")
 app.add_typer(create_auth_app(get_config,tool_name="whop"),name="auth")
 app.add_typer(create_cache_app(get_config),name="cache")

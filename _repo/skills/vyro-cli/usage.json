@@ -1,8 +1,8 @@
 {
   "tool": "vyro",
   "description": "CLI interface for vyro",
-  "discovered_at": "2026-10-13T20:33:56Z",
-  "total_commands": 26,
+  "discovered_at": "2026-10-14T17:17:08Z",
+  "total_commands": 28,
   "global_options": [],
   "commands": {
     "account": {
@@ -14,6 +14,95 @@
           "help": "Read the current account, including workspace and verification fields.",
           "arguments": [],
           "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved authentication profile name"
+            }
+          ]
+        }
+      }
+    },
+    "analytics": {
+      "help": "Fresh provider clip metrics",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "get": {
+          "help": "Query one owned clip's current Vyro metrics and earnings.",
+          "arguments": [
+            {
+              "name": "identity",
+              "type": "TEXT",
+              "required": true,
+              "help": "Owned native submission ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved authentication profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "Query current clip metrics and earnings directly from Vyro.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--campaign-slug",
+              "type": "TEXT",
+              "required": false,
+              "help": "Restrict to exact campaign slug"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[1<=x<=1000]",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter fetched metrics (field:op:value)",
+              "short": "-f"
+            },
             {
               "name": "--table",
               "type": "bool",

@@ -15,11 +15,12 @@ if(scenario==='limit')sources=Array.from({length:121},(_,i)=>'s'+i);
 if(scenario==='total')sources=['one','two','three','four'];
 // Live 2026-10-08: the app bundle moved to an asset-prefix origin; only analytics stayed same-origin.
 if(scenario==='asset_prefix')sources=['https://assets.example.com/c/_next/static/chunks/app.js','https://tracker.example.net/t.js','http://assets.example.com/_next/static/x.js'];
-global.document={get scripts(){return sources.map(s=>({src:s.startsWith('http')?s:origin+'/'+s}));}};
+global.document={get scripts(){return sources.map(s=>({src:s.startsWith('http')?s:origin+'/_next/static/chunks/'+s}));}};
 const signal={aborted:false};global.AbortSignal={timeout(ms){signals.push(ms);return signal;}};
 global.fetch=async(url,opts)=>{
  calls.push({url,signal:opts.signal===signal,redirect:opts.redirect});
- const name=new URL(url).pathname.slice(1);let text=ref('a');
+ const name=new URL(url).pathname.split('/').pop();let text=ref('a');
+ if(scenario==='telemetry_growth'&&name==='one')sources.push(origin+'/c/ingest/static/surveys.js?v=1');
  if(scenario==='growth_missing'&&name==='one'){text='';if(!sources.includes('two'))sources.push('two');}
  if(scenario==='growth_ambiguous'&&name==='one'&&!sources.includes('two'))sources.push('two');
  if(scenario==='growth_ambiguous'&&name==='two')text=ref('b');
@@ -47,7 +48,7 @@ def scan(scenario):
     return json.loads(result.stdout)
 
 @pytest.mark.parametrize('scenario,reason,attempts',[
-    ('stable','ready',1),('growth_missing','ready',2),('growth_ambiguous','ambiguous',2),
+    ('stable','ready',1),('telemetry_growth','ready',1),('growth_missing','ready',2),('growth_ambiguous','ambiguous',2),
     ('unstable','scripts_changed',3),('failed','script_fetch_failed',1),
     ('timeout','script_fetch_failed',1),('oversize','script_fetch_failed',1),
     ('total','script_fetch_failed',2),('limit','script_limit',None),('asset_prefix','ready',1),
@@ -61,6 +62,8 @@ def test_actual_scanner(scenario,reason,attempts):
     assert all(c['signal'] and c['redirect']=='error' for c in value['calls'])
     if scenario=='limit': assert value['calls']==[]
     if scenario in ('oversize','total'): assert value['cancels']==len(value['calls'])
+    if scenario=='telemetry_growth':
+        assert len(value['calls'])==1 and result['sources']==result['afterSources']==1
     if scenario=='growth_missing': assert len(value['calls'])==3
     if scenario=='unstable': assert result['sources']==3 and result['afterSources']==4
     if scenario=='asset_prefix': assert [c['url'] for c in value['calls']]==['https://assets.example.com/c/_next/static/chunks/app.js']

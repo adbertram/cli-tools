@@ -163,3 +163,15 @@ cleans only the recorded Chrome/daemon owners. A reused PID, missing worker reco
 or unrecorded browser owner remains blocked for explicit ownership investigation.
 No read automatically takes over retained state. Provider status/category/minimum
 retry delay remain typed.
+
+## Clip analytics
+
+```bash
+whop analytics list --profile rewards --limit 100
+whop analytics list --profile rewards --properties id,post_url,views,likes,comments,shares,metrics_updated_at,observed_at --table
+whop analytics get SUBMISSION_ID --profile rewards
+```
+
+Every call queries the authenticated provider directly, without a response cache or Trawler data. `observed_at` records when the response was read; it does not promise that the provider refreshed social metrics at that instant. Missing metrics remain `null`; reported zero values and numeric strings are preserved. `native` retains every provider field, including additional metrics, payout terms and review status. Lists are bounded by `--limit`; filters run locally over the fetched rows.
+
+`analytics list --status all` (default) queries pending, approved, then history clip submissions, up to one total limit. Use `--status pending`, `--status approved`, or `--status history` to inspect a specific collection. Lists default to regular clips; pass `--retainer` to query retainer submissions instead. `analytics get` searches the existing bounded owned-submission lists. Views, likes, comments and shares come from `socialMediaPost`; `provider_updated_at` is that post record's update time. Whop does not expose a distinct metrics refresh timestamp in these records, so `metrics_updated_at` is null. CPM terms are payout rules, not realized earnings; use `whop earnings submission SUBMISSION_ID CAMPAIGN_ID --profile rewards` for allocation-backed earnings.

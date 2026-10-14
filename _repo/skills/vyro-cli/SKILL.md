@@ -32,6 +32,8 @@ vyro <command-group> <action> [arguments] [options]
 
 | Task | Command |
 |------|---------|
+| Query one owned clip's current Vyro metrics and earnings | `vyro analytics get <IDENTITY>` |
+| Query current clip metrics and earnings directly from Vyro | `vyro analytics list` |
 | Read the current account, including workspace and verification fields | `vyro account get` |
 | Configure authentication credentials | `vyro auth login` |
 | Clear stored credentials and browser sessions | `vyro auth logout` |
@@ -62,6 +64,7 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
 </principle>
 
 <principle name="Command Groups">
+- **analytics** -- Fresh provider clip metrics (subcommands: get, list)
 - **account** -- Current Vyro account (subcommands: get)
 - **auth** -- Manage vyro authentication (subcommands: login, logout, profiles, seed-shared-chromium-profile, session-export, session-import, session-import-recover, status, test)
 - **campaigns** -- Native campaign catalog and eligibility (subcommands: eligibility, get, list)

@@ -32,6 +32,8 @@ whop <command-group> <action> [arguments] [options]
 
 | Task | Command |
 |------|---------|
+| Query one owned clip's current Whop metrics | `whop analytics get <SUBMISSION_ID>` |
+| Query current clip metrics from Whop, up to the requested total limit | `whop analytics list` |
 | Get the current Whop participant account and observed account balances | `whop account get` |
 | Configure authentication credentials | `whop auth login` |
 | Clear stored credentials and browser sessions | `whop auth logout` |
@@ -77,6 +79,7 @@ Account output whitelists identity, balance and earnings fields and adds profile
 </principle>
 
 <principle name="Command Groups">
+- **analytics** -- Read analytics (subcommands: get, list)
 - **account** -- Read account (subcommands: get)
 - **auth** -- Manage whop authentication (subcommands: login, logout, profiles, seed-shared-chromium-profile, status, test)
 - **cache** -- Manage response cache (subcommands: clear)

@@ -190,6 +190,36 @@ def submissions_get(
     render(read('submission',profile,identity),table,properties)
 
 
+analytics_app = typer.Typer(help='Fresh provider clip metrics', no_args_is_help=True)
+
+@analytics_app.command('list')
+@command
+def analytics_list(
+    campaign_slug: Optional[str] = typer.Option(None, '--campaign-slug', help='Restrict to exact campaign slug'),
+    limit: int = typer.Option(100, '--limit', '-l', min=1, max=1000),
+    filter: Optional[List[str]] = typer.Option(None, '--filter', '-f', help='Filter fetched metrics (field:op:value)'),
+    table: bool = typer.Option(False, '--table', '-t'),
+    properties: Optional[str] = typer.Option(None, '--properties', '-p', help='Comma-separated output fields'),
+    profile: Optional[str] = typer.Option(None, '--profile', help='Saved authentication profile name'),
+):
+    """Query current clip metrics and earnings directly from Vyro."""
+    if filter: validate_filters(filter)
+    rows = read('analytics', profile, campaign_slug, limit)
+    render(apply_filters(rows, filter) if filter else rows, table, properties)
+
+@analytics_app.command('get')
+@command
+def analytics_get(
+    identity: str = typer.Argument(..., help='Owned native submission ID'),
+    table: bool = typer.Option(False, '--table', '-t'),
+    properties: Optional[str] = typer.Option(None, '--properties', '-p', help='Comma-separated output fields'),
+    profile: Optional[str] = typer.Option(None, '--profile', help='Saved authentication profile name'),
+):
+    """Query one owned clip's current Vyro metrics and earnings."""
+    render(read('analytics_submission', profile, identity), table, properties)
+
+app.add_typer(analytics_app, name='analytics')
+
 app.add_typer(submissions_app, name='submissions')
 app.add_typer(account_app, name='account')
 app.add_typer(campaigns_app, name='campaigns')

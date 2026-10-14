@@ -1,8 +1,8 @@
 {
   "tool": "whop",
   "description": "CLI interface for whop",
-  "discovered_at": "2026-10-09T20:21:08Z",
-  "total_commands": 34,
+  "discovered_at": "2026-10-14T17:17:01Z",
+  "total_commands": 36,
   "global_options": [],
   "commands": {
     "account": {
@@ -21,6 +21,110 @@
           "help": "Get the current Whop participant account and observed account balances.",
           "arguments": [],
           "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "analytics": {
+      "help": "Read analytics",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Query one owned clip's current Whop metrics.",
+          "arguments": [
+            {
+              "name": "submission_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Owned submission ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "Query current clip metrics from Whop, up to the requested total limit.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[1<=x<=1000]",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "all, pending, approved, or history; all scans in that order",
+              "default": "all"
+            },
+            {
+              "name": "--retainer",
+              "type": "bool",
+              "required": false,
+              "help": "Read retainer submissions instead of regular clips",
+              "takes_value": false
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter fetched metrics (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
             {
               "name": "--table",
               "type": "bool",

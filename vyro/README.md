@@ -85,3 +85,15 @@ Create sends the observed `{videoUrl, socialAccountId, campaignId}` payload to `
 Before dispatch, a private, fsynced, exclusive-create marker persists under the authentication profile's `vyro-submissions` directory. Concurrent or repeated create calls for that same actor/campaign/post cannot dispatch twice. An ambiguous failure keeps the marker; reconcile may find a receipt later. `not_found` after an uncertain write does not authorize retry, and there is intentionally no automatic marker reset. A legitimate owned TikTok post was submitted and reconciled successfully on October 13, 2026; smoke tests never submit unrelated posts.
 
 Native receipt UI fields verified from the service client include `id`, `campaignId`, `platform`, `platformUserId`, `videoUrl`, `videoRawUrl`, `status.id`, `earnings.totalEarnings`, `earnings.cpm` (dollars), and `metrics.totalViews`. No zero earnings or receipt is fabricated when fields are absent.
+
+## Clip analytics
+
+```bash
+vyro analytics list --profile adam --limit 100
+vyro analytics list --profile adam --properties id,post_url,views,likes,comments,shares,metrics_updated_at,observed_at --table
+vyro analytics get SUBMISSION_ID --profile adam
+```
+
+Every call queries the authenticated provider directly, without a response cache or Trawler data. `observed_at` records when the response was read; it does not promise that the provider refreshed social metrics at that instant. Missing metrics remain `null`; reported zero values and numeric strings are preserved. `native` retains every provider field, including additional metrics, payout terms and review status. Lists are bounded by `--limit`; filters run locally over the fetched rows.
+
+Use `analytics list --campaign-slug SLUG` to scope clips to one campaign. Views, likes and comments come from `metrics.totalViews`, `metrics.totalLikes` and `metrics.totalComments`; `metrics_updated_at` is `metrics.lastMetricsUpdatedAt`. Shares are not exposed in the observed response and remain null. `earnings` preserves native `totalEarnings`, `cpm` and `updatedAt` when present. `analytics get` verifies the receipt belongs to the currently authenticated account before returning metrics.

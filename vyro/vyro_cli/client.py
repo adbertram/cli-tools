@@ -44,7 +44,7 @@ READ_JS = r"""async ({path, method = 'GET', body, expectedAccountId}) => {
         if(candidates.length!==1 || typeof candidates[0].id!=='string')
             return {error:'requires_exactly_one_clipper_workspace'};
         headers['ap-workspace']=candidates[0].id;
-        const options = {method,headers,credentials:'include',signal};
+        const options = {method,headers,cache:'no-store',credentials:'include',signal};
         if (method !== 'GET') {
             // Vyro SDK wire format: CBOR text containing base64 UTF-8 JSON.
             const jsonBytes=new TextEncoder().encode(JSON.stringify(body));
@@ -220,6 +220,35 @@ class VyroClient:
         # The observed endpoint has no limit parameter. Limit the returned list
         # explicitly; it always fetches the full linked-account collection.
         return rows[:limit]
+    def analytics(self, slug=None, limit=100):
+        return [self._analytics_record(row) for row in self.submissions(slug, limit)]
+
+    def analytics_submission(self, identity):
+        actor = self.account()['id']
+        row = self.submission(identity)
+        owner = row.get('owner')
+        if not isinstance(owner, dict) or owner.get('id') != actor:
+            raise ClientError('clip_analytics_owner_mismatch')
+        return self._analytics_record(row)
+
+    def _analytics_record(self, row):
+        metrics = row.get('metrics')
+        if metrics is None:
+            metrics = {}
+        if not isinstance(metrics, dict) or not isinstance(row.get('id'), str):
+            raise ClientError('invalid_clip_analytics_record')
+        return {
+            'id': row['id'], 'campaign_id': row.get('campaignId'),
+            'post_id': row.get('videoId'), 'post_url': row.get('videoUrl'),
+            'platform': row.get('platform'), 'status': row.get('status'),
+            'views': metrics.get('totalViews'), 'likes': metrics.get('totalLikes'),
+            'comments': metrics.get('totalComments'), 'shares': None,
+            'metrics_updated_at': metrics.get('lastMetricsUpdatedAt'),
+            'earnings': row.get('earnings'),
+            'observed_at': datetime.now(timezone.utc).isoformat(),
+            'profile': self.config.get_active_profile_name(), 'native': row,
+        }
+
     def readiness(self, slug, expected_account_id, expected_social_account_id, expected_username):
         social = self.actor(expected_account_id, expected_social_account_id, expected_username)
         campaign = self.campaign(slug)
