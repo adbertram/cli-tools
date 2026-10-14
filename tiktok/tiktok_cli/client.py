@@ -272,10 +272,19 @@ def get_client() -> TiktokClient:
 #   ``postVideoDelete`` issues it. The endpoint answers
 #   ``{"status_code": 0}`` on success and, confirmed live,
 #   ``{"status_code": 8, "status_msg": "Login expired"}`` without a session.
+# - Who can watch: ``POST /api/aweme/modify/visibility/?aweme_id=...&type=...``
+#   with the same csrf query/header pair, exactly how the post page's
+#   ``postModifyVisibility`` issues it (live-served webapp bundle, 2026-10-14).
+#   Its ``type`` enum is Public="1", Private="2", Friends="3", the same codes
+#   Studio's item list reports as ``visibility`` (ITEM_VISIBILITY_TYPE_PUBLIC=1,
+#   _PRIVATE=2, _FRIEND=3). A live type=1 call on a public own post answered
+#   ``{"status_code": 0}``; success is only claimed after a Studio readback.
 
 FAVORITES_PATH = "/api/user/collect/item_list/?aid=1988"
 POSTS_PATH = "/api/post/item_list/?aid=1988"
 DELETE_PATH = "/api/aweme/delete/?aid=1988"
+VISIBILITY_PATH = "/api/aweme/modify/visibility/?aid=1988"
+VISIBILITY_CODES = {"public": 1, "private": 2, "friends": 3}
 ACCOUNT_INFO_PATH = "/passport/web/account/info/?aid=1988"
 ACCOUNT_INFO_ORIGIN = "https://www.tiktok.com"
 
@@ -831,6 +840,31 @@ class TikTokWebClient:
             csrf=True,
         )
         return {"video_id": value, "deleted": True}
+
+    def set_video_privacy(self, username: str, video_id: str, setting: str, *, expected_account_id: str) -> Dict:
+        """Set who can watch one own post, then prove it with an exact Studio readback."""
+        code = VISIBILITY_CODES.get(setting)
+        if code is None:
+            raise ClientError(f"--to must be one of: {', '.join(VISIBILITY_CODES)}.", code="invalid_privacy", category="validation")
+        if expected_account_id is None:
+            raise ClientError("--expected-account-id is required to change privacy.")
+        before = self.get_studio_video(username, video_id, expected_account_id=expected_account_id)
+        page = self._page(f"/@{quote(before['author'], safe='')}/video/{video_id}")
+        self._fetch_json(page, f"{VISIBILITY_PATH}&aweme_id={video_id}&type={code}", method="POST", csrf=True)
+        after = self.get_studio_video(username, video_id, expected_account_id=expected_account_id)
+        if after["visibility"] != code:
+            raise ClientError(
+                f"privacy_unconfirmed: TikTok accepted the request, but Studio readback shows visibility "
+                f"{after['visibility']!r}, not {code} ({setting}).",
+                code="privacy_unconfirmed", category="provider")
+        return {
+            "id": after["id"], "url": after["url"], "account_id": after["account_id"], "profile": after["profile"],
+            "requested": setting, "requested_visibility": code,
+            "previous_visibility": before["visibility"], "visibility": after["visibility"],
+            "changed": before["visibility"] != after["visibility"],
+            "observed_at": after["observed_at"],
+            "endpoint": ACCOUNT_INFO_ORIGIN + urlsplit(VISIBILITY_PATH).path, "provenance": after["provenance"],
+        }
 
 
 # Module-level web client instance - singleton pattern

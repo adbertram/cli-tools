@@ -2,7 +2,7 @@
 
 ## DESCRIPTION
 
-The `tiktok` CLI provides a TikTok transcript downloader using yt-dlp, commands to list and look up your saved (favorited) TikTok videos, and commands to publish, check, list, and delete your own TikTok videos.
+The `tiktok` CLI provides a TikTok transcript downloader using yt-dlp, commands to list and look up your saved (favorited) TikTok videos, and commands to publish, check, list, delete, and change who can watch your own TikTok videos.
 
 Use it when you need scriptable reads, exports, or evidence collection without opening the service UI.
 
@@ -291,7 +291,7 @@ tiktok auth test
 ```
 
 TikTok has two profile types: `browser_session` (favorites list and the
-`videos list/get/delete` commands) and `custom` (Content Posting API publish and
+`videos list/get/delete/privacy` commands) and `custom` (Content Posting API publish and
 status; see below). `auth status` checks a browser session against TikTok's own
 account endpoint, so an expired session reports `authenticated: false`.
 
@@ -567,6 +567,47 @@ tiktok videos delete 7300000000000000001 --yes
 
 `videos delete` prints `{"video_id": "<id>", "deleted": true}`.
 
+## Changing Who Can Watch a Post
+
+`videos privacy` sets one own post to `public`, `friends`, or `private`. It
+verifies the session owner (`--username`, exact `--expected-account-id`), reads
+the post's current Studio `visibility`, sends the change, then re-reads that
+exact ID from Studio. It exits non-zero unless the readback shows the requested
+value. Setting the value a post already has still sends the request and reports
+`"changed": false`.
+
+```bash
+tiktok videos privacy 7696592655307787533 --to public --profile clipper \
+  --username ata_clipper --expected-account-id 7692213003349443597
+```
+
+```json
+{
+  "id": "7696592655307787533",
+  "url": "https://www.tiktok.com/@ata_clipper/video/7696592655307787533",
+  "account_id": "7692213003349443597",
+  "profile": "clipper",
+  "requested": "public",
+  "requested_visibility": 1,
+  "previous_visibility": 1,
+  "visibility": 1,
+  "changed": false,
+  "observed_at": "2026-10-14T21:52:10.462892+00:00",
+  "endpoint": "https://www.tiktok.com/api/aweme/modify/visibility/",
+  "provenance": "https://www.tiktok.com/tiktok/creator/manage/item_list/v1/"
+}
+```
+
+Endpoint evidence (captured 2026-10-14 from the live-served tiktok.com webapp
+and Studio bundles in the `clipper` session): the post page's privacy setting
+calls `POST /api/aweme/modify/visibility/` with query `aweme_id`, `type`, and
+`tt_csrf_token`, plus the `tt-csrf-token` header (`postModifyVisibility`). Its
+`type` codes are `1` public, `2` private, `3` friends, the same values Studio's
+item list reports as `visibility` (`ITEM_VISIBILITY_TYPE_PUBLIC=1`, `_PRIVATE=2`,
+`_FRIEND=3`). A live `type=1` call on a public post answered
+`{"status_code": 0}` and the Studio readback stayed `1`. The `2`/`3` codes come
+from those bundle enums only: no live post was moved off public to test them.
+
 ### Videos Command Options
 
 | Command | Option | Short | Description |
@@ -578,6 +619,8 @@ tiktok videos delete 7300000000000000001 --yes
 | `list`, `get` | `--properties` | `-p` | Comma-separated fields to display |
 | `get` | `--table` | `-t` | Display result as a table |
 | `delete` | `--yes` | `-y` | Confirm permanent deletion (required) |
+| `privacy` | `--to` | | `public`, `friends`, or `private` (required) |
+| `privacy` | `--username`, `--expected-account-id` | `-u` | Verified owner handle and exact numeric ID (both required) |
 
 ## Live E2E Test
 

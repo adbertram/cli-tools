@@ -1,8 +1,8 @@
 {
   "tool": "tiktok",
   "description": "TikTok transcript downloader using yt-dlp",
-  "discovered_at": "2026-10-13T22:01:11Z",
-  "total_commands": 34,
+  "discovered_at": "2026-10-14T21:53:53Z",
+  "total_commands": 35,
   "global_options": [
     {
       "name": "--version",
@@ -935,7 +935,7 @@
       }
     },
     "videos": {
-      "help": "Publish, inspect, list, and delete TikTok videos",
+      "help": "Publish, inspect, list, delete, and set privacy of TikTok videos",
       "arguments": [],
       "options": [
         {
@@ -1127,6 +1127,44 @@
               "required": false,
               "help": "Comma-separated fields to display",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "privacy": {
+          "help": "Set who can watch one own post; fails unless a Studio readback confirms it.",
+          "arguments": [
+            {
+              "name": "video_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Own TikTok video ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--to",
+              "type": "TEXT",
+              "required": true,
+              "help": "Who can watch: public, friends, or private"
+            },
+            {
+              "name": "--username",
+              "type": "TEXT",
+              "required": true,
+              "help": "Verified session owner's TikTok handle",
+              "short": "-u"
+            },
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact numeric session owner ID"
             },
             {
               "name": "--profile",

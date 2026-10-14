@@ -15,7 +15,7 @@ from cli_tools_shared.output import ClientError, command, print_json, print_tabl
 from ..client import get_web_client
 from ..posting import TikTokPostingClient
 
-app = typer.Typer(help="Publish, inspect, list, and delete TikTok videos")
+app = typer.Typer(help="Publish, inspect, list, delete, and set privacy of TikTok videos")
 
 COMMAND_CREDENTIALS = {
     "search": ["browser_session"],
@@ -25,6 +25,7 @@ COMMAND_CREDENTIALS = {
     "get": ["browser_session"],
     "metrics": ["browser_session"],
     "delete": ["browser_session"],
+    "privacy": ["browser_session"],
 }
 _VIDEO_COLUMNS = ["id", "url", "caption", "author", "created_at"]
 _USERNAME_HELP = "TikTok username whose posts to read (private posts need that account's session)"
@@ -202,6 +203,22 @@ def videos_delete(
     client = get_web_client()
     try:
         print_json(client.delete_video(video_id))
+    finally:
+        client.close()
+
+
+@app.command("privacy")
+@command
+def videos_privacy(
+    video_id: str = typer.Argument(..., help="Own TikTok video ID"),
+    to: str = typer.Option(..., "--to", help="Who can watch: public, friends, or private"),
+    username: str = typer.Option(..., "--username", "-u", help="Verified session owner's TikTok handle"),
+    expected_account_id: str = typer.Option(..., "--expected-account-id", help="Exact numeric session owner ID"),
+):
+    """Set who can watch one own post; fails unless a Studio readback confirms it."""
+    client = get_web_client()
+    try:
+        print_json(client.set_video_privacy(username, video_id, to, expected_account_id=expected_account_id))
     finally:
         client.close()
 
