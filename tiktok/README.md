@@ -240,19 +240,20 @@ Continue/Discard banner names no draft, it offers the one unlocked row, so its
 Discard cannot be aimed at the owned draft (adam-server 2026-10-08, request
 ef6a6cc4).
 
-Studio prepare, publish, and `studio check` always run in visible (headed)
-Chrome, whatever `HEADLESS` says; a standalone `reconcile` and other reads stay
-headless. Before
-Post, the publisher journals what the page can read about the browser
-(`browser_environment`: user agent, `navigator.webdriver`, screen size) and
-refuses Post, leaving the request prepared, when the user agent says headless or
-`navigator.webdriver` is true. Both posts made from headless Chrome
-(`HeadlessChrome/155`, 800x600 screen) were accepted with an item ID and then
-never existed, not even in the owner's Studio list (measured 2026-10-06).
-The host must have a logged-in desktop session for headed Chrome, and the
-caller must run in that user's session: on macOS a LaunchDaemon (n8n on
-adam-server) cannot open it directly and must run the command through
-`ssh localhost`.
+Studio prepare, publish, and `studio check` use the shared browser engine's
+headless mode by default; `HEADLESS=false` selects headed Chrome. Manual login
+remains an explicit visible flow. Before Post, the publisher journals the browser
+user agent, `navigator.webdriver`, and screen size. It refuses Post when the
+user agent reports HeadlessChrome or `navigator.webdriver` is true, leaving the
+request prepared. The shared engine supplies the installed real Chrome user
+agent in headless mode.
+
+A native private post persisted in Studio after browser restarts and over five
+minutes with `--headless=new`, the real Chrome user agent, and webdriver false
+(measured 2026-10-14). Public publication was not tested because TikTok's daily
+content-check quota blocked the public trial before Post. Content and music
+checks, including quota failures, remain required. Earlier missing posts do not
+establish that headless mode caused their disappearance.
 
 A native request guard permits only the exact creation ID, uploaded video ID,
 and one batch-zero request. The response allocates a separate `post_project_id`.

@@ -170,7 +170,7 @@ class Config(BaseConfig):
         return val is None or val.lower() == "true"
 
     def get_browser(self, *, posting: bool = False):
-        """``posting=True`` is the Studio publisher's browser: always visible Chrome."""
+        """``posting=True`` selects Studio publishing with the configured headless mode."""
         from .browser import ManualTiktokBrowser, StudioPostingBrowser, TiktokBrowser, manual_login_requested
         if posting:
             return StudioPostingBrowser(self)

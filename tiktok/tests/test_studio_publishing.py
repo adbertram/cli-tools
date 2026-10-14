@@ -158,7 +158,7 @@ CHECKS_RUNNING = {**CHECKS_PASSED, 'lite': {'checkStatus': 1}, 'music_status': '
 CONFIRMATION = ("Continue to post?\n\nWe're still checking your video for potential issues. Do you want to "
                 "continue posting before the check is complete?\nCancel\nPost now")
 
-# Headed Chrome on adam-server, read 2026-10-06; headless reports HeadlessChrome/155.
+# Real Chrome user agent on adam-server, read 2026-10-06; shared engine uses it in either mode.
 HEADED_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36'
 
 
@@ -1493,7 +1493,7 @@ def test_native_local_resume_duplicate_key_rejects_other_or_batch_context(publis
     {"user_agent": HEADED_UA, "webdriver": True, "screen": [1920, 1080]},
     None,
 ])
-def test_headless_or_automated_browser_never_posts_and_stays_prepared(publisher, monkeypatch, environment):
+def test_invalid_browser_identity_never_posts_and_stays_prepared(publisher, monkeypatch, environment):
     value = prepared(publisher);page = attach(publisher, value, monkeypatch)
     page.environment = environment
     with pytest.raises(StudioPublishError, match="headless or automated") as error:
@@ -1504,7 +1504,7 @@ def test_headless_or_automated_browser_never_posts_and_stays_prepared(publisher,
     assert after["browser_environment"] == environment
 
 
-def test_headed_browser_environment_and_native_receipt_are_journaled(publisher, monkeypatch):
+def test_browser_environment_and_native_receipt_are_journaled(publisher, monkeypatch):
     value = prepared(publisher);page = attach(publisher, value, monkeypatch)
     monkeypatch.setattr(publisher, "_reconcile", lambda v: v)
     publisher.publish(value["request_id"], before_public_action=lambda binding: None)
@@ -1515,17 +1515,18 @@ def test_headed_browser_environment_and_native_receipt_are_journaled(publisher, 
     assert after["state"] == "receipt_observed" and page.clicked == 1
 
 
-def test_posting_browser_is_visible_chrome_and_reads_stay_headless():
+@pytest.mark.parametrize("headless", [True, False])
+def test_posting_browser_respects_configured_headless_mode(headless):
     from tiktok_cli.browser import StudioPostingBrowser, TiktokBrowser
     from tiktok_cli.config import Config
-    config = SimpleNamespace(headless=True)
-    assert StudioPostingBrowser(config)._headless_enabled() is False
-    assert TiktokBrowser(config)._headless_enabled() is True
+    config = SimpleNamespace(headless=headless)
+    assert StudioPostingBrowser(config)._headless_enabled() is headless
+    assert TiktokBrowser(config)._headless_enabled() is headless
     assert type(Config.get_browser(config, posting=True)) is StudioPostingBrowser
     assert type(Config.get_browser(config)) is TiktokBrowser
 
 
-def test_standalone_reconcile_reads_headless_while_posting_opens_visible_chrome(publisher, monkeypatch):
+def test_standalone_reconcile_uses_read_browser_while_posting_uses_studio_browser(publisher, monkeypatch):
     value = prepared(publisher, state="project_accepted", public_action_dispatched=True, post_project_id="555666777")
     pages = []
     monkeypatch.setattr(publisher, "_page", lambda: pages.append(publisher.browser.posting) or SimpleNamespace())

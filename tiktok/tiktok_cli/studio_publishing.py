@@ -44,10 +44,8 @@ MAX_JOURNALED_RESPONSE_CHARS = 65536  # Native Post receipts observed so far are
 STUDIO_CHECK_WAIT_SECONDS = 900
 POST_CONFIRMATION_TITLE = "Continue to post?"
 UNSENT_DRAFT_GONE = "Owned draft is gone after an unsent Post attempt; nothing was posted and it is never re-uploaded."
-# What TikTok's web scripts can read about the posting browser. Both Studio
-# posts made from headless Chrome (navigator.userAgent "HeadlessChrome/155",
-# 800x600 screen) were accepted with a project and item ID and then never
-# existed, not even in the owner's own Studio list (measured 2026-10-06).
+# Record the browser environment before Post; the shared engine supplies the
+# real Chrome user agent in either headed or headless mode.
 BROWSER_ENV_JS = """() => ({user_agent: navigator.userAgent, webdriver: navigator.webdriver === true,
  screen: [screen.width, screen.height]})"""
 MEDIA_BINDING_FIELDS = ("creation_id", "video_id", "file_key", "file_name", "file_size", "duration_ms")
@@ -1322,14 +1320,14 @@ class StudioPublisher:
         return operation, page
 
     def _require_posting_browser(self, page, operation):
-        """Record what TikTok sees of this browser; refuse Post from a headless one."""
+        """Record what TikTok sees; require the shared engine's browser identity."""
         environment = page.evaluate(BROWSER_ENV_JS)
         operation["browser_environment"] = environment
         self._save(operation)
         if (not isinstance(environment, dict) or not isinstance(environment.get("user_agent"), str)
                 or "headless" in environment["user_agent"].lower() or environment.get("webdriver") is not False):
             raise StudioPublishError("Studio Post refused: the posting browser reports itself as headless or automated; "
-                                     "Post runs only in a normal visible Chrome.", category="pre_action_abort")
+                                     "Post requires the real Chrome user agent and webdriver false.", category="pre_action_abort")
 
     def publish(self, request_id: str, *, before_public_action: Callable[[dict], dict | None]) -> dict:
         if not callable(before_public_action):

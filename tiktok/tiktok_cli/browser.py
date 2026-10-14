@@ -215,15 +215,11 @@ class TiktokBrowser(BrowserAutomation):
 
 
 class StudioPostingBrowser(TiktokBrowser):
-    """The Studio publisher's browser: visible Chrome regardless of ``HEADLESS``.
+    """Studio publishing uses the shared engine and configured headless mode.
 
-    Both posts made from headless Chrome (user agent ``HeadlessChrome/155``,
-    800x600 screen) were accepted by Studio and then never existed, not even in
-    the owner's own Studio list (measured 2026-10-06). Reads stay headless.
+    Native private publication persisted after browser restarts with the real
+    Chrome user agent and webdriver false (measured 2026-10-14).
     """
-
-    def _headless_enabled(self) -> bool:
-        return False
 
 
 class ManualTiktokBrowser(TiktokBrowser):
