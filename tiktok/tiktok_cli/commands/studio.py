@@ -1,4 +1,4 @@
-"""Prepare, check, and inspect journaled Studio operations; publish only with --yes."""
+"""Prepare, check, and inspect journaled Studio operations; publish or post only with --yes."""
 from pathlib import Path
 
 import typer
@@ -11,7 +11,7 @@ from ..studio_publishing import StudioPublisher, StudioPublishError, validate_po
 MAX_POLICY_BYTES = 64 * 1024  # Fixed schema plus a 4000-character escaped caption.
 
 app = typer.Typer(help="Prepare, check, publish, and reconcile owned Studio drafts", no_args_is_help=True)
-COMMAND_CREDENTIALS = {"prepare": ["browser_session"], "publish": ["browser_session"],
+COMMAND_CREDENTIALS = {"prepare": ["browser_session"], "publish": ["browser_session"], "post": ["browser_session"],
                        "reconcile": ["browser_session"], "status": ["no_auth"],
                        "inventory": ["browser_session"], "check": ["browser_session"],
                        "watch": ["browser_session"]}
@@ -23,6 +23,23 @@ def _print_operation(result, table):
         print_table([result], columns, columns)
     else:
         print_json(result)
+
+
+def _read_policy(policy):
+    with policy.open("rb") as stream:
+        payload = stream.read(MAX_POLICY_BYTES + 1)
+    if len(payload) > MAX_POLICY_BYTES:
+        raise StudioPublishError("Studio policy exceeds the 64 KiB input limit.")
+    try:
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError:
+        raise StudioPublishError("Studio policy must be UTF-8 JSON.") from None
+    return validate_policy(parse_response(text))
+
+
+def _require_yes(yes):
+    if not yes:
+        raise StudioPublishError("Refusing Studio public Post without --yes.")
 
 
 @app.command("prepare")
@@ -39,15 +56,7 @@ def studio_prepare(
     caption, audience=Everyone, timing=now, disclosure=branded_content,
     music_rights_confirmed=true. Caption is used verbatim.
     """
-    with policy.open("rb") as stream:
-        payload = stream.read(MAX_POLICY_BYTES + 1)
-    if len(payload) > MAX_POLICY_BYTES:
-        raise StudioPublishError("Studio policy exceeds the 64 KiB input limit.")
-    try:
-        text = payload.decode("utf-8")
-    except UnicodeDecodeError:
-        raise StudioPublishError("Studio policy must be UTF-8 JSON.") from None
-    checked = validate_policy(parse_response(text))
+    checked = _read_policy(policy)
     publisher = StudioPublisher(get_config())
     try:
         result = publisher.prepare(file, checked, request_id)
@@ -95,13 +104,54 @@ def studio_publish(
     table: bool = typer.Option(False, "--table", "-t", help="Display operation as table"),
 ):
     """Reverify and publish one exact owned draft; never retry unknown outcomes."""
-    if not yes:
-        raise StudioPublishError("Refusing Studio public Post without --yes.")
+    _require_yes(yes)
     publisher = StudioPublisher(get_config())
     try:
-        def authorize(_binding):
-            if not yes:
-                raise StudioPublishError("Refusing Studio public Post without --yes.")
+        result = publisher.publish(request_id, before_public_action=lambda _binding: _require_yes(yes))
+    finally:
+        publisher.close()
+    _print_operation(result, table)
+
+
+@app.command("post")
+@command
+def studio_post(
+    file: Path = typer.Argument(..., exists=True, dir_okay=False, help="Exact local MP4 to upload and post"),
+    policy: Path = typer.Option(..., "--policy", exists=True, dir_okay=False, help="Explicit version 1 Studio policy JSON"),
+    request_id: str = typer.Option(..., "--request-id", help="Canonical UUID binding this operation"),
+    yes: bool = typer.Option(False, "--yes", help="Explicitly authorize the single public Post action"),
+    dispatch_deadline: float = typer.Option(None, "--dispatch-deadline", help="Epoch seconds after which Post must not dispatch"),
+    refuse_if_exists: Path = typer.Option(None, "--refuse-if-exists", help="Abort before Post if this path exists at dispatch time"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display operation as table"),
+):
+    """Prepare and publish in one process so the owned editor stays open.
+
+    Same policy and request rules as `prepare` and `publish`. A failed prepare
+    is retried once on a fresh publisher (never when another operation owns
+    the profile). Read `studio status <request-id>` for the journal on error.
+    """
+    _require_yes(yes)
+    checked = _read_policy(policy)
+
+    def authorize(_binding):
+        if refuse_if_exists is not None and refuse_if_exists.exists():
+            raise StudioPublishError(f"Refusing Studio public Post: {refuse_if_exists} exists.")
+        return None if dispatch_deadline is None else {"dispatch_deadline": dispatch_deadline}
+
+    publisher = StudioPublisher(get_config())
+    try:
+        try:
+            prepared = publisher.prepare(file, checked, request_id)
+        except Exception as exc:
+            if "owns this profile" in str(exc):
+                raise
+            # A failed editor cannot recover its own draft; a fresh instance
+            # recovers the journal-bound request.
+            publisher.close()
+            publisher = StudioPublisher(get_config())
+            prepared = publisher.prepare(file, checked, request_id)
+        if prepared["state"] != "prepared":
+            raise StudioPublishError(f"Studio prepare ended in state {prepared['state']}; Post refused.")
         result = publisher.publish(request_id, before_public_action=authorize)
     finally:
         publisher.close()

@@ -189,7 +189,21 @@ tiktok studio prepare clip.mp4 --policy policy.json --request-id UUID --profile 
 tiktok studio status UUID --profile clipper
 tiktok studio publish UUID --yes --profile clipper
 tiktok studio reconcile UUID --profile clipper
+tiktok studio post clip.mp4 --policy policy.json --request-id UUID --yes --profile clipper
+tiktok studio post clip.mp4 --policy policy.json --request-id UUID --yes --dispatch-deadline 1760450400 --refuse-if-exists /path/to/STOP --profile clipper
 ```
+
+`post` runs prepare and publish in one process on one `StudioPublisher`, because
+the publisher's owned editor does not survive between processes: a separate
+`prepare` then `publish` refuses with "Studio preceding draft changed or
+disappeared". It uses the same policy rules, `--yes` guard, and request UUID as
+the two-step commands. When prepare fails, except when another operation owns the
+profile, `post` closes that publisher and calls prepare once more on a fresh one,
+which recovers the journal-bound request; a second failure exits 1. Prepare must
+end in state `prepared` before Post. Its trusted callback aborts before Post when
+`--refuse-if-exists` names a path that exists at that moment, and passes
+`--dispatch-deadline` (epoch seconds) as the SDK's `dispatch_deadline`. On any
+error, read `tiktok studio status UUID` for the journal.
 
 `prepare` stages the exact MP4 bytes under the profile's private runtime directory,
 then verifies the account, uploaded media, caption, Everyone, Now, branded content,

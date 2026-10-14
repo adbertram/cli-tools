@@ -25,6 +25,7 @@
 | `claude-code-sessions` | The `claude-code-sessions` CLI wraps claude with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
 | `clickbank` | The `clickbank` CLI provides a command-line interface for Clickbank API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `cliclick` | The `cliclick` CLI wraps cliclick with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
+| `clipster` | Read Clipster's public clipping campaign catalog |
 | `cloudflare` | The `cloudflare` CLI provides a command-line interface for Cloudflare API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `codex-helper` | Codex local app-server helper commands |
 | `codex-sessions` | The `codex-sessions` CLI lets you query and analyze OpenAI Codex session transcripts from ~/.codex. Use it when you need scriptable reads, exports, or evidence collection without opening the service UI. |
@@ -45,6 +46,7 @@
 | `facebook-ads` | Wrapper for Meta's official Ads CLI, with complete native command passthrough and upstream-owned authentication |
 | `fedex` | The `fedex` CLI provides a command-line interface for Fedex API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `fitnesspal` | The `fitnesspal` CLI provides a command-line interface for Fitnesspal API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `frameio` | Read public Frame.io shares and download their original video files |
 | `g2` | The `g2` CLI provides a command-line interface for G2 API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `garrul` | Moderate and operate a self-hosted Garrul comment system |
 | `gemini` | The `gemini` CLI provides a command-line interface for Gemini API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |

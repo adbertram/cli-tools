@@ -1,8 +1,8 @@
 {
   "tool": "tiktok",
   "description": "TikTok transcript downloader using yt-dlp",
-  "discovered_at": "2026-10-14T21:53:53Z",
-  "total_commands": 35,
+  "discovered_at": "2026-10-14T22:12:51Z",
+  "total_commands": 36,
   "global_options": [
     {
       "name": "--version",
@@ -681,6 +681,64 @@
               "type": "bool",
               "required": false,
               "help": "Display freshly observed matched records as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "post": {
+          "help": "Prepare and publish in one process so the owned editor stays open. Same policy and request rules as `prepare` and `publish`. A failed prepare is retried once on a fresh publisher (never when another operation owns the profile). Read `studio status <request-id>` for the journal on error.",
+          "arguments": [
+            {
+              "name": "file",
+              "type": "file",
+              "required": true,
+              "help": "Exact local MP4 to upload and post"
+            }
+          ],
+          "options": [
+            {
+              "name": "--policy",
+              "type": "file",
+              "required": true,
+              "help": "Explicit version 1 Studio policy JSON"
+            },
+            {
+              "name": "--request-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Canonical UUID binding this operation"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Explicitly authorize the single public Post action",
+              "takes_value": false
+            },
+            {
+              "name": "--dispatch-deadline",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Epoch seconds after which Post must not dispatch"
+            },
+            {
+              "name": "--refuse-if-exists",
+              "type": "PATH",
+              "required": false,
+              "help": "Abort before Post if this path exists at dispatch time"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display operation as table",
               "short": "-t",
               "takes_value": false
             },

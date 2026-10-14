@@ -50,6 +50,7 @@ tiktok <command-group> <action> [arguments] [options]
 | Read verified current numeric account ID and username in a named browser profile. | `tiktok account get --profile clipping` |
 | Report each recent own post's restriction state (For You eligibility), TikTok's stated reason, and appeal state; read-only. | `tiktok account check --profile clipper --username ata_clipper --expected-account-id 7692213003349443597` |
 | Read TikTok Studio's own pre-post verdict (Content check lite, music copyright) for a local MP4; uploads a private draft, removes it, never posts. | `tiktok studio check clip.mp4 --profile clipper --username ata_clipper --account-id 7692213003349443597` |
+| Prepare and publish one MP4 publicly in a single process (owned editor stays open); retries a failed prepare once on a fresh publisher, requires `--yes`. Read `tiktok studio status <request-id>` after an error. | `tiktok studio post clip.mp4 --policy policy.json --request-id <uuid> --yes --profile clipper` |
 | Clear stored credentials. | `tiktok auth logout` |
 | Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``. | `tiktok auth status` |
 | Manage authentication profiles | `tiktok auth profiles` |

@@ -1,0 +1,100 @@
+{
+  "tool": "clipster",
+  "description": "CLI interface for clipster",
+  "discovered_at": "2026-10-14T22:14:17Z",
+  "total_commands": 3,
+  "global_options": [],
+  "commands": {
+    "cache": {
+      "help": "Manage response cache",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
+        }
+      }
+    },
+    "campaigns": {
+      "help": "Read Clipster campaigns",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "get": {
+          "help": "Get one campaign by ID.",
+          "arguments": [
+            {
+              "name": "campaign_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Campaign ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "list": {
+          "help": "List campaigns exactly as the API returns them, plus web_url.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of campaigns (reads as many pages as needed)",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "usage_instructions": "Use the `clipster` CLI. Run `clipster --help` to discover command groups and `--help` on any subcommand for its options."
+}

@@ -1734,3 +1734,107 @@ def test_unfinished_check_journal_preserves_native_diagnosis(publisher, monkeypa
     assert saved['studio_checks']['content_check']['check_id'] == 'native-check-id'
     assert saved['studio_checks']['status'] == 'not_finished' and page.clicked == 0
     assert saved['public_action_dispatched'] is False
+
+
+class FakePublisher:
+    """Records every StudioPublisher the `studio post` command constructs."""
+    instances = []
+
+    def __init__(self, config, *, prepare_errors=(), state="prepared"):
+        self.calls, self.closed = [], False
+        self.prepare_errors, self.state = list(prepare_errors), state
+        FakePublisher.instances.append(self)
+
+    def prepare(self, file, policy, request_id):
+        self.calls.append(("prepare", request_id))
+        if self.prepare_errors:
+            raise self.prepare_errors.pop(0)
+        return {"request_id": request_id, "state": self.state}
+
+    def publish(self, request_id, *, before_public_action):
+        authorization = before_public_action({"request_id": request_id})
+        self.calls.append(("publish", request_id, authorization))
+        return {"request_id": request_id, "state": "published_verified", "authorization": authorization}
+
+    def close(self):
+        self.closed = True
+
+
+def run_post(tmp_path, monkeypatch, *extra, errors=None, state="prepared"):
+    from typer.testing import CliRunner
+    from tiktok_cli.commands import studio
+    FakePublisher.instances = []
+    queued = list(errors or [])
+    monkeypatch.setattr(studio, "StudioPublisher",
+                        lambda config: FakePublisher(config, prepare_errors=queued.pop(0) if queued else (), state=state))
+    asset = tmp_path / "asset.mp4";asset.write_bytes(b"asset")
+    policy_file = tmp_path / "policy.json";policy_file.write_text(json.dumps(policy()))
+    request = str(uuid4())
+    result = CliRunner().invoke(studio.app, ["post", str(asset), "--policy", str(policy_file),
+                                             "--request-id", request, *extra])
+    return result, request
+
+
+def test_cli_post_guard_runs_before_publisher_construction(tmp_path, monkeypatch):
+    from typer.testing import CliRunner
+    from tiktok_cli.commands import studio
+    asset = tmp_path / "asset.mp4";asset.write_bytes(b"asset")
+    policy_file = tmp_path / "policy.json";policy_file.write_text(json.dumps(policy()))
+    monkeypatch.setattr(studio, "StudioPublisher", lambda *args: pytest.fail("must not construct publisher"))
+    result = CliRunner().invoke(studio.app, ["post", str(asset), "--policy", str(policy_file), "--request-id", str(uuid4())])
+    assert result.exit_code == 1 and "without --yes" in result.output
+
+
+def test_cli_post_prepares_and_publishes_on_one_instance(tmp_path, monkeypatch):
+    result, request = run_post(tmp_path, monkeypatch, "--yes")
+    assert result.exit_code == 0, result.output
+    [only] = FakePublisher.instances
+    assert only.calls == [("prepare", request), ("publish", request, None)] and only.closed
+    assert json.loads(result.stdout) == {"request_id": request, "state": "published_verified", "authorization": None}
+
+
+def test_cli_post_retries_failed_prepare_once_on_fresh_instance(tmp_path, monkeypatch):
+    result, request = run_post(tmp_path, monkeypatch, "--yes", errors=[[StudioPublishError("editor lost")]])
+    assert result.exit_code == 0, result.output
+    first, second = FakePublisher.instances
+    assert first.calls == [("prepare", request)] and first.closed
+    assert second.calls == [("prepare", request), ("publish", request, None)] and second.closed
+
+
+def test_cli_post_second_prepare_failure_propagates(tmp_path, monkeypatch):
+    result, _ = run_post(tmp_path, monkeypatch, "--yes",
+                         errors=[[StudioPublishError("first")], [StudioPublishError("second failure")]])
+    assert result.exit_code == 1 and "second failure" in result.output
+    assert len(FakePublisher.instances) == 2 and all(p.closed for p in FakePublisher.instances)
+    assert not any(call[0] == "publish" for p in FakePublisher.instances for call in p.calls)
+
+
+def test_cli_post_does_not_retry_when_profile_is_owned(tmp_path, monkeypatch):
+    owned = StudioPublishError("Another Studio operation owns this profile; no action performed.")
+    result, request = run_post(tmp_path, monkeypatch, "--yes", errors=[[owned]])
+    assert result.exit_code == 1 and "owns this profile" in result.output
+    [only] = FakePublisher.instances
+    assert only.calls == [("prepare", request)] and only.closed
+
+
+def test_cli_post_refuses_unprepared_state(tmp_path, monkeypatch):
+    result, request = run_post(tmp_path, monkeypatch, "--yes", state="preparation_failed")
+    assert result.exit_code == 1 and "preparation_failed" in result.output
+    [only] = FakePublisher.instances
+    assert only.calls == [("prepare", request)] and only.closed
+
+
+def test_cli_post_refuse_if_exists_aborts_in_callback(tmp_path, monkeypatch):
+    stop = tmp_path / "STOP";stop.write_text("")
+    result, request = run_post(tmp_path, monkeypatch, "--yes", "--refuse-if-exists", str(stop))
+    assert result.exit_code == 1 and str(stop) in result.output
+    [only] = FakePublisher.instances
+    assert only.calls == [("prepare", request)] and only.closed
+
+
+def test_cli_post_absent_refuse_path_and_deadline_pass_through(tmp_path, monkeypatch):
+    result, request = run_post(tmp_path, monkeypatch, "--yes", "--refuse-if-exists", str(tmp_path / "absent"),
+                               "--dispatch-deadline", "123.5")
+    assert result.exit_code == 0, result.output
+    [only] = FakePublisher.instances
+    assert only.calls[-1] == ("publish", request, {"dispatch_deadline": 123.5})
