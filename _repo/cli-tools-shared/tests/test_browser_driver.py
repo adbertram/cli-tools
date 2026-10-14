@@ -2375,5 +2375,5 @@ def test_get_network_filter_needs_no_request_body_and_exports_no_secrets(monkeyp
               event('loadingFinished',requestId='exact',encodedDataLength=12)]
     service, _ = network_service(monkeypatch, events=events)
     rows = service.network_observations('owner',method='GET',origin='https://exact.test',path='/search')
-    assert rows == [{'kind':'request','request_id':'exact','body':None},{'kind':'response','request_id':'exact','status':200,'route_matches':True},{'kind':'finished','request_id':'exact','encoded_bytes':12}]
+    assert rows == [{'kind':'request','request_id':'exact','body':None,'url_sha256':__import__('hashlib').sha256(b'https://exact.test/search?token=SECRET').hexdigest()},{'kind':'response','request_id':'exact','status':200,'route_matches':True},{'kind':'finished','request_id':'exact','encoded_bytes':12}]
     assert 'SECRET' not in str(rows)

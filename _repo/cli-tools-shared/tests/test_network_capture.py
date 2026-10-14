@@ -221,6 +221,8 @@ def test_get_capture_accepts_no_body_preserves_route_and_response_bounds():
     capture.record('Network.loadingFinished', {'requestId':'exact','encodedDataLength':99}, 'owned')
     result = capture.drain()
     assert result['loss'] is None and capture.requests == {'exact'}
+    entry = result["events"][0]["params"]["request"]
+    assert entry["url_sha256"] == __import__("hashlib").sha256(b"https://exact.test/post/?ignored=secret").hexdigest()
     assert 'postData' not in str(result) and 'NEVER_CAPTURE' not in str(result)
     capture.record('Network.loadingFinished', {'requestId':'exact','encodedDataLength':10001}, 'owned')
     assert capture.drain()['loss'] == 'response_size_inconclusive'

@@ -1,4 +1,5 @@
 """Loss-aware native route capture; background CDP traffic is never retained."""
+import hashlib
 import json
 import math
 import uuid
@@ -92,6 +93,8 @@ class NetworkCapture:
                 "url": self.scope["origin"] + self.scope["path"]}}
             if self.scope["method"] != "GET":
                 selected["request"]["postData"] = body
+            else:
+                selected["request"]["url_sha256"] = hashlib.sha256(request["url"].encode()).hexdigest()
         elif method == "Network.responseReceived":
             response = params.get("response", {})
             if not known_request:

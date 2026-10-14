@@ -1396,7 +1396,14 @@ class BrowserHarnessService:
                 if method != 'GET' and (not isinstance(body, str) or len(body.encode()) > max_bytes):
                     raise BrowserHarnessError('network_observation_request_body_unavailable')
                 matched.add(request_id)
-                result.append({'kind': 'request', 'request_id': request_id, 'body': None if method == 'GET' else body})
+                record = {'kind': 'request', 'request_id': request_id, 'body': None if method == 'GET' else body}
+                if method == 'GET':
+                    import hashlib
+                    digest = request.get('url_sha256') if capture is not None else hashlib.sha256(request['url'].encode()).hexdigest()
+                    if not isinstance(digest, str) or not re.fullmatch(r'[a-f0-9]{64}', digest):
+                        raise BrowserHarnessError('network_observation_request_identity_invalid')
+                    record['url_sha256'] = digest
+                result.append(record)
             elif request_id in matched:
                 if event.get('method') == 'Network.responseReceived':
                     response = params.get('response', {});url = urlsplit(response.get('url', ''))
