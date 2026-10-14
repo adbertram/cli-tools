@@ -1,8 +1,8 @@
 {
   "tool": "tiktok",
   "description": "TikTok transcript downloader using yt-dlp",
-  "discovered_at": "2026-10-14T22:12:51Z",
-  "total_commands": 36,
+  "discovered_at": "2026-10-14T23:27:37Z",
+  "total_commands": 37,
   "global_options": [
     {
       "name": "--version",
@@ -905,6 +905,45 @@
               "type": "bool",
               "required": false,
               "help": "Display watch metrics as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "watch-batch": {
+          "help": "Read watch metrics for many owned posts in one browser session. Same per-post read as `watch`, through one page, with the account identity verified once before and once after the batch. A post that fails lands in `errors` keyed by its ID; the rest still return in `records`.",
+          "arguments": [
+            {
+              "name": "manifest",
+              "type": "PATH",
+              "required": true,
+              "help": "Regular JSON file containing 1-1000 unique string post IDs"
+            }
+          ],
+          "options": [
+            {
+              "name": "--username",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact session owner handle"
+            },
+            {
+              "name": "--account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact numeric session owner ID"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display one row per read post",
               "short": "-t",
               "takes_value": false
             },

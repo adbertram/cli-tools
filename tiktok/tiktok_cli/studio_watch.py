@@ -103,18 +103,52 @@ def normalize(payload, identity, video_id):
             'watch_metrics_error': '; '.join(f'{k}: {v}' for k, v in unavailable.items()) or None}
 
 
-def read(client, username, video_id, expected_account_id):
-    if not positive_decimal_id(video_id) or not positive_decimal_id(expected_account_id):
-        raise StudioContractError('TikTok Studio watch requires exact positive post and account IDs.')
-    identity = client.get_account(expected_username=username, expected_account_id=expected_account_id)
-    page = client._get_browser().get_page('https://www.tiktok.com/tiktokstudio/analytics/' + video_id + '?qa_enter_from=analytics')
+ANALYTICS_URL = 'https://www.tiktok.com/tiktokstudio/analytics/{}?qa_enter_from=analytics'
+MAX_BATCH_IDS = 1000
+
+
+def _fetch(page, identity, video_id):
+    """One same-origin insight fetch for one post; any open Studio page serves every ID."""
     query = urlencode({'aid': '1988', 'type_requests': json.dumps(
         [{'insigh_type': kind, 'aweme_id': video_id} for kind in INSIGHTS], separators=(',', ':'))})
     response = page.evaluate(FETCH, PATH + '?' + query)
     if not isinstance(response, dict) or response.get('status') != 200 or not isinstance(response.get('body'), str):
         raise StudioContractError('TikTok Studio watch request failed, timed out, or exceeded its size bound.')
-    result = normalize(parse_response(response['body']), identity, video_id)
+    return normalize(parse_response(response['body']), identity, video_id)
+
+
+def _verified(client, username, expected_account_id, read_posts):
+    """Bind every read to one owner identity checked before and after."""
+    identity = client.get_account(expected_username=username, expected_account_id=expected_account_id)
+    result = read_posts(identity)
     checked = client.get_account(expected_username=username, expected_account_id=expected_account_id)
     if any(checked[k] != identity[k] for k in ('account_id', 'username', 'profile')):
         raise StudioContractError('TikTok Studio watch owner changed during the read.')
     return result
+
+
+def read(client, username, video_id, expected_account_id):
+    if not positive_decimal_id(video_id) or not positive_decimal_id(expected_account_id):
+        raise StudioContractError('TikTok Studio watch requires exact positive post and account IDs.')
+    return _verified(client, username, expected_account_id, lambda identity: _fetch(
+        client._get_browser().get_page(ANALYTICS_URL.format(video_id)), identity, video_id))
+
+
+def read_many(client, username, video_ids, expected_account_id):
+    """Read many owned posts in one browser page; one post's failure never aborts the batch."""
+    if type(video_ids) is not list or not 1 <= len(video_ids) <= MAX_BATCH_IDS:
+        raise StudioContractError('TikTok Studio watch batch requires between 1 and 1000 exact post IDs.')
+    if any(not positive_decimal_id(v) for v in video_ids) or len(set(video_ids)) != len(video_ids) \
+            or not positive_decimal_id(expected_account_id):
+        raise StudioContractError('TikTok Studio watch requires unique exact positive post and account IDs.')
+
+    def read_posts(identity):
+        page = client._get_browser().get_page(ANALYTICS_URL.format(video_ids[0]))
+        records, errors = [], {}
+        for video_id in video_ids:
+            try:
+                records.append(_fetch(page, identity, video_id))
+            except ValueError as error:  # StudioContractError included
+                errors[video_id] = str(error)
+        return {'records': records, 'errors': errors, 'requested': len(video_ids)}
+    return _verified(client, username, expected_account_id, read_posts)

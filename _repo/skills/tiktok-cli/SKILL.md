@@ -43,6 +43,7 @@ tiktok <command-group> <action> [arguments] [options]
 | Read verified own-account Studio content with endpoint provenance. | `tiktok videos list --profile clipper --username ata_clipper --studio --expected-account-id 7692213003349443597` |
 | Read exact owned post IDs in one bounded Studio scan; resume beyond 1000 feed items using caller-owned continuation. | `tiktok studio inventory owned-post-ids.json --profile clipper --username ata_clipper --account-id 7692213003349443597` |
 | Read actual cumulative views, likes, comments, shares, and favorites for an own post. Missing measurements stay null. | `tiktok videos metrics <video_id> --profile clipper --username ata_clipper --expected-account-id 7692213003349443597` |
+| Read watch time, completion, and retention for 1–1000 own posts in one browser session; a failed post lands in `errors` and the rest still return. Use instead of one `studio watch` per post. | `tiktok studio watch-batch post-ids.json --profile clipper --username ata_clipper --account-id 7692213003349443597` |
 | Permanently delete one of your videos by id; requires `--yes` (`browser_session`). | `tiktok videos delete` |
 | Set who can watch one own post (`public`, `friends`, `private`); fails non-zero unless an exact Studio readback shows the requested visibility. | `tiktok videos privacy <video_id> --to public --profile clipper --username ata_clipper --expected-account-id 7692213003349443597` |
 | Configure authentication, optionally using a manual browser login. | `tiktok auth login` |

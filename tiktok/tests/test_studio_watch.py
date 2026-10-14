@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from tiktok_cli.studio import StudioContractError
-from tiktok_cli.studio_watch import normalize, read
+from tiktok_cli.studio_watch import normalize, read, read_many
 
 ID = '7695809227801087246'
 OWNER = {'account_id': '7692213003349443597', 'username': 'ata_clipper', 'profile': 'clipper'}
@@ -83,3 +83,59 @@ def test_owner_verified_before_and_after_one_bounded_read():
 
 def test_invalid_id_fails_before_browser():
     with pytest.raises(StudioContractError): read(None, OWNER['username'], 'x', OWNER['account_id'])
+
+
+IDS = ['7695809227801087246', '7695809227801087247', '7695809227801087248']
+
+
+class BatchClient:
+    """One page answering each ID's insight request; the second names the wrong owner."""
+    def __init__(self):
+        self.identity_reads, self.pages = 0, []
+    def get_account(self, **kwargs): self.identity_reads += 1; return OWNER
+    def _get_browser(self): return self
+    def get_page(self, url): self.pages.append(url); return self
+    def evaluate(self, js, query):
+        video_id = next(v for v in IDS if v in query)
+        data = payload(); data['video_info']['aweme_id'] = video_id
+        if video_id == IDS[1]:
+            data['video_info']['author'] = {'uid': '1'}
+        return {'status': 200, 'body': json.dumps(data)}
+    def get_studio_watch_metrics_many(self, username, ids, *, expected_account_id):
+        return read_many(self, username, ids, expected_account_id)
+    def close(self): pass
+
+
+def test_batch_keeps_reading_past_one_failed_post_in_one_page():
+    client = BatchClient()
+    result = read_many(client, OWNER['username'], IDS, OWNER['account_id'])
+    assert [r['id'] for r in result['records']] == [IDS[0], IDS[2]]
+    assert list(result['errors']) == [IDS[1]] and 'owner did not match' in result['errors'][IDS[1]]
+    assert result['requested'] == 3
+    assert client.identity_reads == 2 and len(client.pages) == 1 and IDS[0] in client.pages[0]
+
+
+def invoke_batch(monkeypatch, tmp_path, ids, *extra):
+    from typer.testing import CliRunner
+    from tiktok_cli.main import app
+    import tiktok_cli.client as module
+    client = BatchClient()
+    monkeypatch.setattr(module, 'TikTokWebClient', lambda **kwargs: client)
+    manifest = tmp_path / 'ids.json'; manifest.write_text(json.dumps(ids))
+    return client, CliRunner().invoke(app, ['studio', 'watch-batch', str(manifest), '--username', OWNER['username'],
+                                            '--account-id', OWNER['account_id'], '--profile', 'clipper', *extra],
+                                    env={'COLUMNS': '250'})
+
+
+@pytest.mark.parametrize('ids', [[], [str(10**18 + n) for n in range(1001)]])
+def test_cli_batch_refuses_empty_or_oversized_manifest(monkeypatch, tmp_path, ids):
+    client, result = invoke_batch(monkeypatch, tmp_path, ids)
+    assert result.exit_code == 1, result.output
+    assert client.identity_reads == 0 and client.pages == []
+
+
+def test_cli_batch_table_renders_one_row_per_record(monkeypatch, tmp_path):
+    _, result = invoke_batch(monkeypatch, tmp_path, IDS, '--table')
+    assert result.exit_code == 0, result.output
+    assert 'average_watch_time_seconds' in result.stdout and 'retention_points' in result.stdout
+    assert IDS[0] in result.stdout and IDS[2] in result.stdout and IDS[1] not in result.stdout

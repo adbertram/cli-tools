@@ -690,6 +690,11 @@ class TikTokWebClient:
         from .studio_watch import read
         return read(self, username, video_id, expected_account_id)
 
+    def get_studio_watch_metrics_many(self, username: str, video_ids: List[str], *, expected_account_id: str) -> Dict:
+        """Read many owned posts' watch metrics in one browser page; per-post failures land in ``errors``."""
+        from .studio_watch import read_many
+        return read_many(self, username, video_ids, expected_account_id)
+
     def get_studio_video(self, username: str, video_id: str, expected_account_id: Optional[str] = None) -> Dict:
         from .studio import MAX_STUDIO_ITEMS
         return self._studio_read(username, limit=MAX_STUDIO_ITEMS, video_id=video_id, expected_account_id=expected_account_id)[0]

@@ -15,7 +15,7 @@ app = typer.Typer(help="Prepare, check, publish, and reconcile owned Studio draf
 COMMAND_CREDENTIALS = {"prepare": ["browser_session"], "publish": ["browser_session"], "post": ["browser_session"],
                        "reconcile": ["browser_session"], "status": ["no_auth"],
                        "inventory": ["browser_session"], "check": ["browser_session"],
-                       "watch": ["browser_session"]}
+                       "watch": ["browser_session"], "watch-batch": ["browser_session"]}
 
 
 def _print_operation(result, table):
@@ -244,8 +244,38 @@ def studio_watch(
     with closing(TikTokWebClient(config=get_config())) as client:
         result = client.get_studio_watch_metrics(username, video_id, expected_account_id=account_id)
     if table:
-        row = {"id": result["id"], **{k: v for k, v in result["metrics"].items() if k != "retention"},
-               "retention_points": len(result["metrics"]["retention"] or []), "unavailable": result["watch_metrics_error"]}
+        row = _watch_row(result)
         print_table([row], list(row), list(row))
+    else:
+        print_json(result)
+
+
+def _watch_row(record):
+    return {"id": record["id"], **{k: v for k, v in record["metrics"].items() if k != "retention"},
+            "retention_points": len(record["metrics"]["retention"] or []), "unavailable": record["watch_metrics_error"]}
+
+
+@app.command("watch-batch")
+@command
+def studio_watch_batch(
+    manifest: Path = typer.Argument(..., help="Regular JSON file containing 1-1000 unique string post IDs"),
+    username: str = typer.Option(..., "--username", help="Exact session owner handle"),
+    account_id: str = typer.Option(..., "--account-id", help="Exact numeric session owner ID"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display one row per read post"),
+):
+    """Read watch metrics for many owned posts in one browser session.
+
+    Same per-post read as `watch`, through one page, with the account identity
+    verified once before and once after the batch. A post that fails lands in
+    `errors` keyed by its ID; the rest still return in `records`.
+    """
+    from ..client import TikTokWebClient
+    ids = _read_inventory_input(manifest)
+    with closing(TikTokWebClient(config=get_config())) as client:
+        result = client.get_studio_watch_metrics_many(username, ids, expected_account_id=account_id)
+    if table:
+        columns = ["id", "average_watch_time_seconds", "total_watch_time_seconds", "completion_rate",
+                   "retention_points", "unavailable"]
+        print_table([_watch_row(record) for record in result["records"]], columns, columns)
     else:
         print_json(result)

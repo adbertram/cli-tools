@@ -729,6 +729,32 @@ It reuses the client's browser, including an existing Studio publishing client.
 Observed on October 12, 2026: post 7695809227801087246 returned 57 retention points,
 3.33 seconds average watch time, 340 seconds total watch time, and 0.0098 completion.
 
+### Read watch time for many posts in one session
+
+```bash
+echo '["7696592655307787533","7695809227801087246"]' > post-ids.json
+tiktok studio watch-batch post-ids.json --profile clipper --username ata_clipper --account-id 7692213003349443597
+tiktok studio watch-batch post-ids.json --profile clipper --username ata_clipper --account-id 7692213003349443597 --table
+```
+
+`watch-batch` runs the same read as `watch` for 1–1000 unique positive string post
+IDs from a regular JSON file (64 KiB cap, the same reader as `studio inventory`).
+It opens one browser and one Studio page, verifies the session owner once before
+and once after the whole batch, and sends one bounded insight request per post
+from that page. Output is `{"records": [...], "errors": {"<id>": "<message>"},
+"requested": <count>}`; each record has the exact `watch` shape. A post whose read
+fails (wrong owner, failed request, malformed response) lands in `errors` and the
+batch continues. An owner change during the batch fails the whole command.
+`--table` prints one row per record: id, average and total watch time, completion,
+retention point count, and unavailable reasons.
+
+Measured on October 14, 2026: one `studio watch` per post took 7.9 seconds
+(browser launch and identity 3.9 s, page navigation 2.3 s), 63 s of a 78 s
+verify pass. The same insight request inside one already-open page took 0.60 s
+per post (14 posts in 19.5 s). Use `watch-batch` whenever reading more than one post.
+The Python entry point is
+`TikTokWebClient.get_studio_watch_metrics_many(username, video_ids, expected_account_id=account_id)`.
+
 ### Search public videos by exact hashtag
 
 ```bash
